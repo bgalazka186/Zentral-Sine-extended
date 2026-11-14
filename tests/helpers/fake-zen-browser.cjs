@@ -11,7 +11,11 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   document.querySelector = (selector) => document.querySelectorAll(selector)[0] || null;
   document.createXULElement = (tag) => document.createElement(tag);
   const operations = [], events = [], listeners = new Map(), timers = new Map();
-  let timerId = 0, tabId = 0, definition;
+  let timerId = 0, tabId = 0, definition, clockOffset = 0;
+  class FakeDate extends Date {
+    constructor(...args) { super(...(args.length ? args : [Date.now() + clockOffset])); }
+    static now() { return Date.now() + clockOffset; }
+  }
   const record = (node, parent) => {
     if (!node || !["tab", "zen-folder"].includes(node.localName)) return;
     operations.push({ type: node.parentElement ? "move" : "add", node, from: node.parentElement, parent });
@@ -69,7 +73,13 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     addObserver(prefix, observer) { if (!prefObservers.has(prefix)) prefObservers.set(prefix, new Set()); prefObservers.get(prefix).add(observer); },
     removeObserver(prefix, observer) { prefObservers.get(prefix)?.delete(observer); },
   };
-  const Services = { prefs: prefApi, obs: { addObserver() {}, removeObserver() {}, notifyObservers() {} }, scriptSecurityManager: { getSystemPrincipal: () => ({}) }, wm: { getEnumerator: () => [] } };
+  const observers = new Map();
+  const obs = {
+    addObserver(observer, topic) { if (!observers.has(topic)) observers.set(topic, new Set()); observers.get(topic).add(observer); },
+    removeObserver(observer, topic) { observers.get(topic)?.delete(observer); },
+    notifyObservers(subject, topic, data) { for (const observer of [...(observers.get(topic) || [])]) observer.observe(subject, topic, data); },
+  };
+  const Services = { prefs: prefApi, obs, scriptSecurityManager: { getSystemPrincipal: () => ({}) }, wm: { getEnumerator: () => [] } };
   const IOUtils = {
     makeDirectory: async () => {}, setPermissions: async () => {}, exists: async (p) => files.has(p),
     readUTF8: async (p) => { if (!files.has(p)) { const e = new Error("not found"); e.code = "ENOENT"; throw e; } return files.get(p); },
@@ -79,12 +89,18 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   const PathUtils = { profileDir: "/profile", tempDir: "/tmp", join: (...parts) => parts.join("/"), filename: (p) => p.split("/").pop() };
   class MutationObserver { observe() {} disconnect() {} }
   vm.runInNewContext(source, { window: win, document, globalThis: { Services }, ChromeUtils: { importESModule: () => ({}) }, PathUtils, IOUtils, MutationObserver, Event: Ev,
-    navigator: { platform: "Linux" }, console, URL, Date, JSON, Math, Promise, RegExp, Number, Map, Set, WeakMap, setTimeout, clearTimeout, queueMicrotask });
+    navigator: { platform: "Linux" }, console, URL, Date: FakeDate, JSON, Math, Promise, RegExp, Number, Map, Set, WeakMap, setTimeout, clearTimeout, queueMicrotask });
   if (!definition?.init) throw new Error("Notes registration missing");
   const destroy = definition.init();
-  return { ...dom, window: win, sidebar, operations, events, timers, values, files, emit, destroy,
+  return { ...dom, window: win, sidebar, operations, events, timers, values, files, observers, obs, emit, destroy,
     setPref, resetOperations() { operations.length = 0; },
-    fireTimer(ms) { const found = [...timers].find(([, timer]) => timer.ms === ms); if (!found) return false; timers.delete(found[0]); found[1].fn(); return true; },
+    fireTimer(ms) {
+      // This harness can fire the boot timer out of chronological order. The
+      // shared timer may then be overdue (0ms) instead of its 250ms debounce.
+      const found = [...timers].find(([, timer]) => Math.abs(timer.ms - ms) <= 10) || (ms === 250 ? [...timers].find(([, timer]) => timer.ms === 0) : null);
+      if (!found) return false;
+      timers.delete(found[0]); clockOffset += Math.max(0, Number(ms) || 0) + 10; found[1].fn(); return true;
+    },
     get seam() { return win.__zentralNotesTestSeam.sidebar; } };
 }
 module.exports = { createFakeZen };

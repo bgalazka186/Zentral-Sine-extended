@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.126
+// @version 3.3.127
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.126, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.127, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.126";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.127";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -3878,6 +3878,7 @@ const __zentralEmbeddedLoader = (function () {
       runNow,
       schedule,
       invalidate() { consecutiveChanges = 0; blockedUntil = 0; },
+      refreshClock() { if (dead) return []; clearScheduled(); consecutiveChanges = 0; blockedUntil = 0; return runNow(); },
       get busy() { return busy; },
       get projection() { return last; },
       destroy() { dead = true; clearScheduled(); try { api.removeAll?.(); } catch (error) { safeWarn(error); } },
@@ -9659,6 +9660,60 @@ __zentralShim.register = function (def) {
     }
     // One timer, armed for the next future reminder. `onDue(notes)` receives every overdue, unannounced
     // reminder as one batch AFTER the store has recorded them as announced (claim), so nothing repeats.
+    // One native timer drives all calendar deadlines and a low-cost clock
+    // check. Deadlines are absolute wall-clock instants; monotonic elapsed
+    // time distinguishes ordinary timer delay from manual clock jumps.
+    function createTimeTickService({ now = () => Date.now(), monotonic = () => window.performance?.now?.() ?? Date.now(),
+      zone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (_) { return ""; } },
+      setTimer = (fn, ms) => window.setTimeout(fn, ms), clearTimer = (id) => window.clearTimeout(id), warn = () => {} } = {}) {
+      const queue = new Map(), listeners = new Set(), pollMs = 60000, driftLimit = 120000;
+      let native = null, nextId = 0, dead = false, running = false;
+      let lastWall = now(), lastMono = monotonic(), lastZone = zone(), lastDay = remindDateText(lastWall), nextPoll = lastWall + pollMs;
+      function arm() {
+        if (dead || running) return;
+        if (native !== null) clearTimer(native);
+        let due = nextPoll;
+        for (const entry of queue.values()) due = Math.min(due, entry.at);
+        native = setTimer(() => { native = null; check("timer"); }, Math.max(0, Math.min(MAX_TIMER_MS, due - now())));
+      }
+      function check(reason = "focus") {
+        if (dead || running) return;
+        running = true;
+        try {
+          const at = now(), clock = monotonic(), currentZone = zone(), day = remindDateText(at);
+          const dayChanged = day !== lastDay, zoneChanged = currentZone !== lastZone;
+          const clockChanged = Math.abs((at - lastWall) - (clock - lastMono)) > driftLimit;
+          lastWall = at; lastMono = clock; lastDay = day; lastZone = currentZone;
+          if (at >= nextPoll || clockChanged || dayChanged || zoneChanged || reason === "wake") nextPoll = at + pollMs;
+          if (reason === "wake" || reason === "focus" || reason === "visible" || dayChanged || zoneChanged || clockChanged) {
+            const event = { type: dayChanged ? "dayRollover" : "timeChange", reason, at, dayChanged, zoneChanged, clockChanged };
+            for (const fn of [...listeners]) { if (dead) break; try { fn(event); } catch (error) { try { warn(error); } catch (_) {} } }
+          }
+          // Listeners can cancel/reschedule stale deadlines on wake; only run
+          // entries still present, in deadline/registration order.
+          const due = [...queue].filter(([, entry]) => entry.at <= now()).sort((a, b) => a[1].at - b[1].at || a[0] - b[0]);
+          for (const [id, entry] of due) {
+            if (!queue.has(id)) continue;
+            queue.delete(id); try { entry.fn(); } catch (error) { try { warn(error); } catch (_) {} }
+          }
+        } finally { running = false; arm(); }
+      }
+      const api = {
+        setTimer(fn, ms) {
+          if (dead) return null;
+          const id = ++nextId;
+          queue.set(id, { fn, at: now() + Math.max(0, Number(ms) || 0) }); arm(); return id;
+        },
+        clearTimer(id) { if (queue.delete(id)) arm(); },
+        on(fn) { if (dead) return () => {}; listeners.add(fn); return () => listeners.delete(fn); },
+        check,
+        wake() { check("wake"); },
+        destroy() { if (dead) return; dead = true; if (native !== null) clearTimer(native); native = null; queue.clear(); listeners.clear(); },
+      };
+      arm();
+      return api;
+    }
+
     function createReminderScheduler({ store, now = () => Date.now(), setTimer, clearTimer, onDue }) {
       let timer = null, debounceTimer = null, destroyed = false, busy = false, again = false;
       const stop = () => { if (timer !== null) { clearTimer(timer); timer = null; } };
@@ -13509,7 +13564,7 @@ __zentralShim.register = function (def) {
         FIND_MAX_MATCHES, FIND_MAX_QUERY, sniffImageMime, checkAssetBytes, assetFileName, parseAssetLink, buildAssetLink, buildAssetImage,
         insertAssetImage, assetImageAt, restyleAssetImage, assetRefs, assetIntegrityReport, isAssetNoteId, ASSET_MAX_BYTES, ASSET_VIDEO_MAX_BYTES, ASSET_FILE_MAX_BYTES, ASSET_MAX_PER_NOTE, ASSET_MIME, VIDEO_EXT_MIME, cleanAssetFileName, uniqueAssetFileName, parseFileAssetLink, droppedAssetMarkup, insertDroppedAssetLinks, droppedFiles,
         cleanRemind, ceilStep, dueReminders, nextReminderAt, reminderDelay, reminderPresets, parseRemindInput, remindPreview, remindDateText, remindTimeText,
-        createReminderScheduler, createReminderAlertActions, createReminderAlertStack, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
+        createTimeTickService, createReminderScheduler, createReminderAlertActions, createReminderAlertStack, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
         headingSlug, headingsOf, cleanAnchor, noteLinkParts, headingOffset, tocBlock, tocList, findToc, updateToc, insertToc, insertFootnote, nextFootnoteLabel, mentionRe, hasMention, linkFirstMention, collectRefs, attachTrailingBlockId, nextMarkdownFence, TASK_BOX_CHARS, TASK_BOX_TOKEN,
         hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_FOLDER_LABEL, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
         DATE_TITLE_RE, dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
@@ -22147,6 +22202,7 @@ __zentralShim.register = function (def) {
         close,
         destroy,
         refreshRead,
+        refreshCalendar() { if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden) renderCalendar(); },
         refreshList: scheduleList,
         layout: scheduleLayout,
         applyState,
@@ -22972,12 +23028,13 @@ __zentralShim.register = function (def) {
           if (topic === OBS_TOPIC) store.onRemoteMessage(data);
         },
       };
-      let storePromise = null;
+      let storePromise = null, storeReady = false;
       function ensureStore() {
         if (!storePromise)
           storePromise = store
             .open()
             .then(() => {
+              storeReady = true;
               if (!disposed) Services.obs.addObserver(remoteObserver, OBS_TOPIC);
               // Application startup (not the store's own open): note-less items get their Agenda line. Idempotent.
               try { if (!disposed) store.backfillAgendaLinks(); } catch (error) { warn(error); }
@@ -23220,6 +23277,8 @@ __zentralShim.register = function (def) {
         assetUrls.set(rel, url);
         return { url };
       }
+      const tick = createTimeTickService({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), warn });
+      onCleanup(() => tick.destroy());
       const env = { openLink, copyText, exportNote, exportAll, exportZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now() };
 
       // ---- reminders (P2): ONE coarse timer for the next due note, armed by the scheduler (no polling) ----
@@ -23316,11 +23375,12 @@ __zentralShim.register = function (def) {
           } catch (error) { warn(error); }
         }
       }
+      let remindersStarted = false;
       const reminders = createReminderScheduler({
         store,
         now: () => Date.now(),
-        setTimer: (fn, ms) => window.setTimeout(fn, ms),
-        clearTimer: (id) => window.clearTimeout(id),
+        setTimer: tick.setTimer,
+        clearTimer: tick.clearTimer,
         onDue: showReminders,
       });
       onCleanup(() => reminders.destroy());
@@ -23330,6 +23390,7 @@ __zentralShim.register = function (def) {
         if (disposed || !enabledNow()) return;
         ensureStore().then(() => {
           if (disposed) return;
+          remindersStarted = true;
           reminders.start();
           // Give the browser and Notes UI time to settle, then show one compact daily plan.
           dayPlanTimer = window.setTimeout(showDayPlan, 90000);
@@ -23938,7 +23999,7 @@ __zentralShim.register = function (def) {
           const state = store.items.history?.stateFor?.(identity.itemId, identity.occurrenceId) || "pending";
           return state === "done" || state === "dismissed";
         },
-        setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), warn,
+        setTimer: tick.setTimer, clearTimer: tick.clearTimer, warn,
       }) : { runNow: () => [], schedule() {}, destroy() {} };
       onCleanup(() => agendaController.destroy());
       const agendaSoon = () => {
@@ -25363,6 +25424,25 @@ __zentralShim.register = function (def) {
         delete window.__zentralNotesClaimWidget;
       });
 
+      const offTick = tick.on(() => {
+        if (disposed || !enabledNow()) return;
+        if (storeReady && agendaEnabled()) agendaController.refreshClock?.();
+        if (remindersStarted) reminders.reschedule();
+        for (const binding of bindings.values()) sheetOf(binding)?.refreshCalendar?.();
+        floating?.sheet?.refreshCalendar?.();
+      });
+      const wakeObserver = { observe(_subject, topic) { if (topic === "wake_notification") tick.wake(); } };
+      try { Services.obs.addObserver(wakeObserver, "wake_notification"); } catch (error) { warn(error); }
+      const onTimeFocus = () => tick.check("focus");
+      const onTimeVisibility = () => { if (document.visibilityState !== "hidden") tick.check("visible"); };
+      window.addEventListener("focus", onTimeFocus);
+      document.addEventListener("visibilitychange", onTimeVisibility);
+      onCleanup(() => {
+        offTick(); window.removeEventListener("focus", onTimeFocus);
+        document.removeEventListener("visibilitychange", onTimeVisibility);
+        try { Services.obs.removeObserver(wakeObserver, "wake_notification"); } catch (_) {}
+      });
+
       const api = {
         destroy() {
           if (disposed) return;
@@ -25383,7 +25463,7 @@ __zentralShim.register = function (def) {
       // Opt-in test seam: the real per-window coordinator and native adapters,
       // without opening a Notes sheet or publishing privileged objects normally.
       if (window.__zentralNotesTestSeam) {
-        const sidebar = { store, ensureStore, zenApi, zen, agendaApi, agendaController,
+        const sidebar = { store, ensureStore, zenApi, zen, agendaApi, agendaController, tick, reminders,
           onAgendaMouse, onAgendaSelect, onAgendaTabEvent, onAgendaFolderMenuShowing,
           onAgendaFolderMenuHidden, onAgendaTabMenuShowing };
         window.__zentralNotesTestSeam.sidebar = sidebar;

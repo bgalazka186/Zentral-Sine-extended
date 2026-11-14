@@ -2667,6 +2667,7 @@
       runNow,
       schedule,
       invalidate() { consecutiveChanges = 0; blockedUntil = 0; },
+      refreshClock() { if (dead) return []; clearScheduled(); consecutiveChanges = 0; blockedUntil = 0; return runNow(); },
       get busy() { return busy; },
       get projection() { return last; },
       destroy() { dead = true; clearScheduled(); try { api.removeAll?.(); } catch (error) { safeWarn(error); } },

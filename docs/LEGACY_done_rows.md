@@ -368,3 +368,20 @@ The real coordinator checks for linked items, including hidden ones, before sche
 
 **Tests / done when:** UI regression for Week/Day: scroll offset, hover card and focus survive a background history event.
 Agenda initially expands 28 civil days (one page plus lookahead), appends 14-day pages on scroll or accessible Load more, retains the 90-day/160-item bounds and deduplicates overlapping multi-day events. Week/Day history append and cross-window refresh patch affected reminder nodes in place; item changes rebuild only affected day columns to recalculate overlap geometry and retain other columns and the scroll container. Tests exercise local/remote history, focus, hover, scroll, add/change/remove and paging. The initial 28-day recurrence benchmark measured 107/548 ms for 500/2000 items versus 356/1480 ms for 90 days on this run; new CI ceilings include margin. Full view rebuilds remain for broad/reset/category changes and a background item change during an active drag still cancels the gesture; interaction-safe handling is tracked by UI4.6. Live Zen UI remains unverified.
+
+## TM3.1 — Completed shared time tick service (3.3.127)
+
+#### `TM3.1` — One shared tick service: wake, focus, clock/time-zone change, day rollover
+**Status:** `DONE` · **Impact:** High · **Effort:** M · **Depends on:** F0.1 · **Source:** Audit R1 B11 + R2 R4/E7 + proposal S2
+
+**Problem:** No code path handles system sleep, clock changes or time-zone changes (no `wake_notification`, `visibilitychange` or focus date check exists). Agenda boundary timers and the reminder timer are one-shot `setTimeout`s; after suspend they can fire late, so Today/Tomorrow labels stay stale and due reminders alert late (or not until another event). Three separate timer owners exist (Agenda controller, reminder scheduler, alert stack).
+
+**Plan (do in this order):**
+1. Create one small service: `nextDue` priority queue, `onWake` (Services.obs `wake_notification`), window `focus`/`visibilitychange`, periodic cheap drift check (compare `Date.now()` with last tick; a jump of more than 2 minutes means sleep or clock change).
+2. On wake/jump/time-zone change (`Intl.DateTimeFormat().resolvedOptions().timeZone` changed): recompute day keys, re-run Agenda `runNow`, scheduler `pass`, calendar `renderCalendar`.
+3. Emit a `dayRollover` event once when the local date changes.
+4. Move Agenda boundary timer and scheduler timer onto the service; keep their public behaviour.
+
+**Tests / done when:** Fake clock tests: sleep jump over a reminder time alerts once on wake; day rollover updates Today; time-zone change re-labels buckets.
+
+One per-window priority queue owns the Agenda and reminder scheduler timers plus a one-minute drift check. Wake observer, focus and visible-document checks re-evaluate date, zone and wall-vs-monotonic clock drift; a local day change emits one dayRollover event. On re-evaluation, open calendar sheets, initialized scheduler and Agenda refresh; pre-store wake cannot clear restored Agenda tabs. Queue deadlines remain cancelable and owners/observers are disposed. Fake-clock tests cover wake alert exactly once, day and timezone relabeling, clock jumps, cancellation and teardown; fake-Zen host exercises wake/focus/visibility wiring. Live Zen sleep, wake and timezone validation remains pending; alert stack retains its own UI timers.
