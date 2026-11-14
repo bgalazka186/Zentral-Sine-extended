@@ -43,16 +43,16 @@ when the ordering rules below are broken.
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | `#zentral-settings-modal` | extension/settings/styles/ZentralSettingsFoundation.css:31 |
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | `#zentral-settings-modal` | extension/settings/styles/ZentralSettingsInjected.css:47 |
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | inline style: `"position:fixed;inset:8%;overflow:auto;z-index:2147483647;padding:20px` | loader/Zentral.uc.js:215 |
-| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zentral-notes-toast` | additional/notes/ZentralNotes.css:1060 |
-| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zentral-notes-pill` | additional/notes/ZentralNotes.css:1532 |
-| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zn-reminder-stack` | additional/notes/ZentralNotes.css:2107 |
-| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zn-agenda-title-card` | additional/notes/ZentralNotes.css:2187 |
+| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zentral-notes-toast` | additional/notes/ZentralNotes.css:1074 |
+| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zentral-notes-pill` | additional/notes/ZentralNotes.css:1546 |
+| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zn-reminder-stack` | additional/notes/ZentralNotes.css:2121 |
+| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zn-agenda-title-card` | additional/notes/ZentralNotes.css:2201 |
 | 2147483646 | RSS reader card (fallback only; see Top layer) | `#bgalazka-rss-card` | additional/rss/ZentralRssDisplay.css:110 |
 | 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-sheet[data-host="float"], .zentral-notes-sheet[data-host="dock"]` | additional/notes/ZentralNotes.css:96 |
-| 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-reveal` | additional/notes/ZentralNotes.css:991 |
-| 2147483643 | Big Preview (fallback only; see Top layer) | `.zentral-notes-shield` | additional/notes/ZentralNotes.css:1523 |
+| 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-reveal` | additional/notes/ZentralNotes.css:1005 |
+| 2147483643 | Big Preview (fallback only; see Top layer) | `.zentral-notes-shield` | additional/notes/ZentralNotes.css:1537 |
 | 2147483643 | Big Preview (fallback only; see Top layer) | `#zentral-video-preview#zentral-video-preview[data-enlarged]` | additional/video/ZentralVideoPreview.css:522 |
-| 2147483642 | Dock ghost while a floating panel is dragged | `.zentral-notes-ghost` | additional/notes/ZentralNotes.css:1517 |
+| 2147483642 | Dock ghost while a floating panel is dragged | `.zentral-notes-ghost` | additional/notes/ZentralNotes.css:1531 |
 | 2147483642 | Dock ghost while a floating panel is dragged | `:root[zentral-geometry-dragging] #zentral-dock-ghost` | extension/panels/floating/ZentralFloatingPanels.css:285 |
 | 2147483640 | Reveal edge and invisible drag shields | `#bgalazka-panel-reveal-edge` | extension/appearance/ZentralAppearance.css:208 |
 | 2147483640 | Reveal edge and invisible drag shields | `.bgalazka-pill-drag-shield` | extension/panels/browsers/ZentralBrowserIntegrations.css:691 |
@@ -86,19 +86,19 @@ Ordering inside one component. Listed by file; values only matter relative to si
 | additional/notes/ZentralNotes.css | 133 | 6 | `.zentral-notes-sheet .zn-rz` |
 | additional/notes/ZentralNotes.css | 319 | 1 | `.zentral-notes-sheet .zn-calendar-splitter` |
 | additional/notes/ZentralNotes.css | 579 | 5 | `.zentral-notes-sheet .zn-menu` |
-| additional/notes/ZentralNotes.css | 686 | 5 | `.zentral-notes-sheet .zn-dialog` |
-| additional/notes/ZentralNotes.css | 1127 | 40 | `:root[bgalazka-notes-spill="true"][bgalazka-triple-view="true"] #zen-app-panel-root #zen-app-panel-slider > .zentral-notes-sheet` |
-| additional/notes/ZentralNotes.css | 1293 | 3 | `.zentral-notes-sheet .zn-tocpill` |
-| additional/notes/ZentralNotes.css | 1448 | 0 | `.zentral-notes-sheet .zn-findlayer` |
-| additional/notes/ZentralNotes.css | 1453 | 1 | `.zentral-notes-sheet[data-hl="on"] .zn-editor` |
-| additional/notes/ZentralNotes.css | 1661 | 1 | `.zentral-notes-sheet .zn-frow[data-color] .zn-frow-icon.is-folder::before` |
-| additional/notes/ZentralNotes.css | 1675 | 2 | `.zentral-notes-sheet .zn-frow[data-color] .zn-frow-icon.is-folder::after` |
-| additional/notes/ZentralNotes.css | 1897 | 5 | `.zentral-notes-sheet .zn-cal-now-line` |
-| additional/notes/ZentralNotes.css | 1902 | 0 | `.zentral-notes-sheet .zn-cal-off-hours` |
-| additional/notes/ZentralNotes.css | 1904 | 1 | `.zentral-notes-sheet .zn-cal-busy-range` |
-| additional/notes/ZentralNotes.css | 1930 | 70 | `.zentral-notes-sheet .zn-cal-hover-card` |
-| additional/notes/ZentralNotes.css | 2161 | 6 | `.zentral-notes-sheet .zn-cal-drag-preview` |
-| additional/notes/ZentralNotes.css | 2164 | 4 | `.zentral-notes-sheet .zn-cal-resize-handle` |
+| additional/notes/ZentralNotes.css | 700 | 5 | `.zentral-notes-sheet .zn-dialog` |
+| additional/notes/ZentralNotes.css | 1141 | 40 | `:root[bgalazka-notes-spill="true"][bgalazka-triple-view="true"] #zen-app-panel-root #zen-app-panel-slider > .zentral-notes-sheet` |
+| additional/notes/ZentralNotes.css | 1307 | 3 | `.zentral-notes-sheet .zn-tocpill` |
+| additional/notes/ZentralNotes.css | 1462 | 0 | `.zentral-notes-sheet .zn-findlayer` |
+| additional/notes/ZentralNotes.css | 1467 | 1 | `.zentral-notes-sheet[data-hl="on"] .zn-editor` |
+| additional/notes/ZentralNotes.css | 1675 | 1 | `.zentral-notes-sheet .zn-frow[data-color] .zn-frow-icon.is-folder::before` |
+| additional/notes/ZentralNotes.css | 1689 | 2 | `.zentral-notes-sheet .zn-frow[data-color] .zn-frow-icon.is-folder::after` |
+| additional/notes/ZentralNotes.css | 1911 | 5 | `.zentral-notes-sheet .zn-cal-now-line` |
+| additional/notes/ZentralNotes.css | 1916 | 0 | `.zentral-notes-sheet .zn-cal-off-hours` |
+| additional/notes/ZentralNotes.css | 1918 | 1 | `.zentral-notes-sheet .zn-cal-busy-range` |
+| additional/notes/ZentralNotes.css | 1944 | 70 | `.zentral-notes-sheet .zn-cal-hover-card` |
+| additional/notes/ZentralNotes.css | 2175 | 6 | `.zentral-notes-sheet .zn-cal-drag-preview` |
+| additional/notes/ZentralNotes.css | 2178 | 4 | `.zentral-notes-sheet .zn-cal-resize-handle` |
 | additional/video/controllers/ZentralVideoSidebar.js | 213 | 5 | `"position:absolute;inset:0;z-index:5;background:var(--zl-video-canvas,` |
 | additional/video/ZentralVideoPreview.css | 132 | 3 | `#zentral-video-preview .zentral-video-preview-subtitles` |
 | additional/video/ZentralVideoPreview.css | 301 | 2 | `#zentral-video-preview canvas` |
