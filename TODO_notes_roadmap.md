@@ -72,14 +72,18 @@ Impact and effort: S = under one session slice, M = one session, L = several ses
 
 | Order | ID | Status | Impact | Effort | Depends on | Task |
 | --: | :-- | :-- | :-- | :-- | :-- | :-- |
+| 21a | `OW-16` | `OPEN` | High | M | none | [bug] Event categories do not survive Daily Note / Calendar synchronization |
 | 22 | `OW-01` | `OPEN` | High | S | none | [issue] Deleting a note-less reminder asks to 'remove this item from its source note' |
+| 22a | `OW-17` | `OPEN` | High | M | F0.1 | [bug] Show complete Agenda reminder/event titles on hover |
 | 23 | `UI4.1` | `OPEN` | High | S | F0.1 | Agenda tab activation on click release, with modifiers and drag threshold |
 | 24 | `UI4.2` | `OPEN` | Med-High | S | UI4.1 | Tab cycling must not open Notes |
 | 25 | `UI4.3` | `OPEN` | Med | S | UI4.2 | Choose the bounce-back tab safely |
 | 26 | `UI4.4` | `OPEN` | High | M | H1.1, F0.1 | Guard dragging into and out of the Agenda folder; report the real DOM parent |
+| 26a | `ST7.1` | `OPEN` | High | M | F0.1, UI4.4 | Show shared NOTES and Agenda across Zen spaces |
 | 27 | `UI4.5` | `OPEN` | Med | S-M | F0.1 | Reorder Agenda tabs through Zen's API (live verification) |
 | 28 | `UI4.6` | `OPEN` | High | M | PF2.5 | Calendar must not cancel drags or lose scroll/focus on background updates |
 | 29 | `UI4.7` | `OPEN` | Med | M | H1.2, F0.1 | Multi-window and data-integrity edge tests |
+| 29a | `OW-18` | `OPEN` | High | L | ST7.1, UI4.7 | [new] Choose shared or separate Notes and Agenda per space |
 | 30 | `OW-04` | `OPEN` | High | M | none | [new] Limit the visible hour range in Week/Day (e.g. 08-20) with automatic extension |
 | 31 | `OW-03` | `OPEN` | High | M-L | OW-04 | [change] Calendar size: fit to the pane by default (no scrollbar) plus a size slider; replaces Comfortable/Compact/Extra compact |
 | 32 | `T2.4e` | `PARTIAL` | Med-High | S-M | — | Compact and extra-compact calendar density |
@@ -116,7 +120,6 @@ Impact and effort: S = under one session slice, M = one session, L = several ses
 | 63 | `SB6.10` | `OPEN` | Med | M | PF2.3 | Incremental Agenda projection |
 | 64 | `B3.3.50-6` | `PARTIAL` | — | — | — | Harden ZenSync & SessionStore isolation for Agenda and Notes pseudo-tabs |
 | 65 | `ST7.3` | `OPEN` | Low-Med | S | none | Move calendar UI state out of notes metadata |
-| 66 | `ST7.1` | `OPEN` | Med | M | F0.1 | Agenda in every workspace (or follow the active workspace) |
 | 67 | `ST7.2` | `OPEN` | Med | M | H1.2, H1.3, PF2.1 | Reminder history compaction (or append-only segments) |
 | 68 | `ST7.5` | `OPEN` | Low-Med | S-M | ST7.2 | Reminder history export, prune and inspect UI |
 | 69 | `B3.3.32-7` | `PARTIAL` | Med-High | S | — | Protect Daily Notes and connect note-less reminders to an Agenda note |
@@ -178,6 +181,15 @@ _Stale 'Today', late alerts after sleep, overdue and missed reminders. Builds on
 
 _Click/drag/keyboard behaviour in the Zen sidebar and Month view, plus the owner's bug reports._
 
+#### `OW-16` — Event categories lost when Calendar and Daily Note synchronize
+**Status:** `OPEN` · **Impact:** High · **Effort:** M · **Depends on:** none · **Source:** Owner report
+
+**Problem:** Event category edits still fail to survive navigating between Calendar and the Daily Note; the owner reports the Daily Note and Calendar are not synchronizing correctly. This is a newly reported remaining path after `OW-12`, not proof that its source-note override fix covered mirroring.
+
+**Plan:** Reproduce a note-less event mirrored into a Daily Note and an existing Daily Note event; trace create, category edit, navigation, note synchronization, relocation and reload. Fix the actual synchronization/ownership problem without rewriting unrelated lines or losing markers, fields or sibling categories. Preserve intentional section inheritance and explicit no-category choices; do not assume the reported cause without a regression.
+
+**Tests / done when:** Real sheet/store flows for mirrored and user-authored Daily Note events, none → category → another → none, navigation in both directions, note edits and reload; matching Calendar and note representation remain consistent, other items and markers survive, and existing OW-12 tests still pass.
+
 #### `OW-01` — [issue] Deleting a note-less reminder asks to 'remove this item from its source note'
 **Status:** `OPEN` · **Impact:** High · **Effort:** S · **Depends on:** none · **Source:** Owner 2026-11-14
 
@@ -190,6 +202,15 @@ _Click/drag/keyboard behaviour in the Zen sidebar and Month view, plus the owner
 4. Label the action by what it does ('Delete reminder' vs 'Delete reminder and its Agenda line').
 
 **Tests / done when:** Calendar-menu tests for manual, mirrored and note-sourced items; delete leaves no orphan `%%calendar%%` line.
+
+#### `OW-17` — Full Agenda titles on hover
+**Status:** `OPEN` · **Impact:** High · **Effort:** M · **Depends on:** F0.1 · **Source:** Owner request
+
+**Problem:** A reminder in the Zen Agenda folder has no readable full title on hover when the sidebar truncates it.
+
+**Plan:** Provide a scoped, readable hover card for Agenda event/reminder pseudo-tabs with the complete title; support long titles, both sidebar sides, edges, focus/keyboard accessibility, retargeting and teardown. Reuse or leave an extensible base for `T3.4a` rather than creating a conflicting second card. Preserve standalone functionality and never expose foreign tabs.
+
+**Tests / done when:** Fake Zen tests show full long titles over truncated sidebar rows, update on retarget, close on leave/removal/disable/destroy, and leave foreign tabs untouched; cover keyboard and viewport placement. Verify actual Zen layering if necessary.
 
 #### `UI4.1` — Agenda tab activation on click release, with modifiers and drag threshold
 **Status:** `OPEN` · **Impact:** High · **Effort:** S · **Depends on:** F0.1 · **Source:** Audit R1 B1
@@ -652,16 +673,23 @@ _Larger changes; do them with the Phase 0 harness in place. `T2.13` (ICS) is alw
 
 **Tests / done when:** Migration test; no meta write on Prev/Next.
 
-#### `ST7.1` — Agenda in every workspace (or follow the active workspace)
-**Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Depends on:** F0.1 · **Source:** Audit R1 B7
+#### `ST7.1` — Shared NOTES and Agenda available across workspaces
+**Status:** `OPEN` · **Impact:** High · **Effort:** M · **Depends on:** F0.1, UI4.4 · **Source:** Audit R1 B7 and owner report
 
-**Problem:** The root is created with `workspaceId: gZenWorkspaces.activeWorkspace` and nothing handles workspace switches, so Agenda exists only where it was created.
+**Problem:** NOTES and Agenda currently show only in the main/creation space. The owner wants them available in every space.
 
-**Plan (do in this order):**
-1. Decide with the owner: one root per workspace or move the root on switch; handle Essentials and `agendaRootEl` lookups per workspace.
-2. Teardown must remove every workspace's root.
+**Plan:** Implement safe shared-data projections across Zen spaces, either per-space roots or an equivalent active-space strategy, handling workspace switches, restored roots, foreign content, Essentials, duplicate reconciliation and teardown. Preserve existing shared data and prepare for the separate-per-space mode in `OW-18` without prematurely implementing that setting.
 
-**Tests / done when:** Harness with two workspaces.
+**Tests / done when:** Real-host fake with multiple workspaces verifies both NOTES and Agenda appear in each active space, shared edits propagate, switches/restarts/disable/re-enable remain idempotent, and no foreign content is removed. Check native Zen workspace behavior where necessary.
+
+#### `OW-18` — Shared versus independent Notes and Agenda per space
+**Status:** `OPEN` · **Impact:** High · **Effort:** L · **Depends on:** ST7.1, UI4.7 · **Source:** Owner request
+
+**Problem:** The owner wants a setting to choose whether NOTES/Agenda are duplicated between spaces or each space has its own Notes and Agenda.
+
+**Plan:** Design and implement a clearly named setting for shared (same data in each space) versus independent space-local Notes and Agenda. Preserve existing shared data as the default; define stable workspace identities, data/history/scheduler isolation, workspace switching, creation/removal, multi-window behavior and safe reversible mode transitions without silently merging, deleting or leaking data. No cloud sync. Reuse `ST7.1` projection ownership and coordinate with `B3.3.50-6` SessionStore isolation.
+
+**Tests / done when:** Two or more spaces and windows cover shared and isolated notes, calendar items, history, alerts and sidebar projections; switching setting and restarts retain both datasets without data loss or cross-space leakage; removed/recreated spaces and teardown are safe. Live-check native workspace identity if needed.
 
 #### `ST7.2` — Reminder history compaction (or append-only segments)
 **Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Depends on:** H1.2, H1.3, PF2.1 · **Source:** Audit R2 P4
@@ -988,8 +1016,8 @@ Completed this session: imported the new instructions, active roadmap and legacy
 
 Standing owner rules for chunks: no conversational filler; output production-ready code and test suites; process tasks strictly in order (implementation, edge cases, unit tests per task); stop cleanly before output limits so the zip is complete; deliver a zip of only changed files (no `.git`).
 
-Known debts / owner requirements: Earlier roadmap DONE claims for `T2.5a–d` were incorrect. Timed-event and timed/all-day reminder pointer moves, timed-event pointer/keyboard resizing, configurable timed snap, cancellation and guarded undo now exist; recurring pointer integration remains open; drag-to-create uses a validated, cancelable composer. Week/Day currently draws 24 fixed labels even on DST transition days; `T2.4c4` is reopened. `T2.6` Big Picture also has no implementation or test and has been reopened. **`B3.3.50-6` LEFT:** Firefox `SessionFile.write` receives the original snapshot separately and remains unprotected; deletion of previously synced records still needs verification. Zen upstream calls `ZenSessionStore.saveState(state)` before `SessionFile.write(state)`; do not mutate that shared state or set `zen-empty-tab` indiscriminately. A Firefox write-time prototype was not enabled: saved/closed groups, split-view trees, selection indexes, and last-window shutdown ownership need a demonstrably safe solution. Zen independently copies split-view metadata; its interaction with removed pseudo-tabs needs investigation. Test shutdown and multi-window ownership. Live Zen validation of all native hooks is required. Continue `T1.18` remaining syntax, ambiguous escaped/ignored script contents, nested-format fidelity and per-note flavor/ignore behavior for remaining syntax including ambiguous block ID locations, unsupported constructs and nested formatting while live validation is blocked; skip parked items and **Never build**.
+Known debts / owner requirements: The owner reports event categories still fail through Daily Note synchronization despite OW-12; tracked separately as OW-16. Full Agenda hover titles are OW-17; shared and isolated space modes are ST7.1 / OW-18. Earlier roadmap DONE claims for `T2.5a–d` were incorrect. Timed-event and timed/all-day reminder pointer moves, timed-event pointer/keyboard resizing, configurable timed snap, cancellation and guarded undo now exist; recurring pointer integration remains open; drag-to-create uses a validated, cancelable composer. Week/Day currently draws 24 fixed labels even on DST transition days; `T2.4c4` is reopened. `T2.6` Big Picture also has no implementation or test and has been reopened. **`B3.3.50-6` LEFT:** Firefox `SessionFile.write` receives the original snapshot separately and remains unprotected; deletion of previously synced records still needs verification. Zen upstream calls `ZenSessionStore.saveState(state)` before `SessionFile.write(state)`; do not mutate that shared state or set `zen-empty-tab` indiscriminately. A Firefox write-time prototype was not enabled: saved/closed groups, split-view trees, selection indexes, and last-window shutdown ownership need a demonstrably safe solution. Zen independently copies split-view metadata; its interaction with removed pseudo-tabs needs investigation. Test shutdown and multi-window ownership. Live Zen validation of all native hooks is required. Continue `T1.18` remaining syntax, ambiguous escaped/ignored script contents, nested-format fidelity and per-note flavor/ignore behavior for remaining syntax including ambiguous block ID locations, unsupported constructs and nested formatting while live validation is blocked; skip parked items and **Never build**.
 
 Calendar density supports persisted Comfortable, Compact and Extra compact in all five views; timeline hour geometry and shading use a shared scale, while narrow Month keeps its list fallback. Live density readability and interaction checks are pending. Calendar/Agenda item menus share a per-item Zen Agenda visibility toggle; it preserves sparse lead/tail overrides, acts on the recurring series, and makes the legacy read-only note-reminder limitation explicit. Calendar remains available to restore an item hidden from the sidebar. Live Zen menu and projection checks remain open.
 
-Next action: implement `OW-01`, then continue Master Order. `OW-09` must retain Month select-only behavior when picker mode is introduced. Live Zen remains unavailable in the sandbox.
+Next action: reproduce and implement `OW-16` (Daily Note category synchronization), then `OW-01` and `OW-17`. New workspace work is ordered at `ST7.1` and `OW-18` after their safety dependencies. `OW-09` must retain Month select-only behavior when picker mode is introduced. Live Zen remains unavailable in the sandbox.
