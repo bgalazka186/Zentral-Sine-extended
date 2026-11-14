@@ -14,6 +14,25 @@ const root = path.resolve(__dirname, "..");
 const buildRoot = fs.mkdtempSync(path.join(os.tmpdir(), "zentral-standalone-build-"));
 for (const name of ["tools", "additional", "loader"])
   fs.cpSync(path.join(root, name), path.join(buildRoot, name), { recursive: true });
+// The build discovers preference owners across the whole checkout, not only the
+// three build inputs above. Copy every owner schema at its original relative path
+// so borrowedSettings validation sees the same registry as an in-place build.
+function copyOwnerSchemas(sourceDir = root, relativeDir = "") {
+  for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+    if (entry.name === ".git" || entry.name === "node_modules") continue;
+    const relative = path.join(relativeDir, entry.name);
+    const full = path.join(sourceDir, entry.name);
+    if (entry.isDirectory()) copyOwnerSchemas(full, relative);
+    else if (/^(?:extension-)?settings\.json$/.test(entry.name)) {
+      const destination = path.join(buildRoot, relative);
+      if (!fs.existsSync(destination)) {
+        fs.mkdirSync(path.dirname(destination), { recursive: true });
+        fs.copyFileSync(full, destination);
+      }
+    }
+  }
+}
+copyOwnerSchemas();
 const runBuild = (args = [], options = {}) => cp.execFileSync(process.execPath,
   [path.join(buildRoot, "tools/build-standalone.cjs"), ...args], { cwd: buildRoot, ...options });
 function repositorySnapshot() {
