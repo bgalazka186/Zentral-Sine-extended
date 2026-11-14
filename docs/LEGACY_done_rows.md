@@ -432,3 +432,23 @@ Optional default-on Overdue folder shows pending, policy-visible reminders from 
 **Tests / done when:** Fake clock: app closed across three reminders: one digest, no per-stage banners.
 
 Startup and explicit wake/clock jumps gather unclaimed final-stage reminders within a configurable 1–31 day window (default 7), coalescing lower stages into a single digest. Shared-history batch claims refresh once and write once, retaining the documented simultaneous cross-window race; protected history blocks calendar claims. Digest paginates its list and supports bulk dismissal and snooze including legacy notes, all-day and recurring occurrence exceptions; unsuccessful actions remain visible with an error. Fake-clock scheduler, fake-Zen and protected-history tests pass. Production-shape 7-day startup with 500/2000 daily series measured 704/2587 ms including normal scheduler expansion (budgets 12000/45000 ms). Live Zen behavior unverified.
+
+## TM3.5 — Completed time edge-case test pack (3.3.131)
+
+#### `TM3.5` — Time edge-case test pack (DST, zones, duplicates, moved occurrences, parsers)
+**Status:** `DONE` · **Impact:** Med-High · **Effort:** M · **Depends on:** F0.2 · **Source:** Audit R1 C list
+
+**Problem:** Edge cases listed in the audit but not covered by tests.
+
+**Plan (do in this order):**
+1. DST: event 02:00-03:00 on a spring-forward day, 25-hour fall-back day, item with its own IANA zone different from local: check day bucket, Agenda label and `ended`.
+2. Two identical reminders at the same minute: identity after deleting one.
+3. Done/Dismiss on one occurrence of a recurring series while it is projected.
+4. `dd-mm-yyyy` and ambiguous dates (`03-04-2026`) under each date-format setting (also the owner's old T2.12 observation).
+5. 31-day Agenda window with 5000 items (production call shape).
+6. A 'this occurrence' move of several weeks, viewed in each month it touches (`recurrenceSearchMargins`).
+
+**Tests / done when:** New `tests/notes-time-edgecases.test.cjs`.
+
+
+New `tests/notes-time-edgecases.test.cjs` covers the spring gap, invalid zero-duration missing hour, 25-hour fall-back, explicit remote zone and local Agenda labels/ended, duplicate reminder keys, occurrence-scoped Done/Dismiss, ambiguous format fallback and day-first note parsing, 31-day/5000 daily-series production-shaped projection and long-distance recurrence exceptions across months. On this run the 5000-series projection took 1967 ms with a 20000 ms ceiling; no production behavior was changed.
