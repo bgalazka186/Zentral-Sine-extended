@@ -8724,9 +8724,13 @@
       const isPseudo = (tab) => {
         if (!tab || typeof tab !== "object") return false;
         const entries = Array.isArray(tab.entries) ? tab.entries : [];
-        const index = Number.isInteger(tab.index) && tab.index > 0 ? tab.index - 1 : entries.length - 1;
-        const current = entries[index]?.url || "";
-        return !!pseudoTabCleanupKind({ url: current }, {});
+        const index = entries.length
+          ? Math.max(0, Math.min(entries.length - 1, (Number(tab.index) || entries.length) - 1))
+          : -1;
+        const current = index >= 0 ? String(entries[index]?.url || "") : "";
+        if (current && current !== "about:blank") return !!pseudoTabCleanupKind({ url: current }, {});
+        const fallback = String(tab._zenPinnedInitialState?.entry?.url || tab.userTypedValue || "");
+        return !!pseudoTabCleanupKind({ url: fallback }, {});
       };
       const managed = (id) => typeof id === "string" && (id === NOTES_ZEN_ROOT_ID || id.startsWith(NOTES_ZEN_SUB_PREFIX) || id === AGENDA_ROOT_ID || id.startsWith("zentral-notes-agenda-day-"));
       const parents = new Map(), used = new Set(), removedTabIds = new Set(), liveTabIds = new Set();
@@ -19611,7 +19615,7 @@
       function zenSweepStrays() {
         const root = zenRootEl();
         if (!root) return;
-        for (const t of [...(document.querySelectorAll?.("tab") || [])]) if (zenManagedTab(t) && !root.contains(t)) zenRemoveTab(t);
+        for (const t of [...(document.querySelectorAll?.("tab") || [])]) if (zenManagedTab(t)) { if (!root.contains(t)) zenRemoveTab(t); }
         for (const f of [...(document.querySelectorAll?.("zen-folder[bgalazka-notes-subfolder]") || [])]) if (!root.contains(f) && f !== root) retireNotesFolder(f, zenRemoveTab);
       }
       // Entries in browser order, direct children of one folder together (what orderPlan compares).
@@ -19915,6 +19919,40 @@
         }
         agendaPlaceRoot(root, position);
         return true;
+      }
+      function agendaTabKey(tab) {
+        if (!tab) return "";
+        let live = "";
+        try { live = tab.linkedBrowser?.currentURI?.spec || ""; } catch (_) {}
+        if (live && live !== "about:blank" && !/^about:blank#zn-agenda-/.test(live)) {
+          try {
+            tab.removeAttribute?.(AGENDA_ATTR);
+            if (/^about:blank#zn-agenda-/.test(tab._zentralNotesUrl || "")) delete tab._zentralNotesUrl;
+          } catch (_) {}
+          return "";
+        }
+        let sessionUrl = "";
+        if ((!live || live === "about:blank") && typeof sessionCurrentTabUrl === "function") {
+          const remembered = String(tab._zentralNotesUrl || "");
+          if (tab.hasAttribute?.(AGENDA_ATTR) || /^about:blank#zn-agenda-/.test(remembered) || tab.pinned || tab.hasAttribute?.("pending")) {
+            sessionUrl = sessionCurrentTabUrl(tab) || "";
+            if (sessionUrl && sessionUrl !== "about:blank" && !/^about:blank#zn-agenda-/.test(sessionUrl)) {
+              if (typeof clearStalePseudoTabMarks === "function") clearStalePseudoTabMarks(tab);
+              else tab.removeAttribute?.(AGENDA_ATTR);
+              return "";
+            }
+          }
+        }
+        const attr = tab.getAttribute?.(AGENDA_ATTR) || "";
+        if (attr) return attr;
+        const raw = /^about:blank#zn-agenda-/.test(live)
+          ? live
+          : (/^about:blank#zn-agenda-/.test(sessionUrl)
+            ? sessionUrl
+            : (typeof tab._zentralNotesUrl === "string" ? tab._zentralNotesUrl : ""));
+        const match = /^about:blank#zn-agenda-([A-Za-z0-9%._~-]{1,600})$/.exec(raw);
+        if (!match) return "";
+        try { return decodeURIComponent(match[1]); } catch (_) { return ""; }
       }
       const agendaOwnTab = (tab) => !!agendaTabKey(tab);
       const agendaOwnedDay = (child) => child.hasAttribute?.("bgalazka-notes-agenda-day") || child.id?.startsWith("zentral-notes-agenda-day-");
@@ -20542,26 +20580,6 @@
         for (const ty of ["TabOpen", "TabClose", "TabUnpinned", "TabPinned", "TabMove", "SSTabRestored", "FolderGrouped", "FolderUngrouped"]) window[act](ty, onAgendaTabEvent, true);
       }
       onCleanup(() => bindAgenda(false));
-      function agendaTabKey(tab) {
-        if (!tab) return "";
-        const url = currentPseudoTabUrl(tab);
-        if (url) {
-          const match = /^about:blank#zn-agenda-([A-Za-z0-9%._~-]{1,600})$/.exec(url);
-          if (!match) {
-            tab.removeAttribute?.(AGENDA_ATTR);
-            return "";
-          }
-          try {
-            const key = decodeURIComponent(match[1]);
-            if (key) tab.setAttribute(AGENDA_ATTR, key);
-            return key;
-          } catch (_) {
-            tab.removeAttribute?.(AGENDA_ATTR);
-            return "";
-          }
-        }
-        return tab.getAttribute?.(AGENDA_ATTR) || "";
-      }
       function pseudoEventPath(event) {
         const nodes = [];
         const add = (node) => { if (node && !nodes.includes(node)) nodes.push(node); };
@@ -20852,13 +20870,14 @@
         // Recover a lost marker from the private pseudo-URL, and keep ownership
         // when Zen moves a managed tab outside the Agenda root.
         const key = agendaTabKey(candidate);
-        const tab = candidate && agendaOwnTab(candidate) && key ? candidate : null;
+        const tab = candidate && key ? candidate : null;
         const owned = tab && (key.startsWith("item:") || key === "more:overdue");
         const modified = ev.ctrlKey || ev.shiftKey || ev.altKey || ev.metaKey;
+        const inButton = !!pseudoEventClosest(ev, ".tab-close-button, .tab-reset-button, .tab-icon-overlay");
         if (ev.type === "blur") { if (ev.target === window) clearAgendaPress(); return; }
         if (ev.type === "mousedown") {
           clearAgendaPress();
-          if (owned && (ev.button === 0 || ev.button === 1) && !ev.target?.closest?.(".tab-close-button, .tab-reset-button, .tab-icon-overlay"))
+          if (owned && (ev.button === 0 || ev.button === 1) && !inButton)
             agendaPress = { tab, button: ev.button, x: ev.clientX, y: ev.clientY, modified: !!modified, moved: false, released: false,
               origin: (() => { try { return window.gBrowser.selectedTab; } catch (_) { return null; } })() };
           if (owned && ev.button === 1 && !modified) { ev.preventDefault(); ev.stopImmediatePropagation(); }
@@ -20901,8 +20920,9 @@
         }
         if (ev.type !== "click") return;
         const press = agendaPress; clearAgendaPress();
-        if (!owned || !press || press.tab !== tab || press.button !== 0 || ev.button !== 0 || !press.released || press.modified || modified) return;
-        ev.preventDefault(); ev.stopImmediatePropagation();
+        if (!owned || ev.button !== 0 || modified || inButton) return;
+        ev.preventDefault(); ev.stopPropagation?.(); ev.stopImmediatePropagation();
+        if (!press || press.tab !== tab || press.button !== 0 || !press.released || press.modified) return;
         if (!press.moved && Math.hypot(ev.clientX - press.x, ev.clientY - press.y) <= 4 && tab.isConnected !== false) activateAgendaTab(tab);
       }
       function onAgendaDrag(ev) {
@@ -21301,7 +21321,8 @@
         if (tab && routePseudoTab(tab)) { ev.preventDefault?.(); ev.stopImmediatePropagation?.(); return; }
         // Ownership survives a native move out of NOTES and a session restore
         // which recreated the pseudo-tab without our expando/attribute marker.
-        if (!tab || !zenManagedTab(tab)) return;
+        if (tab) notesTabKey(tab);
+        if (!tab || !(tab.hasAttribute?.(NOTES_ATTR) || zenLooksOurs(tab))) return;
         ev.preventDefault();
         ev.stopImmediatePropagation();
         // Middle click (close / unload in some setups) and the tab's own close / reset buttons do nothing here:
@@ -21332,13 +21353,13 @@
         if (disposed || zen.dead || zenMode() === "off" || zenEventsIgnored()) return;
         const tab = ev.target;
         if (!tab || tab.localName !== "tab") return;
-        const marked = !!zenManagedTab(tab);
+        const marked = !!notesTabKey(tab);
         if (!marked && zenRootEl()?.contains?.(tab) && ["TabMove", "TabPinned", "SSTabRestored"].includes(ev.type)) {
           zen.touch(0); // foreign tabs entering NOTES are evacuated immediately after the native move
           return;
         }
         if (ev.type === "TabBrowserDiscarded") { if (marked) zenHeal(tab); return; }
-        if (!marked) return;
+        if (!marked && !(ev.type === "SSTabRestored" && zenLooksOurs(tab))) return;
         zen.touch(0);
       };
       const onZenFolderEvent = (ev) => {
@@ -21362,7 +21383,8 @@
         // Misplaced marked tabs and restored pseudo-URLs are still our inert
         // placeholders. Bounce selection before about:blank can become a page,
         // open their model target, then queue an immediate projection repair.
-        if (!isOurTab(tab) && zenManagedTab(tab)) {
+        if (tab) notesTabKey(tab);
+        if (!isOurTab(tab) && (tab?.hasAttribute?.(NOTES_ATTR) || zenLooksOurs(tab))) {
           if (zenEventsIgnored()) return;
           const prev = ev.detail?.previousTab;
           window.clearTimeout(zenSelectTimer);

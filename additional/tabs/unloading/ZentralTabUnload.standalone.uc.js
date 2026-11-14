@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Tab Unload
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.155
+// @version 3.3.156
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.155, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.156, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.155";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.156";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -711,10 +711,41 @@ function nativeSidebarSide() {
       // a tab's historical SessionStore entries or display label).
       function isNotesAgendaEntryTab(tab) {
         if (!tab) return false;
-        if (tab.hasAttribute("bgalazka-notes-item") ||
-            tab.hasAttribute("bgalazka-notes-agenda-item")) return true;
         let url = "";
         try { url = tab.linkedBrowser?.currentURI?.spec || ""; } catch (_) {}
+        // A live ordinary URL is authoritative: old pseudo markers/expandos
+        // must not make a reused web tab permanently ineligible for unloading.
+        if (url && url !== "about:blank") {
+          if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(url)) return true;
+          try {
+            tab.removeAttribute("bgalazka-notes-item");
+            tab.removeAttribute("bgalazka-notes-agenda-item");
+            if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(tab._zentralNotesUrl || "")) delete tab._zentralNotesUrl;
+          } catch (_) {}
+          return false;
+        }
+        if (!url || url === "about:blank") {
+          let sessionUrl = "";
+          try {
+            const state = JSON.parse(window.SessionStore?.getTabState?.(tab) || "{}");
+            const entries = Array.isArray(state.entries) ? state.entries : [];
+            const index = entries.length
+              ? Math.max(0, Math.min(entries.length - 1, (Number(state.index) || 1) - 1))
+              : -1;
+            sessionUrl = index >= 0 ? String(entries[index]?.url || "") : "";
+          } catch (_) {}
+          if (sessionUrl) {
+            if (sessionUrl !== "about:blank" && /^about:blank#zn-(?:note:|new:|agenda-)/.test(sessionUrl)) return true;
+            try {
+              tab.removeAttribute("bgalazka-notes-item");
+              tab.removeAttribute("bgalazka-notes-agenda-item");
+              if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(tab._zentralNotesUrl || "")) delete tab._zentralNotesUrl;
+            } catch (_) {}
+            return false;
+          }
+        }
+        if (tab.hasAttribute("bgalazka-notes-item") ||
+            tab.hasAttribute("bgalazka-notes-agenda-item")) return true;
         if (!url || url === "about:blank") {
           try { url = tab._zentralNotesUrl || url; } catch (_) {}
         }

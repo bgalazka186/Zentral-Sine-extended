@@ -22,7 +22,7 @@ const PREF = "zen.workspace.zentral.notes.agenda_folder", MARK = "bgalazka-notes
   other.setAttribute("pinned", "true"); other.setAttribute("pending", "true"); h.window.gBrowser.selectedTab = other; h.emit("TabSelect", other, {});
   ev("mousedown", tab); h.window.gBrowser.selectedTab = tab; h.emit("TabSelect", tab, { detail: { previousTab: null } }); h.fireTimer(0);
   assert.equal(h.window.gBrowser.selectedTab, other, "pointer origin wins even when it is a pinned or unloaded tab");
-  other.removeAttribute("pinned"); other.removeAttribute("pending"); ev("mouseup", tab); h.fireTimer(0);
+  other.removeAttribute("pinned"); other.removeAttribute("pending");
   ev("mousemove", tab, { clientX: 45 }); ev("mouseup", other, { clientX: 45 }); ev("click", other, { clientX: 45 }); await Promise.resolve();
   assert.equal(opens, 0, "drag and release elsewhere cancel activation");
   // Gecko/Zen can deliver the click after the mouseup task has returned.
@@ -63,7 +63,8 @@ const PREF = "zen.workspace.zentral.notes.agenda_folder", MARK = "bgalazka-notes
   assert.equal(ev("mousedown", tab, { button: 1 }).defaultPrevented, true); const middle = ev("auxclick", tab, { button: 1 }); assert.equal(middle.defaultPrevented, true); await Promise.resolve(); assert.equal(opens, 1);
   ev("mousedown", tab); ev("mousemove", tab, { clientY: 26 }); ev("mouseup", tab, { clientY: 26 }); ev("click", tab, { clientY: 26 }); await Promise.resolve(); assert.equal(opens, 1, "movement exceeding 4px cancels even on same tab");
   ev("mousedown", tab); ev("dragstart", tab); ev("mouseup", tab); ev("click", tab); await Promise.resolve(); assert.equal(opens, 1, "native dragstart cancels activation");
-  ev("mousedown", tab); ev("mouseup", tab); ev("click", tab, { ctrlKey: true }); await Promise.resolve(); assert.equal(opens, 1, "a modifier applied during the gesture cancels activation");
+  ev("mousedown", tab); ev("mouseup", tab, { ctrlKey: true }); ev("click", tab); await Promise.resolve(); assert.equal(opens, 1, "a modifier applied before release cancels activation");
+  ev("mousedown", tab, { ctrlKey: true }); ev("mouseup", tab); ev("click", tab); await Promise.resolve(); assert.equal(opens, 1, "a modifier applied on press cancels activation");
   ev("click", tab); await Promise.resolve(); assert.equal(opens, 1, "stray clicks cannot activate");
   // A modified release without click must not suppress a later keyboard activation.
   ev("mousedown", tab); ev("mouseup", tab, { ctrlKey: true }); h.fireTimer(500);

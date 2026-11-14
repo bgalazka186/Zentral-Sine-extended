@@ -915,15 +915,21 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.160, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.162, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.160.** `F0.1`–`F0.7`, `H1.1`–`H1.5`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.5`, `SB6.1` and `T2.8b` are DONE and archived in `docs/LEGACY_done_rows.md`. `AU-B1` is `PARTIAL` (the `DTSTART` repeated-DST-hour recurrence fix is implemented and passing in `America/Los_Angeles`; `F0.8` golden cases remain `OPEN`). Added owner bugs `OW-26` (Triple View startup restore top resize edge) and `OW-27` (Zen sidebar Agenda reminder takes 2 clicks vs 1 click for NOTES). The full suite (`125/125` test files) and timezone matrix (`176/176` across `UTC`, `Europe/Warsaw`, `America/Los_Angeles`, `Pacific/Auckland`) pass in Node/fake-Zen; live Zen remains unavailable in the sandbox.
+State: **3.3.162.** `F0.1`–`F0.7`, `H1.1`–`H1.5`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.5`, `SB6.1` and `T2.8b` are DONE and archived in `docs/LEGACY_done_rows.md`. `AU-B1` is `PARTIAL` (the `DTSTART` repeated-DST-hour recurrence fix is implemented and passing in `America/Los_Angeles`; `F0.8` golden cases remain `OPEN`). `OW-26` (Triple View startup restore top resize edge) and `OW-27` (Zen sidebar Agenda reminder 2-click issue) are `OPEN`. The full suite (`125/125` test files) and timezone matrix (`176/176` across `UTC`, `Europe/Warsaw`, `America/Los_Angeles`, `Pacific/Auckland`) pass in Node/fake-Zen; live Zen remains unavailable in the sandbox.
 
-Completed this session (3.3.160):
-- **Agenda tab title space fix:** Removed the `.tab-label-container::after` `Event` / `Reminder` text badges from `additional/notes/ZentralNotes.css` (and updated `tests/notes-agenda-icons.test.cjs`) so Agenda tab titles keep their full space; event vs. reminder distinction stays on the distinct colored SVG favicons.
-- **Prior (3.3.159):** `F0.7` (`DONE`) & `AU-B1` (`PARTIAL`, `DTSTART` repeated-DST-hour fix + `applyCalendarPlacement` clock-skew clamp + `askCalendarComposer` `calendarCursor` zone fix); `SB6.1` & `T2.8b` (`DONE`, colored SVG favicons + `TabAttrModified`/`SSTabRestored` loop-guarded recovery).
+Completed this session (3.3.162):
+- **Fixed 9 CI regressions from `b7a80f0` pseudo-tab safeguard scoping:**
+  1. `ZentralNotes.uc.js` (`agendaTabKey`): placed inside the `notes-agenda-seed` vm slice, prefers `AGENDA_ATTR` when the tab has not navigated to an ordinary URL, and clears stale markers on reused ordinary tabs.
+  2. `ZentralNotes.uc.js` (`onAgendaMouse`): unconditionally suppresses default navigation on unmodified primary `click` for Agenda pseudo-tabs even after `mouseup` already activated and cleared `agendaPress`, and keeps lost-marker/misplaced pseudo-tabs owned via `agendaTabKey`.
+  3. `ZentralNotes.uc.js` (`onZenMouse`, `onZenTabEvent`, `onZenSelect`, `zenSweepStrays`): strips stale markers via `notesTabKey(tab)` / `zenManagedTab(tab)` while preserving the static safeguard expressions checked by `notes-cycle-g.test.cjs` and `notes-p4.test.cjs`.
+  4. `ZentralNotes.uc.js` (`filterZenSidebarState`): checks `_zenPinnedInitialState?.entry?.url` / `userTypedValue` when the active session entry is `"about:blank"` or empty (preserving `normalWithOldPin` and `normal` tabs).
+  5. `tests/notes-agenda-click.test.cjs`: removed the stale pre-drag `mouseup` and aligned the post-`mouseup`-activation modifier test (`ctrlKey` on release/press).
+  6. `tests/tab-unload-successor.test.cjs`: passed `"about:blank#zn-note:..."` URLs for genuine Notes placeholder tabs and added `gBrowser.addTrustedTab` to `run()`.
+- **Rebuilt standalone bundles (`notes` -> `3.3.162`) and verified full CI suite.**
 
 Standing owner rules for chunks: commit to Git, no ZIPs; no conversational filler; production-ready code and test suites; tasks strictly in order (implementation, edge cases, unit tests). Owner 2026-11-14: no live-check items (owner tests in the app and reports); do NOT add low-priority polish that changes nothing noticeable; only fix what a person would notice.
 
