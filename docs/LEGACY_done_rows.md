@@ -668,3 +668,16 @@ Shared Notes and Agenda roots follow the active workspace, with owned descendant
 **Tests / done when:** Harness: reorder performs only moves through the helper; live check on a disposable profile.
 
 Agenda reordering uses the same `gBrowser.moveTabBefore` helper as the Notes projection for tabs and day folders; a DOM fallback is used only when that helper is absent. Native failures or no-op moves are detected without a bookkeeping-bypassing fallback. Own synchronous TabMove events are ignored, with the guard released even on failure. Fake-host tests cover tabs, folders, no-ops, exceptions, fallback, idempotence and external events. Fake 50/150-item reverse reorder: 17.1/135.7 ms before, 17.3/140.5 ms after (timings vary). Live Zen remains unverified; the owner-approved assumption for live-only checks applies.
+
+## OW-19 — Recover flattened pasted table rows (3.3.147)
+
+#### `OW-19` — Recover pasted Markdown tables whose row breaks were lost
+**Status:** `DONE` · **Impact:** High · **Effort:** S-M · **Depends on:** none · **Source:** Owner report
+
+**Problem:** Some sources paste a Markdown table as a single line, joining row boundaries as `||` (possibly with whitespace), so Notes does not recognize the table.
+
+**Plan:** Conservatively reconstruct lost row breaks during paste only if a valid Markdown table can be positively identified and the reconstructed content parses as a table. Preserve all other pasted text and existing valid tables, escaped pipes, inline code and ordinary `||` text; do not alter the clipboard or other input paths. Preserve paste behavior for rich HTML, selections, undo, line endings and security.
+
+**Tests / done when:** Pure and real-sheet paste regressions include the owner's header, delimiter and data example, malformed/ambiguous input unchanged, escaped/inline-code pipes, surrounding text, selections and existing tables.
+
+Paste reconstructs row boundaries only for matching complete rows and a valid delimiter, then validates the reconstructed table against the destination note using its read options before inserting through the existing undo-preserving edit path. Escaped pipes and CRLF are retained, code fences, inline-code pipes, malformed or oversized candidates and invalid context fall back to ordinary paste; structured HTML retains precedence. Pure and fake-sheet tests cover the reported example, selection, malformed/ordinary text, fences and read-only notes. Live Zen paste/undo remains unverified.

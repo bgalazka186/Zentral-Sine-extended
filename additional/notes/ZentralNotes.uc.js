@@ -3939,6 +3939,51 @@
       return normalizeNewlines(r.markdown);
     }
 
+    // Some clipboards flatten table rows into one line, leaving the closing
+    // and opening pipes adjacent. Only repair a complete, unambiguous table;
+    // validate again in the destination note so code blocks stay untouched.
+    function repairPastedTable(raw, { before = "", after = "", readOptions = {}, prepare = hideFrontMatter } = {}) {
+      if (typeof raw !== "string" || !raw.includes("|") || raw.length > 200000 || before.length + after.length + raw.length > 1000000) return null;
+      if (!/^[\t ]*$/.test(before.slice(before.lastIndexOf("\n") + 1)) || !/^[\t ]*$/.test(after.split(/\r\n|\r|\n/, 1)[0])) return null;
+      const newline = raw.match(/\r\n|\n|\r/)?.[0] || "\n";
+      const parts = raw.split(/(\r\n|\n|\r)/), repaired = [], starts = [];
+      let outputLine = 0;
+      for (let n = 0; n < parts.length; n += 2) {
+        const line = parts[n], segments = [];
+        let from = 0, code = 0, invalid = false;
+        for (let i = 0; i < line.length; i++) {
+          if (line[i] === "\\") { i++; continue; }
+          if (line[i] === "`") {
+            let end = i + 1; while (line[end] === "`") end++;
+            const length = end - i;
+            if (!code) code = length; else if (code === length) code = 0;
+            i = end - 1; continue;
+          }
+          if (line[i] !== "|") continue;
+          if (code) { invalid = true; break; }
+          let next = i + 1; while (line[next] === " " || line[next] === "\t") next++;
+          if (line[next] === "|") { segments.push(line.slice(from, i + 1)); from = next; i = next - 1; }
+        }
+        if (!invalid && !code && segments.length) {
+          segments.push(line.slice(from));
+          const counts = segments.map((part) => splitRow(part).length);
+          const fullRows = segments.every((part) => /^\s*\|/.test(part) && /\|\s*$/.test(part));
+          const valid = fullRows && counts[0] > 0 && counts[0] <= MAX_TABLE_COLS && segments.length - 2 <= MAX_TABLE_ROWS && counts.every((count) => count === counts[0]) && isTableStart(segments, 0);
+          if (valid) { starts.push({ line: outputLine, rows: segments.length - 2 }); repaired.push(segments.join(newline)); outputLine += segments.length - 1; }
+          else repaired.push(line);
+        } else repaired.push(line);
+        if (parts[n + 1]) { repaired.push(parts[n + 1]); outputLine++; }
+      }
+      if (!starts.length) return null;
+      const result = repaired.join(""), candidate = before + result + after;
+      const prefixLines = (before.match(/\n/g) || []).length;
+      try {
+        const tables = parseBlocks(prepare(candidate), false, readOptions).filter((block) => block.type === "table");
+        if (!starts.every(({ line, rows }) => tables.some((table) => table.src === prefixLines + line && table.rows.length >= rows))) return null;
+        return result;
+      } catch (_) { return null; }
+    }
+
     function pastedLink(raw) {
       const t = String(raw ?? "").trim();
       if (!t || /\s/.test(t) || t.length > 2000) return null;
@@ -9093,7 +9138,7 @@
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition, calendarMenuPosition, normalizeContextMenuItems,
         highlightCode, codeLangKey, texNodes, mapPosition, mergeAnchors, insertCodeBlock, buildLink, insertLink,
-        pastedLink, richPaste, PASTE_HTML_PART, fragmentLabel, insertImage, makeTable, insertTable, SHORTCUT_ACTIONS, formatCombo,
+        pastedLink, richPaste, repairPastedTable, PASTE_HTML_PART, fragmentLabel, insertImage, makeTable, insertTable, SHORTCUT_ACTIONS, formatCombo,
         normalizeCombo, comboFromEvent, parseShortcutMap, effectiveShortcuts, findShortcutConflict,
         matchShortcutAction, assignShortcut, QUICK_OPTIONS, stepOption, PREF,
         alignDelim, buildImage, insertImageMd, pastedWebAddress, CODE_LANGS, CALLOUT_KINDS, calloutId, insertCallout,
@@ -16792,6 +16837,14 @@
         if (rich) {
           e.preventDefault();
           applyEdit({ start: s, end: en, text: rich, selStart: s + rich.length, selEnd: s + rich.length });
+          return;
+        }
+        const pasteReadOptions = { ...(env.readOpts?.() || {}), ...(note()?.flavor ? { flavor: note().flavor } : {}) };
+        const repaired = repairPastedTable(text, { before: ta.value.slice(0, s), after: ta.value.slice(en), readOptions: pasteReadOptions,
+          prepare: (body) => readBody(hideFrontMatter(body), pasteReadOptions.flavor) });
+        if (repaired !== null) {
+          e.preventDefault();
+          applyEdit({ start: s, end: en, text: repaired, selStart: s + repaired.length, selEnd: s + repaired.length });
         }
       });
       listen(ta, "blur", () => {

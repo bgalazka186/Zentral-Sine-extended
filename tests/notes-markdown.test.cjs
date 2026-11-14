@@ -39,6 +39,23 @@ test("tables: pipes without a delimiter row stay a paragraph; a lone --- is stil
   assert.equal(c.parseBlocks("| a | b |\n|---|---|")[0].type, "table", "header-only table");
 });
 
+test("OW-19: repair only unambiguous pasted table row boundaries", () => {
+  const sample = "| Order | ID | Status | Impact | Effort | Depends on | Task || --: | :-- | :-- | :-- | :-- | :-- | :-- || 25 | `ID` | `OPEN` | Med | S | UI | Example Text |";
+  const fixed = "| Order | ID | Status | Impact | Effort | Depends on | Task |\n| --: | :-- | :-- | :-- | :-- | :-- | :-- |\n| 25 | `ID` | `OPEN` | Med | S | UI | Example Text |";
+  assert.equal(c.repairPastedTable(sample), fixed);
+  assert.equal(c.parseBlocks(fixed)[0].type, "table");
+  assert.equal(c.repairPastedTable("intro\n" + sample + "\nend"), "intro\n" + fixed + "\nend");
+  assert.equal(c.repairPastedTable("intro\r\n" + sample + "\r\nend"), "intro\r\n" + fixed.replace(/\n/g, "\r\n") + "\r\nend");
+  assert.equal(c.repairPastedTable(sample, { before: "```\n", after: "\n```" }), null);
+  assert.equal(c.repairPastedTable(sample, { before: "text " }), null);
+  assert.equal(c.repairPastedTable(sample, { prepare: () => "" }), null);
+  assert.equal(c.repairPastedTable(sample, { prepare: () => { throw Error("unavailable"); } }), null, "validation failure falls back to native paste");
+  assert.equal(c.repairPastedTable(sample + "x".repeat(200001)), null, "oversized input is left alone");
+  assert.equal(c.repairPastedTable("| A | B || --- | --- || a\\|b | ok |"), "| A | B |\n| --- | --- |\n| a\\|b | ok |");
+  for (const unsafe of ["hello || world", "| A | B || --- | no || x | y |", "| A | B || --- | --- || wrong |", "| A | B |\n|---|---|\n| x | y |", "| A | B || --- | --- || `a||b` | c |", "```\n" + sample + "\n```", "| A || B || --- | --- || x | y |", "| A | B || --- | --- || a | b | extra |"])
+    assert.equal(c.repairPastedTable(unsafe), null, unsafe);
+});
+
 test("tables: a table ends a paragraph and is followed by normal blocks; size is capped", () => {
   const blocks = c.parseBlocks("intro\n| a | b |\n|---|---|\n| 1 | 2 |\n\nafter");
   same(blocks.map((b) => b.type), ["p", "table", "p"]);

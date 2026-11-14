@@ -173,3 +173,7 @@ Agenda sidebar items and day folders are managed projections: dragging them or d
 ### Shared workspace projections
 
 When Notes or Agenda sidebar folders are enabled, their shared data follows the active Zen workspace in each window. Switching workspaces does not create independent copies. Foreign tabs and folders found inside a projection are preserved in their original workspace; if they cannot be moved safely, the projection waits for a later retry. Separate per-space data is not yet available.
+
+### Pasting flattened tables
+
+If a copied Markdown table has lost its row breaks and its rows run together at `||`, Notes can restore the breaks when the result is a valid table in the note. Ambiguous or malformed text is left to the normal paste behavior; structured HTML still uses the existing HTML-to-Markdown conversion.

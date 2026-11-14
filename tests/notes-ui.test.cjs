@@ -541,6 +541,20 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     prefs.delete(c.PREF.PASTE_LINK);
   });
 
+  await test("OW-19: pasted collapsed table replaces the selection only when it becomes a table", async () => {
+    const raw = "| Order | ID | Task || --: | :-- | :-- || 25 | `ID` | Example |";
+    const fixed = "| Order | ID | Task |\n| --: | :-- | :-- |\n| 25 | `ID` | Example |";
+    let ta = prep(sheetA, "before\nreplace\nafter", 7, 14);
+    const paste = (text) => { const e = new Ev("paste", { clipboardData: { getData: type => type === "text/plain" ? text : "" } }); ta.dispatchEvent(e); return e; };
+    assert.ok(paste(raw).defaultPrevented); assert.equal(ta.value, "before\n" + fixed + "\nafter");
+    assert.equal(ta.selectionStart, 7 + fixed.length); assert.equal(ta.selectionEnd, ta.selectionStart);
+    assert.equal(c.parseBlocks(ta.value).find(b => b.type === "table").rows.length, 1);
+    ta = prep(sheetA, "```\nreplace\n```", 4, 11); assert.equal(paste(raw).defaultPrevented, false, "pasting inside a fence is left native");
+    ta = prep(sheetA, "prefix replace suffix", 7, 14); assert.equal(paste(raw).defaultPrevented, false, "partial-line paste is not a table");
+    ta = prep(sheetA, "", 0, 0); assert.equal(paste("a || b").defaultPrevented, false, "ordinary text uses native paste");
+    ta.readOnly = true; assert.equal(paste(raw).defaultPrevented, false, "read-only notes are never edited"); ta.readOnly = false;
+  });
+
   await test("B2 table creator inserts the picked size", async () => {
     const ta = prep(sheetA, "", 0, 0);
     key(ta, "y", { ctrlKey: true, shiftKey: true, code: "KeyY" });
