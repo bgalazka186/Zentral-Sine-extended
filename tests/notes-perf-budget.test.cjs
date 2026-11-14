@@ -6,7 +6,7 @@ const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
 const { createFakeZen } = require("./helpers/fake-zen-browser.cjs");
 const BUDGET_MS = Object.freeze({
   projection4_500: 500, projection31_500: 2000, projection4_2000: 1000, projection31_2000: 7000,
-  expand31_500: 1600, expand90_500: 5000, expand31_2000: 7000, expand90_2000: 18000,
+  expand31_500: 1300, expand90_500: 4300, expand31_2000: 6200, expand90_2000: 16000,
   scheduler500: 6500, scheduler2000: 25000, schedulerCached500: 4000, schedulerCached2000: 15000, history45000: 500,
 });
 const now = Date.parse("2026-11-13T12:00:00Z"), start = C.addDays(C.dayStart(now), 1) + 12 * 3600000;

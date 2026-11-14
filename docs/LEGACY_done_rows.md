@@ -321,3 +321,20 @@ Occurrence expansions are cached by local day/timezone and master identity/revis
 **Tests / done when:** F0.2 budget for the production call shape; equality test old vs new projection on random fixtures.
 
 Production controller resolves each master policy once per reconciliation, sharing a run-local map with projection and boundary scheduling; default policies use the tight loop. Occurrence-specific external callbacks retain legacy behavior unless explicitly opted into master policy. The cache is intentionally run-local rather than across-run revision-memoized: category, note-policy and global preference revision counters are not exposed, so rebuilding prevents stale inheritance. Randomized equality and controller invalidation tests pass. Production-shaped projection plus boundary 500/2000: 4-day 74/192 ms, 31-day 364/1665 ms; prior projection alone 82/179 and 428/1519 ms, respectively, so only 500-item 31-day improvement was observed. Budgets tightened with CI margin; timings vary.
+
+## PF2.4 — Completed recurrence expansion improvements (3.3.124)
+
+#### `PF2.4` — Recurrence core: memoise rules, index exceptions, cheap occurrence copies
+**Status:** `DONE` · **Impact:** High · **Effort:** M · **Depends on:** F0.2 · **Source:** Audit R2 P3
+
+**Problem:** `expandItem` (`ZentralNotesCalendar.js` ~line 1749) re-parses the rule on every call (`it.recurrence.map(parseRule)`), finds exceptions with a linear `exceptions.find` per candidate, and deep-copies each occurrence with `JSON.parse(JSON.stringify(it))`. Measured: 500 daily items, 90 days: 0.58 s; 2000 items: 2.5 s (UI thread, synchronous in `renderCalendar`).
+
+**Plan (do in this order):**
+1. Memoise `parseRule` by rule string (small LRU).
+2. Build a `Map` of `scope:'this'` exceptions keyed by recurrence id once per `expandItem` call.
+3. Replace the deep copy by a shallow copy that clones only `x`, `start`, `end` (and arrays that are mutated); freeze nothing else.
+4. Keep occurrence ids and `x.series`/`x.recurrenceId` semantics byte-identical.
+
+**Tests / done when:** Property test: new expansion equals old expansion for random rules/exceptions over DST boundaries; F0.2 budgets.
+
+Bounded rule LRU accounts for timezone-sensitive UNTIL and returns defensive copies; occurrence exceptions are indexed once per expansion with first-match semantics. Normalized plain records use an in-memory recursive clone rather than JSON round trips, retaining full master/sibling mutation isolation (rather than sharing nested arrays as the initial shallow-copy proposal suggested). Sixty seeded pre-change byte-hash fixtures across DST and exceptions match, plus mutation/timezone tests. 31-day expansion 500/2000: 224/951 ms; 90-day: 629/2488 ms versus pre-change 250/1136 and 752/3143 ms (timings vary). Corresponding budgets tightened.

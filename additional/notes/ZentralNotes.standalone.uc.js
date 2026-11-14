@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.123
+// @version 3.3.124
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.123, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.124, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.123";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.124";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2956,7 +2956,23 @@ const __zentralEmbeddedLoader = (function () {
 
   // ---------- recurrence (RRULE subset: FREQ DAILY/WEEKLY/MONTHLY/YEARLY, INTERVAL, COUNT, UNTIL, BYDAY for weekly) ----------
   const DAY_CODES = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+  const parsedRuleCache = new Map(), PARSED_RULE_CACHE_LIMIT = 256;
   function parseRule(text) {
+    // UNTIL is a local civil date, so a timezone change must not reuse the old value.
+    let zone = "";
+    if (/;?UNTIL=/i.test(String(text || ""))) { try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (_) {} }
+    const key = zone + "\u0000" + String(text || "");
+    if (parsedRuleCache.has(key)) {
+      const cached = parsedRuleCache.get(key);
+      parsedRuleCache.delete(key); parsedRuleCache.set(key, cached);
+      return cached ? { ...cached, byday: [...cached.byday] } : null;
+    }
+    const parsed = parseRuleUncached(text);
+    parsedRuleCache.set(key, parsed);
+    if (parsedRuleCache.size > PARSED_RULE_CACHE_LIMIT) parsedRuleCache.delete(parsedRuleCache.keys().next().value);
+    return parsed ? { ...parsed, byday: [...parsed.byday] } : null;
+  }
+  function parseRuleUncached(text) {
     const m = /^RRULE:(.+)$/.exec(String(text || ""));
     if (!m) return null;
     const o = {};
@@ -3087,6 +3103,13 @@ const __zentralEmbeddedLoader = (function () {
     const key = ymd(date), minute = zonedDateTimeToMs(key, p2(wall.hour) + ":" + p2(wall.minute), zone);
     return Number.isFinite(minute) ? minute + wall.second * 1000 + wall.millisecond : NaN;
   }
+  function copyOccurrenceRecord(value) {
+    if (Array.isArray(value)) return value.map(copyOccurrenceRecord);
+    if (!value || typeof value !== "object") return value;
+    const copy = {};
+    for (const key of Object.keys(value)) copy[key] = copyOccurrenceRecord(value[key]);
+    return copy;
+  }
   function expandItem(it, from, to) {
     const rule = (it.recurrence || []).map(parseRule).find(Boolean);
     if (!rule) return itemsInRange([it], from, to);
@@ -3096,6 +3119,11 @@ const __zentralEmbeddedLoader = (function () {
     const zone = allDay ? "" : cleanZone(it.x?.tz);
     const base = recurrenceCivilDate(s0, zone), wall = recurrenceWallClock(s0, zone);
     const out = [], exceptions = it.x?.recurrenceExceptions || [], exdates = recurrenceExdateSet(it);
+    const singleExceptions = new Map();
+    for (const entry of exceptions) if (entry.scope === "this") {
+      const stamp = whenMs(entry.recurrenceId);
+      if (!singleExceptions.has(stamp)) singleExceptions.set(stamp, entry);
+    }
     const margins = recurrenceSearchMargins(it, allDay);
     const limit = Math.min(to + margins.negative, rule.until || Infinity);
     if (limit <= s0) return [];
@@ -3119,7 +3147,7 @@ const __zentralEmbeddedLoader = (function () {
         ordinal++;
         if (exdates.has(recurrenceMs)) continue;
         const recurrenceId = recurrenceIdWhen(recurrenceMs, allDay);
-        const exception = exceptions.find((entry) => entry.scope === "this" && whenMs(entry.recurrenceId) === recurrenceMs);
+        const exception = singleExceptions.get(recurrenceMs);
         if (exception?.cancelled) continue;
         let visibleStart = recurrenceMs + occurrenceShift(exceptions, recurrenceMs, allDay);
         let visibleEnd = allDay ? addDays(visibleStart, allDaySpan) : visibleStart + len;
@@ -3129,7 +3157,9 @@ const __zentralEmbeddedLoader = (function () {
         }
         const touches = reminder ? visibleStart >= from && visibleStart < to : visibleStart < to && visibleEnd > from;
         if (!touches) continue;
-        const occ = JSON.parse(JSON.stringify(it));
+        // Calendar items are normalized plain records. Clone nested values to
+        // keep occurrences, siblings and their source independently editable.
+        const occ = copyOccurrenceRecord(it);
         occ.id = recurrenceMs === s0 ? it.id : it.id + "@" + recurrenceMs;
         occ.x.series = it.id;
         occ.x.recurrenceId = String(recurrenceMs);
