@@ -644,7 +644,21 @@
 .zentral-notes-sheet .zn-swatch[data-color="teal"] { background: #2ec4b6; }
 
 /* ---- Markdown: tables and images ------------------------------------------- */
-.zentral-notes-sheet .zn-read .zn-table-wrap { max-width: 100%; overflow-x: auto; margin: 0.5em 0; scrollbar-width: thin; }
+.zentral-notes-sheet .zn-read .zn-table-wrap {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto !important;
+  overscroll-behavior-x: contain;
+  margin: 0.5em 0;
+  /* Zen themes can hide scrollbars or make them nearly invisible. Keep the
+     native horizontal control usable, including in a narrow split pane. */
+  scrollbar-width: auto !important;
+  scrollbar-color: var(--zn-muted) transparent;
+}
+.zentral-notes-sheet .zn-read .zn-table-wrap:focus-visible { outline: 2px solid var(--zn-text); outline-offset: 2px; }
 .zentral-notes-sheet .zn-read .zn-table { border-collapse: collapse; font-size: 0.95em; }
 .zentral-notes-sheet .zn-read .zn-table th,
 .zentral-notes-sheet .zn-read .zn-box { margin: 0 0 var(--zn-gap, 0.6em); }

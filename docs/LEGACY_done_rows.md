@@ -681,3 +681,16 @@ Agenda reordering uses the same `gBrowser.moveTabBefore` helper as the Notes pro
 **Tests / done when:** Pure and real-sheet paste regressions include the owner's header, delimiter and data example, malformed/ambiguous input unchanged, escaped/inline-code pipes, surrounding text, selections and existing tables.
 
 Paste reconstructs row boundaries only for matching complete rows and a valid delimiter, then validates the reconstructed table against the destination note using its read options before inserting through the existing undo-preserving edit path. Escaped pipes and CRLF are retained, code fences, inline-code pipes, malformed or oversized candidates and invalid context fall back to ordinary paste; structured HTML retains precedence. Pure and fake-sheet tests cover the reported example, selection, malformed/ordinary text, fences and read-only notes. Live Zen paste/undo remains unverified.
+
+## OW-20 — Table horizontal scrolling (3.3.148)
+
+#### `OW-20` — Horizontal scrolling for clipped tables
+**Status:** `DONE` · **Impact:** High · **Effort:** S-M · **Depends on:** none · **Source:** Owner report
+
+**Problem:** A table wider than the Notes window can be cut off with no usable horizontal scrollbar.
+
+**Plan:** Make wide Markdown and supported HTML tables scroll horizontally within their own constrained read-view container, without clipping the rest of the note or disturbing vertical scroll. Account for narrow panes, nested content, dark/light themes, keyboard and overlay scrollbars.
+
+**Tests / done when:** Render/style tests for both table kinds and narrow/nested layouts; manual Zen scrollbar, keyboard and window-width verification remains explicitly noted if unavailable.
+
+Markdown and supported HTML tables use constrained, full-width, shrinkable horizontal scroll regions, overriding host scrollbar hiding with a standard-width native scrollbar. The regions are keyboard-focusable and labeled with visible focus; nested tables use the same wrapper. CSS and fake-sheet tests cover both table kinds and quoted nesting. Actual Gecko/Zen layout, OS overlay visibility, keyboard and resize behavior remain unverified in the sandbox.

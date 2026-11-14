@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.147
+// @version 3.3.148
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.147, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.148, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.147";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.148";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -14472,7 +14472,7 @@ __zentralShim.register = function (def) {
             body.append(tr);
           }
           table.append(body);
-          parent.append(h("div", { class: "zn-table-wrap" }, table));
+          parent.append(h("div", { class: "zn-table-wrap", tabindex: "0", role: "region", "aria-label": "Table, scroll horizontally" }, table));
         } else if (b.type === "table") {
           const table = h("table", { class: "zn-table" });
           const row = (tag, cells) => {
@@ -14486,7 +14486,7 @@ __zentralShim.register = function (def) {
             return tr;
           };
           table.append(h("thead", {}, row("th", b.head)), h("tbody", {}, ...b.rows.map((r) => row("td", r))));
-          parent.append(h("div", { class: "zn-table-wrap" }, table));
+          parent.append(h("div", { class: "zn-table-wrap", tabindex: "0", role: "region", "aria-label": "Table, scroll horizontally" }, table));
         } else if (b.type === "quote") {
           const node = h("blockquote", { class: b.callout ? "zn-quote zn-callout" : "zn-quote" });
           if (b.callout) {

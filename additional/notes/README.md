@@ -177,3 +177,7 @@ When Notes or Agenda sidebar folders are enabled, their shared data follows the 
 ### Pasting flattened tables
 
 If a copied Markdown table has lost its row breaks and its rows run together at `||`, Notes can restore the breaks when the result is a valid table in the note. Ambiguous or malformed text is left to the normal paste behavior; structured HTML still uses the existing HTML-to-Markdown conversion.
+
+### Wide tables
+
+Rendered Markdown and supported HTML tables scroll horizontally in their own region when wider than the note pane. Focus a table region and use the arrow keys to scroll it; the native scrollbar may follow your operating system’s overlay behavior.

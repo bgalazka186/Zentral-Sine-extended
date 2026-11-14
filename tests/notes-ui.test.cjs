@@ -225,6 +225,18 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(read.all().filter((e) => e._classes.has("zn-link")).length, 1);
   });
 
+  await test("OW-20: Markdown and HTML tables have individually keyboard-focusable scroll regions", async () => {
+    const ta = q(sheetA, ".zn-editor"), read = q(sheetA, ".zn-read");
+    type(ta, "| Wide | Table |\n| --- | --- |\n| left | right |\n\n> | Quoted | Table |\n> | --- | --- |\n> | long | value |\n\n<table><tr><th>HTML</th><th>Table</th></tr><tr><td>left</td><td>right</td></tr></table>");
+    await new Promise((r) => setTimeout(r, 400)); await flushRaf();
+    const wrappers = read.querySelectorAll(".zn-table-wrap"); assert.equal(wrappers.length, 3);
+    for (const wrapper of wrappers) {
+      assert.equal(wrapper.getAttribute("tabindex"), "0"); assert.equal(wrapper.getAttribute("role"), "region");
+      assert.match(wrapper.getAttribute("aria-label"), /table.*scroll/i); assert.ok(wrapper.querySelector("table"));
+    }
+    assert.ok(wrappers.some(wrapper => wrapper.closest("blockquote")), "nested table uses the same constrained scrollport");
+  });
+
   await test("YouTube embeds are click-to-load and use only the privacy-enhanced host", async () => {
     const ta = q(sheetA, ".zn-editor"), read = q(sheetA, ".zn-read");
     type(ta, "![Course clip](https://youtu.be/dQw4w9WgXcQ)");

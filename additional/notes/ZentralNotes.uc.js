@@ -9667,7 +9667,7 @@
             body.append(tr);
           }
           table.append(body);
-          parent.append(h("div", { class: "zn-table-wrap" }, table));
+          parent.append(h("div", { class: "zn-table-wrap", tabindex: "0", role: "region", "aria-label": "Table, scroll horizontally" }, table));
         } else if (b.type === "table") {
           const table = h("table", { class: "zn-table" });
           const row = (tag, cells) => {
@@ -9681,7 +9681,7 @@
             return tr;
           };
           table.append(h("thead", {}, row("th", b.head)), h("tbody", {}, ...b.rows.map((r) => row("td", r))));
-          parent.append(h("div", { class: "zn-table-wrap" }, table));
+          parent.append(h("div", { class: "zn-table-wrap", tabindex: "0", role: "region", "aria-label": "Table, scroll horizontally" }, table));
         } else if (b.type === "quote") {
           const node = h("blockquote", { class: b.callout ? "zn-quote zn-callout" : "zn-quote" });
           if (b.callout) {
