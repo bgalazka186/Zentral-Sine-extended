@@ -487,7 +487,7 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
   });
 
   await test("T2.3c: calendar details edit one same-day item without merging its sibling reminder", async () => {
-    const n = store.create("# Plan\n\n%%calendar: Projects%%\n- 2026-11-20 06:00-08:00 Morning shift\n- 2026-11-20 09:00 Follow-up reminder\n");
+    const n = store.create("# Plan\n\n%%calendar: Projects%%\n- 2026-11-20 12:00-14:00 Morning shift\n- 2026-11-20 15:00 Follow-up reminder\n");
     sheet.openNoteById(n.id); await flushRaf();
     if (q(".zn-read").hidden) key(ta, "e", { ctrlKey: true });
     await flushRaf();
@@ -533,7 +533,9 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.deepEqual(saved.recurrence, ["RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,TH;COUNT=6"]);
 
     // Reopen the same item's editor: recurrence state is loaded, and UNTIL can replace COUNT.
-    dateChip.click(); menuItem("Edit calendar item for this date…").click();
+    const reopenedChip = qa(".zn-date-chip").find((b) => b.dataset.ymd === "2026-11-20");
+    assert.ok(reopenedChip, "the source date remains interactive after updating details");
+    reopenedChip.click(); menuItem("Edit calendar item for this date…").click();
     qa(".zn-menu-item").find((b) => b.textContent.includes("Morning shift")).click();
     await new Promise((r) => setImmediate(r));
     const reopenedFrequency = qa("select").find((select) => select.getAttribute("aria-label") === "Repeat frequency");

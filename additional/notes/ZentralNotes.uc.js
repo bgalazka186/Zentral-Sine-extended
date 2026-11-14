@@ -1809,6 +1809,21 @@
       const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M3.5 1.5h6l3 3v9a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1z" fill="' + hex + '"/><path d="M9.5 1.5v3h3z" fill="#000" fill-opacity=".28"/><path d="M5 7.5h6M5 9.5h6M5 11.5h4" stroke="#000" stroke-opacity=".45" stroke-width="1" stroke-linecap="round"/></svg>';
       return "data:image/svg+xml," + encodeURIComponent(svg);
     }
+    // Distinct Agenda pseudo-tab favicons (calendar card for events, bell for reminders, overflow clock for +N more)
+    // tinted with the resolved note or category palette hex (neutral gray/orange when uncolored).
+    function agendaFaviconUri(color, kind = "event") {
+      const cleanKind = kind === "reminder" || kind === "more" ? kind : "event";
+      const hex = colorHex(color) || (cleanKind === "more" ? TINT_HEX.orange : TINT_HEX.gray);
+      let svg;
+      if (cleanKind === "reminder") {
+        svg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M8 2.2a3.3 3.3 0 0 0-3.3 3.3v2.2L3.5 9.9a.75.75 0 0 0 .65 1.1h7.7a.75.75 0 0 0 .65-1.1l-1.2-2.2V5.5A3.3 3.3 0 0 0 8 2.2z" fill="' + hex + '"/><path d="M6.3 11.8a1.7 1.7 0 0 0 3.4 0" fill="none" stroke="' + hex + '" stroke-width="1.4" stroke-linecap="round"/><circle cx="12.2" cy="3.6" r="2.1" fill="' + hex + '" stroke="#000" stroke-opacity=".35" stroke-width=".9"/></svg>';
+      } else if (cleanKind === "more") {
+        svg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="' + hex + '"/><path d="M8 4.8v3.5l2.2 1.3" fill="none" stroke="#000" stroke-opacity=".52" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      } else {
+        svg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="11" rx="2" fill="' + hex + '"/><path d="M2 5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1.3H2z" fill="#000" fill-opacity=".28"/><path d="M5.2 1.8v2.1M10.8 1.8v2.1" stroke="#000" stroke-opacity=".48" stroke-width="1.3" stroke-linecap="round"/><rect x="5" y="8.2" width="6" height="3.6" rx=".7" fill="#000" fill-opacity=".28"/></svg>';
+      }
+      return "data:image/svg+xml," + encodeURIComponent(svg);
+    }
     // More than one folder claims to be the NOTES root (a leftover from a crash, a restored session, a copied profile).
     // `roots` = [{ours: tabs we made, foreign: tabs somebody else put there, subs: our sub-folders}] in document order.
     // The first one is adopted. Another is deleted ONLY if every tab in it is ours; one that holds a tab the person put
@@ -8963,6 +8978,28 @@
         else tab.removeAttribute("bgalazka-notes-color");
       } catch (error) { warn(error); }
     }
+    // Agenda pseudo-tabs always keep their distinct event vs. reminder type icon; `on` gates colored note/category tinting.
+    function setAgendaTabIcon(tab, color, kind = "event", { gBrowser, on = true, warn = () => {} } = {}) {
+      const cleanKind = kind === "reminder" || kind === "more" ? kind : "event";
+      const resolved = colorHex(color) || "";
+      const uri = agendaFaviconUri(on ? resolved : "", cleanKind);
+      try {
+        const img = tab.querySelector?.(".tab-icon-image");
+        if ((tab.getAttribute("image") || "") !== uri || (img && (img.getAttribute("src") || "") !== uri)) {
+          if (typeof gBrowser?.setIcon === "function") gBrowser.setIcon(tab, uri, uri);
+          if ((tab.getAttribute("image") || "") !== uri) tab.setAttribute("image", uri);
+          if (img && (img.getAttribute("src") || "") !== uri) img.setAttribute("src", uri);
+        }
+        if (tab.getAttribute("bgalazka-notes-agenda-kind") !== cleanKind) tab.setAttribute("bgalazka-notes-agenda-kind", cleanKind);
+        if (resolved) {
+          if (tab.getAttribute("bgalazka-notes-color") !== resolved) tab.setAttribute("bgalazka-notes-color", resolved);
+        } else if (tab.hasAttribute?.("bgalazka-notes-color")) tab.removeAttribute("bgalazka-notes-color");
+        if (tab.style) {
+          if (on && resolved) tab.style.setProperty("--zn-agenda-color", resolved);
+          else tab.style.removeProperty("--zn-agenda-color");
+        }
+      } catch (error) { warn(error); }
+    }
     // What list() reports for a note tab: the colour we set, or "?" when the browser has since replaced the icon (a discard,
     // a session restore), so the next run puts it back.
     function notesTabColor(tab, on = true) {
@@ -9226,7 +9263,7 @@
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
-        makeFolderUid, ensureFolderUids, setNotesTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, sharedProjectionPlan, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
+        makeFolderUid, ensureFolderUids, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition, calendarMenuPosition, normalizeContextMenuItems,
@@ -12015,7 +12052,8 @@
       function applyCalendarPlacement(g, placement) {
         const current = store.items.get(g.before.id);
         if (!current || current.rev !== g.before.rev || current.etag !== g.before.etag) return flash("Calendar item changed during the drag; nothing was moved");
-        const next = g.allDay ? CALENDAR_PART.calendarMoveAllDayReminder(current, g.originDay, placement.date, nowMs()) : g.edge ? CALENDAR_PART.calendarResizeTimedEvent(current, g.edge, placement, g.zone, g.snap, nowMs()) : CALENDAR_PART.calendarMoveTimedItem(current, placement, g.zone, nowMs());
+        const stamp = Math.max(nowMs(), Date.parse(current.updated) || 0);
+        const next = g.allDay ? CALENDAR_PART.calendarMoveAllDayReminder(current, g.originDay, placement.date, stamp) : g.edge ? CALENDAR_PART.calendarResizeTimedEvent(current, g.edge, placement, g.zone, g.snap, stamp) : CALENDAR_PART.calendarMoveTimedItem(current, placement, g.zone, stamp);
         if (!next) return flash("That calendar move is unavailable");
         if (JSON.stringify(next.start) === JSON.stringify(current.start) && JSON.stringify(next.end) === JSON.stringify(current.end)) return;
         const before = { start: current.start, end: current.end, moved: current.x?.moved };
@@ -12543,7 +12581,8 @@
           if (!original && !saved.x?.noteId) { try { store.mirrorItemToAgendaNote(saved.id, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
           else if (saved.x?.src === "list") { try { store.syncItemCategoryToNote(saved, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
           const startMs = item.start.date ? C.parseYmd(item.start.date).getTime() : Date.parse(item.start.dateTime);
-          store.setMeta({ calendarCursor: C.localDateKey(startMs), calendarView: store.meta.calendarView || "month" });
+          const cursor = item.start.date ? item.start.date : C.zonedDateKey(startMs, calendarDisplayZone() || item.x?.tz || "");
+          store.setMeta({ calendarCursor: cursor, calendarView: store.meta.calendarView || "month" });
           closeDialog(); renderCalendar();
           flash(original ? "Calendar item saved" : (item.x.kind === "reminder" ? "Reminder created" : "Event created"));
         };
@@ -19991,6 +20030,108 @@
         }
         return complete;
       }
+      const agendaSetAttr = (el, name, value) => {
+        if (!el) return;
+        const next = String(value ?? "");
+        if (el.getAttribute?.(name) !== next) el.setAttribute?.(name, next);
+      };
+      const agendaDelAttr = (el, name) => {
+        if (el?.hasAttribute?.(name)) el.removeAttribute?.(name);
+      };
+      let agendaAttrBusy = false;
+      const agendaIconTimers = new Set();
+      function agendaIconRetry(tab) {
+        if (!tab) return;
+        for (const ms of [200, 900, 3000]) {
+          const id = window.setTimeout(() => { agendaIconTimers.delete(id); agendaEnsureVisuals(tab); }, ms);
+          agendaIconTimers.add(id);
+        }
+      }
+      onCleanup(() => { for (const id of agendaIconTimers) window.clearTimeout(id); agendaIconTimers.clear(); });
+      function agendaApplyTabEntry(tab, entry) {
+        if (!tab || !entry) return false;
+        const kind = entry.key === "more:overdue" ? "more" : entry.reminder ? "reminder" : "event";
+        const color = colorHex(entry.color || entry.x?.color || "") || "";
+        const label = String(entry.label || entry.summary || tab.getAttribute("label") || "");
+        const summary = String(entry.summary || "");
+        const tip = String(entry.tooltip ?? entry.details ?? "");
+        const fallbackTip = [summary, tip].filter(Boolean).join("\n");
+        const day = String(entry.openDate || (entry.parent ? String(entry.parent).replace(/^day:/, "") : agendaDateFromKey(entry.key)) || "");
+        const prevBusy = agendaAttrBusy;
+        agendaAttrBusy = true;
+        try {
+          agendaSetAttr(tab, "label", label);
+          agendaSetAttr(tab, "bgalazka-notes-label", label);
+          agendaSetAttr(tab, "bgalazka-notes-agenda-summary", summary);
+          agendaSetAttr(tab, "bgalazka-notes-agenda-tooltip", fallbackTip);
+          agendaSetAttr(tab, "tooltiptext", fallbackTip);
+          agendaSetAttr(tab, "title", fallbackTip);
+          agendaSetAttr(tab, "bgalazka-notes-agenda-kind", kind);
+          agendaSetAttr(tab, "bgalazka-notes-agenda-day", day);
+          agendaSetAttr(tab, "bgalazka-notes-agenda-item-id", entry.itemId || "");
+          agendaSetAttr(tab, "bgalazka-notes-agenda-occurrence-id", entry.occurrenceId || "");
+          agendaSetAttr(tab, "bgalazka-notes-agenda-record-id", entry.recordId || "");
+          agendaSetAttr(tab, "bgalazka-notes-agenda-start", Number.isFinite(Number(entry.start)) ? String(entry.start) : "");
+          agendaSetAttr(tab, "bgalazka-notes-agenda-end", Number.isFinite(Number(entry.end)) ? String(entry.end) : "");
+          agendaSetAttr(tab, "bgalazka-notes-agenda-note-id", entry.noteId || "");
+          agendaSetAttr(tab, "bgalazka-notes-agenda-heading", entry.heading || "");
+          if (entry.ended) agendaSetAttr(tab, "bgalazka-notes-agenda-ended", "true");
+          else agendaDelAttr(tab, "bgalazka-notes-agenda-ended");
+          setAgendaTabIcon(tab, color, kind, { gBrowser: window.gBrowser, on: zenFaviconsOn(), warn });
+          agendaTitleCard.updated(tab);
+        } finally {
+          agendaAttrBusy = prevBusy;
+        }
+        return true;
+      }
+      function agendaEnsureVisuals(tab) {
+        if (disposed || agendaAttrBusy || !agendaEnabled() || !tab || tab.isConnected === false) return false;
+        const key = agendaTabKey(tab);
+        if (!key || key.startsWith("seed:")) return false;
+        const wantLabel = tab.getAttribute("bgalazka-notes-label") || "";
+        const wantKind = tab.getAttribute("bgalazka-notes-agenda-kind") || "";
+        const wantColor = tab.getAttribute("bgalazka-notes-color") || "";
+        const wantTip = tab.getAttribute("bgalazka-notes-agenda-tooltip") ?? "";
+        if (!wantLabel || !wantKind) {
+          if (!storePromise) return false;
+          const entry = agendaEntryForKey(key);
+          if (entry) {
+            const hydrated = entry.label ? entry : (CALENDAR_PART?.agendaZenItem?.(entry, agendaDateFromKey(key), nowMs()) || entry);
+            return agendaApplyTabEntry(tab, { ...hydrated, key });
+          }
+          agendaController.schedule(0);
+          return false;
+        }
+        const kind = wantKind === "reminder" || wantKind === "more" ? wantKind : "event";
+        const on = zenFaviconsOn();
+        const wantUri = agendaFaviconUri(on ? wantColor : "", kind);
+        const img = tab.querySelector?.(".tab-icon-image");
+        const needsLabel = (tab.getAttribute("label") || "") !== wantLabel;
+        const needsTip = (tab.getAttribute("tooltiptext") || "") !== wantTip || (tab.getAttribute("title") || "") !== wantTip;
+        const needsIcon = (tab.getAttribute("image") || "") !== wantUri || (!!img && (img.getAttribute("src") || "") !== wantUri);
+        if (!needsLabel && !needsTip && !needsIcon) return false;
+        const prevBusy = agendaAttrBusy;
+        agendaAttrBusy = true;
+        try {
+          if (needsLabel) agendaSetAttr(tab, "label", wantLabel);
+          if (needsTip) {
+            agendaSetAttr(tab, "tooltiptext", wantTip);
+            agendaSetAttr(tab, "title", wantTip);
+          }
+          if (needsIcon) setAgendaTabIcon(tab, wantColor, kind, { gBrowser: window.gBrowser, on, warn });
+          agendaTitleCard.updated(tab);
+        } finally {
+          agendaAttrBusy = prevBusy;
+        }
+        return true;
+      }
+      const onAgendaAttr = (ev) => {
+        const tab = ev?.target;
+        if (disposed || agendaAttrBusy || !agendaEnabled() || tab?.localName !== "tab" || !agendaOwnTab(tab)) return;
+        const changed = ev.detail?.changed;
+        if (Array.isArray(changed) && !changed.some((k) => k === "label" || k === "image" || k === "tooltiptext" || k === "title" || k === "bgalazka-notes-label" || k === "bgalazka-notes-agenda-kind" || k === "bgalazka-notes-color")) return;
+        agendaEnsureVisuals(tab);
+      };
       const agendaApi = {
         mutationCount: () => agendaMutationCount,
         ensureRoot: agendaEnsureRoot,
@@ -20053,6 +20194,7 @@
           const tab = agendaNewTab(entry.key);
           if (!zenPlace(tab, folder)) { zenRemoveTab(tab); return false; }
           this.update(entry);
+          agendaIconRetry(tab);
           return true;
         },
         update(entry) {
@@ -20065,23 +20207,7 @@
             return true;
           }
           const tab = agendaTabFor(entry.key, entry.parent); if (!tab) return false;
-          tab.setAttribute("label", entry.label);
-          tab.setAttribute("bgalazka-notes-label", entry.label);
-          tab.setAttribute("bgalazka-notes-agenda-summary", entry.summary || "");
-          const fallbackTip = [entry.summary, entry.tooltip].filter(Boolean).join("\n");
-          tab.setAttribute("tooltiptext", fallbackTip);
-          tab.setAttribute("title", fallbackTip);
-          tab.setAttribute("bgalazka-notes-agenda-day", entry.openDate || entry.parent.replace(/^day:/, ""));
-          tab.setAttribute("bgalazka-notes-agenda-item-id", entry.itemId || "");
-          tab.setAttribute("bgalazka-notes-agenda-occurrence-id", entry.occurrenceId || "");
-          tab.setAttribute("bgalazka-notes-agenda-record-id", entry.recordId || "");
-          tab.setAttribute("bgalazka-notes-agenda-start", String(entry.start));
-          tab.setAttribute("bgalazka-notes-agenda-end", String(entry.end));
-          tab.setAttribute("bgalazka-notes-agenda-note-id", entry.noteId || "");
-          tab.setAttribute("bgalazka-notes-agenda-heading", entry.heading || "");
-          if (entry.ended) tab.setAttribute("bgalazka-notes-agenda-ended", "true"); else tab.removeAttribute("bgalazka-notes-agenda-ended");
-          agendaTitleCard.updated(tab);
-          return true;
+          return agendaApplyTabEntry(tab, entry);
         },
         remove(key) {
           if (String(key).startsWith("day:")) { const folder = agendaDayEl(key); if (folder) agendaRetireFolder(folder); return; }
@@ -20131,7 +20257,11 @@
         agendaLegacyIds.clear(); for (const item of legacy) if (item.x?.noteId) agendaLegacyIds.add(item.x.noteId);
         for (const item of [...stored, ...legacy]) {
           const note = item.x?.noteId ? store.get(item.x.noteId) : null;
-          unique.set(item.id, { ...item, x: { ...(item.x || {}), sourceNoteTitle: note && !note.trashed ? titleOf(note.body) : "" } });
+          const noteColor = note && !note.trashed ? note.color : "";
+          const catColor = item.x?.category ? (store.items?.category?.(item.x.category)?.color || "") : "";
+          const resolvedColor = CALENDAR_PART?.resolveItemColor?.(noteColor, catColor) || noteColor || catColor || "";
+          const color = colorHex(resolvedColor) || "";
+          unique.set(item.id, { ...item, x: { ...(item.x || {}), sourceNoteTitle: note && !note.trashed ? titleOf(note.body) : "", noteColor, categoryColor: catColor, color } });
         }
         return [...unique.values()];
       };
@@ -20308,6 +20438,7 @@
         for (const type of ["mousedown", "mousemove", "mouseup", "click", "auxclick", "dragstart", "dragend", "blur"]) window[act](type, onAgendaMouse, true);
         for (const type of ["dragstart", "dragover", "drop"]) window[act](type, onAgendaDrag, true);
         window[act]("TabSelect", onAgendaSelect, true);
+        window[act]("TabAttrModified", onAgendaAttr, true);
         window[act]("popupshowing", onAgendaFolderMenuShowing, true);
         window[act]("popupshowing", onAgendaTabMenuShowing, true);
         window[act]("popuphidden", onAgendaFolderMenuHidden, true);
@@ -20315,11 +20446,13 @@
           agendaTitleCard.hide();
           clearAgendaPress();
           window.clearTimeout(agendaSelectTimer); agendaSelectTimer = 0; agendaLastContent.clear();
+          for (const id of agendaIconTimers) window.clearTimeout(id);
+          agendaIconTimers.clear();
           document.documentElement.removeAttribute("zentral-agenda-folder-ctx");
           document.documentElement.removeAttribute("zentral-agenda-ctx");
           document.querySelectorAll?.("[zentral-agenda-folder-own],[zentral-agenda-own]").forEach((item) => item.remove());
         }
-        for (const ty of ["TabClose", "TabUnpinned", "TabPinned", "TabMove", "SSTabRestored", "FolderGrouped", "FolderUngrouped"]) window[act](ty, onAgendaTabEvent, true);
+        for (const ty of ["TabOpen", "TabClose", "TabUnpinned", "TabPinned", "TabMove", "SSTabRestored", "FolderGrouped", "FolderUngrouped"]) window[act](ty, onAgendaTabEvent, true);
       }
       onCleanup(() => bindAgenda(false));
       function agendaTabKey(tab) {
@@ -20558,6 +20691,13 @@
             zenIconRetry(tab);
           }
         }
+        if (tab.hasAttribute?.(AGENDA_ATTR)) {
+          if (event?.type === "TabSelect") agendaEnsureVisuals(tab);
+          else if (event?.type === "TabOpen" || event?.type === "SSTabRestored") {
+            agendaEnsureVisuals(tab);
+            agendaIconRetry(tab);
+          }
+        }
         if (event?.type === "TabOpen" &&
             !tab.hasAttribute?.(NOTES_ATTR) && !tab.hasAttribute?.(AGENDA_ATTR)) {
           pendingExternalPseudoTabs.add(tab);
@@ -20747,7 +20887,13 @@
         const movedFolder = ["FolderGrouped", "FolderUngrouped"].includes(ev.type) &&
           (tab === root || agendaOwnedDay(tab) || root?.contains?.(tab));
         const movedIntoAgenda = ["TabMove", "FolderGrouped", "FolderUngrouped"].includes(ev.type) && root?.contains?.(tab);
-        if (movedIntoAgenda || movedFolder || agendaTabKey(tab) || (ev.type === "SSTabRestored" && /#zn-agenda-/.test(tab?._zentralNotesUrl || tab?.linkedBrowser?.currentURI?.spec || ""))) {
+        const restoredAgendaUrl = ev.type === "SSTabRestored" && /#zn-agenda-/.test(tab?._zentralNotesUrl || tab?.linkedBrowser?.currentURI?.spec || "");
+        const isAgendaTab = !!agendaTabKey(tab) || restoredAgendaUrl;
+        if ((ev.type === "SSTabRestored" || ev.type === "TabOpen") && isAgendaTab && !agendaTabKey(tab).startsWith("seed:")) {
+          agendaEnsureVisuals(tab);
+          agendaIconRetry(tab);
+        }
+        if (movedIntoAgenda || movedFolder || (ev.type !== "TabOpen" && isAgendaTab)) {
           // A new native move is fresh external state, not a retry from the prior
           // reconciliation. Release the previous backoff and repair this move.
           agendaController.invalidate();
@@ -21988,6 +22134,10 @@
           else if (name === PREF.ZEN_NEW_BUTTON) {
             if (zenMode() !== "off") zenSoon(); // entries appear in (or leave) every folder at once
           }
+          else if (name === PREF.ZEN_FAVICONS) {
+            if (zenMode() !== "off") zenSoon();
+            if (agendaEnabled()) agendaSoon();
+          }
           else if (WINDOW_PREFS.has(name)) {
             // Hover reveal, push page, split windows and the sidebar option: open sheets follow at once.
             for (const b of [...bindings.values(), floating]) {
@@ -22150,7 +22300,7 @@
       // without opening a Notes sheet or publishing privileged objects normally.
       if (window.__zentralNotesTestSeam) {
         const sidebar = { store, ensureStore, zenApi, zen, agendaApi, agendaController, tick, reminders,
-          onAgendaMouse, onAgendaSelect, onAgendaTabEvent, onAgendaFolderMenuShowing,
+          onAgendaMouse, onAgendaSelect, onAgendaTabEvent, onAgendaAttr, agendaEnsureVisuals, onAgendaFolderMenuShowing,
           onAgendaFolderMenuHidden, onAgendaTabMenuShowing };
         window.__zentralNotesTestSeam.sidebar = sidebar;
         onCleanup(() => {

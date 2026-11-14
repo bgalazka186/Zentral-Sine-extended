@@ -2140,7 +2140,8 @@
     return parts ? { hour: parts.hour, minute: parts.minute, second: parts.second, millisecond: date.getUTCMilliseconds() }
       : { hour: date.getHours(), minute: date.getMinutes(), second: date.getSeconds(), millisecond: date.getMilliseconds() };
   }
-  function recurrenceCandidateMs(date, wall, zone = "") {
+  function recurrenceCandidateMs(date, wall, zone = "", base = null, startMs = NaN) {
+    if (base && Number.isFinite(startMs) && date.getFullYear() === base.getFullYear() && date.getMonth() === base.getMonth() && date.getDate() === base.getDate()) return startMs;
     if (!zone) return new Date(date.getFullYear(), date.getMonth(), date.getDate(), wall.hour, wall.minute, wall.second, wall.millisecond).getTime();
     const key = ymd(date), minute = zonedDateTimeToMs(key, p2(wall.hour) + ":" + p2(wall.minute), zone);
     return Number.isFinite(minute) ? minute + wall.second * 1000 + wall.millisecond : NaN;
@@ -2178,7 +2179,7 @@
     if (rule.count && countBefore >= rule.count) return [];
     let ordinal = countBefore;
     const timedAt = (d) => allDay ? new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
-      : recurrenceCandidateMs(d, wall, zone);
+      : recurrenceCandidateMs(d, wall, zone, base, s0);
     for (let scanned = 0; scanned < 100000; scanned++, period++) {
       if (recurrencePeriodAnchor(rule, base, period) >= limitCivil) break;
       const candidates = recurrencePeriodDates(rule, base, period).map(timedAt).sort((a, b) => a - b);
@@ -2223,10 +2224,10 @@
     // The search helper deliberately starts one period early so event spans and BYDAY weeks are not missed.
     // Check that period and its successor to find the candidate's actual COUNT ordinal.
     for (let period = firstPeriod; period <= firstPeriod + 1; period++) {
-      const wall = recurrenceWallClock(whenMs(master.start), zone);
+      const startMs = whenMs(master.start), wall = recurrenceWallClock(startMs, zone);
       const candidates = recurrencePeriodDates(rule, base, period).map((date) => allDay
         ? new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
-        : recurrenceCandidateMs(date, wall, zone)).sort((a, b) => a - b);
+        : recurrenceCandidateMs(date, wall, zone, base, startMs)).sort((a, b) => a - b);
       const index = candidates.findIndex((candidate) => candidate === recurrenceMs);
       if (index < 0) continue;
       const countBefore = recurrenceCountBefore(rule, base, period);
@@ -2759,6 +2760,7 @@
       end,
       allDay: isAllDay(item),
       reminder: isReminder(item),
+      color: String(item.x?.color || resolveItemColor(item.x?.noteColor || "", item.x?.categoryColor || "") || ""),
       ended: !isReminder(item) && end > start && end <= Number(now),
     };
   }

@@ -720,3 +720,11 @@ Owner request: make the Recommended theme's default accent brighter and distinct
 | Track ID | Status | Item | Verification |
 | :-- | :-- | :-- | :-- |
 | `F0.4` | `DONE` | Aggregate test runner | `tests/run-all.cjs` discovers every `*.test.cjs`, runs ordinary tests with four workers and perf-named tests serially, propagates child failures as exit 1, and reports Node TODO cases. `tests/run-all.test.cjs` creates a temporary failing test plus a TODO fixture and verifies both exit-code propagation and the TODO summary. The release instructions and CI workflow call the runner. |
+| `F0.7` | `DONE` | Time-zone matrix across 4 zones (3.3.159) | `node tests/run-all.cjs --tz` runs 43 calendar/Agenda/reminder/recurrence/date test files across `UTC`, `Europe/Warsaw`, `America/Los_Angeles`, and `Pacific/Auckland` (`172/172` passed). Fixed the `AU-B1` `DTSTART` repeated-DST-hour drop in `expandItem`/`isRecurrenceCandidate`, `applyCalendarPlacement` clock-skew clamp, `askCalendarComposer` `calendarCursor` display-zone key, and timezone-sensitive test fixtures in `notes-calendar-views`, `notes-calendar-menu`, and `notes-p2-ui`. |
+
+## SB6.1 & T2.8b — Agenda tab favicons, event/reminder badges and attribute repair (3.3.159)
+
+#### `SB6.1` & `T2.8b` — Coloured Agenda favicons, distinct event vs. reminder badges, and loop-guarded attribute repair
+**Status:** `DONE` · **Impact:** Med-High · **Effort:** M · **Depends on:** H1.1, F0.1, T2.8
+
+Resolved note/category colours (`resolveItemColor` + `colorHex`) flow from `agendaItems()` through `agendaZenItem()` into `agendaApi.add`/`update`. Added `agendaFaviconUri` (distinct calendar-card, bell, and overflow-clock SVG data URIs tinted by the note/category palette hex, or neutral gray/orange when `ZEN_FAVICONS` is off), `setAgendaTabIcon`, and CSS pill badges (`Event` / `Reminder`) for `tab[bgalazka-notes-agenda-item][bgalazka-notes-agenda-kind]`. Added an `agendaAttrBusy`-guarded `TabAttrModified` listener (`onAgendaAttr`), `SSTabRestored` / `TabOpen` / `TabSelect` recovery (`agendaEnsureVisuals` + `agendaIconRetry`), and `PREF.ZEN_FAVICONS` live refresh. Covered by `tests/notes-agenda-icons.test.cjs` (and full `run-all.cjs` + `--tz` matrix).
