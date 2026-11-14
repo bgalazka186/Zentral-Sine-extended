@@ -19923,13 +19923,14 @@
         window[act]("keydown", agendaTitleCard.key, true);
         window[act]("popupshowing", agendaTitleCard.popup, true);
         window[act]("resize", agendaTitleCard.position, true);
-        window[act]("mousedown", onAgendaMouse, true);
+        for (const type of ["mousedown", "mousemove", "mouseup", "click", "auxclick", "dragstart", "dragend", "blur"]) window[act](type, onAgendaMouse, true);
         window[act]("TabSelect", onAgendaSelect, true);
         window[act]("popupshowing", onAgendaFolderMenuShowing, true);
         window[act]("popupshowing", onAgendaTabMenuShowing, true);
         window[act]("popuphidden", onAgendaFolderMenuHidden, true);
         if (!on) {
           agendaTitleCard.hide();
+          clearAgendaPress();
           document.documentElement.removeAttribute("zentral-agenda-folder-ctx");
           document.documentElement.removeAttribute("zentral-agenda-ctx");
           document.querySelectorAll?.("[zentral-agenda-folder-own],[zentral-agenda-own]").forEach((item) => item.remove());
@@ -19946,6 +19947,7 @@
         return key;
       }
       function activateAgendaTab(tab) {
+        window.__zentralNotesTestSeam?.onAgendaActivate?.(tab);
         const itemId = tab.getAttribute("bgalazka-notes-agenda-item-id") || "", noteId = tab.getAttribute("bgalazka-notes-agenda-note-id") || "";
         const heading = tab.getAttribute("bgalazka-notes-agenda-heading") || "", date = tab.getAttribute("bgalazka-notes-agenda-day") || "";
         return ensureStore().then(() => {
@@ -19953,13 +19955,48 @@
           return openCalendarDayFromHost(date);
         }).catch(warn);
       }
+      let agendaPress = null, agendaPressTimer = 0;
+      const clearAgendaPress = () => { window.clearTimeout(agendaPressTimer); agendaPressTimer = 0; agendaPress = null; };
+      onCleanup(clearAgendaPress);
       function onAgendaMouse(ev) {
-        if (disposed || !agendaEnabled() || (ev.button !== 0 && ev.button !== 1)) return;
+        if (disposed || !agendaEnabled()) { clearAgendaPress(); return; }
         let tab = null; try { tab = ev.target?.closest?.("tab[" + AGENDA_ATTR + "]"); } catch (_) {}
-        if (!tab || !agendaRootEl()?.contains?.(tab)) return;
+        const key = tab?.getAttribute?.(AGENDA_ATTR) || "";
+        const owned = tab && (key.startsWith("item:") || key === "more:overdue") && agendaRootEl()?.contains?.(tab);
+        const modified = ev.ctrlKey || ev.shiftKey || ev.altKey || ev.metaKey;
+        if (ev.type === "blur") { if (ev.target === window) clearAgendaPress(); return; }
+        if (ev.type === "mousedown") {
+          clearAgendaPress();
+          if (owned && (ev.button === 0 || ev.button === 1) && !ev.target?.closest?.(".tab-close-button, .tab-reset-button, .tab-icon-overlay"))
+            agendaPress = { tab, button: ev.button, x: ev.clientX, y: ev.clientY, modified: !!modified, moved: false, released: false };
+          if (owned && ev.button === 1 && !modified) { ev.preventDefault(); ev.stopImmediatePropagation(); }
+          return; // Do not block primary-button drags or native modifiers.
+        }
+        if (ev.type === "dragstart") { if (agendaPress) agendaPress.moved = true; return; }
+        if (ev.type === "dragend") { clearAgendaPress(); return; }
+        if (ev.type === "mousemove" || ev.type === "mouseup") {
+          if (!agendaPress) return;
+          if (Math.hypot(ev.clientX - agendaPress.x, ev.clientY - agendaPress.y) > 4) agendaPress.moved = true;
+          if (ev.type === "mouseup") {
+            if (tab !== agendaPress.tab || ev.button !== agendaPress.button) clearAgendaPress();
+            else {
+              agendaPress.released = true;
+              // Browser click/auxclick follows synchronously; do not retain a
+              // canceled gesture into a later keyboard selection.
+              agendaPressTimer = window.setTimeout(clearAgendaPress, 0);
+            }
+          }
+          return;
+        }
+        if (ev.type === "auxclick" || (ev.type === "click" && ev.button === 1)) {
+          if (owned && ev.button === 1 && !modified) { ev.preventDefault(); ev.stopImmediatePropagation(); }
+          clearAgendaPress(); return;
+        }
+        if (ev.type !== "click") return;
+        const press = agendaPress; clearAgendaPress();
+        if (!owned || !press || press.tab !== tab || press.button !== 0 || ev.button !== 0 || !press.released || press.modified || modified) return;
         ev.preventDefault(); ev.stopImmediatePropagation();
-        if (ev.button === 1) return;
-        if (ev.type === "mousedown" && !ev.target?.closest?.(".tab-close-button, .tab-reset-button, .tab-icon-overlay")) activateAgendaTab(tab);
+        if (!press.moved && Math.hypot(ev.clientX - press.x, ev.clientY - press.y) <= 4 && tab.isConnected !== false) activateAgendaTab(tab);
       }
       let agendaSelectTimer = 0;
       onCleanup(() => window.clearTimeout(agendaSelectTimer));
@@ -19967,6 +20004,8 @@
         const tab = ev.target;
         if (disposed || !agendaEnabled() || !tab || !agendaTabKey(tab) || !agendaRootEl()?.contains?.(tab)) return;
         const prev = ev.detail?.previousTab;
+        // Zen may select the tab on mousedown before the click/drag is known.
+        const pointerSelection = agendaPress?.tab === tab;
         window.clearTimeout(agendaSelectTimer);
         agendaSelectTimer = window.setTimeout(() => {
           agendaSelectTimer = 0;
@@ -19974,7 +20013,7 @@
             if (disposed || window.gBrowser.selectedTab !== tab) return;
             const back = prev && prev.isConnected && !agendaTabKey(prev) ? prev : [...window.gBrowser.tabs].find((t) => !agendaTabKey(t) && !t.hidden);
             if (back) window.gBrowser.selectedTab = back;
-            activateAgendaTab(tab);
+            if (!pointerSelection) activateAgendaTab(tab);
           } catch (error) { warn(error); }
         }, 0);
       }

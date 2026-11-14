@@ -38,7 +38,9 @@ assert.equal(C.agendaOverdueProjection(records, now, { days: 1, cap: 10, isDone 
     assert.ok(folder, "real host creates the Overdue folder"); assert.equal(folder.getAttribute("bgalazka-notes-agenda-count"), "12");
     const more = folder.querySelectorAll("tab").find((tab) => tab.getAttribute("bgalazka-notes-agenda-item") === "more:overdue");
     assert.ok(more); assert.equal(more.getAttribute("label"), "+2 more"); assert.equal(more.getAttribute("bgalazka-notes-agenda-day"), C.localDateKey(yesterday));
-    const event = h.emit("mousedown", more, { button: 0 }); assert.equal(event.defaultPrevented, true);
+    const down = h.emit("mousedown", more, { button: 0, clientX: 10, clientY: 10 }); assert.equal(down.defaultPrevented, false);
+    h.emit("mouseup", more, { button: 0, clientX: 10, clientY: 10 });
+    const event = h.emit("click", more, { button: 0, clientX: 10, clientY: 10 }); assert.equal(event.defaultPrevented, true);
     for (let i = 0; i < 4; i++) await new Promise((r) => setImmediate(r));
     assert.equal(h.seam.store.meta.calendarCursor, C.localDateKey(yesterday), "More opens the first hidden overdue day");
     assert.equal(h.seam.store.meta.calendarView, "day");

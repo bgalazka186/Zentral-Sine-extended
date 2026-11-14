@@ -578,3 +578,18 @@ Mirroring changes `src` to list and records the original ID; a deterministic lin
 **Tests / done when:** Fake Zen tests show full long titles over truncated sidebar rows, update on retarget, close on leave/removal/disable/destroy, and leave foreign tabs untouched; cover keyboard and viewport placement. Verify actual Zen layering if necessary.
 
 Agenda item pseudo-tabs show their full title in a wrapping, scrollable tooltip on hover and keyboard focus, with native tooltip fallback, Escape, retarget, bounded left/right positioning and lifecycle cleanup. Only owned Agenda items are targeted, and existing aria-describedby values survive. The lightweight card lifecycle is a base to extend for the still-open richer T3.4a cards; no Notes or RSS card is replaced. Fake Zen exercises retarget, title update, pointer hover, focus, disable, removal, fallback and destroy; actual Zen rendering/top-layer and screen-reader behavior remain unverified.
+
+## UI4.1 — Completed Agenda activation on click release (3.3.140)
+
+#### `UI4.1` — Agenda tab activation on click release, with modifiers and drag threshold
+**Status:** `DONE` · **Impact:** High · **Effort:** S · **Depends on:** F0.1 · **Source:** Audit R1 B1
+
+**Problem:** `onAgendaMouse` (capture `mousedown`) calls `preventDefault`/`stopImmediatePropagation` and opens the note immediately. You cannot cancel by moving away, Ctrl/Shift-click is swallowed and drags that start on an Agenda tab are blocked.
+
+**Plan (do in this order):**
+1. Activate on `click` (or `mouseup` within 4 px of the press); ignore events with Ctrl/Shift/Alt/Meta unless a later feature maps them; keep middle-click inert.
+2. Keep keyboard activation (Enter/Space through `TabSelect`).
+
+**Tests / done when:** DOM harness: press-move-release elsewhere does not open; plain click opens once.
+
+Plain primary clicks open only on release within four pixels; press itself is not canceled, so native drag gestures remain available. Pointer-originated TabSelect is bounced without opening; modifier gestures pass through and middle-click remains inert. Dragstart, lost or canceled releases and changed modifiers do not open. Keyboard TabSelect remains supported; UI4.2 still must distinguish deliberate keyboard activation from tab cycling. Fake Zen covers these paths; real Zen native event ordering and drag behavior remain unverified.
