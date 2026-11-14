@@ -20392,7 +20392,7 @@
         if (key === "more:overdue") return CALENDAR_PART?.localDateKey?.(Date.now()) || "";
         return "";
       }
-      function routePseudoTab(tab) {
+      function routePseudoTab(tab, forceExternalNavigation = false) {
         if (!tab || tab.isConnected === false || pseudoTabCreationDepth || internalPseudoTabs.has(tab)) return false;
         if (routedPseudoTabs.has(tab)) return true;
         const url = pseudoUrlForTab(tab);
@@ -20408,12 +20408,12 @@
         const notesRoot = zenRootEl(), agendaRoot = agendaRootEl();
         if (tab.hasAttribute?.(NOTES_ATTR)) { zen.touch(0); return false; }
         if (tab.hasAttribute?.(AGENDA_ATTR)) { agendaController.schedule(0); return false; }
-        if (notesRoot?.contains?.(tab)) {
+        if (!forceExternalNavigation && notesRoot?.contains?.(tab)) {
           if (noteTarget?.kind === "note") tab.setAttribute(NOTES_ATTR, "n:" + noteTarget.id);
           else if (noteTarget?.kind === "new") tab.setAttribute(NOTES_ATTR, noteTarget.folder ? "new:" + noteTarget.folder : "root");
           tab._zentralNotesUrl = url; zen.touch(0); return false;
         }
-        if (agendaRoot?.contains?.(tab)) {
+        if (!forceExternalNavigation && agendaRoot?.contains?.(tab)) {
           tab.setAttribute(AGENDA_ATTR, agendaKey); tab._zentralNotesUrl = url; agendaController.schedule(0); return false;
         }
 
@@ -20457,7 +20457,7 @@
         if (disposed || pseudoTabCreationDepth) return;
         const tab = event?.target?.localName === "tab" ? event.target : pseudoEventClosest(event, "tab");
         if (!tab || internalPseudoTabs.has(tab)) return;
-        routePseudoTab(tab);
+        routePseudoTab(tab, event?.type === "TabOpen");
       };
       const PSEUDO_TAB_EVENTS = ["TabOpen", "TabAttrModified", "SSTabRestored", "TabSelect"];
       const pseudoEventTargets = [...new Set([window, window.gBrowser?.tabContainer].filter(Boolean))];

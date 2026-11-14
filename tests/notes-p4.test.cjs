@@ -363,7 +363,7 @@ const note = (id, body, extra = {}) => ({ id, body, folder: "", updated: 1_700_0
     assert.match(js, /if \(!marked && !\(ev\.type === "SSTabRestored" && zenLooksOurs\(tab\)\)\) return;/, "unmarked tabs are ignored");
     assert.match(js, /if \(!n \|\| n\.trashed\) \{ zen\.touch\(0\); return null; \}/, "a stale entry opens nothing and requests immediate cleanup");
     assert.match(js, /if \(!root\.contains\(t\)\) zenRemoveTab\(t\)/, "marked tabs outside the NOTES folder are closed");
-    assert.match(js, /spec\.startsWith\(ZEN_URL_PREFIX\) \? spec : tab\._zentralNotesUrl/, "a discarded tab keeps its address");
+    assert.match(js, /spec\.startsWith\(ZEN_URL_PREFIX\).*about:blank#zn-agenda-/s, "live pseudo-URLs are preferred and remembered URLs cover discarded tabs");
   });
   await test("perf sampler: records nothing while off, counts and maxima while on", () => {
     let on = false, t = 0;

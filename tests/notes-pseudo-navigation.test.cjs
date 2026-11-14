@@ -19,7 +19,13 @@ const AGENDA_PREF = "zen.workspace.zentral.notes.agenda_folder";
 
   const noteTab = h.window.gBrowser.addTab("about:blank#zn-note:" + encodeURIComponent(note.id));
   assert.equal(noteTab.isConnected, false, "zn-note navigation tab is closed during TabOpen");
-  assert.deepEqual(routes, [{ kind: "note", noteId: note.id }], "zn-note is routed to its note identity");
+  const inheritedFolderTab = h.window.gBrowser.addTab("about:blank#zn-note:" + encodeURIComponent(note.id), { deferTabOpen: true });
+  const notesRoot = h.document.querySelector('zen-folder[bgalazka-notes-folder="true"]');
+  assert.ok(notesRoot);
+  notesRoot.addTabs([inheritedFolderTab]);
+  h.emit("TabOpen", inheritedFolderTab);
+  assert.equal(inheritedFolderTab.isConnected, false, "a new URL tab is routed even if Zen initially inserts it into NOTES");
+  assert.equal(JSON.stringify(routes), JSON.stringify([{ kind: "note", noteId: note.id }]), "zn-note is routed to its note identity");
 
   const start = C.addDays(C.dayStart(Date.now()), 1) + 12 * 3600000;
   const item = h.seam.store.items.upsert(C.makeItem({
@@ -37,9 +43,9 @@ const AGENDA_PREF = "zen.workspace.zentral.notes.agenda_folder";
   const agendaUrl = "about:blank#zn-agenda-" + encodeURIComponent(entry.key);
   const agendaTab = h.window.gBrowser.addTab(agendaUrl);
   assert.equal(agendaTab.isConnected, false, "zn-agenda-item navigation tab is closed during TabOpen");
-  assert.deepEqual(routes[1], { kind: "agenda", key: entry.key }, "Agenda URL is decoded as its item key");
+  assert.equal(JSON.stringify(routes[1]), JSON.stringify({ kind: "agenda", key: entry.key }), "Agenda URL is decoded as its item key");
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(opened[0], { id: note.id, key: entry.key }, "Agenda URL opens the note linked to the reminder");
+  assert.equal(JSON.stringify(opened[0]), JSON.stringify({ id: note.id, key: entry.key }), "Agenda URL opens the note linked to the reminder");
 
   await h.destroy();
   console.log("pseudo-tab navigation routes zn-note and zn-agenda-item URLs to their model targets");

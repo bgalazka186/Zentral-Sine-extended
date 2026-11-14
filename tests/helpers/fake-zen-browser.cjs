@@ -56,7 +56,7 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   win.window = win;
   win.gBrowser = {
     get tabs() { return document.querySelectorAll("tab"); }, selectedTab: null,
-    addTab(url) { const tab = sidebar.tab(url); tab.id = `fake-${id}-${++tabId}`; tab.linkedBrowser = { currentURI: { spec: url } }; const ws = win.gZenWorkspaces.activeWorkspace; tab.setAttribute("zen-workspace-id", ws); (workspaces.get(ws)?.pinnedTabsContainer || sidebar.pinned).append(tab); emit("TabOpen", tab); return tab; },
+    addTab(url, options = {}) { const tab = sidebar.tab(url); tab.id = `fake-${id}-${++tabId}`; tab.linkedBrowser = { currentURI: { spec: url } }; const ws = win.gZenWorkspaces.activeWorkspace; tab.setAttribute("zen-workspace-id", ws); (workspaces.get(ws)?.pinnedTabsContainer || sidebar.pinned).append(tab); if (!options.deferTabOpen) emit("TabOpen", tab); return tab; },
     pinTab(tab) { tab.pinned = true; tab.setAttribute("pinned", "true"); emit("TabPinned", tab); },
     removeTab(tab) {
       const folder = tab.closest("zen-folder");
