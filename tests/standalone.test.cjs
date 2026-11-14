@@ -6,10 +6,39 @@
 const assert = require("node:assert/strict"),
   fs = require("node:fs"),
   path = require("node:path"),
+  os = require("node:os"),
+  crypto = require("node:crypto"),
   vm = require("node:vm"),
   cp = require("node:child_process");
-const root = path.resolve(__dirname, ".."),
-  runtimeSource = fs.readFileSync(path.join(root, "loader/ZentralRuntime.js"), "utf8");
+const root = path.resolve(__dirname, "..");
+const buildRoot = fs.mkdtempSync(path.join(os.tmpdir(), "zentral-standalone-build-"));
+for (const name of ["tools", "additional", "loader"])
+  fs.cpSync(path.join(root, name), path.join(buildRoot, name), { recursive: true });
+const runBuild = (args = [], options = {}) => cp.execFileSync(process.execPath,
+  [path.join(buildRoot, "tools/build-standalone.cjs"), ...args], { cwd: buildRoot, ...options });
+function repositorySnapshot() {
+  const rows = [];
+  const visit = (dir) => {
+    const entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      if (entry.name === ".git" || entry.name === "node_modules" || entry.name.startsWith(".tmp-run-all-")) continue;
+      const full = path.join(dir, entry.name);
+      const relative = path.relative(root, full).split(path.sep).join("/");
+      const stat = fs.lstatSync(full);
+      if (entry.isDirectory()) {
+        rows.push([relative, "dir"]);
+        visit(full);
+      } else {
+        const digest = stat.isFile() ? crypto.createHash("sha256").update(fs.readFileSync(full)).digest("hex") : "";
+        rows.push([relative, entry.isFile() ? "file" : "other", stat.mtimeMs, stat.size, stat.mode, digest]);
+      }
+    }
+  };
+  visit(root);
+  return JSON.stringify(rows);
+}
+const originalRepositorySnapshot = repositorySnapshot();
+const runtimeSource = fs.readFileSync(path.join(root, "loader/ZentralRuntime.js"), "utf8");
 
 function walk(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) =>
@@ -436,12 +465,12 @@ const baseline = (env) => {
 
   await test("build: a pref read from another owner must be borrowed; an unknown pref must be declared", () => {
     const run2 = (code, extra = {}) => {
-      const tmp = path.join(root, "additional/zz-test");
+      const tmp = path.join(buildRoot, "additional/zz-test");
       fs.mkdirSync(tmp, { recursive: true });
       fs.writeFileSync(path.join(tmp, "standalone.json"), JSON.stringify({ id: "zz", themeId: "zz", name: "zz", version: "1.0.0", entry: "a.uc.js", output: "a.standalone.uc.js", ...extra }));
       fs.writeFileSync(path.join(tmp, "a.uc.js"), code);
       try {
-        cp.execFileSync("node", ["tools/build-standalone.cjs"], { cwd: root, stdio: "pipe" });
+        runBuild([], { stdio: "pipe" });
         return null;
       } catch (e) {
         return String(e.stderr);
@@ -581,19 +610,20 @@ const baseline = (env) => {
   });
 
   await test("build: up to date; refuses changed content without a version bump", () => {
-    cp.execFileSync("node", ["tools/build-standalone.cjs", "--check"], { cwd: root });
-    const src = path.join(manifests[0].dir, manifests[0].m.entry);
+    runBuild(["--check"]);
+    const moduleDir = path.join(buildRoot, path.relative(root, manifests[0].dir));
+    const src = path.join(moduleDir, manifests[0].m.entry);
     const original = fs.readFileSync(src, "utf8");
     fs.writeFileSync(src, original + "\n// test change\n");
     try {
       assert.throws(
-        () => cp.execFileSync("node", ["tools/build-standalone.cjs"], { cwd: root, stdio: "pipe" }),
+        () => runBuild([], { stdio: "pipe" }),
         (e) => /version is still/.test(String(e.stderr)),
       );
     } finally {
       fs.writeFileSync(src, original);
     }
-    cp.execFileSync("node", ["tools/build-standalone.cjs", "--check"], { cwd: root });
+    runBuild(["--check"]);
   });
 
   for (const [label, code, pattern] of [
@@ -601,13 +631,13 @@ const baseline = (env) => {
     ["unprovided runtime member", "window.ZentralRuntime?.snapshot();", /does not provide/],
   ]) {
     await test(`build: rejects a module that needs ${label}`, () => {
-      const tmp = path.join(root, "additional/zz-test");
+      const tmp = path.join(buildRoot, "additional/zz-test");
       fs.mkdirSync(tmp, { recursive: true });
       fs.writeFileSync(path.join(tmp, "standalone.json"), JSON.stringify({ id: "zz", themeId: "zz", name: "zz", version: "1.0.0", entry: "a.uc.js", output: "a.standalone.uc.js" }));
       fs.writeFileSync(path.join(tmp, "a.uc.js"), code);
       try {
         assert.throws(
-          () => cp.execFileSync("node", ["tools/build-standalone.cjs"], { cwd: root, stdio: "pipe" }),
+          () => runBuild([], { stdio: "pipe" }),
           (e) => pattern.test(String(e.stderr)),
         );
       } finally {
@@ -616,8 +646,14 @@ const baseline = (env) => {
     });
   }
 
+  await test("standalone build leaves checkout files, contents, and mtimes unchanged", () => {
+    assert.equal(repositorySnapshot(), originalRepositorySnapshot,
+      "build operations must not create, delete, edit, or touch any repository file");
+  });
   console.log(`\n${passed} standalone tests passed`);
 })().catch((e) => {
   console.error("FAIL", e);
-  process.exit(1);
+  process.exitCode = 1;
+}).finally(() => {
+  fs.rmSync(buildRoot, { recursive: true, force: true });
 });
