@@ -709,3 +709,7 @@ Markdown and supported HTML tables use constrained, full-width, shrinkable horiz
 **Tests / done when:** UI regression: history event during a pointer drag does not cancel it; scroll offset unchanged after a render.
 
 Background item, note, history, layout and refresh work is coalesced while a drag, dialog or calendar menu is active and applied after release/close; concurrent edits still reject stale drag commits. Day/Week full redraws and affected-day patches preserve timeline scroll, focus by item identity and hover where the item remains visible. Tests cover commit, cancellation, concurrent edit, menu, composer, hover and focus. Fake real-sheet Day redraws for 50/150 items measured 9.6/23.5 ms before and 10.7/34.4 ms after (timings vary); native Zen pointer capture, scrolling and focus remain unverified.
+
+## OW-23 — Recommended Notes theme accent (3.3.150)
+
+Owner request: make the Recommended theme's default accent brighter and distinct from its lines and borders. The theme now uses coordinated light/dark blue accents rather than Zen's potentially black primary colour; the selected Month date uses contrasting text with the default palette. Explicit accent overrides and the line/border setting remain independent. `tests/notes-recommended-theme.test.cjs` checks palette contrast and override rules. Real Zen/Gecko rendering and unusual custom popup colours remain unverified.

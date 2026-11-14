@@ -148,7 +148,7 @@ Tests: `node tests/notes.test.cjs` (store, autosave, sync, recovery), `node test
 - **Tuck away** (setting, off by default): with *Keep open* off, an outside click slides the card away instead of closing it; hover the thin strip on its top edge (or press the Notes button or shortcut) to bring it back.
 - **Push the page aside** (setting, off by default, standalone card only): the page makes room instead of being covered.
 - **Split view as a second window** (setting, off by default): *Split* opens another note in a second window of the same size beside the first, instead of halving one window. With no room beside it the second window is not shown.
-- **Theme** (Quick settings or Zentral settings): Zentral (follows the Zen look), Recommended (like the RSS card), Light, Dark, Paper.
+- **Theme** (Quick settings or Zentral settings): Zentral (follows the Zen look), Recommended (like the RSS card), Light, Dark, Paper. Recommended uses a readable blue accent for links and active items, distinct from the popup's line and border colour; it adapts to the light or dark palette. An explicit Appearance accent still overrides it.
 
 - **Hold in the editor toolbar**: holding *Quote* or the *More* caret lists the callout kinds (Note, Tip, Important, Warning, Caution, Info); a tap does what it always did.
 - **Checkmarks in read view**: a click toggles done, a right click cycles the main states (`[?] [!] [/] [-]`), holding the left button lists the classic states and holding the right button lists the extra ones (`[f] [b] [i] [*]` ...). An extra state is a second kind of checkmark: a click or right click leaves it alone and only a hold changes it.
