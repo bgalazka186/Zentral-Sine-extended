@@ -88,8 +88,23 @@ function failureDetails(result) {
   if (tapIndex >= 0) {
     const tapEnd = lines.findIndex((line, index) => index > tapIndex && /^\s*\.\.\.\s*$/.test(line));
     const block = lines.slice(tapIndex + 1, tapEnd < 0 ? tapIndex + 35 : tapEnd);
-    const detail = block.find(line => /^\s*error:\s*/.test(line));
-    if (detail) message += " — " + detail.replace(/^\s*error:\s*/, "").replace(/^['"]|['"]$/g, "");
+    const detailIndex = block.findIndex(line => /^\s*error:\s*/.test(line));
+    if (detailIndex >= 0) {
+      const header = block[detailIndex];
+      let detail = header.replace(/^\s*error:\s*/, "").trim();
+      if (!detail || detail === "|-" || detail === "|") {
+        const indent = (header.match(/^\s*/) || [""])[0].length;
+        const body = [];
+        for (const line of block.slice(detailIndex + 1)) {
+          if (!line.trim()) { if (body.length) body.push(""); continue; }
+          const lineIndent = (line.match(/^\s*/) || [""])[0].length;
+          if (lineIndent <= indent) break;
+          body.push(line.trim());
+        }
+        detail = body.find(Boolean) || "";
+      }
+      if (detail) message += " — " + detail.replace(/^['"]|['"]$/g, "");
+    }
   } else if (message && /:$/.test(message)) {
     const continuation = lines.slice(messageIndex + 1).find(line => line.trim() && !/^\s*at\s/.test(line));
     if (continuation) message += " " + continuation.trim();

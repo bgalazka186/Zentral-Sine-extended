@@ -7,7 +7,7 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 test("run-all fails on a failing child and reports TODO tests", () => {
-  const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), "zentral-run-all-"));
+  const fixtureDir = fs.mkdtempSync(path.join(__dirname, ".tmp-run-all-"));
   try {
     fs.writeFileSync(path.join(fixtureDir, "failing.test.cjs"), [
       "const test = require('node:test');",
