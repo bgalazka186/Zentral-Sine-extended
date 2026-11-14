@@ -72,13 +72,97 @@ async function runParallel(files, limit) {
   return results;
 }
 
+function failureDetails(result) {
+  const output = result.stdout + "\n" + result.stderr;
+  const lines = output.split(/\r?\n/);
+  const errorIndex = lines.findIndex(line =>
+    /(?:AssertionError(?: \[[^\]]+\])?|TypeError|ReferenceError|SyntaxError|RangeError|Error):/.test(line) &&
+    !/^\s*\[ZentralNotes\]/.test(line));
+  const tapIndex = lines.findIndex(line => /^\s*not ok \d+\s+-/.test(line));
+  const failIndex = lines.findIndex(line => /^\s*FAIL(?:\s|:)/.test(line));
+  const messageIndex = errorIndex >= 0 ? errorIndex : tapIndex >= 0 ? tapIndex : failIndex;
+  let message = messageIndex >= 0 ? lines[messageIndex].trim() : "";
+
+  // Node's TAP reporter puts assertion messages in a YAML "error:" field
+  // below the "not ok" row rather than on the first line.
+  if (tapIndex >= 0) {
+    const tapEnd = lines.findIndex((line, index) => index > tapIndex && /^\s*\.\.\.\s*$/.test(line));
+    const block = lines.slice(tapIndex + 1, tapEnd < 0 ? tapIndex + 35 : tapEnd);
+    const detail = block.find(line => /^\s*error:\s*/.test(line));
+    if (detail) message += " — " + detail.replace(/^\s*error:\s*/, "").replace(/^['"]|['"]$/g, "");
+  } else if (message && /:$/.test(message)) {
+    const continuation = lines.slice(messageIndex + 1).find(line => line.trim() && !/^\s*at\s/.test(line));
+    if (continuation) message += " " + continuation.trim();
+  }
+  if (!message) message = result.error ? result.error.message : result.signal ? "Process terminated by " + result.signal : "Test process exited with code " + result.code;
+
+  let location = null;
+  for (let i = Math.max(0, messageIndex); i < lines.length; i++) {
+    const match = lines[i].match(/(?:^|\/)((?:tests|additional|tools)\/[^():\s]+):(\d+):(\d+)/);
+    if (match) { location = { file: match[1], line: Number(match[2]), column: Number(match[3]) }; break; }
+  }
+  if (!location) {
+    for (const line of lines) {
+      const match = line.match(/(?:^|\/)((?:tests|additional|tools)\/[^():\s]+):(\d+):(\d+)/);
+      if (match) { location = { file: match[1], line: Number(match[2]), column: Number(match[3]) }; break; }
+    }
+  }
+  return { message: message.slice(0, 500), location };
+}
+
+function commandEscape(value) {
+  return String(value).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A").replace(/:/g, "%3A").replace(/,/g, "%2C");
+}
+
+function printFailureSummary(failed, passed, total, totalMs) {
+  process.stderr.write("\n========== REGRESSION FAILURE DETAILS ==========\n");
+  for (const result of failed) {
+    const name = path.relative(ROOT, result.file) || path.basename(result.file);
+    const detail = failureDetails(result);
+    const location = detail.location;
+    process.stderr.write("FAIL: " + name + "\n");
+    process.stderr.write("  What failed: " + detail.message + "\n");
+    if (location) process.stderr.write("  Source: " + location.file + ":" + location.line + ":" + location.column + "\n");
+    process.stderr.write("  Process: exit " + result.code + (result.signal ? " / " + result.signal : "") + "\n");
+    const props = location ? " file=" + commandEscape(location.file) + ",line=" + location.line + ",col=" + location.column : "";
+    process.stdout.write("::error" + props + " title=" + commandEscape(name + " failed") + "::" + commandEscape(detail.message) + "\n");
+  }
+  process.stderr.write("================================================\n");
+
+  const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+  if (summaryPath) {
+    const rows = failed.map(result => {
+      const detail = failureDetails(result), name = path.relative(ROOT, result.file) || path.basename(result.file);
+      const source = detail.location ? detail.location.file + ":" + detail.location.line + ":" + detail.location.column : "See full log";
+      return "| **" + name + "** | " + detail.message.replace(/\|/g, "\\|") + " | " + source + " | " + result.code + " |";
+    });
+    const markdown = [
+      "## Regression test failure details",
+      "",
+      "**" + failed.length + " failed** · " + passed + "/" + total + " test files passed · " + (totalMs / 1000).toFixed(1) + " s combined runtime",
+      "",
+      "| Test file | Failure | Source location | Exit |",
+      "| --- | --- | --- | ---: |",
+      ...rows,
+      "",
+      "The full assertion and stack trace remain in the **Run regression suite** job log, grouped by test file.",
+      "",
+    ].join("\n");
+    try { fs.appendFileSync(summaryPath, markdown); }
+    catch (error) { process.stderr.write("Could not write GitHub step summary: " + error.message + "\n"); }
+  }
+}
+
 function printResult(result) {
   const name = path.relative(ROOT, result.file) || path.basename(result.file);
-  process.stdout.write("\n=== " + name + ": " + (result.code === 0 ? "PASS" : "FAIL") + " (" + result.durationMs.toFixed(0) + " ms) ===\n");
+  const github = process.env.GITHUB_ACTIONS === "true";
+  if (github) process.stdout.write("::group::" + name + ": " + (result.code === 0 ? "PASS" : "FAIL") + " (" + result.durationMs.toFixed(0) + " ms)\n");
+  else process.stdout.write("\n=== " + name + ": " + (result.code === 0 ? "PASS" : "FAIL") + " (" + result.durationMs.toFixed(0) + " ms) ===\n");
   if (result.stdout) process.stdout.write(result.stdout.endsWith("\n") ? result.stdout : result.stdout + "\n");
   if (result.stderr) process.stderr.write(result.stderr.endsWith("\n") ? result.stderr : result.stderr + "\n");
   if (result.error) process.stderr.write("Could not start " + name + ": " + result.error.message + "\n");
   if (result.signal) process.stderr.write(name + " terminated by " + result.signal + "\n");
+  if (github) process.stdout.write("::endgroup::\n");
 }
 
 async function main() {
@@ -128,6 +212,7 @@ async function main() {
   process.stdout.write(todos.length + " TODO failing: " + todoLabel + "\n");
   if (failed.length) {
     process.stderr.write("Failed files: " + failed.map(result => path.basename(result.file)).join(", ") + "\n");
+    printFailureSummary(failed, passed, results.length, totalMs);
     process.exitCode = 1;
   }
 }
