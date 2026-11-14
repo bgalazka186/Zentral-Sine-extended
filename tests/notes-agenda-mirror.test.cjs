@@ -76,6 +76,64 @@ const lineFor = (body, text) => body.split("\n").find((l) => l.includes(text)) |
     assert.equal(cal.removeAgendaLine(b.body, "nope").changed, false);
   });
 
+  await test("OW-16: item category markers round-trip independently of section and siblings", () => {
+    const body = "# 2026-11-20\n\n## Agenda\n%%calendar: Work%%\n- [ ] 2026-11-20 09:00-10:00 First %%zn-item-id:abcd1%%\n- [ ] 2026-11-20 11:00-12:00 Sibling %%zn-item-id:abcd2%%\n";
+    const work = cal.setListLineCategory(body, "abcd1", "Personal");
+    assert.equal(work.changed, true); assert.match(work.body, /%%zn-item-category: Personal%%/);
+    assert.equal(cal.extractNoteItems(work.body, "day", clock)[0].x.category, "Personal");
+    assert.equal(cal.extractNoteItems(work.body, "day", clock)[1].x.category, "Work");
+    assert.equal(cal.setListLineCategory(work.body, "abcd1", "Personal").changed, false);
+    const empty = cal.setListLineCategory(work.body, "abcd1", "");
+    assert.equal(cal.extractNoteItems(empty.body, "day", clock)[0].x.category, "");
+    const follow = cal.setListLineCategory(empty.body, "abcd1", null);
+    assert.equal(cal.extractNoteItems(follow.body, "day", clock)[0].x.category, "Work");
+    assert.equal(follow.body, body, "removing our marker leaves the original text and identity unchanged");
+    assert.equal(cal.setListLineCategory(body, "missing", "Work").found, false);
+    const duplicate = work.body.replace("%%zn-item-category: Personal%%", "%%zn-item-category: Personal%% %%zn-item-category: Work%%");
+    assert.equal(cal.setListLineCategory(duplicate, "abcd1", "Health").safe, false, "ambiguous metadata is never overwritten");
+    const unsafe = cal.setListLineSummary(body, "abcd1", "New %%zn-item-id:evil%%", clock);
+    assert.equal(unsafe.safe, false); assert.equal(unsafe.body, body);
+    const renamed = cal.setListLineSummary(body, "abcd1", "New title", clock);
+    assert.match(renamed.body, /New title %%zn-item-id:abcd1%%/); assert.match(renamed.body, /Sibling %%zn-item-id:abcd2%%/);
+  });
+
+  await test("OW-16: daily note and mirrored event category edits stay synchronized through reload", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    st.items.upsert(mkItem({ id: "event-sync", summary: "Project", start: at(20, 9), end: at(20, 10), x: { kind: "event", src: "manual" } }));
+    const noteId = st.mirrorItemToAgendaNote("event-sync"); assert.ok(noteId);
+    let item = st.items.list().find(x => x.summary === "Project"); assert.equal(item.x.src, "list");
+    const siblingBody = st.get(noteId).body + "\nOther text and %%not-date%%\n"; st.update(noteId, siblingBody, "input");
+    for (const category of ["Work", "Personal", ""]) {
+      item = st.items.get(item.id);
+      const saved = st.items.upsert({ ...item, x: { ...item.x, category, categoryOverride: category } });
+      assert.ok(st.syncItemCategoryToNote(saved));
+      const note = st.get(noteId), parsed = cal.extractNoteItems(note.body, noteId, clock).find(x => x.id === saved.id);
+      assert.equal(parsed.x.category, category, "the Daily Note represents the saved category");
+      const wire = cal.fromGoogle(cal.toGoogle(st.items.get(saved.id)));
+      assert.equal(wire.x.categoryOverride, category); assert.equal(wire.x.categoryInNote, true);
+      st.update(noteId, note.body + "\nEdit\n", "input");
+      assert.equal(st.items.get(saved.id).x.category, category);
+      assert.match(st.get(noteId).body, /%%not-date%%/);
+    }
+    await st.flush(); const reopened = mk(io); await reopened.open();
+    assert.equal(reopened.items.get(item.id).x.category, "");
+    const changed = st.get(noteId).body.replace("%%zn-item-category:%%", "%%zn-item-category: Work%%");
+    st.update(noteId, changed, "input"); assert.equal(st.items.get(item.id).x.category, "Work", "editing the note marker updates Calendar");
+    st.update(noteId, changed.replace(" %%zn-item-category: Work%%", ""), "input");
+    assert.equal(st.items.get(item.id).x.category, "", "removing the per-item marker restores section inheritance");
+    let old = st.items.get(item.id);
+    let categorized = st.items.upsert({ ...old, x: { ...old.x, category: "Personal", categoryOverride: "Personal" } });
+    assert.ok(st.syncItemCategoryToNote(categorized));
+    categorized = st.items.get(item.id);
+    const moved = st.items.upsert({ ...categorized, start: at(23, 9), end: at(23, 10) });
+    assert.equal(st.syncItemScheduleToNote(moved), true);
+    const relocated = st.items.list().find(i => i.summary === "Project");
+    assert.equal(relocated.x.category, "Personal");
+    assert.match(st.get(relocated.x.noteId).body, /%%zn-item-category: Personal%%/);
+    await st.flush(); const afterMove = mk(io); await afterMove.open();
+    assert.equal(afterMove.items.get(relocated.id).x.category, "Personal", "relocation and reload preserve the category");
+  });
+
   await test("pure: reminderIdentity keeps the original identity of a mirrored item (non-recurring only)", () => {
     const it = mkItem({ id: "lxyz-abcd1", summary: "S", start: at(20, 9), x: { kind: "reminder", src: "list", noteId: "N", historyId: "m1" } });
     assert.deepEqual(plain(cal.reminderIdentity(it)), { itemId: "m1", occurrenceId: "m1", noteId: "N", legacyNote: false });
@@ -107,6 +165,52 @@ const lineFor = (body, text) => body.split("\n").find((l) => l.includes(text)) |
     assert.ok(st.applyReminderLifecycle(it, "reopened"));
     assert.ok(st.get(noteId).body.includes("- [ ] 2026-11-20 09:00 Dentist"));
     assert.equal(st.items.history.list({ itemId: "m1" }).map((r) => r.action).join(","), "reopened,done");
+  });
+
+  await test("OW-01: deleting a mirrored reminder removes only its Agenda line and survives reload", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    st.items.upsert(mkItem({ id: "delete1", summary: "Reminder to delete", start: at(20, 9) }));
+    st.items.upsert(mkItem({ id: "keep1", summary: "Keep", start: at(20, 10) }));
+    const noteId = st.mirrorItemToAgendaNote("delete1"); st.mirrorItemToAgendaNote("keep1");
+    const item = st.items.list().find(x => x.summary === "Reminder to delete");
+    assert.equal(item.x.src, "list"); assert.ok(item.x.noteId); assert.equal(cal.isMirroredAgendaItem(item), true);
+    const deletion = cal.calendarItemMenuModel(item).find(x => x.id === "delete");
+    assert.equal(deletion.enabled, true); assert.match(deletion.label, /Delete reminder and its Agenda line/);
+    const before = st.get(noteId).body; assert.ok(before.includes("Reminder to delete"));
+    assert.equal(st.deleteCalendarItem(item.id), true);
+    assert.equal(st.items.get(item.id), null); assert.ok(!st.get(noteId).body.includes("Reminder to delete"));
+    assert.ok(st.get(noteId).body.includes("Keep")); assert.ok(st.get(noteId).body.includes("%%calendar%%"));
+    await st.flush(); const reopened = mk(io); await reopened.open();
+    assert.equal(reopened.items.list().some(x => x.summary === "Reminder to delete"), false);
+    assert.equal(reopened.items.list().filter(x => x.summary === "Keep").length, 1);
+  });
+
+  await test("OW-01: user-authored, ambiguous and protected data are never deleted", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const note = st.create("# 2026-11-20\n## Agenda\n%%calendar%%\n- [ ] 2026-11-20 09:00 Written by user\n");
+    const authored = st.items.list({ noteId: note.id })[0];
+    assert.equal(cal.isMirroredAgendaItem(authored), false); assert.equal(st.deleteCalendarItem(authored.id), false);
+    st.items.upsert(mkItem({ id: "blocked", summary: "Blocked", start: at(20, 10) }));
+    const noteId = st.mirrorItemToAgendaNote("blocked"), item = st.items.list().find(x => x.summary === "Blocked");
+    const line = lineFor(st.get(noteId).body, "Blocked");
+    st.update(noteId, st.get(noteId).body + line + "\n", "input");
+    const before = st.get(noteId).body;
+    assert.equal(st.deleteCalendarItem(item.id), false, "duplicate identity is not an authorization to delete either line");
+    assert.equal(st.get(noteId).body, before); assert.ok(st.items.get(item.id));
+    const movedAuthored = st.items.upsert({ ...st.items.get(authored.id), start: at(23, 9) });
+    assert.ok(st.syncItemScheduleToNote(movedAuthored));
+    const authoredAfterMove = st.items.list().find(x => x.summary === "Written by user");
+    assert.ok(authoredAfterMove.x.historyId, "moving a source line can also create a history identity");
+    assert.equal(cal.isMirroredAgendaItem(authoredAfterMove), false, "historyId alone never authorizes deleting an authored line");
+    assert.equal(st.deleteCalendarItem(authoredAfterMove.id), false);
+    const other = fakeIO(), protectedStore = mk(other); await protectedStore.open();
+    protectedStore.items.upsert(mkItem({ id: "protect1", summary: "Protected", start: at(20, 11) }));
+    const protectedNote = protectedStore.mirrorItemToAgendaNote("protect1"), protectedItem = protectedStore.items.list().find(x => x.summary === "Protected");
+    const protectedBody = protectedStore.get(protectedNote).body;
+    other.files.set("/n/calendar.json", { text: "{invalid", mtime: clock });
+    await protectedStore.items.open(); assert.equal(protectedStore.items.storageState().writeBlocked, true);
+    assert.equal(protectedStore.deleteCalendarItem(protectedItem.id), false);
+    assert.equal(protectedStore.get(protectedNote).body, protectedBody, "protected calendar storage prevents note deletion too");
   });
 
   await test("store: items a list line cannot express stay linked-only; recurring and ordinary-note items are untouched", async () => {

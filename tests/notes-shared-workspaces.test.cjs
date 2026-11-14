@@ -1,0 +1,152 @@
+"use strict";
+const assert = require("node:assert/strict");
+const { createFakeZen } = require("./helpers/fake-zen-browser.cjs");
+const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
+const AGENDA = "zen.workspace.zentral.notes.agenda_folder", NOTES = "zen.workspace.zentral.notes.zen_folder";
+const root = (space, attr) => space.querySelector(`zen-folder[${attr}]`);
+(async () => {
+  const h = createFakeZen({ prefs: { [AGENDA]: true, [NOTES]: "all" } }), a = h.sidebar.ws, b = h.addWorkspace("space-b").element;
+  const plan = h.window.__zentralNotesTestSeam.core.sharedProjectionPlan;
+  assert.equal(plan({ active: "a", targetReady: true, alreadyThere: false }), "move");
+  assert.equal(plan({ active: "a", targetReady: true, alreadyThere: true }), "stay");
+  assert.equal(plan({ active: "", targetReady: true }), "wait");
+  assert.equal(plan({ active: "b", targetReady: false }), "wait");
+  await h.seam.ensureStore(); h.fireTimer(6000); h.fireTimer(6500); await Promise.resolve();
+  const note = h.seam.store.create("Shared note");
+  const start = C.addDays(C.dayStart(Date.now()), 1) + 12 * 3600000;
+  h.seam.store.items.upsert(C.makeItem({ id: "shared", summary: "Shared reminder", start: { dateTime: new Date(start).toISOString() }, x: { src: "manual", kind: "reminder" } }));
+  h.seam.zen.runNow(); h.seam.agendaController.runNow();
+  const notesA = root(a, "bgalazka-notes-folder"), agendaA = root(a, "bgalazka-notes-agenda-folder"); assert.ok(notesA && agendaA);
+  const foreign = h.window.gBrowser.addTab("https://user.test/"); notesA.addTabs([foreign]);
+  const foreignFolder = h.sidebar.folder("Foreign", { parent: notesA.querySelector(":scope > .tab-group-container") });
+  const nested = h.window.gBrowser.addTab("https://nested.test/"); foreignFolder.addTab(nested);
+  const agendaForeign = h.window.gBrowser.addTab("https://agenda-user.test/"); agendaA.querySelector("zen-folder[bgalazka-notes-agenda-day]").addTabs([agendaForeign]);
+  const noteTab = notesA.querySelector("tab[bgalazka-notes-item]");
+  h.window.gZenWorkspaces.lastSelectedWorkspaceTabs = { [a.id]: noteTab, untouched: foreign };
+  let schedules = 0; const original = h.seam.zen.schedule; h.seam.zen.schedule = (...args) => { schedules++; return original(...args); };
+  await h.switchWorkspace("space-b"); await Promise.resolve(); assert.ok(schedules > 0, "native workspace change schedules projection refresh");
+  h.seam.zen.schedule = original; h.seam.zen.runNow(); h.seam.agendaController.runNow();
+  assert.ok(root(b, "bgalazka-notes-folder") && root(b, "bgalazka-notes-agenda-folder"), "both shared projections follow the active space");
+  assert.ok(!root(a, "bgalazka-notes-folder") && !root(a, "bgalazka-notes-agenda-folder"));
+  for (const owned of [notesA, agendaA, ...notesA.querySelectorAll("zen-folder"), ...notesA.querySelectorAll("tab"), ...agendaA.querySelectorAll("zen-folder"), ...agendaA.querySelectorAll("tab")]) assert.equal(owned.getAttribute("zen-workspace-id"), "space-b");
+  assert.equal(h.window.gZenWorkspaces.lastSelectedWorkspaceTabs[a.id], undefined); assert.equal(h.window.gZenWorkspaces.lastSelectedWorkspaceTabs.untouched, foreign);
+  assert.ok(foreign.isConnected && foreignFolder.isConnected && foreignFolder.contains(nested) && agendaForeign.isConnected, "foreign contents are never deleted or moved to the other space");
+  assert.ok(a.contains(foreign) && a.contains(foreignFolder) && a.contains(agendaForeign));
+  h.seam.store.update(note.id, "Edited shared note", "input");
+  h.seam.store.items.upsert({ ...h.seam.store.items.get("shared"), summary: "Edited shared reminder" });
+  h.seam.zen.runNow(); h.seam.agendaController.invalidate(); h.seam.agendaController.runNow();
+  await h.switchWorkspace(a.id); await Promise.resolve(); h.seam.zen.runNow(); h.seam.agendaController.invalidate(); h.seam.agendaController.runNow();
+  assert.ok(root(a, "bgalazka-notes-folder").querySelectorAll("tab").some(t => (t.getAttribute("label") || "").includes("Edited shared note")));
+  assert.ok(root(a, "bgalazka-notes-agenda-folder").querySelectorAll("tab").some(t => (t.getAttribute("label") || "").includes("Edited shared reminder")));
+  h.resetOperations(); h.seam.zen.runNow(); h.seam.agendaController.runNow(); assert.deepEqual(h.operations, [], "stable projection has no repeated DOM operations");
+  h.setPref(AGENDA, false); h.setPref(NOTES, "off"); assert.ok(!root(a, "bgalazka-notes-folder") && !root(a, "bgalazka-notes-agenda-folder"));
+  assert.equal(h.workspaceListenerCount(), 0, "disabled projections detach workspace listener");
+  h.setPref(NOTES, "all"); h.setPref(AGENDA, true); assert.equal(h.workspaceListenerCount(), 1, "re-enabled projections attach exactly once"); await Promise.resolve(); h.seam.zen.runNow(); h.seam.agendaController.runNow();
+  for (let i = 0; i < 5; i++) { h.fireTimer(250); await Promise.resolve(); }
+  assert.ok(root(a, "bgalazka-notes-folder") && root(a, "bgalazka-notes-agenda-folder"));
+  await h.seam.store.flush(); const files = h.files; await h.destroy(); assert.equal(h.workspaceListenerCount(), 0, "workspace listeners are removed on destroy");
+  const restarted = createFakeZen({ files, prefs: { [AGENDA]: true, [NOTES]: "all" } }); const second = restarted.addWorkspace("space-b").element;
+  await restarted.switchWorkspace("space-b"); await restarted.seam.ensureStore(); restarted.fireTimer(6000); restarted.fireTimer(6500); await Promise.resolve(); restarted.seam.zen.runNow(); restarted.seam.agendaController.runNow();
+  assert.ok(root(second, "bgalazka-notes-folder") && root(second, "bgalazka-notes-agenda-folder"), "restart in another space projects the shared store");
+  assert.equal(restarted.seam.store.get(note.id).body, "Edited shared note"); await restarted.destroy();
+  // Each browser window has its own DOM projection and workspace listener,
+  // even when its store reads the same persisted notes.
+  const win1 = createFakeZen({ files, prefs: { [AGENDA]: true, [NOTES]: "all" } });
+  const win2 = createFakeZen({ files, prefs: { [AGENDA]: true, [NOTES]: "all" } });
+  const win1b = win1.addWorkspace("space-b").element; win2.addWorkspace("space-b");
+  await Promise.all([win1.seam.ensureStore(), win2.seam.ensureStore()]);
+  for (const w of [win1, win2]) { w.fireTimer(6000); w.fireTimer(6500); await Promise.resolve(); w.seam.zen.runNow(); w.seam.agendaController.runNow(); }
+  const win2Notes = root(win2.sidebar.ws, "bgalazka-notes-folder"), win2Agenda = root(win2.sidebar.ws, "bgalazka-notes-agenda-folder");
+  await win1.switchWorkspace("space-b"); assert.ok(root(win1b, "bgalazka-notes-folder"));
+  assert.ok(win2.sidebar.ws.contains(win2Notes) && win2.sidebar.ws.contains(win2Agenda), "switching one window leaves the other projection in place");
+  await win1.destroy(); assert.equal(win1.workspaceListenerCount(), 0); assert.equal(win2.workspaceListenerCount(), 1);
+  await win2.destroy();
+  // A failed native evacuation must not destroy user content or transport it
+  // into another workspace; retry after the move becomes available.
+  const blocked = createFakeZen({ prefs: { [AGENDA]: true, [NOTES]: "all" } }); const blockedB = blocked.addWorkspace("space-b").element;
+  await blocked.seam.ensureStore(); blocked.fireTimer(6000); blocked.fireTimer(6500); await Promise.resolve();
+  blocked.seam.store.create("Protected note"); blocked.seam.zen.runNow();
+  const blockedRoot = root(blocked.sidebar.ws, "bgalazka-notes-folder"), blockedUser = blocked.window.gBrowser.addTab("https://protected.test/"); blockedRoot.addTabs([blockedUser]);
+  blockedRoot.elementIndex = 0; blocked.window.gBrowser.moveTabTo = () => { throw new Error("blocked move"); };
+  await blocked.switchWorkspace("space-b"); assert.ok(blocked.sidebar.ws.contains(blockedRoot) && blockedRoot.contains(blockedUser));
+  assert.equal(root(blockedB, "bgalazka-notes-folder"), null, "do not duplicate or move a root with trapped user content");
+  delete blocked.window.gBrowser.moveTabTo; await blocked.switchWorkspace("space-b");
+  assert.ok(root(blockedB, "bgalazka-notes-folder") && blocked.sidebar.ws.contains(blockedUser), "a later workspace notification retries safely");
+  await blocked.destroy();
+  // An unavailable or incorrectly resolved destination must not move anything.
+  const uncertain = createFakeZen({ prefs: { [AGENDA]: true, [NOTES]: "all" } }); uncertain.addWorkspace("space-b");
+  await uncertain.seam.ensureStore(); uncertain.fireTimer(6000); uncertain.fireTimer(6500); await Promise.resolve(); uncertain.seam.store.create("Stay here"); uncertain.seam.zen.runNow();
+  const fixed = root(uncertain.sidebar.ws, "bgalazka-notes-folder"), locate = uncertain.window.gZenWorkspaces.workspaceElement;
+  uncertain.window.gZenWorkspaces.workspaceElement = () => ({ pinnedTabsContainer: uncertain.sidebar.pinned });
+  await uncertain.switchWorkspace("space-b"); assert.ok(uncertain.sidebar.ws.contains(fixed), "a destination from another space is refused");
+  uncertain.window.gZenWorkspaces.workspaceElement = locate; uncertain.emit("ZenWorkspacesUIUpdate", uncertain.document.documentElement); await Promise.resolve();
+  assert.ok(!uncertain.sidebar.ws.contains(fixed), "a later ready event completes migration"); await uncertain.destroy();
+  const failing = createFakeZen({ prefs: { [AGENDA]: false, [NOTES]: "all" } }); const failureDest = failing.addWorkspace("space-b");
+  await failing.seam.ensureStore(); failing.fireTimer(6000); await Promise.resolve(); failing.seam.store.create("Failed destination"); failing.seam.zen.runNow();
+  const failingRoot = root(failing.sidebar.ws, "bgalazka-notes-folder"), beforeId = failingRoot.getAttribute("zen-workspace-id");
+  const originalInsert = failureDest.pinnedTabsContainer.insertBefore; failureDest.pinnedTabsContainer.insertBefore = () => { throw new Error("destination unavailable"); };
+  await failing.switchWorkspace("space-b"); assert.ok(failing.sidebar.ws.contains(failingRoot)); assert.equal(failingRoot.getAttribute("zen-workspace-id"), beforeId);
+  failureDest.pinnedTabsContainer.insertBefore = originalInsert; await failing.switchWorkspace("space-b"); assert.ok(failureDest.element.contains(failingRoot)); await failing.destroy();
+  // Simulate restored roots in the old space with the next space already
+  // active when Notes finishes startup.
+  const restored = createFakeZen({ prefs: { [AGENDA]: true, [NOTES]: "all" } }); const restoredB = restored.addWorkspace("space-b").element;
+  await restored.seam.ensureStore(); restored.seam.store.create("Restored note");
+  const oldNotes = restored.sidebar.folder("NOTES", { id: "bgalazka-zentral-notes", attrs: { "bgalazka-notes-folder": "true" } });
+  const oldAgenda = restored.sidebar.folder("Agenda", { id: "zentral-notes-agenda", attrs: { "bgalazka-notes-agenda-folder": "true" } });
+  restored.window.gZenWorkspaces.activeWorkspace = "space-b";
+  restored.fireTimer(6000); restored.fireTimer(6500); await Promise.resolve();
+  assert.ok(restoredB.contains(oldNotes) && restoredB.contains(oldAgenda), "startup adopts and migrates restored roots before rebuilding");
+  await restored.destroy();
+  const dupHost = createFakeZen({ prefs: { [AGENDA]: false, [NOTES]: "all" } }); const dupB = dupHost.addWorkspace("space-b").element;
+  await dupHost.seam.ensureStore(); dupHost.seam.store.create("Root data");
+  const kept = dupHost.sidebar.folder("NOTES", { id: "bgalazka-zentral-notes", attrs: { "bgalazka-notes-folder": "true" } });
+  kept.addTabs = (nodes) => nodes.forEach(node => kept.addTab(node));
+  const duplicate = dupHost.sidebar.folder("NOTES", { id: "bgalazka-zentral-notes", attrs: { "bgalazka-notes-folder": "true" } });
+  const userEmpty = dupHost.sidebar.folder("User empty", { parent: duplicate.querySelector(":scope > .tab-group-container") });
+  dupHost.window.gZenWorkspaces.activeWorkspace = "space-b"; dupHost.fireTimer(6000); await Promise.resolve(); dupHost.seam.zen.runNow();
+  assert.ok(dupB.contains(kept)); assert.ok(duplicate.isConnected && userEmpty.isConnected); assert.notEqual(duplicate.id, "bgalazka-zentral-notes");
+  assert.equal(duplicate.hasAttribute("bgalazka-notes-folder"), false, "duplicate with foreign content is safely released");
+  await dupHost.destroy();
+  const duplicateFailure = createFakeZen({ prefs: { [AGENDA]: true, [NOTES]: "off" } }); const duplicateB = duplicateFailure.addWorkspace("space-b").element;
+  await duplicateFailure.seam.ensureStore(); duplicateFailure.fireTimer(6500); await Promise.resolve();
+  duplicateFailure.seam.store.items.upsert(C.makeItem({ id: "dup-item", summary: "Duplicate protection", start: { dateTime: new Date(start).toISOString() }, x: { src: "manual", kind: "reminder" } }));
+  duplicateFailure.seam.agendaController.runNow();
+  const canonical = root(duplicateFailure.sidebar.ws, "bgalazka-notes-agenda-folder");
+  const dupe = duplicateFailure.sidebar.folder("Agenda", { id: "restored-duplicate", attrs: { "bgalazka-notes-agenda-folder": "true" } });
+  const dupeUser = duplicateFailure.window.gBrowser.addTab("https://duplicate-user.test/"); dupe.addTab(dupeUser); dupe.elementIndex = 0;
+  duplicateFailure.window.gBrowser.moveTabTo = () => { throw Error("duplicate move unavailable"); };
+  await duplicateFailure.switchWorkspace("space-b");
+  assert.ok(canonical.isConnected && duplicateFailure.sidebar.ws.contains(canonical), "unresolved duplicate prevents moving the canonical root");
+  assert.ok(dupe.isConnected && dupe.contains(dupeUser)); assert.equal(root(duplicateB, "bgalazka-notes-agenda-folder"), null);
+  delete duplicateFailure.window.gBrowser.moveTabTo; await duplicateFailure.switchWorkspace("space-b");
+  assert.ok(duplicateB.contains(canonical) && dupeUser.isConnected && !dupe.isConnected, "duplicate cleanup succeeds before migration retry");
+  await duplicateFailure.destroy();
+  // Reconciliation can retire a nested Notes folder after the user removes or
+  // moves it. Neither a foreign tab nor an empty foreign folder may be closed.
+  const retire = createFakeZen({ prefs: { [AGENDA]: false, [NOTES]: "all" } });
+  await retire.seam.ensureStore(); retire.fireTimer(6000); await Promise.resolve(); retire.seam.store.create("Keep root"); retire.seam.zen.runNow();
+  const retireRoot = root(retire.sidebar.ws, "bgalazka-notes-folder"), owned = retire.sidebar.folder("Owned", { parent: retireRoot.querySelector(":scope > .tab-group-container"), attrs: { "bgalazka-notes-subfolder": "f:retiring" } });
+  const empty = retire.sidebar.folder("User empty", { parent: owned.querySelector(":scope > .tab-group-container") });
+  const keepTab = retire.window.gBrowser.addTab("https://retire-user.test/"); owned.addTab(keepTab);
+  retire.seam.zenApi.remove("f:retiring", false);
+  assert.ok(empty.isConnected && keepTab.isConnected, "retiring a managed subfolder preserves foreign tabs and empty folders");
+  assert.ok(!retireRoot.contains(empty) && !retireRoot.contains(keepTab), "foreign content is moved outside the managed root");
+  const stuck = retire.sidebar.folder("Blocked", { parent: retireRoot.querySelector(":scope > .tab-group-container"), attrs: { "bgalazka-notes-subfolder": "f:blocked" } });
+  const stuckTab = retire.window.gBrowser.addTab("https://blocked-retire.test/"); stuck.addTab(stuckTab); retireRoot.elementIndex = 0;
+  retire.window.gBrowser.moveTabTo = () => { throw new Error("retire move blocked"); };
+  assert.equal(retire.seam.zenApi.remove("f:blocked", false), false); assert.ok(stuck.contains(stuckTab) && stuck.isConnected);
+  delete retire.window.gBrowser.moveTabTo; retire.seam.zenApi.remove("f:blocked", false);
+  assert.ok(stuckTab.isConnected && !retireRoot.contains(stuckTab) && !stuck.isConnected, "later reconciliation can retry retirement");
+  await retire.destroy();
+  // Older native hosts without the listener API fall back to a coalesced
+  // TabSelect after the active workspace changes.
+  const legacy = createFakeZen({ prefs: { [AGENDA]: false, [NOTES]: "all" } }); const legacyB = legacy.addWorkspace("space-b").element;
+  await legacy.seam.ensureStore(); legacy.fireTimer(6000); await Promise.resolve(); legacy.seam.store.create("Legacy host"); legacy.seam.zen.runNow();
+  const legacyRoot = root(legacy.sidebar.ws, "bgalazka-notes-folder"), oldManager = legacy.window.gZenWorkspaces;
+  legacy.window.gZenWorkspaces = { activeWorkspace: legacy.sidebar.ws.id, workspaceElement: oldManager.workspaceElement };
+  legacy.emit("ZenWorkspacesUIUpdate", legacy.document.documentElement); assert.equal(legacy.workspaceListenerCount(), 0, "replaced native manager is detached");
+  legacy.window.gZenWorkspaces.activeWorkspace = "space-b"; legacy.emit("TabSelect", legacy.window.gBrowser.addTab("https://legacy.test/"));
+  assert.ok(legacy.fireTimer(0)); assert.ok(legacyB.contains(legacyRoot), "fallback handles a workspace switch");
+  await legacy.destroy();
+  console.log("Shared workspace projections passed");
+})().catch(e => { console.error(e); process.exitCode = 1; });

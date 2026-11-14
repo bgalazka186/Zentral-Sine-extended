@@ -10,7 +10,7 @@ const find = (rows, id) => rows.flatMap((row) => row.group ? [row, ...row.group]
   const manualEvent = cal.makeItem({ id: "manual-event", summary: "Manual event", start: { dateTime: "2026-11-12T10:00:00Z" }, end: { dateTime: "2026-11-12T11:00:00Z" }, x: { kind: "event", src: "manual" } }, 0);
   const before = JSON.stringify(manualEvent);
   const eventMenu = cal.calendarItemMenuModel(manualEvent);
-  assert.deepEqual(menuLabels(eventMenu), ["Show details", "Edit details…", "Change time…", "Convert to reminder", "Duplicate as independent item", "Delete item…"]);
+  assert.deepEqual(menuLabels(eventMenu), ["Show details", "Edit details…", "Change time…", "Convert to reminder", "Duplicate as independent item", "Delete event…"]);
   for (const id of ["edit", "change-time", "convert", "duplicate", "delete"]) assert.equal(find(eventMenu, id).enabled, true, id + " is available for a manual event");
   assert.equal(JSON.stringify(manualEvent), before, "building a menu never mutates the stored item");
 
@@ -197,7 +197,7 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   menuItem(root, "Show in Zen Agenda").click(); await flush();
   assert.equal(store.items.get("menu-manual-event").x.agendaWindow.enabled, true);
   openRowMenu(root, "menu-manual-event");
-  for (const label of ["Show details", "Edit details…", "Change time…", "Convert to reminder", "Duplicate as independent item", "Delete item…"]) assert.ok(menuItem(root, label), `manual event menu includes ${label}`);
+  for (const label of ["Show details", "Edit details…", "Change time…", "Convert to reminder", "Duplicate as independent item", "Delete event…"]) assert.ok(menuItem(root, label), `manual event menu includes ${label}`);
   menuItem(root, "Change time…").click(); await flush();
   const dateInput = q(root, '[aria-label="New date (YYYY-MM-DD)"]');
   assert.ok(dateInput, "change-time dialog exposes a validated date field");
@@ -211,26 +211,29 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   assert.equal(store.items.get("menu-manual-event").end, undefined, "reminder conversion removes the event end");
 
   openRowMenu(root, "menu-manual-event");
+  store.items.history.append({ itemId: "menu-manual-event", action: "done", at: Date.now() });
   menuItem(root, "Duplicate as independent item").click(); await flush();
   const copy = store.items.list().find((item) => item.summary === "Standalone review (copy)");
   assert.ok(copy, "duplicate action stores a separate item");
   assert.equal(copy.x.src, "manual");
   assert.equal(copy.x.noteId, "", "duplicate is independent of the source note");
+  assert.equal(store.items.history.stateFor(copy.id), "pending", "a copy never inherits Done");
+  assert.notEqual(copy.id, "menu-manual-event");
 
   openRowMenu(root, copy.id);
-  menuItem(root, "Delete item…").click(); await flush();
+  menuItem(root, "Delete reminder…").click(); await flush();
   assert.ok(q(root, '.zn-dialog-card[aria-label="Delete calendar item?"]'), "delete is confirmed rather than immediate");
   root.querySelectorAll(".zn-dialog-card button").find((node) => node.textContent.trim() === "Cancel").click(); await flush();
   assert.ok(store.items.get(copy.id), "cancel leaves the item intact");
   const staleCopyButton = openRowMenu(root, copy.id);
-  menuItem(root, "Delete item…").click(); await flush();
-  root.querySelectorAll(".zn-dialog-card button").find((node) => node.textContent.trim() === "Delete item").click(); await flush();
+  menuItem(root, "Delete reminder…").click(); await flush();
+  root.querySelectorAll(".zn-dialog-card button").find((node) => node.textContent.trim() === "Delete reminder").click(); await flush();
   assert.equal(store.items.get(copy.id), null, "confirmed delete removes only the independent calendar item");
   staleCopyButton.dispatchEvent(new Ev("contextmenu", { bubbles: true, clientX: 90, clientY: 90 }));
   assert.equal(q(root, ".zn-menu"), null, "a detached row cannot open a stale menu after its item is removed");
 
   openRowMenu(root, "menu-listed-event");
-  const convert = menuItem(root, "Convert to reminder"), remove = menuItem(root, "Delete item…");
+  const convert = menuItem(root, "Convert to reminder"), remove = menuItem(root, "Delete event…");
   assert.ok(convert && convert.disabled, "source-defined type conversion is visible but disabled");
   assert.ok(remove && remove.disabled, "source-derived deletion is visible but disabled");
   assert.match(convert.textContent, /source text/);
@@ -271,6 +274,7 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
 
   // T2.3f: all four creation modes use the same full composer and its shared Clock/date controls.
   store.items.upsertCategory({ name: "Work", color: "#abcdef" });
+  store.items.upsertCategory({ name: "Personal", color: "#decade" });
   const openCreate = async (label) => {
     q(root, ".zn-calendar-tools").click(); await flush();
     const entry = menuItem(root, label);
@@ -381,6 +385,114 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   saveEdit.click(); await flush();
   assert.equal(store.items.get(timedEvent.id).summary, "Edited timed event");
   assert.equal(store.items.get(timedEvent.id).id, timedEvent.id, "editing keeps the calendar item identity stable");
+  openRowMenu(root, timedEvent.id); menuItem(root, "Edit details…").click(); await flush();
+  const independentCard = q(root, ".zn-cal-compose-card"); independentCard.querySelector('[aria-label="Calendar category"]').value = "Work";
+  independentCard.querySelectorAll("button").find((button) => button.textContent.trim() === "Save calendar item").click(); await flush();
+  assert.equal(store.items.get(timedEvent.id).x.category, "Work", "independent items also save category edits");
+  assert.equal(store.items.get(timedEvent.id).summary, "Edited timed event", "category synchronization must not undo another edited field");
+  assert.match(store.get(timedEvent.x.noteId).body, /Edited timed event.*%%zn-item-category: Work%%/);
+
+  // OW-01: a note-less composer reminder has been mirrored into its Daily Note.
+  // Its deletion is enabled, names both removals, and cancel leaves both intact.
+  const mirroredReminder = fullDayReminder, mirroredNote = store.get(mirroredReminder.x.noteId);
+  assert.equal(mirroredReminder.x.src, "list"); assert.ok(cal.isMirroredAgendaItem(mirroredReminder));
+  openRowMenu(root, mirroredReminder.id);
+  const deleteMirror = menuItem(root, "Delete reminder and its Agenda line…"); assert.ok(deleteMirror && !deleteMirror.disabled);
+  deleteMirror.click(); await flush();
+  let deleteCard = q(root, '[aria-label="Delete calendar item?"]');
+  assert.match(deleteCard.textContent, /removes the calendar reminder and its Agenda line/);
+  deleteCard.querySelectorAll("button").find(button => button.textContent.trim() === "Cancel").click(); await flush();
+  assert.ok(store.items.get(mirroredReminder.id)); assert.match(mirroredNote.body, /Full-day reminder/);
+  openRowMenu(root, mirroredReminder.id); menuItem(root, "Delete reminder and its Agenda line…").click(); await flush();
+  deleteCard = q(root, '[aria-label="Delete calendar item?"]');
+  store.update(mirroredNote.id, store.get(mirroredNote.id).body + "\nChanged while confirming\n", "input"); await flush();
+  deleteCard.querySelectorAll("button").find(button => button.textContent.trim() === "Delete reminder").click(); await flush();
+  assert.ok(store.items.get(mirroredReminder.id), "an item changed while confirmation was open is not silently deleted");
+  deleteCard.querySelectorAll("button").find(button => button.textContent.trim() === "Cancel").click(); await flush();
+  openRowMenu(root, mirroredReminder.id); menuItem(root, "Delete reminder and its Agenda line…").click(); await flush();
+  deleteCard = q(root, '[aria-label="Delete calendar item?"]');
+  deleteCard.querySelectorAll("button").find(button => button.textContent.trim() === "Delete reminder").click(); await flush();
+  assert.equal(store.items.get(mirroredReminder.id), null); assert.doesNotMatch(store.get(mirroredNote.id).body, /Full-day reminder/);
+  assert.ok(store.get(mirroredNote.id).body.includes("Edited timed event"), "other Agenda lines survive");
+
+  // OW-16: a real composer-created event is mirrored into its date note. Edit,
+  // visit the note, return to Calendar and reload without losing its category.
+  const dailyId = timedEvent.x.noteId;
+  openRowMenu(root, timedEvent.id); menuItem(root, "Open source note").click(); await flush();
+  assert.ok(root.querySelector("textarea").value.includes("%%zn-item-category: Work%%"));
+  root.all().find((el) => el.title === "All notes").click(); await flush();
+  assert.equal(store.items.get(timedEvent.id).x.category, "Work");
+  async function dailyCategory(id, category, save = true) {
+    openRowMenu(root, id); menuItem(root, "Edit details…").click(); await flush();
+    const card = q(root, ".zn-cal-compose-card"), select = card.querySelector('[aria-label="Calendar category"]');
+    select.value = category; select.dispatchEvent(new Ev("change"));
+    card.querySelectorAll("button").find((button) => button.textContent.trim() === (save ? "Save calendar item" : "Cancel")).click(); await flush();
+  }
+  await dailyCategory(timedEvent.id, "Personal");
+  assert.equal(store.items.get(timedEvent.id).x.category, "Personal");
+  assert.match(store.get(dailyId).body, /Edited timed event.*%%zn-item-category: Personal%%/);
+  await dailyCategory(timedEvent.id, "", false); assert.equal(store.items.get(timedEvent.id).x.category, "Personal");
+  await dailyCategory(timedEvent.id, ""); assert.equal(store.items.get(timedEvent.id).x.category, "");
+  await dailyCategory(timedEvent.id, "Work");
+  const daily = store.create(`# ${dayKey} Monday\n\n## My events\n%%calendar: Work%%\n- [ ] ${dayKey} 13:30-14:30 Authored daily event\n- [ ] ${dayKey} 16:00-17:00 Daily sibling\n`);
+  const authored = store.items.list({ noteId: daily.id }).find((entry) => entry.summary === "Authored daily event");
+  const dailySibling = store.items.list({ noteId: daily.id }).find((entry) => entry.summary === "Daily sibling");
+  assert.ok(authored && dailySibling); await flush();
+  await dailyCategory(authored.id, "Personal");
+  assert.equal(cal.extractNoteItems(store.get(daily.id).body, daily.id, Date.now()).find(x => x.id === authored.id).x.category, "Personal");
+  assert.equal(store.items.get(dailySibling.id).x.category, "Work");
+  store.update(daily.id, store.get(daily.id).body.replace("%%zn-item-category: Personal%%", "%%zn-item-category: Work%%"), "input"); await flush();
+  assert.equal(store.items.get(authored.id).x.category, "Work", "note changes flow back to Calendar");
+  openRowMenu(root, authored.id); menuItem(root, "Edit details…").click(); await flush();
+  const authoredCard = q(root, ".zn-cal-compose-card"), authoredSelect = authoredCard.querySelector('[aria-label="Calendar category"]');
+  const follow = authoredSelect.querySelectorAll("option").find(option => option.textContent.includes("Follow note section (Work)")); assert.ok(follow);
+  authoredSelect.value = follow.getAttribute("value"); authoredCard.querySelectorAll("button").find(button => button.textContent.trim() === "Save calendar item").click(); await flush();
+  assert.equal(Object.hasOwn(store.items.get(authored.id).x, "categoryOverride"), false);
+  assert.equal(Object.hasOwn(store.items.get(authored.id).x, "categoryInNote"), false);
+  assert.doesNotMatch(store.get(daily.id).body.split("\n").find(line => line.includes("Authored daily event")), /zn-item-category/);
+  await store.flush();
+  const dailyReload = core.createStore({ io, notify() {}, windowId: "daily-sync-reload", getDir: async () => "/calendar-menu", getMaxSaveMs: () => 1000, setTimer: setTimeout, clearTimer: clearTimeout });
+  await dailyReload.open(); assert.equal(dailyReload.items.get(authored.id).x.category, "Work"); assert.equal(dailyReload.items.get(timedEvent.id).x.category, "Work"); await dailyReload.close();
+
+  // OW-12: editing one note-derived item's category must survive a later note sync
+  // without reclassifying its siblings or modifying hidden line markers.
+  const categoryNote = store.create(`# Category source\n\n## Agenda\n%%calendar%%\n- [ ] ${dayKey} 09:30 Category edit target\n- [ ] ${dayKey} 10:30 Category sibling\n`);
+  const target = store.items.list({ noteId: categoryNote.id }).find((item) => item.summary === "Category edit target");
+  const sibling = store.items.list({ noteId: categoryNote.id }).find((item) => item.summary === "Category sibling");
+  assert.ok(target && sibling); await flush();
+  async function editCategory(value, save = true) {
+    openRowMenu(root, target.id); menuItem(root, "Edit details…").click(); await flush();
+    const card = q(root, ".zn-cal-compose-card"); assert.ok(card);
+    const select = card.querySelector('[aria-label="Calendar category"]'); select.value = value; select.dispatchEvent(new Ev("change"));
+    card.querySelectorAll("button").find((button) => button.textContent.trim() === (save ? "Save calendar item" : "Cancel")).click(); await flush();
+  }
+  const sourceBefore = store.get(categoryNote.id).body;
+  await editCategory("");
+  store.update(categoryNote.id, sourceBefore.replace("%%calendar%%", "%%calendar: Work%%"), "input"); await flush();
+  assert.equal(store.items.get(target.id).x.category, "", "explicit No category remains distinct even when it initially matched inheritance");
+  store.update(categoryNote.id, sourceBefore, "input"); await flush();
+  await editCategory("Work");
+  assert.equal(store.items.get(target.id).x.category, "Work", "category saves on a linked list item");
+  store.update(categoryNote.id, sourceBefore + "\nA note edit\n", "input"); await flush();
+  assert.equal(store.items.get(target.id).x.category, "Work", "category survives note resync");
+  await store.flush();
+  const readWork = core.createStore({ io, notify() {}, windowId: "category-work", getDir: async () => "/calendar-menu", getMaxSaveMs: () => 1000, setTimer: setTimeout, clearTimer: clearTimeout });
+  await readWork.open(); assert.equal(readWork.items.get(target.id).x.category, "Work", "selected category survives disk reload");
+  assert.equal(readWork.items.get(timedEvent.id).x.category, "Work", "independent item survives disk reload"); await readWork.close();
+  assert.equal(store.items.get(sibling.id).x.category, "", "changing one item does not change a sibling");
+  assert.ok(store.get(categoryNote.id).body.includes("%%zn-item-id:"), "stable item markers remain intact");
+  await editCategory("Personal"); assert.equal(store.items.get(target.id).x.category, "Personal");
+  await editCategory("", false); assert.equal(store.items.get(target.id).x.category, "Personal", "cancel changes nothing");
+  await editCategory(""); assert.equal(store.items.get(target.id).x.category, "");
+  openRowMenu(root, target.id); menuItem(root, "Edit details…").click(); await flush();
+  let inheritanceCard = q(root, ".zn-cal-compose-card"), inheritedOption = inheritanceCard.querySelectorAll('option').find((option) => option.textContent.includes("Follow note section"));
+  assert.ok(inheritedOption, "editor makes section inheritance recoverable");
+  inheritanceCard.querySelector('[aria-label="Calendar category"]').value = inheritedOption.getAttribute("value");
+  inheritanceCard.querySelectorAll("button").find((button) => button.textContent.trim() === "Save calendar item").click(); await flush();
+  assert.equal(Object.hasOwn(store.items.get(target.id).x, "categoryOverride"), false);
+  await store.flush();
+  const reopened = core.createStore({ io, notify() {}, windowId: "category-reopen", getDir: async () => "/calendar-menu", getMaxSaveMs: () => 1000, setTimer: setTimeout, clearTimer: clearTimeout });
+  await reopened.open(); assert.equal(reopened.items.get(target.id).x.category, "", "category clearing survives disk reload"); await reopened.close();
 
   // Note-level sound defaults are editable from the composer and persist separately from item overrides.
   const noteDefaultsComposer = await openCreate("Create timed reminder…");

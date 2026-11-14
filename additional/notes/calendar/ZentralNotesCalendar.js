@@ -486,7 +486,10 @@
         category: cleanCategoryName(x.category), tz: cleanZone(x.tz), historyId: String(x.historyId ?? "").slice(0, 120), src: ["list", "note", "manual"].includes(x.src) ? x.src : "manual", key: String(x.key ?? "").slice(0, 60), legacyKey: String(x.legacyKey ?? "").slice(0, 60), moved: x.moved ? "1" : "", calNote: String(x.calNote ?? "").slice(0, MAX_DESC), notify: cleanNotifyOverrides(x.notify), agendaWindow: cleanAgendaWindow(x.agendaWindow), recurrenceExceptions: cleanRecurrenceExceptions(x.recurrenceExceptions, allDay),
       },
     };
+    if (x.src === "list" && typeof x.categoryOverride === "string") item.x.categoryOverride = cleanCategoryName(x.categoryOverride);
+    if (x.src === "list" && x.categoryInNote === true) item.x.categoryInNote = true;
     if (end) item.end = end;
+    if (typeof raw.created === "string" && Number.isFinite(Date.parse(raw.created))) item.created = iso(Date.parse(raw.created));
     item.etag = typeof raw.etag === "string" && raw.etag ? raw.etag : etagOf(item);
     return item;
   }
@@ -723,9 +726,10 @@
   // The plain Google event resource for an item (our `x` goes into extendedProperties.private, as Google allows).
   function toGoogle(it) {
     const priv = {};
-    for (const [k, v] of Object.entries(it.x)) if (v !== "" && v !== undefined && v !== null && !(Array.isArray(v) && !v.length)) priv["zentral_" + k] = ["notify", "recurrenceExceptions", "agendaWindow"].includes(k) ? JSON.stringify(v) : String(v);
+    for (const [k, v] of Object.entries(it.x)) if ((v !== "" || k === "categoryOverride") && v !== undefined && v !== null && !(Array.isArray(v) && !v.length)) priv["zentral_" + k] = ["notify", "recurrenceExceptions", "agendaWindow", "categoryOverride", "categoryInNote"].includes(k) ? JSON.stringify(v) : String(v);
     const out = { id: it.id, summary: it.summary, description: it.description, status: it.status, start: it.start, updated: it.updated, extendedProperties: { private: priv } };
     out.end = it.end || it.start;
+    if (it.created) out.created = it.created;
     if (it.recurrence.length) out.recurrence = it.recurrence;
     if (it.reminders.overrides.length) out.reminders = { useDefault: false, overrides: it.reminders.overrides };
     return out;
@@ -734,13 +738,13 @@
     if (!g || typeof g !== "object") return null;
     const priv = g.extendedProperties?.private || {};
     const x = {};
-    for (const k of ["kind", "noteId", "heading", "category", "tz", "src", "key", "legacyKey", "moved", "calNote", "notify", "agendaWindow", "recurrenceExceptions", "historyId"]) if (priv["zentral_" + k] !== undefined) {
-      if (["notify", "agendaWindow", "recurrenceExceptions"].includes(k)) { try { x[k] = JSON.parse(priv["zentral_" + k]); } catch (_) {} }
+    for (const k of ["kind", "noteId", "heading", "category", "tz", "src", "key", "legacyKey", "moved", "calNote", "notify", "agendaWindow", "recurrenceExceptions", "historyId", "categoryOverride", "categoryInNote"]) if (priv["zentral_" + k] !== undefined) {
+      if (["notify", "agendaWindow", "recurrenceExceptions", "categoryOverride", "categoryInNote"].includes(k)) { try { x[k] = JSON.parse(priv["zentral_" + k]); } catch (_) {} }
       else x[k] = priv["zentral_" + k];
     }
     const sameEnd = g.end && JSON.stringify(g.end) === JSON.stringify(g.start);
     return cleanItem({ id: g.id, summary: g.summary, description: g.description, status: g.status, start: g.start, end: sameEnd ? undefined : g.end,
-      updated: g.updated, recurrence: g.recurrence, reminders: g.reminders, x: { ...x, kind: x.kind || (sameEnd ? "reminder" : "event") } }, 0);
+      created: g.created, updated: g.updated, recurrence: g.recurrence, reminders: g.reminders, x: { ...x, kind: x.kind || (sameEnd ? "reminder" : "event") } }, 0);
   }
 
 
@@ -821,9 +825,17 @@
   const ITEM_ID_RE = /%%\s*zn-item-id:([a-z0-9_-]{4,60})\s*%%/gi;
   function itemIdTokens(line) { return [...String(line || "").matchAll(ITEM_ID_RE)].map((m) => m[1]); }
   const stripItemIdMarks = (line) => String(line || "").replace(ITEM_ID_RE, "");
+  // An explicit per-line category in a Daily Note is an ordinary hidden Markdown
+  // comment. An empty value means no category; absence means section inheritance.
+  const ITEM_CATEGORY_RE = /%%\s*zn-item-category:([^%\r\n]*)%%/gi;
+  function itemCategoryMark(line) {
+    const match = [...String(line || "").matchAll(ITEM_CATEGORY_RE)];
+    return match.length === 1 ? cleanCategoryName(match[0][1]) : null;
+  }
+  const stripItemCategoryMarks = (line) => String(line || "").replace(ITEM_CATEGORY_RE, "");
   function parseMarkedLine(line, heading, now) {
     const ignored = ignoredDateTokens(line);
-    let sourceLine = stripItemIdMarks(stripDateIgnoreMarks(line));
+    let sourceLine = stripItemCategoryMarks(stripItemIdMarks(stripDateIgnoreMarks(line)));
     const listText = sourceLine.replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)(?:\[[ xX]\]\s+)?/, "");
     const prefix = parseDatePrefix(listText, now);
     // Ignoring a leading date disables that trigger; a dated heading may still supply its own date.
@@ -927,6 +939,7 @@
   // ---- Mirror a note-less item as an Agenda list line (B3.3.32-7) ----
   const AGENDA_HEAD_RE = /^(#{1,6})\s+agenda\s*#*\s*$/i;
   const LIST_LINE_RE = /^\s*(?:[-*+]|\d+[.)])\s/;
+  const agendaMirrorLineId = (id) => "zm" + hashText(String(id)).padStart(6, "0");
   const isRecurringItem = (item) => !!item?.x?.series || (Array.isArray(item?.recurrence) && item.recurrence.length > 0);
   // Pure: the `- [ ] YYYY-MM-DD [HH:MM[-HH:MM]] Summary %%zn-item-id:ID%%` line that represents `item`, or null when a
   // list line cannot say the same thing (recurring, all-day event, event of 24 h or more, seconds, text the line parser
@@ -949,7 +962,7 @@
       }
     }
     // Derived from the item id (not random): two windows mirroring the same item produce the same token.
-    const id = /^[a-z0-9_-]{4,60}$/i.test(String(lineId)) ? String(lineId) : "zm" + hashText(String(item.id)).padStart(6, "0");
+    const id = /^[a-z0-9_-]{4,60}$/i.test(String(lineId)) ? String(lineId) : agendaMirrorLineId(item.id);
     const line = "- [" + (done ? "x" : " ") + "] " + when + " " + summary + " %%zn-item-id:" + id + "%%";
     const back = extractNoteItems("## Agenda\n%%calendar%%\n" + line, "mirror", now)[0];
     if (!back || back.summary !== summary || isReminder(back) !== !event || isAllDay(back) !== allDay) return null;
@@ -1021,6 +1034,21 @@
   function mirroredItem(item, noteId, lineId, heading = "Agenda") {
     return { ...item, id: noteLineItemId(noteId, lineId), x: { ...item.x, src: "list", noteId, heading, key: lineId, legacyKey: "", historyId: item.x?.historyId || item.id } };
   }
+  // The original identity and deterministic generated token together distinguish
+  // a mirrored manual item from a user-authored line that later moved dates.
+  function isMirroredAgendaItem(item) {
+    const x = item?.x || {}, id = String(x.historyId || ""), key = String(x.key || "");
+    return x.src === "list" && !!id && !!x.noteId && key === agendaMirrorLineId(id) && item.id === noteLineItemId(x.noteId, key);
+  }
+  function removeMirroredAgendaLine(body, item) {
+    const text = String(body || "");
+    if (!isMirroredAgendaItem(item)) return { body: text, changed: false };
+    const ids = text.split("\n").flatMap(itemIdTokens).filter(id => id === item.x.key);
+    if (ids.length !== 1) return { body: text, changed: false };
+    const hit = findAgendaLine(text, item.x.key);
+    if (!hit || itemIdTokens(hit.line).length !== 1) return { body: text, changed: false };
+    return removeAgendaLine(text, item.x.key);
+  }
   // ---- Agenda checkbox <-> reminder lifecycle (owner-approved 2026-11-12) ----
   // The stored item id of a line that carries a hidden `%%zn-item-id:...%%` token (same formula as extractNoteItems).
   const noteLineItemId = (noteId, lineId) => "l" + hashText(String(noteId)) + "-" + String(lineId);
@@ -1052,6 +1080,50 @@
     });
     return { body: changed ? lines.join("\n") : String(body || ""), changed, found };
   }
+  // Replace a list item's parsed title only when its exact text is unambiguous;
+  // never consume hidden markers or other Markdown if it cannot be located safely.
+  function setListLineSummary(body, lineId, summary, now = 0) {
+    const text = String(body || ""), lines = text.split("\n");
+    let found = false, changed = false, safe = true;
+    visitCalendarListLines(text, now, (entry) => {
+      if (found || itemIdTokens(entry.line)[0] !== lineId) return;
+      found = true;
+      const old = entry.parsed.summary, next = String(summary || "").trim();
+      if (old === next) return;
+      if (!next || /%%|[\r\n]/.test(next) || /%%/.test(old)) { safe = false; return; }
+      const pos = entry.line.indexOf(old);
+      if (pos < 0 || entry.line.indexOf(old, pos + 1) !== -1) { safe = false; return; }
+      const candidate = entry.line.slice(0, pos) + next + entry.line.slice(pos + old.length);
+      if (parseMarkedLine(candidate, entry.heading, now).parsed?.summary !== next) { safe = false; return; }
+      lines[entry.index] = candidate;
+      changed = true;
+    });
+    return { body: changed ? lines.join("\n") : text, found, changed, safe };
+  }
+  // Edit only the one owned category comment, leaving line identity and other
+  // note content intact. Duplicate markers are ambiguous and must not be changed.
+  function setListLineCategory(body, lineId, category, now = 0) {
+    const text = String(body || ""), lines = text.split("\n");
+    let found = false, changed = false, safe = true;
+    visitCalendarListLines(text, now, (entry) => {
+      if (found || itemIdTokens(entry.line)[0] !== lineId) return;
+      found = true;
+      const matches = [...entry.line.matchAll(ITEM_CATEGORY_RE)];
+      if (matches.length > 1) { safe = false; return; }
+      const mark = category === null ? "" : "%%zn-item-category:" + (cleanCategoryName(category) ? " " + cleanCategoryName(category) : "") + "%%";
+      let line = entry.line;
+      if (matches.length) {
+        const old = matches[0];
+        if (mark) line = line.slice(0, old.index) + mark + line.slice(old.index + old[0].length);
+        else {
+          const pos = old.index > 0 && line[old.index - 1] === " " ? old.index - 1 : old.index;
+          line = line.slice(0, pos) + line.slice(old.index + old[0].length);
+        }
+      } else if (mark) line += " " + mark;
+      if (line !== entry.line) { lines[entry.index] = line; changed = true; }
+    });
+    return { body: changed ? lines.join("\n") : text, changed, found, safe };
+  }
   function extractNoteItems(body, noteId, now = 0) {
     const lines = String(body || "").split("\n");
     const out = [], seen = new Map();
@@ -1076,8 +1148,11 @@
       const legacyKey = hashText(noteId + "|" + norm) + (n > 1 ? "-" + n : "");
       const lineId = itemIdTokens(line)[0] || "";
       const key = lineId || legacyKey;
-      const it = itemFromLine(parsed, { noteId, heading: heading.text, category: sec.category, src: "list", key, legacyKey }, now);
+      const lineCategory = itemCategoryMark(line);
+      const it = itemFromLine(parsed, { noteId, heading: heading.text, category: lineCategory === null ? sec.category : lineCategory, src: "list", key, legacyKey }, now);
       if (!it) continue;
+      it._sectionCategory = cleanCategoryName(sec.category);
+      if (lineCategory !== null) { it.x.categoryOverride = lineCategory; it.x.categoryInNote = true; }
       it.id = lineId ? "l" + hashText(noteId) + "-" + lineId : "l" + hashText(noteId) + legacyKey;
       it._legacyKey = legacyKey;
       it._lineId = !!lineId;
@@ -1106,7 +1181,7 @@
   // Reminder lifecycle is intentionally separate from Google Calendar's `status` field. Records are
   // immutable snapshots in their own versioned file; history is retained indefinitely (no silent pruning).
   const REMINDER_HISTORY_FILE = "reminder-history.json";
-  const REMINDER_HISTORY_ACTIONS = Object.freeze(["alerted", "done", "dismissed", "reopened", "snoozed", "rescheduled"]);
+  const REMINDER_HISTORY_ACTIONS = Object.freeze(["alerted", "skipped", "done", "dismissed", "reopened", "snoozed", "rescheduled"]);
   function cleanReminderHistoryRecord(raw, fallbackAt = 0) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
     const action = REMINDER_HISTORY_ACTIONS.includes(raw.action) ? raw.action : "";
@@ -1122,6 +1197,7 @@
       itemId, occurrenceId, noteId: String(raw.noteId || "").slice(0, 120),
       summary: String(raw.summary || "").slice(0, MAX_TEXT), start: start ? { ...start } : null,
       action, stage: ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "", at,
+      ...(raw.coalesced === true ? { coalesced: true } : {}),
     };
   }
   // Display and cross-window retirement rules for occurrence-scoped reminder cards.
@@ -1169,8 +1245,24 @@
     if (!itemId) return null;
     return { itemId, occurrenceId: String(kept || item.id || itemId), noteId, legacyNote: false };
   }
-  function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400, onWrite = () => {} }) {
-    const records = [];
+  // A registry can be shared by independently loaded browser-window modules.
+  // Gates are removed after the final waiter, so it retains no idle windows.
+  const localHistoryLocks = new Map();
+  function createHistoryCoordinator(registry = localHistoryLocks) {
+    return async (key, work) => {
+      const previous = registry.get(key);
+      let release;
+      const gate = new Promise((resolve) => { release = resolve; });
+      registry.set(key, gate);
+      try { if (previous) await previous; return await work(); }
+      finally {
+        try { if (registry.get(key) === gate) registry.delete(key); } catch (_) {}
+        release();
+      }
+    };
+  }
+  function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400, onWrite = () => {}, perf = null, withHistoryLock = createHistoryCoordinator() }) {
+    const records = [], unsaved = new Set();
     const listeners = new Set();
     const emit = (event) => { for (const fn of [...listeners]) { try { fn(event); } catch (error) { safeWarn(error); } } };
     const lifecycle = new Map();
@@ -1183,83 +1275,227 @@
       const key = lifecycleKey(record.itemId, record.occurrenceId), old = lifecycle.get(key);
       if (!old || record.at > old.at || (record.at === old.at && record.seq > old.seq)) lifecycle.set(key, record);
     };
-    let storage = { state: "unopened", error: "", backupPath: "" };
+    // These indexes contain references to immutable internal records; public
+    // list() still returns defensive copies in the original sort order.
+    const byIdentity = new Map(), claimedStages = new Set();
+    const identityIndexKey = (itemId, occurrenceId) => JSON.stringify([itemId, occurrenceId]);
+    const alertIndexKey = (itemId, occurrenceId, stage, start) => JSON.stringify([itemId, occurrenceId, stage, start?.date || "", start?.dateTime || ""]);
+    const indexRecord = (record) => {
+      indexTransition(record);
+      const key = identityIndexKey(record.itemId, record.occurrenceId);
+      if (!byIdentity.has(key)) byIdentity.set(key, []);
+      byIdentity.get(key).push(record);
+      if (["alerted", "skipped"].includes(record.action)) {
+        claimedStages.add(alertIndexKey(record.itemId, record.occurrenceId, record.stage, record.start));
+        if (!record.stage) claimedStages.add(alertIndexKey(record.itemId, record.occurrenceId, "due", record.start));
+      }
+    };
+    const clearIndexes = () => { lifecycle.clear(); byIdentity.clear(); claimedStages.clear(); };
+    // A claim must not suppress its own retry if the write failed. Only discard
+    // records still known to be unsaved; never undo another lifecycle action.
+    function rollbackClaims(claims) {
+      const removed = [];
+      for (let i = records.length - 1; i >= 0; i--) {
+        const record = records[i];
+        if (!claims.has(record) || !unsaved.has(record)) continue;
+        unsaved.delete(record); records.splice(i, 1); removed.push(record);
+      }
+      if (!removed.length) return;
+      clearIndexes(); for (const record of records) indexRecord(record);
+      dirty = unsaved.size > 0;
+      if (!dirty && timer !== null) { clearTimer(timer); timer = null; }
+      emit({ kind: "refresh", count: removed.length, identities: removed.map(({ itemId, occurrenceId }) => ({ itemId, occurrenceId })) });
+    }
+    let storage = { state: "unopened", error: "", backupPath: "" }, protectedText = null;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
-    const state = () => ({ ...storage, dirty, writeBlocked, retryCount, count: records.length });
+    const state = () => ({ ...storage, dirty: dirty || unsaved.size > 0, writeBlocked, retryCount, count: records.length });
     const scheduleTimer = (ms = delayMs) => {
       if (timer !== null) clearTimer(timer);
       timer = setTimer(() => { timer = null; writeNow().catch(() => {}); }, ms);
     };
     const schedule = () => { dirty = true; if (!writeBlocked) scheduleTimer(); };
+    async function backupHistory(dir, text) {
+      const file = io.join(dir, REMINDER_HISTORY_FILE), stamp = Math.max(0, Math.floor(Number(now()) || Date.now()));
+      const base = file + ".corrupt-" + stamp + ".bak";
+      let path = base, suffix = 1;
+      if (typeof io.exists === "function") while (await io.exists(path)) path = base.replace(/\.bak$/, "-" + (++suffix) + ".bak");
+      else path = base.replace(/\.bak$/, "-" + Math.random().toString(36).slice(2) + ".bak");
+      await io.writeUTF8(path, String(text), { tmpPath: path + ".tmp" });
+      return path;
+    }
+    function badHistory(message, text = null) {
+      const error = new Error(message); error.historyReadFailure = true; error.historyText = text; return error;
+    }
+    function decodeHistoryRecords(rawRecords) {
+      const chosen = new Map(), rejected = [];
+      for (let index = 0; index < rawRecords.length; index++) {
+        const raw = rawRecords[index], record = cleanReminderHistoryRecord(raw, now());
+        if (!record) { rejected.push({ reason: "invalid", record: raw }); continue; }
+        if (!record.seq) record.seq = index + 1;
+        const old = chosen.get(record.id);
+        if (!old) { chosen.set(record.id, { record, raw, index }); continue; }
+        const newer = record.at > old.record.at || (record.at === old.record.at && (record.seq > old.record.seq || (record.seq === old.record.seq && index > old.index)));
+        if (newer) { rejected.push({ reason: "duplicate", record: old.raw }); chosen.set(record.id, { record, raw, index }); }
+        else rejected.push({ reason: "duplicate", record: raw });
+      }
+      return { clean: [...chosen.values()].sort((a, b) => a.index - b.index).map((entry) => entry.record), rejected };
+    }
+    async function preserveRejected(dir, file, text, rejected) {
+      const backupPath = await backupHistory(dir, text), base = io.join(dir, "reminder-history.rejected.json");
+      let rejectedPath = base;
+      if (typeof io.exists === "function") { let suffix = 1; while (await io.exists(rejectedPath)) rejectedPath = base.replace(/\.json$/, "-" + (++suffix) + ".json"); }
+      else rejectedPath = base.replace(/\.json$/, "-" + Math.random().toString(36).slice(2) + ".json");
+      await io.writeUTF8(rejectedPath, JSON.stringify({ v: 1, records: rejected }), { tmpPath: rejectedPath + ".tmp" });
+      if (await io.readUTF8(file) !== text) throw new Error("Reminder history changed during recovery; reopen it before trying again.");
+      return { backupPath, rejectedPath };
+    }
+    // A write must not overwrite an unreadable or damaged file discovered since
+    // open. Background refresh remains best-effort; only the write path is strict.
+    async function mergeStored(dir, strict = false) {
+      const file = io.join(dir, REMINDER_HISTORY_FILE);
+      let text;
+      try { text = await io.readUTF8(file); }
+      catch (error) {
+        const message = String(error?.message || error || "");
+        let missing = error?.code === "ENOENT" || error?.name === "NotFoundError" || /(?:^|\b)(?:nf|not found|no such file|does not exist|NS_ERROR_FILE_NOT_FOUND)(?:\b|$)/i.test(message);
+        if (!missing && typeof io.exists === "function") { try { missing = !(await io.exists(file)); } catch (_) {} }
+        if (missing || !strict) return 0;
+        throw badHistory(message);
+      }
+      let parsed;
+      try { parsed = JSON.parse(text); } catch (error) { if (strict) throw badHistory(String(error?.message || error), String(text)); return 0; }
+      if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.records)) {
+        if (strict) throw badHistory("Reminder history has an unsupported or damaged structure.", String(text));
+        return 0;
+      }
+      const { clean, rejected } = decodeHistoryRecords(parsed.records);
+      if (strict && rejected.length) {
+        try {
+          const paths = await preserveRejected(dir, file, String(text), rejected);
+          storage = { ...storage, ...paths };
+        } catch (error) { throw badHistory(String(error?.message || error), String(text)); }
+      }
+      const known = new Set(records.map((record) => record.id));
+      let added = 0;
+      const changed = new Map();
+      for (const record of clean) {
+        if (!record || known.has(record.id)) continue;
+        known.add(record.id); record.seq = nextSeq++; records.push(record); indexRecord(record); added++;
+        changed.set(identityIndexKey(record.itemId, record.occurrenceId), { itemId: record.itemId, occurrenceId: record.occurrenceId });
+      }
+      if (added) emit({ kind: "refresh", count: added, identities: [...changed.values()] });
+      return added;
+    }
+    function queueHistory(dir, work) {
+      const task = chain.catch(() => {}).then(() => withHistoryLock(io.join(dir, REMINDER_HISTORY_FILE), work));
+      chain = task;
+      return task;
+    }
+    async function persistHistory(dir) {
+      try {
+        if (writeBlocked) throw new Error("Reminder history is protected because its existing file could not be read safely.");
+        await mergeStored(dir, true);
+        const includedUnsaved = [...unsaved];
+        const text = JSON.stringify({ v: 1, records: records.map((record) => ({ ...record, start: record.start ? { ...record.start } : null })) });
+        perf?.recordBytes?.("history.bytes", text);
+        await io.writeUTF8(io.join(dir, REMINDER_HISTORY_FILE), text, { tmpPath: io.join(dir, REMINDER_HISTORY_FILE + ".tmp") });
+        for (const record of includedUnsaved) unsaved.delete(record);
+        dirty = unsaved.size > 0;
+        try { onWrite(dir); } catch (error) { safeWarn(error); }
+        retryCount = 0;
+        if (["unopened", "missing", "recovery-pending"].includes(storage.state)) storage = { ...storage, state: "ready", error: "" };
+        if (dirty && timer === null && !writeBlocked) scheduleTimer();
+        return true;
+      } catch (error) {
+        dirty = true; retryCount++; safeWarn(error);
+        if (error?.historyReadFailure) {
+          let backupPath = "";
+          if (error.historyText !== null) { try { backupPath = await backupHistory(dir, error.historyText); } catch (backupError) { safeWarn(backupError); } }
+          protectedText = backupPath ? error.historyText : null;
+          writeBlocked = true;
+          storage = { state: error.historyText === null ? "unreadable" : "corrupt", error: String(error.message || error), backupPath };
+          emit({ kind: "protected" });
+        }
+        if (retryCount <= 3 && timer === null && !writeBlocked) scheduleTimer(Math.min(delayMs * Math.pow(2, retryCount), 5000));
+        throw error;
+      }
+    }
     function writeNow() {
       if (timer !== null) { clearTimer(timer); timer = null; }
       const dir = getDir();
       if (!dirty || !dir) return chain;
       if (writeBlocked) return Promise.reject(new Error("Reminder history is protected because its existing file could not be read safely."));
-      const text = JSON.stringify({ v: 1, records: records.map((record) => ({ ...record, start: record.start ? { ...record.start } : null })) });
       dirty = false;
-      const task = chain.catch(() => {}).then(async () => {
-        try {
-          await io.writeUTF8(io.join(dir, REMINDER_HISTORY_FILE), text, { tmpPath: io.join(dir, REMINDER_HISTORY_FILE + ".tmp") });
-          try { onWrite(dir); } catch (error) { safeWarn(error); }
-          retryCount = 0;
-          if (["unopened", "missing", "recovery-pending"].includes(storage.state)) storage = { ...storage, state: "ready", error: "" };
-          if (dirty && timer === null && !writeBlocked) scheduleTimer();
-          return true;
-        } catch (error) {
-          dirty = true; retryCount++; safeWarn(error);
-          if (retryCount <= 3 && timer === null && !writeBlocked) scheduleTimer(Math.min(delayMs * Math.pow(2, retryCount), 5000));
-          throw error;
-        }
-      });
-      chain = task;
-      return task;
+      return queueHistory(dir, () => persistHistory(dir));
     }
+    if (perf?.wrapAsync) persistHistory = perf.wrapAsync("history.write", persistHistory);
     return {
       async open() {
+        // Opening a second time must not discard pending local transitions.
+        if (unsaved.size) return state();
         const dir = getDir();
         if (!dir) return state();
-        const file = io.join(dir, REMINDER_HISTORY_FILE);
-        let text;
-        try { text = await io.readUTF8(file); }
-        catch (error) {
-          const message = String(error?.message || error || "");
-          const missing = error?.code === "ENOENT" || error?.name === "NotFoundError" || /(?:^|\b)(?:nf|not found|no such file|does not exist|NS_ERROR_FILE_NOT_FOUND)(?:\b|$)/i.test(message);
-          let exists = !missing;
-          if (typeof io.exists === "function") { try { exists = await io.exists(file); } catch (_) { exists = true; } }
-          if (!exists || missing) {
-            records.length = 0; lifecycle.clear(); nextSeq = 1; dirty = false; writeBlocked = false; retryCount = 0;
-            storage = { state: "missing", error: "", backupPath: "" };
-          } else {
-            writeBlocked = true; storage = { state: "unreadable", error: String(error?.message || error), backupPath: "" }; safeWarn(error);
+        return queueHistory(dir, async () => {
+          if (unsaved.size) return state();
+          const file = io.join(dir, REMINDER_HISTORY_FILE);
+          let text;
+          try { text = await io.readUTF8(file); }
+          catch (error) {
+            const message = String(error?.message || error || "");
+            const missing = error?.code === "ENOENT" || error?.name === "NotFoundError" || /(?:^|\b)(?:nf|not found|no such file|does not exist|NS_ERROR_FILE_NOT_FOUND)(?:\b|$)/i.test(message);
+            let exists = !missing;
+            if (typeof io.exists === "function") { try { exists = await io.exists(file); } catch (_) { exists = true; } }
+            if (!exists || missing) {
+              if (unsaved.size) return state();
+              records.length = 0; clearIndexes(); nextSeq = 1; dirty = false; writeBlocked = false; retryCount = 0;
+              storage = { state: "missing", error: "", backupPath: "" };
+            } else {
+              writeBlocked = true; storage = { state: "unreadable", error: String(error?.message || error), backupPath: "" }; safeWarn(error);
+            }
+            return state();
           }
+          let parsed, backupPath = "", rejectedPath = "";
+          try {
+            parsed = JSON.parse(text);
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.v !== 1 || !Array.isArray(parsed.records)) throw new Error("Reminder history has an unsupported or damaged structure.");
+            const { clean, rejected } = decodeHistoryRecords(parsed.records);
+            if (rejected.length) {
+              // Save both the original and every rejected raw record before replacing anything.
+              ({ backupPath, rejectedPath } = await preserveRejected(dir, file, String(text), rejected));
+              await io.writeUTF8(file, JSON.stringify({ v: 1, records: clean }), { tmpPath: file + ".tmp" });
+            }
+            if (unsaved.size) return state();
+            records.splice(0, records.length, ...clean); clearIndexes();
+            for (const record of records) indexRecord(record);
+            nextSeq = records.reduce((max, record) => Math.max(max, record.seq), 0) + 1;
+          } catch (error) {
+            if (!backupPath) { try { backupPath = await backupHistory(dir, text); } catch (backupError) { safeWarn(backupError); } }
+            protectedText = backupPath ? String(text) : null;
+            writeBlocked = true; storage = { state: "corrupt", error: String(error?.message || error), backupPath, rejectedPath }; safeWarn(error);
+            return state();
+          }
+          dirty = false; writeBlocked = false; retryCount = 0; protectedText = null;
+          storage = { state: "ready", error: "", backupPath, rejectedPath };
+          if (rejectedPath) { try { onWrite(dir); } catch (error) { safeWarn(error); } emit({ kind: "recovery", count: records.length }); }
           return state();
-        }
-        let parsed;
-        try {
-          parsed = JSON.parse(text);
-          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.v !== 1 || !Array.isArray(parsed.records)) throw new Error("Reminder history has an unsupported or damaged structure.");
-          const clean = parsed.records.map((record) => cleanReminderHistoryRecord(record, now()));
-          if (clean.some((record) => !record)) throw new Error("Reminder history contains an invalid record.");
-          const seen = new Set();
-          if (clean.some((record) => seen.has(record.id) || !seen.add(record.id))) throw new Error("Reminder history contains duplicate record IDs.");
-          clean.forEach((record, index) => { if (!record.seq) record.seq = index + 1; });
-          records.splice(0, records.length, ...clean);
-          lifecycle.clear();
-          for (const record of records) indexTransition(record);
-          nextSeq = records.reduce((max, record) => Math.max(max, record.seq), 0) + 1;
-        } catch (error) {
-          const stamp = Math.max(0, Math.floor(Number(now()) || Date.now()));
-          const base = file + ".corrupt-" + stamp + ".bak";
-          let backupPath = base, suffix = 1;
-          if (typeof io.exists === "function") { try { while (await io.exists(backupPath)) backupPath = base.replace(/\.bak$/, "-" + (++suffix) + ".bak"); } catch (_) {} }
-          let backedUp = false;
-          try { await io.writeUTF8(backupPath, String(text), { tmpPath: backupPath + ".tmp" }); backedUp = true; } catch (backupError) { safeWarn(backupError); }
-          writeBlocked = true; storage = { state: "corrupt", error: String(error?.message || error), backupPath: backedUp ? backupPath : "" }; safeWarn(error);
-          return state();
-        }
-        dirty = false; writeBlocked = false; retryCount = 0; storage = { state: "ready", error: "", backupPath: "" };
-        return state();
+        });
+      },
+      async startFresh() {
+        const dir = getDir();
+        if (!dir || !writeBlocked || storage.state !== "corrupt" || !storage.backupPath || protectedText === null) return false;
+        return queueHistory(dir, async () => {
+          if (!writeBlocked || storage.state !== "corrupt" || !storage.backupPath || protectedText === null) return false;
+          const file = io.join(dir, REMINDER_HISTORY_FILE);
+          try {
+            if (await io.readUTF8(file) !== protectedText) throw new Error("Reminder history changed since it was backed up; reopen before recovering.");
+            await io.writeUTF8(file, JSON.stringify({ v: 1, records }), { tmpPath: file + ".tmp" });
+            unsaved.clear(); dirty = false; writeBlocked = false; retryCount = 0; protectedText = null;
+            storage = { ...storage, state: "ready", error: "" };
+            try { onWrite(dir); } catch (error) { safeWarn(error); }
+            emit({ kind: "recovery", count: 0 });
+            return true;
+          } catch (error) { storage = { ...storage, error: String(error?.message || error) }; safeWarn(error); return false; }
+        });
       },
       storageState: state,
       on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
@@ -1269,8 +1505,8 @@
         if (!record) return null;
         nextSeq = Math.max(nextSeq + 1, record.seq + 1);
         // Immutable append: duplicate records are allowed because repeated transitions are meaningful.
-        records.push(record); indexTransition(record); schedule();
-        emit({ kind: "append", action: record.action });
+        records.push(record); unsaved.add(record); indexRecord(record); schedule();
+        emit({ kind: "append", action: record.action, itemId: record.itemId, occurrenceId: record.occurrenceId });
         return { ...record, start: record.start ? { ...record.start } : null };
       },
       // Merge records another window wrote since we last read the file (matched by record id; nothing is dropped or
@@ -1278,38 +1514,65 @@
       async refresh() {
         const dir = getDir();
         if (!dir || writeBlocked) return 0;
-        let parsed;
-        try { parsed = JSON.parse(await io.readUTF8(io.join(dir, REMINDER_HISTORY_FILE))); } catch (_) { return 0; }
-        if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.records)) return 0;
-        const known = new Set(records.map((record) => record.id));
-        let added = 0;
-        for (const raw of parsed.records) {
-          const record = cleanReminderHistoryRecord(raw, now());
-          if (!record || known.has(record.id)) continue;
-          known.add(record.id);
-          record.seq = nextSeq++;
-          records.push(record); indexTransition(record); added++;
-        }
-        if (added) { dirty = true; emit({ kind: "refresh", count: added }); }
-        return added;
+        return mergeStored(dir);
       },
-      // Cross-window "alert exactly once per saved schedule": re-read the shared file, skip when ANY window already
-      // alerted this occurrence for this schedule, otherwise append and write immediately so the other window sees it.
-      // The remaining read-to-write gap is a few milliseconds; it can show one extra banner, never lose history.
+      // Check and persist while holding the same per-file lock as ordinary writes.
       async claimAlert(raw) {
-        if (writeBlocked) return null;
-        try { await this.refresh(); } catch (error) { safeWarn(error); }
-        const same = (a, b) => (a?.date || "") === (b?.date || "") && (a?.dateTime || "") === (b?.dateTime || "");
-        const requestedStage = ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "";
-        const duplicate = records.some((record) => record.action === "alerted" && record.itemId === raw.itemId && record.occurrenceId === raw.occurrenceId && same(record.start, raw.start) && (record.stage === requestedStage || (!record.stage && requestedStage === "due")));
-        if (duplicate) return null;
-        const record = this.append({ ...raw, action: "alerted" });
-        if (!record) return null;
-        try { await writeNow(); } catch (error) { safeWarn(error); }
-        return record;
+        const dir = getDir();
+        if (writeBlocked || !dir) return null;
+        return queueHistory(dir, async () => {
+          if (writeBlocked) return null;
+          try { await mergeStored(dir); } catch (error) { safeWarn(error); }
+          if (raw.requirePending && ["done", "dismissed"].includes(this.stateFor(raw.itemId, raw.occurrenceId))) return null;
+          const requestedStage = ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "";
+          const duplicate = claimedStages.has(alertIndexKey(raw.itemId, raw.occurrenceId, requestedStage, raw.start));
+          if (duplicate) return null;
+          const record = this.append({ ...raw, action: raw.action === "skipped" ? "skipped" : "alerted" });
+          if (!record) return null;
+          const claim = records[records.length - 1];
+          if (timer !== null) { clearTimer(timer); timer = null; }
+          dirty = false;
+          try { await persistHistory(dir); }
+          catch (error) { rollbackClaims(new Set([claim])); safeWarn(error); return null; }
+          return record;
+        });
+      },
+      // Digest claims use one merge and one durable write for the whole batch.
+      // Each group starts with its highest stage: if another window claimed it,
+      // none of that group's lower stages may become a new visible digest entry.
+      async claimAlertGroups(groups) {
+        const dir = getDir();
+        if (writeBlocked || !dir || !Array.isArray(groups)) return [];
+        return queueHistory(dir, async () => {
+          if (writeBlocked) return [];
+          try { await mergeStored(dir); } catch (error) { safeWarn(error); }
+          if (writeBlocked) return [];
+          const claimed = [], claimRecords = new Set();
+          for (let index = 0; index < groups.length; index++) {
+            const group = groups[index], top = Array.isArray(group) && group[0];
+            if (!top || (top.requirePending && ["done", "dismissed"].includes(this.stateFor(top.itemId, top.occurrenceId)))) continue;
+            const already = (raw) => claimedStages.has(alertIndexKey(raw.itemId, raw.occurrenceId, ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "", raw.start));
+            if (already(top)) continue;
+            const record = this.append({ ...top, action: "alerted" });
+            if (!record) continue;
+            claimed.push(index); claimRecords.add(records[records.length - 1]);
+            for (const raw of group.slice(1)) if (raw && !already(raw)) {
+              const lower = this.append({ ...raw, action: "alerted" });
+              if (lower) claimRecords.add(records[records.length - 1]);
+            }
+          }
+          if (claimed.length) {
+            if (timer !== null) { clearTimer(timer); timer = null; }
+            dirty = false;
+            try { await persistHistory(dir); }
+            catch (error) { rollbackClaims(claimRecords); safeWarn(error); return []; }
+          }
+          return claimed;
+        });
       },
       list({ itemId = "", occurrenceId = "", noteId = "", limit = 0, offset = 0 } = {}) {
-        let out = records.filter((record) => (!itemId || record.itemId === itemId) && (!occurrenceId || record.occurrenceId === occurrenceId) && (!noteId || record.noteId === noteId));
+        const candidates = itemId && occurrenceId ? (byIdentity.get(identityIndexKey(itemId, occurrenceId)) || []) : records;
+        let out = candidates.filter((record) => (!itemId || record.itemId === itemId) && (!occurrenceId || record.occurrenceId === occurrenceId) && (!noteId || record.noteId === noteId));
         out = out.slice().sort((a, b) => b.at - a.at || b.seq - a.seq);
         const max = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Math.min(10000, Math.floor(Number(limit))) : 0;
         const skip = Number.isFinite(Number(offset)) ? Math.max(0, Math.min(out.length, Math.floor(Number(offset)))) : 0;
@@ -1324,53 +1587,155 @@
     };
   }
 
-  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {} }) {
+  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null }) {
     const items = new Map();
-    const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite });
+    const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite, perf, withHistoryLock });
     const categoryDefs = new Map();
     const hidden = new Set(); // noteIds whose items stay stored but are not shown (note in Trash, or its file is missing)
     const listeners = new Set();
-    let dirty = false, timer = null, chain = Promise.resolve(), retryCount = 0;
-    let storage = { state: "unopened", error: "", backupPath: "" }, writeBlocked = false;
-    const shown = (it) => !it.x.noteId || !hidden.has(it.x.noteId);
+    let dirty = false, timer = null, chain = Promise.resolve(), retryCount = 0, pendingWrites = 0;
+    let storage = { state: "unopened", error: "", backupPath: "" }, writeBlocked = false, protectedText = null;
+    let baseline = { items: [], categories: [] };
+    const withCalendarLock = withHistoryLock || createHistoryCoordinator();
+    const shown = (it) => !it.x.noteId || (!hidden.has(it.x.noteId) && (!isNoteVisible || isNoteVisible(it.x.noteId)));
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
-    const emit = (kind, id) => { for (const fn of [...listeners]) { try { fn(kind, id); } catch (e) { safeWarn(e); } } };
+    const emit = (kind, id, detail) => { for (const fn of [...listeners]) { try { fn(kind, id, detail); } catch (e) { safeWarn(e); } } };
     const state = () => ({ ...storage, dirty, writeBlocked, retryCount });
     const scheduleTimer = (ms = delayMs) => {
       if (timer !== null) clearTimer(timer);
       timer = setTimer(() => { timer = null; writeNow().catch(() => {}); }, ms);
     };
     const schedule = () => { dirty = true; if (!writeBlocked) scheduleTimer(delayMs); };
+    const snapshot = () => JSON.parse(JSON.stringify({ items: [...items.values()], categories: [...categoryDefs.values()] }));
+    const equalRecord = (a, b) => calendarRecordEqual(a ?? null, b ?? null);
+    function parseCalendarSnapshot(text) {
+      const raw = JSON.parse(text);
+      if (!raw || typeof raw !== "object" || Array.isArray(raw) || !Array.isArray(raw.items) || (raw.categories !== undefined && !Array.isArray(raw.categories)))
+        throw new Error("Calendar file has an unsupported or damaged structure.");
+      const parsed = { items: raw.items.map((item) => cleanItem(item, 0)), categories: (raw.categories || []).map(cleanCategory) };
+      if (parsed.items.some((item) => !item) || parsed.categories.some((category) => !category)) throw new Error("Calendar file contains an invalid item or category record.");
+      // Reject duplicate keys rather than silently discarding an unrelated record.
+      mergeCalendarSnapshots(parsed, parsed, parsed);
+      return parsed;
+    }
+    async function backupCalendar(dir, label, text) {
+      const base = io.join(dir, "calendar." + label + "-" + Math.max(0, Math.floor(Number(now()) || Date.now())));
+      let path = base + ".bak", suffix = 1;
+      if (typeof io.exists === "function") while (await io.exists(path)) path = base + "-" + (++suffix) + ".bak";
+      else path = base + "-" + Math.random().toString(36).slice(2) + ".bak";
+      await io.writeUTF8(path, text, { tmpPath: path + ".tmp" });
+      return path;
+    }
+    async function backupLocalCalendar(dir, captured, remote = null) {
+      try { return await backupCalendar(dir, "conflict", JSON.stringify({ v: 1, base: baseline, local: captured, remote })); }
+      catch (error) { safeWarn(error); return ""; }
+    }
+    async function readCalendarForWrite(dir, captured) {
+      const file = io.join(dir, ITEMS_FILE); let text;
+      try { text = await io.readUTF8(file); }
+      catch (error) {
+        const message = String(error?.message || error || "");
+        let missing = error?.code === "ENOENT" || error?.name === "NotFoundError" || /(?:^|\b)(?:nf|not found|no such file|does not exist|NS_ERROR_FILE_NOT_FOUND)(?:\b|$)/i.test(message);
+        if (!missing && typeof io.exists === "function") { try { missing = !(await io.exists(file)); } catch (_) {} }
+        if (missing && !baseline.items.length && !baseline.categories.length && storage.state !== "recovery-pending") return { items: [], categories: [] };
+        if (missing) {
+          const backupPath = await backupLocalCalendar(dir, captured);
+          writeBlocked = true; storage = { state: "conflict", error: "Calendar file was removed while this window had edits.", backupPath };
+          emit("conflict", "", { winner: "unresolved", backupPath });
+          throw new Error(storage.error);
+        }
+        const localBackupPath = await backupLocalCalendar(dir, captured);
+        writeBlocked = true; storage = { state: "unreadable", error: message, backupPath: "", localBackupPath };
+        emit("conflict", "", { winner: "unresolved", backupPath: localBackupPath });
+        throw new Error("Calendar storage is unreadable: " + message);
+      }
+      if (storage.state === "recovery-pending") {
+        if (text !== protectedText) {
+          const localBackupPath = await backupLocalCalendar(dir, captured);
+          writeBlocked = true; storage = { ...storage, state: "conflict", error: "Calendar file changed since recovery was requested.", localBackupPath };
+          emit("conflict", "", { winner: "unresolved", backupPath: localBackupPath });
+          throw new Error(storage.error);
+        }
+        return null; // explicit replacement of the previously backed-up damaged file
+      }
+      try { return parseCalendarSnapshot(text); }
+      catch (error) {
+        let backupPath = "";
+        try { backupPath = await backupCalendar(dir, "corrupt", String(text)); } catch (backupError) { safeWarn(backupError); }
+        const localBackupPath = await backupLocalCalendar(dir, captured);
+        protectedText = backupPath ? String(text) : null;
+        writeBlocked = true; storage = { state: "corrupt", error: String(error?.message || error), backupPath, localBackupPath };
+        emit("conflict", "", { winner: "unresolved", backupPath: localBackupPath });
+        throw new Error("Calendar storage is corrupt: " + storage.error);
+      }
+    }
+    function applyMerged(captured, merged) {
+      const patch = (target, before, after, keyOf, kind) => {
+        const old = new Map(before.map((record) => [keyOf(record), record]));
+        const next = new Map(after.map((record) => [keyOf(record), record]));
+        for (const id of new Set([...old.keys(), ...next.keys()])) {
+          if (!equalRecord(target.get(id), old.get(id))) continue; // a newer local edit arrived during I/O
+          const value = next.get(id), current = target.get(id);
+          if (equalRecord(current, value)) continue;
+          if (value) target.set(id, value); else target.delete(id);
+          emit(kind === "category" ? "category" : value ? "change" : "remove", id);
+        }
+      };
+      patch(items, captured.items, merged.items, (v) => v.id, "item");
+      patch(categoryDefs, captured.categories, merged.categories, (v) => categoryKey(v.name), "category");
+    }
     function writeNow() {
       if (timer !== null) { clearTimer(timer); timer = null; }
       const dir = getDir();
       if (!dirty || !dir) return chain;
       if (writeBlocked) {
         const error = new Error("Calendar storage is protected because its existing file could not be read safely.");
-        safeWarn(error);
-        return Promise.reject(error);
+        safeWarn(error); return Promise.reject(error);
       }
-      const text = JSON.stringify({ v: 2, items: [...items.values()], categories: [...categoryDefs.values()] });
-      // Clear only for this snapshot. If I/O fails, restore dirty; if a newer edit arrives while writing, its dirty
-      // flag remains set and the next queued write stores the newer snapshot.
-      dirty = false;
-      const task = chain.catch(() => {}).then(async () => {
+      dirty = false; pendingWrites++;
+      const task = chain.catch(() => {}).then(() => withCalendarLock(io.join(dir, ITEMS_FILE), async () => {
         try {
+          if (writeBlocked) throw new Error("Calendar storage is protected because its existing file could not be read safely.");
+          const captured = snapshot(), remote = await readCalendarForWrite(dir, captured);
+          const merged = remote ? mergeCalendarSnapshots(baseline, captured, remote) : { ...captured, conflicts: [], safe: true };
+          if (!merged.safe) {
+            const backupPath = await backupLocalCalendar(dir, captured, remote);
+            writeBlocked = true; storage = { state: "conflict", error: "Calendar edits conflict with changes from another window.", backupPath };
+            emit("conflict", "", { winner: "unresolved", backupPath });
+            throw new Error(storage.error);
+          }
+          const text = JSON.stringify({ v: 2, items: merged.items, categories: merged.categories });
+          perf?.recordBytes?.("calendar.bytes", text);
           await io.writeUTF8(io.join(dir, ITEMS_FILE), text, { tmpPath: io.join(dir, ITEMS_FILE + ".tmp") });
-          retryCount = 0;
-          if (storage.state === "unopened" || storage.state === "missing" || storage.state === "recovery-pending") storage = { ...storage, state: "ready", error: "" };
+          baseline = JSON.parse(JSON.stringify({ items: merged.items, categories: merged.categories }));
+          applyMerged(captured, merged);
+          for (const conflict of merged.conflicts) if (conflict.winner === "remote") emit("conflict", conflict.id, conflict);
+          retryCount = 0; protectedText = null; storage = { state: "ready", error: "", backupPath: "" };
           if (dirty && timer === null && !writeBlocked) scheduleTimer(delayMs);
           return true;
         } catch (error) {
-          dirty = true;
-          retryCount++;
-          safeWarn(error);
+          dirty = true; retryCount++; safeWarn(error);
           if (retryCount <= 3 && timer === null && !writeBlocked) scheduleTimer(Math.min(delayMs * Math.pow(2, retryCount), 5000));
           throw error;
         }
-      });
+      })).finally(() => { pendingWrites--; });
       chain = task;
       return task;
+    }
+    if (perf?.wrapAsync) writeNow = perf.wrapAsync("calendar.write", writeNow);
+    function skipPastAtCreation(item, stamp) {
+      if (!isReminder(item) && !(item.reminders?.overrides || []).length) return;
+      if (!(itemRange(item)[0] < stamp)) return;
+      const occurrences = item.recurrence.length ? expandRange([item], stamp - 2 * DAY_MS, stamp + 1) : [item];
+      for (const occurrence of occurrences) {
+        const identity = reminderIdentity(occurrence);
+        if (!identity || !(itemRange(occurrence)[0] < stamp)) continue;
+        const category = occurrence.x.category ? categoryDefs.get(categoryKey(occurrence.x.category)) || DEFAULT_CATEGORIES.find((c) => categoryKey(c.name) === categoryKey(occurrence.x.category)) : null;
+        for (const stage of reminderStagePlan(occurrence, category?.notify, stamp)) {
+          if (stage.at >= stamp) continue;
+          history.append({ ...identity, summary: occurrence.summary, start: occurrence.start, action: "skipped", stage: stage.stage, at: stamp });
+        }
+      }
     }
     return {
       async open() {
@@ -1387,27 +1752,27 @@
             try { exists = await io.exists(file); } catch (_) { exists = true; }
           }
           if (!exists || missingError) {
+            if (dirty || pendingWrites) return state();
             items.clear(); categoryDefs.clear(); hidden.clear(); dirty = false; writeBlocked = false;
+            baseline = { items: [], categories: [] }; protectedText = null;
             storage = { state: "missing", error: "", backupPath: "" };
           } else {
             // A permission/I/O error is not an empty store. Keep existing in-memory data and prohibit overwriting
             // the unreadable file until the caller explicitly resolves the storage problem.
+            const hasPending = dirty || pendingWrites;
+            const localBackupPath = hasPending ? await backupLocalCalendar(getDir(), snapshot()) : "";
             writeBlocked = true;
-            storage = { state: "unreadable", error: String(error?.message || error), backupPath: "" };
+            storage = { state: "unreadable", error: String(error?.message || error), backupPath: "", localBackupPath };
+            if (hasPending) emit("conflict", "", { winner: "unresolved", backupPath: localBackupPath });
             safeWarn(error);
           }
           emit("reset");
           return state();
         }
-        let raw, parsedItems, parsedCategories;
+        let parsedItems, parsedCategories;
         try {
-          raw = JSON.parse(text);
-          if (!raw || typeof raw !== "object" || Array.isArray(raw) || !Array.isArray(raw.items) || (raw.categories !== undefined && !Array.isArray(raw.categories)))
-            throw new Error("Calendar file has an unsupported or damaged structure.");
-          parsedItems = raw.items.map((record) => cleanItem(record, 0));
-          parsedCategories = (Array.isArray(raw.categories) ? raw.categories : []).map(cleanCategory);
-          if (parsedItems.some((item) => !item) || parsedCategories.some((category) => !category))
-            throw new Error("Calendar file contains an invalid item or category record.");
+          const parsed = parseCalendarSnapshot(text);
+          parsedItems = parsed.items; parsedCategories = parsed.categories;
         } catch (error) {
           const stamp = Math.max(0, Math.floor(Number(now()) || Date.now()));
           const baseBackupPath = file + ".corrupt-" + stamp + ".bak";
@@ -1420,15 +1785,21 @@
             await io.writeUTF8(backupPath, String(text), { tmpPath: backupPath + ".tmp" });
             backedUp = true;
           } catch (backupError) { safeWarn(backupError); }
+          const hasPending = dirty || pendingWrites;
+          const localBackupPath = hasPending ? await backupLocalCalendar(getDir(), snapshot()) : "";
+          protectedText = backedUp ? String(text) : null;
           writeBlocked = true;
-          storage = { state: "corrupt", error: String(error?.message || error), backupPath: backedUp ? backupPath : "" };
+          storage = { state: "corrupt", error: String(error?.message || error), backupPath: backedUp ? backupPath : "", localBackupPath };
+          if (hasPending) emit("conflict", "", { winner: "unresolved", backupPath: localBackupPath });
           safeWarn(error);
           emit("reset");
           return state();
         }
+        if (dirty || pendingWrites) return state();
         items.clear(); categoryDefs.clear(); hidden.clear(); dirty = false; writeBlocked = false; retryCount = 0;
         for (const it of parsedItems) if (!items.has(it.id)) items.set(it.id, it);
         for (const category of parsedCategories) categoryDefs.set(categoryKey(category.name), category);
+        baseline = snapshot(); protectedText = null;
         storage = { state: "ready", error: "", backupPath: "" };
         emit("reset");
         return state();
@@ -1497,14 +1868,16 @@
           if (lwwPick(old, it) !== it) return null;
           it.rev = Math.min(Number.MAX_SAFE_INTEGER, Math.max(old.rev || 0, it.rev || 0) + 1);
         } else {
-          it.rev = Math.max(1, it.rev || 0);
+          it.rev = 1;
+          it.created = iso(stamp);
         }
+        if (old) { if (old.created) it.created = old.created; else delete it.created; }
         it.updated = iso(stamp);
         it.etag = etagOf(it);
         if (old && JSON.stringify(old) === JSON.stringify(it)) return old;
         if (old && isReminder(it)) {
           const changedStart = JSON.stringify(old.start) !== JSON.stringify(it.start);
-          const changedRecurrence = raw?.historyAction === "rescheduled" && !!raw?.occurrenceId
+          const changedRecurrence = ["rescheduled", "snoozed"].includes(raw?.historyAction) && !!raw?.occurrenceId
             && JSON.stringify(old.x?.recurrenceExceptions || []) !== JSON.stringify(it.x?.recurrenceExceptions || []);
           if (changedStart || changedRecurrence) {
             const action = raw?.historyAction === "snoozed" ? "snoozed" : "rescheduled";
@@ -1514,6 +1887,7 @@
             if (!record) return null; // Never accept a lifecycle transition that cannot be recorded safely.
           }
         }
+        if (!old) skipPastAtCreation(it, stamp);
         items.set(it.id, it); schedule(); emit("change", it.id);
         return it;
       },
@@ -1534,6 +1908,7 @@
         const had = [...items.values()].filter((it) => it.x.noteId === noteId && it.x.src === "list");
         if (!had.length && !/%%\s*calendar/i.test(String(body || ""))) return false;
         const fresh = extractNoteItems(body, noteId, now());
+        const checkedLines = sourceEdit ? listCheckboxStates(body, now()) : null;
         const exact = new Map(had.map((it) => [it.id, it]));
         const byLegacy = new Map();
         for (const it of had) {
@@ -1563,15 +1938,23 @@
           if (old) {
             const revision = sourceEdit ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, old.rev || 0) + 1) : Math.max(0, old.rev || 0);
             const stamp = sourceEdit && Number.isFinite(Number(updatedAt)) && Number(updatedAt) > 0 ? iso(Number(updatedAt)) : old.updated;
+            const noteCategory = f.x.categoryInNote === true;
+            const priorNoteCategory = old.x.categoryInNote === true;
+            const override = noteCategory ? f.x.categoryOverride : (!priorNoteCategory ? old.x.categoryOverride : undefined);
             next = cleanItem({ ...f, start: old.start, end: old.end, status: old.status, reminders: old.reminders, recurrence: old.recurrence.length ? old.recurrence : f.recurrence, updated: stamp, rev: revision, etag: "",
-              description: f.description || old.description, x: { ...f.x, tz: old.x.tz, calNote: old.x.calNote, moved: old.x.moved, notify: old.x.notify, agendaWindow: old.x.agendaWindow, recurrenceExceptions: old.x.recurrenceExceptions, historyId: old.x.historyId } }, 0);
-            next.x.heading = f.x.heading; next.x.category = f.x.category;
+              description: f.description || old.description, x: { ...f.x, tz: old.x.tz, calNote: old.x.calNote, moved: old.x.moved, notify: old.x.notify, agendaWindow: old.x.agendaWindow, recurrenceExceptions: old.x.recurrenceExceptions, historyId: old.x.historyId, ...(typeof override === "string" ? { categoryOverride: override } : {}), ...(noteCategory ? { categoryInNote: true } : {}) } }, 0);
+            next.x.heading = f.x.heading; next.x.category = typeof override === "string" ? override : f.x.category;
             // The text writer is a newer logical version whenever a body edit triggered this sync. Otherwise
             // lwwPick provides the documented equal-version remote-wins tie break while preserving old extras above.
             const winner = lwwPick(old, next);
             next = winner;
             next.etag = etagOf(next);
             if (old.id === next.id) retainedOld.add(old.id);
+          }
+          if (old?.created) next.created = old.created;
+          if (!old && sourceEdit) {
+            next.created = iso(now());
+            if (!checkedLines?.get(next.x.key)) skipPastAtCreation(next, now());
           }
           if (!old || JSON.stringify(old) !== JSON.stringify(next)) { items.set(next.id, next); changed = true; emit("change", next.id); }
         }
@@ -1615,7 +1998,23 @@
 
   // ---------- recurrence (RRULE subset: FREQ DAILY/WEEKLY/MONTHLY/YEARLY, INTERVAL, COUNT, UNTIL, BYDAY for weekly) ----------
   const DAY_CODES = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+  const parsedRuleCache = new Map(), PARSED_RULE_CACHE_LIMIT = 256;
   function parseRule(text) {
+    // UNTIL is a local civil date, so a timezone change must not reuse the old value.
+    let zone = "";
+    if (/;?UNTIL=/i.test(String(text || ""))) { try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (_) {} }
+    const key = zone + "\u0000" + String(text || "");
+    if (parsedRuleCache.has(key)) {
+      const cached = parsedRuleCache.get(key);
+      parsedRuleCache.delete(key); parsedRuleCache.set(key, cached);
+      return cached ? { ...cached, byday: [...cached.byday] } : null;
+    }
+    const parsed = parseRuleUncached(text);
+    parsedRuleCache.set(key, parsed);
+    if (parsedRuleCache.size > PARSED_RULE_CACHE_LIMIT) parsedRuleCache.delete(parsedRuleCache.keys().next().value);
+    return parsed ? { ...parsed, byday: [...parsed.byday] } : null;
+  }
+  function parseRuleUncached(text) {
     const m = /^RRULE:(.+)$/.exec(String(text || ""));
     if (!m) return null;
     const o = {};
@@ -1746,6 +2145,13 @@
     const key = ymd(date), minute = zonedDateTimeToMs(key, p2(wall.hour) + ":" + p2(wall.minute), zone);
     return Number.isFinite(minute) ? minute + wall.second * 1000 + wall.millisecond : NaN;
   }
+  function copyOccurrenceRecord(value) {
+    if (Array.isArray(value)) return value.map(copyOccurrenceRecord);
+    if (!value || typeof value !== "object") return value;
+    const copy = {};
+    for (const key of Object.keys(value)) copy[key] = copyOccurrenceRecord(value[key]);
+    return copy;
+  }
   function expandItem(it, from, to) {
     const rule = (it.recurrence || []).map(parseRule).find(Boolean);
     if (!rule) return itemsInRange([it], from, to);
@@ -1755,6 +2161,11 @@
     const zone = allDay ? "" : cleanZone(it.x?.tz);
     const base = recurrenceCivilDate(s0, zone), wall = recurrenceWallClock(s0, zone);
     const out = [], exceptions = it.x?.recurrenceExceptions || [], exdates = recurrenceExdateSet(it);
+    const singleExceptions = new Map();
+    for (const entry of exceptions) if (entry.scope === "this") {
+      const stamp = whenMs(entry.recurrenceId);
+      if (!singleExceptions.has(stamp)) singleExceptions.set(stamp, entry);
+    }
     const margins = recurrenceSearchMargins(it, allDay);
     const limit = Math.min(to + margins.negative, rule.until || Infinity);
     if (limit <= s0) return [];
@@ -1778,7 +2189,7 @@
         ordinal++;
         if (exdates.has(recurrenceMs)) continue;
         const recurrenceId = recurrenceIdWhen(recurrenceMs, allDay);
-        const exception = exceptions.find((entry) => entry.scope === "this" && whenMs(entry.recurrenceId) === recurrenceMs);
+        const exception = singleExceptions.get(recurrenceMs);
         if (exception?.cancelled) continue;
         let visibleStart = recurrenceMs + occurrenceShift(exceptions, recurrenceMs, allDay);
         let visibleEnd = allDay ? addDays(visibleStart, allDaySpan) : visibleStart + len;
@@ -1788,7 +2199,9 @@
         }
         const touches = reminder ? visibleStart >= from && visibleStart < to : visibleStart < to && visibleEnd > from;
         if (!touches) continue;
-        const occ = JSON.parse(JSON.stringify(it));
+        // Calendar items are normalized plain records. Clone nested values to
+        // keep occurrences, siblings and their source independently editable.
+        const occ = copyOccurrenceRecord(it);
         occ.id = recurrenceMs === s0 ? it.id : it.id + "@" + recurrenceMs;
         occ.x.series = it.id;
         occ.x.recurrenceId = String(recurrenceMs);
@@ -2206,38 +2619,58 @@
     };
     return { enabled: pick("enabled", true), leadDays: pick("leadDays", 0), tailDays: pick("tailDays", 0) };
   }
-  // Return local-midnight [from, to) boundaries. Offsets are civil days rather than
-  // 24-hour durations, so spring/fall DST changes never shift the visible date.
-  function agendaVisibilityRange(item, rawPolicy = {}) {
-    if (!item?.start) return null;
-    const policy = resolveAgendaWindow({ x: { agendaWindow: rawPolicy } });
-    if (!policy.enabled) return null;
+  // Resolve the inherited layers once per source master. Expanded occurrences
+  // retain the master's policy; the map is private to one reconciliation run.
+  function prepareAgendaWindows(items, getWindow = null) {
+    const policies = new Map();
+    for (const item of items || []) if (item?.id) {
+      policies.set(item.id, resolveAgendaWindow(item, null, null, getWindow ? getWindow(item) : null));
+    }
+    return policies;
+  }
+  function preparedAgendaWindow(item, getWindow, policies) {
+    const key = item?.x?.series || item?.id;
+    return (key && policies?.get(key)) || resolveAgendaWindow(item, null, null, getWindow ? getWindow(item) : null);
+  }
+  function resolvedAgendaVisibilityRange(item, policy) {
+    if (!item?.start || !policy.enabled) return null;
     const start = whenMs(item.start), end = item.end ? whenMs(item.end) : start;
     if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
     const lastVisibleItemDay = dayStart(end > start ? end - 1 : start);
-    return {
-      from: addDays(dayStart(start), -policy.leadDays),
-      to: addDays(lastVisibleItemDay, policy.tailDays + 1),
-    };
+    return { from: addDays(dayStart(start), -policy.leadDays), to: addDays(lastVisibleItemDay, policy.tailDays + 1) };
+  }
+  // Return local-midnight [from, to) boundaries. Offsets are civil days rather than
+  // 24-hour durations, so spring/fall DST changes never shift the visible date.
+  function agendaVisibilityRange(item, rawPolicy = {}) {
+    return resolvedAgendaVisibilityRange(item, resolveAgendaWindow({ x: { agendaWindow: rawPolicy } }));
   }
   // The virtual Agenda is a rolling local-day projection. Refresh only when the next
   // day can change a visible bucket, or when a far-future window first enters its horizon.
   // Recurring series are re-evaluated daily because their next occurrence is generated
   // from the recurrence rule rather than stored as a separate item.
-  function nextAgendaVisibilityBoundary(items, now, days = 4, getWindow = null) {
+  function nextAgendaVisibilityBoundary(items, now, days = 4, getWindow = null, policies = null, projection = null) {
     const stamp = Number(now);
     if (!Number.isFinite(stamp)) return null;
     const today = dayStart(stamp), count = Math.max(1, Math.min(31, Math.floor(Number(days)) || 4));
     const tomorrow = addDays(today, 1), horizon = addDays(today, count);
     let next = Infinity;
     for (const item of items || []) {
-      const policy = resolveAgendaWindow(item, null, null, getWindow ? getWindow(item) : null);
+      const policy = preparedAgendaWindow(item, getWindow, policies);
       if (!policy.enabled) continue;
       if (isRecurringItem(item)) { next = Math.min(next, tomorrow); continue; }
-      const range = agendaVisibilityRange(item, policy);
+      const range = resolvedAgendaVisibilityRange(item, policy);
       if (!range || range.to <= today) continue;
       const boundary = range.from < horizon ? tomorrow : addDays(range.from, -(count - 1));
       if (boundary > stamp) next = Math.min(next, boundary);
+    }
+    // Projection already resolves recurrence moves, visibility policies and
+    // multi-day fan-out. Reuse it in the controller; standalone callers build
+    // it only when timed events exist, never for reminder-only workloads.
+    if (!projection && (items || []).some((item) => item?.x && item.start && !isReminder(item) && !isAllDay(item)))
+      projection = agendaZenProjection(items, stamp, count, () => false, getWindow, policies);
+    const todayKey = localDateKey(today);
+    for (const bucket of projection || []) if (bucket.date === todayKey) {
+      for (const item of bucket.items || []) if (!item.reminder && !item.allDay && item.end > stamp && item.end <= tomorrow) next = Math.min(next, item.end);
     }
     return Number.isFinite(next) ? next : null;
   }
@@ -2296,10 +2729,40 @@
       } };
     } catch (_) { return null; }
   }
+  // Managed Agenda entries are projections, not movable user tabs/folders.
+  // Reject every drop onto the managed region, including links and unknown
+  // drag formats; unrelated drags elsewhere are never intercepted.
+  function blockAgendaDrag({ phase, sourceManaged = false, selectedManaged = false, targetManaged = false } = {}) {
+    if (phase === "dragstart") return !!(sourceManaged || selectedManaged);
+    return (phase === "dragover" || phase === "drop") && !!targetManaged;
+  }
   // Projection for the virtual Zen Agenda folder. Keys are occurrence-scoped, not
   // display strings or formatted dates, so duplicate summaries remain independent.
-  function agendaZenProjection(items, now, days = 4, isDone = () => false, getWindow = null) {
+  function agendaZenItem(item, bucketKey, now) {
     const clock = (ms) => { const d = new Date(ms); return p2(d.getHours()) + ":" + p2(d.getMinutes()); };
+    const [start, end] = itemRange(item);
+    const summary = String(item.summary || "Untitled").replace(/[\r\n]+/g, " ").trim();
+    const label = isAllDay(item) ? "All day · " + summary : (isReminder(item) ? clock(start) : clock(start) + "–" + clock(end)) + "  " + summary;
+    const identity = reminderIdentity(item) || { itemId: item.id, occurrenceId: String(item.x?.recurrenceId || item.id), noteId: item.x?.noteId || "" };
+    const details = [item.description, item.x?.calNote, item.x?.sourceNoteTitle ? "Source note: " + item.x.sourceNoteTitle : "", item.x?.heading ? "Heading: " + item.x.heading : "", item.x?.category ? "Category: " + item.x.category : "", item.x?.tz ? "Time zone: " + item.x.tz : ""].filter(Boolean).join("\n");
+    return {
+      key: "item:" + identity.itemId + ":" + identity.occurrenceId + "@" + bucketKey,
+      itemId: identity.itemId,
+      occurrenceId: identity.occurrenceId,
+      recordId: String(item.x?.series || item.id),
+      noteId: item.x?.noteId || identity.noteId || "",
+      heading: item.x?.heading || "",
+      label,
+      summary,
+      details,
+      start,
+      end,
+      allDay: isAllDay(item),
+      reminder: isReminder(item),
+      ended: !isReminder(item) && end > start && end <= Number(now),
+    };
+  }
+  function agendaZenProjection(items, now, days = 4, isDone = () => false, getWindow = null, policies = null) {
     // Expand the complete local window once, then fan overlapping multi-day events into
     // each day bucket. Calling expandRange once per day is needlessly O(days * items).
     const sourceItems = items || [];
@@ -2312,10 +2775,10 @@
       const policy = item?.x?.agendaWindow;
       return policy && Object.keys(policy).length > 0;
     });
-    const fastDefault = !getWindow && !hasItemPolicy;
+    const fastDefault = policies ? sourceItems.every((item) => { const p = preparedAgendaWindow(item, getWindow, policies); return p.enabled && !p.leadDays && !p.tailDays; }) : !getWindow && !hasItemPolicy;
     let maxLead = 0, maxTail = 0;
     if (!fastDefault) for (const source of sourceItems) {
-      const policy = resolveAgendaWindow(source, null, null, getWindow ? getWindow(source) : null);
+      const policy = preparedAgendaWindow(source, getWindow, policies);
       if (!policy.enabled) continue;
       maxLead = Math.max(maxLead, policy.leadDays);
       maxTail = Math.max(maxTail, policy.tailDays);
@@ -2351,9 +2814,9 @@
         first = Math.max(0, localDayOrdinal(start) - baseOrdinal);
         last = Math.min(n - 1, localDayOrdinal(end > start ? end - 1 : start) - baseOrdinal);
       } else {
-        const policy = resolveAgendaWindow(item, null, null, getWindow ? getWindow(item) : null);
+        const policy = preparedAgendaWindow(item, getWindow, policies);
         if (!policy.enabled) continue;
-        const visible = agendaVisibilityRange(item, policy);
+        const visible = resolvedAgendaVisibilityRange(item, policy);
         if (!visible) continue;
         first = Math.max(0, localDayOrdinal(visible.from) - baseOrdinal);
         last = Math.min(n - 1, localDayOrdinal(visible.to - 1) - baseOrdinal);
@@ -2366,30 +2829,26 @@
       date: bucket.key,
       label: bucket.label,
       count: bucket.count,
-      items: bucket.items.map((item) => {
-        const [start, end] = itemRange(item);
-        const summary = String(item.summary || "Untitled").replace(/[\r\n]+/g, " ").trim();
-        const label = isAllDay(item) ? "All day · " + summary : (isReminder(item) ? clock(start) : clock(start) + "–" + clock(end)) + "  " + summary;
-        const identity = reminderIdentity(item) || { itemId: item.id, occurrenceId: String(item.x?.recurrenceId || item.id), noteId: item.x?.noteId || "" };
-        const details = [item.description, item.x?.calNote, item.x?.sourceNoteTitle ? "Source note: " + item.x.sourceNoteTitle : "", item.x?.heading ? "Heading: " + item.x.heading : "", item.x?.category ? "Category: " + item.x.category : "", item.x?.tz ? "Time zone: " + item.x.tz : ""].filter(Boolean).join("\n");
-        return {
-          key: "item:" + identity.itemId + ":" + identity.occurrenceId,
-          itemId: identity.itemId,
-          occurrenceId: identity.occurrenceId,
-          recordId: String(item.x?.series || item.id),
-          noteId: item.x?.noteId || identity.noteId || "",
-          heading: item.x?.heading || "",
-          label,
-          summary,
-          details,
-          start,
-          end,
-          allDay: isAllDay(item),
-          reminder: isReminder(item),
-          ended: !isReminder(item) && end > start && end <= Number(now),
-        };
-      }),
+      items: bucket.items.map((item) => agendaZenItem(item, bucket.key, now)),
     }));
+  }
+  // Separate, occurrence-scoped overdue bucket. Civil-day look-back excludes
+  // today even for a past time today; item visibility and lifecycle still apply.
+  function agendaOverdueProjection(items, now, { enabled = true, days = 7, cap = 10, isDone = () => false, getWindow = null, policies = null } = {}) {
+    if (!enabled || !Number.isFinite(Number(now))) return null;
+    const countDays = Math.max(1, Math.min(31, Math.floor(Number(days)) || 7));
+    const limit = Math.max(1, Math.min(100, Math.floor(Number(cap)) || 10));
+    const today = dayStart(Number(now)), from = addDays(today, -countDays);
+    const masters = (items || []).filter((item) => item?.x && item.start && isReminder(item) && preparedAgendaWindow(item, getWindow, policies).enabled);
+    const overdue = expandRange(masters, from, today).filter((item) => !isDone(item));
+    if (!overdue.length) return null;
+    const shown = overdue.slice(0, limit).map((item) => {
+      const entry = agendaZenItem(item, "overdue", now);
+      entry.openDate = localDateKey(itemRange(item)[0]);
+      return entry;
+    });
+    if (overdue.length > limit) shown.push({ key: "more:overdue", label: "+" + (overdue.length - limit) + " more", summary: "Open more overdue reminders", openDate: localDateKey(itemRange(overdue[limit])[0]) });
+    return { key: "day:overdue", date: "overdue", label: "Overdue", count: overdue.length, items: shown };
   }
   // Only days with at least one visible item get a Zen Agenda folder. Empty
   // days (count === 0) are omitted so no empty Tomorrow / Day N folders are
@@ -2408,12 +2867,13 @@
   }
   // Coalesced, store-change-driven controller for the virtual Zen Agenda folder. The host
   // supplies DOM/Zen operations through `api`; this controller owns no browser globals.
-  function createZenAgenda({ api, getItems, getDays = () => 4, getEnabled = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
-    let dead = false, timer = null, timerAt = Infinity, last = [];
+  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
+    let dead = false, timer = null, timerAt = Infinity, last = [], busy = false, consecutiveChanges = 0, blockedUntil = 0;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
     function armAt(due) {
       if (dead || !Number.isFinite(due)) return;
       const stamp = Number(now());
+      due = Math.max(due, blockedUntil);
       const wait = Math.max(0, due - (Number.isFinite(stamp) ? stamp : Date.now()));
       if (timer !== null && timerAt <= due) return;
       if (timer !== null) clearTimer(timer);
@@ -2425,21 +2885,31 @@
       timer = null;
       timerAt = Infinity;
     }
-    function scheduleBoundary(items) {
-      const due = nextAgendaVisibilityBoundary(items, now(), getDays(), getWindow);
+    function scheduleBoundary(items, policies, projection, overdue) {
+      let due = nextAgendaVisibilityBoundary(items, now(), getDays(), getWindow, policies, projection);
+      if (overdue) { const tomorrow = addDays(dayStart(now()), 1); if (due === null || tomorrow < due) due = tomorrow; }
       if (due === null) clearScheduled(); else armAt(due);
     }
     function runNow() {
       if (dead) return [];
-      let sourceItems = [];
+      if (busy) return last;
+      const stamp = Number(now());
+      if (blockedUntil && stamp < blockedUntil) return last;
+      if (blockedUntil) { blockedUntil = 0; consecutiveChanges = 0; }
+      busy = true;
+      let sourceItems = [], policies = null, fullProjection = null, overdue = null, operations = 0;
+      const revision = api.mutationCount?.() || 0;
       try {
         if (!getEnabled()) { api.removeAll?.(); last = []; clearScheduled(); return []; }
         sourceItems = getItems?.() || [];
-        const projection = agendaVisibleDays(agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow));
+        policies = getWindowIsMasterPolicy ? prepareAgendaWindows(sourceItems, getWindow) : null;
+        fullProjection = agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow, policies);
+        overdue = agendaOverdueProjection(sourceItems, now(), { ...getOverdue(), isDone, getWindow, policies });
+        const projection = [...(overdue ? [overdue] : []), ...agendaVisibleDays(fullProjection)];
         if (!projection.length) {
-          api.removeAll?.(); last = projection; scheduleBoundary(sourceItems); return projection;
+          api.removeAll?.(); last = projection; scheduleBoundary(sourceItems, policies, fullProjection, overdue); return projection;
         }
-        if (api.ensureRoot?.(getPosition() === "below" ? "below" : "above") === false) { scheduleBoundary(sourceItems); return last; }
+        if (api.ensureRoot?.(getPosition() === "below" ? "below" : "above") === false) { scheduleBoundary(sourceItems, policies, fullProjection, overdue); return last; }
         const desired = [];
         for (const day of projection) {
           desired.push({ key: day.key, kind: "day", label: day.label, date: day.date, count: day.count, parent: "" });
@@ -2448,11 +2918,12 @@
         const current = api.list?.() || [], currentByKey = new Map();
         for (const entry of current) if (entry?.key && !currentByKey.has(entry.key)) currentByKey.set(entry.key, entry);
         const desiredByKey = new Map(desired.map((entry) => [entry.key, entry]));
-        for (const entry of current) if (entry?.key && !desiredByKey.has(entry.key)) api.remove?.(entry.key);
+        for (const entry of current) if (entry?.key && !desiredByKey.has(entry.key)) { operations++; api.remove?.(entry.key); }
         for (const entry of desired) {
           const old = currentByKey.get(entry.key);
           if (!old || old.parent !== entry.parent || old.kind !== entry.kind) {
-            if (old) api.remove?.(entry.key);
+            if (old) { operations++; api.remove?.(entry.key); }
+            operations++;
             if (api.add?.(entry) === false) safeWarn("Zen Agenda: could not add " + entry.key);
           } else api.update?.(entry);
         }
@@ -2460,14 +2931,22 @@
         for (const day of desired.filter((entry) => entry.kind === "day"))
           api.reorder?.(day.key, desired.filter((entry) => entry.kind === "item" && entry.parent === day.key).map((entry) => entry.key));
         last = projection;
-        scheduleBoundary(sourceItems);
+        scheduleBoundary(sourceItems, policies, fullProjection, overdue);
+        if (operations || (api.mutationCount?.() || 0) !== revision) consecutiveChanges++;
+        else consecutiveChanges = 0;
+        if (consecutiveChanges >= 3) {
+          blockedUntil = (Number.isFinite(stamp) ? stamp : Date.now()) + 5000;
+          safeWarn("Zen Agenda: repeated reconciliation changes; back-off for five seconds");
+          clearScheduled(); armAt(blockedUntil);
+        }
         return projection;
       } catch (error) {
         safeWarn(error);
-        try { scheduleBoundary(sourceItems); } catch (scheduleError) { safeWarn(scheduleError); }
+        try { scheduleBoundary(sourceItems, policies, fullProjection, overdue); } catch (scheduleError) { safeWarn(scheduleError); }
         return last;
-      }
+      } finally { busy = false; }
     }
+    if (perf?.wrap) runNow = perf.wrap("agenda.runNow", runNow);
     function schedule(ms = 250) {
       if (dead) return;
       const stamp = Number(now()), due = (Number.isFinite(stamp) ? stamp : Date.now()) + Math.max(0, Number(ms) || 0);
@@ -2476,6 +2955,9 @@
     return {
       runNow,
       schedule,
+      invalidate() { consecutiveChanges = 0; blockedUntil = 0; },
+      refreshClock() { if (dead) return []; clearScheduled(); consecutiveChanges = 0; blockedUntil = 0; return runNow(); },
+      get busy() { return busy; },
       get projection() { return last; },
       destroy() { dead = true; clearScheduled(); try { api.removeAll?.(); } catch (error) { safeWarn(error); } },
     };
@@ -2512,7 +2994,7 @@
     if (!item || typeof item !== "object" || !String(item.id || "")) return [];
     const reminder = isReminder(item);
     const source = ["list", "note", "manual"].includes(item.x?.src) ? item.x.src : "manual";
-    const manual = source === "manual";
+    const manual = source === "manual", mirrored = isMirroredAgendaItem(item);
     const recurring = !!item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length > 0);
     const lifecycle = ["pending", "done", "dismissed"].includes(state) ? state : "pending";
     const action = (id, label, enabled = true, reason = "") => ({ id, command: id, label, enabled: !!enabled, reason: enabled ? "" : String(reason || "Unavailable in the current state") });
@@ -2523,7 +3005,7 @@
       action("convert", reminder ? "Convert to event" : "Convert to reminder", manual, "Items parsed from a note keep the type defined by their source text"),
       { sep: true },
       action("duplicate", "Duplicate as independent item"),
-      action("delete", "Delete item…", manual, "Remove this item from its source note instead of deleting only its calendar copy"),
+      action("delete", "Delete " + (reminder ? "reminder" : "event") + (mirrored ? " and its Agenda line…" : "…"), manual || mirrored, "Remove this item from its source note instead of deleting only its calendar copy"),
     ];
     if (typeof agendaVisible === "boolean") rows.splice(4, 0,
       action("agenda-visibility", agendaWritable ? (agendaVisible ? "Hide in Zen Agenda" : "Show in Zen Agenda") + (recurring ? " (series)" : "") : "Zen Agenda visibility unavailable", agendaWritable, "This legacy note reminder is not stored as an Agenda item"));
@@ -2653,6 +3135,7 @@
         noteId,
         heading: String(input.heading ?? previousX.heading ?? "").trim().slice(0, MAX_TEXT),
         category,
+        ...(previousX.src === "list" && category !== previousX.category ? { categoryOverride: category } : {}),
         tz: zone,
         src: previousX.src || "manual",
         calNote: String(input.calNote ?? previousX.calNote ?? "").slice(0, MAX_DESC),
@@ -2661,6 +3144,10 @@
         moved,
       },
     };
+    if (previousX.src === "list") {
+      if (input.categoryOverride === null) delete record.x.categoryOverride;
+      else if (typeof input.categoryOverride === "string") record.x.categoryOverride = cleanCategoryName(input.categoryOverride);
+    }
     return cleanItem(record, now);
   }
 
@@ -2684,6 +3171,57 @@
     const k = String(key || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     return new RegExp("^#\\s+" + (k || "\\d{4}-\\d{2}-\\d{2}") + "(?:\\s+[A-Za-zÀ-ž]+)?$").test(body);
   }
+  // Compare JSON-shaped records by value, not property order: reading and
+  // normalizing the same calendar file may reorder its object properties.
+  function calendarRecordEqual(a, b) {
+    if (a === b) return true;
+    if (!a || !b || typeof a !== "object" || typeof b !== "object" || Array.isArray(a) !== Array.isArray(b)) return false;
+    const keys = Object.keys(a), other = Object.keys(b);
+    if (keys.length !== other.length) return false;
+    return keys.every((key) => Object.prototype.hasOwnProperty.call(b, key) && calendarRecordEqual(a[key], b[key]));
+  }
+  // Three-way snapshot merge. A missing item is a deletion, not an empty
+  // value. Delete/edit races and simultaneous category edits cannot be
+  // ordered from the current file format, so callers must not persist when
+  // `safe` is false. Item conflicts use the existing last-write-wins rule.
+  function mergeCalendarSnapshots(base, local, remote) {
+    const conflicts = [];
+    const equal = (a, b) => calendarRecordEqual(a ?? null, b ?? null);
+    const index = (snapshot, field, keyOf) => {
+      if (!snapshot || !Array.isArray(snapshot[field])) throw new Error("Invalid calendar " + field + " snapshot");
+      const out = new Map();
+      for (const record of snapshot[field]) {
+        const key = keyOf(record);
+        if (!key || out.has(key)) throw new Error("Invalid or duplicate calendar " + field + " key");
+        out.set(key, record);
+      }
+      return out;
+    };
+    const merge = (field, kind, keyOf) => {
+      const before = index(base, field, keyOf), mine = index(local, field, keyOf), theirs = index(remote, field, keyOf);
+      const keys = new Set([...before.keys(), ...mine.keys(), ...theirs.keys()]), result = [];
+      for (const id of keys) {
+        const b = before.get(id) ?? null, l = mine.get(id) ?? null, r = theirs.get(id) ?? null;
+        let chosen;
+        if (equal(l, b)) chosen = r;
+        else if (equal(r, b) || equal(l, r)) chosen = l;
+        else if (kind === "item" && l && r) {
+          chosen = lwwPick(l, r);
+          conflicts.push({ kind, id, winner: chosen === l ? "local" : "remote" });
+        } else {
+          // Retain the extant value for inspection, but require a decision
+          // before writing either side over the other.
+          chosen = l || r;
+          conflicts.push({ kind, id, winner: "unresolved" });
+        }
+        if (chosen) result.push(chosen);
+      }
+      return result;
+    };
+    const items = merge("items", "item", (v) => typeof v?.id === "string" ? v.id : "");
+    const categories = merge("categories", "category", (v) => categoryKey(v?.name));
+    return { items, categories, conflicts, safe: !conflicts.some((c) => c.winner === "unresolved") };
+  }
   // Last-write-wins between two versions of one record: newer `updated` wins; equal -> higher `rev`; equal -> `remote`.
   function lwwPick(local, remote) {
     if (!local) return remote || null;
@@ -2702,8 +3240,8 @@
 
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
-    cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

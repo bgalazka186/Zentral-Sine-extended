@@ -91,11 +91,81 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(sheet.newAgendaDayItem(tomorrowYmd, "wrong"), false);
   root.all().find((el) => el.title === "All notes").click(); await flushRaf();
 
+  // PF2.5: background history must update the affected reminder without
+  // rebuilding the active timeline or disturbing a separate interaction.
+  const bg = store.items.upsert({ id: "background-history", summary: "Background reminder", start: { dateTime: new Date(day + 10 * 3600000).toISOString() }, x: { kind: "reminder", src: "manual" } });
+  const far = store.items.upsert({ id: "distant-agenda", summary: "Distant Agenda entry", start: { dateTime: new Date(cal.addDays(day, 70) + 36000000).toISOString() }, x: { kind: "reminder", src: "manual" } });
+  const spanning = store.items.upsert({ id: "spanning-page", summary: "Spans agenda pages", start: { date: cal.localDateKey(cal.addDays(day, 27)) }, end: { date: cal.localDateKey(cal.addDays(day, 31)) }, x: { kind: "event", src: "manual" } });
+  for (const mode of ["Day", "Week"]) {
+    await chooseMenu(root, ".zn-calendar-view-select", mode);
+    const timeline = q(root, ".zn-cal-time-scroll"), item = root.querySelectorAll(".zn-cal-item").find((el) => el.textContent.includes("Background reminder"));
+    assert.ok(item); timeline.scrollTop = 219; item.focus();
+    const hoverBefore = q(root, ".zn-cal-hover-card"); assert.ok(hoverBefore);
+    const stamp = Date.now();
+    assert.ok(store.items.history.append({ itemId: bg.id, occurrenceId: bg.id, action: "done", at: stamp }));
+    assert.ok(q(root, ".zn-cal-time-scroll") === timeline, "background history keeps the same scroll container");
+    assert.equal(timeline.scrollTop, 219); assert.equal(document.activeElement, item);
+    assert.equal(q(root, ".zn-cal-hover-card"), hoverBefore, "background history keeps hover open");
+    assert.ok(item.classList.contains("is-done"), "affected reminder is updated in place");
+    assert.ok(store.items.history.append({ itemId: bg.id, occurrenceId: bg.id, action: "reopened", at: stamp + 1 }));
+    assert.ok(item.classList.contains("is-pending"));
+    if (mode === "Day") {
+      await store.items.history.flush();
+      const remote = cal.createReminderHistoryStore({ io, getDir: () => "/views", setTimer: () => 1, clearTimer() {} });
+      await remote.open();
+      assert.ok(remote.append({ itemId: bg.id, occurrenceId: bg.id, action: "done", at: stamp + 2 })); await remote.flush();
+      await store.items.history.refresh();
+      assert.ok(q(root, ".zn-cal-time-scroll") === timeline, "remote history refresh preserves the timeline");
+      assert.ok(item.classList.contains("is-done")); assert.equal(document.activeElement, item);
+      assert.ok(store.items.history.append({ itemId: bg.id, occurrenceId: bg.id, action: "reopened", at: stamp + 3 }));
+    }
+  }
+  // A change on another day must patch its column, not replace an unrelated
+  // focused/hovered item or its scroll container.
+  await chooseMenu(root, ".zn-calendar-view-select", "Week");
+  const stableScroll = q(root, ".zn-cal-time-scroll"), stableButton = root.querySelectorAll(".zn-cal-item").find((el) => el.textContent.includes("Background reminder"));
+  stableScroll.scrollTop = 123; stableButton.focus(); const stableHover = q(root, ".zn-cal-hover-card");
+  const otherDay = cal.addDays(day, new Date(day).getDay() === 0 ? -1 : 1);
+  const tomorrowItem = store.items.upsert({ id: "background-other-day", summary: "Other day item", start: { dateTime: new Date(otherDay + 10 * 3600000).toISOString() }, x: { kind: "reminder", src: "manual" } });
+  assert.ok(q(root, ".zn-cal-time-scroll") === stableScroll, "item event does not replace timeline");
+  assert.equal(stableScroll.scrollTop, 123); assert.equal(document.activeElement, stableButton); assert.equal(q(root, ".zn-cal-hover-card"), stableHover);
+  assert.ok(root.querySelectorAll(".zn-cal-item").some((el) => el.textContent.includes("Other day item")));
+  store.items.upsert({ ...tomorrowItem, summary: "Updated other day" });
+  assert.ok(root.querySelectorAll(".zn-cal-item").some((el) => el.textContent.includes("Updated other day")), "changed column uses the new item");
+  assert.ok(q(root, ".zn-cal-time-scroll") === stableScroll); assert.equal(document.activeElement, stableButton);
+  store.items.remove(tomorrowItem.id);
+  assert.ok(!root.querySelectorAll(".zn-cal-item").some((el) => el.textContent.includes("Updated other day")));
+  const expandOriginal = cal.expandRange, widths = [];
+  cal.expandRange = (items, from, to) => { widths.push((to - from) / 86400000); return expandOriginal(items, from, to); };
+  try {
+    await chooseMenu(root, ".zn-calendar-view-select", "Agenda");
+    assert.ok(widths.length && Math.max(...widths) < 90, "Agenda does not expand the full 90 days initially");
+    assert.ok(!root.querySelectorAll(".zn-cal-item").some((el) => el.textContent.includes("Distant Agenda entry")));
+    content.clientHeight = 300; content.scrollHeight = 1000; content.scrollTop = 700;
+    const beforeScroll = widths.length; content.dispatchEvent(new Ev("scroll"));
+    assert.ok(widths.length > beforeScroll, "scrolling near the end loads another page");
+    let loadMore = q(root, ".zn-cal-agenda-more"), pages = 0;
+    while (loadMore && pages++ < 10) { loadMore.click(); loadMore = q(root, ".zn-cal-agenda-more"); }
+    assert.ok(root.querySelectorAll(".zn-cal-item").some((el) => el.textContent.includes("Distant Agenda entry")), "later pages reach distant entries");
+    assert.equal(root.querySelectorAll(".zn-cal-item").filter((el) => el.textContent.includes("Spans agenda pages")).length, 1, "multi-day items are not duplicated across pages");
+    assert.ok(Math.max(...widths) < 90);
+  } finally { cal.expandRange = expandOriginal; }
+  store.items.remove(bg.id); store.items.remove(far.id); store.items.remove(spanning.id);
+  store.items.upsert({ id: "select-day-timed", summary: "Selection timed", start: { dateTime: new Date(cal.addDays(day, 1) + 11 * 3600000).toISOString() }, x: { kind: "reminder", src: "manual" } });
+  store.items.upsert({ id: "select-day-all", summary: "Selection all day", start: { date: tomorrowYmd }, x: { kind: "reminder", src: "manual" } });
+  await chooseMenu(root, ".zn-calendar-view-select", "Month");
+
   let monthCell = root.querySelectorAll(".zn-cal-month-cell").find((cell) => cell.getAttribute("data-day") === tomorrowYmd);
   assert.ok(monthCell, "tomorrow is in the month grid");
   monthCell.dispatchEvent(new Ev("click", { bubbles: true }));
-  assert.equal(store.meta.calendarView, "day", "clicking the day cell, not only its number, opens Day view");
+  assert.equal(store.meta.calendarView, "month", "clicking a day selects it without leaving Month");
   assert.equal(store.meta.calendarCursor, tomorrowYmd);
+  assert.ok(monthCell.classList.contains("is-selected")); assert.equal(monthCell.getAttribute("aria-selected"), "true");
+  const selectedList = q(root, ".zn-cal-day-group.is-selected"); assert.ok(selectedList, "the selected-day item list is visible");
+  assert.ok(selectedList.textContent.includes("Selection timed")); assert.ok(selectedList.querySelector(".zn-cal-all-day-strip").textContent.includes("Selection all day"));
+  await store.flush(); assert.equal(JSON.parse(files.get("/views/meta.json").text).calendarCursor, tomorrowYmd, "selection persists on disk");
+  monthCell.dispatchEvent(new Ev("dblclick", { bubbles: true }));
+  assert.equal(store.meta.calendarView, "day", "double-click opens Day even after the first click");
   await chooseMenu(root, ".zn-calendar-view-select", "Month");
   monthCell = root.querySelectorAll(".zn-cal-month-cell").find((cell) => cell.getAttribute("data-day") === ymd);
   assert.equal(monthCell.getAttribute("tabindex"), "0", "a day cell supports keyboard navigation");
@@ -106,8 +176,16 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.ok(root.querySelectorAll(".zn-menu-item").some((item) => item.textContent.includes("New event")), "keyboard day context menu exposes creation actions");
   monthCell.dispatchEvent(new Ev("keydown", { key: "Escape", bubbles: true }));
   assert.equal(store.list().length, countBeforeCancel); assert.equal(store.items.list().length, itemsBeforeCancel, "cancelled day menus do not create notes or items");
+  monthCell.dispatchEvent(new Ev("keydown", { key: " ", bubbles: true }));
+  assert.equal(store.meta.calendarView, "month"); assert.equal(store.meta.calendarCursor, ymd);
   monthCell.dispatchEvent(new Ev("keydown", { key: "Enter", bubbles: true }));
-  assert.equal(store.meta.calendarView, "day"); assert.equal(store.meta.calendarCursor, ymd);
+  assert.equal(store.meta.calendarView, "month"); assert.equal(store.meta.calendarCursor, ymd);
+  monthCell.dispatchEvent(new Ev("keydown", { key: "Enter", shiftKey: true, bubbles: true }));
+  assert.equal(store.meta.calendarView, "day", "Shift+Enter opens Day");
+  await chooseMenu(root, ".zn-calendar-view-select", "Month");
+  monthCell = root.querySelectorAll(".zn-cal-month-cell").find((cell) => cell.getAttribute("data-day") === ymd);
+  monthCell.querySelector(".zn-cal-month-date").click();
+  assert.equal(store.meta.calendarView, "day", "date badge still opens Day");
   await chooseMenu(root, ".zn-calendar-view-select", "Month");
 
   assert.equal(content.dataset.density, "comfortable");
@@ -374,6 +452,63 @@ const chooseMenu = async (root, triggerSelector, label) => {
   await chooseMenu(root, ".zn-calendar-snap-select", "30 minutes");
   assert.equal(store.meta.calendarSnap, 30);
   let dragButton = setupDrag(), originalDragStart = store.items.get("drag-ui-event").start.dateTime;
+  // UI4.6: background item and history events must not replace an active
+  // pointer gesture, and one deferred update runs after the release.
+  let backgroundDragScroll = q(root, ".zn-cal-time-scroll"); backgroundDragScroll.scrollTop = 222; dragButton.focus();
+  const dragHover = q(root, ".zn-cal-hover-card");
+  dragButton.dispatchEvent(pointer("pointerdown", 200, 621)); root.dispatchEvent(pointer("pointermove", 200, 675));
+  const background = store.items.upsert({ id: "while-dragging", summary: "While dragging", start: { dateTime: new Date(dragStart + 7200000).toISOString() }, x: { kind: "event", src: "manual" } });
+  assert.ok(store.items.history.append({ itemId: bg.id, occurrenceId: bg.id, action: "done", at: Date.now() + 10 }));
+  sheet.refreshCalendar(); await flushRaf();
+  assert.ok(q(root, ".zn-cal-drag-preview"), "background update cannot cancel pointer drag");
+  assert.equal(q(root, ".zn-cal-time-scroll"), backgroundDragScroll, "background update retains the timeline while dragging");
+  assert.equal(q(root, ".zn-cal-hover-card"), dragHover, "background update retains the hover while dragging");
+  root.dispatchEvent(pointer("pointerup", 200, 675)); await flushRaf();
+  assert.notEqual(store.items.get("drag-ui-event").start.dateTime, originalDragStart, "drag still commits");
+  assert.ok(root.querySelectorAll(".zn-cal-item").some(el => el.textContent.includes("While dragging")), "deferred background update appears on release");
+  assert.equal(q(root, ".zn-cal-time-scroll").scrollTop, 222, "full re-render preserves timeline position");
+  q(root, ".zn-calendar-undo-move").click(); store.items.remove(background.id);
+  dragButton = setupDrag(); originalDragStart = store.items.get("drag-ui-event").start.dateTime;
+  backgroundDragScroll = q(root, ".zn-cal-time-scroll"); backgroundDragScroll.scrollTop = 171; dragButton.focus();
+  const focusedKey = dragButton.getAttribute("data-item-key"); assert.ok(focusedKey, "events carry a stable focus identity");
+  sheet.refreshCalendar(); await flushRaf();
+  assert.equal(q(root, ".zn-cal-time-scroll").scrollTop, 171, "explicit redraw retains scroll offset");
+  assert.equal(document.activeElement?.getAttribute("data-item-key"), focusedKey, "redraw restores the same focused item");
+  // Open menus and composers keep their anchor and unsaved inputs until close.
+  dragButton = setupDrag(); dragButton.dispatchEvent(new Ev("contextmenu", { bubbles: true, clientX: 200, clientY: 621 }));
+  const keptMenu = q(root, ".zn-menu"); assert.ok(keptMenu);
+  const menuItem = store.items.upsert({ id: "menu-background", summary: "Menu background", start: { dateTime: new Date(dragStart + 10800000).toISOString() }, x: { kind: "event", src: "manual" } });
+  assert.equal(q(root, ".zn-menu"), keptMenu); assert.ok(content.contains(dragButton), "menu anchor survives background updates");
+  assert.ok(!root.querySelectorAll(".zn-cal-item").some(el => el.textContent.includes("Menu background")));
+  root.dispatchEvent(new Ev("keydown", { key: "Escape", bubbles: true })); await flushRaf();
+  assert.ok(root.querySelectorAll(".zn-cal-item").some(el => el.textContent.includes("Menu background")), "closing menu flushes deferred changes");
+  store.items.remove(menuItem.id);
+  assert.equal(sheet.newAgendaDayItem(zoneKey, "event"), true);
+  const keptComposer = q(root, ".zn-cal-compose-card"), draftTitle = q(keptComposer, '[aria-label="Title"]'); draftTitle.value = "Unsaved draft";
+  const composeItem = store.items.upsert({ id: "compose-background", summary: "Composer background", start: { dateTime: new Date(dragStart + 10800000).toISOString() }, x: { kind: "event", src: "manual" } });
+  assert.equal(q(root, ".zn-cal-compose-card"), keptComposer); assert.equal(draftTitle.value, "Unsaved draft");
+  assert.ok(!root.querySelectorAll(".zn-cal-item").some(el => el.textContent.includes("Composer background")));
+  keptComposer.querySelectorAll("button").find(el => el.textContent.trim() === "Cancel").click(); await flushRaf();
+  assert.ok(root.querySelectorAll(".zn-cal-item").some(el => el.textContent.includes("Composer background")), "closing composer flushes deferred changes");
+  store.items.remove(composeItem.id);
+  dragButton = setupDrag(); backgroundDragScroll = q(root, ".zn-cal-time-scroll"); backgroundDragScroll.scrollTop = 191; dragButton.focus();
+  const sameDay = store.items.upsert({ id: "same-day-change", summary: "Same day", start: { dateTime: new Date(dragStart + 7200000).toISOString() }, x: { kind: "event", src: "manual" } });
+  assert.equal(q(root, ".zn-cal-time-scroll").scrollTop, 191, "day-column patch preserves scroll");
+  assert.equal(document.activeElement?.getAttribute("data-item-key"), focusedKey, "day-column patch restores focused event");
+  assert.ok(q(root, ".zn-cal-hover-card"), "day-column patch restores the hover card");
+  store.items.remove(sameDay.id);
+  dragButton = setupDrag(); dragButton.dispatchEvent(pointer("pointerdown", 200, 621)); root.dispatchEvent(pointer("pointermove", 200, 675));
+  const cancelBg = store.items.upsert({ id: "cancel-background", summary: "After cancel", start: { dateTime: new Date(dragStart + 10800000).toISOString() }, x: { kind: "event", src: "manual" } });
+  root.dispatchEvent(pointer("pointercancel", 200, 675)); await flushRaf();
+  assert.equal(store.items.get("drag-ui-event").start.dateTime, originalDragStart, "cancelled drag does not commit");
+  assert.ok(root.querySelectorAll(".zn-cal-item").some(el => el.textContent.includes("After cancel")), "cancelling a drag flushes deferred changes");
+  store.items.remove(cancelBg.id);
+  dragButton = setupDrag(); dragButton.dispatchEvent(pointer("pointerdown", 200, 621)); root.dispatchEvent(pointer("pointermove", 200, 675));
+  const concurrentDrag = store.items.get("drag-ui-event"); store.items.upsert({ ...concurrentDrag, description: "Changed during drag" });
+  root.dispatchEvent(pointer("pointerup", 200, 675)); await flushRaf();
+  assert.equal(store.items.get("drag-ui-event").start.dateTime, originalDragStart, "a concurrent edit prevents stale drag overwrite");
+  assert.equal(store.items.get("drag-ui-event").description, "Changed during drag");
+  dragButton = setupDrag();
   dragButton.dispatchEvent(pointer("pointerdown", 200, 621));
   root.dispatchEvent(pointer("pointermove", 200, 675));
   assert.ok(q(root, ".zn-cal-drag-preview"), "moving beyond the threshold previews the snapped destination");
@@ -551,7 +686,7 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(store.items.history.list({ itemId: "drag-allday-reminder" })[0].action, "rescheduled");
   q(root, ".zn-calendar-undo-move").click();
   assert.equal(store.items.get("drag-allday-reminder").start.date, zoneKey, "undo restores the all-day date");
-  assert.equal(store.items.history.list({ itemId: "drag-allday-reminder" }).length, 2);
+  assert.equal(store.items.history.list({ itemId: "drag-allday-reminder" }).filter((entry) => entry.action === "rescheduled").length, 2, "undo records a second schedule transition independently of any skipped creation stages");
   const recurringAllDay = root.querySelectorAll(".zn-cal-time-allday-cell .zn-cal-item").find((el) => el.textContent.includes("Daily check-in"));
   if (recurringAllDay) assert.equal(recurringAllDay.classList.contains("is-movable"), false, "recurring all-day reminders do not bypass occurrence scopes");
   store.items.remove("drag-allday-reminder");

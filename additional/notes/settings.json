@@ -867,6 +867,15 @@
       "property": "zen.workspace.zentral.notes.footer_counter"
     },
     {
+      "property": "zen.workspace.zentral.notes.missed_reminder_days",
+      "label": "Missed reminder digest look-back",
+      "type": "number",
+      "defaultValue": 7,
+      "min": 1,
+      "max": 31,
+      "unit": "days"
+    },
+    {
       "label": "Find in a note: how matches are shown",
       "type": "dropdown",
       "defaultValue": "selection",
@@ -1126,6 +1135,30 @@
       "min": 1,
       "max": 31,
       "unit": "days"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.agenda_overdue",
+      "label": "Show overdue reminders in the Zen Agenda",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.notes.agenda_overdue_days",
+      "label": "Agenda overdue look-back",
+      "type": "number",
+      "defaultValue": 7,
+      "min": 1,
+      "max": 31,
+      "unit": "days"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.agenda_overdue_cap",
+      "label": "Maximum overdue reminders before More",
+      "type": "number",
+      "defaultValue": 10,
+      "min": 1,
+      "max": 100,
+      "unit": "items"
     },
     {
       "property": "zen.workspace.zentral.notes.debug_perf",
@@ -1633,6 +1666,26 @@
     "zen.workspace.zentral.notes.agenda_days": {
       "category": "notes",
       "section": "Experiments (off by default)",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.agenda_overdue": {
+      "category": "notes",
+      "section": "Experiments (off by default)",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.agenda_overdue_days": {
+      "category": "notes",
+      "section": "Experiments (off by default)",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.agenda_overdue_cap": {
+      "category": "notes",
+      "section": "Experiments (off by default)",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.missed_reminder_days": {
+      "category": "notes",
+      "section": "Performance",
       "owner": "notes"
     }
   }

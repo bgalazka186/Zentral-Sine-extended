@@ -591,7 +591,7 @@ const BODY = "# Plan\n\n## Shifts\n%%calendar: Work%%\n- 2026-11-12 06:00-14:00 
   });
 
   await test("T2.7a reminder right-click actions and history are connected to the shared menu engine", () => {
-    assert.match(source, /function\s+showCalendarItemMenu\s*\([\s\S]*?showMenu\(safeAnchor\s*\|\|\s*\(event\s*&&\s*Number\.isFinite\(event\.clientX\)[\s\S]*?pointAnchor\(event\)/);
+    assert.match(source, /function\s+showCalendarItemMenu\s*\([\s\S]*?showMenu\(pointer\s*\?\s*pointAnchor\(event\)\s*:\s*\(safeAnchor\s*\|\|\s*root\),\s*calendarItemMenuRows\(latest\),\s*\{\s*calendar:\s*true\s*\}\)/);
     assert.match(source, /"mark-done":\s*\(\)\s*=>\s*recordReminderLifecycle\(item,\s*["']done["']\)/);
     assert.match(source, /dismiss:\s*\(\)\s*=>\s*recordReminderLifecycle\(item,\s*["']dismissed["']\)/);
     assert.match(source, /reopen:\s*\(\)\s*=>\s*recordReminderLifecycle\(item,\s*["']reopened["']\)/);

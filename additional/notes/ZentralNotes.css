@@ -588,6 +588,17 @@
     var(--zn-backing);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
+/* Context menus use viewport geometry rather than a narrow panel's clip. */
+.zentral-notes-sheet .zn-menu[popover][data-calendar-menu="true"] {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  box-sizing: border-box;
+  min-width: min(170px, calc(100vw - 12px));
+  max-width: calc(100vw - 12px);
+  max-height: calc(100vh - 12px);
+  color: var(--zn-text);
+}
 .zentral-notes-sheet .zn-menu-item {
   appearance: none;
   display: flex;
@@ -633,7 +644,21 @@
 .zentral-notes-sheet .zn-swatch[data-color="teal"] { background: #2ec4b6; }
 
 /* ---- Markdown: tables and images ------------------------------------------- */
-.zentral-notes-sheet .zn-read .zn-table-wrap { max-width: 100%; overflow-x: auto; margin: 0.5em 0; scrollbar-width: thin; }
+.zentral-notes-sheet .zn-read .zn-table-wrap {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto !important;
+  overscroll-behavior-x: contain;
+  margin: 0.5em 0;
+  /* Zen themes can hide scrollbars or make them nearly invisible. Keep the
+     native horizontal control usable, including in a narrow split pane. */
+  scrollbar-width: auto !important;
+  scrollbar-color: var(--zn-muted) transparent;
+}
+.zentral-notes-sheet .zn-read .zn-table-wrap:focus-visible { outline: 2px solid var(--zn-text); outline-offset: 2px; }
 .zentral-notes-sheet .zn-read .zn-table { border-collapse: collapse; font-size: 0.95em; }
 .zentral-notes-sheet .zn-read .zn-table th,
 .zentral-notes-sheet .zn-read .zn-box { margin: 0 0 var(--zn-gap, 0.6em); }
@@ -678,6 +703,20 @@
   justify-content: center;
   padding: 12px;
   background: color-mix(in srgb, var(--zn-surface) 70%, transparent);
+}
+/* Calendar dialogs in a panel are their own top-layer surface, anchored to
+   the sheet. This avoids clipping by the panel and remote browser surfaces
+   without raising the whole sheet or covering the rest of the window. */
+.zentral-notes-sheet .zn-dialog[popover][data-calendar-layer="true"] {
+  position: fixed;
+  inset: auto;
+  box-sizing: border-box;
+  margin: 0;
+  border: 0;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  color: var(--zn-text);
 }
 .zentral-notes-sheet .zn-dialog-card {
   /* V4-QS: sized in em so it follows the sheet font; it may grow past the sheet (JS fitDialog) up to the window */
@@ -881,7 +920,8 @@
 /* hidden copy of the editor text, used to measure where each source line sits for linked scrolling */
 .zentral-notes-sheet .zn-mirror { position: absolute; top: 0; left: 0; visibility: hidden; pointer-events: none; overflow: hidden; height: 0; border-style: solid; border-color: transparent; }
 .zentral-notes-sheet .zn-dialog-card { overflow: auto; }
-.zentral-notes-sheet[data-dialog-spill="true"] { overflow: visible; }
+.zentral-notes-sheet[data-dialog-spill="true"],
+.zentral-notes-sheet[popover][data-dialog-spill="true"] { overflow: visible; }
 .zentral-notes-sheet .zn-dialog[data-spill="true"] .zn-dialog-card { position: absolute; }
 .zentral-notes-sheet .zn-field-row { display: grid; gap: 3px; margin: 8px 0; color: var(--zn-muted); font-size: 0.9em; }
 .zentral-notes-sheet .zn-field {
@@ -978,11 +1018,13 @@
 :root[zentral-notes-push="left"] #tabbrowser-tabbox { margin-left: var(--zentral-notes-push) !important; }
 /* Themes. "recommended" copies the RSS card: popup colours, solid surface, soft shadow. */
 :root[zentral-notes-theme="recommended"] .zentral-notes-sheet {
+  /* The popup's light/dark palette, rather than Zen's sometimes-black primary color, chooses the accent. */
+  color-scheme: var(--zl-input-scheme, light dark);
   --zn-surface: var(--zl-popup, var(--arrowpanel-background, #1f1f24));
   --zn-text: var(--zl-popup-text, var(--arrowpanel-color, #eee));
   --zn-muted: color-mix(in srgb, var(--zn-text) 62%, transparent);
   --zn-hover: color-mix(in srgb, var(--zn-text) 10%, transparent);
-  --zn-accent: var(--zen-primary-color, #6aa7ff);
+  --zn-accent: light-dark(#2459b4, #9bbdff);
   --zn-line: var(--zl-button-border-color, var(--arrowpanel-border-color, #444));
   --zn-tint: var(--zn-surface);
   --zn-radius: 10px;
@@ -1818,6 +1860,8 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-month-date { align-self: flex-start; min-width: 23px; padding: 1px 4px; border: 0; border-radius: 5px; background: transparent; color: var(--zn-text); font: inherit; font-size: .82em; text-align: center; cursor: pointer; }
 .zentral-notes-sheet .zn-cal-month-date:hover { background: var(--zn-hover); }
 .zentral-notes-sheet .zn-cal-month-cell.is-selected .zn-cal-month-date { background: var(--zn-accent); color: white; }
+/* Pair text with our default accent; a person's explicit accent keeps the existing behavior. */
+:root[zentral-notes-theme="recommended"]:not([zentral-notes-ov~="accent"]) .zentral-notes-sheet .zn-cal-month-cell.is-selected .zn-cal-month-date { color: light-dark(#ffffff, #101c30); }
 .zentral-notes-sheet .zn-cal-month-allday { color: var(--zn-muted); font-size: .63em; line-height: 1; white-space: nowrap; }
 .zentral-notes-sheet .zn-cal-month-items { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
 .zentral-notes-sheet .zn-cal-month-mark { display: block; min-width: 0; overflow: hidden; padding: 1px 3px; border: 0; border-left: 2px solid var(--zn-cal-item-color, var(--zn-accent)); border-radius: 3px; background: color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 16%, transparent); color: var(--zn-text); font: inherit; font-size: .65em; line-height: 1.25; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
@@ -2137,3 +2181,27 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
 
 .zentral-notes-sheet .zn-cal-resize-handle { position: absolute; z-index: 4; box-sizing: border-box; height: 8px; min-width: 0; padding: 0; border: 0; border-radius: 3px; background: transparent; cursor: ns-resize; touch-action: none; }
 .zentral-notes-sheet .zn-cal-resize-handle:hover, .zentral-notes-sheet .zn-cal-resize-handle:focus-visible { background: var(--zn-accent); outline: 2px solid var(--zn-accent); outline-offset: 1px; }
+
+/* Full-title tooltip for owned Agenda pseudo-tabs; also works without the core runtime. */
+.zn-agenda-title-card {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(420px, calc(100vw - 8px));
+  max-height: calc(100vh - 8px);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 8px;
+  background: var(--zen-colors-primary, #25252e);
+  color: var(--zen-colors-text, #f7f7fc);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 35%);
+  font: menu;
+  pointer-events: auto;
+  z-index: 2147483646;
+}
+.zn-agenda-title-card[hidden] { display: none !important; }

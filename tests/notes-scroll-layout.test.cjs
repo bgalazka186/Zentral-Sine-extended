@@ -32,4 +32,13 @@ assert.match(
   "both split panes retain independent constrained flex sizing",
 );
 
+const tableScroll = rule(".zentral-notes-sheet .zn-read .zn-table-wrap");
+assert.match(tableScroll, /display:\s*block/, "the table scrollport establishes its own block");
+assert.match(tableScroll, /(?:^|;)\s*width:\s*100%/, "the scrollport is constrained to its parent pane");
+assert.match(tableScroll, /max-width:\s*100%/, "nested tables cannot widen their container");
+assert.match(tableScroll, /min-width:\s*0/, "nested flex items can shrink");
+assert.match(tableScroll, /box-sizing:\s*border-box/, "padding or borders cannot widen the scrollport");
+assert.match(tableScroll, /overflow-x:\s*auto\s*!important/, "wide tables have a horizontal native scrollbar even in a restrictive host");
+assert.match(tableScroll, /scrollbar-width:\s*auto\s*!important/, "host scrollbar hiding and thin bars do not suppress the table scrollbar");
+assert.match(tableScroll, /overscroll-behavior-x:\s*contain/, "horizontal scrolling does not scroll the note or browser");
 console.log("Notes scrolling layout regression tests passed");

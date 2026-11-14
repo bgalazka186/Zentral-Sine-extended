@@ -225,6 +225,18 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(read.all().filter((e) => e._classes.has("zn-link")).length, 1);
   });
 
+  await test("OW-20: Markdown and HTML tables have individually keyboard-focusable scroll regions", async () => {
+    const ta = q(sheetA, ".zn-editor"), read = q(sheetA, ".zn-read");
+    type(ta, "| Wide | Table |\n| --- | --- |\n| left | right |\n\n> | Quoted | Table |\n> | --- | --- |\n> | long | value |\n\n<table><tr><th>HTML</th><th>Table</th></tr><tr><td>left</td><td>right</td></tr></table>");
+    await new Promise((r) => setTimeout(r, 400)); await flushRaf();
+    const wrappers = read.querySelectorAll(".zn-table-wrap"); assert.equal(wrappers.length, 3);
+    for (const wrapper of wrappers) {
+      assert.equal(wrapper.getAttribute("tabindex"), "0"); assert.equal(wrapper.getAttribute("role"), "region");
+      assert.match(wrapper.getAttribute("aria-label"), /table.*scroll/i); assert.ok(wrapper.querySelector("table"));
+    }
+    assert.ok(wrappers.some(wrapper => wrapper.closest("blockquote")), "nested table uses the same constrained scrollport");
+  });
+
   await test("YouTube embeds are click-to-load and use only the privacy-enhanced host", async () => {
     const ta = q(sheetA, ".zn-editor"), read = q(sheetA, ".zn-read");
     type(ta, "![Course clip](https://youtu.be/dQw4w9WgXcQ)");
@@ -539,6 +551,20 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.ok(!paste().defaultPrevented);
     assert.ok(!new Ev("paste", { clipboardData: { getData: () => "plain words" } }).defaultPrevented);
     prefs.delete(c.PREF.PASTE_LINK);
+  });
+
+  await test("OW-19: pasted collapsed table replaces the selection only when it becomes a table", async () => {
+    const raw = "| Order | ID | Task || --: | :-- | :-- || 25 | `ID` | Example |";
+    const fixed = "| Order | ID | Task |\n| --: | :-- | :-- |\n| 25 | `ID` | Example |";
+    let ta = prep(sheetA, "before\nreplace\nafter", 7, 14);
+    const paste = (text) => { const e = new Ev("paste", { clipboardData: { getData: type => type === "text/plain" ? text : "" } }); ta.dispatchEvent(e); return e; };
+    assert.ok(paste(raw).defaultPrevented); assert.equal(ta.value, "before\n" + fixed + "\nafter");
+    assert.equal(ta.selectionStart, 7 + fixed.length); assert.equal(ta.selectionEnd, ta.selectionStart);
+    assert.equal(c.parseBlocks(ta.value).find(b => b.type === "table").rows.length, 1);
+    ta = prep(sheetA, "```\nreplace\n```", 4, 11); assert.equal(paste(raw).defaultPrevented, false, "pasting inside a fence is left native");
+    ta = prep(sheetA, "prefix replace suffix", 7, 14); assert.equal(paste(raw).defaultPrevented, false, "partial-line paste is not a table");
+    ta = prep(sheetA, "", 0, 0); assert.equal(paste("a || b").defaultPrevented, false, "ordinary text uses native paste");
+    ta.readOnly = true; assert.equal(paste(raw).defaultPrevented, false, "read-only notes are never edited"); ta.readOnly = false;
   });
 
   await test("B2 table creator inserts the picked size", async () => {

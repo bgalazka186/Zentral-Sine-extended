@@ -33,6 +33,18 @@ Quick notes that open **over the panel you are looking at**, without touching it
 
 Highlights are written as `==text==` (yellow) or `=={green}text==` (also `blue`, `pink`, `orange`). Links must be `http(s)`, and are opened in a new tab only when you click them in read mode. Markup in a note is never run as HTML.
 
+### Reminder storage failures
+
+Calendar reminder banners and missed-reminder digests are not displayed when their history claim cannot be saved. Unsaved claims are rolled back without discarding other pending history, and the scheduler makes up to three 30-second retries. A damaged or unreadable history file remains protected and requires attention before alerts can be saved. Notes windows in the same browser process coordinate history writes and claims through a shared process registry when the browser exposes its hidden window; external programs and environments without that registry do not participate. Live Zen validation is still needed.
+
+### Concurrent calendar edits
+
+Windows that share the browser's process registry merge independent calendar changes before saving. Competing edits to the same calendar item use the latest revision; a losing window receives a notice. Conflicting deletions or category edits block saving rather than silently discarding a version. When possible a `calendar.conflict-*.bak` file in the Notes folder records the base, local and remote snapshots for manual recovery; a damaged original also gets a separate corrupt backup. If a backup fails, keep Notes open and resolve the storage problem before closing. Changes made after saving is blocked may not be in the backup. This coordination does not cover external programs or environments without the shared registry, and note-file edits are not yet protected by the calendar merge. Live Zen behavior remains unverified.
+
+### Daily Note calendar categories
+
+A calendar item in a Daily Note normally follows its `%%calendar%%` section. Choosing a category for that item in **Edit details** saves a per-item marker on its own line, for example `%%zn-item-category: Work%%`; an empty marker means **No category**. The marker is hidden in read view but visible in the Markdown editor. You can change its value in the note, or choose **Follow note section** in the editor to remove it and resume inheritance. Other lines and their categories are unchanged. Keep the separate `%%zn-item-id:...%%` identity marker intact.
+
 ### Markdown supported
 
 Headings (`#` to `######`; seven `#` or `#tag` stay text), paragraphs, **bold** (`**x**` or `__x__`), *italic* (`*x*` or `_x_`), ***bold italic***, ~~strikethrough~~, any of these nested in each other, `code` and fenced code blocks (with colors for a handful of languages, see below), `[text](https://link)` and bare links, bullet / numbered lists, task lists (`- [ ]`, `- [x]`), ordered lists that number themselves (`1.` `2.` `1.` shows 1, 2, 3; a start such as `42.` is kept), list items with more paragraphs (blank line, then indented text), nested block quotes (`> > text`), callouts (`> [!NOTE] Title`, also tip, important, warning, caution, info), horizontal rules (`---`), **tables** and **images**. Backslash escapes work (`\\*` shows a star), `<https://...>` is a link and an image can be a link (`[![alt](img)](url)`). **Collapsible blocks** use `<details>` with an optional `<summary>` line and a closing `</details>` (add `open` to start expanded); the inside is normal Markdown, and no other HTML tag is understood. **Math** is a small offline LaTeX subset written as `$x^2$` inline or `$$ ... $$` as a block: Greek letters, operators and arrows, `^` / `_`, `\frac`, `\sqrt`, `\text`, `\mathbb{R}`, accents; it becomes plain text with superscripts and subscripts, and anything unknown stays visible as typed. `$5 and $10` is not math (no space just inside the dollar signs). This is a small GitHub-style subset; footnotes, matrices, other raw HTML and nested tables are not supported on purpose.
@@ -144,7 +156,7 @@ Tests: `node tests/notes.test.cjs` (store, autosave, sync, recovery), `node test
 - **Tuck away** (setting, off by default): with *Keep open* off, an outside click slides the card away instead of closing it; hover the thin strip on its top edge (or press the Notes button or shortcut) to bring it back.
 - **Push the page aside** (setting, off by default, standalone card only): the page makes room instead of being covered.
 - **Split view as a second window** (setting, off by default): *Split* opens another note in a second window of the same size beside the first, instead of halving one window. With no room beside it the second window is not shown.
-- **Theme** (Quick settings or Zentral settings): Zentral (follows the Zen look), Recommended (like the RSS card), Light, Dark, Paper.
+- **Theme** (Quick settings or Zentral settings): Zentral (follows the Zen look), Recommended (like the RSS card), Light, Dark, Paper. Recommended uses a readable blue accent for links and active items, distinct from the popup's line and border colour; it adapts to the light or dark palette. An explicit Appearance accent still overrides it.
 
 - **Hold in the editor toolbar**: holding *Quote* or the *More* caret lists the callout kinds (Note, Tip, Important, Warning, Caution, Info); a tap does what it always did.
 - **Checkmarks in read view**: a click toggles done, a right click cycles the main states (`[?] [!] [/] [-]`), holding the left button lists the classic states and holding the right button lists the extra ones (`[f] [b] [i] [*]` ...). An extra state is a second kind of checkmark: a click or right click leaves it alone and only a hold changes it.
@@ -159,3 +171,21 @@ Tests: `node tests/notes.test.cjs` (store, autosave, sync, recovery), `node test
   - the whole NOTES folder (or a sub-folder) deleted: it is rebuilt once. Browser-side repairs are limited to 12 a minute, so an add-on that keeps touching the tabs cannot start a loop;
   - the note was trashed or deleted: the entry is dropped and a click opens nothing.
 - **Right click** on a Notes tab only offers Notes' own actions; Zen's pin, move, container and unload entries are hidden for it.
+
+### Agenda sidebar full titles
+
+Hover or keyboard-focus an Agenda reminder or event to see its complete title in a tooltip beside the sidebar. Move the pointer onto the tooltip to keep it open; Escape dismisses it. The tooltip is scoped to Agenda items and adapts to either sidebar edge. On browsers without top-layer popovers it falls back to a positioned card; the native tooltip also contains the complete title.
+
+Agenda sidebar items and day folders are managed projections: dragging them or dropping content into Agenda is disabled. If restored user tabs or folders appear inside Agenda, Notes attempts to move them out intact into the pinned area. A failed move leaves the original content in place for a later retry.
+
+### Shared workspace projections
+
+When Notes or Agenda sidebar folders are enabled, their shared data follows the active Zen workspace in each window. Switching workspaces does not create independent copies. Foreign tabs and folders found inside a projection are preserved in their original workspace; if they cannot be moved safely, the projection waits for a later retry. Separate per-space data is not yet available.
+
+### Pasting flattened tables
+
+If a copied Markdown table has lost its row breaks and its rows run together at `||`, Notes can restore the breaks when the result is a valid table in the note. Ambiguous or malformed text is left to the normal paste behavior; structured HTML still uses the existing HTML-to-Markdown conversion.
+
+### Wide tables
+
+Rendered Markdown and supported HTML tables scroll horizontally in their own region when wider than the note pane. Focus a table region and use the arrow keys to scroll it; the native scrollbar may follow your operating system’s overlay behavior.

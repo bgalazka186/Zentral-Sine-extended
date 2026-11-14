@@ -3,10 +3,11 @@
   "themeId": "zentral-notes",
   "name": "Zentral Notes",
   "description": "Quick notes as plain Markdown files: multiple notes, highlights, checklists, tables, split-view preview, search, trash, export (Markdown, HTML, text, PDF, zip). Opens from a shortcut anywhere and adds a Notes button to Zentral panel bars when the full pack's panels are present. Standalone part of Zentral Extended.",
-  "version": "3.3.113",
+  "version": "3.3.154",
   "entry": "ZentralNotes.uc.js",
   "output": "ZentralNotes.standalone.uc.js",
   "loader": "__zentralNotesLoader",
+  "fullPackOnly": ["sidebarSafeBounds"],
   "include": [
     "flavors/ZentralNotesFlavors.js",
     "flavors/ZentralNotesShortcuts.js",
@@ -141,6 +142,7 @@
     "zen.workspace.zentral.notes.history_minutes",
     "zen.workspace.zentral.notes.history_cap_kb",
     "zen.workspace.zentral.notes.history_warn_mb",
+    "zen.workspace.zentral.notes.missed_reminder_days",
     "zen.workspace.zentral.notes.find_highlight",
     "zen.workspace.zentral.notes.trash_auto_empty_days",
     "zen.workspace.zentral.notes.spellcheck",
@@ -151,6 +153,9 @@
     "zen.workspace.zentral.notes.agenda_folder",
     "zen.workspace.zentral.notes.agenda_position",
     "zen.workspace.zentral.notes.agenda_days",
+    "zen.workspace.zentral.notes.agenda_overdue",
+    "zen.workspace.zentral.notes.agenda_overdue_days",
+    "zen.workspace.zentral.notes.agenda_overdue_cap",
     "zen.workspace.zentral.notes.debug_perf"
   ],
   "externalPrefs": [

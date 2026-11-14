@@ -1,0 +1,28 @@
+"use strict";
+const assert = require("node:assert/strict");
+const { performance } = require("node:perf_hooks");
+const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
+const now = Date.parse("2026-11-13T12:00:00Z"), files = new Map();
+const io = { join: (...p) => p.join("/"), exists: async (p) => files.has(p), readUTF8: async (p) => { if (!files.has(p)) throw new Error("not found"); return files.get(p); }, writeUTF8: async (p, text) => files.set(p, text) };
+const create = () => C.createReminderHistoryStore({ io, getDir: () => "/n", now: () => now, setTimer: () => 1, clearTimer() {} });
+(async () => {
+  const a = create(); await a.open();
+  for (let i = 0; i < 20000; i++) assert.ok(a.append({ id: "bulk-" + i, itemId: "id-" + (i % 500), occurrenceId: "occ-" + (i % 1000), noteId: "note-" + (i % 3), action: "alerted", stage: "pre", at: now + i }));
+  const start = performance.now();
+  let n = 0;
+  for (let i = 0; i < 45000; i++) n += a.list({ itemId: "id-" + (i % 500), occurrenceId: "occ-" + (i % 1000) }).length;
+  const elapsed = performance.now() - start; console.log(`history indexed 20k/45k: ${elapsed.toFixed(1)} ms (ceiling 1000 ms)`);
+  assert.ok(n > 0); assert.ok(elapsed < 1000, "production identity lookups should use the index");
+  const expected = a.list().filter((r) => r.itemId === "id-3" && r.occurrenceId === "occ-3" && r.noteId === "note-0");
+  const actual = a.list({ itemId: "id-3", occurrenceId: "occ-3", noteId: "note-0" });
+  assert.deepEqual(actual, expected); assert.deepEqual(a.list({ itemId: "id-3", occurrenceId: "occ-3", noteId: "note-0", offset: 1, limit: 2 }), expected.slice(1, 3));
+  actual[0].summary = "changed"; assert.notEqual(a.list({ itemId: "id-3", occurrenceId: "occ-3", noteId: "note-0" })[0].summary, "changed");
+  const startTime = { dateTime: new Date(now + 5000).toISOString() };
+  a.append({ id: "legacy-alert", itemId: "series", occurrenceId: "instance", action: "alerted", start: startTime, at: now });
+  await a.flush(); assert.equal(await a.claimAlert({ itemId: "series", occurrenceId: "instance", stage: "due", start: startTime, at: now }), null, "legacy stage suppresses due");
+  assert.ok(await a.claimAlert({ itemId: "series", occurrenceId: "instance", stage: "pre", start: startTime, at: now }));
+  const b = create(); await b.open(); assert.equal(await b.claimAlert({ itemId: "series", occurrenceId: "instance", stage: "pre", start: startTime, at: now }), null, "index rebuilds on open");
+  a.append({ id: "remote-skip", itemId: "other", occurrenceId: "x", action: "skipped", stage: "followup", start: startTime, at: now }); await a.flush(); await b.refresh();
+  assert.equal(await b.claimAlert({ itemId: "other", occurrenceId: "x", stage: "followup", start: startTime, at: now }), null, "refresh indexes skipped stages");
+  console.log("history index semantics passed");
+})().catch((error) => { console.error(error); process.exitCode = 1; });

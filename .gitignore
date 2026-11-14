@@ -16,6 +16,7 @@ Desktop.ini
 # Local documentation & reference artifacts (not needed to run the mod)
 docs/*
 !docs/MARKDOWN_FLAVORS.md
+!docs/LEGACY_done_rows.md
 patches/
 zentral/upstream/
 
