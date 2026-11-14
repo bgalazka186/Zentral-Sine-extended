@@ -588,6 +588,17 @@
     var(--zn-backing);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
+/* Context menus use viewport geometry rather than a narrow panel's clip. */
+.zentral-notes-sheet .zn-menu[popover][data-calendar-menu="true"] {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  box-sizing: border-box;
+  min-width: min(170px, calc(100vw - 12px));
+  max-width: calc(100vw - 12px);
+  max-height: calc(100vh - 12px);
+  color: var(--zn-text);
+}
 .zentral-notes-sheet .zn-menu-item {
   appearance: none;
   display: flex;

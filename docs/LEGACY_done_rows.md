@@ -491,3 +491,17 @@ Marked or stable-ID restored roots are deduplicated before projection; empty/dis
 **Tests / done when:** Calendar cards remain fully visible and interactive in the Zentral panel, including near edges and with webpage content behind, and close/cleanup correctly. Cover stacking and containment regressions in automated tests and live Zen if needed.
 
 Panel-hosted Calendar cards use a separately anchored manual top-layer overlay, preserving the sheet’s own panel behavior and unrelated controls. Geometry refits on layout and content changes; closing, folding, suspension and teardown release the layer. If popovers are unavailable the card remains constrained and scrollable within the panel. Standalone spill specificity is corrected. Fake sheet tests cover viewport edges, resize, fallback and cleanup; real Zen browser-surface compositing and interaction remain to be checked.
+
+## OW-15 — Completed Calendar context menu placement (3.3.135)
+
+#### `OW-15` — Calendar context menu position, size and stacking
+**Status:** `DONE` · **Impact:** High · **Effort:** M · **Depends on:** none · **Source:** Owner report
+
+**Problem:** Calendar right-click menus can open in odd positions or appear very small, possibly below the calendar stacking level.
+
+**Plan:** Reproduce pointer and keyboard context-menu placement, size and stacking in panel and standalone modes. Correct anchor coordinates, viewport bounds and layer ownership as needed, while keeping menus scoped and their close/teardown behavior intact.
+
+**Tests / done when:** Right-click and keyboard menus for days and items appear near their target, remain readable, within usable viewport bounds and above Calendar, including edges/scroll/zoom; outside click, Escape, action, view switch and destroy close them. Live-check native Zen placement if necessary.
+
+
+Calendar day and item context menus use pointer coordinates for pointer invocation and target geometry for keyboard invocation. A scoped manual top layer uses viewport bounds and readable width, including scrollable tall menus; dismissal owns its listeners and layer on action, outside press, Escape, view change, external scroll, resize and teardown. If popovers are unsupported it falls back to the existing constrained sheet menu. Calendar item details also use the panel dialog layer. Fake sheet and pure geometry tests cover panel and standalone, edges, keyboard, fallback and cleanup. Real Zen compositing, zoom and native browser controls remain unverified.

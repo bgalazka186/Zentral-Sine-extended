@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.134
+// @version 3.3.135
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.134, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.135, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.134";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.135";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11747,6 +11747,17 @@ __zentralShim.register = function (def) {
       };
     }
 
+    function calendarMenuPosition({ anchor, viewport, size, pad = 6 }) {
+      const width = Math.max(0, viewport.width), height = Math.max(0, viewport.height);
+      const minX = Math.min(pad, width / 2), minY = Math.min(pad, height / 2);
+      const usableWidth = Math.max(0, width - 2 * minX), usableHeight = Math.max(0, height - 2 * minY);
+      const w = Math.min(Math.max(0, size.width), usableWidth), h = Math.min(Math.max(0, size.height), usableHeight);
+      const x = anchor.left + w <= width - minX ? anchor.left : anchor.right - w;
+      const y = anchor.bottom + 4 + h <= height - minY ? anchor.bottom + 4 : anchor.top - 4 - h;
+      return { left: Math.round(Math.max(minX, Math.min(x, width - minX - w))),
+        top: Math.round(Math.max(minY, Math.min(y, height - minY - h))), maxHeight: Math.floor(usableHeight) };
+    }
+
     // Normalize every Notes pop-up into one stable action model. The UI may keep accepting older
     // call sites (`action`, `disabled`, `group`) while new surfaces use `{ id, label, enabled, run }`.
     // This function is pure: IDs are deterministic within a menu, nested groups are normalized
@@ -13754,7 +13765,7 @@ __zentralShim.register = function (def) {
         makeFolderUid, ensureFolderUids, setNotesTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
-        createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition, normalizeContextMenuItems,
+        createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition, calendarMenuPosition, normalizeContextMenuItems,
         highlightCode, codeLangKey, texNodes, mapPosition, mergeAnchors, insertCodeBlock, buildLink, insertLink,
         pastedLink, richPaste, PASTE_HTML_PART, fragmentLabel, insertImage, makeTable, insertTable, SHORTCUT_ACTIONS, formatCombo,
         normalizeCombo, comboFromEvent, parseShortcutMap, effectiveShortcuts, findShortcutConflict,
@@ -16165,7 +16176,8 @@ __zentralShim.register = function (def) {
         event?.stopPropagation?.();
         const key = CALENDAR_PART.ymd(new Date(day));
         const chooseView = () => { store.setMeta({ calendarCursor: key, calendarView: "day" }); renderCalendar(); };
-        showMenu(anchor || (event && Number.isFinite(event.clientX) ? pointAnchor(event) : root), [
+        const pointer = event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY) && (event.clientX || event.clientY);
+        showMenu(pointer ? pointAnchor(event) : (anchor || root), [
           { heading: true, label: calendarDayLabel(day, { year: true }) },
           { icon: "calendar", label: "Open Day view", action: chooseView },
           { icon: "bell", label: "New reminder…", action: () => askCalendarComposer({ date: key, kind: "reminder", linkCurrent: false }) },
@@ -16175,7 +16187,7 @@ __zentralShim.register = function (def) {
           { icon: "note", label: "Open or create date note", action: () => openDay(day, key, true) },
           { sep: true },
           ...[[-1, "Previous day"], [1, "Next day"]].map(([offset, label]) => ({ icon: "calendar", label, action: () => { store.setMeta({ calendarCursor: CALENDAR_PART.localDateKey(CALENDAR_PART.addDays(day, offset)), calendarView: "day" }); renderCalendar(); } })),
-        ]);
+        ], { calendar: true });
       }
       function bindCalendarDayContext(anchor, day) {
         anchor.addEventListener("contextmenu", (event) => showCalendarDayMenu(event, day, anchor));
@@ -16230,7 +16242,8 @@ __zentralShim.register = function (def) {
         const latest = currentCalendarOccurrence(item) || (item?.x?.src === "note" ? item : null);
         if (!latest) return flash("That calendar item is no longer available");
         const safeAnchor = anchor?.nodeType === 1 && anchor.isConnected === false ? null : anchor;
-        showMenu(safeAnchor || (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY) ? pointAnchor(event) : root), calendarItemMenuRows(latest));
+        const pointer = event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY) && (event.clientX || event.clientY);
+        showMenu(pointer ? pointAnchor(event) : (safeAnchor || root), calendarItemMenuRows(latest), { calendar: true });
       }
       const calendarReminderNodes = new Map();
       const calendarHistoryKey = (id) => JSON.stringify([id.itemId, id.occurrenceId]);
@@ -17175,6 +17188,7 @@ __zentralShim.register = function (def) {
       }
       function renderCalendar() {
         if (!CALENDAR_PART || !calendarContent) return;
+        if (menu?.calendar && menu.calendarView !== (store.meta.calendarView || "month")) closeMenu();
         cancelCalendarDrag();
         calendarUndoMove.hidden = !calendarMoveUndo;
         syncCalendarFilterOptions();
@@ -18811,6 +18825,8 @@ __zentralShim.register = function (def) {
             stop();
           } catch (_) {}
         }
+        try { if (closing.el.hasAttribute("popover")) closing.el.hidePopover?.(); } catch (_) {}
+        closing.el.removeAttribute("popover");
         closing.el.remove();
       }
       // Keeps a menu fully inside both the sheet and the window: it is right-aligned to its anchor,
@@ -18819,17 +18835,16 @@ __zentralShim.register = function (def) {
       // crop the highlight colors).
       function placeMenu(m, anchor) {
         const doc = root.ownerDocument.documentElement;
-        const pos = menuPosition({
-          anchor: anchor.getBoundingClientRect(),
-          host: root.getBoundingClientRect(),
-          viewport: { width: doc.clientWidth || Infinity, height: doc.clientHeight || Infinity },
-          size: { width: m.offsetWidth || 0, height: m.offsetHeight || 0 },
-        });
+        const viewport = { width: doc.clientWidth || window.innerWidth || 0, height: doc.clientHeight || window.innerHeight || 0 };
+        const raised = m.dataset.calendarMenu === "true";
+        m.style.maxHeight = "";
+        const geometry = { anchor: anchor.getBoundingClientRect(), viewport, size: { width: m.offsetWidth || 0, height: m.offsetHeight || 0 } };
+        const pos = raised ? calendarMenuPosition(geometry) : menuPosition({ ...geometry, host: root.getBoundingClientRect() });
         if (pos.maxHeight) m.style.maxHeight = pos.maxHeight + "px";
         m.style.left = pos.left + "px";
         m.style.top = pos.top + "px";
       }
-      function showMenu(anchor, items) {
+      function showMenu(anchor, items, { calendar = false } = {}) {
         if (menu && menu.anchor === anchor) return closeMenu();
         closeMenu();
         const m = h("div", { class: "zn-menu", role: "menu" });
@@ -18953,9 +18968,15 @@ __zentralShim.register = function (def) {
         });
         m.style.visibility = "hidden";
         root.append(m);
+        if (calendar && typeof m.showPopover === "function") {
+          try {
+            m.setAttribute("popover", "manual"); m.dataset.calendarMenu = "true";
+            m.showPopover();
+          } catch (_) { m.removeAttribute("popover"); delete m.dataset.calendarMenu; }
+        }
         placeMenu(m, anchor);
         m.style.visibility = "";
-        const activeMenu = (menu = { el: m, anchor, cleanups: [] });
+        const activeMenu = (menu = { el: m, anchor, calendar, calendarView: store.meta.calendarView || "month", cleanups: [] });
         const listenMenu = (target, type, fn, opts) => {
           target.addEventListener(type, fn, opts);
           activeMenu.cleanups.push(() => target.removeEventListener(type, fn, opts));
@@ -18969,6 +18990,11 @@ __zentralShim.register = function (def) {
           const within = (node) => !!node && (node === e.target || path.includes(node) || !!node.contains?.(e.target));
           if (!within(activeMenu.el) && !within(activeMenu.anchor)) closeMenu();
         }, true);
+        if (calendar) {
+          // A detached or scrolled anchor must never leave a floating menu behind.
+          listenMenu(window, "scroll", (event) => { if (menu === activeMenu && !activeMenu.el.contains(event.target)) closeMenu(); }, true);
+          listenMenu(window, "resize", () => { if (menu === activeMenu) closeMenu(); });
+        }
         listenMenu(window, "blur", () => {
           if (menu === activeMenu) closeMenu();
         });
@@ -19753,7 +19779,7 @@ __zentralShim.register = function (def) {
 
         const ok = chip("Save calendar details", true), cancel = chip("Cancel");
         const summary = h("p", { class: "zn-empty" }, `${current.summary} · ${calendarItemDate(current)} · ${current.x.kind}`);
-        openCard("Calendar item details", summary, h("label", { class: "zn-field-row zn-calendar-note-row" }, h("span", {}, "Calendar note"), noteField), headingField.row, zoneField.row, recurrenceBox,
+        openCalendarCard("Calendar item details", summary, h("label", { class: "zn-field-row zn-calendar-note-row" }, h("span", {}, "Calendar note"), noteField), headingField.row, zoneField.row, recurrenceBox,
           h("p", { class: "zn-empty" }, "Calendar notes are stored with this item and never appear as separate notes in the sidebar. Recurrence applies only to this item."),
           h("div", { class: "zn-dialog-actions" }, cancel, ok));
         const submit = () => {
