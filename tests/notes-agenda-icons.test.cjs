@@ -23,9 +23,8 @@ async function host(extraPrefs = {}) {
 }
 
 (async () => {
-  // 1. CSS badge rules exist for event and reminder Agenda tabs.
-  assert.match(css, /tab\[bgalazka-notes-agenda-item\]\[bgalazka-notes-agenda-kind="event"\]/);
-  assert.match(css, /tab\[bgalazka-notes-agenda-item\]\[bgalazka-notes-agenda-kind="reminder"\]/);
+  // 1. Agenda tabs must not inject Event/Reminder text badges into .tab-label-container (no space under titles).
+  assert.doesNotMatch(css, /tab\[bgalazka-notes-agenda-item\][^\n]*\.tab-label-container::after/);
 
   // 2. Pure favicon & icon setter contract.
   {
