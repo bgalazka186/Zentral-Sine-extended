@@ -95,10 +95,41 @@
       // a tab's historical SessionStore entries or display label).
       function isNotesAgendaEntryTab(tab) {
         if (!tab) return false;
-        if (tab.hasAttribute("bgalazka-notes-item") ||
-            tab.hasAttribute("bgalazka-notes-agenda-item")) return true;
         let url = "";
         try { url = tab.linkedBrowser?.currentURI?.spec || ""; } catch (_) {}
+        // A live ordinary URL is authoritative: old pseudo markers/expandos
+        // must not make a reused web tab permanently ineligible for unloading.
+        if (url && url !== "about:blank") {
+          if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(url)) return true;
+          try {
+            tab.removeAttribute("bgalazka-notes-item");
+            tab.removeAttribute("bgalazka-notes-agenda-item");
+            if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(tab._zentralNotesUrl || "")) delete tab._zentralNotesUrl;
+          } catch (_) {}
+          return false;
+        }
+        if (!url || url === "about:blank") {
+          let sessionUrl = "";
+          try {
+            const state = JSON.parse(window.SessionStore?.getTabState?.(tab) || "{}");
+            const entries = Array.isArray(state.entries) ? state.entries : [];
+            const index = entries.length
+              ? Math.max(0, Math.min(entries.length - 1, (Number(state.index) || 1) - 1))
+              : -1;
+            sessionUrl = index >= 0 ? String(entries[index]?.url || "") : "";
+          } catch (_) {}
+          if (sessionUrl) {
+            if (sessionUrl !== "about:blank" && /^about:blank#zn-(?:note:|new:|agenda-)/.test(sessionUrl)) return true;
+            try {
+              tab.removeAttribute("bgalazka-notes-item");
+              tab.removeAttribute("bgalazka-notes-agenda-item");
+              if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(tab._zentralNotesUrl || "")) delete tab._zentralNotesUrl;
+            } catch (_) {}
+            return false;
+          }
+        }
+        if (tab.hasAttribute("bgalazka-notes-item") ||
+            tab.hasAttribute("bgalazka-notes-agenda-item")) return true;
         if (!url || url === "about:blank") {
           try { url = tab._zentralNotesUrl || url; } catch (_) {}
         }

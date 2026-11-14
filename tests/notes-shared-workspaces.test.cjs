@@ -54,6 +54,8 @@ function useNodeListQuerySelectorAll(element) {
   // Later boot calls remain safe and idempotent.
   h.fireTimer(6000); h.fireTimer(6500); await Promise.resolve();
   const foreign = h.window.gBrowser.addTab("https://user.test/"); notesA.addTabs([foreign]);
+  const foreignDrag = h.emit("dragstart", foreign);
+  assert.equal(foreignDrag.defaultPrevented, false, "an ordinary web tab inside NOTES can be dragged back out");
   const foreignFolder = h.sidebar.folder("Foreign", { parent: notesA.querySelector(":scope > .tab-group-container") });
   const nested = h.window.gBrowser.addTab("https://nested.test/"); foreignFolder.addTab(nested);
   const agendaForeign = h.window.gBrowser.addTab("https://agenda-user.test/"); agendaA.querySelector("zen-folder[bgalazka-notes-agenda-day]").addTabs([agendaForeign]);

@@ -16,6 +16,10 @@ const PREF = "zen.workspace.zentral.notes.agenda_folder", MARK = "bgalazka-notes
   h.seam.agendaController.runNow();
   const root = h.document.querySelector('zen-folder[bgalazka-notes-agenda-folder="true"]'), day = root.querySelector("zen-folder[bgalazka-notes-agenda-day]"), agenda = day.querySelector(`tab[${MARK}]`);
   const foreign = h.window.gBrowser.addTab("https://example.test/"), transfer = () => ({ dropEffect: "move" });
+  const ordinaryInsideAgenda = h.window.gBrowser.addTab("https://ordinary-inside-agenda.test/");
+  day.addTabs([ordinaryInsideAgenda]);
+  const ordinaryInsideDrag = h.emit("dragstart", ordinaryInsideAgenda, { dataTransfer: transfer() });
+  assert.equal(ordinaryInsideDrag.defaultPrevented, false, "an ordinary web tab inside an Agenda day can be dragged back out");
   const blocked = (type, target, path = null) => { const dt = transfer(), event = h.emit(type, target, { dataTransfer: dt, ...(path ? { composedPath: () => path } : {}) }); assert.equal(event.defaultPrevented, true); assert.equal(event.immediateStopped, true); return dt; };
   blocked("dragstart", agenda); blocked("dragstart", day.querySelector(".tab-group-label"));
   assert.equal(blocked("dragover", agenda).dropEffect, "none"); assert.equal(blocked("drop", day).dropEffect, "none");
