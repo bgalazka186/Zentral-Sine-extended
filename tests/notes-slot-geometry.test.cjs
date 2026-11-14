@@ -356,6 +356,7 @@ function cssTests() {
     assert.ok(writes.every((k) => k.startsWith("--zentral-notes-")), "writes: " + [...new Set(writes)]);
     await release(sheet, 51);
     assert.equal(sheet.dataset.dragging, undefined, "gesture finished");
+    assert.ok(Number.isFinite(readMeta().shareGap) && readMeta().shareGap > 0, "the resized Notes gap height is persisted as a share of the available page height");
     assert.equal(readMeta().gapSplit, undefined, "the split lives in the shared CSS variable and is never remembered across a close");
     assert.equal(model().gap, m1.gap, "release does not jump");
   });
@@ -547,10 +548,17 @@ function cssTests() {
     assert.deepEqual(windowListeners.filter((l) => l.t !== "unload").map((l) => l.t), [], "window listeners removed (the one-off unload hook is intentionally kept)");
   });
 
+  await test("source guards: a released Notes slot flushes its remembered height immediately", () => {
+    assert.match(source, /store\.setMeta\(patch\);\s*Promise\.resolve\(store\.flush\?\.\(\)\)\.catch\(warn\);/,
+      "the new share is durable as soon as the resize gesture is released");
+  });
+
   await test("source guards: secondary views mirror the gap on swap and commit the middle when Notes closes", async () => {
     const sv = fs.readFileSync(path.resolve(__dirname, "../extension/panels/secondary-views/ZentralSecondaryViews.uc.js"), "utf8");
     assert.match(sv, /--zentral-notes-gap-up[\s\S]{0,100}gapNow - upNow/, "swapPair mirrors the gap's upper part");
     assert.match(sv, /zentral-triple-swapped/, "swapPair tells Notes");
+    assert.match(sv, /function scheduleSecondaryGeometryFit/, "Triple View has a bounded delayed geometry settle");
+    assert.match(sv, /scheduleSecondaryGeometryFit\(\);/, "the settle runs after slot changes and browser creation");
     assert.match(sv, /if \(was && notesGap\(\) === 0 && state\.mode === "triple"\)[\s\S]{0,180}tripleShareAfterNotes/, "closing Notes commits the middle of the band");
     assert.ok(/state\.notesOpen = gap > 0 \? \{ top, gap, total: usable \+ gap \}/.test(sv), "the open band is recorded on every fit");
   });

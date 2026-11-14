@@ -233,6 +233,7 @@
         ctx.requestPanelActivity();
         refreshViewZenCss(state.first);
         refreshViewZenCss(state.second);
+        scheduleSecondaryGeometryFit();
       }
       const markTiles = () =>
         document
@@ -334,6 +335,25 @@
           state.dividerHandle.style.height = `${line.height + 3 + lead}px`;
         });
       }
+      // A cold startup or a freshly-created second browser can report transient zero/stale
+      // chrome heights before the flex layout settles. A swap happened to force another fit; do
+      // the same bounded follow-up automatically so Notes' gap grips work on the first open.
+      let secondaryFitFrame = null;
+      let secondaryFitTimer = null;
+      function scheduleSecondaryGeometryFit() {
+        if (state.mode !== "triple" || !state.second?.isConnected) return;
+        if (secondaryFitFrame !== null) cancelAnimationFrame(secondaryFitFrame);
+        secondaryFitFrame = requestAnimationFrame(() => {
+          secondaryFitFrame = null;
+          fitSecondaryBrowsers();
+        });
+        if (secondaryFitTimer !== null) ctx.clearTimeout(secondaryFitTimer);
+        secondaryFitTimer = ctx.setTimeout(() => {
+          secondaryFitTimer = null;
+          fitSecondaryBrowsers();
+        }, 280);
+      }
+
       // Resume can leave secondary geometry/activity stale without a resize.
       // Coalesce native lifecycle signals; one delayed pass covers restored layout.
       let resumeFrame = null;
@@ -372,6 +392,7 @@
           if (state.pair && state.second) rememberPair();
         }
         fitSecondaryBrowsers();
+        scheduleSecondaryGeometryFit();
       };
       document.addEventListener("zentral-notes-reserve", onNotesGap);
       ctx.registerCleanup(() => document.removeEventListener("zentral-notes-reserve", onNotesGap));
@@ -386,7 +407,9 @@
         Services.obs.removeObserver(resumeSecondaryView, "wake_notification");
         if (resumeFrame !== null) cancelAnimationFrame(resumeFrame);
         if (resumeTimer !== null) ctx.clearTimeout(resumeTimer);
-        resumeFrame = resumeTimer = null;
+        if (secondaryFitFrame !== null) cancelAnimationFrame(secondaryFitFrame);
+        if (secondaryFitTimer !== null) ctx.clearTimeout(secondaryFitTimer);
+        resumeFrame = resumeTimer = secondaryFitFrame = secondaryFitTimer = null;
       });
       function moveBrowser(browser, parent) {
         if (browser.parentNode === parent) return;
@@ -1004,6 +1027,7 @@
           linkCurrentPair(firstApp, app);
         }
         markTiles();
+        if (state.mode === "triple") scheduleSecondaryGeometryFit();
         return true;
       }
       // Startup can request one panel even when it belongs to a saved Triple View pair.

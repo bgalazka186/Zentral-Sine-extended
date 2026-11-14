@@ -77,6 +77,32 @@
         window.gZenWorkspaces?.allStoredTabs ?? window.gBrowser?.tabs ?? []
       );
     }
+    function isNotesAgendaPseudoTab(tab) {
+      if (!tab) return false;
+      if (
+        tab.hasAttribute?.("bgalazka-notes-item") ||
+        tab.hasAttribute?.("bgalazka-notes-agenda-item")
+      ) return true;
+      let url = "";
+      try {
+        url = tab._zentralNotesUrl || tab.linkedBrowser?.currentURI?.spec || "";
+      } catch (_) {}
+      if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(url)) return true;
+      // A sleeping/restored tab may expose only about:blank until SessionStore
+      // restores its current entry. Inspect that entry only, never old history.
+      if ((!url || url === "about:blank") && (tab.pinned || tab.hasAttribute?.("pending"))) {
+        try {
+          const store = getSessionStore();
+          if (typeof store?.getTabState === "function") {
+            const state = JSON.parse(store.getTabState(tab) || "{}");
+            const index = Math.max(0, (Number(state.index) || 1) - 1);
+            const current = String(state.entries?.[index]?.url || "");
+            if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(current)) return true;
+          }
+        } catch (_) {}
+      }
+      return false;
+    }
     function eligible(tab, knownTabs = null) {
       return !!(
         tab?.isConnected &&
@@ -85,6 +111,7 @@
         (tab.pinned ||
           (tab.hasAttribute("zen-essential") &&
             tab.getAttribute("zen-essential") !== "false")) &&
+        !isNotesAgendaPseudoTab(tab) &&
         !tab.hasAttribute("zen-empty-tab") &&
         !tab.hasAttribute("bgalazka-addon-host") &&
         !tab.hasAttribute("bgalazka-addon-host-fallback") &&

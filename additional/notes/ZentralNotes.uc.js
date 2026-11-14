@@ -16659,6 +16659,7 @@
             // Remembered per kind of slot, as a share of the pages (so it survives a window resize).
             const patch = { [g.slot === "gap" ? "shareGap" : "shareDock"]: Math.round(g.share * 1000) / 1000, size: "peek" };
             store.setMeta(patch);
+            Promise.resolve(store.flush?.()).catch(warn);
             applyState();
             layout();
           }
@@ -20453,16 +20454,98 @@
         }
         return true;
       }
+      // TabOpen can precede the final currentURI in Zen. Retry a newly-opened blank tab briefly so
+      // link-created zn-* URLs are still routed after the browser finishes its first location change.
+      // The external-navigation marker survives TabAttrModified while Zen is moving the tab into a folder.
+      const pendingPseudoTabRoutes = new WeakMap();
+      const pendingExternalPseudoTabs = new WeakSet();
+      const pseudoTabRouteTimers = new Set();
+      function cancelPseudoTabRoute(tab) {
+        const pending = pendingPseudoTabRoutes.get(tab);
+        if (pending?.timer) {
+          window.clearTimeout(pending.timer);
+          pseudoTabRouteTimers.delete(pending.timer);
+        }
+        pendingPseudoTabRoutes.delete(tab);
+        pendingExternalPseudoTabs.delete(tab);
+      }
+      function schedulePseudoTabRoute(tab, forceExternalNavigation = false) {
+        if (!tab || pendingPseudoTabRoutes.has(tab)) return;
+        const pending = { timer: 0, index: 0 };
+        const delays = [50, 150, 350, 700];
+        const finish = () => {
+          if (pending.timer) {
+            window.clearTimeout(pending.timer);
+            pseudoTabRouteTimers.delete(pending.timer);
+            pending.timer = 0;
+          }
+          pendingPseudoTabRoutes.delete(tab);
+          pendingExternalPseudoTabs.delete(tab);
+        };
+        const check = () => {
+          if (pending.timer) {
+            pseudoTabRouteTimers.delete(pending.timer);
+            pending.timer = 0;
+          }
+          if (disposed || tab.isConnected === false ||
+              tab.hasAttribute?.(NOTES_ATTR) || tab.hasAttribute?.(AGENDA_ATTR)) {
+            finish();
+            return;
+          }
+          if (routePseudoTab(tab, forceExternalNavigation)) {
+            finish();
+            return;
+          }
+          if (pending.index >= delays.length) {
+            finish();
+            return;
+          }
+          pending.timer = window.setTimeout(check, delays[pending.index++]);
+          pseudoTabRouteTimers.add(pending.timer);
+        };
+        pendingPseudoTabRoutes.set(tab, pending);
+        pending.timer = window.setTimeout(check, delays[pending.index++]);
+        pseudoTabRouteTimers.add(pending.timer);
+      }
+      const onPseudoTabClosed = (event) => cancelPseudoTabRoute(event?.target);
       const onPseudoTabNavigation = (event) => {
         if (disposed || pseudoTabCreationDepth) return;
         const tab = event?.target?.localName === "tab" ? event.target : pseudoEventClosest(event, "tab");
         if (!tab || internalPseudoTabs.has(tab)) return;
-        routePseudoTab(tab, event?.type === "TabOpen");
+        if (tab.hasAttribute?.(NOTES_ATTR)) {
+          if (event?.type === "TabSelect") zenEnsureIcon(tab);
+          else if (event?.type === "TabOpen" || event?.type === "SSTabRestored") {
+            zenEnsureIcon(tab);
+            zenIconRetry(tab);
+          }
+        }
+        if (event?.type === "TabOpen" &&
+            !tab.hasAttribute?.(NOTES_ATTR) && !tab.hasAttribute?.(AGENDA_ATTR)) {
+          pendingExternalPseudoTabs.add(tab);
+        }
+        const forceExternalNavigation =
+          event?.type === "TabOpen" || pendingExternalPseudoTabs.has(tab);
+        const routed = routePseudoTab(tab, forceExternalNavigation);
+        if (routed) cancelPseudoTabRoute(tab);
+        else if (forceExternalNavigation &&
+                 !tab.hasAttribute?.(NOTES_ATTR) && !tab.hasAttribute?.(AGENDA_ATTR)) {
+          const url = tab.linkedBrowser?.currentURI?.spec || "";
+          if (!url || url === "about:blank" || /^about:blank#zn-/.test(url))
+            schedulePseudoTabRoute(tab, true);
+        }
       };
       const PSEUDO_TAB_EVENTS = ["TabOpen", "TabAttrModified", "SSTabRestored", "TabSelect"];
       const pseudoEventTargets = [...new Set([window, window.gBrowser?.tabContainer].filter(Boolean))];
       for (const target of pseudoEventTargets) for (const type of PSEUDO_TAB_EVENTS) target.addEventListener(type, onPseudoTabNavigation, true);
-      onCleanup(() => { for (const target of pseudoEventTargets) for (const type of PSEUDO_TAB_EVENTS) target.removeEventListener(type, onPseudoTabNavigation, true); });
+      window.addEventListener("TabClose", onPseudoTabClosed, true);
+      onCleanup(() => {
+        for (const target of pseudoEventTargets)
+          for (const type of PSEUDO_TAB_EVENTS)
+            target.removeEventListener(type, onPseudoTabNavigation, true);
+        window.removeEventListener("TabClose", onPseudoTabClosed, true);
+        for (const timer of pseudoTabRouteTimers) window.clearTimeout(timer);
+        pseudoTabRouteTimers.clear();
+      });
       function activateAgendaTab(tab) {
         window.__zentralNotesTestSeam?.onAgendaActivate?.(tab);
         const key = agendaTabKey(tab);
