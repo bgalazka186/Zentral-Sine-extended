@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.145
+// @version 3.3.146
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.145, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.146, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.145";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.146";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -24264,7 +24264,7 @@ __zentralShim.register = function (def) {
         const url = agendaTabUrl(key), tab = window.gBrowser.addTab(url, { skipAnimation: true, triggeringPrincipal: systemPrincipal() });
         tab.setAttribute(AGENDA_ATTR, key); tab._zentralNotesUrl = url; window.gBrowser.pinTab(tab); return tab;
       }
-      let agendaMutationCount = 0;
+      let agendaMutationCount = 0, agendaReordering = false;
       function agendaPlaceRoot(root, position) {
         const notesRoot = zenRootEl(), host = notesRoot?.parentElement || root?.parentElement;
         if (!host || !root) return;
@@ -24635,12 +24635,24 @@ __zentralShim.register = function (def) {
           if (els.length < 2) return true;
           const host = els[0].parentElement;
           if (!host || els.some((el) => el.parentElement !== host)) return false;
-          for (let i = 0; i < els.length; i++) {
-            const cur = [...host.children].filter((child) => els.includes(child));
-            if (cur[i] === els[i]) continue;
-            try { host.insertBefore(els[i], cur[i]); agendaMutationCount++; } catch (_) {}
-          }
-          return true;
+          const managed = new Set(els);
+          const nowOrder = () => [...host.children].filter((child) => managed.has(child));
+          agendaReordering = true;
+          try {
+            for (let i = 0; i < els.length; i++) {
+              const cur = nowOrder();
+              if (cur[i] === els[i]) continue;
+              // Prefer the same native move used by the Notes projection.
+              // A present but failing native API is not permission to bypass
+              // its bookkeeping with a DOM move.
+              if (typeof window.gBrowser.moveTabBefore === "function") window.gBrowser.moveTabBefore(els[i], cur[i]);
+              else host.insertBefore(els[i], cur[i]);
+              if (els[i].parentElement !== host || nowOrder()[i] !== els[i]) return false;
+              agendaMutationCount++;
+            }
+            return true;
+          } catch (error) { warn(error); return false; }
+          finally { agendaReordering = false; }
         },
         removeAll() {
           agendaTitleCard.hide();
@@ -24980,7 +24992,7 @@ __zentralShim.register = function (def) {
       }
       function onAgendaTabEvent(ev) {
         if (ev.type === "TabClose") agendaTitleCard.removed(ev.target);
-        if (disposed || !agendaEnabled() || agendaController.busy) return;
+        if (disposed || !agendaEnabled() || agendaController.busy || agendaReordering) return;
         const tab = ev.target;
         const movedIntoAgenda = ["TabMove", "FolderGrouped", "FolderUngrouped"].includes(ev.type) && agendaRootEl()?.contains?.(tab);
         if (movedIntoAgenda || agendaTabKey(tab) || (ev.type === "SSTabRestored" && /#zn-agenda-/.test(tab?._zentralNotesUrl || tab?.linkedBrowser?.currentURI?.spec || ""))) agendaController.schedule(400);

@@ -653,3 +653,18 @@ Managed tab/folder drags are canceled, including mixed multiselections, and drag
 Shared Notes and Agenda roots follow the active workspace, with owned descendant workspace IDs updated, old selection references invalidated, foreign contents kept in their original space, duplicate-root cleanup and retry on failure. Native change listeners are detached when disabled or destroyed; a coalesced TabSelect fallback handles older hosts. Fake host covers switches, edits, restore, retry, empty foreign folders, independent windows and cleanup. Fake-host 50/150-item workspace switches: 1.1/2.7 ms; list 8.9/66.9 ms (timings vary). Actual Zen workspace switching and native folder movement remain unverified. Independent per-space storage remains OW-18.
 
 **ST7.1 safety follow-up (3.3.145):** Retiring or moving a managed Notes subfolder first evacuates foreign tabs and empty folders outside the projection. If evacuation fails, it leaves the folder intact; failed moves wait for a later event rather than looping an immediate timer. Tests exercise preservation, failure/retry and timer behavior.
+
+## UI4.5 — Agenda native reordering (3.3.146)
+
+#### `UI4.5` — Reorder Agenda tabs through Zen's API (live verification)
+**Status:** `DONE` · **Impact:** Med · **Effort:** S-M · **Depends on:** F0.1 · **Source:** Audit R1 B6
+
+**Problem:** `agendaApi.reorder` uses raw `host.insertBefore`, bypassing `gBrowser.moveTabTo` and Zen's pinned-tab manager, so Zen's internal order can drift from the DOM; each move also raises `TabMove`.
+
+**Plan (do in this order):**
+1. Use the same move helper as `zenPlace`/`zenNest` where available; fall back to `insertBefore` only if the API is missing.
+2. Suppress own `TabMove` events (see `H1.1`).
+
+**Tests / done when:** Harness: reorder performs only moves through the helper; live check on a disposable profile.
+
+Agenda reordering uses the same `gBrowser.moveTabBefore` helper as the Notes projection for tabs and day folders; a DOM fallback is used only when that helper is absent. Native failures or no-op moves are detected without a bookkeeping-bypassing fallback. Own synchronous TabMove events are ignored, with the guard released even on failure. Fake-host tests cover tabs, folders, no-ops, exceptions, fallback, idempotence and external events. Fake 50/150-item reverse reorder: 17.1/135.7 ms before, 17.3/140.5 ms after (timings vary). Live Zen remains unverified; the owner-approved assumption for live-only checks applies.
