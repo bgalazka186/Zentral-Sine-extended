@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.159
+// @version 3.3.160
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.159, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.160, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.159";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.160";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -25784,9 +25784,12 @@ __zentralShim.register = function (def) {
             if (tab !== agendaPress.tab || ev.button !== agendaPress.button) clearAgendaPress();
             else {
               agendaPress.released = true;
-              // Browser click/auxclick follows synchronously; do not retain a
-              // canceled gesture into a later keyboard selection.
-              agendaPressTimer = window.setTimeout(clearAgendaPress, 0);
+              // Gecko/Zen may dispatch click in a later native input task than
+              // mouseup. A zero-delay timer can expire between those events and
+              // make the first physical click look like a mere tab selection.
+              // Keep the gesture briefly; click, dragend, blur or the next press
+              // clears it immediately, and this timeout is only a bounded fallback.
+              agendaPressTimer = window.setTimeout(clearAgendaPress, 500);
             }
           }
           return;
