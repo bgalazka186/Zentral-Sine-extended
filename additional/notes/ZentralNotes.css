@@ -2065,32 +2065,6 @@ zen-folder[bgalazka-notes-agenda-day]::after {
   background: color-mix(in srgb, currentColor 14%, transparent);
 }
 tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
-tab[bgalazka-notes-agenda-item] { --zn-agenda-accent: var(--zn-agenda-color, currentColor); }
-tab[bgalazka-notes-agenda-item][bgalazka-notes-agenda-kind="event"] .tab-label-container::after,
-tab[bgalazka-notes-agenda-item][bgalazka-notes-agenda-kind="reminder"] .tab-label-container::after {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-inline-start: .35em;
-  padding: 0 .34em;
-  border-radius: 999px;
-  font-size: .72em;
-  font-weight: 600;
-  line-height: 1.45;
-  vertical-align: middle;
-}
-tab[bgalazka-notes-agenda-item][bgalazka-notes-agenda-kind="event"] .tab-label-container::after {
-  content: "Event";
-  color: color-mix(in srgb, var(--zn-agenda-accent) 78%, currentColor);
-  background: color-mix(in srgb, var(--zn-agenda-accent) 16%, transparent);
-}
-tab[bgalazka-notes-agenda-item][bgalazka-notes-agenda-kind="reminder"] .tab-label-container::after {
-  content: "Reminder";
-  color: color-mix(in srgb, var(--zn-agenda-accent) 85%, currentColor);
-  background: color-mix(in srgb, var(--zn-agenda-accent) 22%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--zn-agenda-accent) 36%, transparent);
-}
 
 /* ---- privacy-aware media embeds (T1.15) ------------------------------------------- */
 .zentral-notes-sheet .zn-read .zn-video-embed,
