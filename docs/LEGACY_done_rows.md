@@ -416,3 +416,19 @@ Agenda boundary scheduling considers the earliest visible timed occurrence end t
 **Tests / done when:** Projection tests for overdue ordering/cap/window; DOM test for the extra root child (F0.1).
 
 Optional default-on Overdue folder shows pending, policy-visible reminders from the prior 7 civil days, oldest first, capped at 10; look-back and cap are configurable. A +N more pseudo-tab opens the first hidden reminder day, and the folder count includes all results. Supports recurring occurrence lifecycle, snooze, ordinary calendar items and legacy note-front-matter reminders, including their menu actions and removal events; keys stay day-scoped and repeated reconciliation is idempotent. Overdue-only buckets schedule midnight expiry. Fake Zen tests cover ordering, cap, actions, preferences and navigation. Baseline 7-day overdue expansion 500/2000 daily series 32/108 ms; budget 500/2000 ms. Live Zen UI unverified.
+
+## TM3.4 — Completed missed reminder digest (3.3.130)
+
+#### `TM3.4` — Missed-reminders digest after sleep or long closure
+**Status:** `DONE` · **Impact:** Med · **Effort:** M · **Depends on:** H1.5, TM3.1 · **Source:** Audit R2 R3
+
+**Problem:** The scheduler scans from `now - 2 days`; anything older never alerts, and there is no list of reminders that were missed while the browser was closed or asleep.
+
+**Plan (do in this order):**
+1. On startup and wake, collect pending reminders whose last stage time passed while away and are not Done/Dismissed.
+2. Show ONE digest banner ('3 reminders you missed') with Open list / Snooze all / Dismiss all, instead of individual stage alerts (uses H1.5 coalescing).
+3. Setting for the look-back window (default 7 days, max 31).
+
+**Tests / done when:** Fake clock: app closed across three reminders: one digest, no per-stage banners.
+
+Startup and explicit wake/clock jumps gather unclaimed final-stage reminders within a configurable 1–31 day window (default 7), coalescing lower stages into a single digest. Shared-history batch claims refresh once and write once, retaining the documented simultaneous cross-window race; protected history blocks calendar claims. Digest paginates its list and supports bulk dismissal and snooze including legacy notes, all-day and recurring occurrence exceptions; unsuccessful actions remain visible with an error. Fake-clock scheduler, fake-Zen and protected-history tests pass. Production-shape 7-day startup with 500/2000 daily series measured 704/2587 ms including normal scheduler expansion (budgets 12000/45000 ms). Live Zen behavior unverified.

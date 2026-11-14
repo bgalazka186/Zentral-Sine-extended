@@ -1406,6 +1406,7 @@
       async claimAlert(raw) {
         if (writeBlocked) return null;
         try { await this.refresh(); } catch (error) { safeWarn(error); }
+        if (raw.requirePending && ["done", "dismissed"].includes(this.stateFor(raw.itemId, raw.occurrenceId))) return null;
         const requestedStage = ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "";
         const duplicate = claimedStages.has(alertIndexKey(raw.itemId, raw.occurrenceId, requestedStage, raw.start));
         if (duplicate) return null;
@@ -1413,6 +1414,27 @@
         if (!record) return null;
         try { await writeNow(); } catch (error) { safeWarn(error); }
         return record;
+      },
+      // Digest claims use one merge and one durable write for the whole batch.
+      // Each group starts with its highest stage: if another window claimed it,
+      // none of that group's lower stages may become a new visible digest entry.
+      async claimAlertGroups(groups) {
+        if (writeBlocked || !Array.isArray(groups)) return [];
+        try { await this.refresh(); } catch (error) { safeWarn(error); }
+        if (writeBlocked) return [];
+        const claimed = [];
+        for (let index = 0; index < groups.length; index++) {
+          const group = groups[index], top = Array.isArray(group) && group[0];
+          if (!top || (top.requirePending && ["done", "dismissed"].includes(this.stateFor(top.itemId, top.occurrenceId)))) continue;
+          const already = (raw) => claimedStages.has(alertIndexKey(raw.itemId, raw.occurrenceId, ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "", raw.start));
+          if (already(top)) continue;
+          const record = this.append({ ...top, action: "alerted" });
+          if (!record) continue;
+          claimed.push(index);
+          for (const raw of group.slice(1)) if (raw && !already(raw)) this.append({ ...raw, action: "alerted" });
+        }
+        if (claimed.length) try { await writeNow(); } catch (error) { safeWarn(error); }
+        return claimed;
       },
       list({ itemId = "", occurrenceId = "", noteId = "", limit = 0, offset = 0 } = {}) {
         const candidates = itemId && occurrenceId ? (byIdentity.get(identityIndexKey(itemId, occurrenceId)) || []) : records;
@@ -1629,7 +1651,7 @@
         if (old && JSON.stringify(old) === JSON.stringify(it)) return old;
         if (old && isReminder(it)) {
           const changedStart = JSON.stringify(old.start) !== JSON.stringify(it.start);
-          const changedRecurrence = raw?.historyAction === "rescheduled" && !!raw?.occurrenceId
+          const changedRecurrence = ["rescheduled", "snoozed"].includes(raw?.historyAction) && !!raw?.occurrenceId
             && JSON.stringify(old.x?.recurrenceExceptions || []) !== JSON.stringify(it.x?.recurrenceExceptions || []);
           if (changedStart || changedRecurrence) {
             const action = raw?.historyAction === "snoozed" ? "snoozed" : "rescheduled";

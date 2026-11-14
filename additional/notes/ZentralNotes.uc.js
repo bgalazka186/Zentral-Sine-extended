@@ -203,6 +203,7 @@
       AGENDA_OVERDUE: "zen.workspace.zentral.notes.agenda_overdue",
       AGENDA_OVERDUE_DAYS: "zen.workspace.zentral.notes.agenda_overdue_days",
       AGENDA_OVERDUE_CAP: "zen.workspace.zentral.notes.agenda_overdue_cap",
+      MISSED_DAYS: "zen.workspace.zentral.notes.missed_reminder_days",
       CAPTURE_FORMAT: "zen.workspace.zentral.notes.quick_capture_format",
       DEBUG_PERF: "zen.workspace.zentral.notes.debug_perf",
     });
@@ -4348,6 +4349,8 @@
           S("histMin", "At most one version every", PREF.HISTORY_MINUTES, 1, 1440, "min", 10),
           S("histCap", "Do not version notes bigger than", PREF.HISTORY_CAP_KB, 16, 4096, "KB", 512),
           S("histWarn", "Warn when all history is bigger than", PREF.HISTORY_WARN_MB, 5, 2000, "MB", 100),
+          { kind: "heading", label: "Reminders" },
+          S("missedDays", "Missed reminder digest look-back", PREF.MISSED_DAYS, 1, 31, "days", 7),
           { kind: "heading", label: "Performance" },
           { id: "findHl", label: "Find in a note shows matches by", pref: PREF.FIND_HL, kind: "choice", def: "selection", choices: [["selection", "Selecting the match"], ["backdrop", "Highlighting every match"]] },
           S("trashDays", "Delete notes from the Trash after (0 = never)", PREF.TRASH_DAYS, 0, 3650, "days", 30),
@@ -4914,9 +4917,9 @@
     }
     // One manual top-layer stack, with a single delegated listener. All strings
     // come from textContent; the caller owns the scope and the teardown.
-    function createReminderAlertStack({ document, history, listen, warn = () => {} }) {
+    function createReminderAlertStack({ document, history, listen, warn = () => {}, onBulkEnd = () => {} }) {
       const cards = new Map();
-      let host = null, stopClick = null, stopped = false;
+      let host = null, stopClick = null, stopped = false, bulkRunning = false;
       const html = (tag, cls, text) => {
         const el = document.createElementNS("http://www.w3.org/1999/xhtml", tag);
         if (cls) el.setAttribute("class", cls);
@@ -4925,15 +4928,23 @@
       };
       const close = (key) => {
         const card = cards.get(key); if (!card) return;
-        cards.delete(key); card.node.remove();
+        cards.delete(key); card.node?.remove();
         if (!cards.size && host) {
           try { host.hidePopover?.(); } catch (_) {}
           host.hidden = true;
         }
       };
-      const onHistory = () => {
-        if (stopped) return;
+      const onHistory = (event) => {
+        if (stopped || bulkRunning || (event?.kind === "append" && ["alerted", "skipped"].includes(event.action))) return;
         for (const [key, card] of [...cards]) {
+          if (card.digest) {
+            card.entries = card.entries.filter((entry) => {
+              const records = history?.list?.({ itemId: entry.identity.itemId, occurrenceId: entry.identity.occurrenceId }) || [];
+              return !CALENDAR_PART.reminderAlertShouldClose(entry.identity, records, entry.seen);
+            });
+            renderDigest(card);
+            continue;
+          }
           const records = history?.list?.({ itemId: card.identity.itemId, occurrenceId: card.identity.occurrenceId }) || [];
           if (CALENDAR_PART.reminderAlertShouldClose(card.identity, records, card.seen)) close(key);
         }
@@ -4961,7 +4972,80 @@
         });
         return host;
       }
+      const digestKey = "__missed_reminders_digest__";
+      function renderDigest(card) {
+        if (!card.entries.length) { close(digestKey); return; }
+        const parent = ensureHost(), previous = card.node, node = html("section", "zn-reminder-card");
+        node.setAttribute("data-key", digestKey); node.setAttribute("data-stage", "followup"); node.setAttribute("role", "status");
+        const count = card.entries.length;
+        node.append(html("div", "zn-reminder-stage", "Missed reminders"));
+        node.append(html("div", "zn-reminder-title", `${count} reminder${count === 1 ? "" : "s"} you missed`));
+        if (card.error) node.append(html("div", "zn-reminder-stage", card.error));
+        const row = html("div", "zn-reminder-actions"), callbacks = new Map();
+        const add = (id, label, callback) => {
+          const button = html("button", "", label); button.setAttribute("type", "button"); button.setAttribute("data-action", id);
+          callbacks.set(id, callback); row.append(button);
+        };
+        add("open-list", card.expanded ? "Hide list" : "Open list", () => { card.expanded = !card.expanded; renderDigest(card); return false; });
+        const bulk = (operation) => () => {
+          card.error = ""; const removed = new Set(); bulkRunning = true;
+          try {
+            for (const entry of card.entries) {
+              let success = false;
+              try { success = typeof entry[operation] === "function" && entry[operation]() !== false; } catch (error) { warn(error); }
+              if (success) removed.add(entry);
+              else card.error = "Some reminders could not be changed. Check their storage and try again.";
+            }
+          } finally {
+            bulkRunning = false;
+            try { onBulkEnd(); } catch (error) { warn(error); }
+          }
+          card.entries = card.entries.filter((entry) => !removed.has(entry));
+          renderDigest(card); return false;
+        };
+        add("snooze-all", "Snooze all", bulk("snooze"));
+        add("dismiss-all", "Dismiss all", bulk("dismiss"));
+        add("close", "Close", () => true);
+        node.append(row);
+        if (card.expanded) {
+          const list = html("div", "zn-reminder-actions"), pageSize = 50;
+          card.page = Math.max(0, Math.min(card.page || 0, Math.floor((card.entries.length - 1) / pageSize)));
+          const begin = card.page * pageSize;
+          card.entries.slice(begin, begin + pageSize).forEach((entry, offset) => {
+            const id = "open-" + (begin + offset), button = html("button", "", entry.title || "Untitled reminder");
+            button.setAttribute("type", "button"); button.setAttribute("data-action", id);
+            callbacks.set(id, () => { entry.open?.(); return false; }); list.append(button);
+          });
+          if (card.page > 0) {
+            const button = html("button", "", "Previous"); button.setAttribute("type", "button"); button.setAttribute("data-action", "previous");
+            callbacks.set("previous", () => { card.page--; renderDigest(card); return false; }); list.append(button);
+          }
+          if (begin + pageSize < card.entries.length) {
+            const button = html("button", "", "More"); button.setAttribute("type", "button"); button.setAttribute("data-action", "more");
+            callbacks.set("more", () => { card.page++; renderDigest(card); return false; }); list.append(button);
+          }
+          node.append(list);
+        }
+        card.node = node; card.actions = callbacks;
+        if (previous?.parentElement) previous.replaceWith(node); else parent.append(node);
+        parent.hidden = false;
+        try { if (typeof parent.showPopover === "function") { if (!parent.matches(":popover-open")) parent.showPopover(); } else parent.removeAttribute("popover"); } catch (_) { parent.removeAttribute("popover"); }
+      }
       return {
+        showDigest(entries) {
+          if (stopped || !Array.isArray(entries) || !entries.length) return false;
+          let card = cards.get(digestKey);
+          if (!card) { card = { digest: true, entries: [], expanded: false, node: null, actions: new Map() }; cards.set(digestKey, card); }
+          const keys = new Set(card.entries.map((entry) => JSON.stringify([entry.identity.itemId, entry.identity.occurrenceId])));
+          for (const entry of entries) {
+            if (!entry?.identity?.itemId || !entry.identity.occurrenceId) continue;
+            const key = JSON.stringify([entry.identity.itemId, entry.identity.occurrenceId]);
+            if (keys.has(key)) continue; keys.add(key);
+            const records = history?.list?.({ itemId: entry.identity.itemId, occurrenceId: entry.identity.occurrenceId }) || [];
+            card.entries.push({ ...entry, seen: new Set(records.map((record) => record.id)) });
+          }
+          renderDigest(card); return !!card.entries.length;
+        },
         show({ identity, title, stage, actions = [] }) {
           if (stopped || !identity?.itemId || !identity?.occurrenceId) return false;
           if (["done", "dismissed"].includes(history?.stateFor?.(identity.itemId, identity.occurrenceId))) return false;
@@ -5056,8 +5140,9 @@
       return api;
     }
 
-    function createReminderScheduler({ store, now = () => Date.now(), setTimer, clearTimer, onDue }) {
+    function createReminderScheduler({ store, now = () => Date.now(), setTimer, clearTimer, onDue, onDigest = null, getDigestDays = () => 7, deferUntilStart = false }) {
       let timer = null, debounceTimer = null, destroyed = false, busy = false, again = false;
+      let started = !deferUntilStart, digestRequested = false;
       const stop = () => { if (timer !== null) { clearTimer(timer); timer = null; } };
       const stopDebounce = () => { if (debounceTimer !== null) { clearTimer(debounceTimer); debounceTimer = null; } };
       let windowKey = "", occurrenceCache = new Map(), dirtySeries = new Set(), notesDirty = true, pendingNotes = [];
@@ -5150,6 +5235,57 @@
         }
         return { due, next, hasRecurring };
       });
+      async function collectMissed(at) {
+        if (!onDigest || !CALENDAR_PART) return [];
+        const C = CALENDAR_PART, days = Math.max(1, Math.min(31, Math.round(Number(getDigestDays()) || 7)));
+        const from = C.addDays(C.dayStart(at), -days), history = store.items?.history;
+        const missed = [];
+        try { await history?.refresh?.(); } catch (_) {}
+        const eligibleNotes = () => noteCandidates().filter((note) => !["done", "dismissed"].includes(history?.stateFor?.("note-reminder:" + note.id, "note-reminder:" + note.id)));
+        // A claim is persisted before display, like the normal scheduler. Its identity
+        // includes the original schedule so an explicitly snoozed occurrence can alert again.
+        for (const note of dueReminders(eligibleNotes(), at)) {
+          if (destroyed) return missed;
+          if (note.remind < from) continue;
+          if (await store.claimReminder(note.id)) missed.push(store.get(note.id) || note);
+          notesDirty = true;
+        }
+        const masters = store.items?.list?.() || [];
+        // Google lead overrides can fire up to 28 days before the item start;
+        // only expand that far when a master actually uses such a lead.
+        let maxLead = 0;
+        for (const master of masters) for (const override of master.reminders?.overrides || []) maxLead = Math.max(maxLead, Number(override.minutes) || 0);
+        const occurrences = C.expandRange(masters, from - 31 * 60000, at + maxLead * 60000 + 1);
+        const candidates = [], groups = [];
+        for (const item of occurrences) {
+          if (destroyed) return missed;
+          if (!item || item.status === "cancelled" || !C.isReminder(item)) continue;
+          const identity = C.reminderIdentity(item); if (!identity) continue;
+          if (["done", "dismissed"].includes(history?.stateFor?.(identity.itemId, identity.occurrenceId))) continue;
+          const category = store.items?.category?.(item.x?.category), stages = C.reminderStagePlan(item, category?.notify, at);
+          const top = stages.at(-1); if (!top || top.at < from || top.at > at) continue;
+          const created = Date.parse(item.created || ""), startAt = C.itemRange(item)[0];
+          if (Number.isFinite(created) && startAt < created && top.at < created) continue;
+          const entry = (stage, coalesced) => ({ itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: item.summary, start: item.start, stage: stage.stage, at, action: "alerted", coalesced, requirePending: true });
+          groups.push([entry(top, false), ...stages.filter((stage) => stage !== top && stage.at > 0 && stage.at <= at).map((stage) => entry(stage, true))]);
+          candidates.push({ ...item, __calendarReminder: true, __calendarItem: item, __historyIdentity: identity, __scheduledStart: item.start, __stage: top.stage });
+        }
+        if (history?.claimAlertGroups) {
+          let claimed = []; try { claimed = await history.claimAlertGroups(groups); } catch (_) {}
+          for (const index of claimed) missed.push(candidates[index]);
+        } else {
+          for (let index = 0; index < groups.length; index++) {
+            if (destroyed) return missed;
+            const [top, ...lower] = groups[index]; let claimed = null;
+            try { claimed = history?.claimAlert ? await history.claimAlert(top) : history?.append?.(top); } catch (_) {}
+            if (!claimed) continue;
+            for (const stage of lower) try { if (history?.claimAlert) await history.claimAlert(stage); else history?.append?.(stage); } catch (_) {}
+            missed.push(candidates[index]);
+          }
+        }
+        try { await history?.flush?.(); } catch (_) {}
+        return missed;
+      }
       async function pass() {
         if (destroyed) return;
         if (busy) { again = true; return; }
@@ -5159,7 +5295,14 @@
             again = false;
             stop();
             const nowAt = now();
-            const notes = noteCandidates();
+            if (digestRequested) {
+              digestRequested = false;
+              const missed = await collectMissed(nowAt);
+              if (destroyed) return;
+              if (missed.length) try { onDigest(missed); } catch (_) {}
+            }
+            const pendingNoteCandidates = () => noteCandidates().filter((note) => !["done", "dismissed"].includes(store.items?.history?.stateFor?.("note-reminder:" + note.id, "note-reminder:" + note.id)));
+            const notes = pendingNoteCandidates();
             const fired = [];
             for (const n of dueReminders(notes, nowAt)) {
               if (destroyed) return;
@@ -5182,7 +5325,7 @@
             }
             if (destroyed) return;
             if (fired.length) { try { onDue(fired.map((n) => n.__calendarReminder ? n : (store.get(n.id) || n))); } catch (_) {} }
-            const nextNote = nextReminderAt(noteCandidates(), now());
+            const nextNote = nextReminderAt(pendingNoteCandidates(), now());
             const next = calendar.next && nextNote ? Math.min(calendar.next, nextNote) : calendar.next || nextNote;
             if (next && !destroyed) timer = setTimer(() => { timer = null; run(); }, reminderDelay(next, now()));
           } while (again && !destroyed);
@@ -5191,11 +5334,11 @@
       pass = PERF.wrapAsync("reminders.pass", pass);
       const run = () => { stopDebounce(); return pass().catch(() => {}); };
       const off = store.on((ev) => {
-        if (destroyed) return;
+        if (destroyed || !started) return;
         if (ev.type === "reset" || ev.type === "remove" || (ev.type === "change" && (ev.reminder || ev.meta || ev.remote || ev.created))) { notesDirty = true; run(); }
       });
       const offItems = store.items?.on?.((event, itemId) => {
-        if (destroyed) return;
+        if (destroyed || !started) return;
         const kind = typeof event === "string" ? event : event?.type || event?.kind;
         const id = itemId || event?.id;
         if (!["change", "remove", "reset", "recovery", "category"].includes(kind)) return;
@@ -5205,7 +5348,8 @@
         debounceTimer = setTimer(() => { debounceTimer = null; run(); }, 300);
       }) || (() => {});
       return {
-        start: run,
+        start() { started = true; digestRequested = !!onDigest; notesDirty = true; return run(); },
+        wake() { if (!started) return; digestRequested = !!onDigest; return run(); },
         reschedule: run,
         pending: () => timer !== null || debounceTimer !== null,
         destroy() { if (destroyed) return; destroyed = true; stop(); stopDebounce(); occurrenceCache.clear(); pendingNotes = []; off(); offItems(); },
@@ -6386,7 +6530,7 @@
         },
         // The ONE place a calendar reminder changes lifecycle from outside the note text (banner, calendar menu).
         // Appends the history record, then reflects done/reopened in the Agenda checkbox. Returns the record or false.
-        applyReminderLifecycle(item, action, at = now()) {
+        applyReminderLifecycle(item, action, at = now(), deferFlush = false) {
           const history = items?.history, identity = CALENDAR_PART?.reminderIdentity(item);
           if (!history || !identity || !["done", "dismissed", "reopened"].includes(action)) return false;
           // Idempotent: repeating the state an occurrence is already in (a double click, a second window) adds no record.
@@ -6396,7 +6540,7 @@
           if (!record) return false;
           if (action === "done") api.syncItemCheckbox(item, true);
           else if (action === "reopened") api.syncItemCheckbox(item, false);
-          history.flush?.().catch?.(warn);
+          if (!deferFlush) history.flush?.().catch?.(warn);
           return record;
         },
         // Banner snooze for a stored timed, non-recurring reminder: moves the schedule, appends `snoozed`.
@@ -18688,6 +18832,7 @@
       }
       const alertStack = createReminderAlertStack({
         document, history: store.items?.history, warn,
+        onBulkEnd() { store.items?.history?.flush?.().catch?.(warn); },
         listen(target, type, fn) {
           if (lifecycle?.listen) return lifecycle.listen(target, type, fn);
           target.addEventListener(type, fn);
@@ -18717,6 +18862,41 @@
           } catch (error) { warn(error); }
         }
       }
+      function showMissedReminders(list) {
+        if (disposed) return;
+        const C = CALENDAR_PART;
+        const entries = list.map((entry) => {
+          const item = entry.__calendarReminder ? entry.__calendarItem : null;
+          const identity = item ? C.reminderIdentity(item) : { itemId: "note-reminder:" + entry.id, occurrenceId: "note-reminder:" + entry.id };
+          const latest = () => {
+            if (!item) return store.get(entry.id)?.remind === entry.remind ? store.get(entry.id) : null;
+            const [start, end] = C.itemRange(item), recordId = item.x?.series || item.id;
+            const master = store.items?.get?.(recordId); if (!master) return null;
+            const resolved = C.resolveAgendaOccurrence([master], { ...identity, recordId, start, end });
+            return resolved && JSON.stringify(resolved.start) === JSON.stringify(item.start) ? resolved : null;
+          };
+          return {
+            identity, title: item?.summary || titleOf(entry.body) || "Untitled reminder",
+            open: () => item?.x?.noteId ? openReminderNote(item.x.noteId, { heading: item.x.heading || "", itemId: item.id }) : item ? openCalendarDayFromHost(C.localDateKey(C.itemRange(item)[0])) : openReminderNote(entry.id),
+            dismiss: () => {
+              const current = latest(); if (!current) return true;
+              return item ? !!store.applyReminderLifecycle(current, "dismissed", Date.now(), true) : !!store.setReminder(entry.id, 0, "dismissed");
+            },
+            snooze: () => {
+              const current = latest(); if (!current) return true;
+              if (!item) return !!store.snoozeReminder(entry.id, C.reminderSnoozeTomorrowMinutes(Date.now()));
+              const start = C.snoozedItemStart(current, 0, C.addDays(Date.now(), 1)); if (!start) return false;
+              const master = store.items?.get?.(current.x?.series || current.id); if (!master) return false;
+              if (current.x?.series) {
+                const moved = C.moveOccurrence(master, current, start, "this", Date.now()); if (!moved) return false;
+                return !!store.items.upsert({ ...moved, historyAction: "snoozed", occurrenceId: identity.occurrenceId, historyStart: start });
+              }
+              return !!store.items.upsert({ ...master, start, historyAction: "snoozed" });
+            },
+          };
+        });
+        alertStack.showDigest(entries);
+      }
       let remindersStarted = false;
       const reminders = createReminderScheduler({
         store,
@@ -18724,6 +18904,9 @@
         setTimer: tick.setTimer,
         clearTimer: tick.clearTimer,
         onDue: showReminders,
+        onDigest: showMissedReminders,
+        getDigestDays: () => prefInt(PREF.MISSED_DAYS, 7),
+        deferUntilStart: true,
       });
       onCleanup(() => reminders.destroy());
       // The store opens lazily; reminders need it, so open it shortly after startup (not on the critical path).
@@ -20781,10 +20964,13 @@
         delete window.__zentralNotesClaimWidget;
       });
 
-      const offTick = tick.on(() => {
+      const offTick = tick.on((event) => {
         if (disposed || !enabledNow()) return;
         if (storeReady && agendaEnabled()) agendaController.refreshClock?.();
-        if (remindersStarted) reminders.reschedule();
+        if (remindersStarted) {
+          if (event.reason === "wake" || event.clockChanged) reminders.wake();
+          else reminders.reschedule();
+        }
         for (const binding of bindings.values()) sheetOf(binding)?.refreshCalendar?.();
         floating?.sheet?.refreshCalendar?.();
       });

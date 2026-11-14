@@ -946,6 +946,15 @@
     "placeholder": "100"
   },
   {
+    "property": "zen.workspace.zentral.notes.missed_reminder_days",
+    "label": "Missed reminder digest look-back",
+    "type": "number",
+    "defaultValue": 7,
+    "min": 1,
+    "max": 31,
+    "unit": "days"
+  },
+  {
     "label": "Find in a note: how matches are shown",
     "type": "dropdown",
     "defaultValue": "selection",

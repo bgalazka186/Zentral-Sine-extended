@@ -94,6 +94,7 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   if (!definition?.init) throw new Error("Notes registration missing");
   const destroy = definition.init();
   return { ...dom, window: win, sidebar, operations, events, timers, values, files, observers, obs, emit, destroy,
+    advanceClock(ms) { clockOffset += Number(ms) || 0; },
     setPref, resetOperations() { operations.length = 0; },
     fireTimer(ms) {
       // This harness can fire the boot timer out of chronological order. The

@@ -1152,6 +1152,7 @@
       "label": "**Notes · Performance**",
       "size": "16px"
     },
+    "zen.workspace.zentral.notes.missed_reminder_days",
     "zen.workspace.zentral.notes.find_highlight",
     "zen.workspace.zentral.notes.trash_auto_empty_days",
     "zen.workspace.zentral.notes.spellcheck",
