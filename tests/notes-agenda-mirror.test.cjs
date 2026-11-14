@@ -167,6 +167,52 @@ const lineFor = (body, text) => body.split("\n").find((l) => l.includes(text)) |
     assert.equal(st.items.history.list({ itemId: "m1" }).map((r) => r.action).join(","), "reopened,done");
   });
 
+  await test("OW-01: deleting a mirrored reminder removes only its Agenda line and survives reload", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    st.items.upsert(mkItem({ id: "delete1", summary: "Reminder to delete", start: at(20, 9) }));
+    st.items.upsert(mkItem({ id: "keep1", summary: "Keep", start: at(20, 10) }));
+    const noteId = st.mirrorItemToAgendaNote("delete1"); st.mirrorItemToAgendaNote("keep1");
+    const item = st.items.list().find(x => x.summary === "Reminder to delete");
+    assert.equal(item.x.src, "list"); assert.ok(item.x.noteId); assert.equal(cal.isMirroredAgendaItem(item), true);
+    const deletion = cal.calendarItemMenuModel(item).find(x => x.id === "delete");
+    assert.equal(deletion.enabled, true); assert.match(deletion.label, /Delete reminder and its Agenda line/);
+    const before = st.get(noteId).body; assert.ok(before.includes("Reminder to delete"));
+    assert.equal(st.deleteCalendarItem(item.id), true);
+    assert.equal(st.items.get(item.id), null); assert.ok(!st.get(noteId).body.includes("Reminder to delete"));
+    assert.ok(st.get(noteId).body.includes("Keep")); assert.ok(st.get(noteId).body.includes("%%calendar%%"));
+    await st.flush(); const reopened = mk(io); await reopened.open();
+    assert.equal(reopened.items.list().some(x => x.summary === "Reminder to delete"), false);
+    assert.equal(reopened.items.list().filter(x => x.summary === "Keep").length, 1);
+  });
+
+  await test("OW-01: user-authored, ambiguous and protected data are never deleted", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const note = st.create("# 2026-11-20\n## Agenda\n%%calendar%%\n- [ ] 2026-11-20 09:00 Written by user\n");
+    const authored = st.items.list({ noteId: note.id })[0];
+    assert.equal(cal.isMirroredAgendaItem(authored), false); assert.equal(st.deleteCalendarItem(authored.id), false);
+    st.items.upsert(mkItem({ id: "blocked", summary: "Blocked", start: at(20, 10) }));
+    const noteId = st.mirrorItemToAgendaNote("blocked"), item = st.items.list().find(x => x.summary === "Blocked");
+    const line = lineFor(st.get(noteId).body, "Blocked");
+    st.update(noteId, st.get(noteId).body + line + "\n", "input");
+    const before = st.get(noteId).body;
+    assert.equal(st.deleteCalendarItem(item.id), false, "duplicate identity is not an authorization to delete either line");
+    assert.equal(st.get(noteId).body, before); assert.ok(st.items.get(item.id));
+    const movedAuthored = st.items.upsert({ ...st.items.get(authored.id), start: at(23, 9) });
+    assert.ok(st.syncItemScheduleToNote(movedAuthored));
+    const authoredAfterMove = st.items.list().find(x => x.summary === "Written by user");
+    assert.ok(authoredAfterMove.x.historyId, "moving a source line can also create a history identity");
+    assert.equal(cal.isMirroredAgendaItem(authoredAfterMove), false, "historyId alone never authorizes deleting an authored line");
+    assert.equal(st.deleteCalendarItem(authoredAfterMove.id), false);
+    const other = fakeIO(), protectedStore = mk(other); await protectedStore.open();
+    protectedStore.items.upsert(mkItem({ id: "protect1", summary: "Protected", start: at(20, 11) }));
+    const protectedNote = protectedStore.mirrorItemToAgendaNote("protect1"), protectedItem = protectedStore.items.list().find(x => x.summary === "Protected");
+    const protectedBody = protectedStore.get(protectedNote).body;
+    other.files.set("/n/calendar.json", { text: "{invalid", mtime: clock });
+    await protectedStore.items.open(); assert.equal(protectedStore.items.storageState().writeBlocked, true);
+    assert.equal(protectedStore.deleteCalendarItem(protectedItem.id), false);
+    assert.equal(protectedStore.get(protectedNote).body, protectedBody, "protected calendar storage prevents note deletion too");
+  });
+
   await test("store: items a list line cannot express stay linked-only; recurring and ordinary-note items are untouched", async () => {
     const io = fakeIO(), st = mk(io); await st.open();
     st.items.upsert(mkItem({ id: "e1", summary: "Trip", start: { date: "2026-11-20" }, end: { date: "2026-11-22" }, x: { kind: "event", src: "manual" } }));

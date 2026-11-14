@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.137
+// @version 3.3.138
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.137, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.138, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.137";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.138";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2150,6 +2150,7 @@ const __zentralEmbeddedLoader = (function () {
   // ---- Mirror a note-less item as an Agenda list line (B3.3.32-7) ----
   const AGENDA_HEAD_RE = /^(#{1,6})\s+agenda\s*#*\s*$/i;
   const LIST_LINE_RE = /^\s*(?:[-*+]|\d+[.)])\s/;
+  const agendaMirrorLineId = (id) => "zm" + hashText(String(id)).padStart(6, "0");
   const isRecurringItem = (item) => !!item?.x?.series || (Array.isArray(item?.recurrence) && item.recurrence.length > 0);
   // Pure: the `- [ ] YYYY-MM-DD [HH:MM[-HH:MM]] Summary %%zn-item-id:ID%%` line that represents `item`, or null when a
   // list line cannot say the same thing (recurring, all-day event, event of 24 h or more, seconds, text the line parser
@@ -2172,7 +2173,7 @@ const __zentralEmbeddedLoader = (function () {
       }
     }
     // Derived from the item id (not random): two windows mirroring the same item produce the same token.
-    const id = /^[a-z0-9_-]{4,60}$/i.test(String(lineId)) ? String(lineId) : "zm" + hashText(String(item.id)).padStart(6, "0");
+    const id = /^[a-z0-9_-]{4,60}$/i.test(String(lineId)) ? String(lineId) : agendaMirrorLineId(item.id);
     const line = "- [" + (done ? "x" : " ") + "] " + when + " " + summary + " %%zn-item-id:" + id + "%%";
     const back = extractNoteItems("## Agenda\n%%calendar%%\n" + line, "mirror", now)[0];
     if (!back || back.summary !== summary || isReminder(back) !== !event || isAllDay(back) !== allDay) return null;
@@ -2243,6 +2244,21 @@ const __zentralEmbeddedLoader = (function () {
   // alert overrides) stays; the original identity moves into x.historyId so history stays attached.
   function mirroredItem(item, noteId, lineId, heading = "Agenda") {
     return { ...item, id: noteLineItemId(noteId, lineId), x: { ...item.x, src: "list", noteId, heading, key: lineId, legacyKey: "", historyId: item.x?.historyId || item.id } };
+  }
+  // The original identity and deterministic generated token together distinguish
+  // a mirrored manual item from a user-authored line that later moved dates.
+  function isMirroredAgendaItem(item) {
+    const x = item?.x || {}, id = String(x.historyId || ""), key = String(x.key || "");
+    return x.src === "list" && !!id && !!x.noteId && key === agendaMirrorLineId(id) && item.id === noteLineItemId(x.noteId, key);
+  }
+  function removeMirroredAgendaLine(body, item) {
+    const text = String(body || "");
+    if (!isMirroredAgendaItem(item)) return { body: text, changed: false };
+    const ids = text.split("\n").flatMap(itemIdTokens).filter(id => id === item.x.key);
+    if (ids.length !== 1) return { body: text, changed: false };
+    const hit = findAgendaLine(text, item.x.key);
+    if (!hit || itemIdTokens(hit.line).length !== 1) return { body: text, changed: false };
+    return removeAgendaLine(text, item.x.key);
   }
   // ---- Agenda checkbox <-> reminder lifecycle (owner-approved 2026-11-12) ----
   // The stored item id of a line that carries a hidden `%%zn-item-id:...%%` token (same formula as extractNoteItems).
@@ -4029,7 +4045,7 @@ const __zentralEmbeddedLoader = (function () {
     if (!item || typeof item !== "object" || !String(item.id || "")) return [];
     const reminder = isReminder(item);
     const source = ["list", "note", "manual"].includes(item.x?.src) ? item.x.src : "manual";
-    const manual = source === "manual";
+    const manual = source === "manual", mirrored = isMirroredAgendaItem(item);
     const recurring = !!item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length > 0);
     const lifecycle = ["pending", "done", "dismissed"].includes(state) ? state : "pending";
     const action = (id, label, enabled = true, reason = "") => ({ id, command: id, label, enabled: !!enabled, reason: enabled ? "" : String(reason || "Unavailable in the current state") });
@@ -4040,7 +4056,7 @@ const __zentralEmbeddedLoader = (function () {
       action("convert", reminder ? "Convert to event" : "Convert to reminder", manual, "Items parsed from a note keep the type defined by their source text"),
       { sep: true },
       action("duplicate", "Duplicate as independent item"),
-      action("delete", "Delete item…", manual, "Remove this item from its source note instead of deleting only its calendar copy"),
+      action("delete", "Delete " + (reminder ? "reminder" : "event") + (mirrored ? " and its Agenda line…" : "…"), manual || mirrored, "Remove this item from its source note instead of deleting only its calendar copy"),
     ];
     if (typeof agendaVisible === "boolean") rows.splice(4, 0,
       action("agenda-visibility", agendaWritable ? (agendaVisible ? "Hide in Zen Agenda" : "Show in Zen Agenda") + (recurring ? " (series)" : "") : "Zen Agenda visibility unavailable", agendaWritable, "This legacy note reminder is not stored as an Agenda item"));
@@ -4225,7 +4241,7 @@ const __zentralEmbeddedLoader = (function () {
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -11289,6 +11305,20 @@ __zentralShim.register = function (def) {
           const saved = items.upsert({ ...item, x: { ...item.x, noteId: note.id, heading: ensured.heading } });
           return saved ? note.id : "";
         },
+        // Only an owned deterministic mirror may remove text. Note update also
+        // reconciles the item store, so a later note refresh cannot resurrect it.
+        deleteCalendarItem(id) {
+          const item = items?.get?.(id);
+          if (!item || items.storageState?.().writeBlocked) return false;
+          if (item.x?.src === "manual") return items.remove(item.id);
+          if (!CALENDAR_PART.isMirroredAgendaItem(item)) return false;
+          const note = notes.get(item.x.noteId);
+          if (!note || note.trashed) return false;
+          const result = CALENDAR_PART.removeMirroredAgendaLine(note.body, item);
+          if (!result.changed) return false;
+          api.update(note.id, result.body, "agenda-delete");
+          return !items.get(item.id);
+        },
         // After a reschedule of a note-derived item, rewrite ITS line's date/time so the text and the calendar agree
         // (otherwise a later note edit would silently pull the old time back). Only the leading date/time of the one
         // line changes; a line whose date comes from a heading is left alone. Idempotent. Returns true when text changed.
@@ -16237,13 +16267,19 @@ __zentralShim.register = function (def) {
       function askDeleteCalendarItem(item) {
         const current = currentCalendarItem(item);
         if (!current) return flash("That calendar item is no longer available");
-        if (current.x?.src !== "manual") return flash("Remove this item from its source note instead");
-        const cancel = chip("Cancel"), remove = chip("Delete item", true);
-        openCalendarCard("Delete calendar item?", h("p", { class: "zn-empty" }, `Delete “${current.summary || "Untitled item"}”? This removes the independent calendar item and cannot be undone.`), h("div", { class: "zn-dialog-actions" }, cancel, remove));
+        const mirrored = CALENDAR_PART.isMirroredAgendaItem(current);
+        if (current.x?.src !== "manual" && !mirrored) return flash("Remove this item from its source note instead");
+        const kind = CALENDAR_PART.isReminder(current) ? "reminder" : "event";
+        const cancel = chip("Cancel"), remove = chip("Delete " + kind, true);
+        const detail = mirrored ? "This removes the calendar " + kind + " and its Agenda line from the Daily Note." : "This removes the independent calendar " + kind + ".";
+        openCalendarCard("Delete calendar item?", h("p", { class: "zn-empty" }, `Delete “${current.summary || "Untitled item"}”? ${detail} This cannot be undone.`), h("div", { class: "zn-dialog-actions" }, cancel, remove));
         remove.addEventListener("click", () => {
           const latest = currentCalendarItem(current);
-          if (!latest || latest.x?.src !== "manual") { closeDialog(); return flash("That calendar item is no longer available"); }
-          if (!store.items.remove(latest.id)) return flash("Could not delete the calendar item");
+          // A changed ownership identity while the confirmation was open is not
+          // consent to remove a different kind of source content.
+          if (!latest || CALENDAR_PART.isMirroredAgendaItem(latest) !== mirrored || (!mirrored && latest.x?.src !== "manual")) { closeDialog(); return flash("That calendar item is no longer available"); }
+          if (latest.rev !== current.rev || latest.updated !== current.updated) return flash("The item changed; cancel and review it before deleting");
+          if (!store.deleteCalendarItem(latest.id)) return flash("Could not safely delete the calendar item or its Agenda line");
           closeDialog();
           renderCalendar();
           flash("Calendar item deleted");

@@ -6507,6 +6507,20 @@
           const saved = items.upsert({ ...item, x: { ...item.x, noteId: note.id, heading: ensured.heading } });
           return saved ? note.id : "";
         },
+        // Only an owned deterministic mirror may remove text. Note update also
+        // reconciles the item store, so a later note refresh cannot resurrect it.
+        deleteCalendarItem(id) {
+          const item = items?.get?.(id);
+          if (!item || items.storageState?.().writeBlocked) return false;
+          if (item.x?.src === "manual") return items.remove(item.id);
+          if (!CALENDAR_PART.isMirroredAgendaItem(item)) return false;
+          const note = notes.get(item.x.noteId);
+          if (!note || note.trashed) return false;
+          const result = CALENDAR_PART.removeMirroredAgendaLine(note.body, item);
+          if (!result.changed) return false;
+          api.update(note.id, result.body, "agenda-delete");
+          return !items.get(item.id);
+        },
         // After a reschedule of a note-derived item, rewrite ITS line's date/time so the text and the calendar agree
         // (otherwise a later note edit would silently pull the old time back). Only the leading date/time of the one
         // line changes; a line whose date comes from a heading is left alone. Idempotent. Returns true when text changed.
@@ -11455,13 +11469,19 @@
       function askDeleteCalendarItem(item) {
         const current = currentCalendarItem(item);
         if (!current) return flash("That calendar item is no longer available");
-        if (current.x?.src !== "manual") return flash("Remove this item from its source note instead");
-        const cancel = chip("Cancel"), remove = chip("Delete item", true);
-        openCalendarCard("Delete calendar item?", h("p", { class: "zn-empty" }, `Delete “${current.summary || "Untitled item"}”? This removes the independent calendar item and cannot be undone.`), h("div", { class: "zn-dialog-actions" }, cancel, remove));
+        const mirrored = CALENDAR_PART.isMirroredAgendaItem(current);
+        if (current.x?.src !== "manual" && !mirrored) return flash("Remove this item from its source note instead");
+        const kind = CALENDAR_PART.isReminder(current) ? "reminder" : "event";
+        const cancel = chip("Cancel"), remove = chip("Delete " + kind, true);
+        const detail = mirrored ? "This removes the calendar " + kind + " and its Agenda line from the Daily Note." : "This removes the independent calendar " + kind + ".";
+        openCalendarCard("Delete calendar item?", h("p", { class: "zn-empty" }, `Delete “${current.summary || "Untitled item"}”? ${detail} This cannot be undone.`), h("div", { class: "zn-dialog-actions" }, cancel, remove));
         remove.addEventListener("click", () => {
           const latest = currentCalendarItem(current);
-          if (!latest || latest.x?.src !== "manual") { closeDialog(); return flash("That calendar item is no longer available"); }
-          if (!store.items.remove(latest.id)) return flash("Could not delete the calendar item");
+          // A changed ownership identity while the confirmation was open is not
+          // consent to remove a different kind of source content.
+          if (!latest || CALENDAR_PART.isMirroredAgendaItem(latest) !== mirrored || (!mirrored && latest.x?.src !== "manual")) { closeDialog(); return flash("That calendar item is no longer available"); }
+          if (latest.rev !== current.rev || latest.updated !== current.updated) return flash("The item changed; cancel and review it before deleting");
+          if (!store.deleteCalendarItem(latest.id)) return flash("Could not safely delete the calendar item or its Agenda line");
           closeDialog();
           renderCalendar();
           flash("Calendar item deleted");

@@ -10,7 +10,7 @@ const find = (rows, id) => rows.flatMap((row) => row.group ? [row, ...row.group]
   const manualEvent = cal.makeItem({ id: "manual-event", summary: "Manual event", start: { dateTime: "2026-11-12T10:00:00Z" }, end: { dateTime: "2026-11-12T11:00:00Z" }, x: { kind: "event", src: "manual" } }, 0);
   const before = JSON.stringify(manualEvent);
   const eventMenu = cal.calendarItemMenuModel(manualEvent);
-  assert.deepEqual(menuLabels(eventMenu), ["Show details", "Edit details…", "Change time…", "Convert to reminder", "Duplicate as independent item", "Delete item…"]);
+  assert.deepEqual(menuLabels(eventMenu), ["Show details", "Edit details…", "Change time…", "Convert to reminder", "Duplicate as independent item", "Delete event…"]);
   for (const id of ["edit", "change-time", "convert", "duplicate", "delete"]) assert.equal(find(eventMenu, id).enabled, true, id + " is available for a manual event");
   assert.equal(JSON.stringify(manualEvent), before, "building a menu never mutates the stored item");
 
@@ -197,7 +197,7 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   menuItem(root, "Show in Zen Agenda").click(); await flush();
   assert.equal(store.items.get("menu-manual-event").x.agendaWindow.enabled, true);
   openRowMenu(root, "menu-manual-event");
-  for (const label of ["Show details", "Edit details…", "Change time…", "Convert to reminder", "Duplicate as independent item", "Delete item…"]) assert.ok(menuItem(root, label), `manual event menu includes ${label}`);
+  for (const label of ["Show details", "Edit details…", "Change time…", "Convert to reminder", "Duplicate as independent item", "Delete event…"]) assert.ok(menuItem(root, label), `manual event menu includes ${label}`);
   menuItem(root, "Change time…").click(); await flush();
   const dateInput = q(root, '[aria-label="New date (YYYY-MM-DD)"]');
   assert.ok(dateInput, "change-time dialog exposes a validated date field");
@@ -221,19 +221,19 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   assert.notEqual(copy.id, "menu-manual-event");
 
   openRowMenu(root, copy.id);
-  menuItem(root, "Delete item…").click(); await flush();
+  menuItem(root, "Delete reminder…").click(); await flush();
   assert.ok(q(root, '.zn-dialog-card[aria-label="Delete calendar item?"]'), "delete is confirmed rather than immediate");
   root.querySelectorAll(".zn-dialog-card button").find((node) => node.textContent.trim() === "Cancel").click(); await flush();
   assert.ok(store.items.get(copy.id), "cancel leaves the item intact");
   const staleCopyButton = openRowMenu(root, copy.id);
-  menuItem(root, "Delete item…").click(); await flush();
-  root.querySelectorAll(".zn-dialog-card button").find((node) => node.textContent.trim() === "Delete item").click(); await flush();
+  menuItem(root, "Delete reminder…").click(); await flush();
+  root.querySelectorAll(".zn-dialog-card button").find((node) => node.textContent.trim() === "Delete reminder").click(); await flush();
   assert.equal(store.items.get(copy.id), null, "confirmed delete removes only the independent calendar item");
   staleCopyButton.dispatchEvent(new Ev("contextmenu", { bubbles: true, clientX: 90, clientY: 90 }));
   assert.equal(q(root, ".zn-menu"), null, "a detached row cannot open a stale menu after its item is removed");
 
   openRowMenu(root, "menu-listed-event");
-  const convert = menuItem(root, "Convert to reminder"), remove = menuItem(root, "Delete item…");
+  const convert = menuItem(root, "Convert to reminder"), remove = menuItem(root, "Delete event…");
   assert.ok(convert && convert.disabled, "source-defined type conversion is visible but disabled");
   assert.ok(remove && remove.disabled, "source-derived deletion is visible but disabled");
   assert.match(convert.textContent, /source text/);
@@ -391,6 +391,29 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   assert.equal(store.items.get(timedEvent.id).x.category, "Work", "independent items also save category edits");
   assert.equal(store.items.get(timedEvent.id).summary, "Edited timed event", "category synchronization must not undo another edited field");
   assert.match(store.get(timedEvent.x.noteId).body, /Edited timed event.*%%zn-item-category: Work%%/);
+
+  // OW-01: a note-less composer reminder has been mirrored into its Daily Note.
+  // Its deletion is enabled, names both removals, and cancel leaves both intact.
+  const mirroredReminder = fullDayReminder, mirroredNote = store.get(mirroredReminder.x.noteId);
+  assert.equal(mirroredReminder.x.src, "list"); assert.ok(cal.isMirroredAgendaItem(mirroredReminder));
+  openRowMenu(root, mirroredReminder.id);
+  const deleteMirror = menuItem(root, "Delete reminder and its Agenda line…"); assert.ok(deleteMirror && !deleteMirror.disabled);
+  deleteMirror.click(); await flush();
+  let deleteCard = q(root, '[aria-label="Delete calendar item?"]');
+  assert.match(deleteCard.textContent, /removes the calendar reminder and its Agenda line/);
+  deleteCard.querySelectorAll("button").find(button => button.textContent.trim() === "Cancel").click(); await flush();
+  assert.ok(store.items.get(mirroredReminder.id)); assert.match(mirroredNote.body, /Full-day reminder/);
+  openRowMenu(root, mirroredReminder.id); menuItem(root, "Delete reminder and its Agenda line…").click(); await flush();
+  deleteCard = q(root, '[aria-label="Delete calendar item?"]');
+  store.update(mirroredNote.id, store.get(mirroredNote.id).body + "\nChanged while confirming\n", "input"); await flush();
+  deleteCard.querySelectorAll("button").find(button => button.textContent.trim() === "Delete reminder").click(); await flush();
+  assert.ok(store.items.get(mirroredReminder.id), "an item changed while confirmation was open is not silently deleted");
+  deleteCard.querySelectorAll("button").find(button => button.textContent.trim() === "Cancel").click(); await flush();
+  openRowMenu(root, mirroredReminder.id); menuItem(root, "Delete reminder and its Agenda line…").click(); await flush();
+  deleteCard = q(root, '[aria-label="Delete calendar item?"]');
+  deleteCard.querySelectorAll("button").find(button => button.textContent.trim() === "Delete reminder").click(); await flush();
+  assert.equal(store.items.get(mirroredReminder.id), null); assert.doesNotMatch(store.get(mirroredNote.id).body, /Full-day reminder/);
+  assert.ok(store.get(mirroredNote.id).body.includes("Edited timed event"), "other Agenda lines survive");
 
   // OW-16: a real composer-created event is mirrored into its date note. Edit,
   // visit the note, return to Calendar and reload without losing its category.

@@ -1,6 +1,6 @@
 # tools
 
-Owner and local file guide for Extended 3.3.137. Original Zentral reference: 1.1.0.
+Owner and local file guide for Extended 3.3.138. Original Zentral reference: 1.1.0.
 
 | File                    | Responsibility                        |
 | ----------------------- | ------------------------------------- |

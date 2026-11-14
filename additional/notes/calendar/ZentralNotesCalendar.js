@@ -939,6 +939,7 @@
   // ---- Mirror a note-less item as an Agenda list line (B3.3.32-7) ----
   const AGENDA_HEAD_RE = /^(#{1,6})\s+agenda\s*#*\s*$/i;
   const LIST_LINE_RE = /^\s*(?:[-*+]|\d+[.)])\s/;
+  const agendaMirrorLineId = (id) => "zm" + hashText(String(id)).padStart(6, "0");
   const isRecurringItem = (item) => !!item?.x?.series || (Array.isArray(item?.recurrence) && item.recurrence.length > 0);
   // Pure: the `- [ ] YYYY-MM-DD [HH:MM[-HH:MM]] Summary %%zn-item-id:ID%%` line that represents `item`, or null when a
   // list line cannot say the same thing (recurring, all-day event, event of 24 h or more, seconds, text the line parser
@@ -961,7 +962,7 @@
       }
     }
     // Derived from the item id (not random): two windows mirroring the same item produce the same token.
-    const id = /^[a-z0-9_-]{4,60}$/i.test(String(lineId)) ? String(lineId) : "zm" + hashText(String(item.id)).padStart(6, "0");
+    const id = /^[a-z0-9_-]{4,60}$/i.test(String(lineId)) ? String(lineId) : agendaMirrorLineId(item.id);
     const line = "- [" + (done ? "x" : " ") + "] " + when + " " + summary + " %%zn-item-id:" + id + "%%";
     const back = extractNoteItems("## Agenda\n%%calendar%%\n" + line, "mirror", now)[0];
     if (!back || back.summary !== summary || isReminder(back) !== !event || isAllDay(back) !== allDay) return null;
@@ -1032,6 +1033,21 @@
   // alert overrides) stays; the original identity moves into x.historyId so history stays attached.
   function mirroredItem(item, noteId, lineId, heading = "Agenda") {
     return { ...item, id: noteLineItemId(noteId, lineId), x: { ...item.x, src: "list", noteId, heading, key: lineId, legacyKey: "", historyId: item.x?.historyId || item.id } };
+  }
+  // The original identity and deterministic generated token together distinguish
+  // a mirrored manual item from a user-authored line that later moved dates.
+  function isMirroredAgendaItem(item) {
+    const x = item?.x || {}, id = String(x.historyId || ""), key = String(x.key || "");
+    return x.src === "list" && !!id && !!x.noteId && key === agendaMirrorLineId(id) && item.id === noteLineItemId(x.noteId, key);
+  }
+  function removeMirroredAgendaLine(body, item) {
+    const text = String(body || "");
+    if (!isMirroredAgendaItem(item)) return { body: text, changed: false };
+    const ids = text.split("\n").flatMap(itemIdTokens).filter(id => id === item.x.key);
+    if (ids.length !== 1) return { body: text, changed: false };
+    const hit = findAgendaLine(text, item.x.key);
+    if (!hit || itemIdTokens(hit.line).length !== 1) return { body: text, changed: false };
+    return removeAgendaLine(text, item.x.key);
   }
   // ---- Agenda checkbox <-> reminder lifecycle (owner-approved 2026-11-12) ----
   // The stored item id of a line that carries a hidden `%%zn-item-id:...%%` token (same formula as extractNoteItems).
@@ -2818,7 +2834,7 @@
     if (!item || typeof item !== "object" || !String(item.id || "")) return [];
     const reminder = isReminder(item);
     const source = ["list", "note", "manual"].includes(item.x?.src) ? item.x.src : "manual";
-    const manual = source === "manual";
+    const manual = source === "manual", mirrored = isMirroredAgendaItem(item);
     const recurring = !!item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length > 0);
     const lifecycle = ["pending", "done", "dismissed"].includes(state) ? state : "pending";
     const action = (id, label, enabled = true, reason = "") => ({ id, command: id, label, enabled: !!enabled, reason: enabled ? "" : String(reason || "Unavailable in the current state") });
@@ -2829,7 +2845,7 @@
       action("convert", reminder ? "Convert to event" : "Convert to reminder", manual, "Items parsed from a note keep the type defined by their source text"),
       { sep: true },
       action("duplicate", "Duplicate as independent item"),
-      action("delete", "Delete item…", manual, "Remove this item from its source note instead of deleting only its calendar copy"),
+      action("delete", "Delete " + (reminder ? "reminder" : "event") + (mirrored ? " and its Agenda line…" : "…"), manual || mirrored, "Remove this item from its source note instead of deleting only its calendar copy"),
     ];
     if (typeof agendaVisible === "boolean") rows.splice(4, 0,
       action("agenda-visibility", agendaWritable ? (agendaVisible ? "Hide in Zen Agenda" : "Show in Zen Agenda") + (recurring ? " (series)" : "") : "Zen Agenda visibility unavailable", agendaWritable, "This legacy note reminder is not stored as an Agenda item"));
@@ -3014,7 +3030,7 @@
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

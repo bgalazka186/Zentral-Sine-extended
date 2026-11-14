@@ -548,3 +548,20 @@ Month cell click, Enter and Space select and persist the local day and update th
 **Tests / done when:** Real sheet/store flows for mirrored and user-authored Daily Note events, none → category → another → none, navigation in both directions, note edits and reload; matching Calendar and note representation remain consistent, other items and markers survive, and existing OW-12 tests still pass.
 
 Daily Note list items now persist per-item category overrides in a dedicated hidden `%%zn-item-category: …%%` comment; an empty value means no category and deleting the comment restores section inheritance. Source edits synchronize back into Calendar; composer saves update the line, without changing sibling sections or identity markers. Ambiguous duplicate markers and unsafe title rewrites are refused. Mirrored and authored event flows, navigation, category edits, inherited values, marker removal, relocation, Google shape and reload have regression coverage. Existing non-Daily Note override behavior remains unchanged. Hot-path 500/2000 note-sync baseline 33.5/106.8 ms, after 33.8/103.5 ms; timings vary. Note and calendar writes are not a cross-file transaction; live Zen is unverified.
+
+## OW-01 — Completed mirrored reminder deletion (3.3.138)
+
+#### `OW-01` — [issue] Deleting a note-less reminder asks to 'remove this item from its source note'
+**Status:** `DONE` · **Impact:** High · **Effort:** S · **Depends on:** none · **Source:** Owner 2026-11-14
+
+**Problem:** Owner has a reminder created without a note, yet Delete is disabled/rephrased with the reason 'Remove this item from its source note instead of deleting only its calendar copy'. `calendarItemMenuModel` (`ZentralNotesCalendar.js`) enables `delete` only when `x.src` is `manual`. Likely cause (to verify): `store.mirrorItemToAgendaNote` / `backfillAgendaLinks` (B3.3.32-7) mirror note-less items into a `## Agenda` `%%calendar%%` line of the date note and may change `x.src`/`x.noteId`, so the item stops counting as manual although the user never wrote a note.
+
+**Plan (do in this order):**
+1. Reproduce: create a note-less reminder, wait for the mirror, open its menu; log `x.src`, `x.noteId`, `mirroredItem(item)`.
+2. Treat mirrored items as manual for deletion: delete removes the calendar item AND its mirrored line (marker-preserving, rule 3a), with one confirmation naming both.
+3. Keep the 'remove from source note' rule only for items that really come from user-written note text.
+4. Label the action by what it does ('Delete reminder' vs 'Delete reminder and its Agenda line').
+
+**Tests / done when:** Calendar-menu tests for manual, mirrored and note-sourced items; delete leaves no orphan `%%calendar%%` line.
+
+Mirroring changes `src` to list and records the original ID; a deterministic line-token plus original identity distinguishes a real mirror from an authored line moved to another date. The menu and confirmation name the reminder/event and its Agenda line. Confirmed deletion removes the owned line and store item, preserving neighbors and calendar markers; ambiguous duplicate identities, protected storage, changed confirmations and user-authored items are refused. Store and real-sheet tests cover cancel, deletion, reload, moved user text and failures. Note/calendar disk writes remain separate rather than transactional; real Zen remains unverified.
