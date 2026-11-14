@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.121
+// @version 3.3.122
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.121, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.122, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.121";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.122";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -9616,17 +9616,54 @@ __zentralShim.register = function (def) {
     // One timer, armed for the next future reminder. `onDue(notes)` receives every overdue, unannounced
     // reminder as one batch AFTER the store has recorded them as announced (claim), so nothing repeats.
     function createReminderScheduler({ store, now = () => Date.now(), setTimer, clearTimer, onDue }) {
-      let timer = null, destroyed = false, busy = false, again = false;
+      let timer = null, debounceTimer = null, destroyed = false, busy = false, again = false;
       const stop = () => { if (timer !== null) { clearTimer(timer); timer = null; } };
+      const stopDebounce = () => { if (debounceTimer !== null) { clearTimer(debounceTimer); debounceTimer = null; } };
+      let windowKey = "", occurrenceCache = new Map(), dirtySeries = new Set(), notesDirty = true, pendingNotes = [];
+      function noteCandidates() {
+        if (notesDirty) {
+          pendingNotes = (store.list({ trashed: false }) || []).filter(reminderPending).sort((a, b) => a.remind - b.remind || (a.id < b.id ? -1 : 1));
+          notesDirty = false;
+        }
+        return pendingNotes;
+      }
+      function cachedOccurrences(masters, at) {
+        const base = CALENDAR_PART.dayStart(at), date = new Date(at);
+        let zone = ""; try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (_) {}
+        const key = CALENDAR_PART.localDateKey(base) + "|" + date.getTimezoneOffset() + "|" + zone;
+        if (windowKey !== key) { occurrenceCache.clear(); dirtySeries.clear(); windowKey = key; }
+        // Padding covers the rolling 92-day instant window throughout a local
+        // day, including DST changes; filter back to exact bounds below.
+        const cacheFrom = CALENDAR_PART.addDays(base, -3), cacheTo = CALENDAR_PART.addDays(base, 92);
+        const from = at - 2 * 86400000, until = at + 90 * 86400000, seen = new Set(), all = [];
+        for (const master of masters) {
+          const id = master?.id;
+          if (!id || seen.has(id)) return CALENDAR_PART.expandRange(masters, from, until);
+          seen.add(id);
+          const signature = String(master.rev || 0) + "|" + String(master.etag || "") + "|" + String(master.updated || "");
+          let cached = occurrenceCache.get(id);
+          if (!cached || cached.master !== master || cached.signature !== signature || dirtySeries.has(id)) {
+            cached = { master, signature, values: CALENDAR_PART.expandRange([master], cacheFrom, cacheTo) };
+            occurrenceCache.set(id, cached);
+          }
+          for (const item of cached.values) {
+            const [start, end] = CALENDAR_PART.itemRange(item);
+            if (CALENDAR_PART.isReminder(item) ? start >= from && start < until : start < until && end > from) all.push(item);
+          }
+        }
+        for (const id of occurrenceCache.keys()) if (!seen.has(id)) occurrenceCache.delete(id);
+        dirtySeries.clear();
+        all.sort((a, b) => CALENDAR_PART.itemRange(a)[0] - CALENDAR_PART.itemRange(b)[0] || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+        return all;
+      }
       const calendarCandidates = PERF.wrap("reminders.calendarCandidates", (at) => {
         const itemStore = store.items;
         if (!CALENDAR_PART || !itemStore?.list) return { due: [], next: 0, hasRecurring: false };
         const masters = itemStore.list();
-        if (!masters.length) return { due: [], next: 0, hasRecurring: false };
+        if (!masters.length) { occurrenceCache.clear(); dirtySeries.clear(); return { due: [], next: 0, hasRecurring: false }; }
         // Keep expansion bounded. Recurring series are refreshed at least twice a day, so long-lived
         // rules never require an unbounded scan and newly-created exceptions are seen promptly.
-        const from = at - 2 * 86400000, until = at + 90 * 86400000;
-        const expanded = CALENDAR_PART.expandRange(masters, from, until);
+        const expanded = cachedOccurrences(masters, at);
         const history = itemStore.history;
         const due = [];
         let next = 0;
@@ -9681,11 +9718,12 @@ __zentralShim.register = function (def) {
             again = false;
             stop();
             const nowAt = now();
-            const notes = store.list({ trashed: false });
+            const notes = noteCandidates();
             const fired = [];
             for (const n of dueReminders(notes, nowAt)) {
               if (destroyed) return;
               if (await store.claimReminder(n.id)) fired.push(n);
+              notesDirty = true;
             }
             const calendar = calendarCandidates(nowAt);
             for (const item of calendar.due) {
@@ -9703,24 +9741,33 @@ __zentralShim.register = function (def) {
             }
             if (destroyed) return;
             if (fired.length) { try { onDue(fired.map((n) => n.__calendarReminder ? n : (store.get(n.id) || n))); } catch (_) {} }
-            const nextNote = nextReminderAt(store.list({ trashed: false }), now());
+            const nextNote = nextReminderAt(noteCandidates(), now());
             const next = calendar.next && nextNote ? Math.min(calendar.next, nextNote) : calendar.next || nextNote;
             if (next && !destroyed) timer = setTimer(() => { timer = null; run(); }, reminderDelay(next, now()));
           } while (again && !destroyed);
         } finally { busy = false; }
       }
       pass = PERF.wrapAsync("reminders.pass", pass);
-      const run = () => pass().catch(() => {});
+      const run = () => { stopDebounce(); return pass().catch(() => {}); };
       const off = store.on((ev) => {
         if (destroyed) return;
-        if (ev.type === "reset" || ev.type === "remove" || (ev.type === "change" && (ev.reminder || ev.meta || ev.remote || ev.created))) run();
+        if (ev.type === "reset" || ev.type === "remove" || (ev.type === "change" && (ev.reminder || ev.meta || ev.remote || ev.created))) { notesDirty = true; run(); }
       });
-      const offItems = store.items?.on?.(() => { if (!destroyed) run(); }) || (() => {});
+      const offItems = store.items?.on?.((event, itemId) => {
+        if (destroyed) return;
+        const kind = typeof event === "string" ? event : event?.type || event?.kind;
+        const id = itemId || event?.id;
+        if (!["change", "remove", "reset", "recovery", "category"].includes(kind)) return;
+        if (["reset", "recovery", "category"].includes(kind) || !id) { occurrenceCache.clear(); dirtySeries.clear(); }
+        else dirtySeries.add(id);
+        stopDebounce();
+        debounceTimer = setTimer(() => { debounceTimer = null; run(); }, 300);
+      }) || (() => {});
       return {
         start: run,
         reschedule: run,
-        pending: () => timer !== null,
-        destroy() { if (destroyed) return; destroyed = true; stop(); off(); offItems(); },
+        pending: () => timer !== null || debounceTimer !== null,
+        destroy() { if (destroyed) return; destroyed = true; stop(); stopDebounce(); occurrenceCache.clear(); pendingNotes = []; off(); offItems(); },
       };
     }
 

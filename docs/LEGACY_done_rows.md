@@ -288,3 +288,20 @@ The history store tracks unsaved local record objects independently of remote me
 **Tests / done when:** Same behaviour tests as before plus the F0.2 budget for 20000 records.
 
 Indexes are updated on append, merge, open and salvage, preserving copy/filter/sort and legacy/skipped-stage semantics. 20k-record/45k identity lookups improved from 7552 ms to 155 ms; 500/2000 scheduler baseline improved from 2366/10579 ms to 1029/4097 ms. Corresponding CI ceilings were tightened; true concurrent cross-window writes remain unlocked.
+
+## PF2.2 — Completed scheduler caching and debounce (3.3.122)
+
+#### `PF2.2` — Reminder scheduler: cache the 92-day expansion, debounce, react only to relevant changes
+**Status:** `DONE` · **Impact:** High · **Effort:** M · **Depends on:** PF2.1, F0.3 · **Source:** Audit R2 P1
+
+**Problem:** `pass()` runs on EVERY `store.items.on` event (no filtering) and on note reminder changes; each run re-expands all items over -2/+90 days (about 0.6 s for 500 daily reminders), scans notes for `nextReminderAt`, and awaits `claimAlert` (which re-reads the history file). Editing, dragging or snoozing any item therefore redoes the whole job.
+
+**Plan (do in this order):**
+1. Cache the expansion keyed by (items version, category version, window start day); invalidate on item/category change or local-day rollover.
+2. Debounce `run()` triggered by item events (about 300 ms, trailing), keep immediate runs for the alert timer.
+3. Only re-run for event kinds that can change due times (`change`, `remove`, `reset`, `recovery`, `category`) and only for the affected series when the event carries an id.
+4. Compute `nextReminderAt` incrementally or cache per note revision.
+
+**Tests / done when:** Budget test: one pass on 2000 recurring items under the CI budget; event storm test (50 edits in 1 s) triggers at most 2 passes.
+
+Occurrence expansions are cached by local day/timezone and master identity/revision; only edited series re-expand, categories/reset invalidate the window, and exact rolling bounds are retained over DST. Item events trail-debounce 300 ms; alert timers remain immediate. Pending note reminders are cached until relevant note changes or claims. 50-edit storm and DST-boundary tests pass. Baseline 500/2000 first pass 969/4774 ms versus cached pass 454/2089 ms; initial 2000 cost was 4097 ms before caching, so a first-pass improvement is not claimed. CI budgets include cached passes.

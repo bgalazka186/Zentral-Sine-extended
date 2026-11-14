@@ -7,7 +7,7 @@ const { createFakeZen } = require("./helpers/fake-zen-browser.cjs");
 const BUDGET_MS = Object.freeze({
   projection4_500: 600, projection31_500: 2500, projection4_2000: 1200, projection31_2000: 9000,
   expand31_500: 1600, expand90_500: 5000, expand31_2000: 7000, expand90_2000: 18000,
-  scheduler500: 6500, scheduler2000: 25000, history45000: 500,
+  scheduler500: 6500, scheduler2000: 25000, schedulerCached500: 4000, schedulerCached2000: 15000, history45000: 500,
 });
 const now = Date.parse("2026-11-13T12:00:00Z"), start = C.addDays(C.dayStart(now), 1) + 12 * 3600000;
 const measure = (name, fn) => {
@@ -46,6 +46,8 @@ const makeItems = (n) => Array.from({ length: n }, (_, i) => C.makeItem({
     const scheduler = schedulerFactory({ store: fakeStore, now: () => now, setTimer: () => 1, clearTimer() {}, onDue(list) { fired += list.length; } });
     measure(`scheduler${n}`, () => scheduler.start()); assert.ok(scheduler.pending());
     assert.ok(historyCalls > n * 80, `production scheduler must inspect the 90-day occurrence window: ${historyCalls}`);
+    measure(`schedulerCached${n}`, () => scheduler.reschedule());
+    assert.ok(historyCalls > n * 160, "cached pass still checks every occurrence's current history");
     assert.equal(fired, 0); scheduler.destroy();
   }
   await host.destroy();
