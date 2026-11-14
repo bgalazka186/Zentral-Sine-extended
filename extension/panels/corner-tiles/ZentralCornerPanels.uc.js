@@ -645,8 +645,26 @@
       return true;
     }
 
+    function isNotesAgendaPseudoTab(tab) {
+      if (!tab) return false;
+      if (tab.hasAttribute?.("bgalazka-notes-item") || tab.hasAttribute?.("bgalazka-notes-agenda-item")) return true;
+      let url = "";
+      try { url = tab._zentralNotesUrl || tab.linkedBrowser?.currentURI?.spec || ""; } catch (_) {}
+      if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(url)) return true;
+      try {
+        if ((!url || url === "about:blank") && essentialSessionStore()?.getTabState) {
+          const state = JSON.parse(essentialSessionStore().getTabState(tab) || "{}");
+          const entry = state.entries?.[Math.max(0, (state.index || 1) - 1)];
+          if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(entry?.url || "")) return true;
+        }
+      } catch (_) {}
+      return false;
+    }
+
     function getEssentialSource(tab) {
       // Inspect restored history instead of touching a sleeping native browser.
+      // Notes and Agenda tabs are model pointers, never launchable web pages.
+      if (isNotesAgendaPseudoTab(tab)) return null;
       if (!tab.linkedPanel || tab.hasAttribute("pending") || tab.hasAttribute("discarded") ||
           (tab.hasAttribute("zen-dormant") && tab.getAttribute("zen-dormant") !== "false")) return null;
       const url = tab.linkedBrowser?.currentURI?.spec;
@@ -656,6 +674,7 @@
     }
 
     function getRestoredEssentialSource(tab) {
+      if (isNotesAgendaPseudoTab(tab)) return null;
       const live = getEssentialSource(tab);
       if (live) return live;
       try {
@@ -672,6 +691,7 @@
       }
     }
     function openEssentialPanel(record) {
+      if (isNotesAgendaPseudoTab(record?.tab)) { releaseTabPanelLauncher(record); return; }
       const apps = window.Zentral?.Apps;
       if (!apps?.openPanel || !record.tab.isConnected) return;
       const root = document.getElementById("zen-app-panel-root");
@@ -733,6 +753,7 @@
                   !tab.closing &&
                   !tab.hasAttribute("bgalazka-addon-host") &&
                   !tab.hasAttribute("bgalazka-addon-host-fallback") &&
+                  !isNotesAgendaPseudoTab(tab) &&
                   !tab.closest(
                     "#bgalazka-zentral-addon-hosts, [bgalazka-addon-host-folder='true']",
                   ) &&
@@ -742,6 +763,13 @@
         );
         for (const [id, record] of essentialPanels) {
           if (targets.has(record.tab)) continue;
+          if (isNotesAgendaPseudoTab(record.tab)) {
+            try { window.Zentral?.Apps?.closeApp?.(id); } catch (_) {}
+            releaseTabPanelLauncher(record);
+            essentialTabRecords.delete(record.tab);
+            essentialPanels.delete(id);
+            continue;
+          }
           const removed =
             record.tab.closing ||
             !storedTabs.has(record.tab) ||
@@ -917,7 +945,14 @@
       if (syncTimer) ctx.clearTimeout(syncTimer);
       syncTimer = ctx.setTimeout(syncCornerTiles, delay);
     }
+    const onPseudoTabAttributes = (event) => {
+      if (isNotesAgendaPseudoTab(event.target)) requestTileSync(0);
+    };
+    for (const type of ["TabOpen", "TabAttrModified", "TabPinned", "TabUnpinned", "TabMove", "SSTabRestored"])
+      window.addEventListener(type, onPseudoTabAttributes, true);
     ctx.registerCleanup(() => {
+      for (const type of ["TabOpen", "TabAttrModified", "TabPinned", "TabUnpinned", "TabMove", "SSTabRestored"])
+        window.removeEventListener(type, onPseudoTabAttributes, true);
       if (syncTimer) ctx.clearTimeout(syncTimer);
     });
   });

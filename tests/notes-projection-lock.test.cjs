@@ -54,15 +54,13 @@ const transfer = moved => ({
 
   const restoredUrl = "about:blank#zn-note:" + encodeURIComponent(note.id);
   const restoredCopy = h.window.gBrowser.addTab(restoredUrl);
-  const restoredClick = h.emit("mousedown", restoredCopy, { button: 0 });
-  assert.equal(restoredClick.defaultPrevented, true, "a restored pseudo-URL without its marker is still intercepted");
+  assert.equal(restoredCopy.isConnected, false, "a markerless zn-note URL tab is closed immediately on TabOpen");
   await Promise.resolve();
-  assert.deepEqual(openedNotes, [note.id, note.id], "the restored pseudo-URL resolves to its note id");
-  h.window.gBrowser.removeTab(restoredCopy);
+  assert.deepEqual(openedNotes, [note.id, note.id], "the markerless pseudo-URL resolves to its note id");
   delete h.window.__zentralNotesTestSeam.onZenOpenNote;
 
-  const blocked = (type, target, moved = null) => {
-    const event = h.emit(type, target, { dataTransfer: transfer(moved) });
+  const blocked = (type, target, moved = null, path = null) => {
+    const event = h.emit(type, target, { dataTransfer: transfer(moved), ...(path ? { composedPath: () => path } : {}) });
     assert.equal(event.defaultPrevented, true, type + " must be cancelled");
     assert.equal(event.immediateStopped, true, type + " must not reach Zen's native move handler");
     if (type !== "dragstart") assert.equal(event.dataTransfer.dropEffect, "none");
@@ -71,7 +69,9 @@ const transfer = moved => ({
   const foreign = h.window.gBrowser.addTab("https://outside.test/");
   for (const managed of [noteTab, notesRoot, notesFolder, agendaTab, agendaRoot, dayFolders[0]]) blocked("dragstart", managed);
   blocked("dragover", notesRoot);
+  blocked("dragover", foreign, null, [foreign, notesRoot, h.document]);
   blocked("drop", notesFolder, foreign);
+  blocked("drop", foreign, foreign, [foreign, notesFolder, notesRoot, h.document]);
   blocked("dragover", agendaRoot);
   blocked("drop", dayFolders[0], foreign);
   blocked("drop", foreign, noteTab);

@@ -16,11 +16,13 @@ const PREF = "zen.workspace.zentral.notes.agenda_folder", MARK = "bgalazka-notes
   h.seam.agendaController.runNow();
   const root = h.document.querySelector('zen-folder[bgalazka-notes-agenda-folder="true"]'), day = root.querySelector("zen-folder[bgalazka-notes-agenda-day]"), agenda = day.querySelector(`tab[${MARK}]`);
   const foreign = h.window.gBrowser.addTab("https://example.test/"), transfer = () => ({ dropEffect: "move" });
-  const blocked = (type, target) => { const dt = transfer(), event = h.emit(type, target, { dataTransfer: dt }); assert.equal(event.defaultPrevented, true); assert.equal(event.immediateStopped, true); return dt; };
+  const blocked = (type, target, path = null) => { const dt = transfer(), event = h.emit(type, target, { dataTransfer: dt, ...(path ? { composedPath: () => path } : {}) }); assert.equal(event.defaultPrevented, true); assert.equal(event.immediateStopped, true); return dt; };
   blocked("dragstart", agenda); blocked("dragstart", day.querySelector(".tab-group-label"));
   assert.equal(blocked("dragover", agenda).dropEffect, "none"); assert.equal(blocked("drop", day).dropEffect, "none");
   assert.equal(blocked("dragover", root).dropEffect, "none", "dropping directly on the Agenda folder header is blocked");
   assert.equal(blocked("drop", root).dropEffect, "none", "the Agenda root itself is a protected drop target");
+  assert.equal(blocked("dragover", foreign, [foreign, day, root, h.document]).dropEffect, "none", "shadow-retargeted drops into Agenda are blocked");
+  assert.equal(blocked("drop", foreign, [foreign, root, h.document]).dropEffect, "none", "shadow-retargeted root drops are blocked");
   // A moved or restored pseudo-tab must still activate as an Agenda item.
   let activated = 0;
   h.window.__zentralNotesTestSeam.onAgendaActivate = () => activated++;
