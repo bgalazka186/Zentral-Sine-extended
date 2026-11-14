@@ -1,7 +1,6 @@
 "use strict";
-// UI4.7 partial: serialized cross-window claims and restored mirrored notes.
-// Simultaneous writes and last-writer loss notification need the remaining
-// calendar-store concurrency work described in the roadmap.
+// UI4.7 partial: serialized claims, calendar merges and restored mirrored notes.
+// Note-file Done versus stale-edit conflict notification remains TODO.
 const assert = require("node:assert/strict");
 const { createFakeZen } = require("./helpers/fake-zen-browser.cjs");
 const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
@@ -43,8 +42,7 @@ async function host(files, id) {
   console.log("Multiwindow serialized claims and mirror/trash tests passed");
 })().catch(e => { console.error(e); process.exitCode = 1; });
 
-// Executable acceptance tests deliberately marked TODO until the store has safe
-// cross-window coordination; they must not be mistaken for passing coverage.
+// TODO-marked acceptance cases remain unfulfilled despite a zero test exit code.
 const test = require("node:test");
 function sharedIO() {
   const files = new Map();
@@ -56,7 +54,7 @@ function sharedIO() {
     exists: async p => files.has(p),
   };
 }
-test("stale windows preserve independent calendar edits", { todo: "UI4.7: calendar snapshots overwrite changes from other windows" }, async () => {
+test("stale windows preserve independent calendar edits", async () => {
   const io = sharedIO(); let now = 1700000000000;
   const options = { io, getDir: () => "/notes", now: () => now, setTimer: () => 1, clearTimer() {} };
   const seed = C.createItemStore(options); await seed.open();

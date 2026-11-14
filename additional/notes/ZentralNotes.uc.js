@@ -5776,7 +5776,9 @@
       // refresh ignore it). Items written as marked lists inside a note are rebuilt from the note text; a note in Trash or
       // with a missing file only HIDES its items (restoring it brings dragged times and calendar notes back); a note that is
       // deleted for good removes them. Every call is guarded: the calendar must never break saving a note.
-      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, withHistoryLock, onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); } }) : null;
+      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, withHistoryLock,
+        isNoteVisible: (id) => !!notes.get(id) && !notes.get(id).trashed,
+        onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); } }) : null;
       function syncItems(id, stabilize = false, sourceEdit = false) {
         if (!items) return;
         try {
@@ -10341,12 +10343,15 @@
           if (ta.spellcheck !== spell) ta.spellcheck = spell;
         } else countEl.textContent = "";
         const s = store.state;
-        statusEl.dataset.state = s.save;
+        const calendarState = store.items?.storageState?.();
+        const calendarBlocked = !!calendarState?.writeBlocked && !!calendarState?.dirty;
+        const localBackup = calendarState?.localBackupPath ?? calendarState?.backupPath ?? "";
+        statusEl.dataset.state = calendarBlocked ? "error" : s.save;
         statusEl.textContent =
-          flashMsg ||
+          flashMsg || (calendarBlocked ? (localBackup ? "Calendar save blocked — edits backed up" : "Calendar save blocked — keep Notes open") : "") ||
           { saved: "Saved", dirty: "Unsaved\u2026", saving: "Saving\u2026", error: "Couldn\u2019t save, retrying" }[s.save] ||
           "";
-        statusEl.title = s.error || "";
+        statusEl.title = calendarBlocked ? (calendarState.error + (localBackup ? " Backup: " + localBackup : " No local backup could be written.")) : (s.error || "");
       }
       const scheduleChrome = () => {
         if (!rafChrome) rafChrome = window.requestAnimationFrame(updateChrome);
@@ -17071,7 +17076,11 @@
           if (view === "list") scheduleList();
         }
       });
-      const offCalendarItems = store.items?.on?.((kind, id) => {
+      const offCalendarItems = store.items?.on?.((kind, id, detail) => {
+        if (kind === "conflict") {
+          if (isOpen && !destroyed) flash(detail?.winner === "unresolved" ? (detail?.backupPath ? "Calendar save blocked: local edits were backed up in the Notes folder." : "Calendar save blocked: backup failed; keep Notes open.") : "A newer calendar edit in another window replaced this edit.", 12000);
+          return;
+        }
         if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden && !deferCalendarBackground() && !patchCalendarItem(kind, id)) renderCalendar();
       });
       if (offCalendarItems) cleanups.push(offCalendarItems);
@@ -21328,6 +21337,10 @@
         toastTimer = window.setTimeout(() => { if (toastEl) toastEl.dataset.on = "false"; }, 2200);
       }
       onCleanup(() => { window.clearTimeout(toastTimer); toastEl?.remove(); toastEl = null; });
+      const offCalendarConflictNotice = store.items?.on?.((kind, _id, detail) => {
+        if (kind === "conflict") toast(detail?.winner === "unresolved" ? (detail?.backupPath ? "Calendar save blocked: local edits were backed up in the Notes folder." : "Calendar save blocked: backup failed; keep Notes open.") : "A newer calendar edit in another window replaced this edit.");
+      });
+      onCleanup(() => offCalendarConflictNotice?.());
       function pageInfo(browser) {
         const b = browser || window.gBrowser?.selectedBrowser;
         let url = "";

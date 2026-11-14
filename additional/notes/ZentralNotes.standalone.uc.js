@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.153
+// @version 3.3.154
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.153, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.154, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.153";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.154";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2798,52 +2798,138 @@ const __zentralEmbeddedLoader = (function () {
     };
   }
 
-  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock }) {
+  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null }) {
     const items = new Map();
     const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite, perf, withHistoryLock });
     const categoryDefs = new Map();
     const hidden = new Set(); // noteIds whose items stay stored but are not shown (note in Trash, or its file is missing)
     const listeners = new Set();
-    let dirty = false, timer = null, chain = Promise.resolve(), retryCount = 0;
-    let storage = { state: "unopened", error: "", backupPath: "" }, writeBlocked = false;
-    const shown = (it) => !it.x.noteId || !hidden.has(it.x.noteId);
+    let dirty = false, timer = null, chain = Promise.resolve(), retryCount = 0, pendingWrites = 0;
+    let storage = { state: "unopened", error: "", backupPath: "" }, writeBlocked = false, protectedText = null;
+    let baseline = { items: [], categories: [] };
+    const withCalendarLock = withHistoryLock || createHistoryCoordinator();
+    const shown = (it) => !it.x.noteId || (!hidden.has(it.x.noteId) && (!isNoteVisible || isNoteVisible(it.x.noteId)));
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
-    const emit = (kind, id) => { for (const fn of [...listeners]) { try { fn(kind, id); } catch (e) { safeWarn(e); } } };
+    const emit = (kind, id, detail) => { for (const fn of [...listeners]) { try { fn(kind, id, detail); } catch (e) { safeWarn(e); } } };
     const state = () => ({ ...storage, dirty, writeBlocked, retryCount });
     const scheduleTimer = (ms = delayMs) => {
       if (timer !== null) clearTimer(timer);
       timer = setTimer(() => { timer = null; writeNow().catch(() => {}); }, ms);
     };
     const schedule = () => { dirty = true; if (!writeBlocked) scheduleTimer(delayMs); };
+    const snapshot = () => JSON.parse(JSON.stringify({ items: [...items.values()], categories: [...categoryDefs.values()] }));
+    const equalRecord = (a, b) => calendarRecordEqual(a ?? null, b ?? null);
+    function parseCalendarSnapshot(text) {
+      const raw = JSON.parse(text);
+      if (!raw || typeof raw !== "object" || Array.isArray(raw) || !Array.isArray(raw.items) || (raw.categories !== undefined && !Array.isArray(raw.categories)))
+        throw new Error("Calendar file has an unsupported or damaged structure.");
+      const parsed = { items: raw.items.map((item) => cleanItem(item, 0)), categories: (raw.categories || []).map(cleanCategory) };
+      if (parsed.items.some((item) => !item) || parsed.categories.some((category) => !category)) throw new Error("Calendar file contains an invalid item or category record.");
+      // Reject duplicate keys rather than silently discarding an unrelated record.
+      mergeCalendarSnapshots(parsed, parsed, parsed);
+      return parsed;
+    }
+    async function backupCalendar(dir, label, text) {
+      const base = io.join(dir, "calendar." + label + "-" + Math.max(0, Math.floor(Number(now()) || Date.now())));
+      let path = base + ".bak", suffix = 1;
+      if (typeof io.exists === "function") while (await io.exists(path)) path = base + "-" + (++suffix) + ".bak";
+      else path = base + "-" + Math.random().toString(36).slice(2) + ".bak";
+      await io.writeUTF8(path, text, { tmpPath: path + ".tmp" });
+      return path;
+    }
+    async function backupLocalCalendar(dir, captured, remote = null) {
+      try { return await backupCalendar(dir, "conflict", JSON.stringify({ v: 1, base: baseline, local: captured, remote })); }
+      catch (error) { safeWarn(error); return ""; }
+    }
+    async function readCalendarForWrite(dir, captured) {
+      const file = io.join(dir, ITEMS_FILE); let text;
+      try { text = await io.readUTF8(file); }
+      catch (error) {
+        const message = String(error?.message || error || "");
+        let missing = error?.code === "ENOENT" || error?.name === "NotFoundError" || /(?:^|\b)(?:nf|not found|no such file|does not exist|NS_ERROR_FILE_NOT_FOUND)(?:\b|$)/i.test(message);
+        if (!missing && typeof io.exists === "function") { try { missing = !(await io.exists(file)); } catch (_) {} }
+        if (missing && !baseline.items.length && !baseline.categories.length && storage.state !== "recovery-pending") return { items: [], categories: [] };
+        if (missing) {
+          const backupPath = await backupLocalCalendar(dir, captured);
+          writeBlocked = true; storage = { state: "conflict", error: "Calendar file was removed while this window had edits.", backupPath };
+          emit("conflict", "", { winner: "unresolved", backupPath });
+          throw new Error(storage.error);
+        }
+        const localBackupPath = await backupLocalCalendar(dir, captured);
+        writeBlocked = true; storage = { state: "unreadable", error: message, backupPath: "", localBackupPath };
+        emit("conflict", "", { winner: "unresolved", backupPath: localBackupPath });
+        throw new Error("Calendar storage is unreadable: " + message);
+      }
+      if (storage.state === "recovery-pending") {
+        if (text !== protectedText) {
+          const localBackupPath = await backupLocalCalendar(dir, captured);
+          writeBlocked = true; storage = { ...storage, state: "conflict", error: "Calendar file changed since recovery was requested.", localBackupPath };
+          emit("conflict", "", { winner: "unresolved", backupPath: localBackupPath });
+          throw new Error(storage.error);
+        }
+        return null; // explicit replacement of the previously backed-up damaged file
+      }
+      try { return parseCalendarSnapshot(text); }
+      catch (error) {
+        let backupPath = "";
+        try { backupPath = await backupCalendar(dir, "corrupt", String(text)); } catch (backupError) { safeWarn(backupError); }
+        const localBackupPath = await backupLocalCalendar(dir, captured);
+        protectedText = backupPath ? String(text) : null;
+        writeBlocked = true; storage = { state: "corrupt", error: String(error?.message || error), backupPath, localBackupPath };
+        emit("conflict", "", { winner: "unresolved", backupPath: localBackupPath });
+        throw new Error("Calendar storage is corrupt: " + storage.error);
+      }
+    }
+    function applyMerged(captured, merged) {
+      const patch = (target, before, after, keyOf, kind) => {
+        const old = new Map(before.map((record) => [keyOf(record), record]));
+        const next = new Map(after.map((record) => [keyOf(record), record]));
+        for (const id of new Set([...old.keys(), ...next.keys()])) {
+          if (!equalRecord(target.get(id), old.get(id))) continue; // a newer local edit arrived during I/O
+          const value = next.get(id), current = target.get(id);
+          if (equalRecord(current, value)) continue;
+          if (value) target.set(id, value); else target.delete(id);
+          emit(kind === "category" ? "category" : value ? "change" : "remove", id);
+        }
+      };
+      patch(items, captured.items, merged.items, (v) => v.id, "item");
+      patch(categoryDefs, captured.categories, merged.categories, (v) => categoryKey(v.name), "category");
+    }
     function writeNow() {
       if (timer !== null) { clearTimer(timer); timer = null; }
       const dir = getDir();
       if (!dirty || !dir) return chain;
       if (writeBlocked) {
         const error = new Error("Calendar storage is protected because its existing file could not be read safely.");
-        safeWarn(error);
-        return Promise.reject(error);
+        safeWarn(error); return Promise.reject(error);
       }
-      const text = JSON.stringify({ v: 2, items: [...items.values()], categories: [...categoryDefs.values()] });
-      perf?.recordBytes?.("calendar.bytes", text);
-      // Clear only for this snapshot. If I/O fails, restore dirty; if a newer edit arrives while writing, its dirty
-      // flag remains set and the next queued write stores the newer snapshot.
-      dirty = false;
-      const task = chain.catch(() => {}).then(async () => {
+      dirty = false; pendingWrites++;
+      const task = chain.catch(() => {}).then(() => withCalendarLock(io.join(dir, ITEMS_FILE), async () => {
         try {
+          if (writeBlocked) throw new Error("Calendar storage is protected because its existing file could not be read safely.");
+          const captured = snapshot(), remote = await readCalendarForWrite(dir, captured);
+          const merged = remote ? mergeCalendarSnapshots(baseline, captured, remote) : { ...captured, conflicts: [], safe: true };
+          if (!merged.safe) {
+            const backupPath = await backupLocalCalendar(dir, captured, remote);
+            writeBlocked = true; storage = { state: "conflict", error: "Calendar edits conflict with changes from another window.", backupPath };
+            emit("conflict", "", { winner: "unresolved", backupPath });
+            throw new Error(storage.error);
+          }
+          const text = JSON.stringify({ v: 2, items: merged.items, categories: merged.categories });
+          perf?.recordBytes?.("calendar.bytes", text);
           await io.writeUTF8(io.join(dir, ITEMS_FILE), text, { tmpPath: io.join(dir, ITEMS_FILE + ".tmp") });
-          retryCount = 0;
-          if (storage.state === "unopened" || storage.state === "missing" || storage.state === "recovery-pending") storage = { ...storage, state: "ready", error: "" };
+          baseline = JSON.parse(JSON.stringify({ items: merged.items, categories: merged.categories }));
+          applyMerged(captured, merged);
+          for (const conflict of merged.conflicts) if (conflict.winner === "remote") emit("conflict", conflict.id, conflict);
+          retryCount = 0; protectedText = null; storage = { state: "ready", error: "", backupPath: "" };
           if (dirty && timer === null && !writeBlocked) scheduleTimer(delayMs);
           return true;
         } catch (error) {
-          dirty = true;
-          retryCount++;
-          safeWarn(error);
+          dirty = true; retryCount++; safeWarn(error);
           if (retryCount <= 3 && timer === null && !writeBlocked) scheduleTimer(Math.min(delayMs * Math.pow(2, retryCount), 5000));
           throw error;
         }
-      });
+      })).finally(() => { pendingWrites--; });
       chain = task;
       return task;
     }
@@ -2877,27 +2963,27 @@ const __zentralEmbeddedLoader = (function () {
             try { exists = await io.exists(file); } catch (_) { exists = true; }
           }
           if (!exists || missingError) {
+            if (dirty || pendingWrites) return state();
             items.clear(); categoryDefs.clear(); hidden.clear(); dirty = false; writeBlocked = false;
+            baseline = { items: [], categories: [] }; protectedText = null;
             storage = { state: "missing", error: "", backupPath: "" };
           } else {
             // A permission/I/O error is not an empty store. Keep existing in-memory data and prohibit overwriting
             // the unreadable file until the caller explicitly resolves the storage problem.
+            const hasPending = dirty || pendingWrites;
+            const localBackupPath = hasPending ? await backupLocalCalendar(getDir(), snapshot()) : "";
             writeBlocked = true;
-            storage = { state: "unreadable", error: String(error?.message || error), backupPath: "" };
+            storage = { state: "unreadable", error: String(error?.message || error), backupPath: "", localBackupPath };
+            if (hasPending) emit("conflict", "", { winner: "unresolved", backupPath: localBackupPath });
             safeWarn(error);
           }
           emit("reset");
           return state();
         }
-        let raw, parsedItems, parsedCategories;
+        let parsedItems, parsedCategories;
         try {
-          raw = JSON.parse(text);
-          if (!raw || typeof raw !== "object" || Array.isArray(raw) || !Array.isArray(raw.items) || (raw.categories !== undefined && !Array.isArray(raw.categories)))
-            throw new Error("Calendar file has an unsupported or damaged structure.");
-          parsedItems = raw.items.map((record) => cleanItem(record, 0));
-          parsedCategories = (Array.isArray(raw.categories) ? raw.categories : []).map(cleanCategory);
-          if (parsedItems.some((item) => !item) || parsedCategories.some((category) => !category))
-            throw new Error("Calendar file contains an invalid item or category record.");
+          const parsed = parseCalendarSnapshot(text);
+          parsedItems = parsed.items; parsedCategories = parsed.categories;
         } catch (error) {
           const stamp = Math.max(0, Math.floor(Number(now()) || Date.now()));
           const baseBackupPath = file + ".corrupt-" + stamp + ".bak";
@@ -2910,15 +2996,21 @@ const __zentralEmbeddedLoader = (function () {
             await io.writeUTF8(backupPath, String(text), { tmpPath: backupPath + ".tmp" });
             backedUp = true;
           } catch (backupError) { safeWarn(backupError); }
+          const hasPending = dirty || pendingWrites;
+          const localBackupPath = hasPending ? await backupLocalCalendar(getDir(), snapshot()) : "";
+          protectedText = backedUp ? String(text) : null;
           writeBlocked = true;
-          storage = { state: "corrupt", error: String(error?.message || error), backupPath: backedUp ? backupPath : "" };
+          storage = { state: "corrupt", error: String(error?.message || error), backupPath: backedUp ? backupPath : "", localBackupPath };
+          if (hasPending) emit("conflict", "", { winner: "unresolved", backupPath: localBackupPath });
           safeWarn(error);
           emit("reset");
           return state();
         }
+        if (dirty || pendingWrites) return state();
         items.clear(); categoryDefs.clear(); hidden.clear(); dirty = false; writeBlocked = false; retryCount = 0;
         for (const it of parsedItems) if (!items.has(it.id)) items.set(it.id, it);
         for (const category of parsedCategories) categoryDefs.set(categoryKey(category.name), category);
+        baseline = snapshot(); protectedText = null;
         storage = { state: "ready", error: "", backupPath: "" };
         emit("reset");
         return state();
@@ -4290,13 +4382,22 @@ const __zentralEmbeddedLoader = (function () {
     const k = String(key || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     return new RegExp("^#\\s+" + (k || "\\d{4}-\\d{2}-\\d{2}") + "(?:\\s+[A-Za-zÀ-ž]+)?$").test(body);
   }
+  // Compare JSON-shaped records by value, not property order: reading and
+  // normalizing the same calendar file may reorder its object properties.
+  function calendarRecordEqual(a, b) {
+    if (a === b) return true;
+    if (!a || !b || typeof a !== "object" || typeof b !== "object" || Array.isArray(a) !== Array.isArray(b)) return false;
+    const keys = Object.keys(a), other = Object.keys(b);
+    if (keys.length !== other.length) return false;
+    return keys.every((key) => Object.prototype.hasOwnProperty.call(b, key) && calendarRecordEqual(a[key], b[key]));
+  }
   // Three-way snapshot merge. A missing item is a deletion, not an empty
   // value. Delete/edit races and simultaneous category edits cannot be
   // ordered from the current file format, so callers must not persist when
   // `safe` is false. Item conflicts use the existing last-write-wins rule.
   function mergeCalendarSnapshots(base, local, remote) {
     const conflicts = [];
-    const equal = (a, b) => a === b || JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+    const equal = (a, b) => calendarRecordEqual(a ?? null, b ?? null);
     const index = (snapshot, field, keyOf) => {
       if (!snapshot || !Array.isArray(snapshot[field])) throw new Error("Invalid calendar " + field + " snapshot");
       const out = new Map();
@@ -10684,7 +10785,9 @@ __zentralShim.register = function (def) {
       // refresh ignore it). Items written as marked lists inside a note are rebuilt from the note text; a note in Trash or
       // with a missing file only HIDES its items (restoring it brings dragged times and calendar notes back); a note that is
       // deleted for good removes them. Every call is guarded: the calendar must never break saving a note.
-      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, withHistoryLock, onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); } }) : null;
+      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, withHistoryLock,
+        isNoteVisible: (id) => !!notes.get(id) && !notes.get(id).trashed,
+        onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); } }) : null;
       function syncItems(id, stabilize = false, sourceEdit = false) {
         if (!items) return;
         try {
@@ -15249,12 +15352,15 @@ __zentralShim.register = function (def) {
           if (ta.spellcheck !== spell) ta.spellcheck = spell;
         } else countEl.textContent = "";
         const s = store.state;
-        statusEl.dataset.state = s.save;
+        const calendarState = store.items?.storageState?.();
+        const calendarBlocked = !!calendarState?.writeBlocked && !!calendarState?.dirty;
+        const localBackup = calendarState?.localBackupPath ?? calendarState?.backupPath ?? "";
+        statusEl.dataset.state = calendarBlocked ? "error" : s.save;
         statusEl.textContent =
-          flashMsg ||
+          flashMsg || (calendarBlocked ? (localBackup ? "Calendar save blocked — edits backed up" : "Calendar save blocked — keep Notes open") : "") ||
           { saved: "Saved", dirty: "Unsaved\u2026", saving: "Saving\u2026", error: "Couldn\u2019t save, retrying" }[s.save] ||
           "";
-        statusEl.title = s.error || "";
+        statusEl.title = calendarBlocked ? (calendarState.error + (localBackup ? " Backup: " + localBackup : " No local backup could be written.")) : (s.error || "");
       }
       const scheduleChrome = () => {
         if (!rafChrome) rafChrome = window.requestAnimationFrame(updateChrome);
@@ -21979,7 +22085,11 @@ __zentralShim.register = function (def) {
           if (view === "list") scheduleList();
         }
       });
-      const offCalendarItems = store.items?.on?.((kind, id) => {
+      const offCalendarItems = store.items?.on?.((kind, id, detail) => {
+        if (kind === "conflict") {
+          if (isOpen && !destroyed) flash(detail?.winner === "unresolved" ? (detail?.backupPath ? "Calendar save blocked: local edits were backed up in the Notes folder." : "Calendar save blocked: backup failed; keep Notes open.") : "A newer calendar edit in another window replaced this edit.", 12000);
+          return;
+        }
         if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden && !deferCalendarBackground() && !patchCalendarItem(kind, id)) renderCalendar();
       });
       if (offCalendarItems) cleanups.push(offCalendarItems);
@@ -26236,6 +26346,10 @@ __zentralShim.register = function (def) {
         toastTimer = window.setTimeout(() => { if (toastEl) toastEl.dataset.on = "false"; }, 2200);
       }
       onCleanup(() => { window.clearTimeout(toastTimer); toastEl?.remove(); toastEl = null; });
+      const offCalendarConflictNotice = store.items?.on?.((kind, _id, detail) => {
+        if (kind === "conflict") toast(detail?.winner === "unresolved" ? (detail?.backupPath ? "Calendar save blocked: local edits were backed up in the Notes folder." : "Calendar save blocked: backup failed; keep Notes open.") : "A newer calendar edit in another window replaced this edit.");
+      });
+      onCleanup(() => offCalendarConflictNotice?.());
       function pageInfo(browser) {
         const b = browser || window.gBrowser?.selectedBrowser;
         let url = "";

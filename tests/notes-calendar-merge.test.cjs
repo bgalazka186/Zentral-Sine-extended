@@ -38,6 +38,11 @@ assert.equal(typeof C.mergeCalendarSnapshots, "function", "calendar needs a thre
   assert.deepEqual(result.conflicts.map(c => [c.kind, c.id, c.winner]), [["category", "projects", "unresolved"]]); assert.equal(result.safe, false);
   const removed = C.mergeCalendarSnapshots(snap([], [category]), snap([], [category]), snap([], []));
   assert.deepEqual(removed.categories, []); assert.equal(removed.safe, true, "an uncontested removal stays removed");
+  const reordered = Object.fromEntries(Object.entries(original).reverse());
+  reordered.x = Object.fromEntries(Object.entries(original.x).reverse());
+  const orderOnly = C.mergeCalendarSnapshots(snap([original]), snap([]), snap([reordered]));
+  assert.equal(orderOnly.safe, true, "property order alone does not turn a clean deletion into a conflict");
+  assert.deepEqual(orderOnly.items, []);
   assert.throws(() => C.mergeCalendarSnapshots(snap([original, original]), snap([]), snap([])), /duplicate/i, "ambiguous snapshots are rejected");
 }
 for (const count of [500, 2000]) {

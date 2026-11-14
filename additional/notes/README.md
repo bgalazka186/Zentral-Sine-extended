@@ -37,6 +37,10 @@ Highlights are written as `==text==` (yellow) or `=={green}text==` (also `blue`,
 
 Calendar reminder banners and missed-reminder digests are not displayed when their history claim cannot be saved. Unsaved claims are rolled back without discarding other pending history, and the scheduler makes up to three 30-second retries. A damaged or unreadable history file remains protected and requires attention before alerts can be saved. Notes windows in the same browser process coordinate history writes and claims through a shared process registry when the browser exposes its hidden window; external programs and environments without that registry do not participate. Live Zen validation is still needed.
 
+### Concurrent calendar edits
+
+Windows that share the browser's process registry merge independent calendar changes before saving. Competing edits to the same calendar item use the latest revision; a losing window receives a notice. Conflicting deletions or category edits block saving rather than silently discarding a version. When possible a `calendar.conflict-*.bak` file in the Notes folder records the base, local and remote snapshots for manual recovery; a damaged original also gets a separate corrupt backup. If a backup fails, keep Notes open and resolve the storage problem before closing. Changes made after saving is blocked may not be in the backup. This coordination does not cover external programs or environments without the shared registry, and note-file edits are not yet protected by the calendar merge. Live Zen behavior remains unverified.
+
 ### Daily Note calendar categories
 
 A calendar item in a Daily Note normally follows its `%%calendar%%` section. Choosing a category for that item in **Edit details** saves a per-item marker on its own line, for example `%%zn-item-category: Work%%`; an empty marker means **No category**. The marker is hidden in read view but visible in the Markdown editor. You can change its value in the note, or choose **Follow note section** in the editor to remove it and resume inheritance. Other lines and their categories are unchanged. Keep the separate `%%zn-item-id:...%%` identity marker intact.
