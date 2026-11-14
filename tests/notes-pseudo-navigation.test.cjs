@@ -13,6 +13,7 @@ const AGENDA_PREF = "zen.workspace.zentral.notes.agenda_folder";
   await Promise.resolve();
 
   const note = h.seam.store.create("# A linked reminder note", "");
+  h.seam.zen.runNow(); // materialize the NOTES root before the inherited-folder routing case
   const routes = [], opened = [];
   h.window.__zentralNotesTestSeam.onPseudoNavigation = route => routes.push(route);
   h.window.__zentralNotesTestSeam.onAgendaOpenNote = (id, key) => opened.push({ id, key });
