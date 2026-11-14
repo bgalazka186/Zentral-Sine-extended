@@ -1,0 +1,48 @@
+name: Notes regression validation
+
+on:
+  push:
+    branches: [beta]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Rebuild standalone packages and preferences
+        run: |
+          node tools/build-standalone.cjs --bump
+          node tools/build-preferences.cjs
+          node tools/build-standalone.cjs --check
+      - name: Run regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test_file in tests/*.test.cjs; do
+            echo "::group::${test_file}"
+            node "${test_file}"
+            echo "::endgroup::"
+          done
+          node tests/standalone.test.cjs
+      - name: Check patch formatting
+        run: git diff --check
+      - name: Commit generated standalone files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "chore: rebuild standalone Notes package [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi

@@ -6,8 +6,8 @@ const { createFakeZen } = require("./helpers/fake-zen-browser.cjs");
 const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
 const PREF = "zen.workspace.zentral.notes.agenda_folder";
 const tabs = h => h.document.querySelectorAll("tab[bgalazka-notes-agenda-item]").filter(t => !t.getAttribute("bgalazka-notes-agenda-item").startsWith("seed:"));
-async function host(files, id) {
-  const h = createFakeZen({ files, id, prefs: { [PREF]: true } });
+async function host(files, id, hiddenDOMWindow = null) {
+  const h = createFakeZen({ files, id, prefs: { [PREF]: true }, hiddenDOMWindow });
   await h.seam.ensureStore(); h.fireTimer(6500); await Promise.resolve(); return h;
 }
 (async () => {
@@ -75,24 +75,31 @@ test("simultaneous stores sharing a coordinator claim a reminder stage only once
   const claims = await Promise.all([a.claimAlert(entry), b.claimAlert(entry)]);
   assert.equal(claims.filter(Boolean).length, 1);
 });
-test("Done versus a stale edit notifies the losing window", { todo: "UI4.7: dirty note writes do not report lost concurrent edits" }, async () => {
-  const files = new Map(), a = await host(files, "done-a");
+test("Done versus a stale edit preserves the displaced version and notifies both windows", async () => {
+  const files = new Map(), sharedWindow = { Map };
+  const a = await host(files, "done-a", sharedWindow);
   const start = C.localDateKey(C.addDays(C.dayStart(Date.now()), 2));
   const note = a.seam.store.create(`# Concurrent\n\n## Agenda\n%%calendar%%\n- [ ] ${start} 09:00 Original %%zn-item-id:conflict1%%\n`);
   a.seam.store.stabilizeItems(note.id); await a.seam.store.flush();
-  const b = await host(files, "edit-b"), eventsA = [], eventsB = []; let reopened;
+  const b = await host(files, "edit-b", sharedWindow), eventsA = [], eventsB = []; let reopened;
   try {
-  a.seam.store.on(e => eventsA.push(e)); b.seam.store.on(e => eventsB.push(e));
-  const item = a.seam.store.items.list({ noteId: note.id })[0]; assert.ok(item);
-  b.seam.store.update(note.id, b.seam.store.get(note.id).body.replace("Original", "Edited in B"));
-  assert.ok(a.seam.store.applyReminderLifecycle(item, "done")); await a.seam.store.flush();
-  b.seam.store.onRemoteMessage(JSON.stringify({ origin: "done-a", id: note.id }));
-  await Promise.resolve(); await b.seam.store.flush();
-  a.seam.store.onRemoteMessage(JSON.stringify({ origin: "edit-b", id: note.id }));
-  await new Promise(resolve => setImmediate(resolve));
-  reopened = await host(files, "reopened");
-  assert.match(reopened.seam.store.get(note.id).body, /Edited in B/, "the last saved edit is retained");
-  assert.ok([...eventsA, ...eventsB].some(e => /conflict|lost/i.test(String(e.type))), "the window losing a concurrent update receives a conflict notification");
+    a.seam.store.on(e => eventsA.push(e)); b.seam.store.on(e => eventsB.push(e));
+    const item = a.seam.store.items.list({ noteId: note.id })[0]; assert.ok(item);
+    b.seam.store.update(note.id, b.seam.store.get(note.id).body.replace("Original", "Edited in B"));
+    assert.ok(a.seam.store.applyReminderLifecycle(item, "done")); await a.seam.store.flush();
+    b.seam.store.onRemoteMessage(JSON.stringify({ origin: "done-a", id: note.id }));
+    await Promise.resolve(); await b.seam.store.flush();
+
+    const conflict = eventsB.find(e => e.type === "conflict");
+    assert.ok(conflict?.backupPath, "the stale writer stores the displaced file in Notes recovery");
+    const preserved = files.get(conflict.backupPath + "/" + note.id + ".md");
+    assert.match(preserved || "", /\[x\].*Original/, "the recovery copy retains the Done version");
+
+    a.seam.store.onRemoteMessage(JSON.stringify({ origin: "edit-b", id: note.id, conflictBackupPath: conflict.backupPath }));
+    await new Promise(resolve => setImmediate(resolve));
+    reopened = await host(files, "reopened", sharedWindow);
+    assert.match(reopened.seam.store.get(note.id).body, /Edited in B/, "the last saved edit is retained");
+    assert.ok(eventsA.some(e => e.type === "conflict"), "the other window receives a visible conflict event");
   } finally { if (reopened) await reopened.destroy(); await a.destroy(); await b.destroy(); }
 });
 

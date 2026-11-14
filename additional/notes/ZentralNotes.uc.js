@@ -5754,6 +5754,8 @@
       getDateFormat = () => "",
     }) {
       const notes = new Map();
+      // Exact bytes last read or written for each note. This detects stale writes even when a window is dirty.
+      const diskSnapshots = new Map();
       // One active-note owner per sheet; a note stays protected while any sheet is displaying it.
       const activeNotes = new Map();
       const dirty = new Set();
@@ -5861,12 +5863,15 @@
         try {
           mtime = (await io.stat(file)).lastModified || mtime;
         } catch (_) {}
-        return noteFromFile(id, text, mtime);
+        const note = noteFromFile(id, text, mtime);
+        diskSnapshots.set(id, text);
+        return note;
       }
 
       async function loadAll() {
         notes.clear();
         dirty.clear();
+        diskSnapshots.clear();
         let children = [];
         try {
           children = await io.children(dir);
@@ -5965,19 +5970,52 @@
 
       async function writeNoteFile(note, text) {
         const file = fileOf(note.id);
-        const opts = { tmpPath: file + ".tmp", flush: true };
-        const wantBackup = note._onDisk && !backedUp.has(note.id);
-        if (wantBackup) opts.backupFile = file + ".bak";
-        await io.writeUTF8(file, text, opts);
-        if (wantBackup) backedUp.add(note.id);
-        if (!note._onDisk) {
-          note._onDisk = true;
-          try {
-            await io.restrict(file);
-          } catch (_) {}
-        }
-        note._mtime = now();
-        notify({ id: note.id, origin: windowId, kind: "saved" });
+        const persist = async () => {
+          let conflictBackupPath = "";
+          const baseline = diskSnapshots.get(note.id);
+          if (note._onDisk && typeof baseline === "string") {
+            // Read and compare under the shared per-path coordinator. A dirty window
+            // deliberately ignores remote reloads; this check prevents that stale edit
+            // from silently overwriting the version that arrived while it was dirty.
+            const exists = await io.exists(file);
+            const currentText = exists ? await io.readUTF8(file) : null;
+            if (currentText !== baseline) {
+              const displaced = currentText === null ? baseline : currentText;
+              try {
+                conflictBackupPath = await backupConflictText(note.id, displaced);
+              } catch (error) {
+                emit("conflict", note.id, { winner: "unresolved", backupPath: "", reason: "backup-failed" });
+                throw new Error("A concurrent note edit was detected, but its recovery copy could not be saved. The local write was blocked: " + String(error?.message || error));
+              }
+              if (!conflictBackupPath) {
+                emit("conflict", note.id, { winner: "unresolved", backupPath: "", reason: "backup-failed" });
+                throw new Error("A concurrent note edit was detected, but its recovery copy could not be saved. The local write was blocked.");
+              }
+            }
+          }
+
+          const opts = { tmpPath: file + ".tmp", flush: true };
+          const wantBackup = note._onDisk && !backedUp.has(note.id);
+          if (wantBackup) opts.backupFile = file + ".bak";
+          await io.writeUTF8(file, text, opts);
+          if (wantBackup) backedUp.add(note.id);
+          if (!note._onDisk) {
+            note._onDisk = true;
+            try {
+              await io.restrict(file);
+            } catch (_) {}
+          }
+          diskSnapshots.set(note.id, text);
+          note._mtime = now();
+          if (conflictBackupPath) {
+            emit("conflict", note.id, { winner: "local", backupPath: conflictBackupPath, reason: "concurrent-write" });
+          }
+          notify({ id: note.id, origin: windowId, kind: "saved", ...(conflictBackupPath ? { conflictBackupPath } : {}) });
+        };
+        // Calendar history already owns a process-shared coordinator when the
+        // hidden window is available. Use a separate key for each note file.
+        if (typeof withHistoryLock === "function") return withHistoryLock("note:" + file, persist);
+        return persist();
       }
 
       // ---- version history: history/<note id>/<UTC stamp>.md, written after a save, rules in the pure core ----
@@ -6055,7 +6093,7 @@
         autosaver.touch();
       }
 
-      async function reloadFromDisk(id) {
+      async function reloadFromDisk(id, conflictBackupCandidate = "") {
         const file = fileOf(id);
         let exists = false;
         try {
@@ -6064,12 +6102,15 @@
         if (!exists) {
           if (notes.has(id) && !dirty.has(id)) {
             notes.delete(id);
+            diskSnapshots.delete(id);
             syncItems(id);
             emit("remove", id, { remote: true });
           }
           return;
         }
-        if (dirty.has(id)) return; // local edits win until they are saved
+        const backupPath = await verifiedConflictBackup(id, conflictBackupCandidate);
+        if (backupPath) emit("conflict", id, { winner: "remote", backupPath, reason: "concurrent-write" });
+        if (dirty.has(id)) return; // preserve local typing; its next save checks the disk snapshot
         const fresh = await readNote(file).catch(() => null);
         if (!fresh) return;
         notes.set(id, fresh);
@@ -6089,6 +6130,23 @@
         } catch (_) {
           return [];
         }
+      }
+      // A conflict copy uses the existing 48-hour backup format, but never moves
+      // pictures or history away from the live note.
+      async function backupConflictText(id, text) {
+        if (!io.makeDir || !isAssetNoteId(id) || !dir || typeof text !== "string") return "";
+        const name = backupEntryName(now(), id, await backupNames());
+        const entry = io.join(backupRoot(), name);
+        await io.makeDir(entry);
+        await io.writeUTF8(io.join(entry, id + ".md"), text, { mode: "create" });
+        return entry;
+      }
+      async function verifiedConflictBackup(id, candidate) {
+        if (typeof candidate !== "string" || !dir) return "";
+        const name = io.filename(candidate);
+        const parsed = parseBackupName(name);
+        if (!parsed || parsed.id !== id || candidate !== io.join(backupRoot(), name)) return "";
+        return await io.exists(io.join(candidate, id + ".md")).catch(() => false) ? candidate : "";
       }
       async function backupNote(id, note, file, withPictures) {
         if (!io.makeDir || !isAssetNoteId(id) || !dir) return false;
@@ -6122,6 +6180,7 @@
         const note = notes.get(id) || null;
         notes.delete(id);
         dirty.delete(id);
+        diskSnapshots.delete(id);
         dropItems(id);
         const file = fileOf(id);
         return queue(async () => {
@@ -7014,6 +7073,7 @@
           const note = noteFromFile(id, text, now());
           note.trashed = 0;
           note._onDisk = false;
+          diskSnapshots.delete(id);
           notes.set(id, note);
           markDirty(id);
           syncItems(id, true);
@@ -7094,7 +7154,7 @@
             return;
           }
           if (typeof msg.id !== "string" || !/^[\w.-]+$/.test(msg.id)) return;
-          reloadFromDisk(msg.id).catch(warn);
+          reloadFromDisk(msg.id, msg.conflictBackupPath || "").catch(warn);
         },
         async close() {
           await api.flush();
@@ -21325,7 +21385,7 @@
       });
       // A short message that disappears by itself (the timer exists only while it is visible).
       let toastEl = null, toastTimer = 0;
-      function toast(text) {
+      function toast(text, ms = 2200) {
         if (disposed) return;
         if (!toastEl) {
           toastEl = h("div", { class: "zentral-notes-toast", role: "status" });
@@ -21334,13 +21394,21 @@
         toastEl.textContent = text;
         toastEl.dataset.on = "true";
         window.clearTimeout(toastTimer);
-        toastTimer = window.setTimeout(() => { if (toastEl) toastEl.dataset.on = "false"; }, 2200);
+        toastTimer = window.setTimeout(() => { if (toastEl) toastEl.dataset.on = "false"; }, ms);
       }
       onCleanup(() => { window.clearTimeout(toastTimer); toastEl?.remove(); toastEl = null; });
       const offCalendarConflictNotice = store.items?.on?.((kind, _id, detail) => {
         if (kind === "conflict") toast(detail?.winner === "unresolved" ? (detail?.backupPath ? "Calendar save blocked: local edits were backed up in the Notes folder." : "Calendar save blocked: backup failed; keep Notes open.") : "A newer calendar edit in another window replaced this edit.");
       });
       onCleanup(() => offCalendarConflictNotice?.());
+      const offNoteConflictNotice = store.on((event) => {
+        if (event?.type !== "conflict") return;
+        const message = event.winner === "unresolved"
+          ? (event.backupPath ? "Note save blocked; a recovery copy was saved. Keep Notes open." : "Note save blocked because its recovery copy could not be saved. Keep Notes open.")
+          : "A concurrent note version was saved to Notes recovery before the newer edit replaced it.";
+        toast(message, 6000);
+      });
+      onCleanup(() => offNoteConflictNotice?.());
       function pageInfo(browser) {
         const b = browser || window.gBrowser?.selectedBrowser;
         let url = "";
