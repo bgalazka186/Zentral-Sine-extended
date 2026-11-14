@@ -99,7 +99,7 @@ function makeBus() {
     notify: (msg) => stores.forEach((s) => s.onRemoteMessage(JSON.stringify(msg))),
   };
 }
-async function newStore({ clock, fsys, bus, id = "w1", maxSec = 5, trashDays }) {
+async function newStore({ clock, fsys, bus, id = "w1", maxSec = 5, trashDays, getHistory = () => ({ on: false }) }) {
   const store = c.createStore({
     io: fsys.io,
     notify: (m) => bus?.notify(m),
@@ -108,6 +108,7 @@ async function newStore({ clock, fsys, bus, id = "w1", maxSec = 5, trashDays }) 
     getDir: async () => "/notes",
     getMaxSaveMs: () => maxSec * 1000,
     ...(trashDays === undefined ? {} : { getTrashDays: () => trashDays }),
+    getHistory,
     setTimer: clock.set,
     clearTimer: clock.clear,
   });

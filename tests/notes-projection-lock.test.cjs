@@ -23,6 +23,7 @@ const transfer = moved => ({
   const parentId = h.seam.store.addFolder("Projects");
   const nestedId = h.seam.store.addFolder("Nested", parentId);
   assert.ok(parentId && nestedId);
+  const nestedKey = "f:" + h.seam.store.folderUid(nestedId);
   const note = h.seam.store.create("# Locked note", nestedId);
   const day1 = C.addDays(C.dayStart(Date.now()), 1);
   const day2 = C.addDays(day1, 1);
@@ -36,7 +37,7 @@ const transfer = moved => ({
   let agendaRoot = root(h, "bgalazka-notes-agenda-folder");
   assert.ok(notesRoot && agendaRoot);
   let noteTab = tab(notesRoot, NOTES_MARK, "n:" + note.id);
-  let notesFolder = notesRoot.querySelectorAll("zen-folder").find(f => f.getAttribute("bgalazka-notes-subfolder") === nestedId);
+  let notesFolder = notesRoot.querySelectorAll("zen-folder").find(f => f.getAttribute("bgalazka-notes-subfolder") === nestedKey);
   let agendaTab = h.document.querySelectorAll("tab[" + AGENDA_MARK + "]").find(t => t.getAttribute(AGENDA_MARK).startsWith("item:"));
   let dayFolders = agendaRoot.querySelectorAll("zen-folder[bgalazka-notes-agenda-day]");
   assert.ok(noteTab && notesFolder && agendaTab && dayFolders.length >= 2);
@@ -78,7 +79,7 @@ const transfer = moved => ({
 
   const actualNoteText = h.seam.store.get(note.id).body;
   noteTab = tab(notesRoot, NOTES_MARK, "n:" + note.id);
-  notesFolder = notesRoot.querySelectorAll("zen-folder").find(f => f.getAttribute("bgalazka-notes-subfolder") === nestedId);
+  notesFolder = notesRoot.querySelectorAll("zen-folder").find(f => f.getAttribute("bgalazka-notes-subfolder") === nestedKey);
   assert.ok(noteTab && notesFolder);
   const otherNotesFolder = notesRoot.querySelectorAll("zen-folder").find(f => f !== notesFolder && f.hasAttribute("bgalazka-notes-subfolder"));
   if (otherNotesFolder) {
@@ -91,12 +92,12 @@ const transfer = moved => ({
   }
 
   // A folder dragged out of NOTES is retired as a projection and rebuilt from Notes metadata.
-  notesFolder = notesRoot.querySelectorAll("zen-folder").find(f => f.getAttribute("bgalazka-notes-subfolder") === nestedId);
+  notesFolder = notesRoot.querySelectorAll("zen-folder").find(f => f.getAttribute("bgalazka-notes-subfolder") === nestedKey);
   h.sidebar.pinned.append(notesFolder);
   h.emit("FolderUngrouped", notesFolder);
   h.seam.zen.runNow();
   notesRoot = root(h, "bgalazka-notes-folder");
-  assert.ok(notesRoot.querySelectorAll("zen-folder").some(f => f.getAttribute("bgalazka-notes-subfolder") === nestedId));
+  assert.ok(notesRoot.querySelectorAll("zen-folder").some(f => f.getAttribute("bgalazka-notes-subfolder") === nestedKey));
   assert.equal(h.seam.store.get(note.id).body, actualNoteText, "sidebar repair never changes note content");
 
   // A reminder tab moved out of Agenda is replaced from calendar.json.

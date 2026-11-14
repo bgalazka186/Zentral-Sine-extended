@@ -19519,7 +19519,8 @@
           const existing = zenRootEl();
           if (existing) {
             if (!zenRestoreRootParent(existing)) { warn("Zen NOTES folder: could not restore its top-level position; sidebar sync is paused"); return false; }
-            zenToTop(existing);
+            // Existing root placement is shared with Agenda. Only creation applies
+            // zenToTop; subsequent runs preserve the user's current top-level order.
             return true;
           }
           const tab = zenNewTab(zenNewUrl(""), "root");
