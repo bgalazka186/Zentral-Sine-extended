@@ -26,7 +26,10 @@ const AGENDA_PREF = "zen.workspace.zentral.notes.agenda_folder";
   notesRoot.addTabs([inheritedFolderTab]);
   h.emit("TabOpen", inheritedFolderTab);
   assert.equal(inheritedFolderTab.isConnected, false, "a new URL tab is routed even if Zen initially inserts it into NOTES");
-  assert.equal(JSON.stringify(routes), JSON.stringify([{ kind: "note", noteId: note.id }]), "zn-note is routed to its note identity");
+  assert.equal(JSON.stringify(routes), JSON.stringify([
+    { kind: "note", noteId: note.id },
+    { kind: "note", noteId: note.id },
+  ]), "both ordinary and inherited-folder zn-note navigations route to their note identity");
 
   const start = C.addDays(C.dayStart(Date.now()), 1) + 12 * 3600000;
   const item = h.seam.store.items.upsert(C.makeItem({
@@ -44,7 +47,7 @@ const AGENDA_PREF = "zen.workspace.zentral.notes.agenda_folder";
   const agendaUrl = "about:blank#zn-agenda-" + encodeURIComponent(entry.key);
   const agendaTab = h.window.gBrowser.addTab(agendaUrl);
   assert.equal(agendaTab.isConnected, false, "zn-agenda-item navigation tab is closed during TabOpen");
-  assert.equal(JSON.stringify(routes[1]), JSON.stringify({ kind: "agenda", key: entry.key }), "Agenda URL is decoded as its item key");
+  assert.equal(JSON.stringify(routes[2]), JSON.stringify({ kind: "agenda", key: entry.key }), "Agenda URL is decoded as its item key");
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(JSON.stringify(opened[0]), JSON.stringify({ id: note.id, key: entry.key }), "Agenda URL opens the note linked to the reminder");
 
