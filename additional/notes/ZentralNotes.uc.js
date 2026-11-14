@@ -19184,7 +19184,15 @@
         if (!disposed && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); }
       });
       const agendaNoteUnsub = store.on((ev) => {
-        if (["change", "tree", "remove", "reset"].includes(ev.type) && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); }
+        if (!agendaEnabled()) return;
+        const structural = ev.type === "tree" || ev.type === "reset";
+        // Hidden linked items matter too: trash/restore and remote deletion
+        // change the title and visibility of their Agenda entries.
+        const linked = ["change", "remove"].includes(ev.type) && ev.id &&
+          (store.items?.list?.({ noteId: ev.id, includeHidden: true }) || []).length > 0;
+        // When permanent removal already dropped the last item, the item
+        // store's own remove event schedules the same reconciliation.
+        if (structural || linked) { agendaController.invalidate?.(); agendaController.schedule(); }
       });
       onCleanup(() => { agendaItemUnsub?.(); agendaHistoryUnsub?.(); agendaNoteUnsub?.(); });
       const agendaBoot = window.setTimeout(agendaSoon, 6500);

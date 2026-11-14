@@ -338,3 +338,18 @@ Production controller resolves each master policy once per reconciliation, shari
 **Tests / done when:** Property test: new expansion equals old expansion for random rules/exceptions over DST boundaries; F0.2 budgets.
 
 Bounded rule LRU accounts for timezone-sensitive UNTIL and returns defensive copies; occurrence exceptions are indexed once per expansion with first-match semantics. Normalized plain records use an in-memory recursive clone rather than JSON round trips, retaining full master/sibling mutation isolation (rather than sharing nested arrays as the initial shallow-copy proposal suggested). Sixty seeded pre-change byte-hash fixtures across DST and exceptions match, plus mutation/timezone tests. 31-day expansion 500/2000: 224/951 ms; 90-day: 629/2488 ms versus pre-change 250/1136 and 752/3143 ms (timings vary). Corresponding budgets tightened.
+
+## PF2.6 — Completed Agenda note event filtering (3.3.125)
+
+#### `PF2.6` — Agenda controller: ignore irrelevant note changes
+**Status:** `DONE` · **Impact:** Med · **Effort:** S · **Depends on:** PF2.3 · **Source:** Audit R1 B12
+
+**Problem:** `agendaNoteUnsub = store.on(...)` calls `agendaController.schedule()` for every note `change`/`tree`/`remove`/`reset`, i.e. on autosaves of notes that have nothing to do with the Agenda. The Agenda only depends on calendar items, linked note titles and trashed state.
+
+**Plan (do in this order):**
+1. Schedule only when the changed note has calendar items (lookup by `noteId` in the item store), when a title changed for a linked note, or on trash/restore/remove of a linked note.
+2. Keep `reset` and `tree` unconditional.
+
+**Tests / done when:** Note edits without calendar items do not call `schedule` (spy).
+
+The real coordinator checks for linked items, including hidden ones, before scheduling note changes; permanent removal also emits the item-store removal event. Tree and reset remain unconditional. Fake-Zen integration spies verify unrelated edits/trash are ignored and linked title, trash/restore and tree events still schedule.
