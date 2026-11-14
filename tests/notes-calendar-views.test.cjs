@@ -468,7 +468,7 @@ const chooseMenu = async (root, triggerSelector, label) => {
   const dragHover = q(root, ".zn-cal-hover-card");
   dragButton.dispatchEvent(pointer("pointerdown", 200, 621)); root.dispatchEvent(pointer("pointermove", 200, 675));
   const background = store.items.upsert({ id: "while-dragging", summary: "While dragging", start: { dateTime: new Date(dragStart + 7200000).toISOString() }, x: { kind: "event", src: "manual" } });
-  assert.ok(store.items.history.append({ itemId: bg.id, occurrenceId: bg.id, action: "done", at: Date.now() + 10 }));
+  assert.ok(store.items.history.append({ itemId: bg.id, occurrenceId: bg.id, action: "done", at: storeNow + 10 }));
   sheet.refreshCalendar(); await flushRaf();
   assert.ok(q(root, ".zn-cal-drag-preview"), "background update cannot cancel pointer drag");
   assert.equal(q(root, ".zn-cal-time-scroll"), backgroundDragScroll, "background update retains the timeline while dragging");
@@ -632,7 +632,8 @@ const chooseMenu = async (root, triggerSelector, label) => {
   reminderButton.dispatchEvent(pointer("pointerdown", 200, 702));
   root.dispatchEvent(pointer("pointermove", 200, 756));
   root.dispatchEvent(pointer("pointerup", 200, 756));
-  store.items.history.append({ itemId: "drag-ui-reminder", action: "done", at: Date.now() });
+  storeNow += 1000;
+  store.items.history.append({ itemId: "drag-ui-reminder", action: "done", at: storeNow });
   q(root, ".zn-calendar-undo-move").click();
   assert.equal(store.items.get("drag-ui-reminder").start.dateTime, new Date(reminderStart + 3600000).toISOString(), "undo refuses to overwrite a newer reminder lifecycle change");
   assert.equal(store.items.history.stateFor("drag-ui-reminder"), "done");
@@ -722,7 +723,7 @@ const chooseMenu = async (root, triggerSelector, label) => {
   q(root, ".zn-calendar-undo-move").click();
   assert.equal(store.items.get(linkedItem.id).start.dateTime, linkedOldStart, "undo restores a source-derived item");
   assert.match(store.get(linkedNote.id).body, /13:30-14:30/, "undo restores the source list schedule");
-  store.items.syncNote(linkedNote.id, store.get(linkedNote.id).body, { sourceEdit: true, updatedAt: Date.now() });
+  store.items.syncNote(linkedNote.id, store.get(linkedNote.id).body, { sourceEdit: true, updatedAt: storeNow });
   assert.equal(store.items.get(linkedItem.id).start.dateTime, linkedOldStart, "source resync retains the restored time");
   const linkedEndHandle = root.querySelectorAll(".zn-cal-resize-handle").find((el) => el.getAttribute("data-item-id") === linkedItem.id && el.getAttribute("data-edge") === "end");
   assert.ok(linkedEndHandle);
