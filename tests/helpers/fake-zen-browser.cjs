@@ -96,7 +96,7 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   const IOUtils = {
     makeDirectory: async () => {}, setPermissions: async () => {}, exists: async (p) => files.has(p),
     readUTF8: async (p) => { if (!files.has(p)) { const e = new Error("not found"); e.code = "ENOENT"; throw e; } return files.get(p); },
-    writeUTF8: async (p, data) => { files.set(p, data); }, getChildren: async (p) => [...files.keys()].filter((entry) => entry.startsWith(p + "/")),
+    writeUTF8: async (p, data) => { files.set(p, data); }, getChildren: async (p) => [...new Set([...files.keys()].filter((entry) => entry.startsWith(p + "/")).map((entry) => p + "/" + entry.slice(p.length + 1).split("/")[0]))],
     stat: async () => ({ lastModified: Date.now() }), remove: async (p) => files.delete(p),
   };
   const PathUtils = { profileDir: "/profile", tempDir: "/tmp", join: (...parts) => parts.join("/"), filename: (p) => p.split("/").pop() };
