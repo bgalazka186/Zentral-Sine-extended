@@ -1275,6 +1275,21 @@
       }
     };
     const clearIndexes = () => { lifecycle.clear(); byIdentity.clear(); claimedStages.clear(); };
+    // A claim must not suppress its own retry if the write failed. Only discard
+    // records still known to be unsaved; never undo another lifecycle action.
+    function rollbackClaims(claims) {
+      const removed = [];
+      for (let i = records.length - 1; i >= 0; i--) {
+        const record = records[i];
+        if (!claims.has(record) || !unsaved.has(record)) continue;
+        unsaved.delete(record); records.splice(i, 1); removed.push(record);
+      }
+      if (!removed.length) return;
+      clearIndexes(); for (const record of records) indexRecord(record);
+      dirty = unsaved.size > 0;
+      if (!dirty && timer !== null) { clearTimer(timer); timer = null; }
+      emit({ kind: "refresh", count: removed.length, identities: removed.map(({ itemId, occurrenceId }) => ({ itemId, occurrenceId })) });
+    }
     let storage = { state: "unopened", error: "", backupPath: "" }, protectedText = null;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
     const state = () => ({ ...storage, dirty: dirty || unsaved.size > 0, writeBlocked, retryCount, count: records.length });
@@ -1485,7 +1500,14 @@
         if (duplicate) return null;
         const record = this.append({ ...raw, action: raw.action === "skipped" ? "skipped" : "alerted" });
         if (!record) return null;
-        try { await writeNow(); } catch (error) { safeWarn(error); }
+        const claim = records[records.length - 1];
+        try { await writeNow(); }
+        catch (error) {
+          // An older in-flight flush can already have included this claim.
+          // In that case it is durable even though the later write failed.
+          const saved = !unsaved.has(claim);
+          rollbackClaims(new Set([claim])); safeWarn(error); return saved ? record : null;
+        }
         return record;
       },
       // Digest claims use one merge and one durable write for the whole batch.
@@ -1495,7 +1517,7 @@
         if (writeBlocked || !Array.isArray(groups)) return [];
         try { await this.refresh(); } catch (error) { safeWarn(error); }
         if (writeBlocked) return [];
-        const claimed = [];
+        const claimed = [], claimRecords = new Set(), claimTops = new Map();
         for (let index = 0; index < groups.length; index++) {
           const group = groups[index], top = Array.isArray(group) && group[0];
           if (!top || (top.requirePending && ["done", "dismissed"].includes(this.stateFor(top.itemId, top.occurrenceId)))) continue;
@@ -1503,10 +1525,17 @@
           if (already(top)) continue;
           const record = this.append({ ...top, action: "alerted" });
           if (!record) continue;
-          claimed.push(index);
-          for (const raw of group.slice(1)) if (raw && !already(raw)) this.append({ ...raw, action: "alerted" });
+          claimed.push(index); claimRecords.add(records[records.length - 1]); claimTops.set(index, records[records.length - 1]);
+          for (const raw of group.slice(1)) if (raw && !already(raw)) {
+            const lower = this.append({ ...raw, action: "alerted" });
+            if (lower) claimRecords.add(records[records.length - 1]);
+          }
         }
-        if (claimed.length) try { await writeNow(); } catch (error) { safeWarn(error); }
+        if (claimed.length) try { await writeNow(); }
+        catch (error) {
+          const saved = claimed.filter((index) => !unsaved.has(claimTops.get(index)));
+          rollbackClaims(claimRecords); safeWarn(error); return saved;
+        }
         return claimed;
       },
       list({ itemId = "", occurrenceId = "", noteId = "", limit = 0, offset = 0 } = {}) {

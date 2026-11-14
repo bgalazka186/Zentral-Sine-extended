@@ -33,6 +33,10 @@ Quick notes that open **over the panel you are looking at**, without touching it
 
 Highlights are written as `==text==` (yellow) or `=={green}text==` (also `blue`, `pink`, `orange`). Links must be `http(s)`, and are opened in a new tab only when you click them in read mode. Markup in a note is never run as HTML.
 
+### Reminder storage failures
+
+Calendar reminder banners and missed-reminder digests are not displayed when their history claim cannot be saved. Unsaved claims are rolled back without discarding other pending history, and the scheduler makes up to three 30-second retries. A damaged or unreadable history file remains protected and requires attention before alerts can be saved. Simultaneous claims from separate windows are not yet atomic, so duplicate alerts are still possible.
+
 ### Daily Note calendar categories
 
 A calendar item in a Daily Note normally follows its `%%calendar%%` section. Choosing a category for that item in **Edit details** saves a per-item marker on its own line, for example `%%zn-item-category: Work%%`; an empty marker means **No category**. The marker is hidden in read view but visible in the Markdown editor. You can change its value in the note, or choose **Follow note section** in the editor to remove it and resume inheritance. Other lines and their categories are unchanged. Keep the separate `%%zn-item-id:...%%` identity marker intact.

@@ -5361,6 +5361,7 @@
               notesDirty = true;
             }
             const calendar = calendarCandidates(nowAt);
+            let retryClaim = false;
             for (const item of calendar.due) {
               if (destroyed) return;
               const identity = item.__historyIdentity;
@@ -5369,6 +5370,8 @@
               // claimAlert re-reads the shared history first so a second window does not show the same banner.
               let record = null;
               try { record = history?.claimAlert ? await history.claimAlert(entry) : history?.append?.(entry); } catch (_) { record = null; }
+              const claimState = !record && history?.storageState?.();
+              if (claimState && !claimState.writeBlocked && claimState.retryCount > 0 && claimState.retryCount <= 3) retryClaim = true;
               if (record && !item.__skipped && !item.__coalesced) fired.push(item);
             }
             if (calendar.due.length && store.items?.history?.flush) {
@@ -5377,7 +5380,10 @@
             if (destroyed) return;
             if (fired.length) { try { onDue(fired.map((n) => n.__calendarReminder ? n : (store.get(n.id) || n))); } catch (_) {} }
             const nextNote = nextReminderAt(pendingNoteCandidates(), now());
-            const next = calendar.next && nextNote ? Math.min(calendar.next, nextNote) : calendar.next || nextNote;
+            let next = calendar.next && nextNote ? Math.min(calendar.next, nextNote) : calendar.next || nextNote;
+            // A failed claim was rolled back and is still due. Retry a bounded
+            // number of times, even when it was the last stage in the schedule.
+            if (retryClaim) next = next ? Math.min(next, now() + 30000) : now() + 30000;
             if (next && !destroyed) timer = setTimer(() => { timer = null; run(); }, reminderDelay(next, now()));
           } while (again && !destroyed);
         } finally { busy = false; }

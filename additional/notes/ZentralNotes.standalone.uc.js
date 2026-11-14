@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.150
+// @version 3.3.151
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.150, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.151, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.150";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.151";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2486,6 +2486,21 @@ const __zentralEmbeddedLoader = (function () {
       }
     };
     const clearIndexes = () => { lifecycle.clear(); byIdentity.clear(); claimedStages.clear(); };
+    // A claim must not suppress its own retry if the write failed. Only discard
+    // records still known to be unsaved; never undo another lifecycle action.
+    function rollbackClaims(claims) {
+      const removed = [];
+      for (let i = records.length - 1; i >= 0; i--) {
+        const record = records[i];
+        if (!claims.has(record) || !unsaved.has(record)) continue;
+        unsaved.delete(record); records.splice(i, 1); removed.push(record);
+      }
+      if (!removed.length) return;
+      clearIndexes(); for (const record of records) indexRecord(record);
+      dirty = unsaved.size > 0;
+      if (!dirty && timer !== null) { clearTimer(timer); timer = null; }
+      emit({ kind: "refresh", count: removed.length, identities: removed.map(({ itemId, occurrenceId }) => ({ itemId, occurrenceId })) });
+    }
     let storage = { state: "unopened", error: "", backupPath: "" }, protectedText = null;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
     const state = () => ({ ...storage, dirty: dirty || unsaved.size > 0, writeBlocked, retryCount, count: records.length });
@@ -2696,7 +2711,14 @@ const __zentralEmbeddedLoader = (function () {
         if (duplicate) return null;
         const record = this.append({ ...raw, action: raw.action === "skipped" ? "skipped" : "alerted" });
         if (!record) return null;
-        try { await writeNow(); } catch (error) { safeWarn(error); }
+        const claim = records[records.length - 1];
+        try { await writeNow(); }
+        catch (error) {
+          // An older in-flight flush can already have included this claim.
+          // In that case it is durable even though the later write failed.
+          const saved = !unsaved.has(claim);
+          rollbackClaims(new Set([claim])); safeWarn(error); return saved ? record : null;
+        }
         return record;
       },
       // Digest claims use one merge and one durable write for the whole batch.
@@ -2706,7 +2728,7 @@ const __zentralEmbeddedLoader = (function () {
         if (writeBlocked || !Array.isArray(groups)) return [];
         try { await this.refresh(); } catch (error) { safeWarn(error); }
         if (writeBlocked) return [];
-        const claimed = [];
+        const claimed = [], claimRecords = new Set(), claimTops = new Map();
         for (let index = 0; index < groups.length; index++) {
           const group = groups[index], top = Array.isArray(group) && group[0];
           if (!top || (top.requirePending && ["done", "dismissed"].includes(this.stateFor(top.itemId, top.occurrenceId)))) continue;
@@ -2714,10 +2736,17 @@ const __zentralEmbeddedLoader = (function () {
           if (already(top)) continue;
           const record = this.append({ ...top, action: "alerted" });
           if (!record) continue;
-          claimed.push(index);
-          for (const raw of group.slice(1)) if (raw && !already(raw)) this.append({ ...raw, action: "alerted" });
+          claimed.push(index); claimRecords.add(records[records.length - 1]); claimTops.set(index, records[records.length - 1]);
+          for (const raw of group.slice(1)) if (raw && !already(raw)) {
+            const lower = this.append({ ...raw, action: "alerted" });
+            if (lower) claimRecords.add(records[records.length - 1]);
+          }
         }
-        if (claimed.length) try { await writeNow(); } catch (error) { safeWarn(error); }
+        if (claimed.length) try { await writeNow(); }
+        catch (error) {
+          const saved = claimed.filter((index) => !unsaved.has(claimTops.get(index)));
+          rollbackClaims(claimRecords); safeWarn(error); return saved;
+        }
         return claimed;
       },
       list({ itemId = "", occurrenceId = "", noteId = "", limit = 0, offset = 0 } = {}) {
@@ -10166,6 +10195,7 @@ __zentralShim.register = function (def) {
               notesDirty = true;
             }
             const calendar = calendarCandidates(nowAt);
+            let retryClaim = false;
             for (const item of calendar.due) {
               if (destroyed) return;
               const identity = item.__historyIdentity;
@@ -10174,6 +10204,8 @@ __zentralShim.register = function (def) {
               // claimAlert re-reads the shared history first so a second window does not show the same banner.
               let record = null;
               try { record = history?.claimAlert ? await history.claimAlert(entry) : history?.append?.(entry); } catch (_) { record = null; }
+              const claimState = !record && history?.storageState?.();
+              if (claimState && !claimState.writeBlocked && claimState.retryCount > 0 && claimState.retryCount <= 3) retryClaim = true;
               if (record && !item.__skipped && !item.__coalesced) fired.push(item);
             }
             if (calendar.due.length && store.items?.history?.flush) {
@@ -10182,7 +10214,10 @@ __zentralShim.register = function (def) {
             if (destroyed) return;
             if (fired.length) { try { onDue(fired.map((n) => n.__calendarReminder ? n : (store.get(n.id) || n))); } catch (_) {} }
             const nextNote = nextReminderAt(pendingNoteCandidates(), now());
-            const next = calendar.next && nextNote ? Math.min(calendar.next, nextNote) : calendar.next || nextNote;
+            let next = calendar.next && nextNote ? Math.min(calendar.next, nextNote) : calendar.next || nextNote;
+            // A failed claim was rolled back and is still due. Retry a bounded
+            // number of times, even when it was the last stage in the schedule.
+            if (retryClaim) next = next ? Math.min(next, now() + 30000) : now() + 30000;
             if (next && !destroyed) timer = setTimer(() => { timer = null; run(); }, reminderDelay(next, now()));
           } while (again && !destroyed);
         } finally { busy = false; }
