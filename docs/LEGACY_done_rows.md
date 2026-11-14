@@ -505,3 +505,16 @@ Panel-hosted Calendar cards use a separately anchored manual top-layer overlay, 
 
 
 Calendar day and item context menus use pointer coordinates for pointer invocation and target geometry for keyboard invocation. A scoped manual top layer uses viewport bounds and readable width, including scrollable tall menus; dismissal owns its listeners and layer on action, outside press, Escape, view change, external scroll, resize and teardown. If popovers are unsupported it falls back to the existing constrained sheet menu. Calendar item details also use the panel dialog layer. Fake sheet and pure geometry tests cover panel and standalone, edges, keyboard, fallback and cleanup. Real Zen compositing, zoom and native browser controls remain unverified.
+
+## T2.4d — Archived existing Calendar/Agenda navigation
+
+#### `T2.4d` — Calendar/Agenda click navigation and right-click menus
+**Status:** `DONE` · **Impact:** High · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
+
+**Current state and what is LEFT:** DONE: Month cell and keyboard Day navigation, linked-item source navigation, keyboard/right-click day and item menus, date note and timed/all-day creation, previous/next day, plus Agenda sidebar item actions. DONE also: inherited-policy-aware per-item show/hide shared by Calendar and Agenda, with recurring changes explicitly applying to the series; legacy note reminders are read-only and not stored in the Agenda projection. LEFT: live Zen navigation/menu checks.
+
+**Full specification (original row):** **OPEN.** Depends on `T2.4b` and the item editor (`T2.3f`). Left-clicking a day in Month switches to Day view focused on that exact date. Left-clicking a linked reminder/event in Calendar or Agenda opens its source note at the saved heading (or its calendar note when explicitly chosen). **This must work for every ordinary source note, not only when a Daily/date note is assigned; resolve the item's `noteId` directly and fall back gracefully if the heading is missing.** Right-click on a calendar day offers relevant actions: switch to Day, create timed/all-day event, create timed/all-day reminder, open/create date note and date navigation. Right-click on an item in Calendar and Agenda offers context-aware Open source note, Edit, reschedule/move, show details, show/hide in Agenda, duplicate and remove/delete; Done/Dismiss actions appear when `T2.7a` exists. Agenda linked-item RMB must expose the same source-note and edit actions. Keyboard/context-menu parity and no action on cancelled menus are required.
+
+**Note (2026-11-14):** the rule 'left-click on a Month day opens Day view' is REVERSED by `OW-06`. Implement `OW-06` instead of that part.
+
+The listed implementation and automated coverage existed before this archival; the sole remaining live-only verification is assumed to work under the standing owner rule, not actually verified here. OW-06 explicitly reverses the old Month click rule and remains next.
