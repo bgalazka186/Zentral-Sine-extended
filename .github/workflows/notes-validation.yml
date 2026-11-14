@@ -28,8 +28,6 @@ jobs:
         run: node tests/notes-multiwindow.test.cjs
       - name: Run regression suite
         run: node tests/run-all.cjs
-      - name: Run calendar, Agenda and reminder time-zone matrix
-        run: node tests/run-all.cjs --tz
       - name: Check patch formatting
         run: git diff --check
       - name: Commit generated standalone files
@@ -43,3 +41,5 @@ jobs:
             git commit -m "chore: rebuild standalone Notes package [skip ci]"
             git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
+      - name: Run calendar, Agenda and reminder time-zone matrix
+        run: node tests/run-all.cjs --tz
