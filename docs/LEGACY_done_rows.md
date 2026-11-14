@@ -535,3 +535,16 @@ The listed implementation and automated coverage existed before this archival; t
 **Tests / done when:** Month click does not change `store.meta.calendarView`; selection persists; Day opens only through the listed actions.
 
 Month cell click, Enter and Space select and persist the local day and update the complete selected-day list and all-day strip without replacing the cell, so double-click remains possible. Date badge, double-click, Shift+Enter, context menu and Agenda day actions retain Day navigation. Grid selection exposes aria-selected. Tests cover persisted selection, item lists, double-click, keyboard and date badge. OW-09 picker mode remains future work and must preserve this behavior; live Zen interaction is unverified.
+
+## OW-16 — Completed Daily Note category synchronization (3.3.137)
+
+#### `OW-16` — Event categories lost when Calendar and Daily Note synchronize
+**Status:** `DONE` · **Impact:** High · **Effort:** M · **Depends on:** none · **Source:** Owner report
+
+**Problem:** Event category edits still fail to survive navigating between Calendar and the Daily Note; the owner reports the Daily Note and Calendar are not synchronizing correctly. This is a newly reported remaining path after `OW-12`, not proof that its source-note override fix covered mirroring.
+
+**Plan:** Reproduce a note-less event mirrored into a Daily Note and an existing Daily Note event; trace create, category edit, navigation, note synchronization, relocation and reload. Fix the actual synchronization/ownership problem without rewriting unrelated lines or losing markers, fields or sibling categories. Preserve intentional section inheritance and explicit no-category choices; do not assume the reported cause without a regression.
+
+**Tests / done when:** Real sheet/store flows for mirrored and user-authored Daily Note events, none → category → another → none, navigation in both directions, note edits and reload; matching Calendar and note representation remain consistent, other items and markers survive, and existing OW-12 tests still pass.
+
+Daily Note list items now persist per-item category overrides in a dedicated hidden `%%zn-item-category: …%%` comment; an empty value means no category and deleting the comment restores section inheritance. Source edits synchronize back into Calendar; composer saves update the line, without changing sibling sections or identity markers. Ambiguous duplicate markers and unsafe title rewrites are refused. Mirrored and authored event flows, navigation, category edits, inherited values, marker removal, relocation, Google shape and reload have regression coverage. Existing non-Daily Note override behavior remains unchanged. Hot-path 500/2000 note-sync baseline 33.5/106.8 ms, after 33.8/103.5 ms; timings vary. Note and calendar writes are not a cross-file transaction; live Zen is unverified.

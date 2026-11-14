@@ -6519,6 +6519,26 @@
           api.update(note.id, result.body, "checkbox");
           return true;
         },
+        // Daily Note list entries expose their per-item category in their own
+        // hidden line comment; section categories and siblings remain untouched.
+        prepareItemCategoryToNote(item, { fmt } = {}) {
+          if (!item || item.x?.src !== "list" || !item.x.noteId || !item.x.key) return null;
+          const note = notes.get(item.x.noteId);
+          if (!note || note.trashed || !dateOfNote(note, fmt || getDateFormat() || CALENDAR_PART.DEFAULT_DATE_FORMAT)) return null;
+          if (CALENDAR_PART.noteLineItemId(note.id, item.x.key) !== item.id) return null;
+          const title = CALENDAR_PART.setListLineSummary(note.body, item.x.key, item.summary, now());
+          if (!title.found || !title.safe) return { error: "The Daily Note line cannot be updated safely. Edit its title in the note first." };
+          const category = typeof item.x.categoryOverride === "string" ? item.x.categoryOverride : null;
+          const result = CALENDAR_PART.setListLineCategory(title.body, item.x.key, category, now());
+          if (!result.found || !result.safe) return { error: "The Daily Note line has ambiguous category metadata. Resolve it in the note first." };
+          return { noteId: note.id, body: result.body, changed: title.changed || result.changed };
+        },
+        syncItemCategoryToNote(item, options = {}) {
+          const prepared = api.prepareItemCategoryToNote(item, options);
+          if (!prepared || prepared.error || !prepared.changed) return false;
+          api.update(prepared.noteId, prepared.body, "agenda-category");
+          return true;
+        },
         // Mirror a lifecycle change into the note text. Idempotent: an already-matching box writes nothing.
         syncItemCheckbox(item, done) {
           const lineId = api._checkboxLineId(item), note = lineId ? notes.get(item.x.noteId) : null;
@@ -12085,7 +12105,7 @@
         if (original?.x?.src === "list") {
           const source = store.get(original.x.noteId);
           const parsed = source && C.extractNoteItems(source.body, source.id, now).find((entry) => entry.id === original.id);
-          sourceCategory = parsed?.x?.category || "";
+          sourceCategory = parsed?._sectionCategory ?? parsed?.x?.category ?? "";
           categorySelect.append(h("option", { value: inheritCategory }, "Follow note section (" + (sourceCategory || "no category") + ")"));
         }
         categorySelect.append(h("option", { value: "" }, "No category"));
@@ -12317,9 +12337,12 @@
             status.textContent = kind.value === "event" ? "Check the dates and that the end is after the start." : "Check the date and time.";
             return;
           }
+          const noteSync = original?.x?.src === "list" ? store.prepareItemCategoryToNote(item, { fmt: dateDisplayFormat() }) : null;
+          if (noteSync?.error) { status.textContent = noteSync.error; return; }
           const saved = store.items.upsert(item);
           if (!saved) { status.textContent = "Could not save the calendar item. Check calendar storage."; return; }
           if (!original && !saved.x?.noteId) { try { store.mirrorItemToAgendaNote(saved.id, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
+          else if (saved.x?.src === "list") { try { store.syncItemCategoryToNote(saved, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
           const startMs = item.start.date ? C.parseYmd(item.start.date).getTime() : Date.parse(item.start.dateTime);
           store.setMeta({ calendarCursor: C.localDateKey(startMs), calendarView: store.meta.calendarView || "month" });
           closeDialog(); renderCalendar();

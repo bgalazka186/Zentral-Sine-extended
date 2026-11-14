@@ -487,6 +487,7 @@
       },
     };
     if (x.src === "list" && typeof x.categoryOverride === "string") item.x.categoryOverride = cleanCategoryName(x.categoryOverride);
+    if (x.src === "list" && x.categoryInNote === true) item.x.categoryInNote = true;
     if (end) item.end = end;
     if (typeof raw.created === "string" && Number.isFinite(Date.parse(raw.created))) item.created = iso(Date.parse(raw.created));
     item.etag = typeof raw.etag === "string" && raw.etag ? raw.etag : etagOf(item);
@@ -725,7 +726,7 @@
   // The plain Google event resource for an item (our `x` goes into extendedProperties.private, as Google allows).
   function toGoogle(it) {
     const priv = {};
-    for (const [k, v] of Object.entries(it.x)) if ((v !== "" || k === "categoryOverride") && v !== undefined && v !== null && !(Array.isArray(v) && !v.length)) priv["zentral_" + k] = ["notify", "recurrenceExceptions", "agendaWindow", "categoryOverride"].includes(k) ? JSON.stringify(v) : String(v);
+    for (const [k, v] of Object.entries(it.x)) if ((v !== "" || k === "categoryOverride") && v !== undefined && v !== null && !(Array.isArray(v) && !v.length)) priv["zentral_" + k] = ["notify", "recurrenceExceptions", "agendaWindow", "categoryOverride", "categoryInNote"].includes(k) ? JSON.stringify(v) : String(v);
     const out = { id: it.id, summary: it.summary, description: it.description, status: it.status, start: it.start, updated: it.updated, extendedProperties: { private: priv } };
     out.end = it.end || it.start;
     if (it.created) out.created = it.created;
@@ -737,8 +738,8 @@
     if (!g || typeof g !== "object") return null;
     const priv = g.extendedProperties?.private || {};
     const x = {};
-    for (const k of ["kind", "noteId", "heading", "category", "tz", "src", "key", "legacyKey", "moved", "calNote", "notify", "agendaWindow", "recurrenceExceptions", "historyId", "categoryOverride"]) if (priv["zentral_" + k] !== undefined) {
-      if (["notify", "agendaWindow", "recurrenceExceptions", "categoryOverride"].includes(k)) { try { x[k] = JSON.parse(priv["zentral_" + k]); } catch (_) {} }
+    for (const k of ["kind", "noteId", "heading", "category", "tz", "src", "key", "legacyKey", "moved", "calNote", "notify", "agendaWindow", "recurrenceExceptions", "historyId", "categoryOverride", "categoryInNote"]) if (priv["zentral_" + k] !== undefined) {
+      if (["notify", "agendaWindow", "recurrenceExceptions", "categoryOverride", "categoryInNote"].includes(k)) { try { x[k] = JSON.parse(priv["zentral_" + k]); } catch (_) {} }
       else x[k] = priv["zentral_" + k];
     }
     const sameEnd = g.end && JSON.stringify(g.end) === JSON.stringify(g.start);
@@ -824,9 +825,17 @@
   const ITEM_ID_RE = /%%\s*zn-item-id:([a-z0-9_-]{4,60})\s*%%/gi;
   function itemIdTokens(line) { return [...String(line || "").matchAll(ITEM_ID_RE)].map((m) => m[1]); }
   const stripItemIdMarks = (line) => String(line || "").replace(ITEM_ID_RE, "");
+  // An explicit per-line category in a Daily Note is an ordinary hidden Markdown
+  // comment. An empty value means no category; absence means section inheritance.
+  const ITEM_CATEGORY_RE = /%%\s*zn-item-category:([^%\r\n]*)%%/gi;
+  function itemCategoryMark(line) {
+    const match = [...String(line || "").matchAll(ITEM_CATEGORY_RE)];
+    return match.length === 1 ? cleanCategoryName(match[0][1]) : null;
+  }
+  const stripItemCategoryMarks = (line) => String(line || "").replace(ITEM_CATEGORY_RE, "");
   function parseMarkedLine(line, heading, now) {
     const ignored = ignoredDateTokens(line);
-    let sourceLine = stripItemIdMarks(stripDateIgnoreMarks(line));
+    let sourceLine = stripItemCategoryMarks(stripItemIdMarks(stripDateIgnoreMarks(line)));
     const listText = sourceLine.replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)(?:\[[ xX]\]\s+)?/, "");
     const prefix = parseDatePrefix(listText, now);
     // Ignoring a leading date disables that trigger; a dated heading may still supply its own date.
@@ -1055,6 +1064,50 @@
     });
     return { body: changed ? lines.join("\n") : String(body || ""), changed, found };
   }
+  // Replace a list item's parsed title only when its exact text is unambiguous;
+  // never consume hidden markers or other Markdown if it cannot be located safely.
+  function setListLineSummary(body, lineId, summary, now = 0) {
+    const text = String(body || ""), lines = text.split("\n");
+    let found = false, changed = false, safe = true;
+    visitCalendarListLines(text, now, (entry) => {
+      if (found || itemIdTokens(entry.line)[0] !== lineId) return;
+      found = true;
+      const old = entry.parsed.summary, next = String(summary || "").trim();
+      if (old === next) return;
+      if (!next || /%%|[\r\n]/.test(next) || /%%/.test(old)) { safe = false; return; }
+      const pos = entry.line.indexOf(old);
+      if (pos < 0 || entry.line.indexOf(old, pos + 1) !== -1) { safe = false; return; }
+      const candidate = entry.line.slice(0, pos) + next + entry.line.slice(pos + old.length);
+      if (parseMarkedLine(candidate, entry.heading, now).parsed?.summary !== next) { safe = false; return; }
+      lines[entry.index] = candidate;
+      changed = true;
+    });
+    return { body: changed ? lines.join("\n") : text, found, changed, safe };
+  }
+  // Edit only the one owned category comment, leaving line identity and other
+  // note content intact. Duplicate markers are ambiguous and must not be changed.
+  function setListLineCategory(body, lineId, category, now = 0) {
+    const text = String(body || ""), lines = text.split("\n");
+    let found = false, changed = false, safe = true;
+    visitCalendarListLines(text, now, (entry) => {
+      if (found || itemIdTokens(entry.line)[0] !== lineId) return;
+      found = true;
+      const matches = [...entry.line.matchAll(ITEM_CATEGORY_RE)];
+      if (matches.length > 1) { safe = false; return; }
+      const mark = category === null ? "" : "%%zn-item-category:" + (cleanCategoryName(category) ? " " + cleanCategoryName(category) : "") + "%%";
+      let line = entry.line;
+      if (matches.length) {
+        const old = matches[0];
+        if (mark) line = line.slice(0, old.index) + mark + line.slice(old.index + old[0].length);
+        else {
+          const pos = old.index > 0 && line[old.index - 1] === " " ? old.index - 1 : old.index;
+          line = line.slice(0, pos) + line.slice(old.index + old[0].length);
+        }
+      } else if (mark) line += " " + mark;
+      if (line !== entry.line) { lines[entry.index] = line; changed = true; }
+    });
+    return { body: changed ? lines.join("\n") : text, changed, found, safe };
+  }
   function extractNoteItems(body, noteId, now = 0) {
     const lines = String(body || "").split("\n");
     const out = [], seen = new Map();
@@ -1079,8 +1132,11 @@
       const legacyKey = hashText(noteId + "|" + norm) + (n > 1 ? "-" + n : "");
       const lineId = itemIdTokens(line)[0] || "";
       const key = lineId || legacyKey;
-      const it = itemFromLine(parsed, { noteId, heading: heading.text, category: sec.category, src: "list", key, legacyKey }, now);
+      const lineCategory = itemCategoryMark(line);
+      const it = itemFromLine(parsed, { noteId, heading: heading.text, category: lineCategory === null ? sec.category : lineCategory, src: "list", key, legacyKey }, now);
       if (!it) continue;
+      it._sectionCategory = cleanCategoryName(sec.category);
+      if (lineCategory !== null) { it.x.categoryOverride = lineCategory; it.x.categoryInNote = true; }
       it.id = lineId ? "l" + hashText(noteId) + "-" + lineId : "l" + hashText(noteId) + legacyKey;
       it._legacyKey = legacyKey;
       it._lineId = !!lineId;
@@ -1713,9 +1769,12 @@
           if (old) {
             const revision = sourceEdit ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, old.rev || 0) + 1) : Math.max(0, old.rev || 0);
             const stamp = sourceEdit && Number.isFinite(Number(updatedAt)) && Number(updatedAt) > 0 ? iso(Number(updatedAt)) : old.updated;
+            const noteCategory = f.x.categoryInNote === true;
+            const priorNoteCategory = old.x.categoryInNote === true;
+            const override = noteCategory ? f.x.categoryOverride : (!priorNoteCategory ? old.x.categoryOverride : undefined);
             next = cleanItem({ ...f, start: old.start, end: old.end, status: old.status, reminders: old.reminders, recurrence: old.recurrence.length ? old.recurrence : f.recurrence, updated: stamp, rev: revision, etag: "",
-              description: f.description || old.description, x: { ...f.x, tz: old.x.tz, calNote: old.x.calNote, moved: old.x.moved, notify: old.x.notify, agendaWindow: old.x.agendaWindow, recurrenceExceptions: old.x.recurrenceExceptions, historyId: old.x.historyId, ...(typeof old.x.categoryOverride === "string" ? { categoryOverride: old.x.categoryOverride } : {}) } }, 0);
-            next.x.heading = f.x.heading; next.x.category = typeof old.x.categoryOverride === "string" ? old.x.categoryOverride : f.x.category;
+              description: f.description || old.description, x: { ...f.x, tz: old.x.tz, calNote: old.x.calNote, moved: old.x.moved, notify: old.x.notify, agendaWindow: old.x.agendaWindow, recurrenceExceptions: old.x.recurrenceExceptions, historyId: old.x.historyId, ...(typeof override === "string" ? { categoryOverride: override } : {}), ...(noteCategory ? { categoryInNote: true } : {}) } }, 0);
+            next.x.heading = f.x.heading; next.x.category = typeof override === "string" ? override : f.x.category;
             // The text writer is a newer logical version whenever a body edit triggered this sync. Otherwise
             // lwwPick provides the documented equal-version remote-wins tie break while preserving old extras above.
             const winner = lwwPick(old, next);
@@ -2955,7 +3014,7 @@
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

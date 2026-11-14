@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.136
+// @version 3.3.137
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.136, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.137, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.136";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.137";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1698,6 +1698,7 @@ const __zentralEmbeddedLoader = (function () {
       },
     };
     if (x.src === "list" && typeof x.categoryOverride === "string") item.x.categoryOverride = cleanCategoryName(x.categoryOverride);
+    if (x.src === "list" && x.categoryInNote === true) item.x.categoryInNote = true;
     if (end) item.end = end;
     if (typeof raw.created === "string" && Number.isFinite(Date.parse(raw.created))) item.created = iso(Date.parse(raw.created));
     item.etag = typeof raw.etag === "string" && raw.etag ? raw.etag : etagOf(item);
@@ -1936,7 +1937,7 @@ const __zentralEmbeddedLoader = (function () {
   // The plain Google event resource for an item (our `x` goes into extendedProperties.private, as Google allows).
   function toGoogle(it) {
     const priv = {};
-    for (const [k, v] of Object.entries(it.x)) if ((v !== "" || k === "categoryOverride") && v !== undefined && v !== null && !(Array.isArray(v) && !v.length)) priv["zentral_" + k] = ["notify", "recurrenceExceptions", "agendaWindow", "categoryOverride"].includes(k) ? JSON.stringify(v) : String(v);
+    for (const [k, v] of Object.entries(it.x)) if ((v !== "" || k === "categoryOverride") && v !== undefined && v !== null && !(Array.isArray(v) && !v.length)) priv["zentral_" + k] = ["notify", "recurrenceExceptions", "agendaWindow", "categoryOverride", "categoryInNote"].includes(k) ? JSON.stringify(v) : String(v);
     const out = { id: it.id, summary: it.summary, description: it.description, status: it.status, start: it.start, updated: it.updated, extendedProperties: { private: priv } };
     out.end = it.end || it.start;
     if (it.created) out.created = it.created;
@@ -1948,8 +1949,8 @@ const __zentralEmbeddedLoader = (function () {
     if (!g || typeof g !== "object") return null;
     const priv = g.extendedProperties?.private || {};
     const x = {};
-    for (const k of ["kind", "noteId", "heading", "category", "tz", "src", "key", "legacyKey", "moved", "calNote", "notify", "agendaWindow", "recurrenceExceptions", "historyId", "categoryOverride"]) if (priv["zentral_" + k] !== undefined) {
-      if (["notify", "agendaWindow", "recurrenceExceptions", "categoryOverride"].includes(k)) { try { x[k] = JSON.parse(priv["zentral_" + k]); } catch (_) {} }
+    for (const k of ["kind", "noteId", "heading", "category", "tz", "src", "key", "legacyKey", "moved", "calNote", "notify", "agendaWindow", "recurrenceExceptions", "historyId", "categoryOverride", "categoryInNote"]) if (priv["zentral_" + k] !== undefined) {
+      if (["notify", "agendaWindow", "recurrenceExceptions", "categoryOverride", "categoryInNote"].includes(k)) { try { x[k] = JSON.parse(priv["zentral_" + k]); } catch (_) {} }
       else x[k] = priv["zentral_" + k];
     }
     const sameEnd = g.end && JSON.stringify(g.end) === JSON.stringify(g.start);
@@ -2035,9 +2036,17 @@ const __zentralEmbeddedLoader = (function () {
   const ITEM_ID_RE = /%%\s*zn-item-id:([a-z0-9_-]{4,60})\s*%%/gi;
   function itemIdTokens(line) { return [...String(line || "").matchAll(ITEM_ID_RE)].map((m) => m[1]); }
   const stripItemIdMarks = (line) => String(line || "").replace(ITEM_ID_RE, "");
+  // An explicit per-line category in a Daily Note is an ordinary hidden Markdown
+  // comment. An empty value means no category; absence means section inheritance.
+  const ITEM_CATEGORY_RE = /%%\s*zn-item-category:([^%\r\n]*)%%/gi;
+  function itemCategoryMark(line) {
+    const match = [...String(line || "").matchAll(ITEM_CATEGORY_RE)];
+    return match.length === 1 ? cleanCategoryName(match[0][1]) : null;
+  }
+  const stripItemCategoryMarks = (line) => String(line || "").replace(ITEM_CATEGORY_RE, "");
   function parseMarkedLine(line, heading, now) {
     const ignored = ignoredDateTokens(line);
-    let sourceLine = stripItemIdMarks(stripDateIgnoreMarks(line));
+    let sourceLine = stripItemCategoryMarks(stripItemIdMarks(stripDateIgnoreMarks(line)));
     const listText = sourceLine.replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)(?:\[[ xX]\]\s+)?/, "");
     const prefix = parseDatePrefix(listText, now);
     // Ignoring a leading date disables that trigger; a dated heading may still supply its own date.
@@ -2266,6 +2275,50 @@ const __zentralEmbeddedLoader = (function () {
     });
     return { body: changed ? lines.join("\n") : String(body || ""), changed, found };
   }
+  // Replace a list item's parsed title only when its exact text is unambiguous;
+  // never consume hidden markers or other Markdown if it cannot be located safely.
+  function setListLineSummary(body, lineId, summary, now = 0) {
+    const text = String(body || ""), lines = text.split("\n");
+    let found = false, changed = false, safe = true;
+    visitCalendarListLines(text, now, (entry) => {
+      if (found || itemIdTokens(entry.line)[0] !== lineId) return;
+      found = true;
+      const old = entry.parsed.summary, next = String(summary || "").trim();
+      if (old === next) return;
+      if (!next || /%%|[\r\n]/.test(next) || /%%/.test(old)) { safe = false; return; }
+      const pos = entry.line.indexOf(old);
+      if (pos < 0 || entry.line.indexOf(old, pos + 1) !== -1) { safe = false; return; }
+      const candidate = entry.line.slice(0, pos) + next + entry.line.slice(pos + old.length);
+      if (parseMarkedLine(candidate, entry.heading, now).parsed?.summary !== next) { safe = false; return; }
+      lines[entry.index] = candidate;
+      changed = true;
+    });
+    return { body: changed ? lines.join("\n") : text, found, changed, safe };
+  }
+  // Edit only the one owned category comment, leaving line identity and other
+  // note content intact. Duplicate markers are ambiguous and must not be changed.
+  function setListLineCategory(body, lineId, category, now = 0) {
+    const text = String(body || ""), lines = text.split("\n");
+    let found = false, changed = false, safe = true;
+    visitCalendarListLines(text, now, (entry) => {
+      if (found || itemIdTokens(entry.line)[0] !== lineId) return;
+      found = true;
+      const matches = [...entry.line.matchAll(ITEM_CATEGORY_RE)];
+      if (matches.length > 1) { safe = false; return; }
+      const mark = category === null ? "" : "%%zn-item-category:" + (cleanCategoryName(category) ? " " + cleanCategoryName(category) : "") + "%%";
+      let line = entry.line;
+      if (matches.length) {
+        const old = matches[0];
+        if (mark) line = line.slice(0, old.index) + mark + line.slice(old.index + old[0].length);
+        else {
+          const pos = old.index > 0 && line[old.index - 1] === " " ? old.index - 1 : old.index;
+          line = line.slice(0, pos) + line.slice(old.index + old[0].length);
+        }
+      } else if (mark) line += " " + mark;
+      if (line !== entry.line) { lines[entry.index] = line; changed = true; }
+    });
+    return { body: changed ? lines.join("\n") : text, changed, found, safe };
+  }
   function extractNoteItems(body, noteId, now = 0) {
     const lines = String(body || "").split("\n");
     const out = [], seen = new Map();
@@ -2290,8 +2343,11 @@ const __zentralEmbeddedLoader = (function () {
       const legacyKey = hashText(noteId + "|" + norm) + (n > 1 ? "-" + n : "");
       const lineId = itemIdTokens(line)[0] || "";
       const key = lineId || legacyKey;
-      const it = itemFromLine(parsed, { noteId, heading: heading.text, category: sec.category, src: "list", key, legacyKey }, now);
+      const lineCategory = itemCategoryMark(line);
+      const it = itemFromLine(parsed, { noteId, heading: heading.text, category: lineCategory === null ? sec.category : lineCategory, src: "list", key, legacyKey }, now);
       if (!it) continue;
+      it._sectionCategory = cleanCategoryName(sec.category);
+      if (lineCategory !== null) { it.x.categoryOverride = lineCategory; it.x.categoryInNote = true; }
       it.id = lineId ? "l" + hashText(noteId) + "-" + lineId : "l" + hashText(noteId) + legacyKey;
       it._legacyKey = legacyKey;
       it._lineId = !!lineId;
@@ -2924,9 +2980,12 @@ const __zentralEmbeddedLoader = (function () {
           if (old) {
             const revision = sourceEdit ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, old.rev || 0) + 1) : Math.max(0, old.rev || 0);
             const stamp = sourceEdit && Number.isFinite(Number(updatedAt)) && Number(updatedAt) > 0 ? iso(Number(updatedAt)) : old.updated;
+            const noteCategory = f.x.categoryInNote === true;
+            const priorNoteCategory = old.x.categoryInNote === true;
+            const override = noteCategory ? f.x.categoryOverride : (!priorNoteCategory ? old.x.categoryOverride : undefined);
             next = cleanItem({ ...f, start: old.start, end: old.end, status: old.status, reminders: old.reminders, recurrence: old.recurrence.length ? old.recurrence : f.recurrence, updated: stamp, rev: revision, etag: "",
-              description: f.description || old.description, x: { ...f.x, tz: old.x.tz, calNote: old.x.calNote, moved: old.x.moved, notify: old.x.notify, agendaWindow: old.x.agendaWindow, recurrenceExceptions: old.x.recurrenceExceptions, historyId: old.x.historyId, ...(typeof old.x.categoryOverride === "string" ? { categoryOverride: old.x.categoryOverride } : {}) } }, 0);
-            next.x.heading = f.x.heading; next.x.category = typeof old.x.categoryOverride === "string" ? old.x.categoryOverride : f.x.category;
+              description: f.description || old.description, x: { ...f.x, tz: old.x.tz, calNote: old.x.calNote, moved: old.x.moved, notify: old.x.notify, agendaWindow: old.x.agendaWindow, recurrenceExceptions: old.x.recurrenceExceptions, historyId: old.x.historyId, ...(typeof override === "string" ? { categoryOverride: override } : {}), ...(noteCategory ? { categoryInNote: true } : {}) } }, 0);
+            next.x.heading = f.x.heading; next.x.category = typeof override === "string" ? override : f.x.category;
             // The text writer is a newer logical version whenever a body edit triggered this sync. Otherwise
             // lwwPick provides the documented equal-version remote-wins tie break while preserving old extras above.
             const winner = lwwPick(old, next);
@@ -4166,7 +4225,7 @@ const __zentralEmbeddedLoader = (function () {
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -11242,6 +11301,26 @@ __zentralShim.register = function (def) {
           api.update(note.id, result.body, "checkbox");
           return true;
         },
+        // Daily Note list entries expose their per-item category in their own
+        // hidden line comment; section categories and siblings remain untouched.
+        prepareItemCategoryToNote(item, { fmt } = {}) {
+          if (!item || item.x?.src !== "list" || !item.x.noteId || !item.x.key) return null;
+          const note = notes.get(item.x.noteId);
+          if (!note || note.trashed || !dateOfNote(note, fmt || getDateFormat() || CALENDAR_PART.DEFAULT_DATE_FORMAT)) return null;
+          if (CALENDAR_PART.noteLineItemId(note.id, item.x.key) !== item.id) return null;
+          const title = CALENDAR_PART.setListLineSummary(note.body, item.x.key, item.summary, now());
+          if (!title.found || !title.safe) return { error: "The Daily Note line cannot be updated safely. Edit its title in the note first." };
+          const category = typeof item.x.categoryOverride === "string" ? item.x.categoryOverride : null;
+          const result = CALENDAR_PART.setListLineCategory(title.body, item.x.key, category, now());
+          if (!result.found || !result.safe) return { error: "The Daily Note line has ambiguous category metadata. Resolve it in the note first." };
+          return { noteId: note.id, body: result.body, changed: title.changed || result.changed };
+        },
+        syncItemCategoryToNote(item, options = {}) {
+          const prepared = api.prepareItemCategoryToNote(item, options);
+          if (!prepared || prepared.error || !prepared.changed) return false;
+          api.update(prepared.noteId, prepared.body, "agenda-category");
+          return true;
+        },
         // Mirror a lifecycle change into the note text. Idempotent: an already-matching box writes nothing.
         syncItemCheckbox(item, done) {
           const lineId = api._checkboxLineId(item), note = lineId ? notes.get(item.x.noteId) : null;
@@ -16808,7 +16887,7 @@ __zentralShim.register = function (def) {
         if (original?.x?.src === "list") {
           const source = store.get(original.x.noteId);
           const parsed = source && C.extractNoteItems(source.body, source.id, now).find((entry) => entry.id === original.id);
-          sourceCategory = parsed?.x?.category || "";
+          sourceCategory = parsed?._sectionCategory ?? parsed?.x?.category ?? "";
           categorySelect.append(h("option", { value: inheritCategory }, "Follow note section (" + (sourceCategory || "no category") + ")"));
         }
         categorySelect.append(h("option", { value: "" }, "No category"));
@@ -17040,9 +17119,12 @@ __zentralShim.register = function (def) {
             status.textContent = kind.value === "event" ? "Check the dates and that the end is after the start." : "Check the date and time.";
             return;
           }
+          const noteSync = original?.x?.src === "list" ? store.prepareItemCategoryToNote(item, { fmt: dateDisplayFormat() }) : null;
+          if (noteSync?.error) { status.textContent = noteSync.error; return; }
           const saved = store.items.upsert(item);
           if (!saved) { status.textContent = "Could not save the calendar item. Check calendar storage."; return; }
           if (!original && !saved.x?.noteId) { try { store.mirrorItemToAgendaNote(saved.id, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
+          else if (saved.x?.src === "list") { try { store.syncItemCategoryToNote(saved, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
           const startMs = item.start.date ? C.parseYmd(item.start.date).getTime() : Date.parse(item.start.dateTime);
           store.setMeta({ calendarCursor: C.localDateKey(startMs), calendarView: store.meta.calendarView || "month" });
           closeDialog(); renderCalendar();
