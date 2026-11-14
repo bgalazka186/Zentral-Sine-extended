@@ -219,11 +219,11 @@ _Click/drag/keyboard behaviour in the Zen sidebar and Month view, plus the owner
 **Done when:** the suite passes with all tests started in parallel.
 
 #### `F0.6` — `standalone.test.cjs` must not touch the repo
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Depends on:** F0.4 · **Source:** Audit 2026-11-14
+**Status:** `DONE` · **Impact:** Med · **Effort:** S · **Depends on:** F0.4 · **Source:** Audit 2026-11-14
 
-**Problem:** It appends `// test change` to a real module source and creates `additional/zz-test` inside the repo; a crash or a parallel run corrupts the tree or races other tests.
-**Plan:** Copy `tools/`, `additional/`, `loader/` to `os.tmpdir()`, run the build there, delete after.
-**Done when:** the repo file list and mtimes are unchanged after the test.
+**Problem:** It appended a test comment to a real module source and created `additional/zz-test` inside the repo, risking checkout corruption and parallel-test races.
+**Fix:** All build experiments now run against an OS-temp copy of `tools/`, `additional/`, `loader/`, plus the owner settings schemas required by the builder. The test edits only the copied source and removes the temporary tree in `finally`.
+**Verification:** The regression test compares the checkout's file list, contents, and file mtimes before/after. CI passed with 121/121 test files and `git diff --check`.
 
 #### `F0.7` — Time-zone matrix
 **Status:** `OPEN` · **Impact:** Med-High · **Effort:** S · **Depends on:** F0.4 · **Source:** Audit 2026-11-14
