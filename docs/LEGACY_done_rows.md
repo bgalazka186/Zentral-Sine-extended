@@ -638,3 +638,16 @@ Agenda TabSelect prefers a valid prior tab, then the last focused valid content 
 **Tests / done when:** Harness: foreign tab dropped in; Agenda tab dragged out; both end with unchanged user content.
 
 Managed tab/folder drags are canceled, including mixed multiselections, and dragover/drop on Agenda is rejected without intercepting unrelated drags. Reconciliation evacuates foreign top-level tabs and folder subtrees to the pinned area outside the root, including when a managed day is retired. It prefers Zen/Firefox `moveTabTo` with forceUngrouped when available and verifies the result; older hosts use the existing DOM fallback. Failed moves leave foreign content and its containing folder intact and retry later; foreign moves into the root schedule repair. Fake Zen tests cover source/destination guards, mixed selections, native/fallback movement, nested data, failure, retry, idempotence and disable. Host `agendaApi.list` 50/150 before 9.0/69.4 ms and after 9.9/70.8 ms (timings vary). Actual Zen DnD/event order, native folder moves and fallback session synchronization remain unverified.
+
+## ST7.1 — Shared projections across workspaces (3.3.144)
+
+#### `ST7.1` — Shared NOTES and Agenda available across workspaces
+**Status:** `DONE` · **Impact:** High · **Effort:** M · **Depends on:** F0.1, UI4.4 · **Source:** Audit R1 B7 and owner report
+
+**Problem:** NOTES and Agenda currently show only in the main/creation space. The owner wants them available in every space.
+
+**Plan:** Implement safe shared-data projections across Zen spaces, either per-space roots or an equivalent active-space strategy, handling workspace switches, restored roots, foreign content, Essentials, duplicate reconciliation and teardown. Preserve existing shared data and prepare for the separate-per-space mode in `OW-18` without prematurely implementing that setting.
+
+**Tests / done when:** Real-host fake with multiple workspaces verifies both NOTES and Agenda appear in each active space, shared edits propagate, switches/restarts/disable/re-enable remain idempotent, and no foreign content is removed. Check native Zen workspace behavior where necessary.
+
+Shared Notes and Agenda roots follow the active workspace, with owned descendant workspace IDs updated, old selection references invalidated, foreign contents kept in their original space, duplicate-root cleanup and retry on failure. Native change listeners are detached when disabled or destroyed; a coalesced TabSelect fallback handles older hosts. Fake host covers switches, edits, restore, retry, empty foreign folders, independent windows and cleanup. Fake-host 50/150-item workspace switches: 1.1/2.7 ms; list 8.9/66.9 ms (timings vary). Actual Zen workspace switching and native folder movement remain unverified. Independent per-space storage remains OW-18.

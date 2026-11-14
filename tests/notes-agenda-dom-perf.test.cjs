@@ -11,6 +11,11 @@ const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
     h.seam.agendaController.runNow(); h.seam.agendaApi.list();
     const t = performance.now(); const entries = h.seam.agendaApi.list(); const ms = performance.now() - t;
     assert.equal(entries.filter(e => e.kind === "item").length, n); assert.ok(ms < (n === 50 ? 2000 : 6000), `Agenda DOM list ${n} took ${ms.toFixed(1)}ms`);
-    console.log(`Agenda DOM list ${n}: ${ms.toFixed(1)}ms`); await h.destroy();
+    console.log(`Agenda DOM list ${n}: ${ms.toFixed(1)}ms`);
+    const nextSpace = h.addWorkspace("perf-space");
+    const beforeSwitch = performance.now(); await h.switchWorkspace("perf-space"); const switchMs = performance.now() - beforeSwitch;
+    assert.ok(nextSpace.element.querySelector('zen-folder[bgalazka-notes-agenda-folder="true"]'));
+    assert.ok(switchMs < (n === 50 ? 2000 : 6000), `Agenda space switch ${n} took ${switchMs.toFixed(1)}ms`);
+    console.log(`Agenda space switch ${n}: ${switchMs.toFixed(1)}ms`); await h.destroy();
   }
 })().catch(e => { console.error(e); process.exitCode = 1; });

@@ -25,6 +25,13 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   El.prototype.insertBefore = function (node, before) { record(node, this); return insertBefore.call(this, node, before); };
   El.prototype.remove = function () { if (["tab", "zen-folder"].includes(this.localName) && this.parentElement) operations.push({ type: "remove", node: this, from: this.parentElement }); return remove.call(this); };
   const sidebar = dom.zenSidebar();
+  const workspaces = new Map([[sidebar.ws.id, { element: sidebar.ws, pinnedTabsContainer: sidebar.pinned }]]), workspaceListeners = new Set();
+  function addWorkspace(id) {
+    const element = document.createElement("zen-workspace"), pinnedTabsContainer = document.createElement("vbox");
+    element.id = id; pinnedTabsContainer.className = "zen-workspace-tabs-section zen-workspace-pinned-tabs-section";
+    pinnedTabsContainer.setAttribute("zen-workspace-id", id); element.append(pinnedTabsContainer); document.body.append(element);
+    workspaces.set(id, { element, pinnedTabsContainer }); return workspaces.get(id);
+  }
   const emit = (type, target, extra = {}) => {
     const event = new Ev(type, { target, bubbles: true, ...extra });
     event.stopImmediatePropagation = () => { event.stopped = true; event.immediateStopped = true; };
@@ -35,7 +42,12 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   const win = {
     document, __zentralNotesParts: { "notes-calendar": Calendar }, __zentralNotesTestSeam: {},
     ZentralRuntime: { register(value) { definition = value; } },
-    gZenWorkspaces: { activeWorkspace: sidebar.ws.id }, innerWidth: 1200, innerHeight: 800,
+    gZenWorkspaces: {
+      activeWorkspace: sidebar.ws.id,
+      workspaceElement(id) { return workspaces.get(id) || null; },
+      addChangeListeners(fn) { workspaceListeners.add(fn); },
+      removeChangeListeners(fn) { workspaceListeners.delete(fn); },
+    }, innerWidth: 1200, innerHeight: 800,
     setTimeout(fn, ms) { const id = ++timerId; timers.set(id, { fn, ms }); return id; },
     clearTimeout(id) { timers.delete(id); }, requestAnimationFrame(fn) { return this.setTimeout(fn, 16); }, cancelAnimationFrame(id) { this.clearTimeout(id); },
     addEventListener(type, fn) { if (!listeners.has(type)) listeners.set(type, new Set()); listeners.get(type).add(fn); },
@@ -44,7 +56,7 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   win.window = win;
   win.gBrowser = {
     get tabs() { return document.querySelectorAll("tab"); }, selectedTab: null,
-    addTab(url) { const tab = sidebar.tab(url); tab.id = `fake-${id}-${++tabId}`; tab.linkedBrowser = { currentURI: { spec: url } }; sidebar.pinned.append(tab); return tab; },
+    addTab(url) { const tab = sidebar.tab(url); tab.id = `fake-${id}-${++tabId}`; tab.linkedBrowser = { currentURI: { spec: url } }; const ws = win.gZenWorkspaces.activeWorkspace; tab.setAttribute("zen-workspace-id", ws); (workspaces.get(ws)?.pinnedTabsContainer || sidebar.pinned).append(tab); return tab; },
     pinTab(tab) { tab.pinned = true; tab.setAttribute("pinned", "true"); emit("TabPinned", tab); },
     removeTab(tab) {
       const folder = tab.closest("zen-folder");
@@ -57,6 +69,7 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   win.gZenFolders = { createFolder(tabs, opts) {
     const seed = tabs[0], parent = seed.parentElement || sidebar.pinned;
     const folder = sidebar.folder(opts.label, { id: opts.id, parent });
+    if (opts.workspaceId) folder.setAttribute("zen-workspace-id", opts.workspaceId);
     folder.childrenContainer = folder.querySelector(":scope > .tab-group-container");
     folder.addTabs = (nodes) => { for (const node of nodes) { folder.childrenContainer.append(node); if (node.localName === "tab") emit("TabMove", node); } };
     folder.addFolder = (node) => folder.childrenContainer.append(node);
@@ -99,6 +112,8 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   if (!definition?.init) throw new Error("Notes registration missing");
   const destroy = definition.init();
   return { ...dom, window: win, sidebar, operations, events, timers, values, files, observers, obs, emit, destroy,
+    addWorkspace, workspaceListenerCount: () => workspaceListeners.size,
+    async switchWorkspace(id) { if (!workspaces.has(id)) throw new Error("missing workspace"); win.gZenWorkspaces.activeWorkspace = id; for (const listener of [...workspaceListeners]) await listener({ workspace: { uuid: id }, onInit: false }); },
     advanceClock(ms) { clockOffset += Number(ms) || 0; },
     triggerMutations() { for (const observer of [...mutationObservers]) observer.callback([]); },
     setPref, resetOperations() { operations.length = 0; },

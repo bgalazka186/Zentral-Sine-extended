@@ -169,3 +169,7 @@ Tests: `node tests/notes.test.cjs` (store, autosave, sync, recovery), `node test
 Hover or keyboard-focus an Agenda reminder or event to see its complete title in a tooltip beside the sidebar. Move the pointer onto the tooltip to keep it open; Escape dismisses it. The tooltip is scoped to Agenda items and adapts to either sidebar edge. On browsers without top-layer popovers it falls back to a positioned card; the native tooltip also contains the complete title.
 
 Agenda sidebar items and day folders are managed projections: dragging them or dropping content into Agenda is disabled. If restored user tabs or folders appear inside Agenda, Notes attempts to move them out intact into the pinned area. A failed move leaves the original content in place for a later retry.
+
+### Shared workspace projections
+
+When Notes or Agenda sidebar folders are enabled, their shared data follows the active Zen workspace in each window. Switching workspaces does not create independent copies. Foreign tabs and folders found inside a projection are preserved in their original workspace; if they cannot be moved safely, the projection waits for a later retry. Separate per-space data is not yet available.

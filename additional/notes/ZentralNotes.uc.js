@@ -1813,6 +1813,12 @@
     // `roots` = [{ours: tabs we made, foreign: tabs somebody else put there, subs: our sub-folders}] in document order.
     // The first one is adopted. Another is deleted ONLY if every tab in it is ours; one that holds a tab the person put
     // there is released (it loses our mark and stays a normal folder), so nothing the person added is ever closed.
+    // Only migrate a projection when Zen supplies an active identity and a
+    // pinned container. Unknown or unavailable workspaces are never guessed.
+    function sharedProjectionPlan({ active = "", targetReady = false, alreadyThere = false } = {}) {
+      if (typeof active !== "string" || !active || !targetReady) return "wait";
+      return alreadyThere ? "stay" : "move";
+    }
     function planRootDedupe(roots) {
       const adopt = roots.length ? 0 : -1;
       const remove = [];
@@ -8932,27 +8938,35 @@
     function dedupeNotesRoots(doc, { removeTab, warn = () => {} } = {}) {
       try {
         const roots = [...(doc.querySelectorAll?.('zen-folder[bgalazka-notes-folder="true"]') || [])];
-        if (roots.length < 2) return;
+        if (roots.length < 2) return true;
         const plan = planRootDedupe(roots.map((r) => {
           const tabs = [...(r.querySelectorAll?.("tab") || [])];
-          return { ours: tabs.filter((t) => t.hasAttribute(NOTES_ATTR)).length, foreign: tabs.filter((t) => !t.hasAttribute(NOTES_ATTR)).length };
+          const foreignFolders = [...(r.querySelectorAll?.("zen-folder") || [])].filter((folder) => restoredPseudoFolderKind(folder) !== "notes").length;
+          return { ours: tabs.filter((t) => t.hasAttribute(NOTES_ATTR)).length, foreign: tabs.filter((t) => !t.hasAttribute(NOTES_ATTR)).length + foreignFolders };
         }));
         for (const i of plan.release) releaseNotesFolder(roots[i], removeTab);
         for (const i of plan.remove) {
           for (const t of [...(roots[i].querySelectorAll?.("tab") || [])]) removeTab(t);
           try { roots[i].delete?.(); } catch (_) {}
         }
-      } catch (error) { warn(error); }
+        return roots.every((root, i) => i === plan.adopt || root.isConnected === false || !root.hasAttribute?.("bgalazka-notes-folder"));
+      } catch (error) { warn(error); return false; }
     }
     // The folder stays, as an ordinary folder: our marks and our own tabs go, the person's tabs stay.
     function releaseNotesFolder(f, removeTab) {
-      f.removeAttribute("bgalazka-notes-folder");
-      for (const el of [f, ...(f.querySelectorAll?.("[bgalazka-notes-subfolder]") || [])]) for (const a of ["bgalazka-notes-subfolder", "bgalazka-notes-label", "bgalazka-notes-parent", "bgalazka-notes-color", "bgalazka-notes-icon", "bgalazka-notes-parts", "bgalazka-notes-parts-opacity"]) el.removeAttribute(a);
+      const managed = [f, ...(f.querySelectorAll?.("zen-folder") || [])].filter((el) => el === f || restoredPseudoFolderKind(el) === "notes");
+      for (const el of managed) {
+        for (const a of ["bgalazka-notes-folder", "bgalazka-notes-subfolder", "bgalazka-notes-label", "bgalazka-notes-parent", "bgalazka-notes-color", "bgalazka-notes-icon", "bgalazka-notes-parts", "bgalazka-notes-parts-opacity"]) el.removeAttribute(a);
+        if (el.id === NOTES_ZEN_ROOT_ID || el.id?.startsWith(NOTES_ZEN_SUB_PREFIX)) el.id = "zentral-released-" + el.id;
+      }
       for (const t of [...(f.querySelectorAll?.("tab[" + NOTES_ATTR + "]") || [])]) removeTab(t);
     }
-    // Switching the feature off: a folder holding a tab the person put there is released, never deleted.
+    // Switching off or retiring a restored folder never deletes foreign tabs OR
+    // empty foreign folders; both are user content.
     function retireNotesFolder(f, removeTab = () => {}) {
-      if ([...(f.querySelectorAll?.("tab") || [])].some((t) => !t.hasAttribute(NOTES_ATTR))) releaseNotesFolder(f, removeTab);
+      const foreignTabs = [...(f.querySelectorAll?.("tab") || [])].some((t) => !t.hasAttribute(NOTES_ATTR));
+      const foreignFolders = [...(f.querySelectorAll?.("zen-folder") || [])].some((child) => restoredPseudoFolderKind(child) !== "notes");
+      if (foreignTabs || foreignFolders) releaseNotesFolder(f, removeTab);
       else try { f.delete?.(); } catch (_) {}
     }
     function createZenFolder({ api, store, getMode, getOrder = () => "folders-first", getNewButtons = () => false, getAgendaEnabled = () => false, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, onKill = () => {} }) {
@@ -9073,7 +9087,7 @@
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
-        makeFolderUid, ensureFolderUids, setNotesTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
+        makeFolderUid, ensureFolderUids, setNotesTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, sharedProjectionPlan, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition, calendarMenuPosition, normalizeContextMenuItems,
@@ -19223,7 +19237,7 @@
         if (!root) return;
         for (const t of [...(document.querySelectorAll?.("tab[" + NOTES_ATTR + "]") || [])]) if (!root.contains(t)) zenRemoveTab(t);
         for (const t of [...(document.querySelectorAll?.("tab:not([" + NOTES_ATTR + "])") || [])]) if (zenLooksOurs(t)) zenRemoveTab(t);
-        for (const f of [...(document.querySelectorAll?.("zen-folder[bgalazka-notes-subfolder]") || [])]) if (!root.contains(f) && f !== root) { try { f.delete?.(); } catch (_) {} }
+        for (const f of [...(document.querySelectorAll?.("zen-folder[bgalazka-notes-subfolder]") || [])]) if (!root.contains(f) && f !== root) retireNotesFolder(f, zenRemoveTab);
       }
       // Entries in browser order, direct children of one folder together (what orderPlan compares).
       const zenElFor = (root, key) => (key.startsWith("f:") ? zenFolderByKey(root, key) : zenByKey(root, key)[0] || null);
@@ -19473,17 +19487,21 @@
         }
         return true;
       }
+      function agendaDedupeRoots(root) {
+        if (!root) return true;
+        // Resolve restored duplicates before moving the canonical root: DOM
+        // order changes between spaces and is not a stable ownership signal.
+        let complete = true;
+        for (const duplicate of [...(document.querySelectorAll?.("zen-folder") || [])]) {
+          if (duplicate === root || (duplicate.id !== AGENDA_ROOT_ID && duplicate.getAttribute?.("bgalazka-notes-agenda-folder") !== "true")) continue;
+          if (!agendaRetireFolder(duplicate)) complete = false;
+        }
+        return complete;
+      }
       function agendaEnsureRoot(position) {
         if (!window.gBrowser || !window.gZenFolders?.createFolder) return false;
         let root = agendaRootEl();
-        if (root) {
-          // Restores can leave several marked roots (or repeated stable ids).
-          // Reconcile only identities we own; a folder merely named Agenda is not proof.
-          for (const duplicate of [...(document.querySelectorAll?.("zen-folder") || [])]) {
-            if (duplicate === root || (duplicate.id !== AGENDA_ROOT_ID && duplicate.getAttribute?.("bgalazka-notes-agenda-folder") !== "true")) continue;
-            agendaRetireFolder(duplicate);
-          }
-        }
+        if (root) agendaDedupeRoots(root);
         if (!root) {
           const seed = agendaNewTab("seed:root");
           try {
@@ -19504,36 +19522,36 @@
         try { return /^about:blank#zn-agenda-/.test(tab?._zentralNotesUrl || tab?.linkedBrowser?.currentURI?.spec || ""); } catch (_) { return false; }
       };
       const agendaOwnedDay = (child) => child.hasAttribute?.("bgalazka-notes-agenda-day") || child.id?.startsWith("zentral-notes-agenda-day-");
-      // Move only the outermost foreign subtrees/tabs, preserving their nested
-      // data. Evacuate to the pinned section outside the entire Agenda root,
-      // not merely from a day into that root. Failed moves leave content intact.
-      function agendaEvacuateForeign(folder) {
-        if (!folder) return false;
-        const root = (folder.id === AGENDA_ROOT_ID || folder.getAttribute?.("bgalazka-notes-agenda-folder") === "true") ? folder :
-          folder.closest?.('zen-folder[bgalazka-notes-agenda-folder="true"]') || folder;
+      // Move only the outermost foreign subtrees/tabs, preserving nested data.
+      // Failure leaves the user content and its original managed container.
+      function evacuateProjectionForeign(folder, root, ownFolder, ownTab, onMoved = () => {}) {
+        if (!folder || !root) return false;
         const host = root.parentElement;
-        const foreignFolders = [...(folder.querySelectorAll?.("zen-folder") || [])].filter((child) => !agendaOwnedDay(child));
+        const foreignFolders = [...(folder.querySelectorAll?.("zen-folder") || [])].filter((child) => !ownFolder(child));
         const foreignSet = new Set(foreignFolders);
         const insideForeign = (node) => {
           for (let p = node.parentElement; p && p !== folder; p = p.parentElement) if (foreignSet.has(p)) return true;
           return false;
         };
         const preserve = [...foreignFolders.filter((child) => !insideForeign(child)),
-          ...[...(folder.querySelectorAll?.("tab") || [])].filter((tab) => !agendaOwnTab(tab) && !insideForeign(tab))];
+          ...[...(folder.querySelectorAll?.("tab") || [])].filter((tab) => !ownTab(tab) && !insideForeign(tab))];
         for (const child of preserve) {
           if (!host || !folder.contains?.(child)) continue;
           try {
-            // Prefer Zen/Firefox's ungrouping move so their tab-group state
-            // follows the DOM. Older hosts without that API use the existing
-            // conservative DOM fallback; never close user content on failure.
             if (typeof window.gBrowser?.moveTabTo === "function" && Number.isFinite(root.elementIndex))
               window.gBrowser.moveTabTo(child, { elementIndex: root.elementIndex, forceUngrouped: true });
             else host.insertBefore(child, root);
-            if (!folder.contains?.(child) && !root.contains?.(child)) agendaMutationCount++;
+            if (!folder.contains?.(child) && !root.contains?.(child)) onMoved();
           } catch (error) { warn(error); }
         }
-        return ![...(folder.querySelectorAll?.("tab") || [])].some((tab) => !agendaOwnTab(tab)) &&
-          ![...(folder.querySelectorAll?.("zen-folder") || [])].some((child) => !agendaOwnedDay(child));
+        return ![...(folder.querySelectorAll?.("tab") || [])].some((tab) => !ownTab(tab)) &&
+          ![...(folder.querySelectorAll?.("zen-folder") || [])].some((child) => !ownFolder(child));
+      }
+      function agendaEvacuateForeign(folder) {
+        if (!folder) return false;
+        const root = (folder.id === AGENDA_ROOT_ID || folder.getAttribute?.("bgalazka-notes-agenda-folder") === "true") ? folder :
+          folder.closest?.('zen-folder[bgalazka-notes-agenda-folder="true"]') || folder;
+        return evacuateProjectionForeign(folder, root, agendaOwnedDay, agendaOwnTab, () => { agendaMutationCount++; });
       }
       function agendaRetireFolder(folder) {
         if (!folder) return;
@@ -19648,6 +19666,63 @@
       }
       const agendaTitleCard = createAgendaTitleCard();
       onCleanup(() => agendaTitleCard.destroy());
+      // Shared-data mode keeps one owned projection per window. When a Zen
+      // space changes, move only our root and its owned descendants, after
+      // evacuating any foreign content to the original pinned section.
+      function syncSharedWorkspace() {
+        if (disposed) return false;
+        const spaces = window.gZenWorkspaces;
+        let active = "", target = null;
+        try {
+          active = spaces?.activeWorkspace || "";
+          const workspace = spaces?.workspaceElement?.(active) || spaces?.activeWorkspaceElement || document.getElementById?.(active);
+          target = workspace?.pinnedTabsContainer || workspace?.querySelector?.(".zen-workspace-pinned-tabs-section") || null;
+        } catch (_) { return false; }
+        if (sharedProjectionPlan({ active, targetReady: !!target && target.isConnected !== false }) === "wait") return false;
+        const owner = target.closest?.("zen-workspace");
+        if (owner?.id && owner.id !== active) return false;
+        // Resolve duplicates while their document order is still stable;
+        // otherwise moving the adopted root can make a stale root look first.
+        const notesReady = zenMode() === "off" || dedupeNotesRoots(document, { removeTab: zenRemoveTab, warn });
+        const agendaReady = !agendaEnabled() || agendaDedupeRoots(agendaRootEl());
+        const roots = [
+          { ready: notesReady, root: zenMode() === "off" ? null : zenRootEl(), ownFolder: (f) => !!(f.hasAttribute?.("bgalazka-notes-subfolder") || notesKeyFromId(f.id)), ownTab: (t) => !!t.hasAttribute?.(NOTES_ATTR) },
+          { ready: agendaReady, root: agendaEnabled() ? agendaRootEl() : null, ownFolder: agendaOwnedDay, ownTab: agendaOwnTab },
+        ];
+        let complete = true;
+        for (const { root, ownFolder, ownTab, ready } of roots) {
+          if (!root || root.isConnected === false) continue;
+          if (!ready) { complete = false; continue; }
+          const plan = sharedProjectionPlan({ active, targetReady: !!target, alreadyThere: root.parentElement === target });
+          if (plan === "wait") { complete = false; continue; }
+          // Do not remove an embedded projection from somebody else's folder:
+          // some Zen versions auto-delete a folder when its last child leaves.
+          if (plan === "move" && root.parentElement?.closest?.("zen-folder")) { complete = false; continue; }
+          if (plan === "move" && !evacuateProjectionForeign(root, root, ownFolder, ownTab)) { complete = false; continue; }
+          const nodes = [root, ...(root.querySelectorAll?.("zen-folder") || []).filter(ownFolder), ...(root.querySelectorAll?.("tab") || []).filter(ownTab)];
+          const previous = nodes.map(node => [node, node.getAttribute("zen-workspace-id")]);
+          const parent = root.parentElement, next = root.nextSibling;
+          try {
+            let changed = plan === "move";
+            if (changed) target.insertBefore(root, target.lastChild || null);
+            for (const node of nodes) if (node.getAttribute("zen-workspace-id") !== active) { node.setAttribute("zen-workspace-id", active); changed = true; }
+            if (changed) {
+              window.gBrowser?.tabContainer?._invalidateCachedTabs?.();
+              // Zen remembers a selected tab per workspace; a managed pointer
+              // moved to another space must not remain as the old selection.
+              const last = spaces?.lastSelectedWorkspaceTabs;
+              if (last && typeof last === "object") for (const key of Object.keys(last))
+                if (key !== active && nodes.includes(last[key])) delete last[key];
+            }
+          } catch (error) {
+            complete = false;
+            try { if (parent && root.parentElement !== parent) parent.insertBefore(root, next || null); } catch (_) {}
+            for (const [node, id] of previous) try { if (id === null) node.removeAttribute("zen-workspace-id"); else node.setAttribute("zen-workspace-id", id); } catch (_) {}
+            warn(error);
+          }
+        }
+        return complete;
+      }
       const agendaApi = {
         mutationCount: () => agendaMutationCount,
         ensureRoot: agendaEnsureRoot,
@@ -19798,12 +19873,13 @@
         setTimer: tick.setTimer, clearTimer: tick.clearTimer, warn,
       }) : { runNow: () => [], schedule() {}, destroy() {} };
       onCleanup(() => agendaController.destroy());
-      const agendaSoon = () => {
+      const agendaSoon = (skipWorkspaceSync = false) => {
         if (disposed) return;
+        if (skipWorkspaceSync !== true) syncSharedWorkspace();
         bindAgenda(agendaEnabled());
         agendaController.invalidate?.();
         if (!agendaEnabled()) { agendaController.runNow(); return; }
-        ensureStore().then(() => { if (!disposed) agendaController.schedule(); }).catch(warn);
+        ensureStore().then(() => { if (!disposed && agendaEnabled()) agendaController.schedule(); }).catch(warn);
       };
       const agendaItemUnsub = store.items?.on?.((ev) => {
         if (CALENDAR_PART?.agendaItemEventAffectsProjection(ev) && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); }
@@ -20223,12 +20299,66 @@
       onCleanup(() => { PERF_ON = false; try { delete window.__zentralNotesPerf; } catch (_) {} });
       let zen = makeZen();
       onCleanup(() => zen.destroy());
-      const zenSoon = () => {
+      const zenSoon = (skipWorkspaceSync = false) => {
         if (disposed || zenMode() === "off") return;
+        if (skipWorkspaceSync !== true) syncSharedWorkspace();
         if (zen.dead) zen = makeZen(); // toggling the preference revives it after a kill
         bindZen(true);
-        ensureStore().then(() => { zen.schedule(); if (agendaEnabled()) agendaController.schedule(); }).catch(warn);
+        ensureStore().then(() => { if (disposed || zenMode() === "off") return; zen.schedule(); if (agendaEnabled()) agendaController.schedule(); }).catch(warn);
       };
+      let watchedWorkspaceManager = null, workspaceNativeBound = false, workspaceFallbackTimer = 0, lastWorkspaceId = "";
+      const onSharedWorkspaceChanged = () => {
+        if (disposed) return;
+        if (!lifecycle?.watchNative) bindWorkspaceManager();
+        try { lastWorkspaceId = window.gZenWorkspaces?.activeWorkspace || ""; } catch (_) { lastWorkspaceId = ""; }
+        syncSharedWorkspace();
+        if (zenMode() !== "off") zenSoon(true);
+        if (agendaEnabled()) agendaSoon(true);
+      };
+      function bindWorkspaceManager() {
+        const manager = (zenMode() !== "off" || agendaEnabled()) ? window.gZenWorkspaces : null;
+        if (manager === watchedWorkspaceManager) return;
+        try { watchedWorkspaceManager?.removeChangeListeners?.(onSharedWorkspaceChanged); } catch (_) {}
+        watchedWorkspaceManager = null; workspaceNativeBound = false;
+        if (typeof manager?.addChangeListeners !== "function" || typeof manager?.removeChangeListeners !== "function") return;
+        try { manager.addChangeListeners(onSharedWorkspaceChanged); watchedWorkspaceManager = manager; workspaceNativeBound = true; }
+        catch (error) { try { manager.removeChangeListeners(onSharedWorkspaceChanged); } catch (_) {} warn(error); }
+      }
+      if (lifecycle?.watchNative) {
+        const watcher = lifecycle.watchNative({
+          name: "notes-shared-workspace-projection", prefs: [PREF.ZEN_MODE, PREF.AGENDA_ENABLED],
+          enabled: () => zenMode() !== "off" || agendaEnabled(),
+          resolve: () => window.gZenWorkspaces || null,
+          events: ["AfterWorkspacesSessionRestore", "ZenWorkspacesUIUpdate"],
+          attach(manager, child) {
+            const add = manager.addChangeListeners, remove = manager.removeChangeListeners;
+            if (typeof add !== "function" || typeof remove !== "function") throw new Error("Zen workspace change listeners are unavailable");
+            child.own(() => { try { remove.call(manager, onSharedWorkspaceChanged); } finally { workspaceNativeBound = false; } });
+            add.call(manager, onSharedWorkspaceChanged); workspaceNativeBound = true;
+            return { isCurrent: () => manager.addChangeListeners === add && manager.removeChangeListeners === remove };
+          },
+        });
+        onCleanup(() => watcher.destroy());
+      } else bindWorkspaceManager();
+      try { lastWorkspaceId = window.gZenWorkspaces?.activeWorkspace || ""; } catch (_) {}
+      // Older hosts without a workspace-change callback still expose TabSelect;
+      // coalesce only actual space changes and wait until the native event ends.
+      const onWorkspaceTabSelect = () => {
+        if (disposed || workspaceNativeBound || (zenMode() === "off" && !agendaEnabled())) return;
+        let current = ""; try { current = window.gZenWorkspaces?.activeWorkspace || ""; } catch (_) {}
+        if (!current || current === lastWorkspaceId) return;
+        lastWorkspaceId = current; window.clearTimeout(workspaceFallbackTimer);
+        workspaceFallbackTimer = window.setTimeout(onSharedWorkspaceChanged, 0);
+      };
+      for (const type of ["AfterWorkspacesSessionRestore", "ZenWorkspacesUIUpdate"]) window.addEventListener(type, onSharedWorkspaceChanged);
+      window.addEventListener("TabSelect", onWorkspaceTabSelect, true);
+      onCleanup(() => {
+        window.clearTimeout(workspaceFallbackTimer);
+        try { watchedWorkspaceManager?.removeChangeListeners?.(onSharedWorkspaceChanged); } catch (_) {}
+        watchedWorkspaceManager = null; workspaceNativeBound = false;
+        for (const type of ["AfterWorkspacesSessionRestore", "ZenWorkspacesUIUpdate"]) window.removeEventListener(type, onSharedWorkspaceChanged);
+        window.removeEventListener("TabSelect", onWorkspaceTabSelect, true);
+      });
       const zenUnsub = store.on((ev) => {
         if (ev.type === "change" || ev.type === "tree" || ev.type === "remove" || ev.type === "reset") {
           if (zenMode() !== "off" && !zen.dead) zen.schedule();
@@ -21184,6 +21314,7 @@
       const prefObserver = {
         observe(_s, _t, name) {
           if (disposed) return;
+          if (!lifecycle?.watchNative && (name === PREF.ZEN_MODE || name === PREF.AGENDA_ENABLED)) bindWorkspaceManager();
           // READ_PREFS (blank lines, line breaks, Setext) are read on every render of the read view;
           // open sheets draw it again now so the change shows at once.
           if (READ_PREFS.has(name)) {

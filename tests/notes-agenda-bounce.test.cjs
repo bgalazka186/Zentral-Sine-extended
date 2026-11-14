@@ -25,7 +25,7 @@ const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
   const newLocal = tab("https://new.test/"); assert.equal(bounce(foreign), newLocal, "fallback chooses a loaded current-space tab");
   h.window.gZenWorkspaces.activeWorkspace = B; selected(foreign, agenda);
   h.window.gZenWorkspaces.activeWorkspace = A; assert.equal(bounce(foreign), newLocal, "last selection is tracked separately for each workspace");
-  const unknown = tab("https://unknown.test/", ""); unknown.remove(); h.document.body.append(unknown);
+  const unknown = tab("https://unknown.test/", ""); unknown.removeAttribute("zen-workspace-id"); unknown.remove(); h.document.body.append(unknown);
   assert.equal(bounce(unknown), newLocal, "a tab without provable workspace ownership is rejected");
   selected(newLocal, agenda); selected(agenda, newLocal); h.window.gZenWorkspaces.activeWorkspace = B;
   h.fireTimer(0); assert.equal(h.window.gBrowser.selectedTab, agenda, "workspace changes before the bounce invalidate the deferred selection");
