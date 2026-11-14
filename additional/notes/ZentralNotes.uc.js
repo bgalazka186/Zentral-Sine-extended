@@ -19155,6 +19155,7 @@
         getEnabled: agendaEnabled,
         getPosition: agendaPosition,
         now: () => Date.now(),
+        getWindowIsMasterPolicy: true,
         getWindow: (item) => {
           const category = item.x?.category ? store.items?.category?.(item.x.category) : null;
           const notePolicy = item.x?.noteId ? store.meta.calendarNoteAgendaOverrides?.[item.x.noteId] : null;

@@ -305,3 +305,19 @@ Indexes are updated on append, merge, open and salvage, preserving copy/filter/s
 **Tests / done when:** Budget test: one pass on 2000 recurring items under the CI budget; event storm test (50 edits in 1 s) triggers at most 2 passes.
 
 Occurrence expansions are cached by local day/timezone and master identity/revision; only edited series re-expand, categories/reset invalidate the window, and exact rolling bounds are retained over DST. Item events trail-debounce 300 ms; alert timers remain immediate. Pending note reminders are cached until relevant note changes or claims. 50-edit storm and DST-boundary tests pass. Baseline 500/2000 first pass 969/4774 ms versus cached pass 454/2089 ms; initial 2000 cost was 4097 ms before caching, so a first-pass improvement is not claimed. CI budgets include cached passes.
+
+## PF2.3 — Completed Agenda policy reuse (3.3.123)
+
+#### `PF2.3` — Agenda projection: make the production path as fast as the fast path
+**Status:** `DONE` · **Impact:** High · **Effort:** M · **Depends on:** F0.2 · **Source:** Audit R2 P2
+
+**Problem:** `createZenAgenda` always supplies `getWindow` (via `store.items.category()` and `calendarNoteAgendaOverrides`), so `agendaZenProjection` never takes its tight `fastDefault` loop and normalises four policy layers per item more than once (also in `nextAgendaVisibilityBoundary`). Measured 88 ms (500 daily) and 141 ms (2000 daily) for a 4-day window; 266 ms and 1.1 s for 31 days; it runs on every store event.
+
+**Plan (do in this order):**
+1. Resolve each item's agenda window once per run and memoise by (item rev, category rev, note-policy rev, global-defaults rev).
+2. Pass the resolved map into `agendaZenProjection` and `nextAgendaVisibilityBoundary` instead of calling `getWindow` per use.
+3. Keep results identical (existing `notes-agenda-windows` and `notes-agenda-projection` tests).
+
+**Tests / done when:** F0.2 budget for the production call shape; equality test old vs new projection on random fixtures.
+
+Production controller resolves each master policy once per reconciliation, sharing a run-local map with projection and boundary scheduling; default policies use the tight loop. Occurrence-specific external callbacks retain legacy behavior unless explicitly opted into master policy. The cache is intentionally run-local rather than across-run revision-memoized: category, note-policy and global preference revision counters are not exposed, so rebuilding prevents stale inheritance. Randomized equality and controller invalidation tests pass. Production-shaped projection plus boundary 500/2000: 4-day 74/192 ms, 31-day 364/1665 ms; prior projection alone 82/179 and 428/1519 ms, respectively, so only 500-item 31-day improvement was observed. Budgets tightened with CI margin; timings vary.

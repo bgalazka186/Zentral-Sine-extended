@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.122
+// @version 3.3.123
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.122, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.123, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.122";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.123";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -3547,35 +3547,46 @@ const __zentralEmbeddedLoader = (function () {
     };
     return { enabled: pick("enabled", true), leadDays: pick("leadDays", 0), tailDays: pick("tailDays", 0) };
   }
-  // Return local-midnight [from, to) boundaries. Offsets are civil days rather than
-  // 24-hour durations, so spring/fall DST changes never shift the visible date.
-  function agendaVisibilityRange(item, rawPolicy = {}) {
-    if (!item?.start) return null;
-    const policy = resolveAgendaWindow({ x: { agendaWindow: rawPolicy } });
-    if (!policy.enabled) return null;
+  // Resolve the inherited layers once per source master. Expanded occurrences
+  // retain the master's policy; the map is private to one reconciliation run.
+  function prepareAgendaWindows(items, getWindow = null) {
+    const policies = new Map();
+    for (const item of items || []) if (item?.id) {
+      policies.set(item.id, resolveAgendaWindow(item, null, null, getWindow ? getWindow(item) : null));
+    }
+    return policies;
+  }
+  function preparedAgendaWindow(item, getWindow, policies) {
+    const key = item?.x?.series || item?.id;
+    return (key && policies?.get(key)) || resolveAgendaWindow(item, null, null, getWindow ? getWindow(item) : null);
+  }
+  function resolvedAgendaVisibilityRange(item, policy) {
+    if (!item?.start || !policy.enabled) return null;
     const start = whenMs(item.start), end = item.end ? whenMs(item.end) : start;
     if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
     const lastVisibleItemDay = dayStart(end > start ? end - 1 : start);
-    return {
-      from: addDays(dayStart(start), -policy.leadDays),
-      to: addDays(lastVisibleItemDay, policy.tailDays + 1),
-    };
+    return { from: addDays(dayStart(start), -policy.leadDays), to: addDays(lastVisibleItemDay, policy.tailDays + 1) };
+  }
+  // Return local-midnight [from, to) boundaries. Offsets are civil days rather than
+  // 24-hour durations, so spring/fall DST changes never shift the visible date.
+  function agendaVisibilityRange(item, rawPolicy = {}) {
+    return resolvedAgendaVisibilityRange(item, resolveAgendaWindow({ x: { agendaWindow: rawPolicy } }));
   }
   // The virtual Agenda is a rolling local-day projection. Refresh only when the next
   // day can change a visible bucket, or when a far-future window first enters its horizon.
   // Recurring series are re-evaluated daily because their next occurrence is generated
   // from the recurrence rule rather than stored as a separate item.
-  function nextAgendaVisibilityBoundary(items, now, days = 4, getWindow = null) {
+  function nextAgendaVisibilityBoundary(items, now, days = 4, getWindow = null, policies = null) {
     const stamp = Number(now);
     if (!Number.isFinite(stamp)) return null;
     const today = dayStart(stamp), count = Math.max(1, Math.min(31, Math.floor(Number(days)) || 4));
     const tomorrow = addDays(today, 1), horizon = addDays(today, count);
     let next = Infinity;
     for (const item of items || []) {
-      const policy = resolveAgendaWindow(item, null, null, getWindow ? getWindow(item) : null);
+      const policy = preparedAgendaWindow(item, getWindow, policies);
       if (!policy.enabled) continue;
       if (isRecurringItem(item)) { next = Math.min(next, tomorrow); continue; }
-      const range = agendaVisibilityRange(item, policy);
+      const range = resolvedAgendaVisibilityRange(item, policy);
       if (!range || range.to <= today) continue;
       const boundary = range.from < horizon ? tomorrow : addDays(range.from, -(count - 1));
       if (boundary > stamp) next = Math.min(next, boundary);
@@ -3639,7 +3650,7 @@ const __zentralEmbeddedLoader = (function () {
   }
   // Projection for the virtual Zen Agenda folder. Keys are occurrence-scoped, not
   // display strings or formatted dates, so duplicate summaries remain independent.
-  function agendaZenProjection(items, now, days = 4, isDone = () => false, getWindow = null) {
+  function agendaZenProjection(items, now, days = 4, isDone = () => false, getWindow = null, policies = null) {
     const clock = (ms) => { const d = new Date(ms); return p2(d.getHours()) + ":" + p2(d.getMinutes()); };
     // Expand the complete local window once, then fan overlapping multi-day events into
     // each day bucket. Calling expandRange once per day is needlessly O(days * items).
@@ -3653,10 +3664,10 @@ const __zentralEmbeddedLoader = (function () {
       const policy = item?.x?.agendaWindow;
       return policy && Object.keys(policy).length > 0;
     });
-    const fastDefault = !getWindow && !hasItemPolicy;
+    const fastDefault = policies ? sourceItems.every((item) => { const p = preparedAgendaWindow(item, getWindow, policies); return p.enabled && !p.leadDays && !p.tailDays; }) : !getWindow && !hasItemPolicy;
     let maxLead = 0, maxTail = 0;
     if (!fastDefault) for (const source of sourceItems) {
-      const policy = resolveAgendaWindow(source, null, null, getWindow ? getWindow(source) : null);
+      const policy = preparedAgendaWindow(source, getWindow, policies);
       if (!policy.enabled) continue;
       maxLead = Math.max(maxLead, policy.leadDays);
       maxTail = Math.max(maxTail, policy.tailDays);
@@ -3692,9 +3703,9 @@ const __zentralEmbeddedLoader = (function () {
         first = Math.max(0, localDayOrdinal(start) - baseOrdinal);
         last = Math.min(n - 1, localDayOrdinal(end > start ? end - 1 : start) - baseOrdinal);
       } else {
-        const policy = resolveAgendaWindow(item, null, null, getWindow ? getWindow(item) : null);
+        const policy = preparedAgendaWindow(item, getWindow, policies);
         if (!policy.enabled) continue;
-        const visible = agendaVisibilityRange(item, policy);
+        const visible = resolvedAgendaVisibilityRange(item, policy);
         if (!visible) continue;
         first = Math.max(0, localDayOrdinal(visible.from) - baseOrdinal);
         last = Math.min(n - 1, localDayOrdinal(visible.to - 1) - baseOrdinal);
@@ -3749,7 +3760,7 @@ const __zentralEmbeddedLoader = (function () {
   }
   // Coalesced, store-change-driven controller for the virtual Zen Agenda folder. The host
   // supplies DOM/Zen operations through `api`; this controller owns no browser globals.
-  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
+  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, getWindowIsMasterPolicy = false, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
     let dead = false, timer = null, timerAt = Infinity, last = [], busy = false, consecutiveChanges = 0, blockedUntil = 0;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
     function armAt(due) {
@@ -3767,8 +3778,8 @@ const __zentralEmbeddedLoader = (function () {
       timer = null;
       timerAt = Infinity;
     }
-    function scheduleBoundary(items) {
-      const due = nextAgendaVisibilityBoundary(items, now(), getDays(), getWindow);
+    function scheduleBoundary(items, policies) {
+      const due = nextAgendaVisibilityBoundary(items, now(), getDays(), getWindow, policies);
       if (due === null) clearScheduled(); else armAt(due);
     }
     function runNow() {
@@ -3778,16 +3789,17 @@ const __zentralEmbeddedLoader = (function () {
       if (blockedUntil && stamp < blockedUntil) return last;
       if (blockedUntil) { blockedUntil = 0; consecutiveChanges = 0; }
       busy = true;
-      let sourceItems = [], operations = 0;
+      let sourceItems = [], policies = null, operations = 0;
       const revision = api.mutationCount?.() || 0;
       try {
         if (!getEnabled()) { api.removeAll?.(); last = []; clearScheduled(); return []; }
         sourceItems = getItems?.() || [];
-        const projection = agendaVisibleDays(agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow));
+        policies = getWindowIsMasterPolicy ? prepareAgendaWindows(sourceItems, getWindow) : null;
+        const projection = agendaVisibleDays(agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow, policies));
         if (!projection.length) {
-          api.removeAll?.(); last = projection; scheduleBoundary(sourceItems); return projection;
+          api.removeAll?.(); last = projection; scheduleBoundary(sourceItems, policies); return projection;
         }
-        if (api.ensureRoot?.(getPosition() === "below" ? "below" : "above") === false) { scheduleBoundary(sourceItems); return last; }
+        if (api.ensureRoot?.(getPosition() === "below" ? "below" : "above") === false) { scheduleBoundary(sourceItems, policies); return last; }
         const desired = [];
         for (const day of projection) {
           desired.push({ key: day.key, kind: "day", label: day.label, date: day.date, count: day.count, parent: "" });
@@ -3809,7 +3821,7 @@ const __zentralEmbeddedLoader = (function () {
         for (const day of desired.filter((entry) => entry.kind === "day"))
           api.reorder?.(day.key, desired.filter((entry) => entry.kind === "item" && entry.parent === day.key).map((entry) => entry.key));
         last = projection;
-        scheduleBoundary(sourceItems);
+        scheduleBoundary(sourceItems, policies);
         if (operations || (api.mutationCount?.() || 0) !== revision) consecutiveChanges++;
         else consecutiveChanges = 0;
         if (consecutiveChanges >= 3) {
@@ -3820,7 +3832,7 @@ const __zentralEmbeddedLoader = (function () {
         return projection;
       } catch (error) {
         safeWarn(error);
-        try { scheduleBoundary(sourceItems); } catch (scheduleError) { safeWarn(scheduleError); }
+        try { scheduleBoundary(sourceItems, policies); } catch (scheduleError) { safeWarn(scheduleError); }
         return last;
       } finally { busy = false; }
     }
@@ -4061,7 +4073,7 @@ const __zentralEmbeddedLoader = (function () {
 
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
-    cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
+    cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
@@ -23774,6 +23786,7 @@ __zentralShim.register = function (def) {
         getEnabled: agendaEnabled,
         getPosition: agendaPosition,
         now: () => Date.now(),
+        getWindowIsMasterPolicy: true,
         getWindow: (item) => {
           const category = item.x?.category ? store.items?.category?.(item.x.category) : null;
           const notePolicy = item.x?.noteId ? store.meta.calendarNoteAgendaOverrides?.[item.x.noteId] : null;

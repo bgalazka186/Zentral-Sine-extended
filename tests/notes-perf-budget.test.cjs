@@ -5,7 +5,7 @@ const { performance } = require("node:perf_hooks");
 const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
 const { createFakeZen } = require("./helpers/fake-zen-browser.cjs");
 const BUDGET_MS = Object.freeze({
-  projection4_500: 600, projection31_500: 2500, projection4_2000: 1200, projection31_2000: 9000,
+  projection4_500: 500, projection31_500: 2000, projection4_2000: 1000, projection31_2000: 7000,
   expand31_500: 1600, expand90_500: 5000, expand31_2000: 7000, expand90_2000: 18000,
   scheduler500: 6500, scheduler2000: 25000, schedulerCached500: 4000, schedulerCached2000: 15000, history45000: 500,
 });
@@ -33,7 +33,7 @@ const makeItems = (n) => Array.from({ length: n }, (_, i) => C.makeItem({
     const category = (name) => name === "Work" ? { agenda: { leadDays: 1 }, notify: { due: { enabled: true } } } : { agenda: {}, notify: { due: { enabled: true } } };
     const getWindow = (item) => C.resolveAgendaWindow(item, category(item.x.category).agenda, null, { enabled: true });
     for (const days of [4, 31]) {
-      const projection = measure(`projection${days}_${n}`, () => C.agendaZenProjection(items, now, days, isDone, getWindow));
+      const projection = measure(`projection${days}_${n}`, () => { const policies = C.prepareAgendaWindows(items, getWindow); const result = C.agendaZenProjection(items, now, days, isDone, getWindow, policies); C.nextAgendaVisibilityBoundary(items, now, days, getWindow, policies); return result; });
       assert.equal(projection.length, days); assert.ok(projection.some((day) => day.items.length));
     }
     for (const days of [31, 90]) {
