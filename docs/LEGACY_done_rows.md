@@ -565,3 +565,16 @@ Daily Note list items now persist per-item category overrides in a dedicated hid
 **Tests / done when:** Calendar-menu tests for manual, mirrored and note-sourced items; delete leaves no orphan `%%calendar%%` line.
 
 Mirroring changes `src` to list and records the original ID; a deterministic line-token plus original identity distinguishes a real mirror from an authored line moved to another date. The menu and confirmation name the reminder/event and its Agenda line. Confirmed deletion removes the owned line and store item, preserving neighbors and calendar markers; ambiguous duplicate identities, protected storage, changed confirmations and user-authored items are refused. Store and real-sheet tests cover cancel, deletion, reload, moved user text and failures. Note/calendar disk writes remain separate rather than transactional; real Zen remains unverified.
+
+## OW-17 — Completed Agenda title hover tooltip (3.3.139)
+
+#### `OW-17` — Full Agenda titles on hover
+**Status:** `DONE` · **Impact:** High · **Effort:** M · **Depends on:** F0.1 · **Source:** Owner request
+
+**Problem:** A reminder in the Zen Agenda folder has no readable full title on hover when the sidebar truncates it.
+
+**Plan:** Provide a scoped, readable hover card for Agenda event/reminder pseudo-tabs with the complete title; support long titles, both sidebar sides, edges, focus/keyboard accessibility, retargeting and teardown. Reuse or leave an extensible base for `T3.4a` rather than creating a conflicting second card. Preserve standalone functionality and never expose foreign tabs.
+
+**Tests / done when:** Fake Zen tests show full long titles over truncated sidebar rows, update on retarget, close on leave/removal/disable/destroy, and leave foreign tabs untouched; cover keyboard and viewport placement. Verify actual Zen layering if necessary.
+
+Agenda item pseudo-tabs show their full title in a wrapping, scrollable tooltip on hover and keyboard focus, with native tooltip fallback, Escape, retarget, bounded left/right positioning and lifecycle cleanup. Only owned Agenda items are targeted, and existing aria-describedby values survive. The lightweight card lifecycle is a base to extend for the still-open richer T3.4a cards; no Notes or RSS card is replaced. Fake Zen exercises retarget, title update, pointer hover, focus, disable, removal, fallback and destroy; actual Zen rendering/top-layer and screen-reader behavior remain unverified.

@@ -19549,6 +19549,89 @@
         const root = agendaRootEl(), parent = parentKey ? agendaDayEl(parentKey) : null;
         return [...(root?.querySelectorAll?.("tab[" + AGENDA_ATTR + "]") || [])].find((tab) => tab.getAttribute(AGENDA_ATTR) === key && (!parentKey || (parent && tab.closest?.("zen-folder") === parent))) || null;
       }
+      // Minimal, reusable sidebar-card lifecycle. OW-17 deliberately renders
+      // only the full Agenda title; richer cards/actions remain a future layer.
+      function createAgendaTitleCard() {
+        const id = "bgalazka-notes-agenda-card";
+        let node = null, target = null, pending = null, showTimer = 0, hideTimer = 0, observer = null;
+        const clear = () => { window.clearTimeout(showTimer); window.clearTimeout(hideTimer); showTimer = hideTimer = 0; pending = null; };
+        const valid = (tab) => !disposed && agendaEnabled() && tab?.isConnected !== false &&
+          (tab?.getAttribute?.(AGENDA_ATTR) || "").startsWith("item:") && !!agendaRootEl()?.contains?.(tab);
+        const detachDescription = () => {
+          if (!target) return;
+          const words = (target.getAttribute("aria-describedby") || "").split(/\s+/).filter(word => word && word !== id);
+          if (words.length) target.setAttribute("aria-describedby", words.join(" ")); else target.removeAttribute("aria-describedby");
+        };
+        const hide = () => {
+          clear(); detachDescription(); target = null;
+          if (node) { try { node.hidePopover?.(); } catch (_) {} node.hidden = true; }
+        };
+        const position = () => {
+          if (!node || !valid(target) || node.hidden) { if (target) hide(); return; }
+          const tr = target.getBoundingClientRect(), r = node.getBoundingClientRect();
+          const width = Math.min(window.innerWidth - 8, r.width || node.offsetWidth || 320);
+          const height = Math.min(window.innerHeight - 8, r.height || node.offsetHeight || 80);
+          const runtime = window.ZentralRuntime || window.__zentralStandaloneRuntime;
+          let bounds = null; try { bounds = runtime?.sidebarSafeBounds?.(); } catch (_) {}
+          const onRight = (tr.left + tr.right) / 2 > window.innerWidth / 2;
+          let left = onRight ? tr.left - width - 6 : tr.right + 6;
+          if (bounds && Number.isFinite(bounds.left) && Number.isFinite(bounds.right))
+            left = onRight ? Math.min(left, bounds.right - width) : Math.max(left, bounds.left);
+          if (left < 4 && tr.right + 6 + width <= window.innerWidth - 4) left = tr.right + 6;
+          if (left + width > window.innerWidth - 4 && tr.left - 6 - width >= 4) left = tr.left - 6 - width;
+          node.style.left = Math.max(4, Math.min(left, window.innerWidth - width - 4)) + "px";
+          node.style.top = Math.max(4, Math.min(tr.top, window.innerHeight - height - 4)) + "px";
+        };
+        const show = (tab) => {
+          clear(); if (!valid(tab)) { hide(); return; }
+          if (!node) {
+            node = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+            node.id = id; node.setAttribute("class", "zn-agenda-title-card");
+            node.setAttribute("role", "tooltip"); node.setAttribute("popover", "manual");
+            node.hidden = true; document.documentElement.append(node);
+            try { observer = new MutationObserver(() => { if (target && !valid(target)) hide(); }); observer.observe(document.documentElement, { childList: true, subtree: true }); } catch (_) {}
+          }
+          if (target !== tab) { detachDescription(); target = tab; }
+          const described = (tab.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean);
+          if (!described.includes(id)) { described.push(id); tab.setAttribute("aria-describedby", described.join(" ")); }
+          node.textContent = tab.getAttribute("bgalazka-notes-agenda-summary") || tab.getAttribute("label") || "Untitled";
+          node.hidden = false;
+          try { node.hidePopover?.(); } catch (_) {}
+          try { node.showPopover?.(); } catch (_) { node.removeAttribute("popover"); }
+          position();
+        };
+        const tabOf = (event) => { try { return event.target?.closest?.("tab[" + AGENDA_ATTR + "]"); } catch (_) { return null; } };
+        const over = (event) => {
+          if (node?.contains?.(event.target)) { window.clearTimeout(hideTimer); hideTimer = 0; return; }
+          const tab = tabOf(event); if (!valid(tab)) return;
+          if (target === tab && !node?.hidden) { window.clearTimeout(hideTimer); hideTimer = 0; return; }
+          clear(); pending = tab; showTimer = window.setTimeout(() => { const next = pending; pending = null; showTimer = 0; show(next); }, 350);
+        };
+        const out = (event) => {
+          if (node?.contains?.(event.target)) {
+            if (node.contains?.(event.relatedTarget) || target?.contains?.(event.relatedTarget) || target?.contains?.(document.activeElement)) return;
+            window.clearTimeout(hideTimer); hideTimer = window.setTimeout(hide, 150); return;
+          }
+          const tab = tabOf(event); if (!tab || (event.relatedTarget && (tab.contains?.(event.relatedTarget) || node?.contains?.(event.relatedTarget)))) return;
+          if (pending === tab) { window.clearTimeout(showTimer); showTimer = 0; pending = null; }
+          if (target !== tab || tab.contains?.(document.activeElement)) return;
+          window.clearTimeout(hideTimer); hideTimer = window.setTimeout(hide, 150);
+        };
+        const focus = (event) => { const tab = tabOf(event); if (valid(tab)) show(tab); };
+        const blur = (event) => { const tab = tabOf(event); if (tab === target && !tab?.contains?.(event.relatedTarget)) hide(); };
+        const key = (event) => { if (event.key === "Escape" && target) hide(); };
+        const popup = (event) => {
+          const tab = event.target?.triggerNode?.closest?.("tab[" + AGENDA_ATTR + "]");
+          if (event.target?.id === "tabbrowser-tab-tooltip" && tab === target && valid(tab) && node && !node.hidden) event.preventDefault();
+        };
+        return { over, out, focus, blur, key, popup, position, hide,
+          removed(tab) { if (tab === target || tab === pending) hide(); },
+          updated(tab) { if (tab === target) show(tab); },
+          destroy() { hide(); observer?.disconnect(); observer = null; node?.remove(); node = null; },
+        };
+      }
+      const agendaTitleCard = createAgendaTitleCard();
+      onCleanup(() => agendaTitleCard.destroy());
       const agendaApi = {
         mutationCount: () => agendaMutationCount,
         ensureRoot: agendaEnsureRoot,
@@ -19617,8 +19700,10 @@
           const tab = agendaTabFor(entry.key, entry.parent); if (!tab) return false;
           tab.setAttribute("label", entry.label);
           tab.setAttribute("bgalazka-notes-label", entry.label);
-          tab.setAttribute("tooltiptext", entry.tooltip || entry.summary || "");
-          tab.setAttribute("title", entry.tooltip || entry.summary || "");
+          tab.setAttribute("bgalazka-notes-agenda-summary", entry.summary || "");
+          const fallbackTip = [entry.summary, entry.tooltip].filter(Boolean).join("\n");
+          tab.setAttribute("tooltiptext", fallbackTip);
+          tab.setAttribute("title", fallbackTip);
           tab.setAttribute("bgalazka-notes-agenda-day", entry.openDate || entry.parent.replace(/^day:/, ""));
           tab.setAttribute("bgalazka-notes-agenda-item-id", entry.itemId || "");
           tab.setAttribute("bgalazka-notes-agenda-occurrence-id", entry.occurrenceId || "");
@@ -19628,11 +19713,12 @@
           tab.setAttribute("bgalazka-notes-agenda-note-id", entry.noteId || "");
           tab.setAttribute("bgalazka-notes-agenda-heading", entry.heading || "");
           if (entry.ended) tab.setAttribute("bgalazka-notes-agenda-ended", "true"); else tab.removeAttribute("bgalazka-notes-agenda-ended");
+          agendaTitleCard.updated(tab);
           return true;
         },
         remove(key) {
           if (String(key).startsWith("day:")) { const folder = agendaDayEl(key); if (folder) agendaRetireFolder(folder); return; }
-          const tab = agendaTabFor(key); if (tab) zenRemoveTab(tab);
+          const tab = agendaTabFor(key); if (tab) { agendaTitleCard.removed(tab); zenRemoveTab(tab); }
         },
         reorder(parentKey, keys) {
           const root = agendaRootEl(), parent = parentKey ? agendaDayEl(parentKey) : root;
@@ -19649,6 +19735,7 @@
           return true;
         },
         removeAll() {
+          agendaTitleCard.hide();
           const roots = [...(document.querySelectorAll?.("zen-folder") || [])].filter((folder) => folder.id === AGENDA_ROOT_ID || folder.getAttribute?.("bgalazka-notes-agenda-folder") === "true");
           const protectedRoots = [];
           for (const folder of roots) if (folder.isConnected !== false && !agendaRetireFolder(folder)) protectedRoots.push(folder);
@@ -19829,12 +19916,20 @@
         if (on === agendaBound) return;
         agendaBound = on;
         const act = on ? "addEventListener" : "removeEventListener";
+        window[act]("mouseover", agendaTitleCard.over, true);
+        window[act]("mouseout", agendaTitleCard.out, true);
+        window[act]("focusin", agendaTitleCard.focus, true);
+        window[act]("focusout", agendaTitleCard.blur, true);
+        window[act]("keydown", agendaTitleCard.key, true);
+        window[act]("popupshowing", agendaTitleCard.popup, true);
+        window[act]("resize", agendaTitleCard.position, true);
         window[act]("mousedown", onAgendaMouse, true);
         window[act]("TabSelect", onAgendaSelect, true);
         window[act]("popupshowing", onAgendaFolderMenuShowing, true);
         window[act]("popupshowing", onAgendaTabMenuShowing, true);
         window[act]("popuphidden", onAgendaFolderMenuHidden, true);
         if (!on) {
+          agendaTitleCard.hide();
           document.documentElement.removeAttribute("zentral-agenda-folder-ctx");
           document.documentElement.removeAttribute("zentral-agenda-ctx");
           document.querySelectorAll?.("[zentral-agenda-folder-own],[zentral-agenda-own]").forEach((item) => item.remove());
@@ -19884,6 +19979,7 @@
         }, 0);
       }
       function onAgendaTabEvent(ev) {
+        if (ev.type === "TabClose") agendaTitleCard.removed(ev.target);
         if (disposed || !agendaEnabled() || agendaController.busy) return;
         const tab = ev.target;
         if (agendaTabKey(tab) || (ev.type === "SSTabRestored" && /#zn-agenda-/.test(tab?._zentralNotesUrl || tab?.linkedBrowser?.currentURI?.spec || ""))) agendaController.schedule(400);

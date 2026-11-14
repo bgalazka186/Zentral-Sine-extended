@@ -163,3 +163,7 @@ Tests: `node tests/notes.test.cjs` (store, autosave, sync, recovery), `node test
   - the whole NOTES folder (or a sub-folder) deleted: it is rebuilt once. Browser-side repairs are limited to 12 a minute, so an add-on that keeps touching the tabs cannot start a loop;
   - the note was trashed or deleted: the entry is dropped and a click opens nothing.
 - **Right click** on a Notes tab only offers Notes' own actions; Zen's pin, move, container and unload entries are hidden for it.
+
+### Agenda sidebar full titles
+
+Hover or keyboard-focus an Agenda reminder or event to see its complete title in a tooltip beside the sidebar. Move the pointer onto the tooltip to keep it open; Escape dismisses it. The tooltip is scoped to Agenda items and adapts to either sidebar edge. On browsers without top-layer popovers it falls back to a positioned card; the native tooltip also contains the complete title.

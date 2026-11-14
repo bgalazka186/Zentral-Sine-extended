@@ -2163,3 +2163,27 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
 
 .zentral-notes-sheet .zn-cal-resize-handle { position: absolute; z-index: 4; box-sizing: border-box; height: 8px; min-width: 0; padding: 0; border: 0; border-radius: 3px; background: transparent; cursor: ns-resize; touch-action: none; }
 .zentral-notes-sheet .zn-cal-resize-handle:hover, .zentral-notes-sheet .zn-cal-resize-handle:focus-visible { background: var(--zn-accent); outline: 2px solid var(--zn-accent); outline-offset: 1px; }
+
+/* Full-title tooltip for owned Agenda pseudo-tabs; also works without the core runtime. */
+.zn-agenda-title-card {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(420px, calc(100vw - 8px));
+  max-height: calc(100vh - 8px);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 8px;
+  background: var(--zen-colors-primary, #25252e);
+  color: var(--zen-colors-text, #f7f7fc);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 35%);
+  font: menu;
+  pointer-events: auto;
+  z-index: 2147483646;
+}
+.zn-agenda-title-card[hidden] { display: none !important; }

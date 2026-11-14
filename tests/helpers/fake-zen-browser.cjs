@@ -87,7 +87,12 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     stat: async () => ({ lastModified: Date.now() }), remove: async (p) => files.delete(p),
   };
   const PathUtils = { profileDir: "/profile", tempDir: "/tmp", join: (...parts) => parts.join("/"), filename: (p) => p.split("/").pop() };
-  class MutationObserver { observe() {} disconnect() {} }
+  const mutationObservers = new Set();
+  class MutationObserver {
+    constructor(callback) { this.callback = callback; }
+    observe() { mutationObservers.add(this); }
+    disconnect() { mutationObservers.delete(this); }
+  }
   class ResizeObserver { observe() {} unobserve() {} disconnect() {} }
   vm.runInNewContext(source, { window: win, document, globalThis: { Services }, ChromeUtils: { importESModule: () => ({}) }, PathUtils, IOUtils, MutationObserver, ResizeObserver, Event: Ev,
     navigator: { platform: "Linux" }, console, URL, Date: FakeDate, JSON, Math, Promise, RegExp, Number, Map, Set, WeakMap, setTimeout, clearTimeout, queueMicrotask });
@@ -95,6 +100,7 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   const destroy = definition.init();
   return { ...dom, window: win, sidebar, operations, events, timers, values, files, observers, obs, emit, destroy,
     advanceClock(ms) { clockOffset += Number(ms) || 0; },
+    triggerMutations() { for (const observer of [...mutationObservers]) observer.callback([]); },
     setPref, resetOperations() { operations.length = 0; },
     fireTimer(ms) {
       // This harness can fire the boot timer out of chronological order. The
