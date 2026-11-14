@@ -2732,9 +2732,9 @@
   // Managed Agenda entries are projections, not movable user tabs/folders.
   // Reject every drop onto the managed region, including links and unknown
   // drag formats; unrelated drags elsewhere are never intercepted.
-  function blockAgendaDrag({ phase, sourceManaged = false, selectedManaged = false, targetManaged = false } = {}) {
+  function blockAgendaDrag({ phase, sourceManaged = false, selectedManaged = false, targetManaged = false, draggedManaged = false } = {}) {
     if (phase === "dragstart") return !!(sourceManaged || selectedManaged);
-    return (phase === "dragover" || phase === "drop") && !!targetManaged;
+    return (phase === "dragover" || phase === "drop") && !!(targetManaged || draggedManaged);
   }
   // Projection for the virtual Zen Agenda folder. Keys are occurrence-scoped, not
   // display strings or formatted dates, so duplicate summaries remain independent.

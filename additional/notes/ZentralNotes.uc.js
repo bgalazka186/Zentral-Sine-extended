@@ -19420,11 +19420,24 @@
       }
       // Default place of the NOTES folder: the first entry of the workspace's Pinned tabs (only when it is created;
       // later the person may drag it anywhere and it stays there).
+      function zenRestoreRootParent(el) {
+        try {
+          let outer = zenParentOf(el);
+          if (!outer) return true;
+          while (zenParentOf(outer)) outer = zenParentOf(outer);
+          const host = outer.parentElement;
+          if (!host) return false;
+          host.insertBefore(el, outer.nextSibling || null);
+          return !zenParentOf(el);
+        } catch (error) { warn(error); return false; }
+      }
+      // NOTES is a managed projection, not a draggable user folder. Keep its root
+      // top-level and restore it if a native/API move bypasses dragstart protection.
       function zenToTop(el) {
         try {
-          if (!prefBool(PREF.ZEN_TOP, true)) return;
+          if (!prefBool(PREF.ZEN_TOP, true) || zenParentOf(el)) return;
           const host = el.parentElement;
-          if (!host || zenParentOf(el)) return;
+          if (!host) return;
           const first = [...host.children].find((c) => c !== el && /^(zen-folder|tab)$/i.test(c.localName || ""));
           if (first && first !== el && first !== el.nextElementSibling) host.insertBefore(el, first);
         } catch (error) { warn(error); }
@@ -19503,7 +19516,12 @@
         hasRoot: () => !!zenRootEl(),
         ensureRoot() {
           zenSweepStale();
-          if (zenRootEl()) return true;
+          const existing = zenRootEl();
+          if (existing) {
+            if (!zenRestoreRootParent(existing)) { warn("Zen NOTES folder: could not restore its top-level position; sidebar sync is paused"); return false; }
+            zenToTop(existing);
+            return true;
+          }
           const tab = zenNewTab(zenNewUrl(""), "root");
           let folder = null;
           try {
@@ -19518,6 +19536,15 @@
         },
         list() {
           const root = zenRootEl();
+          if (root) {
+            // Native grouping/session operations can bypass drag event guards.
+            // Move foreign subtrees intact out of NOTES before comparing the
+            // projection; then retire any Notes-owned folders nested in them.
+            evacuateProjectionForeign(root, root,
+              (child) => restoredPseudoFolderKind(child) === "notes",
+              (tab) => tab.hasAttribute?.(NOTES_ATTR));
+            zenSweepStrays();
+          }
           zenAdoptSubfolders(root);
           const out = [];
           // The parent counts as "where it really is": an entry that is not inside the folder it belongs to
@@ -19939,6 +19966,11 @@
           const beforeEvacuation = agendaMutationCount;
           agendaEvacuateForeign(root);
           if (agendaMutationCount !== beforeEvacuation && root.isConnected !== false) agendaPlaceRoot(root, agendaPosition());
+          // A day folder moved outside Agenda is an obsolete projection, not a
+          // user folder. Retire it and let the model recreate it in the right place.
+          for (const orphan of [...(document.querySelectorAll?.("zen-folder") || [])]) {
+            if (agendaOwnedDay(orphan) && !root.contains?.(orphan)) agendaRetireFolder(orphan);
+          }
           const out = [];
           const otherRoots = [...(document.querySelectorAll?.("zen-folder") || [])].filter((folder) => folder !== root && (folder.id === AGENDA_ROOT_ID || folder.getAttribute?.("bgalazka-notes-agenda-folder") === "true"));
           for (const tab of document.querySelectorAll?.("tab") || []) {
@@ -19973,7 +20005,7 @@
             if (date !== "overdue" && !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
             folder.setAttribute("bgalazka-notes-agenda-day", date);
             folder.setAttribute("bgalazka-notes-agenda-key", "day:" + date);
-            out.push({ key: "day:" + date, kind: "day", parent: "" });
+            out.push({ key: "day:" + date, kind: "day", parent: zenParentOf(folder) === root ? "" : "?misplaced" });
           }
           return out;
         },
@@ -20320,14 +20352,17 @@
         if (disposed || !agendaEnabled()) return;
         const root = agendaRootEl(); if (!root) return;
         const target = ev.target, targetManaged = !!target && root.contains?.(target);
-        let sourceManaged = false, selectedManaged = false;
+        let sourceManaged = false, selectedManaged = false, draggedManaged = false;
+        let draggedTab = null;
+        try { draggedTab = ev.dataTransfer?.mozGetDataAt?.("application/x-moz-tabbrowser-tab", 0); } catch (_) {}
+        draggedManaged = agendaOwnTab(draggedTab);
         if (ev.type === "dragstart") {
           const tab = target?.closest?.("tab");
-          const folder = !tab && target?.closest?.("zen-folder");
-          sourceManaged = !!(tab && root.contains?.(tab) && agendaOwnTab(tab)) || !!(folder && (folder === root || (root.contains?.(folder) && agendaOwnedDay(folder))));
-          if (tab?.multiselected) selectedManaged = [...(window.gBrowser?.selectedTabs || [])].some((selected) => root.contains?.(selected) && agendaOwnTab(selected));
+          const folder = target?.closest?.("zen-folder");
+          sourceManaged = agendaOwnTab(tab) || !!(folder && (folder === root || agendaOwnedDay(folder)));
+          if (tab?.multiselected) selectedManaged = [...(window.gBrowser?.selectedTabs || [])].some(agendaOwnTab);
         }
-        if (!CALENDAR_PART.blockAgendaDrag({ phase: ev.type, sourceManaged, selectedManaged, targetManaged })) return;
+        if (!CALENDAR_PART.blockAgendaDrag({ phase: ev.type, sourceManaged, selectedManaged, targetManaged, draggedManaged })) return;
         if (ev.type !== "dragstart") try { if (ev.dataTransfer) ev.dataTransfer.dropEffect = "none"; } catch (_) {}
         ev.preventDefault(); ev.stopImmediatePropagation();
       }
@@ -20388,8 +20423,11 @@
         if (ev.type === "TabClose") agendaTitleCard.removed(ev.target);
         if (disposed || !agendaEnabled() || agendaController.busy || agendaReordering) return;
         const tab = ev.target;
-        const movedIntoAgenda = ["TabMove", "FolderGrouped", "FolderUngrouped"].includes(ev.type) && agendaRootEl()?.contains?.(tab);
-        if (movedIntoAgenda || agendaTabKey(tab) || (ev.type === "SSTabRestored" && /#zn-agenda-/.test(tab?._zentralNotesUrl || tab?.linkedBrowser?.currentURI?.spec || ""))) agendaController.schedule(400);
+        const root = agendaRootEl();
+        const movedFolder = ["FolderGrouped", "FolderUngrouped"].includes(ev.type) &&
+          (tab === root || agendaOwnedDay(tab) || root?.contains?.(tab));
+        const movedIntoAgenda = ["TabMove", "FolderGrouped", "FolderUngrouped"].includes(ev.type) && root?.contains?.(tab);
+        if (movedIntoAgenda || movedFolder || agendaTabKey(tab) || (ev.type === "SSTabRestored" && /#zn-agenda-/.test(tab?._zentralNotesUrl || tab?.linkedBrowser?.currentURI?.spec || ""))) agendaController.schedule(400);
       }
 
       // A narrow, versioned bridge lets Colorful Folders edit Notes-owned Zen
@@ -20695,10 +20733,21 @@
         const tab = ev.target;
         if (!tab || tab.localName !== "tab") return;
         const marked = tab.hasAttribute?.(NOTES_ATTR);
+        if (!marked && zenRootEl()?.contains?.(tab) && ["TabMove", "TabPinned", "SSTabRestored"].includes(ev.type)) {
+          zen.touch(); // foreign tabs entering NOTES are evacuated by the next reconciliation
+          return;
+        }
         if (ev.type === "TabBrowserDiscarded") { if (marked) zenHeal(tab); return; }
-        if (!marked && !(ev.type === "SSTabRestored" && zenLooksOurs(tab))) return; // every other tab: not our business
+        if (!marked && !(ev.type === "SSTabRestored" && zenLooksOurs(tab))) return;
         if (ev.type === "SSTabRestored") zenChecked.delete(tab);
         zen.touch();
+      };
+      const onZenFolderEvent = (ev) => {
+        if (disposed || zen.dead || zenMode() === "off" || zenEventsIgnored()) return;
+        const folder = ev.target?.localName === "zen-folder" ? ev.target : ev.target?.closest?.("zen-folder");
+        if (!folder) return;
+        const root = zenRootEl();
+        if (folder === root || root?.contains?.(folder) || restoredPseudoFolderKind(folder) === "notes") zen.touch();
       };
       const ZEN_TAB_EVENTS = ["TabClose", "TabUnpinned", "TabPinned", "TabMove", "TabBrowserDiscarded", "SSTabRestored"];
       // Selecting one of our tabs (keyboard, session, script) hands the selection back to the previous tab. This must
@@ -20725,18 +20774,35 @@
           } catch (error) { warn(error); }
         }, 0);
       };
-      // Dropping a web tab on the NOTES folder never moves it: it is refused, or captured as a link note (dropDecision).
-      const onZenDrop = (ev) => {
-        const root = zenRootEl();
-        if (disposed || zen.dead || !root || !root.contains?.(ev.target)) return;
-        let tab = null;
-        try { tab = ev.dataTransfer?.mozGetDataAt?.("application/x-moz-tabbrowser-tab", 0); } catch (_) {}
-        if (tab?.hasAttribute?.(NOTES_ATTR)) return;
+      const zenManagedTab = (tab) => !!(tab && (tab.hasAttribute?.(NOTES_ATTR) || zenLooksOurs(tab)));
+      const zenManagedFolder = (folder) => !!(folder && folder.localName === "zen-folder" &&
+        (folder === zenRootEl() || restoredPseudoFolderKind(folder) === "notes"));
+      // NOTES fake tabs/folders cannot be dragged out, reordered, or grouped.
+      // Every drop into the managed tree is intercepted before Zen can mutate
+      // folder membership; ordinary web-tab drops may still create a URL note.
+      const onZenDrag = (ev) => {
+        if (disposed || zen.dead || zenMode() === "off") return;
+        const root = zenRootEl(), target = ev.target;
+        const sourceTab = target?.closest?.("tab");
+        const sourceFolder = target?.closest?.("zen-folder");
+        const sourceManaged = zenManagedTab(sourceTab) || zenManagedFolder(sourceFolder);
+        const selectedManaged = ev.type === "dragstart" &&
+          [...(window.gBrowser?.selectedTabs || [])].some(zenManagedTab);
+        const targetManaged = !!root?.contains?.(target) || zenManagedFolder(sourceFolder);
+        let draggedTab = null;
+        try { draggedTab = ev.dataTransfer?.mozGetDataAt?.("application/x-moz-tabbrowser-tab", 0); } catch (_) {}
+        const draggedManaged = zenManagedTab(draggedTab);
+        const blocked = ev.type === "dragstart"
+          ? sourceManaged || selectedManaged
+          : targetManaged || draggedManaged;
+        if (!blocked) return;
         ev.preventDefault();
         ev.stopImmediatePropagation();
-        if (ev.type !== "drop" || !tab) return;
-        const d = dropDecision({ tab: { attrs: {}, title: tab.label || "", url: tabUrl(tab) }, intoNotes: true });
-        if (d.action === "capture-url") store.create(d.body, zenMode() === "selected" ? TABBAR_FOLDER : "");
+        try { if (ev.dataTransfer) ev.dataTransfer.dropEffect = "none"; } catch (_) {}
+        if (ev.type === "drop" && targetManaged && draggedTab && !draggedManaged) {
+          const decision = dropDecision({ tab: { attrs: {}, title: draggedTab.label || "", url: tabUrl(draggedTab) }, intoNotes: true });
+          if (decision.action === "capture-url") store.create(decision.body, zenMode() === "selected" ? TABBAR_FOLDER : "");
+        }
       };
       // Right-click menus: our own items are added once; for our targets every native item is hidden with CSS (never removed).
       const ZEN_MENU_ITEMS = [
@@ -20855,9 +20921,10 @@
         const act = on ? "addEventListener" : "removeEventListener";
         for (const ty of ["mousedown", "click", "mouseup", "auxclick"]) window[act](ty, onZenMouse, true);
         for (const ty of ZEN_TAB_EVENTS) window[act](ty, onZenTabEvent, true);
+        for (const ty of ["FolderGrouped", "FolderUngrouped"]) window[act](ty, onZenFolderEvent, true);
         window[act]("TabAttrModified", onZenAttr, true);
         window[act]("TabSelect", onZenSelect, true);
-        for (const ty of ["dragover", "drop"]) window[act](ty, onZenDrop, true);
+        for (const ty of ["dragstart", "dragover", "drop"]) window[act](ty, onZenDrag, true);
         window[act]("popupshowing", onTabMenuShowing, true);
         window[act]("popupshowing", onFolderMenuShowing, true);
         window[act]("popuphidden", onTabMenuHidden, true);
