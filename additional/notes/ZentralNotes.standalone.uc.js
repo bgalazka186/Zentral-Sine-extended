@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.148
+// @version 3.3.149
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.148, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.149, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.148";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.149";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -14974,7 +14974,7 @@ __zentralShim.register = function (def) {
         calendarDaysSelect.dataset.value = String([3, 7, 14, 30].includes(Number(store.meta.calendarDaysForward)) ? Number(store.meta.calendarDaysForward) : 7);
         calendarDaysSelect.textContent = calendarDaysSelect.dataset.value + " days";
         calendarDaysSelect.hidden = calendarViewName !== "upcoming";
-        if (active && !calendarPane.hidden) renderCalendar();
+        if (active && !calendarPane.hidden) requestCalendarBackground();
       }
       function scheduleAllLayout() {
         if (rafAllLayout) return;
@@ -16452,6 +16452,8 @@ __zentralShim.register = function (def) {
           title: [item.summary, reminder ? "Reminder: " + lifecycle : "", item.x?.calNote].filter(Boolean).join(" — "),
           "aria-label": `${reminder ? "Reminder" : "Event"}: ${item.summary}${reminder ? ". State: " + lifecycle : ""}${item.x?.calNote ? ". Calendar note: " + item.x.calNote : ""}`,
         });
+        button._znCalendarItem = item;
+        if (!reminder) button.setAttribute("data-item-key", JSON.stringify(["event", String(item.id), String(item.x?.recurrenceId || "")]));
         if (reminder) {
           const identity = reminderLifecycleIdentity(item);
           if (identity) {
@@ -16636,6 +16638,26 @@ __zentralShim.register = function (def) {
       // One captured pointer gesture per sheet. A calendar re-render, view change,
       // Escape, pointer cancellation, panel close or teardown discards the preview.
       let calendarDrag = null, calendarMoveUndo = null, calendarDragClickTimer = 0, calendarSuppressedClick = null;
+      let calendarBackgroundPending = false, calendarFlushQueued = false;
+      const calendarInteracting = () => !!(calendarDrag || dialog || menu?.calendar);
+      function queueCalendarBackgroundFlush() {
+        if (!calendarBackgroundPending || calendarFlushQueued) return;
+        calendarFlushQueued = true;
+        queueMicrotask(() => {
+          calendarFlushQueued = false;
+          if (!calendarBackgroundPending || calendarInteracting() || !isOpen || destroyed || view !== "list" || filter !== "all" || calendarPane.hidden) return;
+          renderCalendar();
+        });
+      }
+      function deferCalendarBackground() {
+        // A real view change intentionally dismisses the old context menu;
+        // only updates to the same view keep it alive.
+        if (menu?.calendar && menu.calendarView !== (store.meta.calendarView || "month")) closeMenu();
+        if (!calendarInteracting()) return false;
+        calendarBackgroundPending = true;
+        return true;
+      }
+      function requestCalendarBackground() { if (!deferCalendarBackground()) renderCalendar(); }
       function releaseCalendarSuppressedClick(event) {
         const pending = calendarSuppressedClick;
         if (!pending || (event?.pointerId !== undefined && event.pointerId !== pending.pointerId)) return;
@@ -16651,6 +16673,7 @@ __zentralShim.register = function (def) {
         if (g.active) { g.button._znSuppressDragClick = true; calendarSuppressedClick = { button: g.button, pointerId: g.pointerId }; }
         g.button.classList.remove("is-dragging");
         try { if (g.button.hasPointerCapture?.(g.pointerId)) g.button.releasePointerCapture(g.pointerId); } catch (_) {}
+        queueCalendarBackgroundFlush();
       }
       function calendarDragPoint(g, event) {
         if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return null;
@@ -16921,7 +16944,7 @@ __zentralShim.register = function (def) {
           calendarReminderNodes.clear();
           for (const button of calendarContent.querySelectorAll("[data-item-key]")) {
             const key = button.getAttribute("data-item-key"), item = button._znCalendarItem;
-            if (!item) continue;
+            if (!item || !CALENDAR_PART.isReminder(item)) continue;
             if (!calendarReminderNodes.has(key)) calendarReminderNodes.set(key, []);
             calendarReminderNodes.get(key).push({ button, item });
           }
@@ -17363,6 +17386,24 @@ __zentralShim.register = function (def) {
         from.input.focus({ preventScroll: true });
       }
       let calendarRenderedItems = new Map();
+      function captureCalendarViewState() {
+        const focused = document.activeElement?.closest?.("[data-item-key]");
+        const savedNode = (node) => node && calendarContent.contains(node) ? { key: node.getAttribute("data-item-key"), day: node.closest?.("[data-day]")?.getAttribute("data-day") || "" } : null;
+        const scroll = calendarContent.querySelector(".zn-cal-time-scroll");
+        return { scrollTop: scroll ? scroll.scrollTop : null, focused: savedNode(focused), hover: savedNode(calendarHoverAnchor) };
+      }
+      function restoreCalendarViewState(state) {
+        const scroll = calendarContent.querySelector(".zn-cal-time-scroll");
+        if (scroll && state.scrollTop !== null) scroll.scrollTop = state.scrollTop;
+        const find = (ref) => {
+          if (!ref?.key) return null;
+          const candidates = [...calendarContent.querySelectorAll("[data-item-key]")].filter((node) => node.getAttribute("data-item-key") === ref.key);
+          return candidates.find((node) => (node.closest?.("[data-day]")?.getAttribute("data-day") || "") === ref.day) || candidates[0] || null;
+        };
+        const focus = find(state.focused), hover = find(state.hover);
+        if (focus && document.activeElement !== focus) focus.focus?.({ preventScroll: true });
+        if (hover && calendarHoverAnchor !== hover && hover._znCalendarItem) showCalendarHoverCard(hover._znCalendarItem, hover);
+      }
       function patchCalendarItem(kind, id) {
         const C = CALENDAR_PART, mode = store.meta.calendarView;
         if (!id || !["change", "remove"].includes(kind) || !["day", "week"].includes(mode) || calendarDrag) return false;
@@ -17385,12 +17426,18 @@ __zentralShim.register = function (def) {
         syncCalendarFilterOptions();
         // Geometry is shared by overlapping entries, so rebuild only affected
         // day columns, keeping other columns and the scroll element intact.
-        if (changed.size) calendarTimeGridView(current, cursor, mode, { allDayRow, columns, scroll, days: changed });
+        if (changed.size) {
+          const state = captureCalendarViewState();
+          calendarTimeGridView(current, cursor, mode, { allDayRow, columns, scroll, days: changed });
+          restoreCalendarViewState(state);
+        }
         calendarRenderedItems = new Map(current.map((item) => [item.id, item]));
         return true;
       }
       function renderCalendar() {
         if (!CALENDAR_PART || !calendarContent) return;
+        const prior = captureCalendarViewState();
+        calendarBackgroundPending = false;
         if (menu?.calendar && menu.calendarView !== (store.meta.calendarView || "month")) closeMenu();
         cancelCalendarDrag();
         calendarUndoMove.hidden = !calendarMoveUndo;
@@ -17419,6 +17466,7 @@ __zentralShim.register = function (def) {
         else if (view === "upcoming") calendarUpcomingView(items, cursor, Number(store.meta.calendarDaysForward) || 7);
         else if (view === "agenda") calendarAgendaView(items, cursor);
         else calendarTimeGridView(items, cursor, view);
+        restoreCalendarViewState(prior);
       }
       function changeCalendarCursor(delta) {
         const C = CALENDAR_PART, stored = C.parseYmd(store.meta.calendarCursor), base = stored ? stored.getTime() : C.dayStart(nowMs());
@@ -19031,6 +19079,7 @@ __zentralShim.register = function (def) {
         try { if (closing.el.hasAttribute("popover")) closing.el.hidePopover?.(); } catch (_) {}
         closing.el.removeAttribute("popover");
         closing.el.remove();
+        if (closing.calendar) queueCalendarBackgroundFlush();
       }
       // Keeps a menu fully inside both the sheet and the window: it is right-aligned to its anchor,
       // shifted back in when that would cross an edge, flipped above the anchor when there is no room
@@ -19232,6 +19281,7 @@ __zentralShim.register = function (def) {
         dialog.removeAttribute("popover");
         dialog.remove();
         dialog = null;
+        queueCalendarBackgroundFlush();
       }
       // V4-QS: a dialog card is sized in em/ch (it follows the sheet font) and, when it is bigger than the sheet,
       // grows past it up to the window (fitDialog). Re-run after every redraw and when the card resizes.
@@ -21769,7 +21819,7 @@ __zentralShim.register = function (def) {
         if (!isOpen || destroyed) return;
         if (findOpen && ev.type !== "status") scheduleFindRefresh();
         if (ev.type === "status") return scheduleChrome();
-        if (view === "list" && filter === "all" && ["reset", "change", "remove"].includes(ev.type) && !calendarPane.hidden) renderCalendar();
+        if (view === "list" && filter === "all" && ["reset", "change", "remove"].includes(ev.type) && !calendarPane.hidden) requestCalendarBackground();
         if (ev.type === "reset") {
           if (currentId && !store.get(currentId)) currentId = "";
           if (view === "editor") showEditor();
@@ -21801,7 +21851,7 @@ __zentralShim.register = function (def) {
         }
       });
       const offCalendarItems = store.items?.on?.((kind, id) => {
-        if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden && !patchCalendarItem(kind, id)) renderCalendar();
+        if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden && !deferCalendarBackground() && !patchCalendarItem(kind, id)) renderCalendar();
       });
       if (offCalendarItems) cleanups.push(offCalendarItems);
       const offCalendarHistory = store.items?.history?.on?.((event) => {
@@ -21810,6 +21860,7 @@ __zentralShim.register = function (def) {
           else showHistoryRecovery();
         }
         if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden) {
+          if (deferCalendarBackground()) return;
           const mode = store.meta.calendarView;
           if (mode === "day" || mode === "week") {
             if (event?.kind === "append" && patchCalendarReminder(event)) return;
@@ -22688,7 +22739,7 @@ __zentralShim.register = function (def) {
         close,
         destroy,
         refreshRead,
-        refreshCalendar() { if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden) renderCalendar(); },
+        refreshCalendar() { if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden) requestCalendarBackground(); },
         refreshList: scheduleList,
         layout: scheduleLayout,
         applyState,

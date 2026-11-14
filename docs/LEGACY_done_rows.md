@@ -694,3 +694,18 @@ Paste reconstructs row boundaries only for matching complete rows and a valid de
 **Tests / done when:** Render/style tests for both table kinds and narrow/nested layouts; manual Zen scrollbar, keyboard and window-width verification remains explicitly noted if unavailable.
 
 Markdown and supported HTML tables use constrained, full-width, shrinkable horizontal scroll regions, overriding host scrollbar hiding with a standard-width native scrollbar. The regions are keyboard-focusable and labeled with visible focus; nested tables use the same wrapper. CSS and fake-sheet tests cover both table kinds and quoted nesting. Actual Gecko/Zen layout, OS overlay visibility, keyboard and resize behavior remain unverified in the sandbox.
+
+## UI4.6 — Preserve Calendar interactions during background updates (3.3.149)
+
+#### `UI4.6` — Calendar must not cancel drags or lose scroll/focus on background updates
+**Status:** `DONE` · **Impact:** High · **Effort:** M · **Depends on:** PF2.5 · **Source:** Audit R2 E1/E2
+
+**Problem:** `renderCalendar()` starts with `cancelCalendarDrag()` and rebuilds everything. History events (an alert firing, a cross-window write) re-render the calendar, so an alert that appears while you drag an event silently cancels the move. Week/Day scroll position, open hover card, keyboard focus and an open context menu may also be lost.
+
+**Plan (do in this order):**
+1. Defer background-triggered renders while a drag, composer or menu is active; apply once on release.
+2. Preserve scroll offset (store `scrollTop` of the time grid) and re-focus the same `data-item-key` after a render.
+
+**Tests / done when:** UI regression: history event during a pointer drag does not cancel it; scroll offset unchanged after a render.
+
+Background item, note, history, layout and refresh work is coalesced while a drag, dialog or calendar menu is active and applied after release/close; concurrent edits still reject stale drag commits. Day/Week full redraws and affected-day patches preserve timeline scroll, focus by item identity and hover where the item remains visible. Tests cover commit, cancellation, concurrent edit, menu, composer, hover and focus. Fake real-sheet Day redraws for 50/150 items measured 9.6/23.5 ms before and 10.7/34.4 ms after (timings vary); native Zen pointer capture, scrolling and focus remain unverified.
