@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.154
+// @version 3.3.155
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.154, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.155, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.154";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.155";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -3943,9 +3943,9 @@ const __zentralEmbeddedLoader = (function () {
   // Managed Agenda entries are projections, not movable user tabs/folders.
   // Reject every drop onto the managed region, including links and unknown
   // drag formats; unrelated drags elsewhere are never intercepted.
-  function blockAgendaDrag({ phase, sourceManaged = false, selectedManaged = false, targetManaged = false } = {}) {
+  function blockAgendaDrag({ phase, sourceManaged = false, selectedManaged = false, targetManaged = false, draggedManaged = false } = {}) {
     if (phase === "dragstart") return !!(sourceManaged || selectedManaged);
-    return (phase === "dragover" || phase === "drop") && !!targetManaged;
+    return (phase === "dragover" || phase === "drop") && !!(targetManaged || draggedManaged);
   }
   // Projection for the virtual Zen Agenda folder. Keys are occurrence-scoped, not
   // display strings or formatted dates, so duplicate summaries remain independent.
@@ -10763,6 +10763,8 @@ __zentralShim.register = function (def) {
       getDateFormat = () => "",
     }) {
       const notes = new Map();
+      // Exact bytes last read or written for each note. This detects stale writes even when a window is dirty.
+      const diskSnapshots = new Map();
       // One active-note owner per sheet; a note stays protected while any sheet is displaying it.
       const activeNotes = new Map();
       const dirty = new Set();
@@ -10870,12 +10872,15 @@ __zentralShim.register = function (def) {
         try {
           mtime = (await io.stat(file)).lastModified || mtime;
         } catch (_) {}
-        return noteFromFile(id, text, mtime);
+        const note = noteFromFile(id, text, mtime);
+        diskSnapshots.set(id, text);
+        return note;
       }
 
       async function loadAll() {
         notes.clear();
         dirty.clear();
+        diskSnapshots.clear();
         let children = [];
         try {
           children = await io.children(dir);
@@ -10974,19 +10979,52 @@ __zentralShim.register = function (def) {
 
       async function writeNoteFile(note, text) {
         const file = fileOf(note.id);
-        const opts = { tmpPath: file + ".tmp", flush: true };
-        const wantBackup = note._onDisk && !backedUp.has(note.id);
-        if (wantBackup) opts.backupFile = file + ".bak";
-        await io.writeUTF8(file, text, opts);
-        if (wantBackup) backedUp.add(note.id);
-        if (!note._onDisk) {
-          note._onDisk = true;
-          try {
-            await io.restrict(file);
-          } catch (_) {}
-        }
-        note._mtime = now();
-        notify({ id: note.id, origin: windowId, kind: "saved" });
+        const persist = async () => {
+          let conflictBackupPath = "";
+          const baseline = diskSnapshots.get(note.id);
+          if (note._onDisk && typeof baseline === "string") {
+            // Read and compare under the shared per-path coordinator. A dirty window
+            // deliberately ignores remote reloads; this check prevents that stale edit
+            // from silently overwriting the version that arrived while it was dirty.
+            const exists = await io.exists(file);
+            const currentText = exists ? await io.readUTF8(file) : null;
+            if (currentText !== baseline) {
+              const displaced = currentText === null ? baseline : currentText;
+              try {
+                conflictBackupPath = await backupConflictText(note.id, displaced);
+              } catch (error) {
+                emit("conflict", note.id, { winner: "unresolved", backupPath: "", reason: "backup-failed" });
+                throw new Error("A concurrent note edit was detected, but its recovery copy could not be saved. The local write was blocked: " + String(error?.message || error));
+              }
+              if (!conflictBackupPath) {
+                emit("conflict", note.id, { winner: "unresolved", backupPath: "", reason: "backup-failed" });
+                throw new Error("A concurrent note edit was detected, but its recovery copy could not be saved. The local write was blocked.");
+              }
+            }
+          }
+
+          const opts = { tmpPath: file + ".tmp", flush: true };
+          const wantBackup = note._onDisk && !backedUp.has(note.id);
+          if (wantBackup) opts.backupFile = file + ".bak";
+          await io.writeUTF8(file, text, opts);
+          if (wantBackup) backedUp.add(note.id);
+          if (!note._onDisk) {
+            note._onDisk = true;
+            try {
+              await io.restrict(file);
+            } catch (_) {}
+          }
+          diskSnapshots.set(note.id, text);
+          note._mtime = now();
+          if (conflictBackupPath) {
+            emit("conflict", note.id, { winner: "local", backupPath: conflictBackupPath, reason: "concurrent-write" });
+          }
+          notify({ id: note.id, origin: windowId, kind: "saved", ...(conflictBackupPath ? { conflictBackupPath } : {}) });
+        };
+        // Calendar history already owns a process-shared coordinator when the
+        // hidden window is available. Use a separate key for each note file.
+        if (typeof withHistoryLock === "function") return withHistoryLock("note:" + file, persist);
+        return persist();
       }
 
       // ---- version history: history/<note id>/<UTC stamp>.md, written after a save, rules in the pure core ----
@@ -11064,7 +11102,7 @@ __zentralShim.register = function (def) {
         autosaver.touch();
       }
 
-      async function reloadFromDisk(id) {
+      async function reloadFromDisk(id, conflictBackupCandidate = "") {
         const file = fileOf(id);
         let exists = false;
         try {
@@ -11073,12 +11111,15 @@ __zentralShim.register = function (def) {
         if (!exists) {
           if (notes.has(id) && !dirty.has(id)) {
             notes.delete(id);
+            diskSnapshots.delete(id);
             syncItems(id);
             emit("remove", id, { remote: true });
           }
           return;
         }
-        if (dirty.has(id)) return; // local edits win until they are saved
+        const backupPath = await verifiedConflictBackup(id, conflictBackupCandidate);
+        if (backupPath) emit("conflict", id, { winner: "remote", backupPath, reason: "concurrent-write" });
+        if (dirty.has(id)) return; // preserve local typing; its next save checks the disk snapshot
         const fresh = await readNote(file).catch(() => null);
         if (!fresh) return;
         notes.set(id, fresh);
@@ -11098,6 +11139,23 @@ __zentralShim.register = function (def) {
         } catch (_) {
           return [];
         }
+      }
+      // A conflict copy uses the existing 48-hour backup format, but never moves
+      // pictures or history away from the live note.
+      async function backupConflictText(id, text) {
+        if (!io.makeDir || !isAssetNoteId(id) || !dir || typeof text !== "string") return "";
+        const name = backupEntryName(now(), id, await backupNames());
+        const entry = io.join(backupRoot(), name);
+        await io.makeDir(entry);
+        await io.writeUTF8(io.join(entry, id + ".md"), text, { mode: "create" });
+        return entry;
+      }
+      async function verifiedConflictBackup(id, candidate) {
+        if (typeof candidate !== "string" || !dir) return "";
+        const name = io.filename(candidate);
+        const parsed = parseBackupName(name);
+        if (!parsed || parsed.id !== id || candidate !== io.join(backupRoot(), name)) return "";
+        return await io.exists(io.join(candidate, id + ".md")).catch(() => false) ? candidate : "";
       }
       async function backupNote(id, note, file, withPictures) {
         if (!io.makeDir || !isAssetNoteId(id) || !dir) return false;
@@ -11131,6 +11189,7 @@ __zentralShim.register = function (def) {
         const note = notes.get(id) || null;
         notes.delete(id);
         dirty.delete(id);
+        diskSnapshots.delete(id);
         dropItems(id);
         const file = fileOf(id);
         return queue(async () => {
@@ -12023,6 +12082,7 @@ __zentralShim.register = function (def) {
           const note = noteFromFile(id, text, now());
           note.trashed = 0;
           note._onDisk = false;
+          diskSnapshots.delete(id);
           notes.set(id, note);
           markDirty(id);
           syncItems(id, true);
@@ -12103,7 +12163,7 @@ __zentralShim.register = function (def) {
             return;
           }
           if (typeof msg.id !== "string" || !/^[\w.-]+$/.test(msg.id)) return;
-          reloadFromDisk(msg.id).catch(warn);
+          reloadFromDisk(msg.id, msg.conflictBackupPath || "").catch(warn);
         },
         async close() {
           await api.flush();
@@ -24369,11 +24429,24 @@ __zentralShim.register = function (def) {
       }
       // Default place of the NOTES folder: the first entry of the workspace's Pinned tabs (only when it is created;
       // later the person may drag it anywhere and it stays there).
+      function zenRestoreRootParent(el) {
+        try {
+          let outer = zenParentOf(el);
+          if (!outer) return true;
+          while (zenParentOf(outer)) outer = zenParentOf(outer);
+          const host = outer.parentElement;
+          if (!host) return false;
+          host.insertBefore(el, outer.nextSibling || null);
+          return !zenParentOf(el);
+        } catch (error) { warn(error); return false; }
+      }
+      // NOTES is a managed projection, not a draggable user folder. Keep its root
+      // top-level and restore it if a native/API move bypasses dragstart protection.
       function zenToTop(el) {
         try {
-          if (!prefBool(PREF.ZEN_TOP, true)) return;
+          if (!prefBool(PREF.ZEN_TOP, true) || zenParentOf(el)) return;
           const host = el.parentElement;
-          if (!host || zenParentOf(el)) return;
+          if (!host) return;
           const first = [...host.children].find((c) => c !== el && /^(zen-folder|tab)$/i.test(c.localName || ""));
           if (first && first !== el && first !== el.nextElementSibling) host.insertBefore(el, first);
         } catch (error) { warn(error); }
@@ -24452,7 +24525,13 @@ __zentralShim.register = function (def) {
         hasRoot: () => !!zenRootEl(),
         ensureRoot() {
           zenSweepStale();
-          if (zenRootEl()) return true;
+          const existing = zenRootEl();
+          if (existing) {
+            if (!zenRestoreRootParent(existing)) { warn("Zen NOTES folder: could not restore its top-level position; sidebar sync is paused"); return false; }
+            // Existing root placement is shared with Agenda. Only creation applies
+            // zenToTop; subsequent runs preserve the user's current top-level order.
+            return true;
+          }
           const tab = zenNewTab(zenNewUrl(""), "root");
           let folder = null;
           try {
@@ -24467,6 +24546,15 @@ __zentralShim.register = function (def) {
         },
         list() {
           const root = zenRootEl();
+          if (root) {
+            // Native grouping/session operations can bypass drag event guards.
+            // Move foreign subtrees intact out of NOTES before comparing the
+            // projection; then retire any Notes-owned folders nested in them.
+            evacuateProjectionForeign(root, root,
+              (child) => restoredPseudoFolderKind(child) === "notes",
+              (tab) => tab.hasAttribute?.(NOTES_ATTR));
+            zenSweepStrays();
+          }
           zenAdoptSubfolders(root);
           const out = [];
           // The parent counts as "where it really is": an entry that is not inside the folder it belongs to
@@ -24888,6 +24976,11 @@ __zentralShim.register = function (def) {
           const beforeEvacuation = agendaMutationCount;
           agendaEvacuateForeign(root);
           if (agendaMutationCount !== beforeEvacuation && root.isConnected !== false) agendaPlaceRoot(root, agendaPosition());
+          // A day folder moved outside Agenda is an obsolete projection, not a
+          // user folder. Retire it and let the model recreate it in the right place.
+          for (const orphan of [...(document.querySelectorAll?.("zen-folder") || [])]) {
+            if (agendaOwnedDay(orphan) && !root.contains?.(orphan)) agendaRetireFolder(orphan);
+          }
           const out = [];
           const otherRoots = [...(document.querySelectorAll?.("zen-folder") || [])].filter((folder) => folder !== root && (folder.id === AGENDA_ROOT_ID || folder.getAttribute?.("bgalazka-notes-agenda-folder") === "true"));
           for (const tab of document.querySelectorAll?.("tab") || []) {
@@ -24922,7 +25015,7 @@ __zentralShim.register = function (def) {
             if (date !== "overdue" && !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
             folder.setAttribute("bgalazka-notes-agenda-day", date);
             folder.setAttribute("bgalazka-notes-agenda-key", "day:" + date);
-            out.push({ key: "day:" + date, kind: "day", parent: "" });
+            out.push({ key: "day:" + date, kind: "day", parent: zenParentOf(folder) === root ? "" : "?misplaced" });
           }
           return out;
         },
@@ -25269,14 +25362,17 @@ __zentralShim.register = function (def) {
         if (disposed || !agendaEnabled()) return;
         const root = agendaRootEl(); if (!root) return;
         const target = ev.target, targetManaged = !!target && root.contains?.(target);
-        let sourceManaged = false, selectedManaged = false;
+        let sourceManaged = false, selectedManaged = false, draggedManaged = false;
+        let draggedTab = null;
+        try { draggedTab = ev.dataTransfer?.mozGetDataAt?.("application/x-moz-tabbrowser-tab", 0); } catch (_) {}
+        draggedManaged = agendaOwnTab(draggedTab);
         if (ev.type === "dragstart") {
           const tab = target?.closest?.("tab");
-          const folder = !tab && target?.closest?.("zen-folder");
-          sourceManaged = !!(tab && root.contains?.(tab) && agendaOwnTab(tab)) || !!(folder && (folder === root || (root.contains?.(folder) && agendaOwnedDay(folder))));
-          if (tab?.multiselected) selectedManaged = [...(window.gBrowser?.selectedTabs || [])].some((selected) => root.contains?.(selected) && agendaOwnTab(selected));
+          const folder = target?.closest?.("zen-folder");
+          sourceManaged = agendaOwnTab(tab) || !!(folder && (folder === root || agendaOwnedDay(folder)));
+          if (tab?.multiselected) selectedManaged = [...(window.gBrowser?.selectedTabs || [])].some(agendaOwnTab);
         }
-        if (!CALENDAR_PART.blockAgendaDrag({ phase: ev.type, sourceManaged, selectedManaged, targetManaged })) return;
+        if (!CALENDAR_PART.blockAgendaDrag({ phase: ev.type, sourceManaged, selectedManaged, targetManaged, draggedManaged })) return;
         if (ev.type !== "dragstart") try { if (ev.dataTransfer) ev.dataTransfer.dropEffect = "none"; } catch (_) {}
         ev.preventDefault(); ev.stopImmediatePropagation();
       }
@@ -25337,8 +25433,16 @@ __zentralShim.register = function (def) {
         if (ev.type === "TabClose") agendaTitleCard.removed(ev.target);
         if (disposed || !agendaEnabled() || agendaController.busy || agendaReordering) return;
         const tab = ev.target;
-        const movedIntoAgenda = ["TabMove", "FolderGrouped", "FolderUngrouped"].includes(ev.type) && agendaRootEl()?.contains?.(tab);
-        if (movedIntoAgenda || agendaTabKey(tab) || (ev.type === "SSTabRestored" && /#zn-agenda-/.test(tab?._zentralNotesUrl || tab?.linkedBrowser?.currentURI?.spec || ""))) agendaController.schedule(400);
+        const root = agendaRootEl();
+        const movedFolder = ["FolderGrouped", "FolderUngrouped"].includes(ev.type) &&
+          (tab === root || agendaOwnedDay(tab) || root?.contains?.(tab));
+        const movedIntoAgenda = ["TabMove", "FolderGrouped", "FolderUngrouped"].includes(ev.type) && root?.contains?.(tab);
+        if (movedIntoAgenda || movedFolder || agendaTabKey(tab) || (ev.type === "SSTabRestored" && /#zn-agenda-/.test(tab?._zentralNotesUrl || tab?.linkedBrowser?.currentURI?.spec || ""))) {
+          // A new native move is fresh external state, not a retry from the prior
+          // reconciliation. Release the previous backoff and repair this move.
+          agendaController.invalidate();
+          agendaController.schedule(400);
+        }
       }
 
       // A narrow, versioned bridge lets Colorful Folders edit Notes-owned Zen
@@ -25644,10 +25748,21 @@ __zentralShim.register = function (def) {
         const tab = ev.target;
         if (!tab || tab.localName !== "tab") return;
         const marked = tab.hasAttribute?.(NOTES_ATTR);
+        if (!marked && zenRootEl()?.contains?.(tab) && ["TabMove", "TabPinned", "SSTabRestored"].includes(ev.type)) {
+          zen.touch(); // foreign tabs entering NOTES are evacuated by the next reconciliation
+          return;
+        }
         if (ev.type === "TabBrowserDiscarded") { if (marked) zenHeal(tab); return; }
-        if (!marked && !(ev.type === "SSTabRestored" && zenLooksOurs(tab))) return; // every other tab: not our business
+        if (!marked && !(ev.type === "SSTabRestored" && zenLooksOurs(tab))) return;
         if (ev.type === "SSTabRestored") zenChecked.delete(tab);
         zen.touch();
+      };
+      const onZenFolderEvent = (ev) => {
+        if (disposed || zen.dead || zenMode() === "off" || zenEventsIgnored()) return;
+        const folder = ev.target?.localName === "zen-folder" ? ev.target : ev.target?.closest?.("zen-folder");
+        if (!folder) return;
+        const root = zenRootEl();
+        if (folder === root || root?.contains?.(folder) || restoredPseudoFolderKind(folder) === "notes") zen.touch();
       };
       const ZEN_TAB_EVENTS = ["TabClose", "TabUnpinned", "TabPinned", "TabMove", "TabBrowserDiscarded", "SSTabRestored"];
       // Selecting one of our tabs (keyboard, session, script) hands the selection back to the previous tab. This must
@@ -25674,18 +25789,35 @@ __zentralShim.register = function (def) {
           } catch (error) { warn(error); }
         }, 0);
       };
-      // Dropping a web tab on the NOTES folder never moves it: it is refused, or captured as a link note (dropDecision).
-      const onZenDrop = (ev) => {
-        const root = zenRootEl();
-        if (disposed || zen.dead || !root || !root.contains?.(ev.target)) return;
-        let tab = null;
-        try { tab = ev.dataTransfer?.mozGetDataAt?.("application/x-moz-tabbrowser-tab", 0); } catch (_) {}
-        if (tab?.hasAttribute?.(NOTES_ATTR)) return;
+      const zenManagedTab = (tab) => !!(tab && (tab.hasAttribute?.(NOTES_ATTR) || zenLooksOurs(tab)));
+      const zenManagedFolder = (folder) => !!(folder && folder.localName === "zen-folder" &&
+        (folder === zenRootEl() || restoredPseudoFolderKind(folder) === "notes"));
+      // NOTES fake tabs/folders cannot be dragged out, reordered, or grouped.
+      // Every drop into the managed tree is intercepted before Zen can mutate
+      // folder membership; ordinary web-tab drops may still create a URL note.
+      const onZenDrag = (ev) => {
+        if (disposed || zen.dead || zenMode() === "off") return;
+        const root = zenRootEl(), target = ev.target;
+        const sourceTab = target?.closest?.("tab");
+        const sourceFolder = target?.closest?.("zen-folder");
+        const sourceManaged = zenManagedTab(sourceTab) || zenManagedFolder(sourceFolder);
+        const selectedManaged = ev.type === "dragstart" &&
+          [...(window.gBrowser?.selectedTabs || [])].some(zenManagedTab);
+        const targetManaged = !!root?.contains?.(target) || zenManagedFolder(sourceFolder);
+        let draggedTab = null;
+        try { draggedTab = ev.dataTransfer?.mozGetDataAt?.("application/x-moz-tabbrowser-tab", 0); } catch (_) {}
+        const draggedManaged = zenManagedTab(draggedTab);
+        const blocked = ev.type === "dragstart"
+          ? sourceManaged || selectedManaged
+          : targetManaged || draggedManaged;
+        if (!blocked) return;
         ev.preventDefault();
         ev.stopImmediatePropagation();
-        if (ev.type !== "drop" || !tab) return;
-        const d = dropDecision({ tab: { attrs: {}, title: tab.label || "", url: tabUrl(tab) }, intoNotes: true });
-        if (d.action === "capture-url") store.create(d.body, zenMode() === "selected" ? TABBAR_FOLDER : "");
+        try { if (ev.dataTransfer) ev.dataTransfer.dropEffect = "none"; } catch (_) {}
+        if (ev.type === "drop" && targetManaged && draggedTab && !draggedManaged) {
+          const decision = dropDecision({ tab: { attrs: {}, title: draggedTab.label || "", url: tabUrl(draggedTab) }, intoNotes: true });
+          if (decision.action === "capture-url") store.create(decision.body, zenMode() === "selected" ? TABBAR_FOLDER : "");
+        }
       };
       // Right-click menus: our own items are added once; for our targets every native item is hidden with CSS (never removed).
       const ZEN_MENU_ITEMS = [
@@ -25804,9 +25936,10 @@ __zentralShim.register = function (def) {
         const act = on ? "addEventListener" : "removeEventListener";
         for (const ty of ["mousedown", "click", "mouseup", "auxclick"]) window[act](ty, onZenMouse, true);
         for (const ty of ZEN_TAB_EVENTS) window[act](ty, onZenTabEvent, true);
+        for (const ty of ["FolderGrouped", "FolderUngrouped"]) window[act](ty, onZenFolderEvent, true);
         window[act]("TabAttrModified", onZenAttr, true);
         window[act]("TabSelect", onZenSelect, true);
-        for (const ty of ["dragover", "drop"]) window[act](ty, onZenDrop, true);
+        for (const ty of ["dragstart", "dragover", "drop"]) window[act](ty, onZenDrag, true);
         window[act]("popupshowing", onTabMenuShowing, true);
         window[act]("popupshowing", onFolderMenuShowing, true);
         window[act]("popuphidden", onTabMenuHidden, true);
@@ -26334,7 +26467,7 @@ __zentralShim.register = function (def) {
       });
       // A short message that disappears by itself (the timer exists only while it is visible).
       let toastEl = null, toastTimer = 0;
-      function toast(text) {
+      function toast(text, ms = 2200) {
         if (disposed) return;
         if (!toastEl) {
           toastEl = h("div", { class: "zentral-notes-toast", role: "status" });
@@ -26343,13 +26476,21 @@ __zentralShim.register = function (def) {
         toastEl.textContent = text;
         toastEl.dataset.on = "true";
         window.clearTimeout(toastTimer);
-        toastTimer = window.setTimeout(() => { if (toastEl) toastEl.dataset.on = "false"; }, 2200);
+        toastTimer = window.setTimeout(() => { if (toastEl) toastEl.dataset.on = "false"; }, ms);
       }
       onCleanup(() => { window.clearTimeout(toastTimer); toastEl?.remove(); toastEl = null; });
       const offCalendarConflictNotice = store.items?.on?.((kind, _id, detail) => {
         if (kind === "conflict") toast(detail?.winner === "unresolved" ? (detail?.backupPath ? "Calendar save blocked: local edits were backed up in the Notes folder." : "Calendar save blocked: backup failed; keep Notes open.") : "A newer calendar edit in another window replaced this edit.");
       });
       onCleanup(() => offCalendarConflictNotice?.());
+      const offNoteConflictNotice = store.on((event) => {
+        if (event?.type !== "conflict") return;
+        const message = event.winner === "unresolved"
+          ? (event.backupPath ? "Note save blocked; a recovery copy was saved. Keep Notes open." : "Note save blocked because its recovery copy could not be saved. Keep Notes open.")
+          : "A concurrent note version was saved to Notes recovery before the newer edit replaced it.";
+        toast(message, 6000);
+      });
+      onCleanup(() => offNoteConflictNotice?.());
       function pageInfo(browser) {
         const b = browser || window.gBrowser?.selectedBrowser;
         let url = "";
