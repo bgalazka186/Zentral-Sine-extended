@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.131
+// @version 3.3.132
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.131, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.132, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.131";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.132";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1697,6 +1697,7 @@ const __zentralEmbeddedLoader = (function () {
         category: cleanCategoryName(x.category), tz: cleanZone(x.tz), historyId: String(x.historyId ?? "").slice(0, 120), src: ["list", "note", "manual"].includes(x.src) ? x.src : "manual", key: String(x.key ?? "").slice(0, 60), legacyKey: String(x.legacyKey ?? "").slice(0, 60), moved: x.moved ? "1" : "", calNote: String(x.calNote ?? "").slice(0, MAX_DESC), notify: cleanNotifyOverrides(x.notify), agendaWindow: cleanAgendaWindow(x.agendaWindow), recurrenceExceptions: cleanRecurrenceExceptions(x.recurrenceExceptions, allDay),
       },
     };
+    if (x.src === "list" && typeof x.categoryOverride === "string") item.x.categoryOverride = cleanCategoryName(x.categoryOverride);
     if (end) item.end = end;
     if (typeof raw.created === "string" && Number.isFinite(Date.parse(raw.created))) item.created = iso(Date.parse(raw.created));
     item.etag = typeof raw.etag === "string" && raw.etag ? raw.etag : etagOf(item);
@@ -1935,7 +1936,7 @@ const __zentralEmbeddedLoader = (function () {
   // The plain Google event resource for an item (our `x` goes into extendedProperties.private, as Google allows).
   function toGoogle(it) {
     const priv = {};
-    for (const [k, v] of Object.entries(it.x)) if (v !== "" && v !== undefined && v !== null && !(Array.isArray(v) && !v.length)) priv["zentral_" + k] = ["notify", "recurrenceExceptions", "agendaWindow"].includes(k) ? JSON.stringify(v) : String(v);
+    for (const [k, v] of Object.entries(it.x)) if ((v !== "" || k === "categoryOverride") && v !== undefined && v !== null && !(Array.isArray(v) && !v.length)) priv["zentral_" + k] = ["notify", "recurrenceExceptions", "agendaWindow", "categoryOverride"].includes(k) ? JSON.stringify(v) : String(v);
     const out = { id: it.id, summary: it.summary, description: it.description, status: it.status, start: it.start, updated: it.updated, extendedProperties: { private: priv } };
     out.end = it.end || it.start;
     if (it.created) out.created = it.created;
@@ -1947,8 +1948,8 @@ const __zentralEmbeddedLoader = (function () {
     if (!g || typeof g !== "object") return null;
     const priv = g.extendedProperties?.private || {};
     const x = {};
-    for (const k of ["kind", "noteId", "heading", "category", "tz", "src", "key", "legacyKey", "moved", "calNote", "notify", "agendaWindow", "recurrenceExceptions", "historyId"]) if (priv["zentral_" + k] !== undefined) {
-      if (["notify", "agendaWindow", "recurrenceExceptions"].includes(k)) { try { x[k] = JSON.parse(priv["zentral_" + k]); } catch (_) {} }
+    for (const k of ["kind", "noteId", "heading", "category", "tz", "src", "key", "legacyKey", "moved", "calNote", "notify", "agendaWindow", "recurrenceExceptions", "historyId", "categoryOverride"]) if (priv["zentral_" + k] !== undefined) {
+      if (["notify", "agendaWindow", "recurrenceExceptions", "categoryOverride"].includes(k)) { try { x[k] = JSON.parse(priv["zentral_" + k]); } catch (_) {} }
       else x[k] = priv["zentral_" + k];
     }
     const sameEnd = g.end && JSON.stringify(g.end) === JSON.stringify(g.start);
@@ -2924,8 +2925,8 @@ const __zentralEmbeddedLoader = (function () {
             const revision = sourceEdit ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, old.rev || 0) + 1) : Math.max(0, old.rev || 0);
             const stamp = sourceEdit && Number.isFinite(Number(updatedAt)) && Number(updatedAt) > 0 ? iso(Number(updatedAt)) : old.updated;
             next = cleanItem({ ...f, start: old.start, end: old.end, status: old.status, reminders: old.reminders, recurrence: old.recurrence.length ? old.recurrence : f.recurrence, updated: stamp, rev: revision, etag: "",
-              description: f.description || old.description, x: { ...f.x, tz: old.x.tz, calNote: old.x.calNote, moved: old.x.moved, notify: old.x.notify, agendaWindow: old.x.agendaWindow, recurrenceExceptions: old.x.recurrenceExceptions, historyId: old.x.historyId } }, 0);
-            next.x.heading = f.x.heading; next.x.category = f.x.category;
+              description: f.description || old.description, x: { ...f.x, tz: old.x.tz, calNote: old.x.calNote, moved: old.x.moved, notify: old.x.notify, agendaWindow: old.x.agendaWindow, recurrenceExceptions: old.x.recurrenceExceptions, historyId: old.x.historyId, ...(typeof old.x.categoryOverride === "string" ? { categoryOverride: old.x.categoryOverride } : {}) } }, 0);
+            next.x.heading = f.x.heading; next.x.category = typeof old.x.categoryOverride === "string" ? old.x.categoryOverride : f.x.category;
             // The text writer is a newer logical version whenever a body edit triggered this sync. Otherwise
             // lwwPick provides the documented equal-version remote-wins tie break while preserving old extras above.
             const winner = lwwPick(old, next);
@@ -4110,6 +4111,7 @@ const __zentralEmbeddedLoader = (function () {
         noteId,
         heading: String(input.heading ?? previousX.heading ?? "").trim().slice(0, MAX_TEXT),
         category,
+        ...(previousX.src === "list" && category !== previousX.category ? { categoryOverride: category } : {}),
         tz: zone,
         src: previousX.src || "manual",
         calNote: String(input.calNote ?? previousX.calNote ?? "").slice(0, MAX_DESC),
@@ -4118,6 +4120,10 @@ const __zentralEmbeddedLoader = (function () {
         moved,
       },
     };
+    if (previousX.src === "list") {
+      if (input.categoryOverride === null) delete record.x.categoryOverride;
+      else if (typeof input.categoryOverride === "string") record.x.categoryOverride = cleanCategoryName(input.categoryOverride);
+    }
     return cleanItem(record, now);
   }
 
@@ -16765,9 +16771,19 @@ __zentralShim.register = function (def) {
           h("p", { class: "zn-empty" }, "Choose whether this item appears in Zen Agenda and how many local calendar days before or after its date it remains visible. Inherited values come from the linked note, category, then global defaults."));
 
         const categorySelect = h("select", { class: "zn-select", "aria-label": "Calendar category" });
+        const categories = store.items.categoryList();
+        let inheritCategory = "__zentral_note_category__", sourceCategory = "";
+        while (categories.some((entry) => entry.name === inheritCategory)) inheritCategory += "_";
+        if (original?.x?.src === "list") {
+          const source = store.get(original.x.noteId);
+          const parsed = source && C.extractNoteItems(source.body, source.id, now).find((entry) => entry.id === original.id);
+          sourceCategory = parsed?.x?.category || "";
+          categorySelect.append(h("option", { value: inheritCategory }, "Follow note section (" + (sourceCategory || "no category") + ")"));
+        }
         categorySelect.append(h("option", { value: "" }, "No category"));
-        for (const category of store.items.categoryList()) categorySelect.append(h("option", { value: category.name }, category.name));
-        categorySelect.value = original?.x?.category || options.category || "";
+        for (const category of categories) categorySelect.append(h("option", { value: category.name }, category.name));
+        categorySelect.value = original?.x?.src === "list" && typeof original.x.categoryOverride !== "string" ? inheritCategory : (original?.x?.category || options.category || "");
+        const selectedCategory = () => categorySelect.value === inheritCategory ? sourceCategory : categorySelect.value;
         const categoryRow = h("label", { class: "zn-field-row" }, h("span", {}, "Category"), categorySelect);
         const colorPreview = h("span", { class: "zn-cal-compose-color", "aria-hidden": "true" });
         const colorLabel = h("span", { class: "zn-cal-compose-color-label", "aria-live": "polite" }, "Color follows the linked note, then the category");
@@ -16824,7 +16840,7 @@ __zentralShim.register = function (def) {
         const notifySection = h("div", { class: "zn-recurrence-editor zn-cal-compose-alerts" }, h("strong", {}, "Reminder alerts"));
         const notifyInputs = {};
         const notifySelects = {};
-        const categoryDefaults = () => C.cleanCategoryNotify(store.items.category(categorySelect.value)?.notify);
+        const categoryDefaults = () => C.cleanCategoryNotify(store.items.category(selectedCategory())?.notify);
         const oldNotify = original?.x?.notify || {};
         const alertSoundEditor = buildAlertSoundEditor(oldNotify, { inherit: true });
         const alertRules = [
@@ -16875,7 +16891,7 @@ __zentralShim.register = function (def) {
           const noteId = noteSelect.value;
           const linked = noteId ? store.get(noteId) : null;
           const inherited = linked && linked.color && linked.color !== "none" ? colorHex(linked.color) : "";
-          const categoryColor = store.items.category(categorySelect.value)?.color || "";
+          const categoryColor = store.items.category(selectedCategory())?.color || "";
           return inherited || categoryColor || "";
         }
         function paintColor() {
@@ -16978,7 +16994,8 @@ __zentralShim.register = function (def) {
             item: original, id: original?.id, kind: kind.value, allDay: allDay.checked,
             summary: title.input.value, startDate: startDate.input.value, startTime: startTime.input.value,
             endDate: endDate.input.value, endTime: endTime.input.value,
-            noteId: noteSelect.value, category: categorySelect.value,
+            noteId: noteSelect.value, category: selectedCategory(),
+            ...(original?.x?.src === "list" ? { categoryOverride: categorySelect.value === inheritCategory ? null : selectedCategory() } : {}),
             description: description.value, calNote: calNote.value,
             heading: original?.x?.heading || options.heading || "", tz: zoneText,
             recurrence, notify, agendaWindow: agendaWindowEditor.read(),

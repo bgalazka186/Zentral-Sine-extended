@@ -12048,9 +12048,19 @@
           h("p", { class: "zn-empty" }, "Choose whether this item appears in Zen Agenda and how many local calendar days before or after its date it remains visible. Inherited values come from the linked note, category, then global defaults."));
 
         const categorySelect = h("select", { class: "zn-select", "aria-label": "Calendar category" });
+        const categories = store.items.categoryList();
+        let inheritCategory = "__zentral_note_category__", sourceCategory = "";
+        while (categories.some((entry) => entry.name === inheritCategory)) inheritCategory += "_";
+        if (original?.x?.src === "list") {
+          const source = store.get(original.x.noteId);
+          const parsed = source && C.extractNoteItems(source.body, source.id, now).find((entry) => entry.id === original.id);
+          sourceCategory = parsed?.x?.category || "";
+          categorySelect.append(h("option", { value: inheritCategory }, "Follow note section (" + (sourceCategory || "no category") + ")"));
+        }
         categorySelect.append(h("option", { value: "" }, "No category"));
-        for (const category of store.items.categoryList()) categorySelect.append(h("option", { value: category.name }, category.name));
-        categorySelect.value = original?.x?.category || options.category || "";
+        for (const category of categories) categorySelect.append(h("option", { value: category.name }, category.name));
+        categorySelect.value = original?.x?.src === "list" && typeof original.x.categoryOverride !== "string" ? inheritCategory : (original?.x?.category || options.category || "");
+        const selectedCategory = () => categorySelect.value === inheritCategory ? sourceCategory : categorySelect.value;
         const categoryRow = h("label", { class: "zn-field-row" }, h("span", {}, "Category"), categorySelect);
         const colorPreview = h("span", { class: "zn-cal-compose-color", "aria-hidden": "true" });
         const colorLabel = h("span", { class: "zn-cal-compose-color-label", "aria-live": "polite" }, "Color follows the linked note, then the category");
@@ -12107,7 +12117,7 @@
         const notifySection = h("div", { class: "zn-recurrence-editor zn-cal-compose-alerts" }, h("strong", {}, "Reminder alerts"));
         const notifyInputs = {};
         const notifySelects = {};
-        const categoryDefaults = () => C.cleanCategoryNotify(store.items.category(categorySelect.value)?.notify);
+        const categoryDefaults = () => C.cleanCategoryNotify(store.items.category(selectedCategory())?.notify);
         const oldNotify = original?.x?.notify || {};
         const alertSoundEditor = buildAlertSoundEditor(oldNotify, { inherit: true });
         const alertRules = [
@@ -12158,7 +12168,7 @@
           const noteId = noteSelect.value;
           const linked = noteId ? store.get(noteId) : null;
           const inherited = linked && linked.color && linked.color !== "none" ? colorHex(linked.color) : "";
-          const categoryColor = store.items.category(categorySelect.value)?.color || "";
+          const categoryColor = store.items.category(selectedCategory())?.color || "";
           return inherited || categoryColor || "";
         }
         function paintColor() {
@@ -12261,7 +12271,8 @@
             item: original, id: original?.id, kind: kind.value, allDay: allDay.checked,
             summary: title.input.value, startDate: startDate.input.value, startTime: startTime.input.value,
             endDate: endDate.input.value, endTime: endTime.input.value,
-            noteId: noteSelect.value, category: categorySelect.value,
+            noteId: noteSelect.value, category: selectedCategory(),
+            ...(original?.x?.src === "list" ? { categoryOverride: categorySelect.value === inheritCategory ? null : selectedCategory() } : {}),
             description: description.value, calNote: calNote.value,
             heading: original?.x?.heading || options.heading || "", tz: zoneText,
             recurrence, notify, agendaWindow: agendaWindowEditor.read(),

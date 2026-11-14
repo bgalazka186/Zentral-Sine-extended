@@ -486,6 +486,7 @@
         category: cleanCategoryName(x.category), tz: cleanZone(x.tz), historyId: String(x.historyId ?? "").slice(0, 120), src: ["list", "note", "manual"].includes(x.src) ? x.src : "manual", key: String(x.key ?? "").slice(0, 60), legacyKey: String(x.legacyKey ?? "").slice(0, 60), moved: x.moved ? "1" : "", calNote: String(x.calNote ?? "").slice(0, MAX_DESC), notify: cleanNotifyOverrides(x.notify), agendaWindow: cleanAgendaWindow(x.agendaWindow), recurrenceExceptions: cleanRecurrenceExceptions(x.recurrenceExceptions, allDay),
       },
     };
+    if (x.src === "list" && typeof x.categoryOverride === "string") item.x.categoryOverride = cleanCategoryName(x.categoryOverride);
     if (end) item.end = end;
     if (typeof raw.created === "string" && Number.isFinite(Date.parse(raw.created))) item.created = iso(Date.parse(raw.created));
     item.etag = typeof raw.etag === "string" && raw.etag ? raw.etag : etagOf(item);
@@ -724,7 +725,7 @@
   // The plain Google event resource for an item (our `x` goes into extendedProperties.private, as Google allows).
   function toGoogle(it) {
     const priv = {};
-    for (const [k, v] of Object.entries(it.x)) if (v !== "" && v !== undefined && v !== null && !(Array.isArray(v) && !v.length)) priv["zentral_" + k] = ["notify", "recurrenceExceptions", "agendaWindow"].includes(k) ? JSON.stringify(v) : String(v);
+    for (const [k, v] of Object.entries(it.x)) if ((v !== "" || k === "categoryOverride") && v !== undefined && v !== null && !(Array.isArray(v) && !v.length)) priv["zentral_" + k] = ["notify", "recurrenceExceptions", "agendaWindow", "categoryOverride"].includes(k) ? JSON.stringify(v) : String(v);
     const out = { id: it.id, summary: it.summary, description: it.description, status: it.status, start: it.start, updated: it.updated, extendedProperties: { private: priv } };
     out.end = it.end || it.start;
     if (it.created) out.created = it.created;
@@ -736,8 +737,8 @@
     if (!g || typeof g !== "object") return null;
     const priv = g.extendedProperties?.private || {};
     const x = {};
-    for (const k of ["kind", "noteId", "heading", "category", "tz", "src", "key", "legacyKey", "moved", "calNote", "notify", "agendaWindow", "recurrenceExceptions", "historyId"]) if (priv["zentral_" + k] !== undefined) {
-      if (["notify", "agendaWindow", "recurrenceExceptions"].includes(k)) { try { x[k] = JSON.parse(priv["zentral_" + k]); } catch (_) {} }
+    for (const k of ["kind", "noteId", "heading", "category", "tz", "src", "key", "legacyKey", "moved", "calNote", "notify", "agendaWindow", "recurrenceExceptions", "historyId", "categoryOverride"]) if (priv["zentral_" + k] !== undefined) {
+      if (["notify", "agendaWindow", "recurrenceExceptions", "categoryOverride"].includes(k)) { try { x[k] = JSON.parse(priv["zentral_" + k]); } catch (_) {} }
       else x[k] = priv["zentral_" + k];
     }
     const sameEnd = g.end && JSON.stringify(g.end) === JSON.stringify(g.start);
@@ -1713,8 +1714,8 @@
             const revision = sourceEdit ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, old.rev || 0) + 1) : Math.max(0, old.rev || 0);
             const stamp = sourceEdit && Number.isFinite(Number(updatedAt)) && Number(updatedAt) > 0 ? iso(Number(updatedAt)) : old.updated;
             next = cleanItem({ ...f, start: old.start, end: old.end, status: old.status, reminders: old.reminders, recurrence: old.recurrence.length ? old.recurrence : f.recurrence, updated: stamp, rev: revision, etag: "",
-              description: f.description || old.description, x: { ...f.x, tz: old.x.tz, calNote: old.x.calNote, moved: old.x.moved, notify: old.x.notify, agendaWindow: old.x.agendaWindow, recurrenceExceptions: old.x.recurrenceExceptions, historyId: old.x.historyId } }, 0);
-            next.x.heading = f.x.heading; next.x.category = f.x.category;
+              description: f.description || old.description, x: { ...f.x, tz: old.x.tz, calNote: old.x.calNote, moved: old.x.moved, notify: old.x.notify, agendaWindow: old.x.agendaWindow, recurrenceExceptions: old.x.recurrenceExceptions, historyId: old.x.historyId, ...(typeof old.x.categoryOverride === "string" ? { categoryOverride: old.x.categoryOverride } : {}) } }, 0);
+            next.x.heading = f.x.heading; next.x.category = typeof old.x.categoryOverride === "string" ? old.x.categoryOverride : f.x.category;
             // The text writer is a newer logical version whenever a body edit triggered this sync. Otherwise
             // lwwPick provides the documented equal-version remote-wins tie break while preserving old extras above.
             const winner = lwwPick(old, next);
@@ -2899,6 +2900,7 @@
         noteId,
         heading: String(input.heading ?? previousX.heading ?? "").trim().slice(0, MAX_TEXT),
         category,
+        ...(previousX.src === "list" && category !== previousX.category ? { categoryOverride: category } : {}),
         tz: zone,
         src: previousX.src || "manual",
         calNote: String(input.calNote ?? previousX.calNote ?? "").slice(0, MAX_DESC),
@@ -2907,6 +2909,10 @@
         moved,
       },
     };
+    if (previousX.src === "list") {
+      if (input.categoryOverride === null) delete record.x.categoryOverride;
+      else if (typeof input.categoryOverride === "string") record.x.categoryOverride = cleanCategoryName(input.categoryOverride);
+    }
     return cleanItem(record, now);
   }
 

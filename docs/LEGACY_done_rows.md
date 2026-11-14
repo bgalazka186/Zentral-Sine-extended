@@ -452,3 +452,16 @@ Startup and explicit wake/clock jumps gather unclaimed final-stage reminders wit
 
 
 New `tests/notes-time-edgecases.test.cjs` covers the spring gap, invalid zero-duration missing hour, 25-hour fall-back, explicit remote zone and local Agenda labels/ended, duplicate reminder keys, occurrence-scoped Done/Dismiss, ambiguous format fallback and day-first note parsing, 31-day/5000 daily-series production-shaped projection and long-distance recurrence exceptions across months. On this run the 5000-series projection took 1967 ms with a 20000 ms ceiling; no production behavior was changed.
+
+## OW-12 — Completed calendar category persistence (3.3.132)
+
+#### `OW-12` — Calendar Edit details category changes do not persist
+**Status:** `DONE` · **Impact:** High · **Effort:** M · **Depends on:** none · **Source:** Owner report
+
+**Problem:** Changing a calendar item's category (e.g. from none to Work) in Edit details cannot be saved or does not survive navigating to the source note and back.
+
+**Plan:** Reproduce the real editor/store flow and determine whether saving, reconciliation, or re-rendering loses the category; fix the underlying cause without losing unrelated item fields or source-note markers.
+
+**Tests / done when:** Exercise none → category, category → another and clearing, Save, navigation away/back, disk reload and linked as well as independent items; cancel must not mutate data.
+
+The note sync previously overwrote a calendar edit with the source section category. List-derived items now retain an explicit per-item category override (including explicit no category) without changing source text or sibling items; the editor offers Follow note section to restore inheritance. Overrides survive disk and Google-shaped round trips; existing unmodified items retain their former section inheritance. Pure/store and real sheet tests cover category changes, cancel, source edits, reload, markers and independent items. Live Zen remains unverified.
