@@ -16337,7 +16337,7 @@
         } catch (error) {
           console.warn("[ZentralNotes] table of contents refresh failed", error);
         }
-        store.flush();
+        store.flush().catch((error) => console.warn("[ZentralNotes] flush failed", error));
       });
       listen(root, "mousedown", (e) => e.stopPropagation());
       listen(root, "keydown", (e) => {
@@ -16457,7 +16457,11 @@
         if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden) renderCalendar();
       });
       if (offCalendarItems) cleanups.push(offCalendarItems);
-      const offCalendarHistory = store.items?.history?.on?.(() => {
+      const offCalendarHistory = store.items?.history?.on?.((event) => {
+        if (isOpen && !destroyed && event?.kind === "protected") {
+          if (dialog) flash("Reminder history is protected. Reopen Notes to review recovery.");
+          else showHistoryRecovery();
+        }
         if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden) renderCalendar();
       });
       if (offCalendarHistory) cleanups.push(offCalendarHistory);
@@ -17219,6 +17223,29 @@
         else newNote();
         layout();
         if (adapter.cardMode && hoverMode()) armGrace();
+        showHistoryRecovery();
+      }
+      function showHistoryRecovery() {
+        const history = store.items?.history, historyState = history?.storageState?.();
+        if (historyState?.writeBlocked) {
+          const cancel = chip("Not now"), actions = [cancel];
+          if (historyState.state === "corrupt" && historyState.backupPath && history.startFresh) {
+            const fresh = chip("Start fresh history", true); actions.push(fresh);
+            fresh.addEventListener("click", async () => {
+              fresh.disabled = true;
+              const recovered = await history.startFresh();
+              if (destroyed || !isOpen) return;
+              if (recovered) { closeDialog(); flash("Reminder history restarted; the backup was kept."); }
+              else { fresh.disabled = false; flash("Could not restart history: " + (history.storageState().error || "the file changed")); }
+            });
+          }
+          cancel.addEventListener("click", closeDialog);
+          openCard("Reminder history needs attention", h("p", { class: "zn-empty" },
+            historyState.backupPath
+              ? "Reminder actions are paused because history is damaged. A backup was saved at " + historyState.backupPath + ". Starting fresh replaces the damaged file with any history still available in this window; the backup is kept."
+              : "Reminder actions are paused because history could not be read or backed up. Fix the file permissions or restore a backup before retrying."),
+            h("div", { class: "zn-dialog-actions" }, ...actions));
+        }
       }
       function close() {
         if (!isOpen) return;
@@ -17247,7 +17274,7 @@
         if (leavingId) store.purgeBlankDateNotes?.({ onlyIds: [leavingId] });
         // Closing by hand forgets "open in", a window or panel going away keeps it (restored with Open on Startup).
         if (adapter.kind && !destroying) store.setMeta({ openIn: "" });
-        store.flush();
+        store.flush().catch((error) => console.warn("[ZentralNotes] flush failed", error));
         window.removeEventListener("mousedown", onOutsidePress, true);
         window.removeEventListener("mousedown", onPress, true);
         window.removeEventListener("mouseup", onRelease, true);
@@ -18150,7 +18177,7 @@
       });
       const quitObserver = {
         observe() {
-          store.flush();
+          store.flush().catch(warn);
         },
       };
       try {

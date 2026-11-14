@@ -242,3 +242,19 @@ Overdue stages coalesce into the highest outstanding alert; lower stages are per
 **Tests / done when:** Two store instances sharing one fake `io`: A and B append in either order, flush both, reopen: all records from both survive and `stateFor` is the later transition.
 
 Sequential writes from stale windows merge unknown IDs inside the queued write; unreadable or malformed remote files are never overwritten, pending local data remains dirty and onWrite still notifies. The filesystem read/write gap is not cross-window locked: truly concurrent writes can still race and need a separate coordination solution.
+
+## H1.3 — Completed history salvage and guarded recovery (3.3.119)
+
+#### `H1.3` — Reminder history: salvage instead of blocking everything on one bad record
+**Status:** `DONE` · **Impact:** High · **Effort:** S · **Depends on:** H1.2 · **Source:** Audit R2 R2
+
+**Problem:** `open()` treats a single invalid record or a duplicate record id as a corrupt file and sets `writeBlocked = true`. From then on Done, Dismiss and Snooze are disabled in every menu (`historyWritable` false) and nothing is persisted. A cross-window race (H1.2) can itself produce the duplicate id.
+
+**Plan (do in this order):**
+1. Keep the existing corrupt-file backup (`.corrupt-<stamp>.bak`).
+2. Keep every valid record; drop duplicates deterministically (keep the later `at`/`seq`); write rejected raw records to `reminder-history.rejected.json`.
+3. Only a file that is not parseable JSON at all (or has an unknown version) stays write-blocked; surface a clear notice with a one-click 'start a fresh history' action.
+
+**Tests / done when:** Fixtures: one invalid record, duplicate ids, unknown version, truncated JSON. Assert which cases salvage and which block.
+
+Valid records survive malformed or duplicate entries; later at/seq wins. The original and rejected entries are saved without overwriting prior evidence before replacement. Invalid JSON, unknown schema and unreadable files remain protected; a sheet notice offers explicit backed-up recovery and retains locally available records. Live UI verification remains pending. The unlocked cross-window read/write race remains.

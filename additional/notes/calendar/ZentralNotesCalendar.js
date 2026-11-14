@@ -1186,7 +1186,7 @@
       const key = lifecycleKey(record.itemId, record.occurrenceId), old = lifecycle.get(key);
       if (!old || record.at > old.at || (record.at === old.at && record.seq > old.seq)) lifecycle.set(key, record);
     };
-    let storage = { state: "unopened", error: "", backupPath: "" };
+    let storage = { state: "unopened", error: "", backupPath: "" }, protectedText = null;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
     const state = () => ({ ...storage, dirty, writeBlocked, retryCount, count: records.length });
     const scheduleTimer = (ms = delayMs) => {
@@ -1194,6 +1194,41 @@
       timer = setTimer(() => { timer = null; writeNow().catch(() => {}); }, ms);
     };
     const schedule = () => { dirty = true; if (!writeBlocked) scheduleTimer(); };
+    async function backupHistory(dir, text) {
+      const file = io.join(dir, REMINDER_HISTORY_FILE), stamp = Math.max(0, Math.floor(Number(now()) || Date.now()));
+      const base = file + ".corrupt-" + stamp + ".bak";
+      let path = base, suffix = 1;
+      if (typeof io.exists === "function") while (await io.exists(path)) path = base.replace(/\.bak$/, "-" + (++suffix) + ".bak");
+      else path = base.replace(/\.bak$/, "-" + Math.random().toString(36).slice(2) + ".bak");
+      await io.writeUTF8(path, String(text), { tmpPath: path + ".tmp" });
+      return path;
+    }
+    function badHistory(message, text = null) {
+      const error = new Error(message); error.historyReadFailure = true; error.historyText = text; return error;
+    }
+    function decodeHistoryRecords(rawRecords) {
+      const chosen = new Map(), rejected = [];
+      for (let index = 0; index < rawRecords.length; index++) {
+        const raw = rawRecords[index], record = cleanReminderHistoryRecord(raw, now());
+        if (!record) { rejected.push({ reason: "invalid", record: raw }); continue; }
+        if (!record.seq) record.seq = index + 1;
+        const old = chosen.get(record.id);
+        if (!old) { chosen.set(record.id, { record, raw, index }); continue; }
+        const newer = record.at > old.record.at || (record.at === old.record.at && (record.seq > old.record.seq || (record.seq === old.record.seq && index > old.index)));
+        if (newer) { rejected.push({ reason: "duplicate", record: old.raw }); chosen.set(record.id, { record, raw, index }); }
+        else rejected.push({ reason: "duplicate", record: raw });
+      }
+      return { clean: [...chosen.values()].sort((a, b) => a.index - b.index).map((entry) => entry.record), rejected };
+    }
+    async function preserveRejected(dir, file, text, rejected) {
+      const backupPath = await backupHistory(dir, text), base = io.join(dir, "reminder-history.rejected.json");
+      let rejectedPath = base;
+      if (typeof io.exists === "function") { let suffix = 1; while (await io.exists(rejectedPath)) rejectedPath = base.replace(/\.json$/, "-" + (++suffix) + ".json"); }
+      else rejectedPath = base.replace(/\.json$/, "-" + Math.random().toString(36).slice(2) + ".json");
+      await io.writeUTF8(rejectedPath, JSON.stringify({ v: 1, records: rejected }), { tmpPath: rejectedPath + ".tmp" });
+      if (await io.readUTF8(file) !== text) throw new Error("Reminder history changed during recovery; reopen it before trying again.");
+      return { backupPath, rejectedPath };
+    }
     // A write must not overwrite an unreadable or damaged file discovered since
     // open. Background refresh remains best-effort; only the write path is strict.
     async function mergeStored(dir, strict = false) {
@@ -1205,18 +1240,20 @@
         let missing = error?.code === "ENOENT" || error?.name === "NotFoundError" || /(?:^|\b)(?:nf|not found|no such file|does not exist|NS_ERROR_FILE_NOT_FOUND)(?:\b|$)/i.test(message);
         if (!missing && typeof io.exists === "function") { try { missing = !(await io.exists(file)); } catch (_) {} }
         if (missing || !strict) return 0;
-        throw error;
+        throw badHistory(message);
       }
       let parsed;
-      try { parsed = JSON.parse(text); } catch (error) { if (strict) throw error; return 0; }
+      try { parsed = JSON.parse(text); } catch (error) { if (strict) throw badHistory(String(error?.message || error), String(text)); return 0; }
       if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.records)) {
-        if (strict) throw new Error("Reminder history has an unsupported or damaged structure.");
+        if (strict) throw badHistory("Reminder history has an unsupported or damaged structure.", String(text));
         return 0;
       }
-      const clean = parsed.records.map((raw) => cleanReminderHistoryRecord(raw, now()));
-      if (strict) {
-        const seen = new Set();
-        if (clean.some((record) => !record || seen.has(record.id) || !seen.add(record.id))) throw new Error("Reminder history contains invalid or duplicate records.");
+      const { clean, rejected } = decodeHistoryRecords(parsed.records);
+      if (strict && rejected.length) {
+        try {
+          const paths = await preserveRejected(dir, file, String(text), rejected);
+          storage = { ...storage, ...paths };
+        } catch (error) { throw badHistory(String(error?.message || error), String(text)); }
       }
       const known = new Set(records.map((record) => record.id));
       let added = 0;
@@ -1247,6 +1284,14 @@
           return true;
         } catch (error) {
           dirty = true; retryCount++; safeWarn(error);
+          if (error?.historyReadFailure) {
+            let backupPath = "";
+            if (error.historyText !== null) { try { backupPath = await backupHistory(dir, error.historyText); } catch (backupError) { safeWarn(backupError); } }
+            protectedText = backupPath ? error.historyText : null;
+            writeBlocked = true;
+            storage = { state: error.historyText === null ? "unreadable" : "corrupt", error: String(error.message || error), backupPath };
+            emit({ kind: "protected" });
+          }
           if (retryCount <= 3 && timer === null && !writeBlocked) scheduleTimer(Math.min(delayMs * Math.pow(2, retryCount), 5000));
           throw error;
         }
@@ -1275,31 +1320,43 @@
           }
           return state();
         }
-        let parsed;
+        let parsed, backupPath = "", rejectedPath = "";
         try {
           parsed = JSON.parse(text);
           if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.v !== 1 || !Array.isArray(parsed.records)) throw new Error("Reminder history has an unsupported or damaged structure.");
-          const clean = parsed.records.map((record) => cleanReminderHistoryRecord(record, now()));
-          if (clean.some((record) => !record)) throw new Error("Reminder history contains an invalid record.");
-          const seen = new Set();
-          if (clean.some((record) => seen.has(record.id) || !seen.add(record.id))) throw new Error("Reminder history contains duplicate record IDs.");
-          clean.forEach((record, index) => { if (!record.seq) record.seq = index + 1; });
-          records.splice(0, records.length, ...clean);
-          lifecycle.clear();
+          const { clean, rejected } = decodeHistoryRecords(parsed.records);
+          if (rejected.length) {
+            // Save both the original and every rejected raw record before replacing anything.
+            ({ backupPath, rejectedPath } = await preserveRejected(dir, file, String(text), rejected));
+            await io.writeUTF8(file, JSON.stringify({ v: 1, records: clean }), { tmpPath: file + ".tmp" });
+          }
+          records.splice(0, records.length, ...clean); lifecycle.clear();
           for (const record of records) indexTransition(record);
           nextSeq = records.reduce((max, record) => Math.max(max, record.seq), 0) + 1;
         } catch (error) {
-          const stamp = Math.max(0, Math.floor(Number(now()) || Date.now()));
-          const base = file + ".corrupt-" + stamp + ".bak";
-          let backupPath = base, suffix = 1;
-          if (typeof io.exists === "function") { try { while (await io.exists(backupPath)) backupPath = base.replace(/\.bak$/, "-" + (++suffix) + ".bak"); } catch (_) {} }
-          let backedUp = false;
-          try { await io.writeUTF8(backupPath, String(text), { tmpPath: backupPath + ".tmp" }); backedUp = true; } catch (backupError) { safeWarn(backupError); }
-          writeBlocked = true; storage = { state: "corrupt", error: String(error?.message || error), backupPath: backedUp ? backupPath : "" }; safeWarn(error);
+          if (!backupPath) { try { backupPath = await backupHistory(dir, text); } catch (backupError) { safeWarn(backupError); } }
+          protectedText = backupPath ? String(text) : null;
+          writeBlocked = true; storage = { state: "corrupt", error: String(error?.message || error), backupPath, rejectedPath }; safeWarn(error);
           return state();
         }
-        dirty = false; writeBlocked = false; retryCount = 0; storage = { state: "ready", error: "", backupPath: "" };
+        dirty = false; writeBlocked = false; retryCount = 0; protectedText = null;
+        storage = { state: "ready", error: "", backupPath, rejectedPath };
+        if (rejectedPath) { try { onWrite(dir); } catch (error) { safeWarn(error); } emit({ kind: "recovery", count: records.length }); }
         return state();
+      },
+      async startFresh() {
+        const dir = getDir();
+        if (!dir || !writeBlocked || storage.state !== "corrupt" || !storage.backupPath || protectedText === null) return false;
+        const file = io.join(dir, REMINDER_HISTORY_FILE);
+        try {
+          if (await io.readUTF8(file) !== protectedText) throw new Error("Reminder history changed since it was backed up; reopen before recovering.");
+          await io.writeUTF8(file, JSON.stringify({ v: 1, records }), { tmpPath: file + ".tmp" });
+          dirty = false; writeBlocked = false; retryCount = 0; protectedText = null; chain = Promise.resolve();
+          storage = { ...storage, state: "ready", error: "" };
+          try { onWrite(dir); } catch (error) { safeWarn(error); }
+          emit({ kind: "recovery", count: 0 });
+          return true;
+        } catch (error) { storage = { ...storage, error: String(error?.message || error) }; safeWarn(error); return false; }
       },
       storageState: state,
       on(fn) { listeners.add(fn); return () => listeners.delete(fn); },

@@ -72,7 +72,6 @@ Impact and effort: S = under one session slice, M = one session, L = several ses
 
 | Order | ID | Status | Impact | Effort | Depends on | Task |
 | --: | :-- | :-- | :-- | :-- | :-- | :-- |
-| 7 | `H1.3` | `OPEN` | High | S | H1.2 | Reminder history: salvage instead of blocking everything on one bad record |
 | 8 | `H1.4` | `OPEN` | Low-Med | S | H1.2 | Reminder history: do not mark dirty after a pure merge |
 | 9 | `PF2.1` | `OPEN` | High | S-M | F0.2, H1.2 | History store: indexes instead of linear scans |
 | 10 | `PF2.2` | `OPEN` | High | M | PF2.1, F0.3 | Reminder scheduler: cache the 92-day expansion, debounce, react only to relevant changes |
@@ -171,18 +170,6 @@ _Nothing below can be proven without these. They change no behaviour._
 ## Phase 1 — Stop loops and data loss
 
 _Defects that can churn the sidebar forever, lose Done/Dismiss state or spam alerts. Highest risk per line of code._
-
-#### `H1.3` — Reminder history: salvage instead of blocking everything on one bad record
-**Status:** `OPEN` · **Impact:** High · **Effort:** S · **Depends on:** H1.2 · **Source:** Audit R2 R2
-
-**Problem:** `open()` treats a single invalid record or a duplicate record id as a corrupt file and sets `writeBlocked = true`. From then on Done, Dismiss and Snooze are disabled in every menu (`historyWritable` false) and nothing is persisted. A cross-window race (H1.2) can itself produce the duplicate id.
-
-**Plan (do in this order):**
-1. Keep the existing corrupt-file backup (`.corrupt-<stamp>.bak`).
-2. Keep every valid record; drop duplicates deterministically (keep the later `at`/`seq`); write rejected raw records to `reminder-history.rejected.json`.
-3. Only a file that is not parseable JSON at all (or has an unknown version) stays write-blocked; surface a clear notice with a one-click 'start a fresh history' action.
-
-**Tests / done when:** Fixtures: one invalid record, duplicate ids, unknown version, truncated JSON. Assert which cases salvage and which block.
 
 #### `H1.4` — Reminder history: do not mark dirty after a pure merge
 **Status:** `OPEN` · **Impact:** Low-Med · **Effort:** S · **Depends on:** H1.2 · **Source:** Audit R2 R5
@@ -1171,13 +1158,13 @@ Use a disposable Zen profile and back up the profile and Sync data first. Do not
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.118, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.119, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.118.** `F0.1`–`F0.3`, `H1.1`, `H1.5` and `H1.2` are DONE and archived. The fan-out idempotence gates are enforced and pass in the fake Zen harness; live Zen is unavailable.
+State: **3.3.119.** `F0.1`–`F0.3`, `H1.1`, `H1.5` and `H1.2`–`H1.3` are DONE and archived. The fan-out idempotence gates are enforced and pass in the fake Zen harness; live Zen is unavailable.
 
-Completed this session: imported the new instructions, active roadmap and legacy archive. Added a production-host fake Zen harness with structural-operation recording, event dispatch, seed fallback, menus, foreign/dragged-out tabs, disable/re-enable, Notes and two isolated windows over shared persisted input. H1.1 makes per-day keys unique, migrates old keys, uses the real parent, suppresses self-generated events and backs off repeated reconciliation; overnight, leadDays=2 and three-day all-day projections perform zero structural operations on unchanged follow-up runs. F0.2 measured production-shape 500/2000 projection 31d at 428/1915 ms, scheduler at 2308/10776 ms, expansion 90d at 742/3188 ms and 45000 history queries at 967 ms; CI ceilings retain headroom. After H1.2: 31d projection 476/1811 ms, 90d expansion 708/3275 ms, scheduler 2366/10579 ms, history 1031 ms; timing fluctuates. F0.3 adds debug-only async write, bytes, Agenda, scheduler and calendar-render sampling. H1.5 coalesces missed reminder stages and records skipped stages for newly-created past reminders and independent copies; live notification verification remains pending. H1.2 merges stale-window history immediately before writes and protects unreadable/damaged files; simultaneous uncoordinated cross-window reads/writes remain a race.
+Completed this session: imported the new instructions, active roadmap and legacy archive. Added a production-host fake Zen harness with structural-operation recording, event dispatch, seed fallback, menus, foreign/dragged-out tabs, disable/re-enable, Notes and two isolated windows over shared persisted input. H1.1 makes per-day keys unique, migrates old keys, uses the real parent, suppresses self-generated events and backs off repeated reconciliation; overnight, leadDays=2 and three-day all-day projections perform zero structural operations on unchanged follow-up runs. F0.2 measured production-shape 500/2000 projection 31d at 428/1915 ms, scheduler at 2308/10776 ms, expansion 90d at 742/3188 ms and 45000 history queries at 967 ms; CI ceilings retain headroom. After H1.2: 31d projection 476/1811 ms, 90d expansion 708/3275 ms, scheduler 2366/10579 ms, history 1031 ms; timing fluctuates. F0.3 adds debug-only async write, bytes, Agenda, scheduler and calendar-render sampling. H1.5 coalesces missed reminder stages and records skipped stages for newly-created past reminders and independent copies; live notification verification remains pending. H1.2 merges stale-window history immediately before writes and protects unreadable/damaged files; simultaneous uncoordinated cross-window reads/writes remain a race. H1.3 preserves valid history and rejected raw records with backups, protects unreadable/unknown files and offers guarded explicit recovery in the sheet; live Zen recovery UI remains unverified.
 
 Standing owner rules for chunks: no conversational filler; output production-ready code and test suites; process tasks strictly in order (implementation, edge cases, unit tests per task); stop cleanly before output limits so the zip is complete; deliver a zip of only changed files (no `.git`).
 
@@ -1185,4 +1172,4 @@ Known debts / owner requirements: Earlier roadmap DONE claims for `T2.5a–d` we
 
 Calendar density supports persisted Comfortable, Compact and Extra compact in all five views; timeline hour geometry and shading use a shared scale, while narrow Month keeps its list fallback. Live density readability and interaction checks are pending. Calendar/Agenda item menus share a per-item Zen Agenda visibility toggle; it preserves sparse lead/tail overrides, acts on the recurring series, and makes the legacy read-only note-reminder limitation explicit. Calendar remains available to restore an item hidden from the sidebar. Live Zen menu and projection checks remain open.
 
-Next action: implement `H1.3` then `H1.4` in order. Live Zen remains unavailable in the sandbox.
+Next action: implement `H1.4`, then `PF2.1` onward in Master Order. Live Zen remains unavailable in the sandbox.
