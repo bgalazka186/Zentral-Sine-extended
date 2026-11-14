@@ -9027,8 +9027,9 @@
         }
         for (const r of plan.relabel) api.relabel(r.key, r.label);
         for (const r of plan.restyle) api.restyle?.(r.key, r);
-        for (const m of plan.move) api.move(m.key, m.parent);
-        if (plan.move.length && timer === null) timer = setTimer(run, 0);
+        let moveOk = true;
+        for (const m of plan.move) if (api.move(m.key, m.parent) === false) moveOk = false;
+        if (plan.move.length && moveOk && timer === null) timer = setTimer(run, 0);
         // Same order as the sheet's tree. Skipped while moves are pending (the follow-up run does it) and for good
         // after the first refusal, so a browser that cannot reorder never causes a loop.
         if (!plan.move.length && orderOk && api.reorder) {
@@ -19370,7 +19371,15 @@
           const tabs = zenByKey(root, key);
           for (const t of dup ? tabs.slice(1) : tabs) zenRemoveTab(t);
           const f = dup ? null : zenFolderByKey(root, key);
-          if (f) { for (const t of [...f.querySelectorAll("tab")]) if (t.hasAttribute(NOTES_ATTR)) zenRemoveTab(t); try { f.delete?.(); } catch (_) {} }
+          if (f) {
+            // A retired subfolder may still contain user tabs or even empty
+            // folders. Evacuate them outside the entire projection first; on
+            // failure keep the owned folder intact for the next reconciliation.
+            if (!evacuateProjectionForeign(f, root,
+              (child) => restoredPseudoFolderKind(child) === "notes",
+              (tab) => tab.hasAttribute?.(NOTES_ATTR))) return false;
+            retireNotesFolder(f, zenRemoveTab);
+          }
         },
         relabel(key, label) {
           const root = zenRootEl();
@@ -19384,7 +19393,7 @@
           const f = zenFolderByKey(root, key);
           if (f) zenApplyFolderStyle(f, st.color || "", st.icon || "", st.parts || {}, st.opacity || {});
         },
-        move(key) { zenApi.remove(key, false); }, // removed now, added again by the next run under its new parent
+        move(key) { return zenApi.remove(key, false); }, // removed now, added again by the next run under its new parent
         // One "New note" entry in the root and in every sub-folder (on), or none where the folder has other content (off).
         // An entry that is the only thing keeping a folder alive is never removed.
         // The NOTES root folder's own colour and emoji (prefs), drawn the same way as a sub-folder's. Cheap and idempotent.

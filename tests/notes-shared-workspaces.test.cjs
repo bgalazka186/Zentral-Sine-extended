@@ -121,6 +121,23 @@ const root = (space, attr) => space.querySelector(`zen-folder[${attr}]`);
   delete duplicateFailure.window.gBrowser.moveTabTo; await duplicateFailure.switchWorkspace("space-b");
   assert.ok(duplicateB.contains(canonical) && dupeUser.isConnected && !dupe.isConnected, "duplicate cleanup succeeds before migration retry");
   await duplicateFailure.destroy();
+  // Reconciliation can retire a nested Notes folder after the user removes or
+  // moves it. Neither a foreign tab nor an empty foreign folder may be closed.
+  const retire = createFakeZen({ prefs: { [AGENDA]: false, [NOTES]: "all" } });
+  await retire.seam.ensureStore(); retire.fireTimer(6000); await Promise.resolve(); retire.seam.store.create("Keep root"); retire.seam.zen.runNow();
+  const retireRoot = root(retire.sidebar.ws, "bgalazka-notes-folder"), owned = retire.sidebar.folder("Owned", { parent: retireRoot.querySelector(":scope > .tab-group-container"), attrs: { "bgalazka-notes-subfolder": "f:retiring" } });
+  const empty = retire.sidebar.folder("User empty", { parent: owned.querySelector(":scope > .tab-group-container") });
+  const keepTab = retire.window.gBrowser.addTab("https://retire-user.test/"); owned.addTab(keepTab);
+  retire.seam.zenApi.remove("f:retiring", false);
+  assert.ok(empty.isConnected && keepTab.isConnected, "retiring a managed subfolder preserves foreign tabs and empty folders");
+  assert.ok(!retireRoot.contains(empty) && !retireRoot.contains(keepTab), "foreign content is moved outside the managed root");
+  const stuck = retire.sidebar.folder("Blocked", { parent: retireRoot.querySelector(":scope > .tab-group-container"), attrs: { "bgalazka-notes-subfolder": "f:blocked" } });
+  const stuckTab = retire.window.gBrowser.addTab("https://blocked-retire.test/"); stuck.addTab(stuckTab); retireRoot.elementIndex = 0;
+  retire.window.gBrowser.moveTabTo = () => { throw new Error("retire move blocked"); };
+  assert.equal(retire.seam.zenApi.remove("f:blocked", false), false); assert.ok(stuck.contains(stuckTab) && stuck.isConnected);
+  delete retire.window.gBrowser.moveTabTo; retire.seam.zenApi.remove("f:blocked", false);
+  assert.ok(stuckTab.isConnected && !retireRoot.contains(stuckTab) && !stuck.isConnected, "later reconciliation can retry retirement");
+  await retire.destroy();
   // Older native hosts without the listener API fall back to a coalesced
   // TabSelect after the active workspace changes.
   const legacy = createFakeZen({ prefs: { [AGENDA]: false, [NOTES]: "all" } }); const legacyB = legacy.addWorkspace("space-b").element;
