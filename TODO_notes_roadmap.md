@@ -16,7 +16,7 @@
 | `PF2.x` | Performance |
 | `TM3.x` | Time correctness (wake, DST, overdue, missed) |
 | `UI4.x` | Interaction safety (click, drag, keyboard, re-render) |
-| `OW-xx` | Owner request or bug report of 2026-11-14 |
+| `OW-xx` | Owner request or bug report (stable IDs) |
 | `SB6.x` | Zen sidebar polish |
 | `ST7.x` | Structural changes |
 | `T1.x`..`T4.x`, `B3.3.x` | Carried over from the previous roadmap |
@@ -74,6 +74,10 @@ Impact and effort: S = under one session slice, M = one session, L = several ses
 | --: | :-- | :-- | :-- | :-- | :-- | :-- |
 | 18 | `TM3.4` | `OPEN` | Med | M | H1.5, TM3.1 | Missed-reminders digest after sleep or long closure |
 | 19 | `TM3.5` | `OPEN` | Med-High | M | F0.2 | Time edge-case test pack (DST, zones, duplicates, moved occurrences, parsers) |
+| 19a | `OW-12` | `OPEN` | High | M | none | [bug] Calendar Edit details category changes do not save or persist |
+| 19b | `OW-13` | `OPEN` | High | M | H1.1, F0.1 | [bug] Empty Agenda root can duplicate when Agenda is recreated |
+| 19c | `OW-14` | `OPEN` | High | M | none | [bug] Calendar cards are obscured or cut off by web content in the Zentral panel |
+| 19d | `OW-15` | `OPEN` | High | M | none | [bug] Calendar right-click menu is misplaced, tiny or incorrectly layered |
 | 20 | `T2.4d` | `PARTIAL` | High | M | `T2 | Calendar/Agenda click navigation and right-click menus |
 | 21 | `OW-06` | `OPEN` | High | S-M | T2.4d (rule change) | [bug] Month view: a click should select the day, not jump to Day view |
 | 22 | `OW-01` | `OPEN` | High | S | none | [issue] Deleting a note-less reminder asks to 'remove this item from its source note' |
@@ -205,6 +209,43 @@ _Stale 'Today', late alerts after sleep, overdue and missed reminders. Builds on
 ---
 
 ## Phase 4 — Interaction safety and owner bugs
+
+#### `OW-12` — Calendar Edit details category changes do not persist
+**Status:** `OPEN` · **Impact:** High · **Effort:** M · **Depends on:** none · **Source:** Owner report
+
+**Problem:** Changing a calendar item's category (e.g. from none to Work) in Edit details cannot be saved or does not survive navigating to the source note and back.
+
+**Plan:** Reproduce the real editor/store flow and determine whether saving, reconciliation, or re-rendering loses the category; fix the underlying cause without losing unrelated item fields or source-note markers.
+
+**Tests / done when:** Exercise none → category, category → another and clearing, Save, navigation away/back, disk reload and linked as well as independent items; cancel must not mutate data.
+
+#### `OW-13` — Empty Agenda root can duplicate on recreation
+**Status:** `OPEN` · **Impact:** High · **Effort:** M · **Depends on:** H1.1, F0.1 · **Source:** Owner report
+
+**Problem:** An empty Agenda folder can remain when another Agenda folder is created, yielding duplicates.
+
+**Plan:** Reproduce empty/repopulate, restored/stale folders and Zen creation fallback using the real host fake; reconcile or safely retire only managed duplicates, moving foreign contents out rather than destroying them. Preserve correct parent and idempotence.
+
+**Tests / done when:** One managed root after repeated empty/repopulate, restored duplicate and disable/re-enable; unchanged passes do zero structural operations and foreign tabs/folders survive. Verify native Zen behavior if it cannot be established by the harness.
+
+#### `OW-14` — Calendar cards obscured or cut off by web content
+**Status:** `OPEN` · **Impact:** High · **Effort:** M · **Depends on:** none · **Source:** Owner report
+
+**Problem:** Cards opened in Calendar within the Zentral panel can be obscured or clipped by the normal webpage.
+
+**Plan:** Trace stacking contexts, clipping and native browser surfaces for card/dialog placement; fix ownership and layering without covering unrelated browser controls or breaking standalone Notes and panel teardown.
+
+**Tests / done when:** Calendar cards remain fully visible and interactive in the Zentral panel, including near edges and with webpage content behind, and close/cleanup correctly. Cover stacking and containment regressions in automated tests and live Zen if needed.
+
+#### `OW-15` — Calendar context menu position, size and stacking
+**Status:** `OPEN` · **Impact:** High · **Effort:** M · **Depends on:** none · **Source:** Owner report
+
+**Problem:** Calendar right-click menus can open in odd positions or appear very small, possibly below the calendar stacking level.
+
+**Plan:** Reproduce pointer and keyboard context-menu placement, size and stacking in panel and standalone modes. Correct anchor coordinates, viewport bounds and layer ownership as needed, while keeping menus scoped and their close/teardown behavior intact.
+
+**Tests / done when:** Right-click and keyboard menus for days and items appear near their target, remain readable, within usable viewport bounds and above Calendar, including edges/scroll/zoom; outside click, Escape, action, view switch and destroy close them. Live-check native Zen placement if necessary.
+
 
 _Click/drag/keyboard behaviour in the Zen sidebar and Month view, plus the owner's bug reports._
 
@@ -1044,4 +1085,4 @@ Known debts / owner requirements: Earlier roadmap DONE claims for `T2.5a–d` we
 
 Calendar density supports persisted Comfortable, Compact and Extra compact in all five views; timeline hour geometry and shading use a shared scale, while narrow Month keeps its list fallback. Live density readability and interaction checks are pending. Calendar/Agenda item menus share a per-item Zen Agenda visibility toggle; it preserves sparse lead/tail overrides, acts on the recurring series, and makes the legacy read-only note-reminder limitation explicit. Calendar remains available to restore an item hidden from the sidebar. Live Zen menu and projection checks remain open.
 
-Next action: implement `TM3.4`, then continue the Master Order. Live Zen remains unavailable in the sandbox.
+Next action: owner reports added as `OW-12`–`OW-15` after the in-progress time tasks; `TM3.4` in progress: `tests/notes-missed-digest.test.cjs` is an uncommitted, deliberately failing test-first draft (startup and wake batches, exclusion and deduplication); implementation is not started, so the full test glob currently fails on it. Finish the scheduler digest, bounded look-back, notification UI/actions and preference; test recurring, legacy, multi-window claims, protected history, partial bulk failures, wake/clock jumps and teardown. Then rebuild, verify all checks, archive the row, commit and continue the Master Order. Live Zen remains unavailable in the sandbox.
