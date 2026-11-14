@@ -47,3 +47,32 @@ test("run-all fails on a failing child and reports TODO tests", () => {
     fs.rmSync(fixtureDir, { recursive: true, force: true });
   }
 });
+
+
+test("run-all --tz runs calendar and reminder fixtures in the four declared zones only", () => {
+  const fixtureDir = fs.mkdtempSync(path.join(__dirname, ".tmp-run-all-tz-"));
+  try {
+    fs.writeFileSync(path.join(fixtureDir, "notes-calendar-zone.test.cjs"), 'console.log("zone:" + process.env.TZ);\n');
+    fs.writeFileSync(path.join(fixtureDir, "plain.test.cjs"), 'console.log("plain fixture must not run");\n');
+    fs.writeFileSync(path.join(fixtureDir, "notes-calendar-perf.test.cjs"), 'console.log("perf fixture must not run");\n');
+    const runner = path.join(__dirname, "run-all.cjs");
+    const result = spawnSync(process.execPath, [runner, "--tz"], {
+      cwd: path.resolve(__dirname, ".."),
+      env: { ...process.env, ZENTRAL_TEST_DIR: fixtureDir },
+      encoding: "utf8",
+      timeout: 30000,
+    });
+    const output = (result.stdout || "") + "\n" + (result.stderr || "");
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, output);
+    for (const zone of ["UTC", "Europe/Warsaw", "America/Los_Angeles", "Pacific/Auckland"]) {
+      assert.match(output, new RegExp("zone:" + zone));
+      assert.match(output, new RegExp("TZ=" + zone));
+    }
+    assert.doesNotMatch(output, /plain fixture must not run/);
+    assert.doesNotMatch(output, /perf fixture must not run/);
+    assert.match(output, /Timezone matrix files: 4\/4 passed/);
+  } finally {
+    fs.rmSync(fixtureDir, { recursive: true, force: true });
+  }
+});

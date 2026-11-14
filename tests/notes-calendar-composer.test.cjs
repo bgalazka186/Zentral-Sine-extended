@@ -77,7 +77,7 @@ const base = { summary: "  Independent title  ", kind: "reminder", allDay: true,
   assert.equal(edited.description, "After");
   assert.equal(edited.x.calNote, "New");
   assert.equal(edited.x.moved, "1", "moving an item preserves its manually chosen schedule through note resync");
-  assert.equal(old.start.dateTime, "2026-11-13T09:00:00.000Z", "compose never mutates the previous item");
+  assert.equal(old.start.dateTime, new Date(2026, 10, 13, 9, 0, 0, 0).toISOString(), "compose never mutates the previous item and interprets the time in the host-local zone");
 }
 
 console.log("calendar composer pure tests passed");

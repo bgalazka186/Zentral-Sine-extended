@@ -10,7 +10,13 @@ const TEST_DIR = path.resolve(process.env.ZENTRAL_TEST_DIR || __dirname);
 const WORKERS = 4;
 const PERF_FILE = /(?:^|[-.])perf(?:[-.]|$)/i;
 const SERIAL_PERF_TESTS = new Set(["notes-agenda-projection.test.cjs"]);
+const TIME_ZONES = Object.freeze(["UTC", "Europe/Warsaw", "America/Los_Angeles", "Pacific/Auckland"]);
+const TIMEZONE_TEST_FILE = /^notes-(?:agenda|calendar|reminder|recurrence|missed-digest|p2|cycle-[fg])(?:[-.]|$)/i;
 const { calibration } = require("./helpers/perf-budget.cjs");
+
+const isPerfFile = file => PERF_FILE.test(path.basename(file)) || SERIAL_PERF_TESTS.has(path.basename(file));
+const isTimezoneFile = file => TIMEZONE_TEST_FILE.test(path.basename(file)) && !isPerfFile(file);
+const resultName = result => (path.relative(ROOT, result.file) || path.basename(result.file)) + (result.timeZone ? " [TZ=" + result.timeZone + "]" : "");
 
 function discover() {
   return fs.readdirSync(TEST_DIR, { withFileTypes: true })
@@ -28,12 +34,14 @@ function todoNames(output, file) {
   return found;
 }
 
-function runFile(file, perf = false) {
+function runFile(file, perf = false, envOverrides = {}) {
   return new Promise(resolve => {
     const started = process.hrtime.bigint();
+    const env = { ...process.env, ...envOverrides };
+    if (perf) env.ZENTRAL_PERF_BUDGET_SCALE = String(calibration.scale);
     const child = spawn(process.execPath, [file], {
       cwd: ROOT,
-      env: perf ? { ...process.env, ZENTRAL_PERF_BUDGET_SCALE: String(calibration.scale) } : process.env,
+      env,
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "", stderr = "", spawnError = null;
@@ -58,14 +66,14 @@ function runFile(file, perf = false) {
   });
 }
 
-async function runParallel(files, limit) {
+async function runParallel(files, limit, envOverrides = {}) {
   const results = new Array(files.length);
   let next = 0;
   const workers = Array.from({ length: Math.min(limit, files.length) }, async () => {
     while (true) {
       const index = next++;
       if (index >= files.length) return;
-      results[index] = await runFile(files[index]);
+      results[index] = await runFile(files[index], false, envOverrides);
     }
   });
   await Promise.all(workers);
@@ -132,7 +140,7 @@ function commandEscape(value) {
 function printFailureSummary(failed, passed, total, totalMs) {
   process.stderr.write("\n========== REGRESSION FAILURE DETAILS ==========\n");
   for (const result of failed) {
-    const name = path.relative(ROOT, result.file) || path.basename(result.file);
+    const name = resultName(result);
     const detail = failureDetails(result);
     const location = detail.location;
     process.stderr.write("FAIL: " + name + "\n");
@@ -147,7 +155,7 @@ function printFailureSummary(failed, passed, total, totalMs) {
   const summaryPath = process.env.GITHUB_STEP_SUMMARY;
   if (summaryPath) {
     const rows = failed.map(result => {
-      const detail = failureDetails(result), name = path.relative(ROOT, result.file) || path.basename(result.file);
+      const detail = failureDetails(result), name = resultName(result);
       const source = detail.location ? detail.location.file + ":" + detail.location.line + ":" + detail.location.column : "See full log";
       return "| **" + name + "** | " + detail.message.replace(/\|/g, "\\|") + " | " + source + " | " + result.code + " |";
     });
@@ -169,7 +177,7 @@ function printFailureSummary(failed, passed, total, totalMs) {
 }
 
 function printResult(result) {
-  const name = path.relative(ROOT, result.file) || path.basename(result.file);
+  const name = resultName(result);
   const github = process.env.GITHUB_ACTIONS === "true";
   if (github) process.stdout.write("::group::" + name + ": " + (result.code === 0 ? "PASS" : "FAIL") + " (" + result.durationMs.toFixed(0) + " ms)\n");
   else process.stdout.write("\n=== " + name + ": " + (result.code === 0 ? "PASS" : "FAIL") + " (" + result.durationMs.toFixed(0) + " ms) ===\n");
@@ -180,6 +188,40 @@ function printResult(result) {
   if (github) process.stdout.write("::endgroup::\n");
 }
 
+async function runTimezoneMatrix(files) {
+  const selected = files.filter(isTimezoneFile);
+  if (!selected.length) {
+    process.stderr.write("No calendar, Agenda, reminder or recurrence tests found for the timezone matrix.\n");
+    process.exitCode = 1;
+    return;
+  }
+  const results = [];
+  process.stdout.write("Timezone matrix: " + TIME_ZONES.join(", ") + "\n");
+  process.stdout.write("Selected " + selected.length + " non-performance test files.\n");
+  for (const timeZone of TIME_ZONES) {
+    process.stdout.write("\n===== TZ=" + timeZone + " =====\n");
+    const zoneResults = await runParallel(selected, WORKERS, { TZ: timeZone });
+    for (const result of zoneResults) {
+      const labelled = { ...result, timeZone };
+      printResult(labelled);
+      results.push(labelled);
+    }
+    const failed = zoneResults.filter(result => result.code !== 0);
+    process.stdout.write("TZ=" + timeZone + ": " + (zoneResults.length - failed.length) + "/" + zoneResults.length + " passed; " + failed.length + " failed\n");
+  }
+  const failed = results.filter(result => result.code !== 0);
+  const todos = results.flatMap(result => result.todos.map(item => ({ ...item, timeZone: result.timeZone })));
+  const passed = results.length - failed.length;
+  const totalMs = results.reduce((sum, result) => sum + result.durationMs, 0);
+  process.stdout.write("\nTimezone matrix files: " + passed + "/" + results.length + " passed; " + failed.length + " failed across " + TIME_ZONES.length + " zones (" + (totalMs / 1000).toFixed(1) + " s combined runtime)\n");
+  process.stdout.write(todos.length + " TODO failing: " + (todos.length ? todos.map(item => item.file + " [TZ=" + item.timeZone + "]: " + item.name).join("; ") : "none") + "\n");
+  if (failed.length) {
+    process.stderr.write("Failed timezone files: " + failed.map(resultName).join(", ") + "\n");
+    printFailureSummary(failed, passed, results.length, totalMs);
+    process.exitCode = 1;
+  }
+}
+
 async function main() {
   const files = discover();
   if (!files.length) {
@@ -188,7 +230,12 @@ async function main() {
     return;
   }
 
-  const isPerf = file => PERF_FILE.test(path.basename(file)) || SERIAL_PERF_TESTS.has(path.basename(file));
+  if (process.argv.includes("--tz")) {
+    await runTimezoneMatrix(files);
+    return;
+  }
+
+  const isPerf = isPerfFile;
   const perf = files.filter(isPerf);
   const regular = files.filter(file => !isPerf(file));
   const results = [];
