@@ -527,12 +527,12 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   const quickReminder = q(root, ".zn-quick-reminder");
   assert.ok(quickReminder && !quickReminder.hidden, "Create reminder shortcut is visible when calendar storage exists");
   assert.equal(quickReminder.tag, "button", "the shortcut is a native keyboard-focusable button");
-  const shortcutDate = "2026-11-21";
+  const shortcutDate = cal.ymd(new Date(cal.addDays(day, 10))), nextShortcutDate = cal.ymd(new Date(cal.addDays(day, 11)));
   store.items.upsert({ id: "shortcut-match-one", summary: "Existing reminder one", start: { date: shortcutDate }, x: { kind: "reminder", src: "manual", noteId: note.id } });
   await sheet.openNoteById(note.id); await flush();
   const editor = q(root, ".zn-editor");
-  editor.value = "# Source note\n\n2026-11-21 Send the release checklist to the team";
-  const selectedSentence = "2026-11-21 Send the release checklist to the team";
+  editor.value = `# Source note\n\n${shortcutDate} Send the release checklist to the team`;
+  const selectedSentence = `${shortcutDate} Send the release checklist to the team`;
   const selectedStart = editor.value.indexOf(selectedSentence);
   editor.setSelectionRange(selectedStart, selectedStart + selectedSentence.length);
   quickReminder.click(); await flush();
@@ -564,12 +564,12 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   assert.ok(store.items.list({ noteId: note.id, kind: "reminder" }).some((item) => item.summary === "Send the release checklist to the team" && item.start.dateTime), "creating another is an explicit action and keeps the captured sentence title");
 
   // A recognised date with no existing item seeds the complete composer without silently linking over another reminder.
-  editor.value = "# Source note\n\n2026-11-22 Publish the project update";
-  const newSentence = "2026-11-22 Publish the project update", newStart = editor.value.indexOf(newSentence);
+  editor.value = `# Source note\n\n${nextShortcutDate} Publish the project update`;
+  const newSentence = `${nextShortcutDate} Publish the project update`, newStart = editor.value.indexOf(newSentence);
   editor.setSelectionRange(newStart, newStart + newSentence.length);
   quickReminder.click(); await flush();
   const dateSeeded = q(root, ".zn-cal-compose-card");
-  assert.equal(dateSeeded.querySelector('[aria-label="Start date"]').value, "2026-11-22");
+  assert.equal(dateSeeded.querySelector('[aria-label="Start date"]').value, nextShortcutDate);
   assert.equal(dateSeeded.querySelector('[aria-label="Title"]').value, "Publish the project update");
   dateSeeded.querySelectorAll("button").find((button) => button.textContent.trim() === "Cancel").click(); await flush();
 

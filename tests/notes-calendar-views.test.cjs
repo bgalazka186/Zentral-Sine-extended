@@ -39,7 +39,8 @@ const io = {
   stat: async (p) => ({ lastModified: files.get(p)?.mtime || 0 }), restrict: async () => {},
 };
 const storeNowDate = new Date(); storeNowDate.setHours(9, 0, 0, 0);
-const store = c.createStore({ io, notify() {}, windowId: "cal-views", now: () => storeNowDate.getTime(), getDir: async () => "/views", getMaxSaveMs: () => 1000, setTimer: setTimeout, clearTimer: clearTimeout });
+let storeNow = storeNowDate.getTime();
+const store = c.createStore({ io, notify() {}, windowId: "cal-views", now: () => storeNow, getDir: async () => "/views", getMaxSaveMs: () => 1000, setTimer: setTimeout, clearTimer: clearTimeout });
 const host = new El("div");
 const adapter = { position: "fixed", host, attach: (root) => host.append(root), getArea: () => ({ left: 0, top: 0, width: 1100, height: 720 }), watch: () => () => {}, setActive() {}, rewatch() {} };
 const prefs = new Map();
@@ -316,17 +317,25 @@ const chooseMenu = async (root, triggerSelector, label) => {
   await flushRaf();
   assert.equal(store.meta.calendarDisplayZone, "Europe/Warsaw", "selected IANA display zone is stored in calendar meta");
   const zone = "Europe/Warsaw", zoneKey = cal.zonedDateKey(Date.now(), zone), zoneDay = cal.parseYmd(zoneKey).getTime();
+  storeNow = cal.zonedDateTimeToMs(zoneKey, "09:00", zone);
   store.setMeta({ calendarCursor: zoneKey, calendarWork: { days: [new Date(zoneDay).getDay()], startMin: 600, endMin: 900 } });
-  const civilParts = (key) => key.split("-").map(Number);
-  const [zy, zm, zd] = civilParts(zoneKey), [iy, im, id] = civilParts(ymd);
-  const displayDayShift = Math.round((Date.UTC(zy, zm - 1, zd) - Date.UTC(iy, im - 1, id)) / 86400000);
-  if (displayDayShift) for (const item of store.items.list()) {
+  const civilDay = (key) => { const [y, m, d] = key.split("-").map(Number); return Math.round(Date.UTC(y, m - 1, d) / 86400000); };
+  const displayDayShift = civilDay(zoneKey) - civilDay(ymd);
+  for (const item of store.items.list()) {
     const moved = { ...item };
-    if (item.start?.dateTime) moved.start = { ...item.start, dateTime: new Date(Date.parse(item.start.dateTime) + displayDayShift * 86400000).toISOString() };
-    else if (item.start?.date) moved.start = { ...item.start, date: cal.ymd(new Date(cal.addDays(cal.parseYmd(item.start.date).getTime(), displayDayShift))) };
-    if (item.end?.dateTime) moved.end = { ...item.end, dateTime: new Date(Date.parse(item.end.dateTime) + displayDayShift * 86400000).toISOString() };
-    else if (item.end?.date) moved.end = { ...item.end, date: cal.ymd(new Date(cal.addDays(cal.parseYmd(item.end.date).getTime(), displayDayShift))) };
-    store.items.upsert(moved);
+    if (item.start?.dateTime) {
+      const ms = Date.parse(item.start.dateTime);
+      const itemShift = civilDay(cal.localDateKey(ms)) - civilDay(cal.zonedDateKey(ms, zone)) + displayDayShift;
+      if (itemShift) {
+        moved.start = { ...item.start, dateTime: new Date(ms + itemShift * 86400000).toISOString() };
+        if (item.end?.dateTime) moved.end = { ...item.end, dateTime: new Date(Date.parse(item.end.dateTime) + itemShift * 86400000).toISOString() };
+        store.items.upsert(moved);
+      }
+    } else if (displayDayShift && item.start?.date) {
+      moved.start = { ...item.start, date: cal.ymd(new Date(cal.addDays(cal.parseYmd(item.start.date).getTime(), displayDayShift))) };
+      if (item.end?.date) moved.end = { ...item.end, date: cal.ymd(new Date(cal.addDays(cal.parseYmd(item.end.date).getTime(), displayDayShift))) };
+      store.items.upsert(moved);
+    }
   }
   const busyStart = cal.zonedDateTimeToMs(zoneKey, "11:30", zone), busyEnd = cal.zonedDateTimeToMs(zoneKey, "12:30", zone);
   store.items.upsert({ id: "display-zone-busy", summary: "Display-zone busy", start: { dateTime: new Date(busyStart).toISOString() }, end: { dateTime: new Date(busyEnd).toISOString() }, x: { kind: "event" } });
@@ -693,7 +702,7 @@ const chooseMenu = async (root, triggerSelector, label) => {
   store.items.remove("drag-allday-reminder");
   await chooseMenu(root, ".zn-calendar-view-select", "Day");
 
-  const linkedNote = store.create(`# Linked drag\n\n%%calendar: Work%%\n- ${zoneKey} 10:00-11:00 Listed drag event`);
+  const linkedNote = store.create(`# Linked drag\n\n%%calendar: Work%%\n- ${zoneKey} 13:30-14:30 Listed drag event`);
   const linkedItem = store.items.list().find((item) => item.x.noteId === linkedNote.id && item.summary.includes("Listed drag event"));
   assert.ok(linkedItem && linkedItem.x.src === "list" && !cal.isReminder(linkedItem));
   const linkedOldStart = linkedItem.start.dateTime;
@@ -709,19 +718,19 @@ const chooseMenu = async (root, triggerSelector, label) => {
   const linkedMoved = store.items.get(linkedItem.id);
   assert.equal(Date.parse(linkedMoved.start.dateTime), Date.parse(linkedOldStart) + 3600000);
   assert.equal(linkedMoved.x.moved, "1", "moving a parsed line retains the moved marker");
-  assert.match(store.get(linkedNote.id).body, /11:00-12:00/, "source list line follows the move");
+  assert.match(store.get(linkedNote.id).body, /14:30-15:30/, "source list line follows the move");
   q(root, ".zn-calendar-undo-move").click();
   assert.equal(store.items.get(linkedItem.id).start.dateTime, linkedOldStart, "undo restores a source-derived item");
-  assert.match(store.get(linkedNote.id).body, /10:00-11:00/, "undo restores the source list schedule");
+  assert.match(store.get(linkedNote.id).body, /13:30-14:30/, "undo restores the source list schedule");
   store.items.syncNote(linkedNote.id, store.get(linkedNote.id).body, { sourceEdit: true, updatedAt: Date.now() });
   assert.equal(store.items.get(linkedItem.id).start.dateTime, linkedOldStart, "source resync retains the restored time");
   const linkedEndHandle = root.querySelectorAll(".zn-cal-resize-handle").find((el) => el.getAttribute("data-item-id") === linkedItem.id && el.getAttribute("data-edge") === "end");
   assert.ok(linkedEndHandle);
   linkedEndHandle.dispatchEvent(new Ev("keydown", { key: "ArrowDown", bubbles: true }));
-  assert.match(store.get(linkedNote.id).body, /10:00-11:30/, "resizing a source event updates its list line");
+  assert.match(store.get(linkedNote.id).body, /13:30-15:00/, "resizing a source event updates its list line");
   assert.equal(store.items.get(linkedItem.id).x.moved, "1");
   q(root, ".zn-calendar-undo-move").click();
-  assert.match(store.get(linkedNote.id).body, /10:00-11:00/, "resize undo restores the source line");
+  assert.match(store.get(linkedNote.id).body, /13:30-14:30/, "resize undo restores the source line");
   store.items.remove(linkedItem.id);
 
   // A source-backed item opens its note at the stored heading target.
