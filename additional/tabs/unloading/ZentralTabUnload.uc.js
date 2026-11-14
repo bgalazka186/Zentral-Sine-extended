@@ -88,6 +88,23 @@
       let normalTabMmbGesture = null;
       let normalTabMmbFallbackTimer = null;
 
+      // Notes and Agenda entries are inert about:blank placeholders. Selecting
+      // one as the successor of an ordinary tab being unloaded is unsafe:
+      // their TabSelect guards immediately bounce back to the tab being unloaded.
+      // Match explicit markers first, then only the live/current pseudo URL (not
+      // a tab's historical SessionStore entries or display label).
+      function isNotesAgendaEntryTab(tab) {
+        if (!tab) return false;
+        if (tab.hasAttribute("bgalazka-notes-item") ||
+            tab.hasAttribute("bgalazka-notes-agenda-item")) return true;
+        let url = "";
+        try { url = tab.linkedBrowser?.currentURI?.spec || ""; } catch (_) {}
+        if (!url || url === "about:blank") {
+          try { url = tab._zentralNotesUrl || url; } catch (_) {}
+        }
+        return /^about:blank#zn-(?:note:|new:|agenda-)/.test(url);
+      }
+
       function getNormalTabFromMiddleClickEvent(event) {
         const target = event?.target;
         if (!target?.closest) return null;
@@ -102,7 +119,7 @@
           tab.hasAttribute("zen-empty-tab") ||
           tab.hasAttribute("bgalazka-addon-host") ||
           tab.hasAttribute("bgalazka-addon-host-fallback") ||
-          tab.hasAttribute("bgalazka-notes-item") ||
+          isNotesAgendaEntryTab(tab) ||
           tab.closest(
             "#bgalazka-zentral-addon-hosts, [bgalazka-addon-host-folder='true']",
           )
@@ -139,7 +156,7 @@
           !tab.closing &&
           !tab.hidden &&
           !isAddonHostTab(tab) &&
-          !isNotesEntryTab(tab) &&
+          !isNotesAgendaEntryTab(tab) &&
           tab.linkedPanel
         );
       }
@@ -158,7 +175,7 @@
         return (
           gBrowser.selectedTab !== tab &&
           !isAddonHostTab(gBrowser.selectedTab) &&
-          !isNotesEntryTab(gBrowser.selectedTab)
+          !isNotesAgendaEntryTab(gBrowser.selectedTab)
         );
       }
 

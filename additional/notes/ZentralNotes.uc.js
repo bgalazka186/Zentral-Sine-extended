@@ -20633,9 +20633,12 @@
             if (tab !== agendaPress.tab || ev.button !== agendaPress.button) clearAgendaPress();
             else {
               agendaPress.released = true;
-              // Browser click/auxclick follows synchronously; do not retain a
-              // canceled gesture into a later keyboard selection.
-              agendaPressTimer = window.setTimeout(clearAgendaPress, 0);
+              // Gecko/Zen may dispatch click in a later native input task than
+              // mouseup. A zero-delay timer can expire between those events and
+              // make the first physical click look like a mere tab selection.
+              // Keep the gesture briefly; click, dragend, blur or the next press
+              // clears it immediately, and this timeout is only a bounded fallback.
+              agendaPressTimer = window.setTimeout(clearAgendaPress, 500);
             }
           }
           return;

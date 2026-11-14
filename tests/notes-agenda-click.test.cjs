@@ -25,8 +25,21 @@ const PREF = "zen.workspace.zentral.notes.agenda_folder", MARK = "bgalazka-notes
   other.removeAttribute("pinned"); other.removeAttribute("pending"); ev("mouseup", tab); h.fireTimer(0);
   ev("mousemove", tab, { clientX: 45 }); ev("mouseup", other, { clientX: 45 }); ev("click", other, { clientX: 45 }); await Promise.resolve();
   assert.equal(opens, 0, "drag and release elsewhere cancel activation");
-  ev("mousedown", tab); ev("mouseup", tab); ev("click", tab); await Promise.resolve(); await Promise.resolve();
-  assert.equal(opens, 1, "plain click opens exactly once");
+  // Gecko/Zen can deliver the click after the mouseup task has returned.
+  // A zero-delay gesture cleanup used to lose this first activation.
+  ev("mousedown", tab); ev("mouseup", tab); h.fireTimer(0); ev("click", tab);
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(opens, 1, "the first click still activates when click follows a timer turn");
+  // The grace period is bounded: if no click follows, it must not leak into a
+  // later stray click or keyboard selection.
+  ev("mousedown", tab); ev("mouseup", tab); h.fireTimer(500); ev("click", tab);
+  await Promise.resolve(); assert.equal(opens, 1, "an expired release cannot activate a later stray click");
+  const normalDown = ev("mousedown", other, { button: 1 });
+  const normalUp = ev("mouseup", other, { button: 1 });
+  const normalAux = ev("auxclick", other, { button: 1 });
+  assert.equal(normalDown.defaultPrevented, false, "Agenda guards do not capture a normal tab's middle press");
+  assert.equal(normalUp.defaultPrevented, false, "Agenda guards do not capture a normal tab's middle release");
+  assert.equal(normalAux.defaultPrevented, false, "Agenda guards do not capture a normal tab's auxclick");
   for (const modifier of ["ctrlKey", "shiftKey", "altKey", "metaKey"]) {
     ev("mousedown", tab, { [modifier]: true }); ev("mouseup", tab, { [modifier]: true }); const click = ev("click", tab, { [modifier]: true });
     assert.equal(click.defaultPrevented, false, `${modifier} remains available to the browser`);
@@ -38,7 +51,7 @@ const PREF = "zen.workspace.zentral.notes.agenda_folder", MARK = "bgalazka-notes
   ev("mousedown", tab); ev("mouseup", tab); ev("click", tab, { ctrlKey: true }); await Promise.resolve(); assert.equal(opens, 1, "a modifier applied during the gesture cancels activation");
   ev("click", tab); await Promise.resolve(); assert.equal(opens, 1, "stray clicks cannot activate");
   // A release without click must not suppress a later keyboard activation.
-  ev("mousedown", tab); ev("mouseup", tab); h.fireTimer(0);
+  ev("mousedown", tab); ev("mouseup", tab); h.fireTimer(500);
   // UI4.2: tab cycling and programmatic selection bounce silently; only a
   // direct unmodified Enter or Space on the pseudo-tab is activation intent.
   h.window.gBrowser.selectedTab = tab; h.emit("TabSelect", tab, { detail: { previousTab: other } }); h.fireTimer(0); await Promise.resolve(); await Promise.resolve();
