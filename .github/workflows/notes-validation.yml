@@ -23,6 +23,8 @@ jobs:
           node tools/build-standalone.cjs --bump
           node tools/build-preferences.cjs
           node tools/build-standalone.cjs --check
+      - name: Run the UI4.7 multi-window regression first
+        run: node tests/notes-multiwindow.test.cjs
       - name: Run regression suite
         shell: bash
         run: |
