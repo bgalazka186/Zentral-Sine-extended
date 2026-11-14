@@ -99,6 +99,54 @@ async function test(name, fn) { await fn(); console.log("ok - " + name); }
     fallback.resetOperations(); fallback.seam.agendaController.runNow(); assert.deepEqual(fallback.operations, []);
     await fallback.destroy();
   });
+  await test("restored duplicate Agenda roots are retired without losing foreign contents", async () => {
+    const h = await host(); h.seam.store.items.upsert(make("duplicate-root", date(1))); h.seam.agendaController.runNow();
+    const canonical = root(h), dup = h.sidebar.folder("Agenda", { id: "old-agenda-copy", attrs: { "bgalazka-notes-agenda-folder": "true" } });
+    const foreign = h.window.gBrowser.addTab("https://example.test/foreign"); dup.addTab(foreign);
+    const nested = h.sidebar.folder("Personal", { parent: dup.querySelector(":scope > .tab-group-container") });
+    const nestedTab = h.window.gBrowser.addTab("https://example.test/nested"); nested.addTab(nestedTab);
+    h.seam.agendaController.runNow();
+    assert.equal(h.document.querySelectorAll('zen-folder[bgalazka-notes-agenda-folder="true"]').length, 1, "one managed root");
+    assert.ok(canonical.isConnected); assert.ok(foreign.isConnected && nested.isConnected && nestedTab.isConnected, "foreign tabs and folders survive");
+    assert.ok(!dup.isConnected && !canonical.contains(foreign) && nested.contains(nestedTab), "foreign contents move out intact before retiring the duplicate");
+    h.resetOperations(); h.seam.agendaController.runNow(); assert.deepEqual(h.operations, [], "deduplicated root is idempotent");
+    h.seam.store.items.remove("duplicate-root"); h.seam.agendaController.runNow();
+    h.seam.store.items.upsert(make("return", date(1))); h.seam.agendaController.runNow();
+    assert.equal(h.document.querySelectorAll('zen-folder[bgalazka-notes-agenda-folder="true"]').length, 1, "empty then repopulated creates just one root");
+    assert.ok(foreign.isConnected && nested.isConnected && nestedTab.isConnected); await h.destroy();
+  });
+  await test("restored empty roots with duplicate stable ids are reclaimed before projection", async () => {
+    const h = await host(); h.seam.store.items.upsert(make("restore", date(1))); h.seam.agendaController.runNow();
+    const first = root(h), duplicate = h.sidebar.folder("Agenda", { id: first.id });
+    h.seam.agendaController.runNow();
+    assert.equal(h.document.querySelectorAll("zen-folder").filter((f) => f.id === first.id).length, 1);
+    assert.equal(duplicate.isConnected, false); h.resetOperations(); h.seam.agendaController.runNow(); assert.deepEqual(h.operations, []); await h.destroy();
+  });
+  await test("disabling removes all managed restored roots, never ordinary folders", async () => {
+    const h = await host(); h.seam.store.items.upsert(make("disable-dupes", date(1))); h.seam.agendaController.runNow();
+    const dup = h.sidebar.folder("Agenda", { id: "restored-second", attrs: { "bgalazka-notes-agenda-folder": "true" } });
+    const ordinary = h.sidebar.folder("Agenda", { id: "user-owned" });
+    const foreign = h.window.gBrowser.addTab("https://example.test/"); dup.addTab(foreign);
+    const restored = h.window.gBrowser.addTab("about:blank#zn-agenda-seed%3Aroot"); dup.addTab(restored);
+    h.setPref(AGENDA, false); h.seam.agendaController.runNow();
+    assert.equal(h.document.querySelectorAll('zen-folder[bgalazka-notes-agenda-folder="true"]').length, 0);
+    assert.ok(foreign.isConnected && ordinary.isConnected, "ordinary Agenda-labelled folders are not ours");
+    assert.equal(restored.isConnected, false, "unmarked restored pseudo-tabs are retired, not treated as foreign");
+    h.setPref(AGENDA, true); h.seam.agendaController.runNow();
+    assert.equal(h.document.querySelectorAll('zen-folder[bgalazka-notes-agenda-folder="true"]').length, 1); await h.destroy();
+  });
+  await test("an immovable foreign folder is never destroyed when duplicate cleanup fails", async () => {
+    const h = await host({ deleteEmptyFolders: true }); h.seam.store.items.upsert(make("protected-duplicate", date(1))); h.seam.agendaController.runNow();
+    const dup = h.sidebar.folder("Agenda", { id: "immovable", attrs: { "bgalazka-notes-agenda-folder": "true" } });
+    const nested = h.sidebar.folder("User folder", { parent: dup.querySelector(":scope > .tab-group-container") });
+    const managed = h.window.gBrowser.addTab("about:blank#zn-agenda-seed%3Aroot"); managed.setAttribute(MARK, "seed:root"); dup.addTab(managed);
+    const originalInsert = h.sidebar.pinned.insertBefore;
+    h.sidebar.pinned.insertBefore = function(node, before) { if (node === nested) throw Error("native move unavailable"); return originalInsert.call(this, node, before); };
+    h.seam.agendaController.runNow(); assert.ok(nested.isConnected, "foreign folder survives failed relocation");
+    h.setPref(AGENDA, false); h.seam.agendaController.runNow(); assert.ok(nested.isConnected, "disable does not delete trapped user content");
+    h.sidebar.pinned.insertBefore = originalInsert; h.seam.agendaController.runNow();
+    assert.ok(nested.isConnected && !dup.isConnected, "cleanup retries after relocation becomes available"); await h.destroy();
+  });
   await test("Agenda folder and tab menus use the real host handlers", async () => {
     const h = await host(); h.seam.store.items.upsert(make("menu", date(1), date(1, 13))); h.seam.agendaController.runNow();
     const folderMenu = h.document.createXULElement("menupopup"); folderMenu.id = "zenFolderActions"; folderMenu.triggerNode = dayFolder(h); h.document.body.append(folderMenu);

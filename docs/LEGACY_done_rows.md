@@ -465,3 +465,16 @@ New `tests/notes-time-edgecases.test.cjs` covers the spring gap, invalid zero-du
 **Tests / done when:** Exercise none → category, category → another and clearing, Save, navigation away/back, disk reload and linked as well as independent items; cancel must not mutate data.
 
 The note sync previously overwrote a calendar edit with the source section category. List-derived items now retain an explicit per-item category override (including explicit no category) without changing source text or sibling items; the editor offers Follow note section to restore inheritance. Overrides survive disk and Google-shaped round trips; existing unmodified items retain their former section inheritance. Pure/store and real sheet tests cover category changes, cancel, source edits, reload, markers and independent items. Live Zen remains unverified.
+
+## OW-13 — Completed duplicate Agenda root reconciliation (3.3.133)
+
+#### `OW-13` — Empty Agenda root can duplicate on recreation
+**Status:** `DONE` · **Impact:** High · **Effort:** M · **Depends on:** H1.1, F0.1 · **Source:** Owner report
+
+**Problem:** An empty Agenda folder can remain when another Agenda folder is created, yielding duplicates.
+
+**Plan:** Reproduce empty/repopulate, restored/stale folders and Zen creation fallback using the real host fake; reconcile or safely retire only managed duplicates, moving foreign contents out rather than destroying them. Preserve correct parent and idempotence.
+
+**Tests / done when:** One managed root after repeated empty/repopulate, restored duplicate and disable/re-enable; unchanged passes do zero structural operations and foreign tabs/folders survive. Verify native Zen behavior if it cannot be established by the harness.
+
+Marked or stable-ID restored roots are deduplicated before projection; empty/disabled cleanup handles every managed root and recognized restored pseudo-tab, without claiming ordinary folders merely named Agenda. Foreign tabs and folder subtrees are moved out intact before retirement, and an immovable subtree leaves its root and pseudo-tabs protected for a later retry. Fake Zen covers duplicate IDs, foreign contents, failed native moves, disable/re-enable, empty/repopulate and unchanged idempotence. Zen restoration that loses both the stable id and all managed markers cannot be safely identified by label alone; real Zen behavior remains unverified.

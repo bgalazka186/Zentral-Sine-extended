@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.132
+// @version 3.3.133
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.132, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.133, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.132";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.133";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -24083,6 +24083,14 @@ __zentralShim.register = function (def) {
       function agendaEnsureRoot(position) {
         if (!window.gBrowser || !window.gZenFolders?.createFolder) return false;
         let root = agendaRootEl();
+        if (root) {
+          // Restores can leave several marked roots (or repeated stable ids).
+          // Reconcile only identities we own; a folder merely named Agenda is not proof.
+          for (const duplicate of [...(document.querySelectorAll?.("zen-folder") || [])]) {
+            if (duplicate === root || (duplicate.id !== AGENDA_ROOT_ID && duplicate.getAttribute?.("bgalazka-notes-agenda-folder") !== "true")) continue;
+            agendaRetireFolder(duplicate);
+          }
+        }
         if (!root) {
           const seed = agendaNewTab("seed:root");
           try {
@@ -24098,16 +24106,33 @@ __zentralShim.register = function (def) {
         agendaPlaceRoot(root, position);
         return true;
       }
+      const agendaOwnTab = (tab) => !!tab?.hasAttribute?.(AGENDA_ATTR) || /^about:blank#zn-agenda-/.test(tab?.linkedBrowser?.currentURI?.spec || tab?._zentralNotesUrl || "");
       function agendaRetireFolder(folder) {
         if (!folder) return;
-        const tabs = [...(folder.querySelectorAll?.("tab") || [])];
-        for (const tab of tabs) if (tab.hasAttribute(AGENDA_ATTR)) zenRemoveTab(tab);
-        const userTabs = [...(folder.querySelectorAll?.("tab") || [])].some((tab) => !tab.hasAttribute(AGENDA_ATTR));
-        const userFolders = [...(folder.querySelectorAll?.("zen-folder") || [])].some((child) => !child.hasAttribute("bgalazka-notes-agenda-day") && !child.id.startsWith("zentral-notes-agenda-day-"));
-        if (userTabs || userFolders) {
-          for (const attr of ["bgalazka-notes-agenda-folder", "bgalazka-notes-agenda-day", "bgalazka-notes-agenda-key", "bgalazka-notes-agenda-count", "bgalazka-notes-agenda-label"]) folder.removeAttribute(attr);
-          if (folder.id === AGENDA_ROOT_ID || folder.id.startsWith("zentral-notes-agenda-day-")) folder.id = "zentral-released-" + folder.id;
-        } else { try { folder.delete?.(); } catch (_) {} }
+        const host = folder.parentElement;
+        const ownedDay = (child) => child.hasAttribute?.("bgalazka-notes-agenda-day") || child.id?.startsWith("zentral-notes-agenda-day-");
+        // Move foreign top-level subtrees and tabs out first. In particular, closing
+        // our last tab must not let Zen auto-delete an otherwise empty user folder.
+        const foreignFolders = [...(folder.querySelectorAll?.("zen-folder") || [])].filter((child) => !ownedDay(child));
+        const foreignSet = new Set(foreignFolders);
+        const insideForeign = (node) => {
+          for (let p = node.parentElement; p && p !== folder; p = p.parentElement) if (foreignSet.has(p)) return true;
+          return false;
+        };
+        const preserve = [...foreignFolders.filter((child) => !insideForeign(child)),
+          ...[...(folder.querySelectorAll?.("tab") || [])].filter((tab) => !agendaOwnTab(tab) && !insideForeign(tab))];
+        for (const child of preserve) {
+          if (!host || !folder.contains?.(child)) continue;
+          try { host.insertBefore(child, folder); if (!folder.contains?.(child)) agendaMutationCount++; } catch (error) { warn(error); }
+        }
+        // If moving anything failed, release rather than destroy the remaining user content.
+        const userTabs = [...(folder.querySelectorAll?.("tab") || [])].some((tab) => !agendaOwnTab(tab));
+        const userFolders = [...(folder.querySelectorAll?.("zen-folder") || [])].some((child) => !ownedDay(child));
+        if (userTabs || userFolders) return false;
+        for (const tab of [...(folder.querySelectorAll?.("tab") || [])]) if (agendaOwnTab(tab)) zenRemoveTab(tab);
+        if (folder.isConnected === false) return true;
+        try { folder.delete?.(); } catch (error) { warn(error); }
+        return folder.isConnected === false;
       }
       function agendaMakeDay(entry) {
         const root = agendaRootEl(); if (!root) return false;
@@ -24137,9 +24162,10 @@ __zentralShim.register = function (def) {
         list() {
           const root = agendaRootEl(); if (!root) return [];
           const out = [];
+          const otherRoots = [...(document.querySelectorAll?.("zen-folder") || [])].filter((folder) => folder !== root && (folder.id === AGENDA_ROOT_ID || folder.getAttribute?.("bgalazka-notes-agenda-folder") === "true"));
           for (const tab of document.querySelectorAll?.("tab") || []) {
             const url = tab.getAttribute?.(AGENDA_ATTR) ? "" : (tab.linkedBrowser?.currentURI?.spec || tab._zentralNotesUrl || "");
-            if (!root.contains(tab) && (tab.hasAttribute?.(AGENDA_ATTR) || /^about:blank#zn-agenda-/.test(url))) zenRemoveTab(tab);
+            if (!root.contains(tab) && !otherRoots.some((folder) => folder.contains?.(tab)) && (tab.hasAttribute?.(AGENDA_ATTR) || /^about:blank#zn-agenda-/.test(url))) zenRemoveTab(tab);
           }
           for (const tab of root.querySelectorAll?.("tab") || []) {
             let key = tab.getAttribute(AGENDA_ATTR) || "";
@@ -24230,12 +24256,12 @@ __zentralShim.register = function (def) {
           return true;
         },
         removeAll() {
-          const root = agendaRootEl();
-          if (root) this.list();
-          for (const tab of [...(document.querySelectorAll?.("tab[" + AGENDA_ATTR + "]") || [])]) zenRemoveTab(tab);
-          if (!root) return;
-          for (const folder of [...(root.querySelectorAll?.("zen-folder[bgalazka-notes-agenda-day]") || [])]) agendaRetireFolder(folder);
-          agendaRetireFolder(root);
+          const roots = [...(document.querySelectorAll?.("zen-folder") || [])].filter((folder) => folder.id === AGENDA_ROOT_ID || folder.getAttribute?.("bgalazka-notes-agenda-folder") === "true");
+          const protectedRoots = [];
+          for (const folder of roots) if (folder.isConnected !== false && !agendaRetireFolder(folder)) protectedRoots.push(folder);
+          // Clean dragged-out pseudo-tabs, but never auto-delete a folder whose
+          // foreign content could not safely be moved out.
+          for (const tab of [...(document.querySelectorAll?.("tab") || [])]) if (agendaOwnTab(tab) && !protectedRoots.some((folder) => folder.contains?.(tab))) zenRemoveTab(tab);
         },
       };
       const agendaLegacyIds = new Set();
