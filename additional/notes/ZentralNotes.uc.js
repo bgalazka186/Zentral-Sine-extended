@@ -19921,6 +19921,7 @@
         window[act]("focusin", agendaTitleCard.focus, true);
         window[act]("focusout", agendaTitleCard.blur, true);
         window[act]("keydown", agendaTitleCard.key, true);
+        window[act]("keydown", onAgendaKey, true);
         window[act]("popupshowing", agendaTitleCard.popup, true);
         window[act]("resize", agendaTitleCard.position, true);
         for (const type of ["mousedown", "mousemove", "mouseup", "click", "auxclick", "dragstart", "dragend", "blur"]) window[act](type, onAgendaMouse, true);
@@ -19998,14 +19999,20 @@
         ev.preventDefault(); ev.stopImmediatePropagation();
         if (!press.moved && Math.hypot(ev.clientX - press.x, ev.clientY - press.y) <= 4 && tab.isConnected !== false) activateAgendaTab(tab);
       }
+      function onAgendaKey(ev) {
+        if (disposed || !agendaEnabled() || ev.ctrlKey || ev.shiftKey || ev.altKey || ev.metaKey || (ev.key !== "Enter" && ev.key !== " ")) return;
+        let tab = null; try { tab = ev.target?.closest?.("tab[" + AGENDA_ATTR + "]"); } catch (_) {}
+        const key = tab?.getAttribute?.(AGENDA_ATTR) || "";
+        if (!tab || !(key.startsWith("item:") || key === "more:overdue") || !agendaRootEl()?.contains?.(tab) || ev.target?.closest?.(".tab-close-button, .tab-reset-button, .tab-icon-overlay")) return;
+        ev.preventDefault(); ev.stopImmediatePropagation();
+        if (!ev.repeat) activateAgendaTab(tab);
+      }
       let agendaSelectTimer = 0;
       onCleanup(() => window.clearTimeout(agendaSelectTimer));
       function onAgendaSelect(ev) {
         const tab = ev.target;
         if (disposed || !agendaEnabled() || !tab || !agendaTabKey(tab) || !agendaRootEl()?.contains?.(tab)) return;
         const prev = ev.detail?.previousTab;
-        // Zen may select the tab on mousedown before the click/drag is known.
-        const pointerSelection = agendaPress?.tab === tab;
         window.clearTimeout(agendaSelectTimer);
         agendaSelectTimer = window.setTimeout(() => {
           agendaSelectTimer = 0;
@@ -20013,7 +20020,6 @@
             if (disposed || window.gBrowser.selectedTab !== tab) return;
             const back = prev && prev.isConnected && !agendaTabKey(prev) ? prev : [...window.gBrowser.tabs].find((t) => !agendaTabKey(t) && !t.hidden);
             if (back) window.gBrowser.selectedTab = back;
-            if (!pointerSelection) activateAgendaTab(tab);
           } catch (error) { warn(error); }
         }, 0);
       }

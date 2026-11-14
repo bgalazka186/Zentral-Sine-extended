@@ -33,8 +33,15 @@ const PREF = "zen.workspace.zentral.notes.agenda_folder", MARK = "bgalazka-notes
   ev("click", tab); await Promise.resolve(); assert.equal(opens, 1, "stray clicks cannot activate");
   // A release without click must not suppress a later keyboard activation.
   ev("mousedown", tab); ev("mouseup", tab); h.fireTimer(0);
-  // Keep the existing keyboard TabSelect path until UI4.2 further refines it.
+  // UI4.2: tab cycling and programmatic selection bounce silently; only a
+  // direct unmodified Enter or Space on the pseudo-tab is activation intent.
   h.window.gBrowser.selectedTab = tab; h.emit("TabSelect", tab, { detail: { previousTab: other } }); h.fireTimer(0); await Promise.resolve(); await Promise.resolve();
-  assert.equal(opens, 2, "keyboard selection still opens");
+  assert.equal(h.window.gBrowser.selectedTab, other); assert.equal(opens, 1, "tab cycling does not open Notes");
+  const enter = ev("keydown", tab, { key: "Enter" }); await Promise.resolve(); assert.equal(enter.defaultPrevented, true); assert.equal(opens, 2, "Enter activates intentionally");
+  const space = ev("keydown", tab, { key: " " }); await Promise.resolve(); assert.equal(space.defaultPrevented, true); assert.equal(opens, 3, "Space activates intentionally");
+  const modifiedKey = ev("keydown", tab, { key: "Enter", ctrlKey: true }); await Promise.resolve(); assert.equal(modifiedKey.defaultPrevented, false); assert.equal(opens, 3);
+  const repeatKey = ev("keydown", tab, { key: "Enter", repeat: true }); await Promise.resolve(); assert.equal(repeatKey.defaultPrevented, true); assert.equal(opens, 3, "held activation keys do not repeat");
+  assert.equal(ev("keydown", other, { key: "Enter" }).defaultPrevented, false, "foreign tabs are untouched");
+  h.setPref(PREF, false); assert.equal(ev("keydown", tab, { key: "Enter" }).defaultPrevented, false); await Promise.resolve(); assert.equal(opens, 3, "disabled Agenda does not activate");
   await h.destroy(); console.log("Agenda click release tests passed");
 })().catch(error => { console.error(error); process.exitCode = 1; });

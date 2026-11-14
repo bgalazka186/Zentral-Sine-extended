@@ -593,3 +593,17 @@ Agenda item pseudo-tabs show their full title in a wrapping, scrollable tooltip 
 **Tests / done when:** DOM harness: press-move-release elsewhere does not open; plain click opens once.
 
 Plain primary clicks open only on release within four pixels; press itself is not canceled, so native drag gestures remain available. Pointer-originated TabSelect is bounced without opening; modifier gestures pass through and middle-click remains inert. Dragstart, lost or canceled releases and changed modifiers do not open. Keyboard TabSelect remains supported; UI4.2 still must distinguish deliberate keyboard activation from tab cycling. Fake Zen covers these paths; real Zen native event ordering and drag behavior remain unverified.
+
+## UI4.2 — Completed silent Agenda tab cycling (3.3.141)
+
+#### `UI4.2` — Tab cycling must not open Notes
+**Status:** `DONE` · **Impact:** Med-High · **Effort:** S · **Depends on:** UI4.1 · **Source:** Audit R1 B2
+
+**Problem:** `onAgendaSelect` bounces the selection back but still calls `activateAgendaTab`, so Ctrl+Tab, Alt+digit, tab search or Ctrl+PageDown through the Pinned area pops the Notes panel.
+
+**Plan (do in this order):**
+1. Set a short-lived `agendaPointerIntent` flag in the click/keyboard handler on the tab itself; in `onAgendaSelect` bounce silently unless that flag is set.
+
+**Tests / done when:** TabSelect without a prior pointer intent: selection returns, `activateAgendaTab` not called.
+
+All TabSelect events bounce without opening; explicit unmodified Enter or Space on the owned pseudo-tab activates directly, with default key action suppressed and repeat ignored. This direct-intent approach avoids a stale timer/flag opening a later programmatic selection. Pointer activation from UI4.1 remains unchanged. Fake Zen tests cover silent cycling, both keys, modifiers, repeat, foreign tabs and disable; native Zen keyboard event order remains unverified. Safe same-workspace bounce target selection is still UI4.3.

@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.140
+// @version 3.3.141
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.140, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.141, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.140";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.141";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -24719,6 +24719,7 @@ __zentralShim.register = function (def) {
         window[act]("focusin", agendaTitleCard.focus, true);
         window[act]("focusout", agendaTitleCard.blur, true);
         window[act]("keydown", agendaTitleCard.key, true);
+        window[act]("keydown", onAgendaKey, true);
         window[act]("popupshowing", agendaTitleCard.popup, true);
         window[act]("resize", agendaTitleCard.position, true);
         for (const type of ["mousedown", "mousemove", "mouseup", "click", "auxclick", "dragstart", "dragend", "blur"]) window[act](type, onAgendaMouse, true);
@@ -24796,14 +24797,20 @@ __zentralShim.register = function (def) {
         ev.preventDefault(); ev.stopImmediatePropagation();
         if (!press.moved && Math.hypot(ev.clientX - press.x, ev.clientY - press.y) <= 4 && tab.isConnected !== false) activateAgendaTab(tab);
       }
+      function onAgendaKey(ev) {
+        if (disposed || !agendaEnabled() || ev.ctrlKey || ev.shiftKey || ev.altKey || ev.metaKey || (ev.key !== "Enter" && ev.key !== " ")) return;
+        let tab = null; try { tab = ev.target?.closest?.("tab[" + AGENDA_ATTR + "]"); } catch (_) {}
+        const key = tab?.getAttribute?.(AGENDA_ATTR) || "";
+        if (!tab || !(key.startsWith("item:") || key === "more:overdue") || !agendaRootEl()?.contains?.(tab) || ev.target?.closest?.(".tab-close-button, .tab-reset-button, .tab-icon-overlay")) return;
+        ev.preventDefault(); ev.stopImmediatePropagation();
+        if (!ev.repeat) activateAgendaTab(tab);
+      }
       let agendaSelectTimer = 0;
       onCleanup(() => window.clearTimeout(agendaSelectTimer));
       function onAgendaSelect(ev) {
         const tab = ev.target;
         if (disposed || !agendaEnabled() || !tab || !agendaTabKey(tab) || !agendaRootEl()?.contains?.(tab)) return;
         const prev = ev.detail?.previousTab;
-        // Zen may select the tab on mousedown before the click/drag is known.
-        const pointerSelection = agendaPress?.tab === tab;
         window.clearTimeout(agendaSelectTimer);
         agendaSelectTimer = window.setTimeout(() => {
           agendaSelectTimer = 0;
@@ -24811,7 +24818,6 @@ __zentralShim.register = function (def) {
             if (disposed || window.gBrowser.selectedTab !== tab) return;
             const back = prev && prev.isConnected && !agendaTabKey(prev) ? prev : [...window.gBrowser.tabs].find((t) => !agendaTabKey(t) && !t.hidden);
             if (back) window.gBrowser.selectedTab = back;
-            if (!pointerSelection) activateAgendaTab(tab);
           } catch (error) { warn(error); }
         }, 0);
       }
