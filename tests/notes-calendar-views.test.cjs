@@ -38,7 +38,8 @@ const io = {
   children: async (d) => [...files.keys()].filter((k) => k.startsWith(d + "/") && !k.slice(d.length + 1).includes("/")),
   stat: async (p) => ({ lastModified: files.get(p)?.mtime || 0 }), restrict: async () => {},
 };
-const store = c.createStore({ io, notify() {}, windowId: "cal-views", getDir: async () => "/views", getMaxSaveMs: () => 1000, setTimer: setTimeout, clearTimer: clearTimeout });
+const storeNowDate = new Date(); storeNowDate.setHours(9, 0, 0, 0);
+const store = c.createStore({ io, notify() {}, windowId: "cal-views", now: () => storeNowDate.getTime(), getDir: async () => "/views", getMaxSaveMs: () => 1000, setTimer: setTimeout, clearTimer: clearTimeout });
 const host = new El("div");
 const adapter = { position: "fixed", host, attach: (root) => host.append(root), getArea: () => ({ left: 0, top: 0, width: 1100, height: 720 }), watch: () => () => {}, setActive() {}, rewatch() {} };
 const prefs = new Map();

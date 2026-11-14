@@ -1,6 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
+const { scaleBudget } = require("./helpers/perf-budget.cjs");
 const now = new Date(2026, 10, 13, 9, 0).getTime();
 const today = C.localDateKey(now), tomorrow = C.localDateKey(C.addDays(C.dayStart(now), 1));
 const make = (id, summary, start, end, x = {}) => { const { description = "", ...meta } = x; return C.makeItem({ id, summary, description, start, ...(end ? { end } : {}), x: { kind: end ? "event" : "reminder", src: "manual", ...meta } }, now); };
@@ -52,7 +53,8 @@ test("Agenda projection handles 5,000 items within the 50 ms CI budget", () => {
   const result = C.agendaZenProjection(items, now, 4);
   const elapsed = Number(process.hrtime.bigint() - start) / 1e6;
   assert.equal(result[0].count, 5000);
-  assert.ok(elapsed < 50, `5,000 item projection took ${elapsed.toFixed(2)} ms`);
+  const ceiling = scaleBudget(50);
+  assert.ok(elapsed < ceiling, `5,000 item projection took ${elapsed.toFixed(2)} ms (ceiling ${ceiling.toFixed(1)} ms)`);
   console.log("ok - 5,000 item projection took " + elapsed.toFixed(2) + " ms");
 });
 

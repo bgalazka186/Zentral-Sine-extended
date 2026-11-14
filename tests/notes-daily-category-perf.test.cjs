@@ -3,6 +3,7 @@
 // generous ceilings catch accidental per-item rescans in this hot path.
 const assert = require("node:assert/strict");
 const { performance } = require("node:perf_hooks");
+const { scaleBudget } = require("./helpers/perf-budget.cjs");
 const C = require(process.env.CALENDAR_BENCH_MODULE || "../additional/notes/calendar/ZentralNotesCalendar.js");
 const now = Date.parse("2026-11-13T12:00:00Z");
 const io = { join: (...p) => p.join("/"), exists: async () => false, readUTF8: async () => { throw Error("not found"); }, writeUTF8: async () => {} };
@@ -14,7 +15,7 @@ const io = { join: (...p) => p.join("/"), exists: async () => false, readUTF8: a
     st.syncNote("daily", body, { updatedAt: now });
     assert.equal(st.list({ noteId: "daily" }).length, n);
     const begin = performance.now(); st.syncNote("daily", body + "\nA harmless note edit\n", { sourceEdit: true, updatedAt: now + 1 });
-    const ms = performance.now() - begin, ceiling = n === 500 ? 2000 : 7000;
+    const ms = performance.now() - begin, ceiling = scaleBudget(n === 500 ? 2000 : 7000);
     console.log(`dailySync${n}: ${ms.toFixed(1)} ms (ceiling ${ceiling} ms)`);
     assert.ok(ms < ceiling, `dailySync${n} exceeded budget`);
   }

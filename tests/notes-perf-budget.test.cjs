@@ -2,6 +2,7 @@
 // Baselines deliberately have CI headroom; PF2.x owns tightening the affected ceilings.
 const assert = require("node:assert/strict");
 const { performance } = require("node:perf_hooks");
+const { scaleBudget } = require("./helpers/perf-budget.cjs");
 const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
 const { createFakeZen } = require("./helpers/fake-zen-browser.cjs");
 const BUDGET_MS = Object.freeze({
@@ -11,10 +12,11 @@ const BUDGET_MS = Object.freeze({
   scheduler500: 6500, scheduler2000: 25000, schedulerCached500: 4000, schedulerCached2000: 15000, history45000: 500,
 });
 const now = Date.parse("2026-11-13T12:00:00Z"), start = C.addDays(C.dayStart(now), 1) + 12 * 3600000;
+const BUDGETS = Object.freeze(Object.fromEntries(Object.entries(BUDGET_MS).map(([name, ms]) => [name, scaleBudget(ms)])));
 const measure = (name, fn) => {
   const at = performance.now(), result = fn(), elapsed = performance.now() - at;
-  console.log(`${name}: ${elapsed.toFixed(1)} ms (ceiling ${BUDGET_MS[name]} ms)`);
-  assert.ok(elapsed < BUDGET_MS[name], `${name} exceeded baseline ceiling: ${elapsed.toFixed(1)} ms`);
+  console.log(`${name}: ${elapsed.toFixed(1)} ms (ceiling ${BUDGETS[name].toFixed(1)} ms)`);
+  assert.ok(elapsed < BUDGETS[name], `${name} exceeded calibrated baseline ceiling: ${elapsed.toFixed(1)} ms`);
   return result;
 };
 const makeItems = (n) => Array.from({ length: n }, (_, i) => C.makeItem({

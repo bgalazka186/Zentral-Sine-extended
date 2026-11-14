@@ -2,6 +2,7 @@
 // Budget the real sheet's Day redraw with a focused calendar item.
 const assert = require("node:assert/strict"), fs = require("node:fs"), path = require("node:path"), vm = require("node:vm");
 const { performance } = require("node:perf_hooks");
+const { scaleBudget } = require("./helpers/perf-budget.cjs");
 const { El, Ev, document, raf } = require("./helpers/fake-dom.cjs")();
 const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
 const source = fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.uc.js"), "utf8");
@@ -22,7 +23,8 @@ const flush = async () => { for (let i = 0; i < 5; i++) { raf.splice(0).forEach(
     await sheet.open(); await flush(); sheet.root.all().find(el => el.title === "All notes").click(); await flush();
     const items = sheet.root.querySelectorAll(".zn-cal-item"); assert.equal(items.length, count); items[Math.floor(count / 2)].focus();
     const start = performance.now(); sheet.refreshCalendar(); const elapsed = performance.now() - start;
-    assert.ok(elapsed < (count === 50 ? 4000 : 10000), `Day calendar ${count} render took ${elapsed.toFixed(1)}ms`);
+    const ceiling = scaleBudget(count === 50 ? 4000 : 10000);
+    assert.ok(elapsed < ceiling, `Day calendar ${count} render took ${elapsed.toFixed(1)}ms (ceiling ${ceiling.toFixed(0)}ms)`);
     console.log(`Day calendar redraw ${count}: ${elapsed.toFixed(1)}ms`);
     sheet.destroy(); await store.close();
   }

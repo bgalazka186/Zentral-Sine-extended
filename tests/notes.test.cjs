@@ -74,6 +74,7 @@ function makeFs(clock) {
       files.set(p, { text, mtime: clock.now() });
       writes.push({ p, opts });
     },
+    async makeDir() {},
     async remove(p) {
       files.delete(p);
     },

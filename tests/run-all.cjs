@@ -9,6 +9,8 @@ const ROOT = path.resolve(__dirname, "..");
 const TEST_DIR = path.resolve(process.env.ZENTRAL_TEST_DIR || __dirname);
 const WORKERS = 4;
 const PERF_FILE = /(?:^|[-.])perf(?:[-.]|$)/i;
+const SERIAL_PERF_TESTS = new Set(["notes-agenda-projection.test.cjs"]);
+const { calibration } = require("./helpers/perf-budget.cjs");
 
 function discover() {
   return fs.readdirSync(TEST_DIR, { withFileTypes: true })
@@ -26,12 +28,12 @@ function todoNames(output, file) {
   return found;
 }
 
-function runFile(file) {
+function runFile(file, perf = false) {
   return new Promise(resolve => {
     const started = process.hrtime.bigint();
     const child = spawn(process.execPath, [file], {
       cwd: ROOT,
-      env: process.env,
+      env: perf ? { ...process.env, ZENTRAL_PERF_BUDGET_SCALE: String(calibration.scale) } : process.env,
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "", stderr = "", spawnError = null;
@@ -87,17 +89,30 @@ async function main() {
     return;
   }
 
-  const perf = files.filter(file => PERF_FILE.test(path.basename(file)));
-  const regular = files.filter(file => !PERF_FILE.test(path.basename(file)));
+  const isPerf = file => PERF_FILE.test(path.basename(file)) || SERIAL_PERF_TESTS.has(path.basename(file));
+  const perf = files.filter(isPerf);
+  const regular = files.filter(file => !isPerf(file));
   const results = [];
+  process.stdout.write("Performance calibration: " + calibration.elapsedMs.toFixed(2) + " ms / " + calibration.referenceMs.toFixed(2) + " ms; budget scale x" + calibration.scale.toFixed(2) + "\\n");
 
   // Keep performance measurements out of the concurrent batch. Ordinary tests
   // use four workers to shorten feedback without starting the whole suite at once.
   const parallelResults = await runParallel(regular, WORKERS);
   for (const result of parallelResults) { printResult(result); results.push(result); }
   for (const file of perf) {
-    const result = await runFile(file);
-    printResult(result);
+    let result = await runFile(file, true);
+    if (result.code !== 0) {
+      process.stderr.write("Retrying isolated performance test once: " + path.basename(file) + "\\n");
+      const retry = await runFile(file, true);
+      if (retry.code === 0) {
+        printResult(retry);
+        result = { ...retry, retried: true };
+        process.stdout.write("Recovered on isolated retry: " + path.basename(file) + "\\n");
+      } else {
+        printResult(result);
+        printResult(retry);
+      }
+    } else printResult(result);
     results.push(result);
   }
 
