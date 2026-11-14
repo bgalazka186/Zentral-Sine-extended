@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.119
+// @version 3.3.120
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.119, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.120, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.119";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.120";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2384,7 +2384,7 @@ const __zentralEmbeddedLoader = (function () {
     return { itemId, occurrenceId: String(kept || item.id || itemId), noteId, legacyNote: false };
   }
   function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400, onWrite = () => {}, perf = null }) {
-    const records = [];
+    const records = [], unsaved = new Set();
     const listeners = new Set();
     const emit = (event) => { for (const fn of [...listeners]) { try { fn(event); } catch (error) { safeWarn(error); } } };
     const lifecycle = new Map();
@@ -2399,7 +2399,7 @@ const __zentralEmbeddedLoader = (function () {
     };
     let storage = { state: "unopened", error: "", backupPath: "" }, protectedText = null;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
-    const state = () => ({ ...storage, dirty, writeBlocked, retryCount, count: records.length });
+    const state = () => ({ ...storage, dirty: dirty || unsaved.size > 0, writeBlocked, retryCount, count: records.length });
     const scheduleTimer = (ms = delayMs) => {
       if (timer !== null) clearTimer(timer);
       timer = setTimer(() => { timer = null; writeNow().catch(() => {}); }, ms);
@@ -2472,7 +2472,7 @@ const __zentralEmbeddedLoader = (function () {
         if (!record || known.has(record.id)) continue;
         known.add(record.id); record.seq = nextSeq++; records.push(record); indexTransition(record); added++;
       }
-      if (added) { if (!strict) dirty = true; emit({ kind: "refresh", count: added }); }
+      if (added) emit({ kind: "refresh", count: added });
       return added;
     }
     function writeNow() {
@@ -2485,9 +2485,12 @@ const __zentralEmbeddedLoader = (function () {
         try {
           if (writeBlocked) throw new Error("Reminder history is protected because its existing file could not be read safely.");
           await mergeStored(dir, true);
+          const includedUnsaved = [...unsaved];
           const text = JSON.stringify({ v: 1, records: records.map((record) => ({ ...record, start: record.start ? { ...record.start } : null })) });
           perf?.recordBytes?.("history.bytes", text);
           await io.writeUTF8(io.join(dir, REMINDER_HISTORY_FILE), text, { tmpPath: io.join(dir, REMINDER_HISTORY_FILE + ".tmp") });
+          for (const record of includedUnsaved) unsaved.delete(record);
+          dirty = unsaved.size > 0;
           try { onWrite(dir); } catch (error) { safeWarn(error); }
           retryCount = 0;
           if (["unopened", "missing", "recovery-pending"].includes(storage.state)) storage = { ...storage, state: "ready", error: "" };
@@ -2513,6 +2516,8 @@ const __zentralEmbeddedLoader = (function () {
     if (perf?.wrapAsync) writeNow = perf.wrapAsync("history.write", writeNow);
     return {
       async open() {
+        // Opening a second time must not discard pending local transitions.
+        if (unsaved.size) return state();
         const dir = getDir();
         if (!dir) return state();
         const file = io.join(dir, REMINDER_HISTORY_FILE);
@@ -2562,7 +2567,7 @@ const __zentralEmbeddedLoader = (function () {
         try {
           if (await io.readUTF8(file) !== protectedText) throw new Error("Reminder history changed since it was backed up; reopen before recovering.");
           await io.writeUTF8(file, JSON.stringify({ v: 1, records }), { tmpPath: file + ".tmp" });
-          dirty = false; writeBlocked = false; retryCount = 0; protectedText = null; chain = Promise.resolve();
+          unsaved.clear(); dirty = false; writeBlocked = false; retryCount = 0; protectedText = null; chain = Promise.resolve();
           storage = { ...storage, state: "ready", error: "" };
           try { onWrite(dir); } catch (error) { safeWarn(error); }
           emit({ kind: "recovery", count: 0 });
@@ -2577,7 +2582,7 @@ const __zentralEmbeddedLoader = (function () {
         if (!record) return null;
         nextSeq = Math.max(nextSeq + 1, record.seq + 1);
         // Immutable append: duplicate records are allowed because repeated transitions are meaningful.
-        records.push(record); indexTransition(record); schedule();
+        records.push(record); unsaved.add(record); indexTransition(record); schedule();
         emit({ kind: "append", action: record.action });
         return { ...record, start: record.start ? { ...record.start } : null };
       },

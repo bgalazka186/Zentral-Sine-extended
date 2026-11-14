@@ -258,3 +258,17 @@ Sequential writes from stale windows merge unknown IDs inside the queued write; 
 **Tests / done when:** Fixtures: one invalid record, duplicate ids, unknown version, truncated JSON. Assert which cases salvage and which block.
 
 Valid records survive malformed or duplicate entries; later at/seq wins. The original and rejected entries are saved without overwriting prior evidence before replacement. Invalid JSON, unknown schema and unreadable files remain protected; a sheet notice offers explicit backed-up recovery and retains locally available records. Live UI verification remains pending. The unlocked cross-window read/write race remains.
+
+## H1.4 — Completed refresh dirty tracking (3.3.120)
+
+#### `H1.4` — Reminder history: do not mark dirty after a pure merge
+**Status:** `DONE` · **Impact:** Low-Med · **Effort:** S · **Depends on:** H1.2 · **Source:** Audit R2 R5
+
+**Problem:** `refresh()` sets `dirty = true` whenever it merges any record, so two windows that merge each other's records both rewrite the file, adding writes and widening the H1.2 race.
+
+**Plan (do in this order):**
+1. Set `dirty` only when this window holds records not yet in the file (track a `unsaved` counter/set).
+2. Merged records alone must not trigger a write.
+
+**Tests / done when:** Two instances: A appends, B refreshes: B performs no write.
+The history store tracks unsaved local record objects independently of remote merges and in-flight snapshots. Refresh-only merges do not write, while records added during I/O remain dirty and reopening cannot discard pending local work.

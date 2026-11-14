@@ -551,7 +551,7 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(store.items.history.list({ itemId: "drag-allday-reminder" })[0].action, "rescheduled");
   q(root, ".zn-calendar-undo-move").click();
   assert.equal(store.items.get("drag-allday-reminder").start.date, zoneKey, "undo restores the all-day date");
-  assert.equal(store.items.history.list({ itemId: "drag-allday-reminder" }).length, 2);
+  assert.equal(store.items.history.list({ itemId: "drag-allday-reminder" }).filter((entry) => entry.action === "rescheduled").length, 2, "undo records a second schedule transition independently of any skipped creation stages");
   const recurringAllDay = root.querySelectorAll(".zn-cal-time-allday-cell .zn-cal-item").find((el) => el.textContent.includes("Daily check-in"));
   if (recurringAllDay) assert.equal(recurringAllDay.classList.contains("is-movable"), false, "recurring all-day reminders do not bypass occurrence scopes");
   store.items.remove("drag-allday-reminder");

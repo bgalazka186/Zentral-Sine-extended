@@ -1173,7 +1173,7 @@
     return { itemId, occurrenceId: String(kept || item.id || itemId), noteId, legacyNote: false };
   }
   function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400, onWrite = () => {}, perf = null }) {
-    const records = [];
+    const records = [], unsaved = new Set();
     const listeners = new Set();
     const emit = (event) => { for (const fn of [...listeners]) { try { fn(event); } catch (error) { safeWarn(error); } } };
     const lifecycle = new Map();
@@ -1188,7 +1188,7 @@
     };
     let storage = { state: "unopened", error: "", backupPath: "" }, protectedText = null;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
-    const state = () => ({ ...storage, dirty, writeBlocked, retryCount, count: records.length });
+    const state = () => ({ ...storage, dirty: dirty || unsaved.size > 0, writeBlocked, retryCount, count: records.length });
     const scheduleTimer = (ms = delayMs) => {
       if (timer !== null) clearTimer(timer);
       timer = setTimer(() => { timer = null; writeNow().catch(() => {}); }, ms);
@@ -1261,7 +1261,7 @@
         if (!record || known.has(record.id)) continue;
         known.add(record.id); record.seq = nextSeq++; records.push(record); indexTransition(record); added++;
       }
-      if (added) { if (!strict) dirty = true; emit({ kind: "refresh", count: added }); }
+      if (added) emit({ kind: "refresh", count: added });
       return added;
     }
     function writeNow() {
@@ -1274,9 +1274,12 @@
         try {
           if (writeBlocked) throw new Error("Reminder history is protected because its existing file could not be read safely.");
           await mergeStored(dir, true);
+          const includedUnsaved = [...unsaved];
           const text = JSON.stringify({ v: 1, records: records.map((record) => ({ ...record, start: record.start ? { ...record.start } : null })) });
           perf?.recordBytes?.("history.bytes", text);
           await io.writeUTF8(io.join(dir, REMINDER_HISTORY_FILE), text, { tmpPath: io.join(dir, REMINDER_HISTORY_FILE + ".tmp") });
+          for (const record of includedUnsaved) unsaved.delete(record);
+          dirty = unsaved.size > 0;
           try { onWrite(dir); } catch (error) { safeWarn(error); }
           retryCount = 0;
           if (["unopened", "missing", "recovery-pending"].includes(storage.state)) storage = { ...storage, state: "ready", error: "" };
@@ -1302,6 +1305,8 @@
     if (perf?.wrapAsync) writeNow = perf.wrapAsync("history.write", writeNow);
     return {
       async open() {
+        // Opening a second time must not discard pending local transitions.
+        if (unsaved.size) return state();
         const dir = getDir();
         if (!dir) return state();
         const file = io.join(dir, REMINDER_HISTORY_FILE);
@@ -1351,7 +1356,7 @@
         try {
           if (await io.readUTF8(file) !== protectedText) throw new Error("Reminder history changed since it was backed up; reopen before recovering.");
           await io.writeUTF8(file, JSON.stringify({ v: 1, records }), { tmpPath: file + ".tmp" });
-          dirty = false; writeBlocked = false; retryCount = 0; protectedText = null; chain = Promise.resolve();
+          unsaved.clear(); dirty = false; writeBlocked = false; retryCount = 0; protectedText = null; chain = Promise.resolve();
           storage = { ...storage, state: "ready", error: "" };
           try { onWrite(dir); } catch (error) { safeWarn(error); }
           emit({ kind: "recovery", count: 0 });
@@ -1366,7 +1371,7 @@
         if (!record) return null;
         nextSeq = Math.max(nextSeq + 1, record.seq + 1);
         // Immutable append: duplicate records are allowed because repeated transitions are meaningful.
-        records.push(record); indexTransition(record); schedule();
+        records.push(record); unsaved.add(record); indexTransition(record); schedule();
         emit({ kind: "append", action: record.action });
         return { ...record, start: record.start ? { ...record.start } : null };
       },
