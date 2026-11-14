@@ -1245,7 +1245,23 @@
     if (!itemId) return null;
     return { itemId, occurrenceId: String(kept || item.id || itemId), noteId, legacyNote: false };
   }
-  function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400, onWrite = () => {}, perf = null }) {
+  // A registry can be shared by independently loaded browser-window modules.
+  // Gates are removed after the final waiter, so it retains no idle windows.
+  const localHistoryLocks = new Map();
+  function createHistoryCoordinator(registry = localHistoryLocks) {
+    return async (key, work) => {
+      const previous = registry.get(key);
+      let release;
+      const gate = new Promise((resolve) => { release = resolve; });
+      registry.set(key, gate);
+      try { if (previous) await previous; return await work(); }
+      finally {
+        try { if (registry.get(key) === gate) registry.delete(key); } catch (_) {}
+        release();
+      }
+    };
+  }
+  function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400, onWrite = () => {}, perf = null, withHistoryLock = createHistoryCoordinator() }) {
     const records = [], unsaved = new Set();
     const listeners = new Set();
     const emit = (event) => { for (const fn of [...listeners]) { try { fn(event); } catch (error) { safeWarn(error); } } };
@@ -1370,104 +1386,116 @@
       if (added) emit({ kind: "refresh", count: added, identities: [...changed.values()] });
       return added;
     }
+    function queueHistory(dir, work) {
+      const task = chain.catch(() => {}).then(() => withHistoryLock(io.join(dir, REMINDER_HISTORY_FILE), work));
+      chain = task;
+      return task;
+    }
+    async function persistHistory(dir) {
+      try {
+        if (writeBlocked) throw new Error("Reminder history is protected because its existing file could not be read safely.");
+        await mergeStored(dir, true);
+        const includedUnsaved = [...unsaved];
+        const text = JSON.stringify({ v: 1, records: records.map((record) => ({ ...record, start: record.start ? { ...record.start } : null })) });
+        perf?.recordBytes?.("history.bytes", text);
+        await io.writeUTF8(io.join(dir, REMINDER_HISTORY_FILE), text, { tmpPath: io.join(dir, REMINDER_HISTORY_FILE + ".tmp") });
+        for (const record of includedUnsaved) unsaved.delete(record);
+        dirty = unsaved.size > 0;
+        try { onWrite(dir); } catch (error) { safeWarn(error); }
+        retryCount = 0;
+        if (["unopened", "missing", "recovery-pending"].includes(storage.state)) storage = { ...storage, state: "ready", error: "" };
+        if (dirty && timer === null && !writeBlocked) scheduleTimer();
+        return true;
+      } catch (error) {
+        dirty = true; retryCount++; safeWarn(error);
+        if (error?.historyReadFailure) {
+          let backupPath = "";
+          if (error.historyText !== null) { try { backupPath = await backupHistory(dir, error.historyText); } catch (backupError) { safeWarn(backupError); } }
+          protectedText = backupPath ? error.historyText : null;
+          writeBlocked = true;
+          storage = { state: error.historyText === null ? "unreadable" : "corrupt", error: String(error.message || error), backupPath };
+          emit({ kind: "protected" });
+        }
+        if (retryCount <= 3 && timer === null && !writeBlocked) scheduleTimer(Math.min(delayMs * Math.pow(2, retryCount), 5000));
+        throw error;
+      }
+    }
     function writeNow() {
       if (timer !== null) { clearTimer(timer); timer = null; }
       const dir = getDir();
       if (!dirty || !dir) return chain;
       if (writeBlocked) return Promise.reject(new Error("Reminder history is protected because its existing file could not be read safely."));
       dirty = false;
-      const task = chain.catch(() => {}).then(async () => {
-        try {
-          if (writeBlocked) throw new Error("Reminder history is protected because its existing file could not be read safely.");
-          await mergeStored(dir, true);
-          const includedUnsaved = [...unsaved];
-          const text = JSON.stringify({ v: 1, records: records.map((record) => ({ ...record, start: record.start ? { ...record.start } : null })) });
-          perf?.recordBytes?.("history.bytes", text);
-          await io.writeUTF8(io.join(dir, REMINDER_HISTORY_FILE), text, { tmpPath: io.join(dir, REMINDER_HISTORY_FILE + ".tmp") });
-          for (const record of includedUnsaved) unsaved.delete(record);
-          dirty = unsaved.size > 0;
-          try { onWrite(dir); } catch (error) { safeWarn(error); }
-          retryCount = 0;
-          if (["unopened", "missing", "recovery-pending"].includes(storage.state)) storage = { ...storage, state: "ready", error: "" };
-          if (dirty && timer === null && !writeBlocked) scheduleTimer();
-          return true;
-        } catch (error) {
-          dirty = true; retryCount++; safeWarn(error);
-          if (error?.historyReadFailure) {
-            let backupPath = "";
-            if (error.historyText !== null) { try { backupPath = await backupHistory(dir, error.historyText); } catch (backupError) { safeWarn(backupError); } }
-            protectedText = backupPath ? error.historyText : null;
-            writeBlocked = true;
-            storage = { state: error.historyText === null ? "unreadable" : "corrupt", error: String(error.message || error), backupPath };
-            emit({ kind: "protected" });
-          }
-          if (retryCount <= 3 && timer === null && !writeBlocked) scheduleTimer(Math.min(delayMs * Math.pow(2, retryCount), 5000));
-          throw error;
-        }
-      });
-      chain = task;
-      return task;
+      return queueHistory(dir, () => persistHistory(dir));
     }
-    if (perf?.wrapAsync) writeNow = perf.wrapAsync("history.write", writeNow);
+    if (perf?.wrapAsync) persistHistory = perf.wrapAsync("history.write", persistHistory);
     return {
       async open() {
         // Opening a second time must not discard pending local transitions.
         if (unsaved.size) return state();
         const dir = getDir();
         if (!dir) return state();
-        const file = io.join(dir, REMINDER_HISTORY_FILE);
-        let text;
-        try { text = await io.readUTF8(file); }
-        catch (error) {
-          const message = String(error?.message || error || "");
-          const missing = error?.code === "ENOENT" || error?.name === "NotFoundError" || /(?:^|\b)(?:nf|not found|no such file|does not exist|NS_ERROR_FILE_NOT_FOUND)(?:\b|$)/i.test(message);
-          let exists = !missing;
-          if (typeof io.exists === "function") { try { exists = await io.exists(file); } catch (_) { exists = true; } }
-          if (!exists || missing) {
-            records.length = 0; clearIndexes(); nextSeq = 1; dirty = false; writeBlocked = false; retryCount = 0;
-            storage = { state: "missing", error: "", backupPath: "" };
-          } else {
-            writeBlocked = true; storage = { state: "unreadable", error: String(error?.message || error), backupPath: "" }; safeWarn(error);
+        return queueHistory(dir, async () => {
+          if (unsaved.size) return state();
+          const file = io.join(dir, REMINDER_HISTORY_FILE);
+          let text;
+          try { text = await io.readUTF8(file); }
+          catch (error) {
+            const message = String(error?.message || error || "");
+            const missing = error?.code === "ENOENT" || error?.name === "NotFoundError" || /(?:^|\b)(?:nf|not found|no such file|does not exist|NS_ERROR_FILE_NOT_FOUND)(?:\b|$)/i.test(message);
+            let exists = !missing;
+            if (typeof io.exists === "function") { try { exists = await io.exists(file); } catch (_) { exists = true; } }
+            if (!exists || missing) {
+              if (unsaved.size) return state();
+              records.length = 0; clearIndexes(); nextSeq = 1; dirty = false; writeBlocked = false; retryCount = 0;
+              storage = { state: "missing", error: "", backupPath: "" };
+            } else {
+              writeBlocked = true; storage = { state: "unreadable", error: String(error?.message || error), backupPath: "" }; safeWarn(error);
+            }
+            return state();
           }
-          return state();
-        }
-        let parsed, backupPath = "", rejectedPath = "";
-        try {
-          parsed = JSON.parse(text);
-          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.v !== 1 || !Array.isArray(parsed.records)) throw new Error("Reminder history has an unsupported or damaged structure.");
-          const { clean, rejected } = decodeHistoryRecords(parsed.records);
-          if (rejected.length) {
-            // Save both the original and every rejected raw record before replacing anything.
-            ({ backupPath, rejectedPath } = await preserveRejected(dir, file, String(text), rejected));
-            await io.writeUTF8(file, JSON.stringify({ v: 1, records: clean }), { tmpPath: file + ".tmp" });
+          let parsed, backupPath = "", rejectedPath = "";
+          try {
+            parsed = JSON.parse(text);
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.v !== 1 || !Array.isArray(parsed.records)) throw new Error("Reminder history has an unsupported or damaged structure.");
+            const { clean, rejected } = decodeHistoryRecords(parsed.records);
+            if (rejected.length) {
+              // Save both the original and every rejected raw record before replacing anything.
+              ({ backupPath, rejectedPath } = await preserveRejected(dir, file, String(text), rejected));
+              await io.writeUTF8(file, JSON.stringify({ v: 1, records: clean }), { tmpPath: file + ".tmp" });
+            }
+            if (unsaved.size) return state();
+            records.splice(0, records.length, ...clean); clearIndexes();
+            for (const record of records) indexRecord(record);
+            nextSeq = records.reduce((max, record) => Math.max(max, record.seq), 0) + 1;
+          } catch (error) {
+            if (!backupPath) { try { backupPath = await backupHistory(dir, text); } catch (backupError) { safeWarn(backupError); } }
+            protectedText = backupPath ? String(text) : null;
+            writeBlocked = true; storage = { state: "corrupt", error: String(error?.message || error), backupPath, rejectedPath }; safeWarn(error);
+            return state();
           }
-          records.splice(0, records.length, ...clean); clearIndexes();
-          for (const record of records) indexRecord(record);
-          nextSeq = records.reduce((max, record) => Math.max(max, record.seq), 0) + 1;
-        } catch (error) {
-          if (!backupPath) { try { backupPath = await backupHistory(dir, text); } catch (backupError) { safeWarn(backupError); } }
-          protectedText = backupPath ? String(text) : null;
-          writeBlocked = true; storage = { state: "corrupt", error: String(error?.message || error), backupPath, rejectedPath }; safeWarn(error);
+          dirty = false; writeBlocked = false; retryCount = 0; protectedText = null;
+          storage = { state: "ready", error: "", backupPath, rejectedPath };
+          if (rejectedPath) { try { onWrite(dir); } catch (error) { safeWarn(error); } emit({ kind: "recovery", count: records.length }); }
           return state();
-        }
-        dirty = false; writeBlocked = false; retryCount = 0; protectedText = null;
-        storage = { state: "ready", error: "", backupPath, rejectedPath };
-        if (rejectedPath) { try { onWrite(dir); } catch (error) { safeWarn(error); } emit({ kind: "recovery", count: records.length }); }
-        return state();
+        });
       },
       async startFresh() {
         const dir = getDir();
         if (!dir || !writeBlocked || storage.state !== "corrupt" || !storage.backupPath || protectedText === null) return false;
-        const file = io.join(dir, REMINDER_HISTORY_FILE);
-        try {
-          if (await io.readUTF8(file) !== protectedText) throw new Error("Reminder history changed since it was backed up; reopen before recovering.");
-          await io.writeUTF8(file, JSON.stringify({ v: 1, records }), { tmpPath: file + ".tmp" });
-          unsaved.clear(); dirty = false; writeBlocked = false; retryCount = 0; protectedText = null; chain = Promise.resolve();
-          storage = { ...storage, state: "ready", error: "" };
-          try { onWrite(dir); } catch (error) { safeWarn(error); }
-          emit({ kind: "recovery", count: 0 });
-          return true;
-        } catch (error) { storage = { ...storage, error: String(error?.message || error) }; safeWarn(error); return false; }
+        return queueHistory(dir, async () => {
+          if (!writeBlocked || storage.state !== "corrupt" || !storage.backupPath || protectedText === null) return false;
+          const file = io.join(dir, REMINDER_HISTORY_FILE);
+          try {
+            if (await io.readUTF8(file) !== protectedText) throw new Error("Reminder history changed since it was backed up; reopen before recovering.");
+            await io.writeUTF8(file, JSON.stringify({ v: 1, records }), { tmpPath: file + ".tmp" });
+            unsaved.clear(); dirty = false; writeBlocked = false; retryCount = 0; protectedText = null;
+            storage = { ...storage, state: "ready", error: "" };
+            try { onWrite(dir); } catch (error) { safeWarn(error); }
+            emit({ kind: "recovery", count: 0 });
+            return true;
+          } catch (error) { storage = { ...storage, error: String(error?.message || error) }; safeWarn(error); return false; }
+        });
       },
       storageState: state,
       on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
@@ -1488,55 +1516,59 @@
         if (!dir || writeBlocked) return 0;
         return mergeStored(dir);
       },
-      // Cross-window "alert exactly once per saved schedule": re-read the shared file, skip when ANY window already
-      // alerted this occurrence for this schedule, otherwise append and write immediately so the other window sees it.
-      // The remaining read-to-write gap is not locked across windows: simultaneous writes can still race.
+      // Check and persist while holding the same per-file lock as ordinary writes.
       async claimAlert(raw) {
-        if (writeBlocked) return null;
-        try { await this.refresh(); } catch (error) { safeWarn(error); }
-        if (raw.requirePending && ["done", "dismissed"].includes(this.stateFor(raw.itemId, raw.occurrenceId))) return null;
-        const requestedStage = ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "";
-        const duplicate = claimedStages.has(alertIndexKey(raw.itemId, raw.occurrenceId, requestedStage, raw.start));
-        if (duplicate) return null;
-        const record = this.append({ ...raw, action: raw.action === "skipped" ? "skipped" : "alerted" });
-        if (!record) return null;
-        const claim = records[records.length - 1];
-        try { await writeNow(); }
-        catch (error) {
-          // An older in-flight flush can already have included this claim.
-          // In that case it is durable even though the later write failed.
-          const saved = !unsaved.has(claim);
-          rollbackClaims(new Set([claim])); safeWarn(error); return saved ? record : null;
-        }
-        return record;
+        const dir = getDir();
+        if (writeBlocked || !dir) return null;
+        return queueHistory(dir, async () => {
+          if (writeBlocked) return null;
+          try { await mergeStored(dir); } catch (error) { safeWarn(error); }
+          if (raw.requirePending && ["done", "dismissed"].includes(this.stateFor(raw.itemId, raw.occurrenceId))) return null;
+          const requestedStage = ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "";
+          const duplicate = claimedStages.has(alertIndexKey(raw.itemId, raw.occurrenceId, requestedStage, raw.start));
+          if (duplicate) return null;
+          const record = this.append({ ...raw, action: raw.action === "skipped" ? "skipped" : "alerted" });
+          if (!record) return null;
+          const claim = records[records.length - 1];
+          if (timer !== null) { clearTimer(timer); timer = null; }
+          dirty = false;
+          try { await persistHistory(dir); }
+          catch (error) { rollbackClaims(new Set([claim])); safeWarn(error); return null; }
+          return record;
+        });
       },
       // Digest claims use one merge and one durable write for the whole batch.
       // Each group starts with its highest stage: if another window claimed it,
       // none of that group's lower stages may become a new visible digest entry.
       async claimAlertGroups(groups) {
-        if (writeBlocked || !Array.isArray(groups)) return [];
-        try { await this.refresh(); } catch (error) { safeWarn(error); }
-        if (writeBlocked) return [];
-        const claimed = [], claimRecords = new Set(), claimTops = new Map();
-        for (let index = 0; index < groups.length; index++) {
-          const group = groups[index], top = Array.isArray(group) && group[0];
-          if (!top || (top.requirePending && ["done", "dismissed"].includes(this.stateFor(top.itemId, top.occurrenceId)))) continue;
-          const already = (raw) => claimedStages.has(alertIndexKey(raw.itemId, raw.occurrenceId, ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "", raw.start));
-          if (already(top)) continue;
-          const record = this.append({ ...top, action: "alerted" });
-          if (!record) continue;
-          claimed.push(index); claimRecords.add(records[records.length - 1]); claimTops.set(index, records[records.length - 1]);
-          for (const raw of group.slice(1)) if (raw && !already(raw)) {
-            const lower = this.append({ ...raw, action: "alerted" });
-            if (lower) claimRecords.add(records[records.length - 1]);
+        const dir = getDir();
+        if (writeBlocked || !dir || !Array.isArray(groups)) return [];
+        return queueHistory(dir, async () => {
+          if (writeBlocked) return [];
+          try { await mergeStored(dir); } catch (error) { safeWarn(error); }
+          if (writeBlocked) return [];
+          const claimed = [], claimRecords = new Set();
+          for (let index = 0; index < groups.length; index++) {
+            const group = groups[index], top = Array.isArray(group) && group[0];
+            if (!top || (top.requirePending && ["done", "dismissed"].includes(this.stateFor(top.itemId, top.occurrenceId)))) continue;
+            const already = (raw) => claimedStages.has(alertIndexKey(raw.itemId, raw.occurrenceId, ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "", raw.start));
+            if (already(top)) continue;
+            const record = this.append({ ...top, action: "alerted" });
+            if (!record) continue;
+            claimed.push(index); claimRecords.add(records[records.length - 1]);
+            for (const raw of group.slice(1)) if (raw && !already(raw)) {
+              const lower = this.append({ ...raw, action: "alerted" });
+              if (lower) claimRecords.add(records[records.length - 1]);
+            }
           }
-        }
-        if (claimed.length) try { await writeNow(); }
-        catch (error) {
-          const saved = claimed.filter((index) => !unsaved.has(claimTops.get(index)));
-          rollbackClaims(claimRecords); safeWarn(error); return saved;
-        }
-        return claimed;
+          if (claimed.length) {
+            if (timer !== null) { clearTimer(timer); timer = null; }
+            dirty = false;
+            try { await persistHistory(dir); }
+            catch (error) { rollbackClaims(claimRecords); safeWarn(error); return []; }
+          }
+          return claimed;
+        });
       },
       list({ itemId = "", occurrenceId = "", noteId = "", limit = 0, offset = 0 } = {}) {
         const candidates = itemId && occurrenceId ? (byIdentity.get(identityIndexKey(itemId, occurrenceId)) || []) : records;
@@ -1555,9 +1587,9 @@
     };
   }
 
-  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null }) {
+  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock }) {
     const items = new Map();
-    const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite, perf });
+    const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite, perf, withHistoryLock });
     const categoryDefs = new Map();
     const hidden = new Set(); // noteIds whose items stay stored but are not shown (note in Trash, or its file is missing)
     const listeners = new Set();
@@ -3066,7 +3098,7 @@
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

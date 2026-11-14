@@ -35,7 +35,7 @@ Highlights are written as `==text==` (yellow) or `=={green}text==` (also `blue`,
 
 ### Reminder storage failures
 
-Calendar reminder banners and missed-reminder digests are not displayed when their history claim cannot be saved. Unsaved claims are rolled back without discarding other pending history, and the scheduler makes up to three 30-second retries. A damaged or unreadable history file remains protected and requires attention before alerts can be saved. Simultaneous claims from separate windows are not yet atomic, so duplicate alerts are still possible.
+Calendar reminder banners and missed-reminder digests are not displayed when their history claim cannot be saved. Unsaved claims are rolled back without discarding other pending history, and the scheduler makes up to three 30-second retries. A damaged or unreadable history file remains protected and requires attention before alerts can be saved. Notes windows in the same browser process coordinate history writes and claims through a shared process registry when the browser exposes its hidden window; external programs and environments without that registry do not participate. Live Zen validation is still needed.
 
 ### Daily Note calendar categories
 

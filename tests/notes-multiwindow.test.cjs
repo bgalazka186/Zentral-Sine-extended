@@ -69,7 +69,7 @@ test("stale windows preserve independent calendar edits", { todo: "UI4.7: calend
   assert.equal(result.get("a").summary, "A edited");
   assert.equal(result.get("b").summary, "B edited");
 });
-test("simultaneous windows claim a reminder stage only once", { todo: "UI4.7: claim read/write is not atomic across windows" }, async () => {
+test("simultaneous stores sharing a coordinator claim a reminder stage only once", async () => {
   const io = sharedIO(), now = 1700000000000;
   const options = { io, getDir: () => "/notes", now: () => now, setTimer: () => 1, clearTimer() {} };
   const a = C.createReminderHistoryStore(options), b = C.createReminderHistoryStore(options); await a.open(); await b.open();
@@ -79,7 +79,7 @@ test("simultaneous windows claim a reminder stage only once", { todo: "UI4.7: cl
 });
 test("Done versus a stale edit notifies the losing window", { todo: "UI4.7: dirty note writes do not report lost concurrent edits" }, async () => {
   const files = new Map(), a = await host(files, "done-a");
-  const start = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
+  const start = C.localDateKey(C.addDays(C.dayStart(Date.now()), 2));
   const note = a.seam.store.create(`# Concurrent\n\n## Agenda\n%%calendar%%\n- [ ] ${start} 09:00 Original %%zn-item-id:conflict1%%\n`);
   a.seam.store.stabilizeItems(note.id); await a.seam.store.flush();
   const b = await host(files, "edit-b"), eventsA = [], eventsB = []; let reopened;

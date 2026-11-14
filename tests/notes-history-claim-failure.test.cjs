@@ -38,8 +38,8 @@ function fixture() {
     assert.equal(f.history.storageState().dirty, true);
   }
   {
-    // An older in-flight flush can include the new claim before the claim's
-    // own queued write fails; a durably saved claim must still be displayed.
+    // A claim waits for an earlier flush, so it cannot be accidentally
+    // included in the older snapshot before its own transaction runs.
     const f = fixture(); await f.history.open();
     f.history.append({ id: "prior", itemId: "other", action: "done", at: now });
     const originalRead = f.io.readUTF8, originalWrite = f.io.writeUTF8;
@@ -49,9 +49,10 @@ function fixture() {
     f.io.writeUTF8 = async (...args) => { if (++writes === 2) throw Error("disk full"); return originalWrite(...args); };
     const earlier = f.history.flush(); await reading;
     const claiming = f.history.claimAlert(entry); await new Promise(resolve => setImmediate(resolve));
-    assert.equal(f.history.list({ itemId: "i" }).length, 1, "claim was added while the earlier flush waits");
-    release(); await earlier; assert.ok(await claiming, "already durable claim is announced even if its redundant queued write fails");
-    assert.ok(JSON.parse(f.files.get("/notes/reminder-history.json")).records.some(r => r.itemId === "i"));
+    assert.equal(f.history.list({ itemId: "i" }).length, 0, "claim waits until the earlier flush completes");
+    release(); await earlier; assert.equal(await claiming, null, "failed claim is not displayed");
+    assert.ok(!JSON.parse(f.files.get("/notes/reminder-history.json")).records.some(r => r.itemId === "i"));
+    assert.ok(await f.history.claimAlert(entry), "the stage can be retried after the failure");
   }
   {
     const f = fixture(); await f.history.open();
@@ -64,8 +65,9 @@ function fixture() {
     const earlier = f.history.flush(); await reading;
     const claiming = f.history.claimAlertGroups([[entry, { ...entry, stage: "pre" }]]);
     await new Promise(resolve => setImmediate(resolve)); release(); await earlier;
-    assert.deepEqual(await claiming, [0], "digest group already captured by an earlier successful flush is still shown");
-    assert.equal(JSON.parse(f.files.get("/notes/reminder-history.json")).records.filter(r => r.itemId === "i").length, 2);
+    assert.deepEqual(await claiming, [], "failed digest transaction is not shown");
+    assert.equal(JSON.parse(f.files.get("/notes/reminder-history.json")).records.filter(r => r.itemId === "i").length, 0);
+    assert.deepEqual(await f.history.claimAlertGroups([[entry, { ...entry, stage: "pre" }]]), [0]);
   }
   {
     const f = fixture(); await f.history.open();

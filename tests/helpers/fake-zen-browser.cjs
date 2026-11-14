@@ -6,7 +6,7 @@ const fs = require("node:fs"), path = require("node:path"), vm = require("node:v
 const Calendar = require("../../additional/notes/calendar/ZentralNotesCalendar.js");
 const source = fs.readFileSync(path.join(__dirname, "../../additional/notes/ZentralNotes.uc.js"), "utf8");
 
-function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyFolders = false } = {}) {
+function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyFolders = false, calendar = Calendar, hiddenDOMWindow = null } = {}) {
   const dom = require("./fake-dom.cjs")(), { El, Ev, document } = dom;
   document.querySelector = (selector) => document.querySelectorAll(selector)[0] || null;
   document.createXULElement = (tag) => document.createElement(tag);
@@ -40,7 +40,7 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     return event;
   };
   const win = {
-    document, __zentralNotesParts: { "notes-calendar": Calendar }, __zentralNotesTestSeam: {},
+    document, __zentralNotesParts: { "notes-calendar": calendar }, __zentralNotesTestSeam: {},
     ZentralRuntime: { register(value) { definition = value; } },
     gZenWorkspaces: {
       activeWorkspace: sidebar.ws.id,
@@ -92,7 +92,7 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     removeObserver(observer, topic) { observers.get(topic)?.delete(observer); },
     notifyObservers(subject, topic, data) { for (const observer of [...(observers.get(topic) || [])]) observer.observe(subject, topic, data); },
   };
-  const Services = { prefs: prefApi, obs, sound: { beep() {} }, scriptSecurityManager: { getSystemPrincipal: () => ({}) }, wm: { getEnumerator: () => [] } };
+  const Services = { prefs: prefApi, obs, sound: { beep() {} }, scriptSecurityManager: { getSystemPrincipal: () => ({}) }, wm: { getEnumerator: () => [] }, ...(hiddenDOMWindow ? { appShell: { hiddenDOMWindow } } : {}) };
   const IOUtils = {
     makeDirectory: async () => {}, setPermissions: async () => {}, exists: async (p) => files.has(p),
     readUTF8: async (p) => { if (!files.has(p)) { const e = new Error("not found"); e.code = "ENOENT"; throw e; } return files.get(p); },

@@ -5366,7 +5366,7 @@
               if (destroyed) return;
               const identity = item.__historyIdentity;
               const history = store.items?.history;
-              const entry = { itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: item.summary, start: item.__scheduledStart, stage: item.__stage, at: nowAt, action: item.__skipped ? "skipped" : "alerted", coalesced: item.__coalesced };
+              const entry = { itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: item.summary, start: item.__scheduledStart, stage: item.__stage, at: nowAt, action: item.__skipped ? "skipped" : "alerted", coalesced: item.__coalesced, requirePending: true };
               // claimAlert re-reads the shared history first so a second window does not show the same banner.
               let record = null;
               try { record = history?.claimAlert ? await history.claimAlert(entry) : history?.append?.(entry); } catch (_) { record = null; }
@@ -5719,10 +5719,30 @@
     // ======================================================================
     // Store: notes as files, atomic writes, cross-window sync
     // ======================================================================
+    function sharedReminderHistoryCoordinator() {
+      if (!CALENDAR_PART?.createHistoryCoordinator) return undefined;
+      try {
+        // The hidden DOM window outlives ordinary browser windows and is
+        // shared by their independently loaded Notes modules. Its Map contains
+        // only in-flight gates, not a permanent reference to any Notes window.
+        const hidden = Services.appShell?.hiddenDOMWindow;
+        const shared = hidden?.wrappedJSObject || hidden;
+        if (!shared || typeof shared.Map !== "function") return undefined;
+        const key = "__zentralNotesHistoryLocksV1";
+        let registry = shared[key];
+        if (!registry) {
+          registry = new shared.Map();
+          Object.defineProperty(shared, key, { value: registry, configurable: true });
+        }
+        if (typeof registry.get !== "function" || typeof registry.set !== "function" || typeof registry.delete !== "function") return undefined;
+        return CALENDAR_PART.createHistoryCoordinator(registry);
+      } catch (_) { return undefined; }
+    }
     function createStore({
       io,
       notify,
       windowId,
+      withHistoryLock = sharedReminderHistoryCoordinator(),
       now = () => Date.now(),
       getDir,
       getMaxSaveMs,
@@ -5756,7 +5776,7 @@
       // refresh ignore it). Items written as marked lists inside a note are rebuilt from the note text; a note in Trash or
       // with a missing file only HIDES its items (restoring it brings dragged times and calendar notes back); a note that is
       // deleted for good removes them. Every call is guarded: the calendar must never break saving a note.
-      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); } }) : null;
+      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, withHistoryLock, onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); } }) : null;
       function syncItems(id, stabilize = false, sourceEdit = false) {
         if (!items) return;
         try {
