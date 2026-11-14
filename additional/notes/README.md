@@ -167,3 +167,5 @@ Tests: `node tests/notes.test.cjs` (store, autosave, sync, recovery), `node test
 ### Agenda sidebar full titles
 
 Hover or keyboard-focus an Agenda reminder or event to see its complete title in a tooltip beside the sidebar. Move the pointer onto the tooltip to keep it open; Escape dismisses it. The tooltip is scoped to Agenda items and adapts to either sidebar edge. On browsers without top-layer popovers it falls back to a positioned card; the native tooltip also contains the complete title.
+
+Agenda sidebar items and day folders are managed projections: dragging them or dropping content into Agenda is disabled. If restored user tabs or folders appear inside Agenda, Notes attempts to move them out intact into the pinned area. A failed move leaves the original content in place for a later retry.

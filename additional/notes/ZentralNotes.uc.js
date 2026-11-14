@@ -19499,14 +19499,20 @@
         agendaPlaceRoot(root, position);
         return true;
       }
-      const agendaOwnTab = (tab) => !!tab?.hasAttribute?.(AGENDA_ATTR) || /^about:blank#zn-agenda-/.test(tab?.linkedBrowser?.currentURI?.spec || tab?._zentralNotesUrl || "");
-      function agendaRetireFolder(folder) {
-        if (!folder) return;
-        const host = folder.parentElement;
-        const ownedDay = (child) => child.hasAttribute?.("bgalazka-notes-agenda-day") || child.id?.startsWith("zentral-notes-agenda-day-");
-        // Move foreign top-level subtrees and tabs out first. In particular, closing
-        // our last tab must not let Zen auto-delete an otherwise empty user folder.
-        const foreignFolders = [...(folder.querySelectorAll?.("zen-folder") || [])].filter((child) => !ownedDay(child));
+      const agendaOwnTab = (tab) => {
+        if (tab?.hasAttribute?.(AGENDA_ATTR)) return true;
+        try { return /^about:blank#zn-agenda-/.test(tab?._zentralNotesUrl || tab?.linkedBrowser?.currentURI?.spec || ""); } catch (_) { return false; }
+      };
+      const agendaOwnedDay = (child) => child.hasAttribute?.("bgalazka-notes-agenda-day") || child.id?.startsWith("zentral-notes-agenda-day-");
+      // Move only the outermost foreign subtrees/tabs, preserving their nested
+      // data. Evacuate to the pinned section outside the entire Agenda root,
+      // not merely from a day into that root. Failed moves leave content intact.
+      function agendaEvacuateForeign(folder) {
+        if (!folder) return false;
+        const root = (folder.id === AGENDA_ROOT_ID || folder.getAttribute?.("bgalazka-notes-agenda-folder") === "true") ? folder :
+          folder.closest?.('zen-folder[bgalazka-notes-agenda-folder="true"]') || folder;
+        const host = root.parentElement;
+        const foreignFolders = [...(folder.querySelectorAll?.("zen-folder") || [])].filter((child) => !agendaOwnedDay(child));
         const foreignSet = new Set(foreignFolders);
         const insideForeign = (node) => {
           for (let p = node.parentElement; p && p !== folder; p = p.parentElement) if (foreignSet.has(p)) return true;
@@ -19516,12 +19522,22 @@
           ...[...(folder.querySelectorAll?.("tab") || [])].filter((tab) => !agendaOwnTab(tab) && !insideForeign(tab))];
         for (const child of preserve) {
           if (!host || !folder.contains?.(child)) continue;
-          try { host.insertBefore(child, folder); if (!folder.contains?.(child)) agendaMutationCount++; } catch (error) { warn(error); }
+          try {
+            // Prefer Zen/Firefox's ungrouping move so their tab-group state
+            // follows the DOM. Older hosts without that API use the existing
+            // conservative DOM fallback; never close user content on failure.
+            if (typeof window.gBrowser?.moveTabTo === "function" && Number.isFinite(root.elementIndex))
+              window.gBrowser.moveTabTo(child, { elementIndex: root.elementIndex, forceUngrouped: true });
+            else host.insertBefore(child, root);
+            if (!folder.contains?.(child) && !root.contains?.(child)) agendaMutationCount++;
+          } catch (error) { warn(error); }
         }
-        // If moving anything failed, release rather than destroy the remaining user content.
-        const userTabs = [...(folder.querySelectorAll?.("tab") || [])].some((tab) => !agendaOwnTab(tab));
-        const userFolders = [...(folder.querySelectorAll?.("zen-folder") || [])].some((child) => !ownedDay(child));
-        if (userTabs || userFolders) return false;
+        return ![...(folder.querySelectorAll?.("tab") || [])].some((tab) => !agendaOwnTab(tab)) &&
+          ![...(folder.querySelectorAll?.("zen-folder") || [])].some((child) => !agendaOwnedDay(child));
+      }
+      function agendaRetireFolder(folder) {
+        if (!folder) return;
+        if (!agendaEvacuateForeign(folder)) return false;
         for (const tab of [...(folder.querySelectorAll?.("tab") || [])]) if (agendaOwnTab(tab)) zenRemoveTab(tab);
         if (folder.isConnected === false) return true;
         try { folder.delete?.(); } catch (error) { warn(error); }
@@ -19637,6 +19653,9 @@
         ensureRoot: agendaEnsureRoot,
         list() {
           const root = agendaRootEl(); if (!root) return [];
+          const beforeEvacuation = agendaMutationCount;
+          agendaEvacuateForeign(root);
+          if (agendaMutationCount !== beforeEvacuation && root.isConnected !== false) agendaPlaceRoot(root, agendaPosition());
           const out = [];
           const otherRoots = [...(document.querySelectorAll?.("zen-folder") || [])].filter((folder) => folder !== root && (folder.id === AGENDA_ROOT_ID || folder.getAttribute?.("bgalazka-notes-agenda-folder") === "true"));
           for (const tab of document.querySelectorAll?.("tab") || []) {
@@ -19925,6 +19944,7 @@
         window[act]("popupshowing", agendaTitleCard.popup, true);
         window[act]("resize", agendaTitleCard.position, true);
         for (const type of ["mousedown", "mousemove", "mouseup", "click", "auxclick", "dragstart", "dragend", "blur"]) window[act](type, onAgendaMouse, true);
+        for (const type of ["dragstart", "dragover", "drop"]) window[act](type, onAgendaDrag, true);
         window[act]("TabSelect", onAgendaSelect, true);
         window[act]("popupshowing", onAgendaFolderMenuShowing, true);
         window[act]("popupshowing", onAgendaTabMenuShowing, true);
@@ -19937,7 +19957,7 @@
           document.documentElement.removeAttribute("zentral-agenda-ctx");
           document.querySelectorAll?.("[zentral-agenda-folder-own],[zentral-agenda-own]").forEach((item) => item.remove());
         }
-        for (const ty of ["TabClose", "TabUnpinned", "TabPinned", "TabMove", "SSTabRestored"]) window[act](ty, onAgendaTabEvent, true);
+        for (const ty of ["TabClose", "TabUnpinned", "TabPinned", "TabMove", "SSTabRestored", "FolderGrouped", "FolderUngrouped"]) window[act](ty, onAgendaTabEvent, true);
       }
       onCleanup(() => bindAgenda(false));
       function agendaTabKey(tab) {
@@ -20000,6 +20020,21 @@
         ev.preventDefault(); ev.stopImmediatePropagation();
         if (!press.moved && Math.hypot(ev.clientX - press.x, ev.clientY - press.y) <= 4 && tab.isConnected !== false) activateAgendaTab(tab);
       }
+      function onAgendaDrag(ev) {
+        if (disposed || !agendaEnabled()) return;
+        const root = agendaRootEl(); if (!root) return;
+        const target = ev.target, targetManaged = !!target && root.contains?.(target);
+        let sourceManaged = false, selectedManaged = false;
+        if (ev.type === "dragstart") {
+          const tab = target?.closest?.("tab");
+          const folder = !tab && target?.closest?.("zen-folder");
+          sourceManaged = !!(tab && root.contains?.(tab) && agendaOwnTab(tab)) || !!(folder && (folder === root || (root.contains?.(folder) && agendaOwnedDay(folder))));
+          if (tab?.multiselected) selectedManaged = [...(window.gBrowser?.selectedTabs || [])].some((selected) => root.contains?.(selected) && agendaOwnTab(selected));
+        }
+        if (!CALENDAR_PART.blockAgendaDrag({ phase: ev.type, sourceManaged, selectedManaged, targetManaged })) return;
+        if (ev.type !== "dragstart") try { if (ev.dataTransfer) ev.dataTransfer.dropEffect = "none"; } catch (_) {}
+        ev.preventDefault(); ev.stopImmediatePropagation();
+      }
       function onAgendaKey(ev) {
         if (disposed || !agendaEnabled() || ev.ctrlKey || ev.shiftKey || ev.altKey || ev.metaKey || (ev.key !== "Enter" && ev.key !== " ")) return;
         let tab = null; try { tab = ev.target?.closest?.("tab[" + AGENDA_ATTR + "]"); } catch (_) {}
@@ -20057,7 +20092,8 @@
         if (ev.type === "TabClose") agendaTitleCard.removed(ev.target);
         if (disposed || !agendaEnabled() || agendaController.busy) return;
         const tab = ev.target;
-        if (agendaTabKey(tab) || (ev.type === "SSTabRestored" && /#zn-agenda-/.test(tab?._zentralNotesUrl || tab?.linkedBrowser?.currentURI?.spec || ""))) agendaController.schedule(400);
+        const movedIntoAgenda = ["TabMove", "FolderGrouped", "FolderUngrouped"].includes(ev.type) && agendaRootEl()?.contains?.(tab);
+        if (movedIntoAgenda || agendaTabKey(tab) || (ev.type === "SSTabRestored" && /#zn-agenda-/.test(tab?._zentralNotesUrl || tab?.linkedBrowser?.currentURI?.spec || ""))) agendaController.schedule(400);
       }
 
       // A narrow, versioned bridge lets Colorful Folders edit Notes-owned Zen

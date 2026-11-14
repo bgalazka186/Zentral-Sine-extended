@@ -117,7 +117,7 @@ test("root and day seeds are removed, or safely recreated and preserved on auto-
       tab.folder = folder;
       return folder;
     } } };
-    const context = { window, document: { getElementById: () => null, querySelectorAll: () => tabs.filter(t => !t.removed) }, AGENDA_ROOT_ID: "agenda-root", AGENDA_ATTR: "agenda", agendaRootEl: () => root, agendaDayEl: () => day, agendaNewTab, zenRemoveTab, agendaPlaceRoot() {}, zenPlace: () => true, zenNest: () => true, agendaRetireFolder() {}, warn() {} };
+    const context = { window, document: { getElementById: () => null, querySelectorAll: () => tabs.filter(t => !t.removed) }, AGENDA_ROOT_ID: "agenda-root", AGENDA_ATTR: "agenda", agendaRootEl: () => root, agendaDayEl: () => day, agendaNewTab, zenRemoveTab, agendaMutationCount: 0, agendaPosition: () => "above", agendaPlaceRoot() {}, zenPlace: () => true, zenNest: () => true, agendaRetireFolder() {}, warn() {} };
     vm.createContext(context);
     vm.runInContext(code + "\nthis.ensureRoot = agendaEnsureRoot; this.makeDay = agendaMakeDay; this.list = () => agendaApi.list();", context);
     assert.equal(context.ensureRoot("above"), true);

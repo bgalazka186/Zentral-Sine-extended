@@ -622,3 +622,19 @@ All TabSelect events bounce without opening; explicit unmodified Enter or Space 
 **Tests / done when:** Harness with two workspaces and a discarded tab.
 
 Agenda TabSelect prefers a valid prior tab, then the last focused valid content tab for this space, then another loaded local content tab. It rejects pseudo-tabs, Essentials, empty, hidden, pending, discarded, closing, detached, unknown-workspace and other-workspace tabs; no proven safe candidate means no forced selection. Deferred callbacks revalidate active space and tab state and are canceled on disable/destroy. Zen upstream uses `zen-workspace-id` as its tab membership field; a containing workspace/section is a fallback when the tab has no ID. Fake Zen covers two spaces, invalidated and unloaded targets, absent candidates, race with workspace and selection changes, and unknown ownership. Live Zen switching remains unverified.
+
+## UI4.4 — Completed Agenda drag and foreign-content safety (3.3.143)
+
+#### `UI4.4` — Guard dragging into and out of the Agenda folder; report the real DOM parent
+**Status:** `DONE` · **Impact:** High · **Effort:** M · **Depends on:** H1.1, F0.1 · **Source:** Audit R1 B4
+
+**Problem:** `agendaApi.list()` reports an item's parent from the `bgalazka-notes-agenda-day` attribute, not from where the tab really is. A dragged Agenda tab leaves the root and is deleted and recreated (flicker). A user tab dropped into a day folder makes `agendaRetireFolder` 'release' the folder, which then keeps a stale label such as 'Today'.
+
+**Plan (do in this order):**
+1. Capture `dragover`/`drop` on the Agenda root and day folders: reject drops of foreign tabs/folders; reject drags of Agenda tabs out of the root (or turn the drag into a no-op).
+2. If a foreign item is already inside (restored session), move it out to the pinned root instead of releasing the folder.
+3. Safeguard: never touch tabs/folders that are not ours (same rule as `T3.4`).
+
+**Tests / done when:** Harness: foreign tab dropped in; Agenda tab dragged out; both end with unchanged user content.
+
+Managed tab/folder drags are canceled, including mixed multiselections, and dragover/drop on Agenda is rejected without intercepting unrelated drags. Reconciliation evacuates foreign top-level tabs and folder subtrees to the pinned area outside the root, including when a managed day is retired. It prefers Zen/Firefox `moveTabTo` with forceUngrouped when available and verifies the result; older hosts use the existing DOM fallback. Failed moves leave foreign content and its containing folder intact and retry later; foreign moves into the root schedule repair. Fake Zen tests cover source/destination guards, mixed selections, native/fallback movement, nested data, failure, retry, idempotence and disable. Host `agendaApi.list` 50/150 before 9.0/69.4 ms and after 9.9/70.8 ms (timings vary). Actual Zen DnD/event order, native folder moves and fallback session synchronization remain unverified.
