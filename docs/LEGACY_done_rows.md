@@ -518,3 +518,20 @@ Calendar day and item context menus use pointer coordinates for pointer invocati
 **Note (2026-11-14):** the rule 'left-click on a Month day opens Day view' is REVERSED by `OW-06`. Implement `OW-06` instead of that part.
 
 The listed implementation and automated coverage existed before this archival; the sole remaining live-only verification is assumed to work under the standing owner rule, not actually verified here. OW-06 explicitly reverses the old Month click rule and remains next.
+
+## OW-06 — Completed Month day selection (3.3.136)
+
+#### `OW-06` — [bug] Month view: a click should select the day, not jump to Day view
+**Status:** `DONE` · **Impact:** High · **Effort:** S-M · **Depends on:** T2.4d (rule change) · **Source:** Owner 2026-11-14 (reverses the 2026-11-11 rule)
+
+**Problem:** Owner: in the normal full Month view a click on a day always switches to Day view; going back to Month shows the right day selected. He wants the click to select the day and show its items (as before), without leaving Month. This reverses the Track 2 rule 'left-clicking a day in Month switches to Day view' (also `T2.4d`, `B3.3.32-8` 'Month date badge opens Day view').
+
+**Plan (do in this order):**
+1. Single click / Enter on a day cell: select it and show its complete list (existing selected-day list + all-day strip) in Month.
+2. Switching to Day view stays available through: the date badge/number click, double-click, context menu 'Open Day view', keyboard Shift+Enter, and the Agenda day folder action.
+3. Update the track rule text and the `notes-calendar-views` and `notes-p4-ui` expectations; keep stored selected day semantics.
+4. Small-calendar picker mode (`OW-09`) uses the same select-only behaviour.
+
+**Tests / done when:** Month click does not change `store.meta.calendarView`; selection persists; Day opens only through the listed actions.
+
+Month cell click, Enter and Space select and persist the local day and update the complete selected-day list and all-day strip without replacing the cell, so double-click remains possible. Date badge, double-click, Shift+Enter, context menu and Agenda day actions retain Day navigation. Grid selection exposes aria-selected. Tests cover persisted selection, item lists, double-click, keyboard and date badge. OW-09 picker mode remains future work and must preserve this behavior; live Zen interaction is unverified.

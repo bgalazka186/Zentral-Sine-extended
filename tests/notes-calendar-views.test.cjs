@@ -151,13 +151,21 @@ const chooseMenu = async (root, triggerSelector, label) => {
     assert.ok(Math.max(...widths) < 90);
   } finally { cal.expandRange = expandOriginal; }
   store.items.remove(bg.id); store.items.remove(far.id); store.items.remove(spanning.id);
+  store.items.upsert({ id: "select-day-timed", summary: "Selection timed", start: { dateTime: new Date(cal.addDays(day, 1) + 11 * 3600000).toISOString() }, x: { kind: "reminder", src: "manual" } });
+  store.items.upsert({ id: "select-day-all", summary: "Selection all day", start: { date: tomorrowYmd }, x: { kind: "reminder", src: "manual" } });
   await chooseMenu(root, ".zn-calendar-view-select", "Month");
 
   let monthCell = root.querySelectorAll(".zn-cal-month-cell").find((cell) => cell.getAttribute("data-day") === tomorrowYmd);
   assert.ok(monthCell, "tomorrow is in the month grid");
   monthCell.dispatchEvent(new Ev("click", { bubbles: true }));
-  assert.equal(store.meta.calendarView, "day", "clicking the day cell, not only its number, opens Day view");
+  assert.equal(store.meta.calendarView, "month", "clicking a day selects it without leaving Month");
   assert.equal(store.meta.calendarCursor, tomorrowYmd);
+  assert.ok(monthCell.classList.contains("is-selected")); assert.equal(monthCell.getAttribute("aria-selected"), "true");
+  const selectedList = q(root, ".zn-cal-day-group.is-selected"); assert.ok(selectedList, "the selected-day item list is visible");
+  assert.ok(selectedList.textContent.includes("Selection timed")); assert.ok(selectedList.querySelector(".zn-cal-all-day-strip").textContent.includes("Selection all day"));
+  await store.flush(); assert.equal(JSON.parse(files.get("/views/meta.json").text).calendarCursor, tomorrowYmd, "selection persists on disk");
+  monthCell.dispatchEvent(new Ev("dblclick", { bubbles: true }));
+  assert.equal(store.meta.calendarView, "day", "double-click opens Day even after the first click");
   await chooseMenu(root, ".zn-calendar-view-select", "Month");
   monthCell = root.querySelectorAll(".zn-cal-month-cell").find((cell) => cell.getAttribute("data-day") === ymd);
   assert.equal(monthCell.getAttribute("tabindex"), "0", "a day cell supports keyboard navigation");
@@ -168,8 +176,16 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.ok(root.querySelectorAll(".zn-menu-item").some((item) => item.textContent.includes("New event")), "keyboard day context menu exposes creation actions");
   monthCell.dispatchEvent(new Ev("keydown", { key: "Escape", bubbles: true }));
   assert.equal(store.list().length, countBeforeCancel); assert.equal(store.items.list().length, itemsBeforeCancel, "cancelled day menus do not create notes or items");
+  monthCell.dispatchEvent(new Ev("keydown", { key: " ", bubbles: true }));
+  assert.equal(store.meta.calendarView, "month"); assert.equal(store.meta.calendarCursor, ymd);
   monthCell.dispatchEvent(new Ev("keydown", { key: "Enter", bubbles: true }));
-  assert.equal(store.meta.calendarView, "day"); assert.equal(store.meta.calendarCursor, ymd);
+  assert.equal(store.meta.calendarView, "month"); assert.equal(store.meta.calendarCursor, ymd);
+  monthCell.dispatchEvent(new Ev("keydown", { key: "Enter", shiftKey: true, bubbles: true }));
+  assert.equal(store.meta.calendarView, "day", "Shift+Enter opens Day");
+  await chooseMenu(root, ".zn-calendar-view-select", "Month");
+  monthCell = root.querySelectorAll(".zn-cal-month-cell").find((cell) => cell.getAttribute("data-day") === ymd);
+  monthCell.querySelector(".zn-cal-month-date").click();
+  assert.equal(store.meta.calendarView, "day", "date badge still opens Day");
   await chooseMenu(root, ".zn-calendar-view-select", "Month");
 
   assert.equal(content.dataset.density, "comfortable");

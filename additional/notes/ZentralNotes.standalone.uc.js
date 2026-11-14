@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.135
+// @version 3.3.136
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.135, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.136, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.135";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.136";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -16344,10 +16344,23 @@ __zentralShim.register = function (def) {
         const cells = h("div", { class: "zn-cal-month-grid", role: "grid", "aria-label": date.toLocaleDateString(undefined, { month: "long", year: "numeric" }) });
         const selected = CALENDAR_PART.parseYmd(store.meta.calendarCursor) ? CALENDAR_PART.parseYmd(store.meta.calendarCursor).getTime() : calendarTodayDay();
         const today = calendarTodayDay();
+        const selection = h("div", { class: "zn-cal-month-selection" });
+        const selectDay = (day) => {
+          const key = CALENDAR_PART.localDateKey(day);
+          store.setMeta({ calendarCursor: key });
+          for (const c of cells.querySelectorAll(".zn-cal-month-cell")) {
+            const active = c.getAttribute("data-day") === key;
+            c.classList.toggle("is-selected", active);
+            c.setAttribute("aria-selected", active ? "true" : "false");
+            c.querySelector(".zn-cal-month-date")?.setAttribute("aria-pressed", active ? "true" : "false");
+          }
+          const entries = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.addDays(day, 1));
+          selection.replaceChildren(calendarDayGroup(day, entries, { selected: true }));
+        };
         for (const week of grid) for (const day of week) {
           const inMonth = new Date(day).getMonth() === month;
           const dayItems = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.addDays(day, 1));
-          const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", tabindex: "0", "aria-label": "Calendar day " + calendarDayLabel(day, { year: true }), "data-day": CALENDAR_PART.ymd(new Date(day)) });
+          const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", tabindex: "0", "aria-selected": day === selected ? "true" : "false", "aria-label": "Calendar day " + calendarDayLabel(day, { year: true }), "data-day": CALENDAR_PART.ymd(new Date(day)) });
           const openDayView = () => { store.setMeta({ calendarCursor: CALENDAR_PART.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); };
           const dayButton = h("button", { type: "button", class: "zn-cal-month-date", "aria-label": "Open Day view for " + calendarDayLabel(day, { year: true }), "aria-pressed": day === selected ? "true" : "false" }, String(new Date(day).getDate()));
           dayButton.addEventListener("click", (event) => { event.stopPropagation(); openDayView(); });
@@ -16372,17 +16385,22 @@ __zentralShim.register = function (def) {
           if (dayItems.length > 2) mini.append(h("span", { class: "zn-cal-month-more" }, `+${dayItems.length - 2} more`));
           if (allDay.length) cell.append(h("span", { class: "zn-cal-month-allday", "aria-label": `${allDay.length} all-day item${allDay.length === 1 ? "" : "s"}` }, "All day"));
           if (timed.some((item) => CALENDAR_PART.isReminder(item))) cell.append(h("span", { class: "zn-cal-month-reminder-dot", "aria-label": "Reminder" }, "●"));
-          cell.addEventListener("click", (event) => { if (!event.target?.closest?.("button, a, input, select, textarea")) openDayView(); });
+          cell.addEventListener("click", (event) => { if (!event.target?.closest?.("button, a, input, select, textarea")) selectDay(day); });
+          cell.addEventListener("dblclick", (event) => { if (!event.target?.closest?.("button, a, input, select, textarea")) openDayView(); });
           bindCalendarDayContext(cell, day);
           cell.addEventListener("keydown", (event) => {
-            if (event.target === cell && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); event.stopPropagation(); openDayView(); }
+            if (event.target === cell && (event.key === "Enter" || event.key === " ")) {
+              event.preventDefault(); event.stopPropagation();
+              if (event.key === "Enter" && event.shiftKey) openDayView(); else selectDay(day);
+            }
           });
           cell.append(mini); cells.append(cell);
         }
         monthWrap.append(dows, cells);
         calendarContent.append(monthWrap);
         const selectedItems = CALENDAR_PART.itemsInRange(expanded, selected, CALENDAR_PART.addDays(selected, 1));
-        calendarContent.append(calendarDayGroup(selected, selectedItems, { selected: true }));
+        selection.append(calendarDayGroup(selected, selectedItems, { selected: true }));
+        calendarContent.append(selection);
       }
       function calendarUpcomingView(items, cursor, days) {
         const end = CALENDAR_PART.addDays(cursor, days);

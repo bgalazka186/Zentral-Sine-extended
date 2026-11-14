@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Tab Unload
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.135
+// @version 3.3.136
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.135, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.136, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.135";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.136";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
