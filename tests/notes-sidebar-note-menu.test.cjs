@@ -40,7 +40,7 @@ const settle = async (turns = 8) => { for (let i = 0; i < turns; i++) await new 
   assert.ok(store.get(plain.id).trashed, "a note without reminders moves to Trash");
   assert.equal(sheetOpen(), false, "Notes stays closed: there was nothing to ask");
   h.fireTimer(250);
-  assert.equal(entryOf(plain), undefined, "its sidebar entry is removed");
+  assert.ok(!entryOf(plain), "its sidebar entry is removed");
   assert.ok(entryOf(linked) && entryOf(shown) && entryOf(kept), "the other entries stay");
 
   // A note with reminders: the same question as in the Notes list, and nothing happens until it is answered.
@@ -52,7 +52,7 @@ const settle = async (turns = 8) => { for (let i = 0; i < turns; i++) await new 
   assert.ok(!store.get(linked.id).trashed, "the note is not moved before the answer");
   card.querySelectorAll("button").find((button) => button.textContent.trim() === "Cancel").click(); await settle();
   assert.ok(!store.get(linked.id).trashed, "Cancel keeps the note");
-  assert.equal(sheet().querySelector(".zn-dialog-card"), null);
+  assert.ok(!sheet().querySelector(".zn-dialog-card"), "the question is closed");
   await choose(linked, "trash");
   card = sheet().querySelector(".zn-dialog-card");
   card.querySelectorAll("button").find((button) => button.textContent.trim() === "Move to Trash").click(); await settle();
@@ -66,7 +66,7 @@ const settle = async (turns = 8) => { for (let i = 0; i < turns; i++) await new 
   await choose(shown, "trash");
   assert.ok(store.get(shown.id).trashed);
   assert.equal(editorText(), "Kept note", "the sheet moves on to a note that still exists");
-  assert.equal(sheet().querySelector(".zn-dialog-card"), null, "no question for a note without reminders");
+  assert.ok(!sheet().querySelector(".zn-dialog-card"), "no question for a note without reminders");
 
   // A dialog that is open in the sheet survives an unrelated sidebar command.
   const second = store.create("Second plain note"); h.seam.zen.runNow();
@@ -83,7 +83,7 @@ const settle = async (turns = 8) => { for (let i = 0; i < turns; i++) await new 
   sheet().querySelector(".zn-dialog-card").querySelectorAll("button").find((button) => button.textContent.trim() === "Move to Trash").click(); await settle();
   assert.ok(store.get(kept.id).trashed);
   stale.dispatchEvent(new h.Ev("command", { bubbles: true })); await settle();
-  assert.equal(sheet().querySelector(".zn-dialog-card"), null, "a second command for a trashed note asks nothing");
+  assert.ok(!sheet().querySelector(".zn-dialog-card"), "a second command for a trashed note asks nothing");
 
   await h.destroy();
   console.log("sidebar note menu tests passed");

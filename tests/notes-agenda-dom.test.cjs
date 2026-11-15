@@ -201,7 +201,7 @@ async function test(name, fn) { await fn(); console.log("ok - " + name); }
     assert.equal(projected(h).length, 1, "the sidebar is reconciled by the debounced run, not inside the click");
     assert.equal(h.fireTimer(250), true, "Save scheduled one Agenda run");
     assert.equal(projected(h).length, 0, "items hidden by the new default leave the sidebar");
-    assert.equal(root(h), null, "and the empty Agenda folder goes with them");
+    assert.ok(!root(h), "and the empty Agenda folder goes with them");
     await h.destroy();
   });
   await test("real Notes projection also creates and retains its own pseudo-tabs", async () => {

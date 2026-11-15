@@ -12,6 +12,10 @@ const PERF_FILE = /(?:^|[-.])perf(?:[-.]|$)/i;
 const SERIAL_PERF_TESTS = new Set(["notes-agenda-projection.test.cjs"]);
 const TIME_ZONES = Object.freeze(["UTC", "Europe/Warsaw", "America/Los_Angeles", "Pacific/Auckland"]);
 const TIMEZONE_TEST_FILE = /^notes-(?:agenda|calendar|reminder|recurrence|missed-digest|p2|cycle-[fg])(?:[-.]|$)/i;
+// A test file that never ends must fail the run, not stall it. The usual cause here is not a loop in the code under
+// test: a failing `assert.equal(elementA, elementB)` makes Node render both fake DOM trees into its message, which
+// takes longer than any CI job. The slowest real file needs a few seconds; ZENTRAL_TEST_TIMEOUT_MS overrides the limit.
+const FILE_TIMEOUT_MS = Math.max(1000, Number(process.env.ZENTRAL_TEST_TIMEOUT_MS) || 5 * 60 * 1000);
 const { calibration } = require("./helpers/perf-budget.cjs");
 
 const isPerfFile = file => PERF_FILE.test(path.basename(file)) || SERIAL_PERF_TESTS.has(path.basename(file));
@@ -44,17 +48,23 @@ function runFile(file, perf = false, envOverrides = {}) {
       env,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    let stdout = "", stderr = "", spawnError = null;
+    let stdout = "", stderr = "", spawnError = null, timedOut = false;
+    const watchdog = setTimeout(() => { timedOut = true; child.kill("SIGKILL"); }, FILE_TIMEOUT_MS);
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", chunk => { stdout += chunk; });
     child.stderr.on("data", chunk => { stderr += chunk; });
     child.on("error", error => { spawnError = error; });
     child.on("close", (code, signal) => {
+      clearTimeout(watchdog);
+      if (timedOut) {
+        stderr += "\nError: " + path.basename(file) + " did not finish within " + Math.round(FILE_TIMEOUT_MS / 1000) + " s and was stopped." +
+          " If its last output is an assertion on DOM elements, compare them with === (assert.ok) instead of assert.equal.\n";
+      }
       const output = stdout + (stderr ? "\n" + stderr : "");
       resolve({
         file,
-        code: spawnError ? 1 : (code ?? 1),
+        code: spawnError || timedOut ? 1 : (code ?? 1),
         signal,
         error: spawnError,
         stdout,
