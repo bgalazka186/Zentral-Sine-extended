@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.166
+// @version 3.3.167
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.166, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.167, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.166";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.167";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2458,14 +2458,31 @@ const __zentralEmbeddedLoader = (function () {
   }
   // A registry can be shared by independently loaded browser-window modules.
   // Gates are removed after the final waiter, so it retains no idle windows.
+  // `waitMs` (with the caller's timers) limits how long a turn waits for the one before it: a window that was closed in
+  // the middle of its turn never finishes it, and without a limit every later turn for that key would wait for ever.
+  // After the limit the turn runs on its own (what every turn did before the registry was shared) and `onTimeout(key)`
+  // is told once. 0 = no limit.
   const localHistoryLocks = new Map();
-  function createHistoryCoordinator(registry = localHistoryLocks) {
+  function createHistoryCoordinator(registry = localHistoryLocks, { waitMs = 0, setTimer = null, clearTimer = null, onTimeout = null } = {}) {
+    const limited = waitMs > 0 && typeof setTimer === "function";
+    const waitFor = (previous, key) => !limited ? previous : new Promise((resolve) => {
+      let timer = null, over = false;
+      const end = (late) => {
+        if (over) return;
+        over = true;
+        if (late) { try { onTimeout?.(key); } catch (_) {} }
+        else if (timer !== null) { try { clearTimer?.(timer); } catch (_) {} }
+        resolve();
+      };
+      timer = setTimer(() => end(true), waitMs);
+      Promise.resolve(previous).then(() => end(false), () => end(false));
+    });
     return async (key, work) => {
       const previous = registry.get(key);
       let release;
       const gate = new Promise((resolve) => { release = resolve; });
       registry.set(key, gate);
-      try { if (previous) await previous; return await work(); }
+      try { if (previous) await waitFor(previous, key); return await work(); }
       finally {
         try { if (registry.get(key) === gate) registry.delete(key); } catch (_) {}
         release();
@@ -10775,15 +10792,37 @@ __zentralShim.register = function (def) {
     // ======================================================================
     // Store: notes as files, atomic writes, cross-window sync
     // ======================================================================
+    // One object that every window of this application can reach; each window loads its own copy of this file, so
+    // without it no window knows what another one is writing. Firefox keeps a hidden window on macOS only (Firefox 128
+    // still had one everywhere, Firefox 140 does not), so the first choice is the global that the system modules share:
+    // it exists from the first moment on every platform and outlives every browser window. Every window asks in the same
+    // order, so two windows never end up with different objects. null = nothing is shared and this window coordinates
+    // only with itself.
+    function sharedNotesHome() {
+      try {
+        if (typeof Components !== "undefined" && typeof Components.utils?.getGlobalForObject === "function") {
+          const exported = ChromeUtils.importESModule("resource://gre/modules/AppConstants.sys.mjs");
+          const home = Components.utils.getGlobalForObject(exported.AppConstants || exported);
+          if (home && typeof home.Map === "function") return home;
+        }
+      } catch (_) {}
+      try {
+        const hidden = Services.appShell?.hiddenDOMWindow;
+        const home = hidden?.wrappedJSObject || hidden;
+        if (home && typeof home.Map === "function") return home;
+      } catch (_) {}
+      return null;
+    }
+    // How long a save or a reminder claim waits for the same step in another window. Only reached when that window was
+    // closed in the middle of the step; a normal step takes milliseconds.
+    const SHARED_TURN_WAIT_MS = 8000;
     function sharedReminderHistoryCoordinator() {
       if (!CALENDAR_PART?.createHistoryCoordinator) return undefined;
       try {
-        // The hidden DOM window outlives ordinary browser windows and is
-        // shared by their independently loaded Notes modules. Its Map contains
+        // The Map is created by the shared object itself, so it does not belong to any browser window. It contains
         // only in-flight gates, not a permanent reference to any Notes window.
-        const hidden = Services.appShell?.hiddenDOMWindow;
-        const shared = hidden?.wrappedJSObject || hidden;
-        if (!shared || typeof shared.Map !== "function") return undefined;
+        const shared = sharedNotesHome();
+        if (!shared) return undefined;
         const key = "__zentralNotesHistoryLocksV1";
         let registry = shared[key];
         if (!registry) {
@@ -10791,7 +10830,17 @@ __zentralShim.register = function (def) {
           Object.defineProperty(shared, key, { value: registry, configurable: true });
         }
         if (typeof registry.get !== "function" || typeof registry.set !== "function" || typeof registry.delete !== "function") return undefined;
-        return CALENDAR_PART.createHistoryCoordinator(registry);
+        let told = false;
+        return CALENDAR_PART.createHistoryCoordinator(registry, {
+          waitMs: SHARED_TURN_WAIT_MS,
+          setTimer: (fn, ms) => window.setTimeout(fn, ms),
+          clearTimer: (id) => window.clearTimeout(id),
+          onTimeout: () => {
+            if (told) return;
+            told = true;
+            console.warn("[ZentralNotes] stopped waiting for another window that did not finish its step; this window continues on its own");
+          },
+        });
       } catch (_) { return undefined; }
     }
     function createStore({
@@ -11071,8 +11120,8 @@ __zentralShim.register = function (def) {
           }
           notify({ id: note.id, origin: windowId, kind: "saved", ...(conflictBackupPath ? { conflictBackupPath } : {}) });
         };
-        // Calendar history already owns a process-shared coordinator when the
-        // hidden window is available. Use a separate key for each note file.
+        // Calendar history already owns the coordinator that the windows of this application share
+        // (see sharedNotesHome). Use a separate key for each note file.
         if (typeof withHistoryLock === "function") return withHistoryLock("note:" + file, persist);
         return persist();
       }
@@ -14364,7 +14413,7 @@ __zentralShim.register = function (def) {
     if (window.__zentralNotesTestSeam) {
       window.__zentralNotesTestSeam.core = {
         flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART,
-        DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
+        DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS, SHARED_TURN_WAIT_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
         makeFolderUid, ensureFolderUids, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
@@ -27453,13 +27502,25 @@ __zentralShim.register = function (def) {
           (doc.head || doc.documentElement).appendChild(st);
         } catch (_) {}
       }
+      // CustomizableUI is one module object for the whole application, and it is frozen: nothing can be stored on it.
+      // The registration itself is the shared fact (one widget serves every window; its command looks up the window
+      // that was clicked). Which window made it is known to that window only: its callbacks live there, so the widget
+      // must not outlive it.
+      let ownsWidget = false;
+      const notesWindows = () => {
+        try {
+          return [...Services.wm.getEnumerator("navigator:browser")];
+        } catch (_) {
+          return [];
+        }
+      };
       function claimWidget() {
         const cui = getCUI();
         if (!cui || disposed || !enabledNow()) return;
         iconStyle(document); // every window needs the icon rule, not only the owner of the widget
-        if (cui.__zentralNotesOwner === windowId) return;
+        if (ownsWidget) return;
         try {
-          if (cui.getWidget?.(TOOLBAR_WIDGET_ID)?.provider) cui.destroyWidget(TOOLBAR_WIDGET_ID);
+          if (cui.getWidget?.(TOOLBAR_WIDGET_ID)?.provider) return; // registered by another window
           cui.createWidget({
             id: TOOLBAR_WIDGET_ID,
             type: "button",
@@ -27474,31 +27535,35 @@ __zentralShim.register = function (def) {
               (w?.__zentralNotesToggle || window.__zentralNotesToggle)?.();
             },
           });
-          cui.__zentralNotesOwner = windowId;
+          ownsWidget = true;
           // A widget registered after startup is not put back where the user placed it until customize mode
           // runs; place it in every open window now.
-          try {
-            for (const w of Services.wm.getEnumerator("navigator:browser")) {
+          for (const w of notesWindows()) {
+            try {
               iconStyle(w.document);
-              try {
-                cui.ensureWidgetPlacedInWindow?.(TOOLBAR_WIDGET_ID, w);
-              } catch (_) {}
-            }
-          } catch (_) {}
+              cui.ensureWidgetPlacedInWindow?.(TOOLBAR_WIDGET_ID, w);
+            } catch (_) {}
+          }
         } catch (error) {
           warn(error);
         }
       }
       function releaseWidget() {
         const cui = getCUI();
-        if (!cui || cui.__zentralNotesOwner !== windowId) return;
+        if (!cui || !ownsWidget) return;
+        ownsWidget = false;
         try {
           cui.destroyWidget(TOOLBAR_WIDGET_ID);
         } catch (_) {}
-        cui.__zentralNotesOwner = null;
-        try {
-          for (const w of Services.wm.getEnumerator("navigator:browser")) if (w !== window && w.__zentralNotesClaimWidget) return w.__zentralNotesClaimWidget();
-        } catch (_) {}
+        // Another window that runs Notes registers it again, with callbacks of its own.
+        if (!enabledNow()) return;
+        for (const w of notesWindows()) {
+          if (w === window || typeof w.__zentralNotesClaimWidget !== "function") continue;
+          try {
+            w.__zentralNotesClaimWidget();
+          } catch (_) {}
+          if (cui.getWidget?.(TOOLBAR_WIDGET_ID)?.provider) return;
+        }
       }
       window.__zentralNotesToggle = () => {
         if (!disposed && enabledNow()) toggleFromShortcut();

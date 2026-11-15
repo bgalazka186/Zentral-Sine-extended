@@ -54,7 +54,7 @@ const names = (code, options) => findUndefinedIdentifiers(code, options).map((en
 // What the host really provides. Everything else must be declared in the file. The lists are kept exact on purpose:
 // an entry nobody uses any more would quietly excuse the same name written by mistake later.
 const WEB = ["window", "document", "navigator", "performance", "queueMicrotask", "URL", "Event", "Blob", "TextEncoder", "DOMParser", "MutationObserver", "ResizeObserver"];
-const FIREFOX_CHROME = ["ChromeUtils", "PathUtils", "IOUtils", "Cc", "Ci"];
+const FIREFOX_CHROME = ["ChromeUtils", "PathUtils", "IOUtils", "Cc", "Ci", "Components"];
 const PART = ["window", "module"]; // a pure part: `module.exports` under Node, the module loader on `window` in the browser
 const SOURCES = {
   "additional/notes/ZentralNotes.uc.js": [...WEB, ...FIREFOX_CHROME],

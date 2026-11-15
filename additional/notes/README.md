@@ -35,7 +35,7 @@ Highlights are written as `==text==` (yellow) or `=={green}text==` (also `blue`,
 
 ### Reminder storage failures
 
-Calendar reminder banners and missed-reminder digests are not displayed when their history claim cannot be saved. Unsaved claims are rolled back without discarding other pending history, and the scheduler makes up to three 30-second retries. A damaged or unreadable history file remains protected and requires attention before alerts can be saved. Notes windows in the same browser process coordinate history writes and claims through a shared process registry when the browser exposes its hidden window; external programs and environments without that registry do not participate. Live Zen validation is still needed.
+Calendar reminder banners and missed-reminder digests are not displayed when their history claim cannot be saved. Unsaved claims are rolled back without discarding other pending history, and the scheduler makes up to three 30-second retries. A damaged or unreadable history file remains protected and requires attention before alerts can be saved. Notes windows in the same browser process coordinate note saves, history writes and claims through one shared registry. It lives on the global that the browser's system modules share, which exists on every platform; the hidden window (Firefox keeps one on macOS only) is the fallback. A step waits at most 8 seconds for the same step in another window, so a window that was closed in the middle of a save cannot block the others. External programs do not participate. Live Zen validation is still needed.
 
 ### Concurrent calendar edits
 

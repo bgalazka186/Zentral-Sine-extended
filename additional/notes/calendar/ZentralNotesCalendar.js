@@ -1247,14 +1247,31 @@
   }
   // A registry can be shared by independently loaded browser-window modules.
   // Gates are removed after the final waiter, so it retains no idle windows.
+  // `waitMs` (with the caller's timers) limits how long a turn waits for the one before it: a window that was closed in
+  // the middle of its turn never finishes it, and without a limit every later turn for that key would wait for ever.
+  // After the limit the turn runs on its own (what every turn did before the registry was shared) and `onTimeout(key)`
+  // is told once. 0 = no limit.
   const localHistoryLocks = new Map();
-  function createHistoryCoordinator(registry = localHistoryLocks) {
+  function createHistoryCoordinator(registry = localHistoryLocks, { waitMs = 0, setTimer = null, clearTimer = null, onTimeout = null } = {}) {
+    const limited = waitMs > 0 && typeof setTimer === "function";
+    const waitFor = (previous, key) => !limited ? previous : new Promise((resolve) => {
+      let timer = null, over = false;
+      const end = (late) => {
+        if (over) return;
+        over = true;
+        if (late) { try { onTimeout?.(key); } catch (_) {} }
+        else if (timer !== null) { try { clearTimer?.(timer); } catch (_) {} }
+        resolve();
+      };
+      timer = setTimer(() => end(true), waitMs);
+      Promise.resolve(previous).then(() => end(false), () => end(false));
+    });
     return async (key, work) => {
       const previous = registry.get(key);
       let release;
       const gate = new Promise((resolve) => { release = resolve; });
       registry.set(key, gate);
-      try { if (previous) await previous; return await work(); }
+      try { if (previous) await waitFor(previous, key); return await work(); }
       finally {
         try { if (registry.get(key) === gate) registry.delete(key); } catch (_) {}
         release();
