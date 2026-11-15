@@ -9187,6 +9187,13 @@
     }
     // Switching off or retiring a restored folder never deletes foreign tabs OR
     // empty foreign folders; both are user content.
+    // Reminders that go out of sight together with a note: its calendar reminders (hidden ones too) and the legacy
+    // front-matter reminder. The Notes list and the Zen sidebar menu ask before they move such a note to Trash.
+    function reminderCountOfNote(store, n) {
+      if (!n) return 0;
+      const stored = store.items?.list({ noteId: n.id, kind: "reminder", includeHidden: true }) || [];
+      return stored.length + (n.remind > 0 ? 1 : 0);
+    }
     function retireNotesFolder(f, removeTab = () => {}) {
       const foreignTabs = [...(f.querySelectorAll?.("tab") || [])].some((t) => !t.hasAttribute(NOTES_ATTR));
       const foreignFolders = [...(f.querySelectorAll?.("zen-folder") || [])].some((child) => restoredPseudoFolderKind(child) !== "notes");
@@ -10032,6 +10039,9 @@
     function createSheet({ store, adapter, env, ensureStore }) {
       const token = {};
       const cleanups = [];
+      // The host's logger lives in another closure. A failed side effect (calendar or Agenda sync) is reported here
+      // and never thrown at the person who pressed Save.
+      const warn = (error) => console.warn("[ZentralNotes]", error);
       const listen = (target, type, fn, opts) => {
         target.addEventListener(type, fn, opts);
         cleanups.push(() => target.removeEventListener(type, fn, opts));
@@ -13768,7 +13778,7 @@
         ok.addEventListener("click", () => {
           store.setMeta({ calendarAgendaDefaults: editor.read() });
           closeDialog(); flash("Zen Agenda defaults saved");
-          agendaController?.schedule?.();
+          env.refreshAgenda?.(); // the Zen Agenda folder follows the new rule at once
         });
         cancel.addEventListener("click", closeDialog);
       }
@@ -13786,13 +13796,13 @@
           if (Object.keys(value).length) next[noteId] = value; else delete next[noteId];
           store.setMeta({ calendarNoteAgendaOverrides: CALENDAR_PART.cleanNoteAgendaOverrides(next) });
           closeDialog(); flash("Note Agenda defaults saved");
-          agendaController?.schedule?.();
+          env.refreshAgenda?.(); // the Zen Agenda folder follows the new rule at once
         });
         clear.addEventListener("click", () => {
           const next = { ...all }; delete next[noteId];
           store.setMeta({ calendarNoteAgendaOverrides: CALENDAR_PART.cleanNoteAgendaOverrides(next) });
           closeDialog(); flash("Note now inherits Agenda defaults");
-          agendaController?.schedule?.();
+          env.refreshAgenda?.(); // the Zen Agenda folder follows the new rule at once
         });
         cancel.addEventListener("click", closeDialog);
       }
@@ -13911,11 +13921,7 @@
       }
       // T2.3e: count every independently stored reminder, including items hidden because the note is in Trash,
       // plus the legacy single `remind` field (which is not part of calendar.json).
-      function noteReminderCount(n) {
-        if (!n) return 0;
-        const stored = store.items?.list({ noteId: n.id, kind: "reminder", includeHidden: true }) || [];
-        return stored.length + (n.remind > 0 ? 1 : 0);
-      }
+      function noteReminderCount(n) { return reminderCountOfNote(store, n); }
       function reminderImpact(notes) {
         const unique = new Map();
         for (const n of notes || []) if (n && !unique.has(n.id)) unique.set(n.id, n);
@@ -18176,6 +18182,18 @@
           askFolderDelete(folder, () => store.meta.folders.find((entry) => entry.uid === uid) || null);
           return true;
         },
+        // "Move note to trash" chosen in the Zen sidebar menu while this sheet is open (also folded away at its edge).
+        // Same rule as in the list: a note with reminders asks first. The sheet leaves the note if it was showing it.
+        sidebarNoteTrash: (id = "") => {
+          if (!isOpen || destroyed) return false;
+          const target = store.get(id);
+          if (!target || target.trashed) return false;
+          const leave = () => { if (id !== currentId) return; currentId = ""; if (view === "editor") showEditor(); else scheduleList(); };
+          // Nothing to ask without reminders, so a dialog that is open in this sheet stays as it is.
+          if (!noteReminderCount(target)) { store.trash(id); leave(); return true; }
+          askNoteTrash(id, leave);
+          return true;
+        },
         sidebarFolderExport: (id = "", uid = "") => {
           if (!isOpen || destroyed) return false;
           const folder = id ? store.meta.folders.find((entry) => entry.id === id && entry.uid === uid) : null;
@@ -19205,7 +19223,9 @@
       }
       const tick = createTimeTickService({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), warn });
       onCleanup(() => tick.destroy());
-      const env = { openLink, copyText, exportNote, exportAll, exportZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now() };
+      const env = { openLink, copyText, exportNote, exportAll, exportZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now(),
+        // Visibility rules live in meta.json, which raises no store event: the sheet asks for the Zen Agenda refresh.
+        refreshAgenda: () => { if (!disposed && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); } } };
 
       // ---- reminders (P2): ONE coarse timer for the next due note, armed by the scheduler (no polling) ----
       let soundCtx = null;
@@ -20240,7 +20260,9 @@
           if (!storePromise) return false;
           const entry = agendaEntryForKey(key);
           if (entry) {
-            const hydrated = entry.label ? entry : (CALENDAR_PART?.agendaZenItem?.(entry, agendaDateFromKey(key), nowMs()) || entry);
+            // Not in the last projection (the first run after startup is still pending): build the same entry the
+            // projection would, so the tab shows its time, kind and tooltip at once instead of a bare title.
+            const hydrated = entry.label ? entry : (CALENDAR_PART?.agendaZenItem?.(entry, agendaDateFromKey(key), Date.now()) || entry);
             return agendaApplyTabEntry(tab, { ...hydrated, key });
           }
           agendaController.schedule(0);
@@ -21470,8 +21492,21 @@
       const ZEN_MENU_ITEMS = [
         ["open", "Open note", (tab) => activateZenTab(tab)],
         ["out", "Remove from sidebar folder", (tab) => { const id = zenNoteIdFromTab(tab); if (id && zenMode() === "selected") { store.setFolder(id, ""); zen.schedule(0); } }],
-        ["trash", "Move note to trash", (tab) => { const id = zenNoteIdFromTab(tab); if (id) askNoteTrash(id, () => { if (id === currentId) { currentId = ""; showEditor(); } }); }],
+        ["trash", "Move note to trash", (tab) => { const id = zenNoteIdFromTab(tab); if (id) trashNoteFromSidebar(id); }],
       ];
+      // A note without reminders goes to Trash at once (it can be restored there). A note with reminders asks first,
+      // and that question is a card of the Notes sheet, so the sheet opens. A sheet that is already open may be showing
+      // this very note: then the sheet does the work and moves on to another note.
+      function trashNoteFromSidebar(id) {
+        return ensureStore().then(() => {
+          const target = store.get(id);
+          if (disposed || !target || target.trashed) return null;
+          const reminders = reminderCountOfNote(store, target);
+          const held = [...bindings.values(), floating].find((binding) => binding?.held());
+          if (!reminders && !held) { store.trash(id); return null; }
+          return (reminders ? showNotes("") : Promise.resolve(held)).then((handle) => (disposed ? null : sheetOf(handle)?.sidebarNoteTrash?.(id)));
+        }).catch(warn);
+      }
       let zenCtxTab = null;
       const onTabMenuShowing = (ev) => {
         const menu = ev.target;

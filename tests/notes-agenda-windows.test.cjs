@@ -59,7 +59,10 @@ test("Notes UI wires global/category/note/item Agenda visibility and independent
     /buildAgendaWindowEditor\(old\?\.agenda/,
     /agendaWindow: agendaWindowEditor\.read\(\)/,
     /getWindow: \(item\) =>[\s\S]*?resolveAgendaWindow\(item, category\?\.agenda, notePolicy, store\.meta\.calendarAgendaDefaults\)/,
-    /agendaController\?\.schedule\?\.\(\)/,
+    // The sheet cannot see the window host's Agenda controller (naming it was a ReferenceError that this text check
+    // could not notice). It asks through its environment; notes-calendar-menu and notes-agenda-dom prove the behaviour.
+    /env\.refreshAgenda\?\.\(\)/,
+    /refreshAgenda: \(\) => \{[^}]*agendaController\.schedule\(\)/,
   ]) assert.match(ui, pattern);
 });
 

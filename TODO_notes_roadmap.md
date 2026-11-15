@@ -855,16 +855,17 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.164, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.165, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.164.** `F0.1`–`F0.8`, `H1.1`–`H1.5`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.5`, `UI4.7`, `AU-B1`, `SB6.1`, `T2.8b` and `T4.5` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`127/127` test files) and the timezone matrix (`180/180` across `UTC`, `Europe/Warsaw`, `America/Los_Angeles`, `Pacific/Auckland`) pass in Node/fake-Zen; live Zen is not available in the sandbox.
+State: **3.3.165.** `F0.1`–`F0.9`, `H1.1`–`H1.5`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.5`, `UI4.7`, `AU-B1`, `SB6.1`, `T2.8b` and `T4.5` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`129/129` test files) and the timezone matrix (`180/180` across `UTC`, `Europe/Warsaw`, `America/Los_Angeles`, `Pacific/Auckland`) pass in Node/fake-Zen; live Zen is not available in the sandbox.
 
-Completed this session (3.3.163–3.3.164), every item archived in `docs/LEGACY_done_rows.md`:
+Completed this session (3.3.163–3.3.165), every item archived in `docs/LEGACY_done_rows.md`:
 - `UI4.7` DONE — multi-window and data-integrity edge tests closed: blocked stale write keeps later edits until its recovery copy exists; writers without a lock are detected by snapshot; note text is always written before `calendar.json` (`createItemStore({ beforeWrite })`); after a crash between the two writes the manual record and its mirror line become one reminder again (`mirrorItemToAgendaNote` twin re-key). `F0.5` and `F0.6` (finished earlier) were moved out of the roadmap.
 - `T4.5` DONE — one version everywhere: `tools/sync-version.cjs` (+ `--check`, `--set`), `tests/version-sync.test.cjs`, CI workflow and release-loop documentation.
 - `F0.8` + `AU-B1` DONE — readable recurrence golden table (`tests/notes-recurrence-golden.test.cjs`, 3 zones x 4 system zones). Fixed what it exposed: `UNTIL` now ends a series with its last day in the item's zone (`recurrenceUntilMs`), and both recurrence editors show the stored last date (`parseRule().untilKey`) instead of the day before on a 23-hour day.
+- `F0.9` DONE (not a planned row, found while preparing `SB6.8`) — `tests/notes-undefined-identifiers.test.cjs` fails on any name used without a declaration and on any calendar function that is named but not exported. It exposed four defects, all fixed with behaviour tests: the sidebar command `Move note to trash` threw and did nothing; the three Save buttons of the Zen Agenda visibility dialogs threw after saving, so the sidebar folder was not refreshed; a failed side effect of Save left the calendar composer open (a second press stored the item twice); a restored Agenda tab outside the last projection got a bare title and the wrong icon.
 
 Standing owner rules for chunks: commit to Git, no ZIPs; no conversational filler; production-ready code and test suites; tasks strictly in order (implementation, edge cases, unit tests). Owner 2026-11-14: no live-check items (owner tests in the app and reports); do NOT add low-priority polish that changes nothing noticeable; only fix what a person would notice. One version everywhere: `node tools/sync-version.cjs` after `build-standalone.cjs --bump` (see "How to add a feature").
 

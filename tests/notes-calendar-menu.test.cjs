@@ -638,6 +638,65 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   assert.equal(store.items.category("Critical").notify.due.sound, "loud");
   assert.deepEqual(JSON.parse(JSON.stringify(store.items.category("Critical").notify.due.quietAllow)), ["loud"]);
 
+  // F0.9: a side effect of Save that fails is reported, not thrown. The report used a logger that only exists in the
+  // window host, so the handler died after the item was stored: the composer stayed open and a second press of the
+  // button created the item again.
+  {
+    const mirror = store.mirrorItemToAgendaNote, consoleWarn = console.warn, reported = [];
+    store.mirrorItemToAgendaNote = () => { throw new Error("mirror failed"); };
+    console.warn = (...args) => { reported.push(args.map((arg) => String(arg?.message || arg)).join(" ")); };
+    try {
+      const failing = await openCreate("Create timed reminder…");
+      failing.querySelector('[aria-label="Title"]').value = "Side effect failure";
+      failing.querySelectorAll("button").find((button) => button.textContent.trim() === "Create reminder").click(); await flush();
+    } finally { store.mirrorItemToAgendaNote = mirror; console.warn = consoleWarn; }
+    assert.equal(q(root, ".zn-cal-compose-card"), null, "the composer closes although the Agenda-note side effect failed");
+    assert.equal(store.items.list().filter((entry) => entry.summary === "Side effect failure").length, 1, "the item is stored exactly once");
+    assert.ok(reported.some((line) => /\[ZentralNotes\] mirror failed/.test(line)), "the failure is reported in the console: " + JSON.stringify(reported));
+  }
+
+  // F0.9: Zen Agenda visibility rules are stored in meta.json, which raises no store event, so after Save the sheet asks
+  // its host to refresh the sidebar folder. It used to name the host's controller directly (a ReferenceError, even with
+  // `?.`), so the dialog closed, the rule was saved and the sidebar kept showing the old state.
+  {
+    let refreshes = 0;
+    env.refreshAgenda = () => { refreshes++; };
+    q(root, ".zn-calendar-tools").click(); await flush();
+    menuItem(root, "Zen Agenda visibility defaults").click(); await flush();
+    const defaults = q(root, '[aria-label="Zen Agenda visibility defaults"]');
+    assert.ok(defaults, "Calendar Tools opens the Agenda visibility defaults");
+    defaults.querySelector('[aria-label="Days before item to show in Agenda"]').value = "2";
+    defaults.querySelectorAll("button").find((button) => button.textContent.trim() === "Save Agenda defaults").click(); await flush();
+    assert.equal(store.meta.calendarAgendaDefaults.leadDays, 2, "the default is saved");
+    assert.equal(q(root, '[aria-label="Zen Agenda visibility defaults"]'), null, "the dialog closes");
+    assert.equal(refreshes, 1, "saving the defaults asks the host for one Agenda refresh");
+
+    const noteRules = async () => {
+      const composer = await openCreate("Create timed reminder…");
+      const linkedNote = composer.querySelector('[aria-label="Linked note"]');
+      linkedNote.value = note.id; linkedNote.dispatchEvent(new Ev("change"));
+      composer.querySelectorAll("button").find((button) => button.textContent.trim() === "Note Agenda defaults…").click(); await flush();
+      const dialog = q(root, ".zn-dialog-card");
+      assert.match(dialog.getAttribute("aria-label"), /^Zen Agenda · /);
+      return dialog;
+    };
+    let dialog = await noteRules();
+    dialog.querySelector('[aria-label="Agenda inclusion"]').value = "off";
+    dialog.querySelectorAll("button").find((button) => button.textContent.trim() === "Save note Agenda defaults").click(); await flush();
+    assert.equal(store.meta.calendarNoteAgendaOverrides[note.id].enabled, false, "the note rule is saved");
+    assert.equal(refreshes, 2, "saving a note rule asks for a refresh");
+    dialog = await noteRules();
+    dialog.querySelectorAll("button").find((button) => button.textContent.trim() === "Use inherited defaults").click(); await flush();
+    assert.equal(store.meta.calendarNoteAgendaOverrides[note.id], undefined, "the note rule is removed");
+    assert.equal(refreshes, 3, "removing a note rule asks for a refresh");
+    delete env.refreshAgenda;
+    // A host without that hook (an older embedder, a test) is tolerated.
+    q(root, ".zn-calendar-tools").click(); await flush();
+    menuItem(root, "Zen Agenda visibility defaults").click(); await flush();
+    q(root, '[aria-label="Zen Agenda visibility defaults"]').querySelectorAll("button").find((button) => button.textContent.trim() === "Save Agenda defaults").click(); await flush();
+    assert.equal(q(root, '[aria-label="Zen Agenda visibility defaults"]'), null);
+  }
+
   await store.flush();
   const restoredStore = core.createStore({ io, notify() {}, windowId: "calendar-menu-reload", getDir: async () => "/calendar-menu", getMaxSaveMs: () => 1000, setTimer: setTimeout, clearTimer: clearTimeout });
   await restoredStore.open();
