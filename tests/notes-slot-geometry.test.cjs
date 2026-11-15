@@ -134,7 +134,7 @@ function loadTripleMath() {
     for (let k = j; k < sv.length; k++) { if (sv[k] === "{") depth++; else if (sv[k] === "}" && --depth === 0) return sv.slice(i, k + 1); }
     throw new Error("unbalanced " + name);
   };
-  return new Function(grab("tripleHeights") + "\n" + grab("tripleShareFor") + "\n" + grab("tripleShareAfterNotes") + "\nreturn { tripleHeights, tripleShareFor, tripleShareAfterNotes };")();
+  return new Function(grab("tripleFloor") + "\n" + grab("tripleHeights") + "\n" + grab("tripleShareFor") + "\n" + grab("tripleShareAfterNotes") + "\nreturn { tripleHeights, tripleShareFor, tripleShareAfterNotes };")();
 }
 function tripleTests() {
   const { tripleHeights: H, tripleShareFor: S, tripleShareAfterNotes: AFTER } = loadTripleMath();
@@ -145,25 +145,30 @@ function tripleTests() {
   h = H({ usable: 316, gap: 270, share: 0.5, up: -1 });
   assert.deepEqual([h.top, h.bottom], [158, 158]);
   // explicit up: U = (usable + gap) * share - up, and U + L is always `usable`
-  h = H({ usable: 256, gap: 330, share: 0.5, up: 195 });
-  assert.equal(h.top, 98); assert.equal(h.top + h.bottom, 256);
+  h = H({ usable: 556, gap: 330, share: 0.5, up: 195 });
+  assert.equal(h.top, 248); assert.equal(h.top + h.bottom, 556);
   // the lower panel's start is unchanged by a top-edge drag: bottom edge of the whole stack is fixed
-  const before = H({ usable: 316, gap: 270, share: 0.5, up: 135 });
-  const afterTop = H({ usable: 256, gap: 330, share: 0.5, up: 195 });
+  const before = H({ usable: 616, gap: 270, share: 0.5, up: 135 });
+  const afterTop = H({ usable: 556, gap: 330, share: 0.5, up: 195 });
   assert.equal(before.bottom, afterTop.bottom, "top-edge drag leaves the lower panel's height (and start) alone");
-  const afterBottom = H({ usable: 276, gap: 310, share: 0.5, up: 135 });
+  const afterBottom = H({ usable: 576, gap: 310, share: 0.5, up: 135 });
   assert.equal(before.top, afterBottom.top, "bottom-edge drag leaves the upper panel alone");
   assert.equal(before.bottom - afterBottom.bottom, 40, "bottom-edge drag takes exactly the dragged distance from the lower panel");
-  // min height keeps both panels usable
+  // A floor keeps both panels usable while Notes is open: 120 px, or a quarter of what the two share WITHOUT Notes.
+  // It must not change with the band (OW-26: it was a quarter of what was left, so a panel resting on it moved with
+  // every px of the band and took the other edge of Notes along; tests/notes-triple-view-startup.test.cjs).
   h = H({ usable: 300, gap: 280, share: 0.5, up: 5000 });
-  assert.equal(h.top, 75); assert.equal(h.bottom, 225);
+  assert.deepEqual([h.top, h.bottom], [120, 180]);
+  assert.equal(H({ usable: 330, gap: 250, share: 0.5, up: 5000 }).top, 120, "the same floor at another band height");
+  h = H({ usable: 200, gap: 200, share: 0.5, up: 5000 });
+  assert.deepEqual([h.top, h.bottom], [100, 100], "two panels that share 400 px: a quarter each");
   // divider drag inverse: dragging the divider changes the share only, and H(S(x)) puts the panel at x
   for (const up of [-1, 0, 100, 250]) for (const gap of [0, 270]) {
     if (up >= 0 && !gap) continue;
-    const usable = 586 - gap;
-    const share = S({ usable, gap, topPx: 200, up });
+    const usable = 886 - gap;
+    const share = S({ usable, gap, topPx: 300, up });
     assert.ok(share > 0 && share < 1);
-    assert.equal(Math.round(H({ usable, gap, share, up }).top), 200, `round trip gap=${gap} up=${up}`);
+    assert.equal(Math.round(H({ usable, gap, share, up }).top), 300, `round trip gap=${gap} up=${up}`);
   }
   // out-of-range pointer positions clamp
   assert.equal(H({ usable: 586, gap: 0, share: S({ usable: 586, gap: 0, topPx: -50 }) }).top, 146.5);
@@ -176,6 +181,15 @@ function tripleTests() {
   assert.equal(1000 - H({ usable: 1000, gap: 0, share: lopsided }).top - (1000 - 265 - 370), 185, "and so does the lower panel");
   assert.equal(AFTER({ top: 300, gap: 0, total: 1000, share: 0.62 }), 0.62, "no band: the share is untouched");
   assert.equal(AFTER({ top: 0, gap: 900, total: 1000, share: 0.5 }), 0.45, "never beyond the share limits");
+  // A band of an odd height: its middle is a whole px, rounded the way Notes rounds the upper part of a new band
+  // (Math.round(px / 2)), so closing and opening again is a round trip. The exact half (172.5 of 345) moved the
+  // divider half a px up every time, and the suite saves the split on every close (OW-26).
+  const odd = AFTER({ top: 185, gap: 345, total: 716, share: 0.4 });
+  assert.equal(odd, 0.5, "185 + 173 of 716");
+  assert.equal(H({ usable: 716 - 345, gap: 345, share: odd, up: Math.round(345 / 2) }).top, 185, "reopened with Notes' own split, the upper panel has the height it had");
+  let creeping = 0.5;
+  for (let i = 0; i < 50; i++) creeping = AFTER({ top: H({ usable: 371, gap: 345, share: creeping, up: 173 }).top, gap: 345, total: 716, share: creeping });
+  assert.equal(creeping, 0.5, "fifty rounds of closing and opening leave the share where it was");
   // Swap top and bottom: the gap's upper part becomes its lower part and the share is mirrored.
   for (const [gap, up, share] of [[270, 135, 0.5], [330, 60, 0.4], [250, 250, 0.7]]) {
     const total = 1000, usable = total - gap;

@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.171
+// @version 3.3.172
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.171, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.172, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.171";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.172";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -10824,13 +10824,26 @@ __zentralShim.register = function (def) {
       if (!(base > 200) || !(share > 0)) return 0;
       return clampSlotPx(base, base * share);
     }
+    // Between Triple View's web panels each page keeps a floor: GAP_PANEL_MIN_PX, or a quarter of what the two pages
+    // share without Notes (`room` = both pages + the gap) when that is less. The panel suite applies the same floor
+    // (tripleFloor in extension/panels/secondary-views/ZentralSecondaryViews.uc.js). The floor depends on `room`
+    // only, never on the gap, so a page resting on it stays put while the other edge of the sheet is dragged.
+    const gapPageFloor = (room) => Math.max(0, Math.min(GAP_PANEL_MIN_PX, (Number(room) || 0) / 4));
+    // The tallest gap that leaves both pages their floor (0 = the pages were not measured: no limit from here).
+    const gapMaxPx = (room) => Math.max(0, Math.floor((Number(room) || 0) - 2 * gapPageFloor(room)));
+    // A gap is never taller than that, whatever share or size asked for it. Asking for more used to leave two pages
+    // of a few px (the "Larger" size took 80% of a panel under ~1300 px), which the suite then had to overrule.
+    function clampGapPx(px, room) {
+      const max = gapMaxPx(room);
+      return max > 0 && px > max ? max : px;
+    }
     // Between Triple View's web panels the Notes sheet has TWO independent edges. Its top edge moves the upper
     // panel's boundary (only `up` changes, `down` stays), its bottom edge moves the lower panel's boundary
     // (only `down` changes). Pure and clamped so a drag can never drift or leave either panel unusable.
     // `dy` is the pointer travel since the gesture began; every call restarts from the gesture's START values,
     // so repeated moves do not accumulate.
-    // `roomUp` / `roomDown` = how much more the upper / lower web panel can give before it falls below a usable
-    // height (a panel under ~40px is no longer counted as a page at all, which collapsed the slot mid-drag).
+    // `roomUp` / `roomDown` = how much more the upper / lower web panel can give before it reaches its floor
+    // (gapPageFloor above; the caller measures them from the heights the panel suite publishes).
     function gapEdgeDrag({ edge = "n", startUp = 0, startDown = 0, dy = 0, base = 0, roomUp = Infinity, roomDown = Infinity } = {}) {
       const su = Math.max(0, Number(startUp) || 0), sd = Math.max(0, Number(startDown) || 0);
       if (!(base > 200)) return { up: su, down: sd, px: su + sd };
@@ -14790,7 +14803,7 @@ __zentralShim.register = function (def) {
         normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, clearOfRect, sideOf, createHoldAction,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
-        clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
+        clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, gapPageFloor, gapMaxPx, clampGapPx, GAP_PANEL_MIN_PX, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
         indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, mergeFolders, mergeMeta, META_SHARED_KEYS, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
@@ -23781,15 +23794,17 @@ __zentralShim.register = function (def) {
     // shared by every bar (main panel, Triple View bottom bar, Super Pin). So the state lives here, not in
     // each adapter, and only the owner may change or release it. (Per-adapter copies went stale when another
     // bar released the variable, which put the sheet below the panel and overcounted the free height.)
-    const SLOT = { owner: null, px: 0, gap: false, quad: false, pseudo: false, up: -1, suspended: null };
+    // `strip` / `frac` / `fracUp`: the gap is only the thin strip of a folded sheet, the split of the band that
+    // folded (its upper part as a fraction), and the strip's own upper part that goes with it (see gapFrac).
+    const SLOT = { owner: null, px: 0, gap: false, quad: false, pseudo: false, up: -1, suspended: null, strip: false, frac: -1, fracUp: -1 };
     function releaseSlot() {
       SLOT.suspended = null;
       if (!SLOT.owner && !SLOT.px) return;
       const r = document.documentElement;
       SLOT.owner = null;
       SLOT.px = 0;
-      SLOT.gap = SLOT.quad = SLOT.pseudo = false;
-      SLOT.up = -1;
+      SLOT.gap = SLOT.quad = SLOT.pseudo = SLOT.strip = false;
+      SLOT.up = SLOT.frac = SLOT.fracUp = -1;
       r.style.removeProperty("--zentral-notes-panel-reserve");
       r.style.removeProperty("--zentral-notes-gap");
       r.style.removeProperty("--zentral-notes-gap-up");
@@ -23824,19 +23839,33 @@ __zentralShim.register = function (def) {
         const v = parseFloat(document.documentElement.style.getPropertyValue("--zentral-notes-gap-up"));
         return Number.isFinite(v) && v >= 0 ? v : -1;
       }
+      // The upper part of the gap this bar holds, as a fraction of the gap; -1 when it holds none. A sheet folded to
+      // its thin strip keeps the gap, but the strip is too low to carry the split of the band (10 px hold it to one
+      // tenth: 213 of 385 came back as 231, and a sheet whose top edge had been dragged reopened 18 px higher). The
+      // band's own fraction is therefore kept beside the strip and used for as long as the strip still has the split
+      // it was given with it; a swap of the panels mirrors both (see watch). Anything else falls back to the strip.
+      function gapFrac() {
+        if (SLOT.owner !== api || !SLOT.gap || !(SLOT.px > 0)) return -1;
+        const cur = liveGapUp();
+        if (cur < 0) return -1;
+        return SLOT.strip && SLOT.frac >= 0 && cur === SLOT.fracUp ? SLOT.frac : Math.min(1, cur / SLOT.px);
+      }
       // No explicit edge position: an open gap keeps the ratio it has (so a resize or a swap never moves Notes
       // relative to the panels); a fresh gap is split EVENLY, the divider sits in the middle of Notes and both
       // panels give (and, on close, take back) the same room.
       function keptGapUp(px) {
-        const cur = SLOT.owner === api && SLOT.gap && SLOT.px > 0 ? liveGapUp() : -1;
-        return cur >= 0 ? Math.round(px * Math.min(1, cur / SLOT.px)) : Math.round(px / 2);
+        const frac = gapFrac();
+        return frac >= 0 ? Math.round(px * frac) : Math.round(px / 2);
       }
-      // Union of every visible page of the panel (one in a normal panel, two in Triple View).
+      const visiblePages = () => [...(slider()?.querySelectorAll(":scope > browser") || [])].filter((x) => !x.hidden && x.getClientRects().length);
+      // Union of every visible page of the panel (one in a normal panel, two in Triple View). A page of Triple View
+      // stays a page however low it is: dropping one under 40 px made the union jump to the other page alone (or to
+      // nothing), and the slot that had squeezed it was then given up, taken again and laid out in the wrong place.
       function pageSpan() {
-        const rects = [...(slider()?.querySelectorAll(":scope > browser") || [])]
-          .filter((x) => !x.hidden && x.getClientRects().length)
-          .map((x) => x.getBoundingClientRect())
-          .filter((r) => r.width > 40 && r.height > 40);
+        const rects = visiblePages()
+          .map((x) => ({ r: x.getBoundingClientRect(), slot: x.hasAttribute("data-bgalazka-triple-slot") }))
+          .filter(({ r, slot }) => r.width > 40 && (r.height > 40 || slot))
+          .map(({ r }) => r);
         if (!rects.length) return { left: 0, top: 0, width: 0, height: 0, bottom: 0 };
         const left = Math.min(...rects.map((r) => r.left)), top = Math.min(...rects.map((r) => r.top));
         const right = Math.max(...rects.map((r) => r.right)), bottom = Math.max(...rects.map((r) => r.bottom));
@@ -23851,6 +23880,13 @@ __zentralShim.register = function (def) {
         // second time or each layout pass would progressively collapse the Notes band. A dock/quad reserve,
         // in contrast, is outside the browser union and must be added back.
         return pagesWithoutSlotHeight({ pageHeight: h2, slotPx: SLOT.px, slotKind: SLOT.gap ? "gap" : "dock" });
+      }
+      // What the pages share while nothing lies between them: their heights now plus the gap they gave up
+      // (the bars and the divider are not part of it).
+      function pagesRoom() {
+        let sum = 0;
+        for (const page of visiblePages()) sum += page.getBoundingClientRect().height || 0;
+        return sum + (SLOT.gap ? SLOT.px : 0);
       }
       const api = {
         position: "absolute",
@@ -23892,8 +23928,9 @@ __zentralShim.register = function (def) {
           if (SLOT.gap) {
             const cs = slider()?.style;
             const t = parseFloat(cs?.getPropertyValue?.("--bgalazka-top-share")), b = parseFloat(cs?.getPropertyValue?.("--bgalazka-bottom-share"));
-            if (Number.isFinite(t)) roomUp = Math.max(0, t - GAP_PANEL_MIN_PX);
-            if (Number.isFinite(b)) roomDown = Math.max(0, b - GAP_PANEL_MIN_PX);
+            const floor = gapPageFloor(pagesRoom());
+            if (Number.isFinite(t)) roomUp = Math.max(0, t - floor);
+            if (Number.isFinite(b)) roomDown = Math.max(0, b - floor);
           }
           return { px: SLOT.px, base: pagesWithoutSlot(), gap: SLOT.gap, up: SLOT.gap ? up : 0, down: SLOT.gap ? SLOT.px - up : 0, roomUp, roomDown };
         },
@@ -23928,8 +23965,13 @@ __zentralShim.register = function (def) {
           // Only the owner may give the reserve back; a bar that holds nothing leaves another bar's slot alone.
           if (!wants && SLOT.owner !== api) return false;
           const base = pagesWithoutSlot();
-          const px = !wants ? 0 : wantPx > 0 ? clampSlotPx(base, wantPx) : strip > 0 && base > 200 ? Math.round(strip) : slotPx(base, fraction);
+          // Between the pages the height also has to leave each page its floor (gapMaxPx); the thin hover strip never reaches it.
+          const fit = between ? (v) => (v > 0 ? clampGapPx(v, pagesRoom()) : v) : (v) => v;
+          const asStrip = wants && !(wantPx > 0) && strip > 0 && base > 200;
+          const px = !wants ? 0 : wantPx > 0 ? fit(clampSlotPx(base, wantPx)) : asStrip ? Math.round(strip) : fit(slotPx(base, fraction));
           const up = !between || px <= 0 ? -1 : wantUp >= 0 ? Math.min(Math.round(wantUp), px) : upFrac >= 0 ? Math.round(px * Math.min(1, upFrac)) : keptGapUp(px);
+          // Read before the slot is rewritten below: what the strip has to remember of the band it replaces.
+          const keep = between && asStrip && px > 0 ? (upFrac >= 0 ? Math.min(1, upFrac) : gapFrac()) : -1;
           const pseudo = !between && px > 0 && pseudoOk;
           const quad = !between && px > 0 && (pseudo || rootEl.hasAttribute("bgalazka-triple-view"));
           const hasQuad = rootEl.hasAttribute("bgalazka-quad-view");
@@ -23947,6 +23989,9 @@ __zentralShim.register = function (def) {
           SLOT.quad = quad;
           SLOT.pseudo = pseudo;
           SLOT.up = up;
+          SLOT.strip = between && asStrip;
+          SLOT.frac = SLOT.strip ? keep : -1;
+          SLOT.fracUp = SLOT.strip ? up : -1;
           if (between && up >= 0) rootEl.style.setProperty("--zentral-notes-gap-up", up + "px");
           else rootEl.style.removeProperty("--zentral-notes-gap-up");
           if (between) rootEl.setAttribute("bgalazka-notes-gap", "true");
@@ -24068,16 +24113,29 @@ __zentralShim.register = function (def) {
             if (own) ro.observe(own);
           };
           observeAll();
+          // The suite has just mirrored --zentral-notes-gap-up (the panels traded places): the split a folded sheet
+          // keeps beside its strip is mirrored with it, or the sheet would reopen on the wrong side of the divider.
+          const swapped = (event) => {
+            if (SLOT.owner === api && SLOT.strip && SLOT.frac >= 0) {
+              SLOT.frac = 1 - SLOT.frac;
+              SLOT.fracUp = SLOT.px - SLOT.fracUp;
+            }
+            cb(event);
+          };
           window.addEventListener("resize", cb);
-          document.addEventListener("zentral-triple-swapped", cb);
+          document.addEventListener("zentral-triple-swapped", swapped);
           return () => {
             ro.disconnect();
             observeAll = () => {};
             window.removeEventListener("resize", cb);
-            document.removeEventListener("zentral-triple-swapped", cb);
+            document.removeEventListener("zentral-triple-swapped", swapped);
           };
         },
         rewatch: () => observeAll(),
+        // The panel suite rebuilt this bar in place (see syncBars): the same sheet goes on with the new element.
+        rebind(next) {
+          barEl = next;
+        },
         // True while the Zentral panel is slid away by its own "hide when not hovered" (its bars stay in the DOM).
         panelHidden() {
           const r = document.documentElement;
@@ -27331,9 +27389,14 @@ __zentralShim.register = function (def) {
           // Includes a sheet folded to its own reveal strip. A folded sheet still owns the
           // window-wide Notes instance and must be closed before another host can open one.
           held: () => !!sheet?.held(),
-          visible: () => el.isConnected && !panelsHidden() && el.getClientRects().length > 0,
+          visible: () => binding.el.isConnected && !panelsHidden() && binding.el.getClientRects().length > 0,
           // The bar exists on screen or slid away with an autohidden panel (a hidden panel keeps its bars).
-          present: () => el.isConnected && el.getClientRects().length > 0,
+          present: () => binding.el.isConnected && binding.el.getClientRects().length > 0,
+          // The suite replaced the bar element (same place, same kind): keep the sheet, its note, caret and folded state.
+          rebind(next) {
+            binding.el = next;
+            adapter.rebind(next);
+          },
           // A request from this bar: it lands on the host chooseHost picks (Triple View: the bar between the
           // cards for both bars), brings an autohidden panel out first, and moves Notes away from any other
           // bar or the card. Resolves to the binding (or the card) that now shows the sheet.
@@ -27533,11 +27596,20 @@ __zentralShim.register = function (def) {
         attachObservers(); // a slider or panel root built (or rebuilt) since the last look is watched from now on
         const found = discoverBars();
         for (const [el, b] of [...bindings]) {
-          if (!el.isConnected || !found.some((f) => f.el === el)) {
-            b.destroy();
-            bindings.delete(el);
-            if (lastUsed === b) lastUsed = null;
+          if (el.isConnected && found.some((f) => f.el === el)) continue;
+          // "Swap top and bottom panels" (and a second panel that is recreated) builds a NEW bar for the second panel
+          // in the same place. Closing the sheet with the old bar and opening another on the new one lost the caret,
+          // an open dialog and the list position, and brought a sheet that was folded away back fully open (OW-26).
+          // The sheet lives in the slider, which is not rebuilt, so it simply continues on the new bar.
+          const heir = b.kind === "triple" && b.held() ? found.find((f) => f.kind === "triple" && !bindings.has(f.el)) : null;
+          bindings.delete(el);
+          if (heir) {
+            b.rebind(heir.el);
+            bindings.set(heir.el, b);
+            continue;
           }
+          b.destroy();
+          if (lastUsed === b) lastUsed = null;
         }
         const show = prefBool(PREF.SHOW_BUTTON, true);
         for (const f of found) {

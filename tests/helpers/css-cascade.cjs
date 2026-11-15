@@ -234,6 +234,8 @@ function cascade(sheet, el, env = {}) {
   }
   return {
     get: (prop) => won.get(prop)?.value ?? "",
+    // True when the winning declaration is !important: it then also beats an inline style (which this helper does not read).
+    important: (prop) => !!won.get(prop)?.important,
     rule: (prop) => won.get(prop)?.rule.selector ?? "",
     line: (prop) => (won.has(prop) ? `${prop}: ${won.get(prop).value}  (${won.get(prop).rule.selector})` : `${prop}: not set`),
     props: () => [...won.keys()],

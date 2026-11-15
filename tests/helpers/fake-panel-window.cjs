@@ -69,7 +69,9 @@ function createPanelWorld({ sharedGlobal = null, hiddenWindow = null, freezeCui 
   };
   if (freezeCui) Object.freeze(cui);
 
-  function openWindow({ id = "w" + (windows.length + 1), components = !!sharedGlobal, hidden = hiddenWindow, calendar = true } = {}) {
+  // `globals` replaces names the Notes script sees as globals (e.g. observers that are really told about changes,
+  // tests/helpers/fake-triple-view.cjs); everything else keeps the stand-ins below.
+  function openWindow({ id = "w" + (windows.length + 1), components = !!sharedGlobal, hidden = hiddenWindow, calendar = true, globals = {} } = {}) {
     const dom = require("./fake-dom.cjs")(), { El, Ev, document, raf } = dom;
     const prefObservers = [], listeners = [], mutationObservers = [], own = new Set();
     let registered = null;
@@ -112,6 +114,7 @@ function createPanelWorld({ sharedGlobal = null, hiddenWindow = null, freezeCui 
       PathUtils: { profileDir: "/profile", join: (...p) => p.join("/"), filename: (p) => p.split("/").pop() }, IOUtils: ioFor(id),
       // What privileged scripts see: Components.utils.getGlobalForObject(module) is the one global all system modules share.
       ...(components ? { Components: { utils: { getGlobalForObject: () => sharedGlobal } } } : {}),
+      ...globals,
     };
     vm.createContext(context);
     if (calendar) {
