@@ -12,9 +12,14 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   document.createXULElement = (tag) => document.createElement(tag);
   const operations = [], events = [], listeners = new Map(), timers = new Map();
   let timerId = 0, tabId = 0, definition, clockOffset = 0;
+  // The clock of the fake window is virtual: it starts at the real time and moves only when a test fires a timer or
+  // calls advanceClock. With the real clock running underneath, a delay computed as "due - now" depended on how busy
+  // the machine was: a debounce re-armed 30 ms later asked for 220 ms instead of 250, fireTimer(250) no longer found
+  // it, and a test failed only when the whole suite ran in parallel.
+  const clockBase = Date.now();
   class FakeDate extends Date {
-    constructor(...args) { super(...(args.length ? args : [Date.now() + clockOffset])); }
-    static now() { return Date.now() + clockOffset; }
+    constructor(...args) { super(...(args.length ? args : [clockBase + clockOffset])); }
+    static now() { return clockBase + clockOffset; }
   }
   const record = (node, parent) => {
     if (!node || !["tab", "zen-folder"].includes(node.localName)) return;
