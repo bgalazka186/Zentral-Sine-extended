@@ -19,6 +19,8 @@ Also update:
 - `INSTALL.md` heading (one version per release), the version badge and the "Extended X.Y.Z uses Zentral…" line in `.github/README.md`
 - Any other `README.md`/`docs/*.md` that cite the old version
 
+`node tools/sync-version.cjs` does all of the above in one step: it raises every listed place to the highest version found in the repository (`--set X.Y.Z` to choose one, `--check` to only report drift; `tests/version-sync.test.cjs` fails on drift). Per chunk: `node tools/build-standalone.cjs --bump && node tools/sync-version.cjs && node tools/build-standalone.cjs`.
+
 After a bump, run `node tools/build-standalone.cjs` (regenerates the bundles and lock files; do not hand-edit the lock files' versions) and `node tools/build-preferences.cjs` (keeps the root `preferences.json` in step with the schema), then `node tools/build-standalone.cjs --check` and `node tests/standalone.test.cjs`. After changing settings placement, run `node tools/organize-layout-order.cjs` before building preferences.
 
 Never leave a standalone module at an older version than the main mod. Verify with `grep 3.0.2` (or whatever the prior version was) after a bump to confirm zero stale references remain.

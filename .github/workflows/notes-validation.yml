@@ -21,6 +21,8 @@ jobs:
       - name: Rebuild standalone packages and preferences
         run: |
           node tools/build-standalone.cjs --bump
+          node tools/sync-version.cjs
+          node tools/build-standalone.cjs
           node tools/build-preferences.cjs
           node tools/build-z-map.cjs
           node tools/build-standalone.cjs --check

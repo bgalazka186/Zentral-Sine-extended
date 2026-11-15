@@ -150,7 +150,6 @@ Impact and effort: S = under one session slice, M = one session, L = several ses
 | 81 | `OW-21` | `OPEN` | Med | M | — | [new, lower priority] Find and replace within Notes |
 | 82 | `OW-22` | `OPEN` | Med | M | — | [new, lower priority] Find next/previous match outside the visible viewport |
 | 83 | `T4.4` | `OPEN` | Low | S | — | Dead code removal (`stretched()`, legacy `quad` helpers) |
-| 84 | `T4.5` | `OPEN` | Low | S | — | Standalone modules version alignment & release hygiene |
 
 ---
 
@@ -810,13 +809,6 @@ _Not blocked by the calendar work. `T3.1` and `T3.6a` are High impact and may be
 
 **Full specification (original row):** **OPEN.** Remove unused legacy layout functions (`stretched()`, obsolete `quad` math/positioning helpers) confirmed dead after `T4.1` verification.
 
-#### `T4.5` — Standalone modules version alignment & release hygiene
-**Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Source:** carried over from the previous roadmap (unchanged requirement)
-
-**Current state and what is LEFT:** Synchronize version strings, headers, and changelogs across all standalone and bundled scripts prior to release tag.
-
-**Full specification (original row):** **OPEN.** Synchronize version strings, headers, and changelogs across all standalone and bundled scripts prior to release tag.
-
 ---
 
 ## Track 2 design rules (owner decisions, still binding)
@@ -873,7 +865,7 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 1. Add the pref: schema in `additional/notes/settings.json` (+ `layout` entry), list in `additional/notes/standalone.json`, constant in `PREF` and a row in the in-app settings list of `ZentralNotes.uc.js`; run `node tools/organize-layout-order.cjs`, `node tools/build-preferences.cjs`, `node tools/check-default-drift.cjs`. Copy the pattern of `default_view` or `tree_order` (grep it).
 2. Pure function first, exported through `__zentralNotesTestSeam`, fixture test red, then implement. Parser changes go in `parseBlocks` / the inline parser; keep `exportHtml` and `exportText` in step.
-3. Release loop: `node tools/build-standalone.cjs --bump`, `node tools/build-preferences.cjs`, `node tools/build-z-map.cjs`, `node tools/build-standalone.cjs --check`, then `node tests/run-all.cjs`.
+3. Release loop: `node tools/build-standalone.cjs --bump`, `node tools/sync-version.cjs`, `node tools/build-standalone.cjs`, `node tools/build-preferences.cjs`, `node tools/build-z-map.cjs`, `node tools/build-standalone.cjs --check`, then `node tests/run-all.cjs`. The second and third commands keep the main mod and every standalone module on one version.
 
 
 ---
@@ -882,13 +874,14 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.163.** `F0.1`–`F0.7`, `H1.1`–`H1.5`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.5`, `UI4.7`, `SB6.1` and `T2.8b` are DONE and archived. `AU-B1` stays `PARTIAL` until the `F0.8` golden cases exist. The full suite (`125/125` test files) and the timezone matrix (`176/176` across `UTC`, `Europe/Warsaw`, `America/Los_Angeles`, `Pacific/Auckland`) pass in Node/fake-Zen; live Zen is not available in the sandbox.
+State: **3.3.163.** `F0.1`–`F0.7`, `H1.1`–`H1.5`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.5`, `UI4.7`, `SB6.1`, `T2.8b` and `T4.5` are DONE and archived. `AU-B1` stays `PARTIAL` until the `F0.8` golden cases exist. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`126/126` test files) and the timezone matrix (`176/176` across `UTC`, `Europe/Warsaw`, `America/Los_Angeles`, `Pacific/Auckland`) pass in Node/fake-Zen; live Zen is not available in the sandbox.
 
 Completed this session (3.3.163), every item archived in `docs/LEGACY_done_rows.md`:
 - `UI4.7` DONE — multi-window and data-integrity edge tests closed: blocked stale write keeps later edits until its recovery copy exists; writers without a lock are detected by snapshot; note text is always written before `calendar.json` (`createItemStore({ beforeWrite })`); after a crash between the two writes the manual record and its mirror line become one reminder again (`mirrorItemToAgendaNote` twin re-key). `F0.5` and `F0.6` (finished earlier) were moved out of the roadmap.
+- `T4.5` DONE — one version everywhere: `tools/sync-version.cjs` (+ `--check`, `--set`), `tests/version-sync.test.cjs`, CI workflow and release-loop documentation.
 
-Standing owner rules for chunks: commit to Git, no ZIPs; no conversational filler; production-ready code and test suites; tasks strictly in order (implementation, edge cases, unit tests). Owner 2026-11-14: no live-check items (owner tests in the app and reports); do NOT add low-priority polish that changes nothing noticeable; only fix what a person would notice.
+Standing owner rules for chunks: commit to Git, no ZIPs; no conversational filler; production-ready code and test suites; tasks strictly in order (implementation, edge cases, unit tests). Owner 2026-11-14: no live-check items (owner tests in the app and reports); do NOT add low-priority polish that changes nothing noticeable; only fix what a person would notice. One version everywhere: `node tools/sync-version.cjs` after `build-standalone.cjs --bump` (see "How to add a feature").
 
 Known debts / owner requirements: `OW-18` (space-local Notes/Agenda) and `B3.3.50-6` (`SessionFile.write` snapshot isolation) remain `PARTIAL`. Accepted limits of `UI4.7` (not tasks): a foreign program writing between our compare and our write cannot be locked out; note file and `calendar.json` are ordered and repaired on start, not one transaction (details of a reminder that never reached `calendar.json` are lost if the browser dies between the two writes; date, time and title survive in the note line).
 
-Next action: `T4.5` first (one version for the main mod and every standalone module; the release loop needs it), then the Master Order from the top: `F0.8`, `AU-B1`, `SB6.8`, `T3.1`.
+Next action: Continue the Master Order from the top: `F0.8`, `AU-B1`, `SB6.8`, `T3.1`, `OW-26`.
