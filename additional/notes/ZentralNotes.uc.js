@@ -5906,6 +5906,8 @@
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, cardDock: "", cardW: 0,
         calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarTab: "tree",
         calendarView: "month", calendarDensity: "comfortable", calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "",
+        // The hours Week and Day show ({ on, startMin, endMin }; off = the whole day). Replaced as a whole, never changed in place.
+        calendarHours: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHours(null) : { on: false, startMin: 480, endMin: 1200 },
         calendarAlertSettings: CALENDAR_PART ? CALENDAR_PART.cleanAlertSettings(null) : {}, calendarNoteAlertOverrides: {},
         calendarAgendaDefaults: {}, calendarNoteAgendaOverrides: {} };
       let meta = { ...DEFAULT_META };
@@ -6140,6 +6142,7 @@
             meta.calendarView = ["month", "upcoming", "agenda", "week", "day"].includes(raw.calendarView) ? raw.calendarView : "month";
             meta.calendarDensity = CALENDAR_PART.cleanCalendarDensity(raw.calendarDensity);
             meta.calendarSnap = CALENDAR_PART.cleanCalendarSnap(raw.calendarSnap);
+            meta.calendarHours = CALENDAR_PART.cleanCalendarHours(raw.calendarHours);
             const daysForward = Number(raw.calendarDaysForward);
             meta.calendarDaysForward = [3, 7, 14, 30].includes(daysForward) ? daysForward : 7;
             meta.calendarFilterKind = ["all", "event", "reminder"].includes(raw.calendarFilterKind) ? raw.calendarFilterKind : "all";
@@ -10544,6 +10547,8 @@
       const calendarViewSelect = h("button", { type: "button", class: "zn-chip zn-calendar-view-select", "aria-label": "Calendar view", "aria-haspopup": "menu" }, "Month");
       const calendarDensitySelect = h("button", { type: "button", class: "zn-chip zn-calendar-density-select", "aria-label": "Calendar density", "aria-haspopup": "menu" }, "Comfortable");
       const calendarSnapSelect = h("button", { type: "button", class: "zn-chip zn-calendar-snap-select", "aria-label": "Calendar drag snap", "aria-haspopup": "menu" }, "Snap 15 min");
+      // Week and Day only: one press switches between the chosen hours and all 24 (the hours themselves: Tools).
+      const calendarHoursToggle = h("button", { type: "button", class: "zn-chip zn-calendar-hours-toggle", "aria-pressed": "false", "aria-label": "Show only 08:00–20:00" }, "08–20");
       const calendarPrev = h("button", { type: "button", class: "zn-chip zn-calendar-nav", "aria-label": "Previous period", title: "Previous period" }, "‹");
       const calendarToday = h("button", { type: "button", class: "zn-chip zn-calendar-today", title: "Go to today" }, "Go to today");
       const calendarNext = h("button", { type: "button", class: "zn-chip zn-calendar-nav", "aria-label": "Next period", title: "Next period" }, "›");
@@ -10552,7 +10557,7 @@
       const calendarCategorySelect = h("button", { type: "button", class: "zn-chip zn-calendar-category-filter", "aria-label": "Filter category", "aria-haspopup": "menu" }, "All categories");
       const calendarUndoMove = h("button", { type: "button", class: "zn-chip zn-calendar-undo-move", "aria-label": "Undo last calendar change", hidden: "true" }, "Undo change");
       const calendarToolsSelect = h("button", { type: "button", class: "zn-chip zn-calendar-tools", "aria-label": "Calendar tools", "aria-haspopup": "menu" }, "Tools");
-      const calendarControls = h("div", { class: "zn-calendar-controls" }, calendarPrev, calendarToday, calendarNext, calendarViewSelect, calendarDensitySelect, calendarSnapSelect, calendarDaysSelect, calendarKindSelect, calendarCategorySelect, calendarUndoMove, calendarToolsSelect);
+      const calendarControls = h("div", { class: "zn-calendar-controls" }, calendarPrev, calendarToday, calendarNext, calendarViewSelect, calendarDensitySelect, calendarSnapSelect, calendarHoursToggle, calendarDaysSelect, calendarKindSelect, calendarCategorySelect, calendarUndoMove, calendarToolsSelect);
       const calendarContent = h("div", { class: "zn-calendar-pane-content zn-calendar-view", role: "region", "aria-label": "Calendar items" });
       const calendarPane = h("section", { class: "zn-calendar-pane", "aria-label": "Calendar" }, calendarHeader, calendarControls, calendarContent);
       const allSplitter = h("div", { class: "zn-calendar-splitter", role: "separator", tabindex: "0", "aria-label": "Resize folder tree and calendar panes", "aria-orientation": "vertical", "aria-valuemin": "20", "aria-valuemax": "80", "aria-valuenow": "36" });
@@ -12330,6 +12335,9 @@
       // One captured pointer gesture per sheet. A calendar re-render, view change,
       // Escape, pointer cancellation, panel close or teardown discards the preview.
       let calendarDrag = null, calendarMoveUndo = null, calendarDragClickTimer = 0, calendarSuppressedClick = null;
+      // The Week / Day grid as it is drawn now (OW-04): the hours it shows, and per day what was laid out in it
+      // ({ startMin, endMin, item }), kept so that an update of one day can tell whether the hours still hold.
+      let calendarGridHours = null, calendarGridEntries = new Map();
       let calendarBackgroundPending = false, calendarFlushQueued = false;
       const calendarInteracting = () => !!(calendarDrag || dialog || menu?.calendar);
       function queueCalendarBackgroundFlush() {
@@ -12374,7 +12382,7 @@
         for (const track of g.columns.querySelectorAll(g.allDay ? ".zn-cal-time-allday-cell" : ".zn-cal-time-track")) {
           const rect = track.getBoundingClientRect();
           if (event.clientX < rect.left || event.clientX >= rect.right || event.clientY < rect.top || event.clientY >= rect.bottom) continue;
-          const minute = g.allDay ? 0 : Math.max(0, Math.min(1440, (event.clientY - rect.top) * 60 / g.hourHeight));
+          const minute = g.allDay ? 0 : CALENDAR_PART.gridMinuteAt(event.clientY - rect.top, g.hourHeight, g.grid);
           return { track, day: track.getAttribute("data-day"), minute };
         }
         return null;
@@ -12391,7 +12399,7 @@
         if (!placement) { g.preview?.remove(); g.preview = null; return; }
         if (!g.preview) g.preview = h("div", { class: "zn-cal-drag-preview", "aria-hidden": "true" });
         if (g.preview.parentElement !== point.track) point.track.append(g.preview);
-        g.preview.style.top = g.allDay ? "0px" : Math.max(0, point.minute / 60 * g.hourHeight) + "px";
+        g.preview.style.top = g.allDay ? "0px" : Math.max(0, CALENDAR_PART.gridOffsetOf(point.minute, g.hourHeight, g.grid)) + "px";
         const shownMinute = Math.min(1440, Math.round((placement.minute || 0) / g.snap) * g.snap);
         g.preview.textContent = g.allDay ? placement.date + " · all day" : placement.date + " " + String(Math.floor(shownMinute / 60)).padStart(2, "0") + ":" + String(shownMinute % 60).padStart(2, "0");
         event.preventDefault();
@@ -12451,7 +12459,9 @@
       listen(window, "pointerup", releaseCalendarSuppressedClick, true);
       listen(root, "pointercancel", (event) => { if (calendarDrag && (event.pointerId === undefined || event.pointerId === calendarDrag.pointerId)) cancelCalendarDrag(); releaseCalendarSuppressedClick(event); });
       cleanups.push(() => { cancelCalendarDrag(); window.clearTimeout(calendarDragClickTimer); calendarDragClickTimer = 0; calendarSuppressedClick = null; });
-      function bindCalendarDrag(button, item, { track, columns, scroll, dayKey, hourHeight, zone, allDay = false, edge = "" }) {
+      // `grid` = the hours the timeline shows ({ startMin, endMin }); a position in a track is a time counted from its
+      // first hour, not from midnight (OW-04). The all-day row has no hours and passes none.
+      function bindCalendarDrag(button, item, { track, columns, scroll, dayKey, hourHeight, zone, grid = null, allDay = false, edge = "" }) {
         const reminder = CALENDAR_PART.isReminder(item);
         const writable = !reminder || (!!store.items.history && !store.items.history.storageState().writeBlocked);
         if (!writable || item.x?.series || (item.recurrence || []).length || item.x?.src === "note") return;
@@ -12464,8 +12474,8 @@
           if (!current || current.rev !== item.rev || current.etag !== item.etag) return;
           const rect = track.getBoundingClientRect();
           calendarDrag = { button, pointerId: event.pointerId, x: event.clientX, y: event.clientY, before: current, originDay: dayKey,
-            originMinute: allDay ? 0 : Math.max(0, Math.min(1440, (event.clientY - rect.top) * 60 / hourHeight)),
-            hourHeight, snap: CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap), columns, scroll, zone, allDay, edge, active: false, placement: null, preview: null };
+            originMinute: allDay ? 0 : CALENDAR_PART.gridMinuteAt(event.clientY - rect.top, hourHeight, grid),
+            hourHeight, grid, snap: CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap), columns, scroll, zone, allDay, edge, active: false, placement: null, preview: null };
           try {
             if (typeof button.setPointerCapture !== "function") { cancelCalendarDrag(); return; }
             button.setPointerCapture(event.pointerId);
@@ -12473,13 +12483,13 @@
         });
         button.addEventListener("lostpointercapture", (event) => { if (calendarDrag?.button === button && calendarDrag.pointerId === event.pointerId) cancelCalendarDrag(); });
       }
-      function bindCalendarCreate(track, columns, scroll, dayKey, hourHeight, zone) {
+      function bindCalendarCreate(track, columns, scroll, dayKey, hourHeight, zone, grid = null) {
         track.addEventListener("pointerdown", (event) => {
           if (event.target !== track || (event.button !== undefined && event.button !== 0) || calendarDrag || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
           const rect = track.getBoundingClientRect();
           calendarDrag = { button: track, pointerId: event.pointerId, x: event.clientX, y: event.clientY, create: true,
-            originDay: dayKey, originMinute: Math.max(0, Math.min(1440, (event.clientY - rect.top) * 60 / hourHeight)),
-            hourHeight, snap: CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap), columns, scroll, zone, active: false, placement: null, preview: null };
+            originDay: dayKey, originMinute: CALENDAR_PART.gridMinuteAt(event.clientY - rect.top, hourHeight, grid),
+            hourHeight, grid, snap: CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap), columns, scroll, zone, active: false, placement: null, preview: null };
           try {
             if (typeof track.setPointerCapture !== "function") { cancelCalendarDrag(); return; }
             track.setPointerCapture(event.pointerId);
@@ -12495,11 +12505,60 @@
         const lastDay = workDays[workDays.length - 1], lastBounds = C.zonedDayBounds(C.localDateKey(lastDay), zone) || [lastDay, C.addDays(lastDay, 1)];
         const from = firstBounds[0], until = lastBounds[1];
         const expanded = C.expandRange(items, from, until);
+        // OW-04. Three steps, in this order: (1) the times of the timed items of every day that is drawn, (2) the
+        // hours of the grid from those times, (3) the lanes of each day inside those hours.
+        // (1) Minutes on the clock of the day, cut off at its ends. A reminder has no length: it counts as one minute,
+        // so that one at 20:00 sharp lies after a grid that ends at 20:00.
+        const timed = new Map();
+        for (const day of workDays) {
+          const dayKey = C.localDateKey(day), bounds = C.zonedDayBounds(dayKey, zone) || [day, C.addDays(day, 1)];
+          const spans = C.itemsInRange(expanded, bounds[0], bounds[1]).filter((it) => !C.isAllDay(it)).map((item) => {
+            const [start, end] = C.itemRange(item), reminder = C.isReminder(item);
+            const startMin = Math.round(C.zonedMinuteOfDay(Math.max(start, bounds[0]), dayKey, zone));
+            const endMin = reminder ? startMin : Math.round(C.zonedMinuteOfDay(Math.min(end, bounds[1]), dayKey, zone));
+            return { item, reminder, start: Math.max(start, bounds[0]), startMin, endMin };
+          });
+          timed.set(dayKey, { bounds, spans });
+        }
+        if (!patch) calendarGridEntries = new Map();
+        for (const [dayKey, data] of timed) calendarGridEntries.set(dayKey, data.spans.map((span) => ({ startMin: span.startMin, endMin: Math.max(span.endMin, span.startMin + 1), item: span.item })));
+        // (2) The hours follow the times of the items, not the size of their boxes: a reminder at 19:50 lies inside
+        // 08:00-20:00 although its box is 20px high.
+        const hoursSet = C.cleanCalendarHours(store.meta.calendarHours);
+        const grid = C.visibleHourRange(hoursSet, days.map((day) => ({ day, entries: calendarGridEntries.get(C.localDateKey(day)) || [] })), zone);
+        // An update of single days keeps the other columns and the scroll element, so it is only possible while the
+        // hours stay the ones that are drawn. Otherwise the caller draws the whole grid again.
+        if (patch && (!calendarGridHours || calendarGridHours.startMin !== grid.startMin || calendarGridHours.endMin !== grid.endMin)) return false;
+        calendarGridHours = { startMin: grid.startMin, endMin: grid.endMin };
+        const gridHours = (grid.endMin - grid.startMin) / 60;
+        const gridY = (minute) => C.gridOffsetOf(minute, CALENDAR_HOUR_PX, grid);
+        // (3) Events and timed reminders share one overlap layout. No box is lower than 20px, so a reminder and an
+        // event shorter than that take the lane of a box of that height: they cannot cover an event or each other.
+        // Such a box which would begin too late to end inside the grid (a reminder at 19:50 in a grid that ends at
+        // 20:00, or at 23:50 in the whole day) is moved up until it ends with the grid, and takes its lane there.
+        const minBoxMin = Math.max(1, Math.ceil((20 / CALENDAR_HOUR_PX) * 60));
+        const lastBoxStart = grid.endMin - minBoxMin;
+        const laidOut = new Map();
+        for (const day of workDays) {
+          const dayKey = C.localDateKey(day), { bounds, spans } = timed.get(dayKey);
+          const spanById = new Map(spans.map((span) => [String(span.item.id), span]));
+          const layoutItems = spans.map((span) => {
+            if (!span.reminder && span.endMin - span.startMin >= minBoxMin) return span.item;
+            const start = span.start - Math.max(0, span.startMin - lastBoxStart) * 60000;
+            return { ...span.item, x: { ...(span.item.x || {}), kind: "event" }, start: { dateTime: new Date(start).toISOString() }, end: { dateTime: new Date(start + minBoxMin * 60000).toISOString() } };
+          });
+          const entries = C.layoutDay(layoutItems, day, zone);
+          for (const entry of entries) { entry.span = spanById.get(String(entry.item.id)) || null; entry.original = entry.span ? entry.span.item : entry.item; }
+          laidOut.set(dayKey, { bounds, entries });
+        }
+        const gridClock = (minute) => { const m = Math.floor(minute); return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
         const fmt = (day) => calendarDayLabel(day, { weekday: mode === "week" ? "short" : "long", year: true });
         calendarPeriod.textContent = mode === "week" ? `${fmt(days[0])} – ${fmt(days[6])}` : fmt(days[0]);
         const cols = `42px repeat(${days.length}, minmax(0, 1fr))`;
         const todayKey = C.zonedDateKey(nowMs(), zone);
         const root = h("div", { class: "zn-cal-time-view is-" + mode, "aria-label": mode === "week" ? "Week calendar" : "Day calendar" });
+        root.dataset.hours = hoursSet.on ? "limited" : "all";
+        root.style.setProperty("--zn-cal-hours", String(gridHours));
         const header = h("div", { class: "zn-cal-time-head" });
         header.style.gridTemplateColumns = cols;
         header.append(h("span", { class: "zn-cal-time-corner", "aria-hidden": "true" }));
@@ -12525,12 +12584,16 @@
           }
           allDayRow.append(cell);
         }
-        const scroll = h("div", { class: "zn-cal-time-scroll", tabindex: "0", "aria-label": "24-hour timeline" });
+        const scroll = h("div", { class: "zn-cal-time-scroll", tabindex: "0", "aria-label": hoursSet.on ? `Timeline ${gridClock(grid.startMin)} to ${gridClock(grid.endMin)}` : "24-hour timeline" });
         const gridRow = h("div", { class: "zn-cal-time-grid-row" });
         // Only the gutter and the columns wrapper are direct children; the wrapper owns all day tracks.
         gridRow.style.gridTemplateColumns = "42px minmax(0, 1fr)";
         const hours = h("div", { class: "zn-cal-hour-gutter" });
-        for (let hour = 0; hour < 24; hour++) hours.append(h("span", { class: "zn-cal-hour-label" }, String(hour).padStart(2, "0") + ":00"));
+        for (let hour = grid.startMin / 60; hour < grid.endMin / 60; hour++) {
+          // An hour outside the chosen ones: it is shown only because something in view lies in it.
+          const extra = hoursSet.on && (hour * 60 < hoursSet.startMin || hour * 60 >= hoursSet.endMin);
+          hours.append(h("span", { class: "zn-cal-hour-label" + (extra ? " is-extended" : "") }, String(hour).padStart(2, "0") + ":00"));
+        }
         gridRow.append(hours);
         const columns = h("div", { class: "zn-cal-time-columns" });
         const dragColumns = patch?.columns || columns, dragScroll = patch?.scroll || scroll;
@@ -12538,52 +12601,54 @@
         const work = C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK);
         for (const day of workDays) {
           const dayKey = C.localDateKey(day);
-          const bounds = C.zonedDayBounds(dayKey, zone) || [day, C.addDays(day, 1)];
+          const { bounds, entries } = laidOut.get(dayKey);
           const isToday = dayKey === todayKey;
           const track = h("div", { class: "zn-cal-time-track", tabindex: "0", "aria-label": "Timeline for " + fmt(day), "data-day": C.ymd(new Date(day)) });
           bindCalendarDayContext(track, day);
-          bindCalendarCreate(track, dragColumns, dragScroll, dayKey, CALENDAR_HOUR_PX, zone);
-          track.style.height = (24 * CALENDAR_HOUR_PX) + "px";
-          for (let hour = 0; hour < 24; hour++) {
+          bindCalendarCreate(track, dragColumns, dragScroll, dayKey, CALENDAR_HOUR_PX, zone, grid);
+          track.style.height = (gridHours * CALENDAR_HOUR_PX) + "px";
+          for (let hour = 0; hour < gridHours; hour++) {
             track.append(h("span", { class: "zn-cal-time-hour-line", style: `top:${hour * CALENDAR_HOUR_PX}px` }));
           }
+          // The part of the grid beyond the chosen hours, there because something in view lies in it.
+          if (grid.extendedTop) track.append(h("span", { class: "zn-cal-hours-extra is-top", style: `top:0;height:${gridY(hoursSet.startMin)}px`, "aria-hidden": "true" }));
+          if (grid.extendedBottom) track.append(h("span", { class: "zn-cal-hours-extra is-bottom", style: `top:${gridY(hoursSet.endMin)}px;bottom:0`, "aria-hidden": "true" }));
           const workRange = C.workRange(day, work, zone);
           const workStart = workRange ? Math.max(0, Math.round(C.zonedMinuteOfDay(workRange[0], dayKey, zone))) : 0;
           const workEnd = workRange ? Math.min(1440, Math.round(C.zonedMinuteOfDay(workRange[1], dayKey, zone))) : 0;
           if (!workRange) {
             track.append(h("span", { class: "zn-cal-off-hours is-all-day", "aria-hidden": "true" }));
           } else {
-            if (workStart > 0) track.append(h("span", { class: "zn-cal-off-hours", style: `top:0;height:${workStart / 60 * CALENDAR_HOUR_PX}px`, "aria-hidden": "true" }));
-            if (workEnd < 1440) track.append(h("span", { class: "zn-cal-off-hours", style: `top:${workEnd / 60 * CALENDAR_HOUR_PX}px;bottom:0`, "aria-hidden": "true" }));
+            if (workStart > grid.startMin) track.append(h("span", { class: "zn-cal-off-hours", style: `top:0;height:${gridY(Math.min(workStart, grid.endMin))}px`, "aria-hidden": "true" }));
+            if (workEnd < grid.endMin) track.append(h("span", { class: "zn-cal-off-hours", style: `top:${gridY(Math.max(workEnd, grid.startMin))}px;bottom:0`, "aria-hidden": "true" }));
           }
           const busy = C.busyRanges(expanded.filter((it) => !C.isAllDay(it)), bounds[0], bounds[1]);
           for (const [start, end] of busy) {
-            const top = Math.max(0, C.zonedMinuteOfDay(start, dayKey, zone) / 60 * CALENDAR_HOUR_PX);
-            const bottom = Math.min(1440, C.zonedMinuteOfDay(end, dayKey, zone));
-            const height = Math.max(1, (bottom - C.zonedMinuteOfDay(start, dayKey, zone)) / 60 * CALENDAR_HOUR_PX);
+            const startMinute = C.zonedMinuteOfDay(start, dayKey, zone);
+            const top = Math.max(0, gridY(startMinute));
+            const bottom = Math.min(grid.endMin, C.zonedMinuteOfDay(end, dayKey, zone));
+            const height = Math.max(1, (bottom - Math.max(grid.startMin, startMinute)) / 60 * CALENDAR_HOUR_PX);
             track.append(h("span", { class: "zn-cal-busy-range", style: `top:${top}px;height:${height}px`, "aria-hidden": "true" }));
           }
           if (isToday) {
             const nowMinutes = C.zonedMinuteOfDay(nowMs(), dayKey, zone);
-            track.append(h("div", { class: "zn-cal-now-line", style: `top:${nowMinutes / 60 * CALENDAR_HOUR_PX}px`, "aria-label": "Current time" }, h("span", { class: "zn-cal-now-dot" })));
+            if (!hoursSet.on || (nowMinutes >= grid.startMin && nowMinutes <= grid.endMin)) {
+              track.append(h("div", { class: "zn-cal-now-line", style: `top:${gridY(nowMinutes)}px`, "aria-label": "Current time" }, h("span", { class: "zn-cal-now-dot" })));
+            } else if (Number.isFinite(nowMinutes)) {
+              // The current time is not among the hours shown: a line in the grid would lie about it. The edge it
+              // is beyond carries a mark instead; the time of day does not widen the grid, only items do.
+              const before = nowMinutes < grid.startMin, clock = C.clockIn(nowMs(), zone);
+              const label = `Current time ${clock}, ${before ? "before" : "after"} the hours shown`;
+              track.append(h("div", { class: "zn-cal-now-edge " + (before ? "is-before" : "is-after"), role: "img", "aria-label": label, title: label }));
+            }
           }
-          // Events and timed reminders share one overlap layout. A reminder occupies a short
-          // visual interval (20px) so it cannot cover an event or another reminder at the same time.
-          const timedItems = C.itemsInRange(expanded, bounds[0], bounds[1]).filter((it) => !C.isAllDay(it));
-          const originalById = new Map(timedItems.map((item) => [String(item.id), item]));
-          const layoutItems = timedItems.map((item) => {
-            if (!C.isReminder(item)) return item;
-            const [start] = C.itemRange(item);
-            const displayDuration = Math.max(1, Math.ceil((20 / CALENDAR_HOUR_PX) * 60));
-            return { ...item, x: { ...(item.x || {}), kind: "event" }, end: { dateTime: new Date(start + displayDuration * 60000).toISOString() } };
-          });
-          for (const entry of C.layoutDay(layoutItems, day, zone)) {
-            const original = originalById.get(String(entry.item.id)) || entry.item;
+          for (const entry of entries) {
+            const original = entry.original;
             const reminder = C.isReminder(original);
             const button = calendarItemButton(original, true);
             button.classList.add(reminder ? "zn-cal-time-reminder" : "zn-cal-time-event");
-            const top = entry.startMin / 60 * CALENDAR_HOUR_PX;
-            const height = reminder ? 20 : Math.max(20, (entry.endMin - entry.startMin) / 60 * CALENDAR_HOUR_PX);
+            const top = gridY(entry.startMin);
+            const height = reminder ? 20 : Math.max(20, ((entry.span ? entry.span.endMin - entry.span.startMin : entry.endMin - entry.startMin)) / 60 * CALENDAR_HOUR_PX);
             button.style.top = top + "px";
             button.style.height = height + "px";
             button.style.left = (entry.lane * 100 / entry.lanes) + "%";
@@ -12593,7 +12658,7 @@
             const startLabel = C.clockIn(Math.max(itemStart, bounds[0]), zone);
             const endLabel = reminder ? "reminder" : C.clockIn(Math.min(itemEnd, bounds[1]), zone);
             button.setAttribute("aria-label", `${original.summary}, ${startLabel}${reminder ? " reminder" : " to " + endLabel}, lane ${entry.lane + 1} of ${entry.lanes}`);
-            bindCalendarDrag(button, original, { track, columns: dragColumns, scroll: dragScroll, dayKey, hourHeight: CALENDAR_HOUR_PX, zone });
+            bindCalendarDrag(button, original, { track, columns: dragColumns, scroll: dragScroll, dayKey, hourHeight: CALENDAR_HOUR_PX, zone, grid });
             track.append(button);
             if (!reminder && !original.x?.series && !(original.recurrence || []).length && original.x?.src !== "note") {
               for (const edge of ["start", "end"]) {
@@ -12601,9 +12666,11 @@
                 const handle = h("button", { type: "button", class: "zn-cal-resize-handle is-" + edge,
                   "aria-label": "Resize " + edge + " of " + (original.summary || "event") + "; use up and down arrows",
                   "data-item-id": original.id, "data-edge": edge, title: "Drag or use Up/Down to resize " + edge });
-                handle.style.top = (top + (edge === "end" ? height : 0) - 4) + "px";
+                // The handle is 8px high and sits astride the edge it moves. At the end of the grid it stays inside:
+                // hanging out, it gave the timeline a few px to scroll (an event that ends at 20:00 in 08:00-20:00).
+                handle.style.top = (edge === "end" ? Math.min(top + height - 4, gridHours * CALENDAR_HOUR_PX - 8) : top - 4) + "px";
                 handle.style.left = button.style.left; handle.style.width = button.style.width;
-                bindCalendarDrag(handle, original, { track, columns: dragColumns, scroll: dragScroll, dayKey, hourHeight: CALENDAR_HOUR_PX, zone, edge });
+                bindCalendarDrag(handle, original, { track, columns: dragColumns, scroll: dragScroll, dayKey, hourHeight: CALENDAR_HOUR_PX, zone, grid, edge });
                 handle.addEventListener("keydown", (event) => {
                   if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
                   event.preventDefault(); event.stopPropagation();
@@ -12623,9 +12690,24 @@
         }
         gridRow.append(columns);
         scroll.append(gridRow);
-        root.append(header, allDayRow, scroll);
+        // Why the grid shows more than the chosen hours: one line above the timeline, only while it does.
+        let hint = null;
+        if (grid.extendedTop || grid.extendedBottom) {
+          const name = (cause) => String(cause.item?.summary || "").trim() || "item";
+          const parts = grid.top && grid.bottom && grid.top.item === grid.bottom.item
+            ? [`${gridClock(grid.top.startMin)}–${gridClock(grid.bottom.endMin)} ${name(grid.top)}`]
+            : [grid.top ? `${gridClock(grid.top.startMin)} ${name(grid.top)}` : "",
+               grid.bottom ? `${C.isReminder(grid.bottom.item) ? gridClock(grid.bottom.startMin) : "until " + gridClock(grid.bottom.endMin)} ${name(grid.bottom)}` : ""].filter(Boolean);
+          const text = "Extended: " + parts.join(" · ");
+          hint = h("div", { class: "zn-cal-hours-hint", role: "status", title: `${text}. Week and Day show ${gridClock(hoursSet.startMin)}–${gridClock(hoursSet.endMin)} and more hours while a day in view has something outside them.` }, text);
+        }
+        root.append(header, allDayRow, ...(hint ? [hint] : []), scroll);
         calendarContent.dataset.compact = "false";
         if (patch) {
+          // The hours are the ones already drawn (checked above), so the line is there exactly when it was: only
+          // what it names can have changed.
+          const shownHint = calendarContent.querySelector(".zn-cal-hours-hint");
+          if (shownHint && hint) { shownHint.textContent = hint.textContent; shownHint.title = hint.title; }
           const oldCells = patch.allDayRow.querySelectorAll(".zn-cal-time-allday-cell"), newCells = allDayRow.querySelectorAll(".zn-cal-time-allday-cell");
           const oldColumns = patch.columns.querySelectorAll(".zn-cal-time-column"), newColumns = columns.querySelectorAll(".zn-cal-time-column");
           for (let i = 0; i < days.length; i++) if (patch.days.has(C.localDateKey(days[i]))) {
@@ -13031,6 +13113,51 @@
         openCalendarCard("Calendar display time zone", zone.row, status, h("div", { class: "zn-dialog-actions" }, cancel, reset, save));
         zone.input.focus({ preventScroll: true });
       }
+      // "08–20" for the toolbar, "08:00–20:00" for sentences.
+      function calendarHoursText(value) {
+        const hours = CALENDAR_PART.cleanCalendarHours(value), two = (minute) => String(minute / 60).padStart(2, "0");
+        return { short: two(hours.startMin) + "–" + two(hours.endMin), long: two(hours.startMin) + ":00–" + two(hours.endMin) + ":00" };
+      }
+      // The hours Week and Day show (OW-04). Working hours are a separate thing (they shade the grid); they are
+      // offered here as a starting point only.
+      function askCalendarHours() {
+        const C = CALENDAR_PART, current = C.cleanCalendarHours(store.meta.calendarHours);
+        const limit = h("input", { type: "checkbox", "aria-label": "Show only these hours in Week and Day" });
+        limit.checked = current.on;
+        const hourField = (label, value, min, max) => {
+          const input = h("input", { type: "number", class: "zn-field", min: String(min), max: String(max), step: "1", "aria-label": label });
+          input.value = String(value);
+          return input;
+        };
+        const from = hourField("First hour shown (0 to 23)", current.startMin / 60, 0, 23), to = hourField("Hour the grid ends at (1 to 24)", current.endMin / 60, 1, 24);
+        const status = h("p", { class: "zn-empty", role: "status" }, "A day in view that has an event or a reminder outside these hours widens the grid by whole hours, for as long as it is in view. All-day items never do.");
+        const work = C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK);
+        const workFrom = Math.floor(work.startMin / 60), workTo = Math.ceil(work.endMin / 60);
+        const preset = chip(`Use working hours (${calendarHoursText({ startMin: workFrom * 60, endMin: workTo * 60 }).long})`);
+        const save = chip("Apply", true), cancel = chip("Cancel");
+        const whole = (input) => (/^\d{1,2}$/.test(String(input.value).trim()) ? Number(input.value) : NaN);
+        const submit = () => {
+          const a = whole(from), b = whole(to);
+          delete from.dataset.bad; delete to.dataset.bad;
+          if (!(a >= 0 && a <= 23)) { from.dataset.bad = "true"; from.focus(); status.textContent = "The first hour is a whole number from 0 to 23."; return; }
+          if (!(b > a && b <= 24)) { to.dataset.bad = "true"; to.focus(); status.textContent = "The grid ends at a whole hour after the first one, 24 at the latest."; return; }
+          const next = { on: limit.checked, startMin: a * 60, endMin: b * 60 };
+          store.setMeta({ calendarHours: next });
+          closeDialog();
+          renderCalendar();
+          flash(next.on ? "Week and Day show " + calendarHoursText(next).long : "Week and Day show all 24 hours");
+        };
+        preset.addEventListener("click", () => { from.value = String(workFrom); to.value = String(workTo); limit.checked = true; });
+        save.addEventListener("click", submit);
+        cancel.addEventListener("click", closeDialog);
+        for (const input of [from, to]) input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); submit(); } });
+        openCalendarCard("Visible hours",
+          h("label", { class: "zn-field-row zn-cal-free-check" }, limit, h("span", {}, "Show only these hours in Week and Day")),
+          h("label", { class: "zn-field-row" }, h("span", {}, "From (hour)"), from),
+          h("label", { class: "zn-field-row" }, h("span", {}, "To (hour)"), to),
+          h("div", { class: "zn-cal-hours-presets" }, preset), status, h("div", { class: "zn-dialog-actions" }, cancel, save));
+        from.focus({ preventScroll: true });
+      }
       function askCalendarFreeSlots() {
         const C = CALENDAR_PART, start = calendarWeekStart(), end = C.addDays(start, 6);
         const from = field("From date (YYYY-MM-DD)", C.ymd(new Date(start)), "2026-11-12");
@@ -13041,11 +13168,17 @@
         workOnly.checked = true;
         const allDayBusy = h("input", { type: "checkbox", "aria-label": "Count all-day events as busy" });
         allDayBusy.checked = false;
+        // While Week and Day are held to a part of the day, free time is looked for in that part (a slot at 03:00
+        // would lie outside the grid). Offered only then; it can be switched off for one search.
+        const shownHours = C.cleanCalendarHours(store.meta.calendarHours);
+        const hoursOnly = h("input", { type: "checkbox", "aria-label": "Only within the visible hours" });
+        hoursOnly.checked = shownHours.on;
         const results = h("div", { class: "zn-cal-free-results", "aria-live": "polite" });
         const find = chip("Find free times", true), cancel = chip("Close");
         const options = h("div", { class: "zn-cal-free-options" },
           h("label", { class: "zn-field-row" }, h("span", {}, "Minimum duration (minutes)"), duration),
           h("label", { class: "zn-field-row zn-cal-free-check" }, workOnly, h("span", {}, "Only within working hours")),
+          ...(shownHours.on ? [h("label", { class: "zn-field-row zn-cal-free-check" }, hoursOnly, h("span", {}, `Only within the visible hours (${calendarHoursText(shownHours).long})`))] : []),
           h("label", { class: "zn-field-row zn-cal-free-check" }, allDayBusy, h("span", {}, "Treat all-day events as busy")));
         openCalendarCard("When am I free?", from.row, through.row, options, results, h("div", { class: "zn-dialog-actions" }, cancel, find));
         const run = () => {
@@ -13060,7 +13193,7 @@
           }
           if (!Number.isInteger(min) || min < 15 || min > 1440) { duration.dataset.bad = "true"; duration.focus(); return; }
           const work = workOnly.checked ? C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK) : null;
-          const slots = C.freeSlots(calendarBaseItems(), fromDay, C.addDays(throughDay, 1), min, { work, blockAllDay: allDayBusy.checked, zone: calendarDisplayZone() });
+          const slots = C.freeSlots(calendarBaseItems(), fromDay, C.addDays(throughDay, 1), min, { work, hours: shownHours.on && hoursOnly.checked ? shownHours : null, blockAllDay: allDayBusy.checked, zone: calendarDisplayZone() });
           results.replaceChildren();
           if (!slots.length) { results.append(h("p", { class: "zn-empty" }, "No matching free time was found in this range.")); return; }
           results.append(h("p", { class: "zn-empty" }, `${slots.length} free slot${slots.length === 1 ? "" : "s"} found · showing up to 20`));
@@ -13084,11 +13217,20 @@
         const focused = document.activeElement?.closest?.("[data-item-key]");
         const savedNode = (node) => node && calendarContent.contains(node) ? { key: node.getAttribute("data-item-key"), day: node.closest?.("[data-day]")?.getAttribute("data-day") || "" } : null;
         const scroll = calendarContent.querySelector(".zn-cal-time-scroll");
-        return { scrollTop: scroll ? scroll.scrollTop : null, focused: savedNode(focused), hover: savedNode(calendarHoverAnchor) };
+        // gridStart: the first hour of the timeline as it is drawn now.
+        return { scrollTop: scroll ? scroll.scrollTop : null, gridStart: scroll && calendarGridHours ? calendarGridHours.startMin : null, focused: savedNode(focused), hover: savedNode(calendarHoverAnchor) };
       }
       function restoreCalendarViewState(state) {
         const scroll = calendarContent.querySelector(".zn-cal-time-scroll");
-        if (scroll && state.scrollTop !== null) scroll.scrollTop = state.scrollTop;
+        if (scroll && state.scrollTop !== null) {
+          // The grid may now begin at another hour: keep the same time at the top, not the same number of px. One
+          // exception: a timeline held to some hours that was at its very top stays at its top, so hours that were
+          // added above (for an item, or by choosing an earlier first hour) are in sight. All 24 hours keep the time:
+          // they would jump to midnight.
+          const shift = state.gridStart !== null && calendarGridHours ? (state.gridStart - calendarGridHours.startMin) / 60 * CALENDAR_PART.calendarDensityHourHeight(store.meta.calendarDensity) : 0;
+          const held = CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours).on;
+          scroll.scrollTop = held && state.scrollTop <= 0 ? 0 : Math.max(0, state.scrollTop + shift);
+        }
         const find = (ref) => {
           if (!ref?.key) return null;
           const candidates = [...calendarContent.querySelectorAll("[data-item-key]")].filter((node) => node.getAttribute("data-item-key") === ref.key);
@@ -13122,7 +13264,8 @@
         // day columns, keeping other columns and the scroll element intact.
         if (changed.size) {
           const state = captureCalendarViewState();
-          calendarTimeGridView(current, cursor, mode, { allDayRow, columns, scroll, days: changed });
+          // false: the change moves the hours the grid has to show (OW-04); the caller draws the whole grid again.
+          if (calendarTimeGridView(current, cursor, mode, { allDayRow, columns, scroll, days: changed }) === false) return false;
           restoreCalendarViewState(state);
         }
         calendarRenderedItems = new Map(current.map((item) => [item.id, item]));
@@ -13151,6 +13294,16 @@
         calendarDensitySelect.textContent = ({ comfortable: "Comfortable", compact: "Compact", "extra-compact": "Extra compact" })[density];
         calendarSnapSelect.textContent = "Snap " + CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap) + " min";
         calendarSnapSelect.hidden = view !== "week" && view !== "day";
+        const hoursSet = CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours), hoursText = calendarHoursText(hoursSet);
+        calendarHoursToggle.textContent = hoursText.short;
+        calendarHoursToggle.hidden = view !== "week" && view !== "day";
+        calendarHoursToggle.setAttribute("aria-pressed", hoursSet.on ? "true" : "false");
+        calendarHoursToggle.setAttribute("aria-label", "Show only " + hoursText.long);
+        calendarHoursToggle.classList.toggle("is-on", hoursSet.on);
+        calendarHoursToggle.title = hoursSet.on
+          ? `Showing ${hoursText.long}, and more while a day in view has something outside. Press for all 24 hours. Other hours: Tools → Visible hours…`
+          : `Show only ${hoursText.long} in Week and Day. Other hours: Tools → Visible hours…`;
+        if (view !== "week" && view !== "day") { calendarGridHours = null; calendarGridEntries = new Map(); }
         const rect = calendarPane.getBoundingClientRect?.();
         const width = Math.max(0, Number(calendarPane.clientWidth) || Number(rect?.width) || 0);
         const compact = view === "month" && width > 0 && width < 470;
@@ -13182,6 +13335,11 @@
       listen(calendarSnapSelect, "click", () => calendarChoiceMenu(calendarSnapSelect,
         CALENDAR_PART.CALENDAR_SNAP_STEPS.map((step) => ({ value: String(step), label: step + " minutes" })),
         String(CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap)), (value) => { store.setMeta({ calendarSnap: CALENDAR_PART.cleanCalendarSnap(value) }); renderCalendar(); }));
+      listen(calendarHoursToggle, "click", () => {
+        const hours = CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours);
+        store.setMeta({ calendarHours: { ...hours, on: !hours.on } });
+        renderCalendar();
+      });
       listen(calendarPrev, "click", () => changeCalendarCursor(-1));
       listen(calendarNext, "click", () => changeCalendarCursor(1));
       listen(calendarToday, "click", () => { store.setMeta({ calendarCursor: calendarTodayKey() }); renderCalendar(); });
@@ -13260,6 +13418,7 @@
         { id: "reminder-alert-settings", label: "Reminder sounds & quiet hours…", icon: "volume-2", run: askCalendarAlertSettings },
         { id: "agenda-visibility-defaults", label: "Zen Agenda visibility defaults…", icon: "calendar-check", run: askAgendaVisibilityDefaults },
         { sep: true },
+        { icon: "clock", label: "Visible hours: " + (CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours).on ? calendarHoursText(store.meta.calendarHours).long : "all 24") + "…", action: () => queueMicrotask(askCalendarHours) },
         { icon: "globe", label: "Display time zone: " + (calendarDisplayZone() || "Local"), action: () => queueMicrotask(askCalendarDisplayZone) },
         { icon: "clock", label: "When am I free?…", action: () => queueMicrotask(askCalendarFreeSlots) },
         { sep: true },

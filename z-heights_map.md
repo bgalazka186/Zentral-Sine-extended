@@ -45,8 +45,8 @@ when the ordering rules below are broken.
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | inline style: `"position:fixed;inset:8%;overflow:auto;z-index:2147483647;padding:20px` | loader/Zentral.uc.js:215 |
 | 2147483646 | RSS reader card (fallback only; see Top layer) | `.zentral-notes-toast` | additional/notes/ZentralNotes.css:1090 |
 | 2147483646 | RSS reader card (fallback only; see Top layer) | `.zentral-notes-pill` | additional/notes/ZentralNotes.css:1571 |
-| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zn-reminder-stack` | additional/notes/ZentralNotes.css:2147 |
-| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zn-agenda-title-card` | additional/notes/ZentralNotes.css:2235 |
+| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zn-reminder-stack` | additional/notes/ZentralNotes.css:2165 |
+| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zn-agenda-title-card` | additional/notes/ZentralNotes.css:2253 |
 | 2147483646 | RSS reader card (fallback only; see Top layer) | `#bgalazka-rss-card` | additional/rss/ZentralRssDisplay.css:110 |
 | 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-sheet[data-host="float"], .zentral-notes-sheet[data-host="dock"]` | additional/notes/ZentralNotes.css:96 |
 | 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-reveal` | additional/notes/ZentralNotes.css:1019 |
@@ -78,7 +78,7 @@ when the ordering rules below are broken.
 Ordering inside one component. Listed by file; values only matter relative to siblings.
 
 <details>
-<summary>66 local z-index declarations</summary>
+<summary>68 local z-index declarations</summary>
 
 | File | Line | z-index | Selector / code |
 | --- | ---: | ---: | --- |
@@ -93,12 +93,14 @@ Ordering inside one component. Listed by file; values only matter relative to si
 | additional/notes/ZentralNotes.css | 1492 | 1 | `.zentral-notes-sheet[data-hl="on"] .zn-editor` |
 | additional/notes/ZentralNotes.css | 1700 | 1 | `.zentral-notes-sheet .zn-frow[data-color] .zn-frow-icon.is-folder::before` |
 | additional/notes/ZentralNotes.css | 1714 | 2 | `.zentral-notes-sheet .zn-frow[data-color] .zn-frow-icon.is-folder::after` |
-| additional/notes/ZentralNotes.css | 1937 | 5 | `.zentral-notes-sheet .zn-cal-now-line` |
-| additional/notes/ZentralNotes.css | 1942 | 0 | `.zentral-notes-sheet .zn-cal-off-hours` |
-| additional/notes/ZentralNotes.css | 1944 | 1 | `.zentral-notes-sheet .zn-cal-busy-range` |
-| additional/notes/ZentralNotes.css | 1970 | 70 | `.zentral-notes-sheet .zn-cal-hover-card` |
-| additional/notes/ZentralNotes.css | 2201 | 6 | `.zentral-notes-sheet .zn-cal-drag-preview` |
-| additional/notes/ZentralNotes.css | 2204 | 4 | `.zentral-notes-sheet .zn-cal-resize-handle` |
+| additional/notes/ZentralNotes.css | 1938 | 5 | `.zentral-notes-sheet .zn-cal-now-line` |
+| additional/notes/ZentralNotes.css | 1943 | 0 | `.zentral-notes-sheet .zn-cal-off-hours` |
+| additional/notes/ZentralNotes.css | 1947 | 0 | `.zentral-notes-sheet .zn-cal-hours-extra` |
+| additional/notes/ZentralNotes.css | 1955 | 5 | `.zentral-notes-sheet .zn-cal-now-edge` |
+| additional/notes/ZentralNotes.css | 1962 | 1 | `.zentral-notes-sheet .zn-cal-busy-range` |
+| additional/notes/ZentralNotes.css | 1988 | 70 | `.zentral-notes-sheet .zn-cal-hover-card` |
+| additional/notes/ZentralNotes.css | 2219 | 6 | `.zentral-notes-sheet .zn-cal-drag-preview` |
+| additional/notes/ZentralNotes.css | 2222 | 4 | `.zentral-notes-sheet .zn-cal-resize-handle` |
 | additional/video/controllers/ZentralVideoSidebar.js | 213 | 5 | `"position:absolute;inset:0;z-index:5;background:var(--zl-video-canvas,` |
 | additional/video/ZentralVideoPreview.css | 132 | 3 | `#zentral-video-preview .zentral-video-preview-subtitles` |
 | additional/video/ZentralVideoPreview.css | 301 | 2 | `#zentral-video-preview canvas` |

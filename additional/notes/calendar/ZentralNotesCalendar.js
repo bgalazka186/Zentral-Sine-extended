@@ -558,6 +558,7 @@
   }
   // Side-by-side columns for the TIMED events of one day, so overlapping events never hide each other.
   // Returns [{ item, lane, lanes, startMin, endMin }]: `lanes` = columns in the item's overlap cluster (width = 1/lanes).
+  // startMin / endMin are minutes on the clock of that day (in `zone`, or the computer's zone), cut off at its ends.
   function layoutDay(items, day, zone = "") {
     const dateKey = localDateKey(day), bounds = zone ? zonedDayBounds(dateKey, zone) : [day, addDays(day, 1)];
     const d0 = bounds[0], d1 = bounds[1];
@@ -575,8 +576,7 @@
         r.lane = lane;
       }
       for (const r of cluster) out.push({ item: r.item, lane: r.lane, lanes: laneEnds.length,
-        startMin: zone ? Math.round(zonedMinuteOfDay(r.s, dateKey, zone)) : Math.round((r.s - d0) / MIN),
-        endMin: zone ? Math.round(zonedMinuteOfDay(r.e, dateKey, zone)) : Math.round((r.e - d0) / MIN) });
+        startMin: Math.round(zonedMinuteOfDay(r.s, dateKey, zone)), endMin: Math.round(zonedMinuteOfDay(r.e, dateKey, zone)) });
       cluster = []; clusterEnd = -Infinity;
     };
     for (const r of rows) {
@@ -2504,7 +2504,13 @@
   function workRange(day, work, zone = "") {
     const w = cleanWork(work), dateKey = localDateKey(day), date = parseYmd(dateKey);
     if (!date || !w.days.includes(date.getDay())) return null;
-    if (!zone) return [dayStart(day) + w.startMin * MIN, dayStart(day) + w.endMin * MIN];
+    if (!zone) {
+      // Clock times of that day in the computer's zone (09:00 is 09:00). Not midnight plus so many minutes: on a day
+      // the clocks change that is an hour off.
+      const at = (minute) => new Date(date.getFullYear(), date.getMonth(), date.getDate(), Math.floor(minute / 60), minute % 60).getTime();
+      const start = at(w.startMin), end = at(w.endMin);
+      return end > start ? [start, end] : null;
+    }
     const valid = cleanZone(zone);
     if (!valid) return null;
     const startText = p2(Math.floor(w.startMin / 60)) + ":" + p2(w.startMin % 60);
@@ -2527,8 +2533,16 @@
     }
     const busy = busyRanges(items.filter((it) => opts.blockAllDay || !isAllDay(it)), rangeFrom, rangeTo);
     const windows = [];
-    if (opts.work) {
-      for (let d = dayStart(from); d < to; d = addDays(d, 1)) { const r = workRange(d, opts.work, zone); if (r) windows.push([Math.max(r[0], rangeFrom), Math.min(r[1], rangeTo)]); }
+    // opts.hours = { startMin, endMin }: only inside these hours of every day (the hours the Week / Day grid is held
+    // to, OW-04). With opts.work as well, only what lies in both.
+    const hours = opts.hours ? cleanCalendarHours({ ...opts.hours, on: true }) : null;
+    const hoursOf = (d) => workRange(d, { days: [0, 1, 2, 3, 4, 5, 6], startMin: hours.startMin, endMin: hours.endMin }, zone);
+    if (opts.work || hours) {
+      for (let d = dayStart(from); d < to; d = addDays(d, 1)) {
+        let r = opts.work ? workRange(d, opts.work, zone) : hoursOf(d);
+        if (r && opts.work && hours) { const h = hoursOf(d); r = h ? [Math.max(r[0], h[0]), Math.min(r[1], h[1])] : null; }
+        if (r) windows.push([Math.max(r[0], rangeFrom), Math.min(r[1], rangeTo)]);
+      }
     } else windows.push([rangeFrom, rangeTo]);
     const need = Math.max(1, Math.round(minMin)) * MIN, out = [];
     for (const [ws, we] of windows) {
@@ -2541,6 +2555,71 @@
       if (we - cur >= need) out.push([cur, we]);
     }
     return out.filter((r) => r[1] > r[0]);
+  }
+
+  // ---------- the hours the Week / Day grid shows (OW-04) ----------
+  // Stored in meta.calendarHours as { on, startMin, endMin }, whole hours; off = the whole day. What is stored and
+  // makes no sense falls back to 08:00-20:00, and only `on: true` switches it on.
+  const DEFAULT_CALENDAR_HOURS = Object.freeze({ on: false, startMin: 480, endMin: 1200 });
+  function cleanCalendarHours(value) {
+    const o = value && typeof value === "object" ? value : {};
+    const hour = (v) => (typeof v === "number" || (typeof v === "string" && v.trim() !== "") ? Math.round(Number(v) / 60) * 60 : NaN);
+    let a = hour(o.startMin), b = hour(o.endMin);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || a < 0 || b > 1440 || b <= a) { a = DEFAULT_CALENDAR_HOURS.startMin; b = DEFAULT_CALENDAR_HOURS.endMin; }
+    return { on: o.on === true, startMin: a, endMin: b };
+  }
+  // The hours the grid has to show: the chosen ones, widened by whole hours until every timed item of the days in
+  // view lies inside. Off = 0..1440. The hours follow the times of the items, not the size of their boxes: a reminder
+  // at 19:50 lies inside 08:00-20:00 (the grid keeps its box inside), one at 20:00 sharp lies after it.
+  //   itemsInView  one entry per visible day. { day, entries }: [{ startMin, endMin, item }] in minutes on the clock
+  //                of that day, already cut off at its ends (the grid hands over what it draws from). Or
+  //                { day, items }: calendar items, laid out here for `day` in `zone`; a timed reminder counts as one
+  //                minute from its start. All-day and cancelled items never count.
+  //   opts.draft   { day, startMin, endMin } of a range that is being dragged out; it counts like an item.
+  // Returns { startMin, endMin, extendedTop, extendedBottom, top, bottom }. `top` / `bottom` say why the grid begins
+  // earlier / ends later than chosen: { item, day, startMin, endMin } of the entry that reaches furthest (item null
+  // for the draft), null where it was not widened.
+  function visibleHourRange(settingRange, itemsInView, zone = "", opts = {}) {
+    const set = cleanCalendarHours(settingRange);
+    if (!set.on) return { startMin: 0, endMin: 1440, extendedTop: false, extendedBottom: false, top: null, bottom: null };
+    let first = null, last = null;
+    const take = (startMin, endMin, item, day) => {
+      const a = Number(startMin), b = Number(endMin);
+      if (!Number.isFinite(a) || !Number.isFinite(b)) return;
+      const lo = Math.max(0, Math.min(1440, a)), hi = Math.max(lo, Math.min(1440, b));
+      if (!first || lo < first.startMin) first = { item, day, startMin: lo, endMin: hi };
+      if (!last || hi > last.endMin) last = { item, day, startMin: lo, endMin: hi };
+    };
+    for (const d of Array.isArray(itemsInView) ? itemsInView : []) {
+      if (!d || typeof d !== "object") continue;
+      if (Array.isArray(d.entries)) { for (const e of d.entries) if (e) take(e.startMin, e.endMin, e.item === undefined ? null : e.item, d.day); continue; }
+      if (!Array.isArray(d.items) || !Number.isFinite(d.day)) continue;
+      // layoutDay lays out events only: a timed reminder goes in as one minute from its start, and the original is
+      // handed back as the reason.
+      const originals = new Map();
+      const spans = d.items.filter((it) => it && it.start && !isAllDay(it)).map((it) => {
+        if (!isReminder(it)) return it;
+        const copy = { ...it, x: { ...(it.x || {}), kind: "event" }, end: { dateTime: iso(itemRange(it)[0] + MIN) } };
+        originals.set(copy, it);
+        return copy;
+      });
+      for (const e of layoutDay(spans, d.day, zone)) take(e.startMin, Math.max(e.endMin, e.startMin + 1), originals.get(e.item) || e.item, d.day);
+    }
+    if (opts?.draft) take(opts.draft.startMin, opts.draft.endMin, null, opts.draft.day);
+    const startMin = first ? Math.min(set.startMin, Math.floor(first.startMin / 60) * 60) : set.startMin;
+    const endMin = last ? Math.max(set.endMin, Math.ceil(last.endMin / 60) * 60) : set.endMin;
+    const extendedTop = startMin < set.startMin, extendedBottom = endMin > set.endMin;
+    return { startMin, endMin, extendedTop, extendedBottom, top: extendedTop ? first : null, bottom: extendedBottom ? last : null };
+  }
+  // A position in the grid <-> a minute of the day, for a grid that shows `range` ({ startMin, endMin }; none = the
+  // whole day) at `hourPx` px an hour. Everything the grid draws and every pointer position it reads goes through
+  // these two, so it cannot be drawn from one hour and measured from another.
+  const gridStartMin = (range) => (Number.isFinite(range?.startMin) ? range.startMin : 0);
+  const gridEndMin = (range) => (Number.isFinite(range?.endMin) ? range.endMin : 1440);
+  function gridOffsetOf(minute, hourPx, range) { return (Number(minute) - gridStartMin(range)) / 60 * hourPx; }
+  function gridMinuteAt(offsetPx, hourPx, range) {
+    const a = gridStartMin(range), b = gridEndMin(range), minute = a + Number(offsetPx) * 60 / hourPx;
+    return Number.isFinite(minute) ? Math.max(a, Math.min(b, minute)) : a;
   }
 
   // ---------- time zones ----------
@@ -2578,7 +2657,16 @@
   function zonedMinuteOfDay(ms, dateKey, zone = "") {
     const date = parseYmd(dateKey);
     if (!date || !Number.isFinite(Number(ms))) return NaN;
-    if (!zone) return Math.max(0, Math.min(1440, (Number(ms) - date.getTime()) / MIN));
+    if (!zone) {
+      // The computer's own zone. The minute on the clock, not the minutes since midnight: the two differ on the days
+      // the clocks change (23 or 25 hours long), and counting from midnight put everything after the change one hour
+      // too early or too late in a grid whose labels, drags and working hours are all clock times.
+      const t = Number(ms), first = date.getTime();
+      if (t < first) return 0;
+      if (t >= addDays(first, 1)) return 1440;
+      const d = new Date(t);
+      return d.getHours() * 60 + d.getMinutes() + (d.getSeconds() * 1000 + d.getMilliseconds()) / MIN;
+    }
     const bounds = zonedDayBounds(dateKey, zone);
     if (!bounds) return NaN;
     if (ms <= bounds[0]) return 0;
@@ -3398,7 +3486,7 @@
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, visibleHourRange, gridOffsetOf, gridMinuteAt, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

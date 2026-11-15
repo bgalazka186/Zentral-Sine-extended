@@ -1925,7 +1925,8 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-time-allday-cell.is-today { background: color-mix(in srgb, var(--zn-accent) 7%, transparent); }
 .zentral-notes-sheet .zn-cal-time-allday-cell .zn-cal-item { padding: 2px 3px; font-size: .66em; }
 .zentral-notes-sheet .zn-cal-time-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-gutter: stable; scrollbar-width: thin; }
-.zentral-notes-sheet .zn-cal-time-grid-row { min-height: calc(24 * var(--zn-cal-hour-height, 54px)); align-items: stretch; grid-template-columns: 42px minmax(0, 1fr); }
+/* --zn-cal-hours: how many hours the grid shows (24, or the chosen hours widened for what is in view; set on .zn-cal-time-view). */
+.zentral-notes-sheet .zn-cal-time-grid-row { min-height: calc(var(--zn-cal-hours, 24) * var(--zn-cal-hour-height, 54px)); align-items: stretch; grid-template-columns: 42px minmax(0, 1fr); }
 .zentral-notes-sheet .zn-cal-hour-gutter { display: flex; flex-direction: column; padding-top: 2px; }
 .zentral-notes-sheet .zn-cal-hour-label { box-sizing: border-box; height: var(--zn-cal-hour-height, 54px); flex: 0 0 var(--zn-cal-hour-height, 54px); padding: 0 3px 0 0; transform: translateY(-.45em); color: var(--zn-muted); font-size: .62em; font-variant-numeric: tabular-nums; text-align: right; }
 .zentral-notes-sheet .zn-cal-hour-label:first-child { transform: none; }
@@ -1941,6 +1942,23 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-agenda-row.is-today .zn-cal-agenda-date { color: var(--zn-accent); font-weight: 650; }
 .zentral-notes-sheet .zn-cal-off-hours { position: absolute; z-index: 0; right: 0; left: 0; background: color-mix(in srgb, var(--zn-hover) 16%, transparent); pointer-events: none; }
 .zentral-notes-sheet .zn-cal-off-hours.is-all-day { top: 0; bottom: 0; }
+/* Hours beyond the chosen ones, shown because a day in view has something there: hatched, a dashed line where the
+ * chosen hours begin or end, their labels in the accent colour, and one line of text above the timeline. */
+.zentral-notes-sheet .zn-cal-hours-extra { position: absolute; z-index: 0; right: 0; left: 0; background: repeating-linear-gradient(135deg, transparent 0, transparent 6px, color-mix(in srgb, var(--zn-accent) 8%, transparent) 6px, color-mix(in srgb, var(--zn-accent) 8%, transparent) 12px); pointer-events: none; }
+.zentral-notes-sheet .zn-cal-hours-extra.is-top { border-bottom: 1px dashed color-mix(in srgb, var(--zn-accent) 60%, transparent); }
+.zentral-notes-sheet .zn-cal-hours-extra.is-bottom { border-top: 1px dashed color-mix(in srgb, var(--zn-accent) 60%, transparent); }
+.zentral-notes-sheet .zn-cal-hour-label.is-extended { color: var(--zn-accent); font-style: italic; }
+.zentral-notes-sheet .zn-cal-hours-hint { flex: 0 0 auto; min-width: 0; overflow: hidden; padding: 2px 8px 2px 45px; border-bottom: 1px solid var(--zn-line); color: var(--zn-muted); font-size: .7em; text-overflow: ellipsis; white-space: nowrap; }
+/* The current time lies before / after the hours shown: no line, but a dotted mark on that edge of today's column
+ * with a small arrow that points to where the time is (up = earlier, down = later). It has a tooltip, so it takes the
+ * pointer; it is 3px high. */
+.zentral-notes-sheet .zn-cal-now-edge { position: absolute; z-index: 5; right: 0; left: 0; height: 0; border-top: 3px dotted #ff5b5b; }
+.zentral-notes-sheet .zn-cal-now-edge.is-before { top: 0; }
+.zentral-notes-sheet .zn-cal-now-edge.is-after { bottom: 0; }
+.zentral-notes-sheet .zn-cal-now-edge::before { content: ""; position: absolute; left: -5px; width: 0; height: 0; border: 5px solid transparent; pointer-events: none; }
+.zentral-notes-sheet .zn-cal-now-edge.is-before::before { top: 0; border-top-width: 0; border-bottom-color: #ff5b5b; }
+.zentral-notes-sheet .zn-cal-now-edge.is-after::before { bottom: 3px; border-bottom-width: 0; border-top-color: #ff5b5b; }
+.zentral-notes-sheet .zn-cal-hours-presets { display: flex; flex-wrap: wrap; gap: 6px; }
 .zentral-notes-sheet .zn-cal-busy-range { position: absolute; z-index: 1; right: 0; left: 0; border-top: 1px solid color-mix(in srgb, var(--zn-accent) 16%, transparent); background: color-mix(in srgb, var(--zn-accent) 6%, transparent); pointer-events: none; }
 .zentral-notes-sheet .zn-cal-time-event { position: absolute; box-sizing: border-box; min-width: 0; overflow: hidden; display: flex; flex-direction: column; flex-wrap: nowrap; align-items: flex-start; justify-content: flex-start; gap: 1px; padding: 2px 4px; border: 1px solid color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 45%, var(--zn-line)); border-left: 3px solid var(--zn-cal-item-color, var(--zn-accent)); border-radius: 4px; background: color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 24%, var(--zn-surface)); font-size: .68em; line-height: 1.15; }
 .zentral-notes-sheet .zn-cal-time-event .zn-cal-item-time { font-size: .66em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
