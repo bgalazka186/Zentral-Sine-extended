@@ -743,8 +743,9 @@
 .zentral-notes-sheet .zn-dialog-card.zn-folder-style-card .zn-fstyle { min-width: 0; }
 .zentral-notes-sheet .zn-dialog-card.zn-folder-style-card .zn-fstyle-part > * { min-width: 0; max-width: 100%; }
 .zentral-notes-sheet .zn-dialog-card.zn-folder-style-card .zn-dialog-actions { flex-wrap: wrap; }
-.zentral-notes-sheet .zn-dialog-card p { margin: 6px 0 10px; color: var(--zn-muted); line-height: 1.45; }
-.zentral-notes-sheet .zn-dialog-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.zentral-notes-sheet .zn-dialog-card p { margin: 6px 0 10px; color: var(--zn-muted); line-height: 1.45; overflow-wrap: anywhere; }
+.zentral-notes-sheet .zn-dialog-card > strong { overflow-wrap: anywhere; }
+.zentral-notes-sheet .zn-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 
 /* ---- callouts: > [!NOTE] Title ---------------------------------------------------- */
 .zentral-notes-sheet .zn-read .zn-callout { --zn-callout: #6aa7ff; border-left-color: var(--zn-callout); background: color-mix(in srgb, var(--zn-callout) 10%, transparent); padding: 4px 10px; border-radius: 0 6px 6px 0; }
@@ -941,10 +942,23 @@
 .zentral-notes-sheet .zn-grid { display: grid; grid-template-columns: repeat(var(--cols, 8), 1fr); gap: 3px; margin: 6px 0; }
 .zentral-notes-sheet .zn-gcell { aspect-ratio: 1; min-width: 18px; padding: 0; border: 1px solid var(--zn-line); border-radius: 3px; background: transparent; cursor: pointer; }
 .zentral-notes-sheet .zn-gcell.is-on { background: color-mix(in srgb, var(--zn-accent) 40%, transparent); border-color: var(--zn-accent); }
-.zentral-notes-sheet .zn-quick { display: grid; gap: 4px; margin: 8px 0; }
+/* A list of setting rows: one row a line, never wider than the card. Loose items (the quick colours, the code
+   languages) carry zn-flow and run on like words. Both were `.zn-quick` once and the later rule won for the lists too:
+   their rows ran on like words as well. */
+.zentral-notes-sheet .zn-quick { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin: 8px 0; }
+.zentral-notes-sheet .zn-quick.zn-flow { display: flex; flex-wrap: wrap; gap: 6px; }
 .zentral-notes-sheet .zn-quick-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
-.zentral-notes-sheet .zn-quick-label { flex: 1 1 12em; min-width: 0; }
-.zentral-notes-sheet .zn-quick-value { min-width: 4.4em; text-align: center; font-variant-numeric: tabular-nums; }
+.zentral-notes-sheet .zn-quick-label { flex: 1 1 12em; min-width: 0; overflow-wrap: anywhere; }
+/* The controls of one setting stay together (see controlGroup): beside the label when there is room, below it when not.
+   4px between them, as between the chips of a choice. */
+.zentral-notes-sheet .zn-ctl { display: flex; flex: 0 1 auto; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
+/* A slider with its value and reset button takes the width that is left: beside the label while at least 60px of
+   slider fit there, otherwise below it at full width. Only when a line is too short for the three do they break up. */
+.zentral-notes-sheet .zn-ctl-fill { flex: 1 1 auto; flex-wrap: wrap; gap: 4px 8px; }
+.zentral-notes-sheet .zn-ctl-fill > .zn-range { flex: 1 1 60px; width: 60px; }
+/* The value between minus and plus keeps a steady width so the plus button does not move with every digit; it gives
+   that width up (down to its own text, never less) before a button would leave the card. */
+.zentral-notes-sheet .zn-quick-value { flex: 0 1 auto; width: 4.4em; min-width: min-content; white-space: nowrap; text-align: center; font-variant-numeric: tabular-nums; }
 .zentral-notes-sheet .zn-keys { max-height: 46vh; overflow: auto; }
 .zentral-notes-sheet .zn-keybtn { min-width: 8.5em; }
 .zentral-notes-sheet .zn-key-note { min-height: 2.6em; }
@@ -1092,10 +1106,14 @@
 /* ---- Settings view: wide card with tabs, sliders and the in-card colour picker -------------------------- */
 .zentral-notes-sheet .zn-dialog-card.zn-settings { width: 100%; max-width: none; height: 100%; max-height: none; display: flex; flex-direction: column; box-sizing: border-box; }
 .zentral-notes-sheet .zn-set-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
-.zentral-notes-sheet .zn-set-body { flex: 1 1 0; min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: 6px; padding-right: 4px; }
-.zentral-notes-sheet .zn-set-heading { margin-top: 8px; color: var(--zn-muted); font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; }
-.zentral-notes-sheet .zn-set-row { display: flex; align-items: center; gap: 8px; min-height: 28px; }
-.zentral-notes-sheet .zn-set-row .zn-quick-label { flex: 1 1 40%; }
+/* Rows of max-content: with `auto` rows, a body that has to scroll gave every row only its 28px min-height (for an item
+   with a min-height that is all an `auto` row must give), and whatever was taller lay over the next row. One column
+   that never grows past the card. */
+.zentral-notes-sheet .zn-set-body { flex: 1 1 0; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; align-content: start; gap: 6px; padding-right: 4px; }
+.zentral-notes-sheet .zn-set-heading { margin-top: 8px; color: var(--zn-muted); font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; overflow-wrap: anywhere; }
+.zentral-notes-sheet .zn-set-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 28px; }
+/* The label keeps at least 9em (about 18 letters a line). A control that does not fit beside that goes below the label. */
+.zentral-notes-sheet .zn-set-row .zn-quick-label { flex: 1 1 9em; min-width: min(100%, 9em); }
 /* Dropdown choice rows (settings window and quick settings): label on its own line, the select below it at full width. */
 .zentral-notes-sheet .zn-select {
   flex: 1 1 100%; min-width: 0; max-width: 100%; box-sizing: border-box;
@@ -1108,16 +1126,21 @@
 .zentral-notes-sheet .zn-quick-row[data-dropdown="true"] { flex-wrap: wrap; gap: 3px 8px; }
 .zentral-notes-sheet .zn-set-row[data-dropdown="true"] .zn-quick-label,
 .zentral-notes-sheet .zn-quick-row[data-dropdown="true"] .zn-quick-label { flex: 1 1 100%; }
-.zentral-notes-sheet .zn-set-chips { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.zentral-notes-sheet .zn-set-chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; max-width: 100%; }
 .zentral-notes-sheet .zn-range { flex: 1 1 90px; min-width: 60px; height: 8px; margin: 0; accent-color: var(--zn-accent); }
-.zentral-notes-sheet .zn-set-row .zn-quick-value { min-width: 3.6em; }
+.zentral-notes-sheet .zn-set-row .zn-quick-value { width: 3.6em; }
+/* The value of a slider is as wide as its text ("100000chars"), at least 3.6em, and breaks only when a line is too short for it. */
+.zentral-notes-sheet .zn-set-row .zn-ctl-fill > .zn-quick-value { width: auto; min-width: 3.6em; white-space: normal; overflow-wrap: anywhere; }
+/* A text field beside its label keeps its own width; below the label it is never wider than the row. */
+.zentral-notes-sheet .zn-set-row > .zn-field { flex: 0 1 auto; min-width: 0; max-width: 100%; box-sizing: border-box; }
 .zentral-notes-sheet .zn-swatch { width: 38px; height: 22px; padding: 0; border: 1px solid var(--zn-line); border-radius: 6px; cursor: pointer; }
 .zentral-notes-sheet .zn-swatch[data-empty="true"] { background-image: repeating-linear-gradient(45deg, var(--zn-line) 0 4px, transparent 4px 8px) !important; }
-.zentral-notes-sheet .zn-cpanel { display: grid; gap: 6px; margin: 4px 0 8px; padding: 8px; border: 1px solid var(--zn-line); border-radius: 8px; }
+.zentral-notes-sheet .zn-cpanel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin: 4px 0 8px; padding: 8px; border: 1px solid var(--zn-line); border-radius: 8px; }
 .zentral-notes-sheet .zn-cpanel[hidden] { display: none; }
-.zentral-notes-sheet .zn-set-sub { display: grid; grid-template-columns: 6em 1fr; align-items: center; gap: 8px; color: var(--zn-muted); font-size: 0.9em; }
+.zentral-notes-sheet .zn-set-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; color: var(--zn-muted); font-size: 0.9em; }
+.zentral-notes-sheet .zn-set-sub > span { flex: 0 1 6em; min-width: 0; overflow-wrap: anywhere; }
 .zentral-notes-sheet .zn-set-sub .zn-range { height: 12px; border-radius: 6px; }
-.zentral-notes-sheet .zn-hex { max-width: 9em; font-family: ui-monospace, Consolas, monospace; }
+.zentral-notes-sheet .zn-hex { max-width: min(9em, 100%); min-width: 0; box-sizing: border-box; font-family: ui-monospace, Consolas, monospace; }
 
 /* ---- reveal strip: thin hover zone along the top of an open panel's bar ----------------------------- */
 
@@ -1734,7 +1757,6 @@
 .zentral-notes-sheet .zn-color-picker-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .zentral-notes-sheet .zn-color-input { width: 36px; height: 28px; padding: 0; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 6px; background: transparent; cursor: pointer; }
 .zentral-notes-sheet .zn-hex-field { width: 92px; font-family: monospace; }
-.zentral-notes-sheet .zn-quick { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* ---- Emoji icon of a Notes folder in the Zen sidebar: drawn by CSS from the folder's attribute, so it does not depend on Zen's
    icon SVG internals (sub-folders showed none). The SVG <text> the script also adds is hidden to avoid a double icon. ---- */

@@ -1,6 +1,6 @@
 # tools
 
-Owner and local file guide for Extended 3.3.170. Original Zentral reference: 1.1.0.
+Owner and local file guide for Extended 3.3.171. Original Zentral reference: 1.1.0.
 
 | File                    | Responsibility                        |
 | ----------------------- | ------------------------------------- |
@@ -20,3 +20,7 @@ Keeps the main mod and every standalone module on one version (rule in `AGENTS.m
 ## audit-standalone.cjs
 
 Informational dependency report for standalone-capable modules (foreign prefs, attributes, CSS variables, other files styling a module's attributes). The build enforces the hard checks; run this when adding or changing a standalone module.
+
+## audit-notes-settings-layout.cjs
+
+Measures the Notes settings dialogs (Quick settings, every tab of Settings, Toolbar buttons, Keyboard shortcuts, the table creator, the code language list) in a headless Chromium, for every text size from 8 to 40 px, sheets from 240 to 700 px wide, a short and a tall sheet, and scrollbars that do and do not take room. It fails when two items share pixels, an item sticks out of its row or the card, text is wider than its button, a list needs a sideways scrollbar, or the controls of one row are spread over two lines. Not part of `node tests/run-all.cjs` and not run by CI: it needs a browser, installed outside the repository (`mkdir /tmp/ch && cd /tmp/ch && npm i @sparticuz/chromium puppeteer-core`, then `AWS_EXECUTION_ENV=AWS_Lambda_nodejs22.x NODE_PATH=/tmp/ch/node_modules node tools/audit-notes-settings-layout.cjs`; about a quarter of an hour for the whole grid of 240 cells, `--fonts 13,28 --widths 420` for a part of it, `--details` to list the findings, `--shots DIR` for pictures, `--css FILE --js FILE` to measure another version). Run it after changing the style of a dialog; `tests/notes-settings-layout.test.cjs` holds in place what the result rests on (the cascade for the real elements, one unit per row) but cannot measure. Zen draws with Gecko and this measures Blink: see the header of the file for what that does and does not cover.

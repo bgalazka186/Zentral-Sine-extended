@@ -13868,7 +13868,7 @@
         native.value = cur;
         const hexField = h("input", { type: "text", class: "zn-field zn-hex-field", spellcheck: "false", maxlength: "7", placeholder: "#rrggbb", "aria-label": "Color as #rrggbb" });
         hexField.value = cur;
-        const quick = h("div", { class: "zn-quick" });
+        const quick = h("div", { class: "zn-quick zn-flow" });
         const set = (hex) => {
           cur = hex;
           native.value = hex;
@@ -14965,7 +14965,10 @@
       let cardRO = null;
       let rafFit = 0;
       let fitting = false;
-      const FIT_PROPS = ["position", "left", "top", "width", "height", "maxWidth", "maxHeight"];
+      const FIT_PROPS = ["position", "left", "top", "width", "height", "minWidth", "maxWidth", "maxHeight"];
+      // The size a card would have with nothing holding it back. scrollWidth / scrollHeight leave out the card's
+      // border, so a card set to exactly that size was two pixels short and scrolled.
+      const naturalSide = (outer, inner, scroll) => Math.max(outer || 0, (scroll || 0) + (inner > 0 && outer > inner ? outer - inner : 0));
       function fitCard() {
         if (!dialog) return null;
         const card = dialog.querySelector(".zn-dialog-card");
@@ -14989,7 +14992,12 @@
           return { spill: false, left: 0, top: 0, width: 0, height: 0, scroll: true };
         if (viewport.width > 0)
           card.style.maxWidth = "min(34em, " + Math.max(120, viewport.width - 12) + "px)";
-        const size = { width: Math.max(card.offsetWidth || 0, card.scrollWidth || 0), height: Math.max(card.offsetHeight || 0, card.scrollHeight || 0) };
+        // Measured without scrollbars: one that is only there because the card is still held at the sheet's height
+        // takes width, and what was measured beside it no longer fits once it is gone (the table grid grows taller
+        // with every pixel of width, so the scrollbar came back and with it a sideways one).
+        card.style.overflow = "hidden";
+        const size = { width: naturalSide(card.offsetWidth, card.clientWidth, card.scrollWidth), height: naturalSide(card.offsetHeight, card.clientHeight, card.scrollHeight) };
+        card.style.overflow = "";
         const sheet = { left: sr.left, top: sr.top, width: sr.width, height: sr.height };
         // If the platform cannot raise the dialog, keep it within the panel
         // rather than allowing an invisible spill behind a browser surface.
@@ -15003,6 +15011,10 @@
           card.style.top = fit.top + "px";
           card.style.width = fit.width + "px";
           card.style.height = fit.height + "px";
+          // The style sheet's min-width is a share of the overlay. Once the card is positioned that share is taken
+          // from the overlay with its padding, 24px more than was measured: the card came out wider than planned,
+          // off centre, and past the window edge when the sheet stands at that edge.
+          card.style.minWidth = "0";
           card.style.maxWidth = "none";
           card.style.maxHeight = "none";
         }
@@ -15337,6 +15349,10 @@
         return card;
       }
       const chip = (label, on = false) => h("button", { type: "button", class: "zn-chip" + (on ? " is-on" : "") }, label);
+      // The controls of one setting (minus, value, plus; slider, value, reset) are one unit: beside the label when there
+      // is room, below it as a whole when not (a larger text size, a narrow sheet). Loose in the row they broke apart:
+      // the minus at the end of the label's line, the value and the plus on the next.
+      const controlGroup = (...controls) => h("span", { class: "zn-ctl" }, ...controls);
       // A choice row with more than three options, or with long option names, is a dropdown: a row of chips for those wraps
       // and overflows at larger text sizes. Short sets (On/Off, Plain/Filled/Outlined) stay chips.
       const choiceIsDropdown = (choices) => choices.length > 3 || choices.some(([, text]) => String(text).length > 16);
@@ -16151,7 +16167,7 @@
         // A list of buttons inside the sheet, not a native <select>: its popup is a separate window, so
         // clicking an option counts as a click outside the sheet and closes it.
         let chosen = lastCodeLang;
-        const list = h("div", { class: "zn-quick zn-aligns", role: "listbox", "aria-label": "Highlight as" });
+        const list = h("div", { class: "zn-quick zn-aligns zn-flow", role: "listbox", "aria-label": "Highlight as" });
         const drawLangs = () => {
           list.replaceChildren();
           for (const [v, label] of CODE_LANGS) {
@@ -16200,7 +16216,8 @@
         const drawAligns = () => {
           alignBox.replaceChildren();
           for (let i = 0; i < colCount(); i++) {
-            const row = h("div", { class: "zn-quick-row" }, h("span", { class: "zn-quick-label" }, "Column " + (i + 1)));
+            const choices = h("div", { class: "zn-set-chips" });
+            const row = h("div", { class: "zn-quick-row" }, h("span", { class: "zn-quick-label" }, "Column " + (i + 1)), choices);
             for (const [v, text] of [["left", "Left"], ["center", "Centre"], ["right", "Right"]]) {
               const b = chip(text, aligns[i] === v);
               b.setAttribute("aria-pressed", aligns[i] === v ? "true" : "false");
@@ -16208,7 +16225,7 @@
                 aligns[i] = aligns[i] === v ? "" : v;
                 drawAligns();
               });
-              row.append(b);
+              choices.append(b);
             }
             alignBox.append(row);
           }
@@ -16318,17 +16335,19 @@
               const plus = iconButton("plus", "Larger");
               minus.addEventListener("click", () => write(o, stepOption(o, value, -1)));
               plus.addEventListener("click", () => write(o, stepOption(o, value, 1)));
-              row.append(minus, h("span", { class: "zn-quick-value" }, `${value}${o.unit}`), plus);
+              row.append(controlGroup(minus, h("span", { class: "zn-quick-value" }, `${value}${o.unit}`), plus));
             } else {
               if (choiceIsDropdown(o.choices)) {
                 row.dataset.dropdown = "true";
                 row.append(choiceDropdown(o, value, (v) => write(o, v)));
               } else {
+                const choices = h("div", { class: "zn-set-chips" });
                 for (const [v, text] of o.choices) {
                   const b = chip(text, value === v);
                   b.addEventListener("click", () => write(o, v));
-                  row.append(b);
+                  choices.append(b);
                 }
+                row.append(choices);
               }
             }
             body.append(row);
@@ -16392,7 +16411,9 @@
             show();
           });
           show();
-          return h("div", { class: "zn-set-row" }, h("span", { class: "zn-quick-label" }, o.label), input, out, theme);
+          const controls = controlGroup(input, out, theme);
+          controls.classList.add("zn-ctl-fill");
+          return h("div", { class: "zn-set-row" }, h("span", { class: "zn-quick-label" }, o.label), controls);
         }
         function colorRow(o) {
           const stored = () => (LOOK_HEX.test(getPref(o.pref, "").trim()) ? getPref(o.pref, "").trim().toLowerCase() : "");
@@ -16446,7 +16467,7 @@
           });
           panel.append(h("label", { class: "zn-set-sub" }, h("span", {}, "Hue"), sh), h("label", { class: "zn-set-sub" }, h("span", {}, "Saturation"), ss), h("label", { class: "zn-set-sub" }, h("span", {}, "Lightness"), sl), hexIn);
           paint();
-          return h("div", { class: "zn-set-item" }, h("div", { class: "zn-set-row" }, h("span", { class: "zn-quick-label" }, o.label), swatch, theme), panel);
+          return h("div", { class: "zn-set-item" }, h("div", { class: "zn-set-row" }, h("span", { class: "zn-quick-label" }, o.label), controlGroup(swatch, theme)), panel);
         }
         function simpleRow(o) {
           const value = readValue(o);
@@ -16475,7 +16496,7 @@
               writeValue(o, stepOption(o, value, 1));
               redraw();
             });
-            row.append(minus, h("span", { class: "zn-quick-value" }, `${value}${o.unit}`), plus);
+            row.append(controlGroup(minus, h("span", { class: "zn-quick-value" }, `${value}${o.unit}`), plus));
           } else if (o.kind === "text") {
             const input = h("input", { type: "text", class: "zn-field", spellcheck: "false", "aria-label": o.label });
             input.value = String(value ?? "");
@@ -16607,7 +16628,7 @@
               draw();
               applyState();
             });
-            body.append(h("div", { class: "zn-quick-row" }, h("span", { class: "zn-quick-label" }, r.label), btn, reset));
+            body.append(h("div", { class: "zn-quick-row" }, h("span", { class: "zn-quick-label" }, r.label), controlGroup(btn, reset)));
           }
         }
         draw();
