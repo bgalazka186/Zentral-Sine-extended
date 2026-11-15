@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.163
+// @version 3.3.164
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.163, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.164, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.163";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.164";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -3237,10 +3237,31 @@ const __zentralEmbeddedLoader = (function () {
     if (!["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(o.FREQ)) return null;
     const interval = Math.max(1, Math.min(999, parseInt(o.INTERVAL, 10) || 1));
     const count = o.COUNT ? Math.max(1, Math.min(1000000, parseInt(o.COUNT, 10) || 0)) : 0;
-    let until = 0;
-    if (o.UNTIL) { const u = /^(\d{4})(\d{2})(\d{2})/.exec(o.UNTIL); if (u) until = addDays(new Date(+u[1], +u[2] - 1, +u[3]).getTime(), 1); }
+    // UNTIL is the last civil day of the series. `untilKey` is that day (YYYY-MM-DD, the value editors show);
+    // `until` is its end in the system zone. Never derive the day from `until` by subtracting 24 hours: a 23-hour
+    // day would give the day before.
+    let until = 0, untilKey = "";
+    if (o.UNTIL) {
+      const u = /^(\d{4})(\d{2})(\d{2})/.exec(o.UNTIL);
+      if (u) { const last = new Date(+u[1], +u[2] - 1, +u[3]); until = addDays(last.getTime(), 1); untilKey = ymd(last); }
+    }
     const byday = o.BYDAY ? [...new Set(o.BYDAY.split(",").map((d) => DAY_CODES.indexOf(d.slice(-2))).filter((n) => n >= 0))].sort((a, b) => a - b) : [];
-    return { freq: o.FREQ, interval, count, until, byday };
+    return { freq: o.FREQ, interval, count, until, untilKey, byday };
+  }
+  // First instant after the series end. A timed item pinned to a zone ends with its last day IN THAT ZONE, wherever
+  // the computer is; all-day and unpinned items use the system zone. Infinity when the rule has no UNTIL.
+  const untilBoundaryCache = new Map();
+  function recurrenceUntilMs(rule, zone = "") {
+    if (!rule || !rule.until) return Infinity;
+    if (!zone || !rule.untilKey) return rule.until;
+    const key = zone + "\u0000" + rule.untilKey;
+    if (untilBoundaryCache.has(key)) return untilBoundaryCache.get(key);
+    const last = parseYmd(rule.untilKey);
+    const next = last ? zonedDateTimeToMs(localDateKey(addDays(last.getTime(), 1)), "00:00", zone) : null;
+    const value = Number.isFinite(next) ? next : rule.until;
+    untilBoundaryCache.set(key, value);
+    if (untilBoundaryCache.size > PARSED_RULE_CACHE_LIMIT) untilBoundaryCache.delete(untilBoundaryCache.keys().next().value);
+    return value;
   }
   // Local calendar-day ordinal, immune to 23/25-hour DST days.
   function localDayOrdinal(ms) {
@@ -3382,8 +3403,8 @@ const __zentralEmbeddedLoader = (function () {
       const stamp = whenMs(entry.recurrenceId);
       if (!singleExceptions.has(stamp)) singleExceptions.set(stamp, entry);
     }
-    const margins = recurrenceSearchMargins(it, allDay);
-    const limit = Math.min(to + margins.negative, rule.until || Infinity);
+    const margins = recurrenceSearchMargins(it, allDay), until = recurrenceUntilMs(rule, zone);
+    const limit = Math.min(to + margins.negative, until);
     if (limit <= s0) return [];
     // Recurrence arithmetic is performed on civil dates in the item's IANA zone, not the host OS zone.
     const seekFrom = (reminder ? from : from - len) - margins.positive;
@@ -3400,7 +3421,7 @@ const __zentralEmbeddedLoader = (function () {
       const candidates = recurrencePeriodDates(rule, base, period).map(timedAt).sort((a, b) => a - b);
       for (const recurrenceMs of candidates) {
         if (recurrenceMs < s0) continue;
-        if (recurrenceMs >= (rule.until || Infinity)) return out;
+        if (recurrenceMs >= until) return out;
         if (rule.count && ordinal >= rule.count) return out;
         ordinal++;
         if (exdates.has(recurrenceMs)) continue;
@@ -3432,8 +3453,9 @@ const __zentralEmbeddedLoader = (function () {
 
   function isRecurrenceCandidate(master, recurrenceMs) {
     const rule = (master?.recurrence || []).map(parseRule).find(Boolean);
-    if (!rule || !Number.isSafeInteger(recurrenceMs) || recurrenceMs < whenMs(master.start) || recurrenceMs >= (rule.until || Infinity)) return false;
+    if (!rule || !Number.isSafeInteger(recurrenceMs) || recurrenceMs < whenMs(master.start)) return false;
     const allDay = isAllDay(master), zone = allDay ? "" : cleanZone(master.x?.tz);
+    if (recurrenceMs >= recurrenceUntilMs(rule, zone)) return false;
     const base = recurrenceCivilDate(whenMs(master.start), zone);
     const firstPeriod = recurrencePeriodIndex(rule, base, recurrenceCivilDate(recurrenceMs, zone).getTime());
     // The search helper deliberately starts one period early so event spans and BYDAY weeks are not missed.
@@ -4458,7 +4480,7 @@ const __zentralEmbeddedLoader = (function () {
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -17450,7 +17472,7 @@ __zentralShim.register = function (def) {
         endMode.value = currentRule?.count ? "count" : currentRule?.until ? "until" : "never";
         const count = h("input", { type: "number", class: "zn-field", min: "1", max: "5000", step: "1", "aria-label": "Repeat occurrence count" }); count.value = String(currentRule?.count || 10);
         const countRow = h("label", { class: "zn-field-row" }, h("span", {}, "Occurrences"), count);
-        const until = field("Last occurrence date", currentRule?.until ? C.ymd(new Date(currentRule.until - 86400000)) : "", "YYYY-MM-DD");
+        const until = field("Last occurrence date", currentRule?.untilKey || "", "YYYY-MM-DD"); // the civil day itself: never `until` minus 24 hours (23-hour days)
         const untilPick = chip("Choose date…"), untilHost = h("div", { class: "zn-recurrence-until" }, until.row, untilPick);
         const recurrenceBox = h("div", { class: "zn-recurrence-editor zn-cal-compose-section" },
           h("strong", {}, "Recurrence"),
@@ -20402,7 +20424,7 @@ __zentralShim.register = function (def) {
         endMode.value = currentRule?.count ? "count" : currentRule?.until ? "until" : "never";
         const count = h("input", { class: "zn-field", type: "number", min: "1", max: "5000", step: "1", "aria-label": "Repeat occurrence count" }); count.value = String(currentRule?.count || 10);
         const countRow = h("label", { class: "zn-field-row" }, h("span", {}, "Occurrences"), count);
-        const untilInitial = currentRule?.until ? CALENDAR_PART.ymd(new Date(currentRule.until - 86400000)) : "";
+        const untilInitial = currentRule?.untilKey || ""; // the civil day itself: never `until` minus 24 hours (23-hour days)
         const until = field("Last occurrence date", untilInitial, "YYYY-MM-DD");
         const untilPick = chip("Choose date…");
         const untilHost = h("div", { class: "zn-recurrence-until" }, until.row, untilPick);

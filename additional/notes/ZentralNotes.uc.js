@@ -12435,7 +12435,7 @@
         endMode.value = currentRule?.count ? "count" : currentRule?.until ? "until" : "never";
         const count = h("input", { type: "number", class: "zn-field", min: "1", max: "5000", step: "1", "aria-label": "Repeat occurrence count" }); count.value = String(currentRule?.count || 10);
         const countRow = h("label", { class: "zn-field-row" }, h("span", {}, "Occurrences"), count);
-        const until = field("Last occurrence date", currentRule?.until ? C.ymd(new Date(currentRule.until - 86400000)) : "", "YYYY-MM-DD");
+        const until = field("Last occurrence date", currentRule?.untilKey || "", "YYYY-MM-DD"); // the civil day itself: never `until` minus 24 hours (23-hour days)
         const untilPick = chip("Choose date…"), untilHost = h("div", { class: "zn-recurrence-until" }, until.row, untilPick);
         const recurrenceBox = h("div", { class: "zn-recurrence-editor zn-cal-compose-section" },
           h("strong", {}, "Recurrence"),
@@ -15387,7 +15387,7 @@
         endMode.value = currentRule?.count ? "count" : currentRule?.until ? "until" : "never";
         const count = h("input", { class: "zn-field", type: "number", min: "1", max: "5000", step: "1", "aria-label": "Repeat occurrence count" }); count.value = String(currentRule?.count || 10);
         const countRow = h("label", { class: "zn-field-row" }, h("span", {}, "Occurrences"), count);
-        const untilInitial = currentRule?.until ? CALENDAR_PART.ymd(new Date(currentRule.until - 86400000)) : "";
+        const untilInitial = currentRule?.untilKey || ""; // the civil day itself: never `until` minus 24 hours (23-hour days)
         const until = field("Last occurrence date", untilInitial, "YYYY-MM-DD");
         const untilPick = chip("Choose date…");
         const untilHost = h("div", { class: "zn-recurrence-until" }, until.row, untilPick);
