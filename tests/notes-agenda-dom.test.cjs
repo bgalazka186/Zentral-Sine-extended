@@ -166,6 +166,44 @@ async function test(name, fn) { await fn(); console.log("ok - " + name); }
     b.resetOperations(); await a.destroy(); assert.equal(projected(b).length, 1); assert.deepEqual(b.operations, []);
     b.seam.agendaController.runNow(); assert.deepEqual(b.operations, []); await b.destroy();
   });
+  await test("a restored entry the projection has not drawn yet takes its label from the stored item", async () => {
+    // F0.9: this path asked a clock that only exists inside the Notes sheet and threw instead of repairing the tab.
+    const h = await host(), start = date(1), key = `item:fresh:fresh@${C.localDateKey(start)}`;
+    h.seam.store.items.upsert(make("fresh", start));
+    assert.equal(h.seam.agendaController.projection.length, 0, "the projection has not run since the item was stored");
+    const restored = h.window.gBrowser.addTab("about:blank#zn-agenda-" + encodeURIComponent(key), { deferTabOpen: true });
+    assert.equal(restored.hasAttribute("bgalazka-notes-label"), false, "session restore brings the tab back without our attributes");
+    assert.equal(h.seam.agendaEnsureVisuals(restored), true);
+    assert.match(restored.getAttribute("label"), /^12:00\s+fresh$/);
+    assert.equal(restored.getAttribute("bgalazka-notes-agenda-kind"), "reminder");
+    assert.equal(restored.getAttribute("bgalazka-notes-agenda-item-id"), "fresh");
+    assert.equal(restored.getAttribute("bgalazka-notes-agenda-day"), C.localDateKey(start));
+    await h.destroy();
+  });
+  await test("saving Agenda visibility defaults in Notes refreshes the sidebar folder", async () => {
+    // F0.9: the rule is stored in meta.json, which raises no store event, so the sheet must ask the window host.
+    const h = await host(), settle = async () => { for (let i = 0; i < 8; i++) await new Promise((resolve) => setImmediate(resolve)); };
+    h.seam.store.items.upsert(make("visible", date(1)));
+    h.seam.agendaController.runNow();
+    assert.equal(projected(h).length, 1);
+    const press = { button: 0, clientX: 5, clientY: 5 };
+    h.emit("mousedown", projected(h)[0], press); h.emit("mouseup", projected(h)[0], press); await settle(); // opens Notes on that day
+    const sheet = h.document.querySelector(".zentral-notes-sheet"); sheet.ownerDocument = h.document;
+    assert.equal(sheet.hidden, false);
+    while (h.fireTimer(250)) await settle(); // nothing is left that would run the projection anyway
+    assert.equal(projected(h).length, 1);
+    sheet.querySelector(".zn-calendar-tools").click(); await settle();
+    sheet.querySelectorAll(".zn-menu-item").find((entry) => entry.textContent.trim().startsWith("Zen Agenda visibility defaults")).click(); await settle();
+    const dialog = sheet.querySelector('[aria-label="Zen Agenda visibility defaults"]');
+    dialog.querySelector('[aria-label="Agenda inclusion"]').value = "off";
+    dialog.querySelectorAll("button").find((button) => button.textContent.trim() === "Save Agenda defaults").click(); await settle();
+    assert.equal(h.seam.store.meta.calendarAgendaDefaults.enabled, false);
+    assert.equal(projected(h).length, 1, "the sidebar is reconciled by the debounced run, not inside the click");
+    assert.equal(h.fireTimer(250), true, "Save scheduled one Agenda run");
+    assert.equal(projected(h).length, 0, "items hidden by the new default leave the sidebar");
+    assert.ok(!root(h), "and the empty Agenda folder goes with them");
+    await h.destroy();
+  });
   await test("real Notes projection also creates and retains its own pseudo-tabs", async () => {
     const h = await host({ prefs: { [ZEN_MODE]: "all" } });
     h.seam.store.create("Sidebar note"); h.seam.zen.runNow();

@@ -1247,14 +1247,31 @@
   }
   // A registry can be shared by independently loaded browser-window modules.
   // Gates are removed after the final waiter, so it retains no idle windows.
+  // `waitMs` (with the caller's timers) limits how long a turn waits for the one before it: a window that was closed in
+  // the middle of its turn never finishes it, and without a limit every later turn for that key would wait for ever.
+  // After the limit the turn runs on its own (what every turn did before the registry was shared) and `onTimeout(key)`
+  // is told once. 0 = no limit.
   const localHistoryLocks = new Map();
-  function createHistoryCoordinator(registry = localHistoryLocks) {
+  function createHistoryCoordinator(registry = localHistoryLocks, { waitMs = 0, setTimer = null, clearTimer = null, onTimeout = null } = {}) {
+    const limited = waitMs > 0 && typeof setTimer === "function";
+    const waitFor = (previous, key) => !limited ? previous : new Promise((resolve) => {
+      let timer = null, over = false;
+      const end = (late) => {
+        if (over) return;
+        over = true;
+        if (late) { try { onTimeout?.(key); } catch (_) {} }
+        else if (timer !== null) { try { clearTimer?.(timer); } catch (_) {} }
+        resolve();
+      };
+      timer = setTimer(() => end(true), waitMs);
+      Promise.resolve(previous).then(() => end(false), () => end(false));
+    });
     return async (key, work) => {
       const previous = registry.get(key);
       let release;
       const gate = new Promise((resolve) => { release = resolve; });
       registry.set(key, gate);
-      try { if (previous) await previous; return await work(); }
+      try { if (previous) await waitFor(previous, key); return await work(); }
       finally {
         try { if (registry.get(key) === gate) registry.delete(key); } catch (_) {}
         release();
@@ -1587,7 +1604,9 @@
     };
   }
 
-  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null }) {
+  // `beforeWrite` (optional, async) runs before every calendar write, outside the calendar lock. The note store uses it to
+  // put pending note text on disk first, so `calendar.json` never refers to a note line that was not saved (UI4.7).
+  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null, beforeWrite = null }) {
     const items = new Map();
     const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite, perf, withHistoryLock });
     const categoryDefs = new Map();
@@ -1693,7 +1712,9 @@
         safeWarn(error); return Promise.reject(error);
       }
       dirty = false; pendingWrites++;
-      const task = chain.catch(() => {}).then(() => withCalendarLock(io.join(dir, ITEMS_FILE), async () => {
+      // A failing hook is reported but never blocks the calendar: its own write error is shown by its owner.
+      const prepare = typeof beforeWrite === "function" ? () => Promise.resolve().then(beforeWrite).catch(safeWarn) : () => null;
+      const task = chain.catch(() => {}).then(prepare).then(() => withCalendarLock(io.join(dir, ITEMS_FILE), async () => {
         try {
           if (writeBlocked) throw new Error("Calendar storage is protected because its existing file could not be read safely.");
           const captured = snapshot(), remote = await readCalendarForWrite(dir, captured);
@@ -2022,10 +2043,31 @@
     if (!["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(o.FREQ)) return null;
     const interval = Math.max(1, Math.min(999, parseInt(o.INTERVAL, 10) || 1));
     const count = o.COUNT ? Math.max(1, Math.min(1000000, parseInt(o.COUNT, 10) || 0)) : 0;
-    let until = 0;
-    if (o.UNTIL) { const u = /^(\d{4})(\d{2})(\d{2})/.exec(o.UNTIL); if (u) until = addDays(new Date(+u[1], +u[2] - 1, +u[3]).getTime(), 1); }
+    // UNTIL is the last civil day of the series. `untilKey` is that day (YYYY-MM-DD, the value editors show);
+    // `until` is its end in the system zone. Never derive the day from `until` by subtracting 24 hours: a 23-hour
+    // day would give the day before.
+    let until = 0, untilKey = "";
+    if (o.UNTIL) {
+      const u = /^(\d{4})(\d{2})(\d{2})/.exec(o.UNTIL);
+      if (u) { const last = new Date(+u[1], +u[2] - 1, +u[3]); until = addDays(last.getTime(), 1); untilKey = ymd(last); }
+    }
     const byday = o.BYDAY ? [...new Set(o.BYDAY.split(",").map((d) => DAY_CODES.indexOf(d.slice(-2))).filter((n) => n >= 0))].sort((a, b) => a - b) : [];
-    return { freq: o.FREQ, interval, count, until, byday };
+    return { freq: o.FREQ, interval, count, until, untilKey, byday };
+  }
+  // First instant after the series end. A timed item pinned to a zone ends with its last day IN THAT ZONE, wherever
+  // the computer is; all-day and unpinned items use the system zone. Infinity when the rule has no UNTIL.
+  const untilBoundaryCache = new Map();
+  function recurrenceUntilMs(rule, zone = "") {
+    if (!rule || !rule.until) return Infinity;
+    if (!zone || !rule.untilKey) return rule.until;
+    const key = zone + "\u0000" + rule.untilKey;
+    if (untilBoundaryCache.has(key)) return untilBoundaryCache.get(key);
+    const last = parseYmd(rule.untilKey);
+    const next = last ? zonedDateTimeToMs(localDateKey(addDays(last.getTime(), 1)), "00:00", zone) : null;
+    const value = Number.isFinite(next) ? next : rule.until;
+    untilBoundaryCache.set(key, value);
+    if (untilBoundaryCache.size > PARSED_RULE_CACHE_LIMIT) untilBoundaryCache.delete(untilBoundaryCache.keys().next().value);
+    return value;
   }
   // Local calendar-day ordinal, immune to 23/25-hour DST days.
   function localDayOrdinal(ms) {
@@ -2167,8 +2209,8 @@
       const stamp = whenMs(entry.recurrenceId);
       if (!singleExceptions.has(stamp)) singleExceptions.set(stamp, entry);
     }
-    const margins = recurrenceSearchMargins(it, allDay);
-    const limit = Math.min(to + margins.negative, rule.until || Infinity);
+    const margins = recurrenceSearchMargins(it, allDay), until = recurrenceUntilMs(rule, zone);
+    const limit = Math.min(to + margins.negative, until);
     if (limit <= s0) return [];
     // Recurrence arithmetic is performed on civil dates in the item's IANA zone, not the host OS zone.
     const seekFrom = (reminder ? from : from - len) - margins.positive;
@@ -2185,7 +2227,7 @@
       const candidates = recurrencePeriodDates(rule, base, period).map(timedAt).sort((a, b) => a - b);
       for (const recurrenceMs of candidates) {
         if (recurrenceMs < s0) continue;
-        if (recurrenceMs >= (rule.until || Infinity)) return out;
+        if (recurrenceMs >= until) return out;
         if (rule.count && ordinal >= rule.count) return out;
         ordinal++;
         if (exdates.has(recurrenceMs)) continue;
@@ -2217,8 +2259,9 @@
 
   function isRecurrenceCandidate(master, recurrenceMs) {
     const rule = (master?.recurrence || []).map(parseRule).find(Boolean);
-    if (!rule || !Number.isSafeInteger(recurrenceMs) || recurrenceMs < whenMs(master.start) || recurrenceMs >= (rule.until || Infinity)) return false;
+    if (!rule || !Number.isSafeInteger(recurrenceMs) || recurrenceMs < whenMs(master.start)) return false;
     const allDay = isAllDay(master), zone = allDay ? "" : cleanZone(master.x?.tz);
+    if (recurrenceMs >= recurrenceUntilMs(rule, zone)) return false;
     const base = recurrenceCivilDate(whenMs(master.start), zone);
     const firstPeriod = recurrencePeriodIndex(rule, base, recurrenceCivilDate(recurrenceMs, zone).getTime());
     // The search helper deliberately starts one period early so event spans and BYDAY weeks are not missed.
@@ -2869,7 +2912,7 @@
   }
   // Coalesced, store-change-driven controller for the virtual Zen Agenda folder. The host
   // supplies DOM/Zen operations through `api`; this controller owns no browser globals.
-  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
+  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getReady = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
     let dead = false, timer = null, timerAt = Infinity, last = [], busy = false, consecutiveChanges = 0, blockedUntil = 0;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
     function armAt(due) {
@@ -2903,6 +2946,10 @@
       const revision = api.mutationCount?.() || 0;
       try {
         if (!getEnabled()) { api.removeAll?.(); last = []; clearScheduled(); return []; }
+        // The items are not loaded yet (startup, before the store has opened). An empty list now would not mean that
+        // nothing is due: reconciling against it would remove the entries that session restore just brought back. The
+        // host schedules a run when the store is ready.
+        if (!getReady()) return last;
         sourceItems = getItems?.() || [];
         policies = getWindowIsMasterPolicy ? prepareAgendaWindows(sourceItems, getWindow) : null;
         fullProjection = agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow, policies);
@@ -3243,7 +3290,7 @@
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

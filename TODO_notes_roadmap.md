@@ -63,6 +63,7 @@ These apply to every row. They come from past regressions; each rule was checked
 13. **Sidebar safety.** Touch only tabs/folders that carry our attributes; ignore events caused by our own operations; reconcile must be idempotent (a second run on an unchanged store performs zero DOM operations); a foreign tab/folder inside a managed folder is moved out, never destroyed.
 14. **Alerts.** One alert per stage per occurrence and schedule; never fire several stages in one pass (`H1.5`); alerts must survive sleep/clock changes (`TM3.1`).
 15. **Owner rule reversal 2026-11-14.** In Month view a click selects the day; it does not open Day view (`OW-06`). Do not re-add the old behaviour from old rows or tests.
+16. **Never hand a DOM element to `assert.equal` / `assert.deepEqual`.** When such an assertion fails, Node renders both fake DOM trees into the message and the test file never ends. Compare elements with `===` inside `assert.ok(...)` and assert on ids, labels or counts. `tests/run-all.cjs` stops a file after 5 minutes (`ZENTRAL_TEST_TIMEOUT_MS`) and reports it as failed; while writing a new test file, run it under `timeout 60 node …`.
 
 ---
 
@@ -72,13 +73,7 @@ Impact and effort: S = under one session slice, M = one session, L = several ses
 
 | Order | ID | Status | Impact | Effort | Depends on | Task |
 | --: | :-- | :-- | :-- | :-- | :-- | :-- |
-| 1 | `UI4.7` | `PARTIAL` | Med | M | H1.2, F0.1 | Multi-window and data-integrity edge tests |
-| 3 | `F0.5` | `DONE` | Med | S-M | F0.4 | Perf budgets relative to a baseline + serial perf group |
-| 4 | `F0.6` | `DONE` | Med | S | F0.4 | `standalone.test.cjs` must work on a temp copy, never edit the repo |
-| 6 | `F0.8` | `OPEN` | Med | S | F0.7 | Readable DST/leap/month-end golden cases next to the recurrence hash fixture |
-| 7 | `AU-B1` | `PARTIAL` | High | S-M | F0.8 | Recurring item loses its first occurrence in the repeated DST hour |
-| 8 | `SB6.8` | `OPEN` | Med | S | F0.1 | Bind Agenda guards immediately; delay only the projection |
-| 9 | `T3.1` | `OPEN` | High | S-M | — | Fix second panel startup initialization bug & settings font-scaling overlap |
+| 9 | `T3.1` | `PARTIAL` | High | S-M | — | Fix second panel startup initialization bug & settings font-scaling overlap |
 | 10 | `OW-26` | `OPEN` | High | S-M | T3.1 | [new] Triple View startup restore: Notes top edge moves section until panel swap |
 | 10 | `OW-04` | `OPEN` | High | M | none | [new] Limit the visible hour range in Week/Day (e.g. 08-20) with automatic extension |
 | 11 | `OW-03` | `OPEN` | High | M-L | OW-04 | [change] Calendar size: fit to the pane by default (no scrollbar) plus a size slider; replaces Comfortable/Compact/Extra compact |
@@ -153,7 +148,6 @@ Impact and effort: S = under one session slice, M = one session, L = several ses
 | 81 | `OW-21` | `OPEN` | Med | M | — | [new, lower priority] Find and replace within Notes |
 | 82 | `OW-22` | `OPEN` | Med | M | — | [new, lower priority] Find next/previous match outside the visible viewport |
 | 83 | `T4.4` | `OPEN` | Low | S | — | Dead code removal (`stretched()`, legacy `quad` helpers) |
-| 84 | `T4.5` | `OPEN` | Low | S | — | Standalone modules version alignment & release hygiene |
 
 ---
 
@@ -188,53 +182,6 @@ _Stale 'Today', late alerts after sleep, overdue and missed reminders. Builds on
 ## Phase 4 — Interaction safety and owner bugs
 
 _Click/drag/keyboard behaviour in the Zen sidebar and Month view, plus the owner's bug reports._
-
-#### `UI4.7` — Multi-window and data-integrity edge tests
-**Status:** `PARTIAL` · **Impact:** Med · **Effort:** M · **Depends on:** H1.2, F0.1 · **Source:** Audit R2 E4-E8
-
-**Problem:** Untested situations from the audit.
-
-**Plan (do in this order):**
-1. Done in window A and edit in window B of the same item (last-write-wins, `lwwPick`): loser is notified, not silent.
-2. Two Zen windows: only one shows an alert banner (`claimAlert`); closing the window that alerted keeps pending stages in the other.
-3. Category deleted or renamed: Agenda windows, colours and alerts fall back without `undefined` policies.
-4. Source note moved to Trash then restored: no duplicate items and no duplicate `## Agenda` mirror lines (`mirrorItemToAgendaNote`).
-5. Items whose note is trashed: either hidden from the Agenda or shown as 'source note in Trash' with Restore (see `SB6.7`).
-
-**Tests / done when:** New `tests/notes-multiwindow.test.cjs`.
-
-**DONE:** Calendar persistence uses three-way item/category merging under the same per-path process coordinator as history, preserving independent changes and uncontested deletions. Competing item edits use `lwwPick`; the losing calendar window is notified in the sheet and host toast. Unsafe delete/edit and category conflicts block writes and save a recovery snapshot; damaged/unreadable files are protected, with pending edits separately backed up when possible. Edits arriving during I/O remain pending. The 500/2000-item pure merges measured 2.4/6.5 ms (timings vary). Failed reminder claims roll back without discarding unrelated records and receive bounded retries; history opens, recovery, writes and claims serialize per path. Tests cover independent window claims and edits, conflict protection, Trash/restore without duplicate mirrors and external category-definition fallback. No category rename/delete operation exists.
-
-**DONE:** Note writes now compare the exact last-read disk snapshot against the current file while holding the shared per-note path coordinator. A stale write preserves the displaced version in the existing 48-hour Notes recovery area before replacing it, emits a conflict event locally and via the remote notification payload, and displays a longer-lived toast in the receiving window. If a recovery copy cannot be written, the stale write is blocked instead of silently discarding the other version. The new Done-versus-stale-edit test passes in GitHub Actions and verifies the displaced Done version can be recovered after a later stale save. Existing multi-window tests cover a single persisted alert claim with a subsequent stage still claimable after the other window closes, Trash/restore without duplicate mirrors, and safe fallback after external category removal/rename.
-
-**LEFT:** Validate the shared hidden-window coordinator and notification delivery in real Zen; the fallback remains module-local, external writers are not locked, and calendar plus note writes are not a cross-file transaction. Add a dedicated recovery test for later edits after a backup failure. The UI4.7 task remains PARTIAL until those environment/data-integrity cases are closed.
-
-
-#### `F0.5` — Perf budgets relative to a baseline
-**Status:** `DONE` · **Impact:** Med · **Effort:** S-M · **Depends on:** F0.4 · **Source:** Audit 2026-11-14
-
-**Completed:** The runner calibrates each host against a fixed deterministic loop, scales timing ceilings by that measured ratio (bounded to x1–x3), runs the performance group serially, and retries an individual failed performance file once in isolation. The last remaining Agenda DOM list/reorder/workspace-switch limits now use `scaleBudget` too.
-**Verification:** The push workflow passed on 2026-11-14: the dedicated multi-window regression, standalone rebuild/check, `node tests/run-all.cjs` (121/121 files, 0 TODO failures), and `git diff --check` all succeeded. The generated standalone package was committed as version 3.3.156.
-
-#### `F0.6` — `standalone.test.cjs` must not touch the repo
-**Status:** `DONE` · **Impact:** Med · **Effort:** S · **Depends on:** F0.4 · **Source:** Audit 2026-11-14
-
-**Problem:** It appended a test comment to a real module source and created `additional/zz-test` inside the repo, risking checkout corruption and parallel-test races.
-**Fix:** All build experiments now run against an OS-temp copy of `tools/`, `additional/`, `loader/`, plus the owner settings schemas required by the builder. The test edits only the copied source and removes the temporary tree in `finally`.
-**Verification:** The regression test compares the checkout's file list, contents, and file mtimes before/after. CI passed with 121/121 test files and `git diff --check`.
-
-#### `F0.8` — Readable recurrence golden cases
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Depends on:** F0.7 · **Source:** Audit 2026-11-14
-
-**Problem:** `fixtures/notes-recurrence-hashes.json` is a sha256 of random cases; a failure shows no diff.
-**Plan:** Add a test with explicit expected dates for DST fall-back and spring-forward, 29 Feb, the 31st of the month, in 2+ zones. Keep the hash fixture.
-
-#### `AU-B1` — Recurring item loses its first occurrence in the repeated DST hour
-**Status:** `PARTIAL` · **Impact:** High · **Effort:** S-M · **Depends on:** F0.8 · **Source:** Audit 2026-11-14 (reproduced)
-
-**Problem:** Daily reminder starting 2026-11-01 09:05Z in America/Los_Angeles (the second 01:05): `expandItem` returns Nov 2, 3, 4; the start occurrence is dropped, because the ambiguous wall time resolves to the earlier instant, which is before the series start.
-**DONE:** `recurrenceCandidateMs`, `expandItem`, and `isRecurrenceCandidate` now emit the `DTSTART` occurrence at its own instant when the candidate civil date matches `base`, preserving `COUNT` and keeping the earlier-instant rule for later ambiguous occurrences; `notes-p2.test.cjs` passes in `America/Los_Angeles`.
-**LEFT:** Add explicit `F0.8` golden cases covering repeated-DST-hour recurrences across zones.
 
 #### `OW-26` — [new] Triple View startup restore: Notes top edge moves section until panel swap
 **Status:** `OPEN` · **Impact:** High · **Effort:** S-M · **Depends on:** T3.1 · **Source:** Owner 2026-11-14
@@ -460,16 +407,6 @@ _Visible hours and sizing first (they change geometry every later feature uses),
 ## Phase 6 — Zen sidebar polish
 
 _Labels, menus, quick actions, hover cards, caps and diagnostics for Agenda and Notes pseudo-tabs._
-
-#### `SB6.8` — Bind Agenda guards immediately; delay only the projection
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Depends on:** F0.1 · **Source:** Audit R1 B10
-
-**Problem:** `bindAgenda` is only called from `agendaSoon` (6.5 s boot timer), so the click guard and restore listeners are missing for the first seconds; restored `about:blank` Agenda tabs can be clicked unguarded.
-
-**Plan (do in this order):**
-1. Call `bindAgenda(agendaEnabled())` at startup; keep the 6.5 s delay only for `runNow`.
-
-**Tests / done when:** Harness: click before boot timer is guarded.
 
 #### `OW-27` — [new] Opening reminders in Zen sidebar takes 2 clicks vs 1 click for NOTES
 **Status:** `OPEN` · **Impact:** High · **Effort:** S-M · **Depends on:** none · **Source:** Owner 2026-11-14
@@ -764,9 +701,9 @@ _Larger changes; do them with the Phase 0 harness in place. `T2.13` (ICS) is alw
 _Not blocked by the calendar work. `T3.1` and `T3.6a` are High impact and may be pulled earlier._
 
 #### `T3.1` — Fix second panel startup initialization bug & settings font-scaling overlap
-**Status:** `OPEN` · **Impact:** High · **Effort:** S-M · **Source:** carried over from the previous roadmap (unchanged requirement)
+**Status:** `PARTIAL` · **Impact:** High · **Effort:** S-M · **Source:** carried over from the previous roadmap (unchanged requirement)
 
-**Current state and what is LEFT:** Resolve race condition when opening a second Zen window/panel on startup; adjust Settings and Quick Settings CSS so controls never obscure each other at larger font sizes.
+**Current state and what is LEFT:** DONE (3.3.168, start-up half; `tests/notes-startup.test.cjs`, 18 cases on the real `start()` in one or two fake windows with a virtual clock, 16 of the 17 behaviour cases fail on the code before): (1) Start-up restore of Notes no longer depends on which finishes first, reading the notes, building the second panel or the start-up panel sliding away after 1.2 s: it waits for the notes (`storeWhenReady`), needs only that the bar exists, opens folded inside a panel that has already slid away, takes no keyboard focus, never opens as the card, waits up to 60 s for a bar that is built late (Triple View) and ends when the person closes or opens Notes (`maybeRestore`, `endRestore`, `openFromNow({ restore })`). (2) A sheet opened before the notes are read says `Loading notes…`, is dimmed, cannot be typed in and ignores presses and keys except Close, Esc and the resize grips (`setBusy`); before, a note created then was dropped and typed text was replaced. (3) A notes folder that cannot be reached at start-up is tried again (1.5 s, 4 s, 10 s, then every 30 s) and the open sheet, reminders, Agenda and Zen sidebar start when it succeeds; before, each asked once and stayed off for the session. (4) `meta.json` that exists but cannot be read is not an empty one: four immediate tries, then the opening fails and is retried, and nothing is written before the file was read; before, one failed read gave an empty folder tree and the next save replaced folders, permanent ids, colours and settings with defaults. A damaged file is copied to `meta.json.corrupt`. (5) Two windows that start together take turns reading the folder (`withHistoryLock("startup:" + dir)`, start-up work and its save inside the turn), so folders get one set of permanent ids and note-less reminders get one Agenda line and one date note; a save made by the other window while this one is reading is replayed afterwards (the observer is registered before the read). (6) A panel root that is built after the retry ticks, or replaced, gets its Notes buttons (`document.documentElement` is observed for direct children, `attachObservers()` runs on every bar sync). LEFT: (a) Settings and Quick Settings: controls must not obscure each other at a larger text size (pref `zen.workspace.zentral.notes.font_size`, 8–40 px). Not started. Known from reading the style sheet: `.zn-quick` is defined twice (list of setting rows at `display: grid`, and later the quick-colour swatches at `display: flex; flex-wrap: wrap`, which wins for both), `.zn-set-row` does not wrap and its label has `min-width: 0`, `.zn-dialog-actions` does not wrap, `.zn-set-sub` has a fixed `6em` column. Measure in a real layout engine before changing (a headless Chromium runs in the sandbox: `npm i @sparticuz/chromium puppeteer-core` outside the repository, start with `AWS_EXECUTION_ENV=AWS_Lambda_nodejs22.x`), then pin with a style-source test. (b) Two windows that are already running each write their whole in-memory `meta.json` and the last writer wins: a folder added in window A disappears when window B later saves any setting. Re-read and merge before a meta write, or reload meta on the message of the other window; needs a two-window test with `tests/helpers/fake-panel-window.cjs`.
 
 **Full specification (original row):** **OPEN.** Resolve race condition when opening a second Zen window/panel on startup so state listeners, styles, and note trees initialize deterministically without blank/unresponsive UI, change settings in notes app so they dont obscure eachother if user selected bigger font.
 
@@ -847,13 +784,6 @@ _Not blocked by the calendar work. `T3.1` and `T3.6a` are High impact and may be
 
 **Full specification (original row):** **OPEN.** Remove unused legacy layout functions (`stretched()`, obsolete `quad` math/positioning helpers) confirmed dead after `T4.1` verification.
 
-#### `T4.5` — Standalone modules version alignment & release hygiene
-**Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Source:** carried over from the previous roadmap (unchanged requirement)
-
-**Current state and what is LEFT:** Synchronize version strings, headers, and changelogs across all standalone and bundled scripts prior to release tag.
-
-**Full specification (original row):** **OPEN.** Synchronize version strings, headers, and changelogs across all standalone and bundled scripts prior to release tag.
-
 ---
 
 ## Track 2 design rules (owner decisions, still binding)
@@ -910,29 +840,30 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 1. Add the pref: schema in `additional/notes/settings.json` (+ `layout` entry), list in `additional/notes/standalone.json`, constant in `PREF` and a row in the in-app settings list of `ZentralNotes.uc.js`; run `node tools/organize-layout-order.cjs`, `node tools/build-preferences.cjs`, `node tools/check-default-drift.cjs`. Copy the pattern of `default_view` or `tree_order` (grep it).
 2. Pure function first, exported through `__zentralNotesTestSeam`, fixture test red, then implement. Parser changes go in `parseBlocks` / the inline parser; keep `exportHtml` and `exportText` in step.
-3. Release loop: `node tools/build-standalone.cjs --bump`, `node tools/build-preferences.cjs`, `node tools/build-z-map.cjs`, `node tools/build-standalone.cjs --check`, then `node tests/run-all.cjs`.
+3. Release loop: `node tools/build-standalone.cjs --bump`, `node tools/sync-version.cjs`, `node tools/build-standalone.cjs`, `node tools/build-preferences.cjs`, `node tools/build-z-map.cjs`, `node tools/build-standalone.cjs --check`, then `node tests/run-all.cjs`. The second and third commands keep the main mod and every standalone module on one version.
 
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.162, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.168, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.162.** `F0.1`–`F0.7`, `H1.1`–`H1.5`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.5`, `SB6.1` and `T2.8b` are DONE and archived in `docs/LEGACY_done_rows.md`. `AU-B1` is `PARTIAL` (the `DTSTART` repeated-DST-hour recurrence fix is implemented and passing in `America/Los_Angeles`; `F0.8` golden cases remain `OPEN`). `OW-26` (Triple View startup restore top resize edge) and `OW-27` (Zen sidebar Agenda reminder 2-click issue) are `OPEN`. The full suite (`125/125` test files) and timezone matrix (`176/176` across `UTC`, `Europe/Warsaw`, `America/Los_Angeles`, `Pacific/Auckland`) pass in Node/fake-Zen; live Zen remains unavailable in the sandbox.
+State: **3.3.168.** `F0.1`–`F0.12`, `H1.1`–`H1.5`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.5`, `UI4.7`, `AU-B1`, `SB6.1`, `SB6.8`, `T2.8b` and `T4.5` are DONE and archived; `T3.1` is `PARTIAL` (start-up half done, see its row). The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`132/132` test files) and the timezone matrix (`180/180` across `UTC`, `Europe/Warsaw`, `America/Los_Angeles`, `Pacific/Auckland`) pass in Node/fake-Zen; live Zen is not available in the sandbox.
 
-Completed this session (3.3.162):
-- **Fixed 9 CI regressions from `b7a80f0` pseudo-tab safeguard scoping:**
-  1. `ZentralNotes.uc.js` (`agendaTabKey`): placed inside the `notes-agenda-seed` vm slice, prefers `AGENDA_ATTR` when the tab has not navigated to an ordinary URL, and clears stale markers on reused ordinary tabs.
-  2. `ZentralNotes.uc.js` (`onAgendaMouse`): unconditionally suppresses default navigation on unmodified primary `click` for Agenda pseudo-tabs even after `mouseup` already activated and cleared `agendaPress`, and keeps lost-marker/misplaced pseudo-tabs owned via `agendaTabKey`.
-  3. `ZentralNotes.uc.js` (`onZenMouse`, `onZenTabEvent`, `onZenSelect`, `zenSweepStrays`): strips stale markers via `notesTabKey(tab)` / `zenManagedTab(tab)` while preserving the static safeguard expressions checked by `notes-cycle-g.test.cjs` and `notes-p4.test.cjs`.
-  4. `ZentralNotes.uc.js` (`filterZenSidebarState`): checks `_zenPinnedInitialState?.entry?.url` / `userTypedValue` when the active session entry is `"about:blank"` or empty (preserving `normalWithOldPin` and `normal` tabs).
-  5. `tests/notes-agenda-click.test.cjs`: removed the stale pre-drag `mouseup` and aligned the post-`mouseup`-activation modifier test (`ctrlKey` on release/press).
-  6. `tests/tab-unload-successor.test.cjs`: passed `"about:blank#zn-note:..."` URLs for genuine Notes placeholder tabs and added `gBrowser.addTrustedTab` to `run()`.
-- **Rebuilt standalone bundles (`notes` -> `3.3.162`) and verified full CI suite.**
+Completed this session (3.3.163–3.3.168), every finished item archived in `docs/LEGACY_done_rows.md`:
+- `UI4.7` DONE — multi-window and data-integrity edge tests closed: blocked stale write keeps later edits until its recovery copy exists; writers without a lock are detected by snapshot; note text is always written before `calendar.json` (`createItemStore({ beforeWrite })`); after a crash between the two writes the manual record and its mirror line become one reminder again (`mirrorItemToAgendaNote` twin re-key). `F0.5` and `F0.6` (finished earlier) were moved out of the roadmap.
+- `T4.5` DONE — one version everywhere: `tools/sync-version.cjs` (+ `--check`, `--set`), `tests/version-sync.test.cjs`, CI workflow and release-loop documentation.
+- `F0.8` + `AU-B1` DONE — readable recurrence golden table (`tests/notes-recurrence-golden.test.cjs`, 3 zones x 4 system zones). Fixed what it exposed: `UNTIL` now ends a series with its last day in the item's zone (`recurrenceUntilMs`), and both recurrence editors show the stored last date (`parseRule().untilKey`) instead of the day before on a 23-hour day.
+- `F0.9` DONE (not a planned row, found while preparing `SB6.8`) — `tests/notes-undefined-identifiers.test.cjs` fails on any name used without a declaration and on any calendar function that is named but not exported. It exposed four defects, all fixed with behaviour tests: the sidebar command `Move note to trash` threw and did nothing; the three Save buttons of the Zen Agenda visibility dialogs threw after saving, so the sidebar folder was not refreshed; a failed side effect of Save left the calendar composer open (a second press stored the item twice); a restored Agenda tab outside the last projection got a bare title and the wrong icon.
+- `SB6.8` DONE — sidebar guards are bound at start-up for Agenda and for NOTES entries; the boot timers only start the projections. Closed with it: projections never run before the notes are loaded (restored entries were removed and re-created), the first Agenda run after a restart adopts the restored tabs instead of replacing them, and writes from the guarded menus wait for the store. Test: `tests/notes-sidebar-startup.test.cjs`.
+- `F0.10` DONE (not a planned row) — `tests/run-all.cjs` stops a test file after 5 minutes and reports it as failed. Before, one failing `assert.equal` on fake DOM elements stalled the whole run (rule 16).
+- `F0.11` DONE (not a planned row, found while preparing `T3.1`) — the windows of one application now coordinate on Windows and Linux too. The registry of cross-window turns lived on Firefox's hidden window, which exists on macOS only; it now lives on the global shared by the system modules, and a turn waits at most 8 s for another window. Effects: one alert per reminder stage with two windows open, and a save never silently replaces a save of the same note made in another window. The toolbar widget is registered once (`CustomizableUI` is frozen, the old owner mark threw in every window). New test helper `tests/helpers/fake-panel-window.cjs`.
+- `T3.1` PARTIAL — start-up half: the restore of Notes, a sheet opened before the notes are read, a folder that is away at start-up, `meta.json` that cannot be read for a moment, two windows starting together and a panel suite built later all end the same way whatever happens first (details and what is LEFT in the `T3.1` row). Test: `tests/notes-startup.test.cjs`.
+- `F0.12` DONE (not a planned row, found by the full run for `T3.1`) — the clock of the fake Zen window (`tests/helpers/fake-zen-browser.cjs`) is virtual. It ran on the real clock plus an offset, so a debounce re-armed on a busy machine asked for 220 ms instead of 250 and `fireTimer(250)` did not find it: `tests/notes-sidebar-startup.test.cjs` failed 14 of 24 runs under CPU load (also on the code before `T3.1`) and once in a normal parallel run. Now 0 of 24, and all 32 test files that use the fake windows pass under the same load.
 
-Standing owner rules for chunks: commit to Git, no ZIPs; no conversational filler; production-ready code and test suites; tasks strictly in order (implementation, edge cases, unit tests). Owner 2026-11-14: no live-check items (owner tests in the app and reports); do NOT add low-priority polish that changes nothing noticeable; only fix what a person would notice.
+Standing owner rules for chunks: commit to Git, no ZIPs; no conversational filler; production-ready code and test suites; tasks strictly in order (implementation, edge cases, unit tests). Owner 2026-11-14: no live-check items (owner tests in the app and reports); do NOT add low-priority polish that changes nothing noticeable; only fix what a person would notice. One version everywhere: `node tools/sync-version.cjs` after `build-standalone.cjs --bump` (see "How to add a feature").
 
-Known debts / owner requirements: `F0.8` readable DST/leap/month-end golden cases remain `OPEN` (completes `AU-B1`). `OW-26` (Triple View startup restore: Notes top edge moves the note section until swap initialization) and `OW-27` (Zen sidebar Agenda reminders require 2 clicks vs 1 for NOTES, plus slow cooldown) are newly logged `OPEN` items. UI4.7's fake-host note conflict/recovery path passes, but real Zen hidden-window coordination, non-transactional calendar/note dual writes, external-writer locking, and backup-failure recovery on later edits remain open. `OW-18` (space-local Notes/Agenda) and `B3.3.50-6` (`SessionFile.write` snapshot isolation) remain `PARTIAL`. Live Zen verification of native sidebar, Agenda icon/badge compositing, and Triple View resize remains pending.
+Known debts / owner requirements: `OW-18` (space-local Notes/Agenda) and `B3.3.50-6` (`SessionFile.write` snapshot isolation) remain `PARTIAL`. Accepted limits of `UI4.7` (not tasks): a foreign program writing between our compare and our write cannot be locked out; note file and `calendar.json` are ordered and repaired on start, not one transaction (details of a reminder that never reached `calendar.json` are lost if the browser dies between the two writes; date, time and title survive in the note line). FOUND while testing, needs an owner decision (nothing changed): once a calendar line has its hidden `%%zn-item-id%%`, retyping its date or time in the note text does not move the stored item (`syncNote` always keeps `old.start`); only the calendar UI moves it. Safe fix idea: remember the schedule parsed from each line and let the text win only when that parsed schedule changed in an edit. FOUND, not changed: for a skipped hour (clocks forward) an item with its own zone moves to 03:00, an item in the system zone to 03:30; both are pinned in the golden table. PERF finding (measured, not changed): `zonedDateTimeToMs` scans minute by minute; one call costs about 1.1 ms for `Pacific/Auckland`, 3.5 ms for `Europe/Warsaw` and 5.9 ms for `America/Los_Angeles`, and a recurring item with its own zone pays it per occurrence (a daily item in a month grid: 100-200 ms per render). Fix it with a budget test when zones become a first-class feature (`OW-23`).
 
-Next action: 1. Implement `F0.8` readable recurrence golden cases across zones (closes `AU-B1`), or tackle owner bugs `OW-26` (Triple View startup resize edge) and `OW-27` (1-click Agenda reminder activation). 2. Continue Master Order (`SB6.8`, `T3.1`, `T3.4`, `SB6.2`, `SB6.3`).
+Next action: Finish `T3.1` (LEFT (a) settings at a larger text size, LEFT (b) `meta.json` of two running windows), then continue the Master Order: `OW-26`, `OW-04`, `OW-03`, `OW-23`. The roadmap helper script of this session lived outside the repository and is gone; edit this file by hand.

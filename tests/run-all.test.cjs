@@ -48,6 +48,31 @@ test("run-all fails on a failing child and reports TODO tests", () => {
   }
 });
 
+test("run-all stops a test file that never finishes and reports it as a failure", () => {
+  const fixtureDir = fs.mkdtempSync(path.join(__dirname, ".tmp-run-all-hang-"));
+  try {
+    fs.writeFileSync(path.join(fixtureDir, "hanging.test.cjs"), 'console.log("output before the endless part");\nfor (;;) {}\n');
+    fs.writeFileSync(path.join(fixtureDir, "passing.test.cjs"), 'console.log("ok - fixture that ends");\n');
+    const started = Date.now();
+    const result = spawnSync(process.execPath, [path.join(__dirname, "run-all.cjs")], {
+      cwd: path.resolve(__dirname, ".."),
+      env: { ...process.env, ZENTRAL_TEST_DIR: fixtureDir, ZENTRAL_TEST_TIMEOUT_MS: "2000" },
+      encoding: "utf8",
+      timeout: 60000,
+    });
+    const output = (result.stdout || "") + "\n" + (result.stderr || "");
+    assert.ifError(result.error);
+    assert.equal(result.status, 1, output);
+    assert.ok(Date.now() - started < 30000, "the run ended soon after the limit");
+    assert.match(output, /Test files: 1\/2 passed; 1 failed/);
+    assert.match(output, /Failed files: hanging\.test\.cjs/);
+    assert.match(output, /What failed: Error: hanging\.test\.cjs did not finish within 2 s and was stopped\./);
+    assert.match(output, /compare them with ===/, "the message names the usual cause");
+    assert.match(output, /output before the endless part/, "what the file printed before it stalled is kept");
+  } finally {
+    fs.rmSync(fixtureDir, { recursive: true, force: true });
+  }
+});
 
 test("run-all --tz runs calendar and reminder fixtures in the four declared zones only", () => {
   const fixtureDir = fs.mkdtempSync(path.join(__dirname, ".tmp-run-all-tz-"));

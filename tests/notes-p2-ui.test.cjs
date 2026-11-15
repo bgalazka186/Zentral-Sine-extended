@@ -553,6 +553,33 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(store.items.list({ noteId: n.id }).length, 2, "editing details does not merge or drop reminders");
     const invalid = store.items.upsert({ ...store.items.get(morning.id), x: { ...store.items.get(morning.id).x, tz: "Not/A_Real_Zone" } });
     assert.equal(invalid.x.tz, "", "invalid IANA zones are normalized away by the item model");
+
+    // F0.8: the last occurrence date is a civil day. On a 23-hour day (clocks go forward) the editor used to show
+    // the day before, and saving the untouched dialog silently shortened the series.
+    const priorZone = process.env.TZ, calendarPart = win.__zentralNotesParts["notes-calendar"];
+    const startMs = Date.parse(store.items.get(morning.id).start.dateTime);
+    let shortDayZones = 0;
+    try {
+      // Each zone's day is its 23-hour day in 2027. A zone is used only when the item still starts on 20 November
+      // there, so the date chip keeps listing it whatever zone this test file itself runs in.
+      for (const [zone, day] of [["Europe/Warsaw", "2027-03-28"], ["America/Los_Angeles", "2027-03-14"], ["Australia/Sydney", "2027-10-03"], ["Pacific/Auckland", "2027-09-26"], ["America/New_York", "2027-03-14"]]) {
+        if (calendarPart.zonedDateKey(startMs, zone) !== "2026-11-20") continue;
+        shortDayZones++;
+        process.env.TZ = zone;
+        const current = store.items.get(morning.id);
+        assert.ok(store.items.upsert({ ...current, recurrence: ["RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,TH;UNTIL=" + day.replace(/-/g, "")] }));
+        qa(".zn-date-chip").find((b) => b.dataset.ymd === "2026-11-20").click(); menuItem("Edit calendar item for this date…").click();
+        qa(".zn-menu-item").find((b) => b.textContent.includes("Morning shift")).click();
+        await new Promise((r) => setImmediate(r));
+        const shown = qa(".zn-field").find((input) => input.getAttribute("aria-label") === "Last occurrence date");
+        assert.equal(shown.value, day, "the editor shows the stored last occurrence date in " + zone);
+        chipNamed("Save calendar details").click();
+        await flushRaf();
+        assert.deepEqual(store.items.get(morning.id).recurrence, ["RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,TH;UNTIL=" + day.replace(/-/g, "")], "saving the untouched dialog keeps the date in " + zone);
+      }
+    } finally { if (priorZone === undefined) delete process.env.TZ; else process.env.TZ = priorZone; }
+    assert.ok(shortDayZones >= 1, "at least one zone with a 23-hour day was exercised");
+    assert.doesNotMatch(source, /\.until\s*-\s*86400000/, "no editor derives the last occurrence date by subtracting 24 hours");
   });
 
   console.log(passed + " notes P2 UI tests passed");

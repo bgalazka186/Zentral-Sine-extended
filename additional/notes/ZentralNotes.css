@@ -2182,6 +2182,14 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
 .zentral-notes-sheet .zn-cal-resize-handle { position: absolute; z-index: 4; box-sizing: border-box; height: 8px; min-width: 0; padding: 0; border: 0; border-radius: 3px; background: transparent; cursor: ns-resize; touch-action: none; }
 .zentral-notes-sheet .zn-cal-resize-handle:hover, .zentral-notes-sheet .zn-cal-resize-handle:focus-visible { background: var(--zn-accent); outline: 2px solid var(--zn-accent); outline-offset: 1px; }
 
+/* ---- T3.1: open, but the notes are still being read (or their folder is away) ---------------------------
+   Nothing in the sheet acts until the notes are there (setBusy in ZentralNotes.uc.js). Show it: the toolbar and the
+   content are dimmed and the pointer says "wait". The header (Close), the status line and the resize grips are left
+   as they are, and the sheet is NOT made click-through: Close and Esc must keep working. */
+.zentral-notes-sheet[data-loading] { cursor: progress; }
+.zentral-notes-sheet[data-loading] > .zn-tools,
+.zentral-notes-sheet[data-loading] > .zn-body { opacity: 0.55; }
+
 /* Full-title tooltip for owned Agenda pseudo-tabs; also works without the core runtime. */
 .zn-agenda-title-card {
   position: fixed;

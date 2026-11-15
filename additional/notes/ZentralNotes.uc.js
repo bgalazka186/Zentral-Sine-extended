@@ -5734,15 +5734,37 @@
     // ======================================================================
     // Store: notes as files, atomic writes, cross-window sync
     // ======================================================================
+    // One object that every window of this application can reach; each window loads its own copy of this file, so
+    // without it no window knows what another one is writing. Firefox keeps a hidden window on macOS only (Firefox 128
+    // still had one everywhere, Firefox 140 does not), so the first choice is the global that the system modules share:
+    // it exists from the first moment on every platform and outlives every browser window. Every window asks in the same
+    // order, so two windows never end up with different objects. null = nothing is shared and this window coordinates
+    // only with itself.
+    function sharedNotesHome() {
+      try {
+        if (typeof Components !== "undefined" && typeof Components.utils?.getGlobalForObject === "function") {
+          const exported = ChromeUtils.importESModule("resource://gre/modules/AppConstants.sys.mjs");
+          const home = Components.utils.getGlobalForObject(exported.AppConstants || exported);
+          if (home && typeof home.Map === "function") return home;
+        }
+      } catch (_) {}
+      try {
+        const hidden = Services.appShell?.hiddenDOMWindow;
+        const home = hidden?.wrappedJSObject || hidden;
+        if (home && typeof home.Map === "function") return home;
+      } catch (_) {}
+      return null;
+    }
+    // How long a save or a reminder claim waits for the same step in another window. Only reached when that window was
+    // closed in the middle of the step; a normal step takes milliseconds.
+    const SHARED_TURN_WAIT_MS = 8000;
     function sharedReminderHistoryCoordinator() {
       if (!CALENDAR_PART?.createHistoryCoordinator) return undefined;
       try {
-        // The hidden DOM window outlives ordinary browser windows and is
-        // shared by their independently loaded Notes modules. Its Map contains
+        // The Map is created by the shared object itself, so it does not belong to any browser window. It contains
         // only in-flight gates, not a permanent reference to any Notes window.
-        const hidden = Services.appShell?.hiddenDOMWindow;
-        const shared = hidden?.wrappedJSObject || hidden;
-        if (!shared || typeof shared.Map !== "function") return undefined;
+        const shared = sharedNotesHome();
+        if (!shared) return undefined;
         const key = "__zentralNotesHistoryLocksV1";
         let registry = shared[key];
         if (!registry) {
@@ -5750,7 +5772,17 @@
           Object.defineProperty(shared, key, { value: registry, configurable: true });
         }
         if (typeof registry.get !== "function" || typeof registry.set !== "function" || typeof registry.delete !== "function") return undefined;
-        return CALENDAR_PART.createHistoryCoordinator(registry);
+        let told = false;
+        return CALENDAR_PART.createHistoryCoordinator(registry, {
+          waitMs: SHARED_TURN_WAIT_MS,
+          setTimer: (fn, ms) => window.setTimeout(fn, ms),
+          clearTimer: (id) => window.clearTimeout(id),
+          onTimeout: () => {
+            if (told) return;
+            told = true;
+            console.warn("[ZentralNotes] stopped waiting for another window that did not finish its step; this window continues on its own");
+          },
+        });
       } catch (_) { return undefined; }
     }
     function createStore({
@@ -5787,7 +5819,11 @@
       let retryTimer = null;
       let metaTimer = null;
       let metaDirty = false;
+      let metaReady = false; // true once meta.json has been read (or is known to be absent); nothing is written before
       let closed = false;
+      let opening = false; // the folder is being read; messages from other windows wait in missedRemote
+      const missedRemote = new Map(); // note id -> conflict copy path named by the message
+      let missedHistory = false;
       const state = { save: "saved", error: "" };
       // ---- calendar items (roadmap T2.3): ONE file `calendar.json` next to the notes (never matches FILE_RE, so loadAll /
       // refresh ignore it). Items written as marked lists inside a note are rebuilt from the note text; a note in Trash or
@@ -5795,6 +5831,9 @@
       // deleted for good removes them. Every call is guarded: the calendar must never break saving a note.
       const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, withHistoryLock,
         isNoteVisible: (id) => !!notes.get(id) && !notes.get(id).trashed,
+        // The two files are not one transaction, so the order is fixed: note text first, then the calendar record that
+        // refers to it. A crash in between leaves a line the next start rebuilds, never a record without its line.
+        beforeWrite: () => notesFlush || (dirty.size ? flushDirty() : chain),
         onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); } }) : null;
       function syncItems(id, stabilize = false, sourceEdit = false) {
         if (!items) return;
@@ -5899,10 +5938,57 @@
         for (const note of found) if (note) notes.set(note.id, note);
       }
 
+      // The settings file (folders with their labels, colours and permanent ids, calendar and alert settings, layout).
+      // A file that is there but cannot be read is NOT an empty one: another window or program may hold it for a moment
+      // (two windows start together). Starting from defaults then showed an empty folder tree, and the next save
+      // replaced every folder and setting with those defaults. So: a few immediate tries; "missing" only when the file
+      // is really absent; a file that stays unreadable stops the opening (it is tried again); a damaged file is kept
+      // beside the new one before defaults replace it.
+      const META_READ_TRIES = 4;
+      async function readMetaFile() {
+        const file = io.join(dir, "meta.json");
+        let absent = 0, failure = null;
+        for (let attempt = 0; attempt < META_READ_TRIES; attempt++) {
+          try {
+            return { state: "ok", text: await io.readUTF8(file) };
+          } catch (error) {
+            failure = error;
+            let exists = false;
+            if (typeof io.exists === "function") {
+              try { exists = !!(await io.exists(file)); } catch (_) { exists = true; }
+            }
+            // Asked twice: a file being replaced can be absent for an instant.
+            if (!exists && ++absent >= 2) return { state: "missing" };
+          }
+        }
+        return absent ? { state: "missing" } : { state: "unreadable", error: failure };
+      }
       async function loadMeta() {
+        metaReady = false;
         meta = { ...DEFAULT_META, geo: {}, recent: [], folders: [] };
+        const read = await readMetaFile();
+        if (read.state === "unreadable")
+          throw new Error("The Notes settings file (meta.json) is there but could not be read: " + String(read.error?.message || read.error));
+        if (read.state === "ok") {
+          let raw = null;
+          try {
+            raw = JSON.parse(read.text);
+          } catch (_) {}
+          if (raw && typeof raw === "object" && !Array.isArray(raw)) applyMetaRaw(raw);
+          else if (typeof read.text === "string" && read.text.trim()) {
+            // Damaged: keep what was there (one copy, replaced by a newer damaged file) and start from defaults.
+            warn("The Notes settings file (meta.json) is damaged; a copy is kept as meta.json.corrupt and the settings start fresh");
+            try {
+              await io.writeUTF8(io.join(dir, "meta.json.corrupt"), read.text, {});
+            } catch (error) {
+              warn(error);
+            }
+          }
+        }
+        metaReady = true;
+      }
+      function applyMetaRaw(raw) {
         try {
-          const raw = JSON.parse(await io.readUTF8(io.join(dir, "meta.json")));
           if (typeof raw.lastNoteId === "string") meta.lastNoteId = raw.lastNoteId;
           if (raw.size === "full" || raw.size === "peek" || raw.size === "span") meta.size = raw.size;
           if (raw.mode === "read" || raw.mode === "edit" || raw.mode === "split") meta.mode = raw.mode;
@@ -5961,7 +6047,8 @@
       function writeMetaNow() {
         if (metaTimer !== null) clearTimer(metaTimer);
         metaTimer = null;
-        if (!metaDirty || !dir) return Promise.resolve();
+        // Never before the file has been read: what is in memory then are the defaults, not the person's settings.
+        if (!metaDirty || !dir || !metaReady) return Promise.resolve();
         metaDirty = false;
         const text = JSON.stringify(meta);
         return queue(() =>
@@ -6027,8 +6114,8 @@
           }
           notify({ id: note.id, origin: windowId, kind: "saved", ...(conflictBackupPath ? { conflictBackupPath } : {}) });
         };
-        // Calendar history already owns a process-shared coordinator when the
-        // hidden window is available. Use a separate key for each note file.
+        // Calendar history already owns the coordinator that the windows of this application share
+        // (see sharedNotesHome). Use a separate key for each note file.
         if (typeof withHistoryLock === "function") return withHistoryLock("note:" + file, persist);
         return persist();
       }
@@ -6059,7 +6146,16 @@
         lastSnapText.set(note.id, text);
         for (const old of pruneHistory([...names, name].map((n) => ({ name: n })), o.keep || HISTORY_DEFAULTS.keep)) await io.remove(io.join(histDir(note.id), old)).catch(() => {});
       }
+      // The note flush that is queued or running (null when idle). A calendar write waits for it instead of starting a
+      // second pass, so one blocked note is attempted, and reported, once per save.
+      let notesFlush = null;
       function flushDirty() {
+        const run = flushDirtyNow();
+        notesFlush = run;
+        run.then(() => { if (notesFlush === run) notesFlush = null; });
+        return run;
+      }
+      function flushDirtyNow() {
         return queue(async () => {
           if (closed || !dir) return;
           if (retryTimer !== null) {
@@ -6301,19 +6397,48 @@
           listeners.add(fn);
           return () => listeners.delete(fn);
         },
-        async open() {
+        // `startup` (optional) runs once the folder is loaded: work that belongs to starting the application, not to
+        // every opening (the host passes the Agenda lines of older items).
+        async open({ startup = null } = {}) {
           closed = false;
           dir = await getDir();
-          await loadAll();
-          await loadMeta();
-          await openItems();
-          try { // migrate the old generated "Daily" label; a folder the person renamed is left alone
-            const df = meta.folders.find((f) => f.id === DATE_FOLDER);
-            if (df && df.label === "Daily") api.renameFolder(DATE_FOLDER, DATE_FOLDER_LABEL);
-          } catch (error) { warn(error); }
-          api.ensureFolderUids(); // every folder has its permanent uid before anything (tree, Zen sidebar) is built from it
-          await purgeOldTrash();
-          await purgeBackups().catch(warn);
+          opening = true;
+          missedRemote.clear();
+          missedHistory = false;
+          const load = async () => {
+            await loadAll();
+            await loadMeta();
+            await openItems();
+            try { // migrate the old generated "Daily" label; a folder the person renamed is left alone
+              const df = meta.folders.find((f) => f.id === DATE_FOLDER);
+              if (df && df.label === "Daily") api.renameFolder(DATE_FOLDER, DATE_FOLDER_LABEL);
+            } catch (error) { warn(error); }
+            api.ensureFolderUids(); // every folder has its permanent uid before anything (tree, Zen sidebar) is built from it
+            await purgeOldTrash();
+            await purgeBackups().catch(warn);
+            if (typeof startup === "function") {
+              try { await startup(); } catch (error) { warn(error); }
+            }
+          };
+          try {
+            if (typeof withHistoryLock === "function") {
+              // Two windows that start together take turns: the second one reads the folder after the first has
+              // finished AND written what start-up changes (permanent folder ids, the Agenda lines of older items,
+              // expired Trash). Side by side, each window gave the same folders different ids and created its own
+              // date note and its own copy of every reminder.
+              await withHistoryLock("startup:" + dir, async () => {
+                await load();
+                await api.flush().catch(warn); // nothing to write on an ordinary start
+              });
+            } else await load();
+            // What another window saved while this one was reading the folder.
+            const missed = [...missedRemote];
+            missedRemote.clear();
+            for (const [id, backup] of missed) await reloadFromDisk(id, backup).catch(warn);
+            if (missedHistory) items?.history?.refresh?.().catch(warn);
+          } finally {
+            opening = false;
+          }
           emit("reset");
         },
         async switchDir() {
@@ -6604,7 +6729,12 @@
           const inserted = exists ? { body: note.body, changed: false } : CALENDAR_PART.insertAgendaLine(note.body, mirror.line, item.x.category);
           if (!exists && !inserted.changed) return "";
           // The re-keyed item is stored BEFORE the note text changes, so the note sync finds it by id and keeps its extras.
-          if (!items.upsert(CALENDAR_PART.mirroredItem(item, note.id, mirror.lineId, "Agenda"))) return "";
+          // When the line is already there, the note sync has built a twin from the text (another window wrote the line,
+          // or the note was saved and the calendar was not before a crash). The manual record is the same reminder:
+          // it replaces the twin as the newer version, so its details are kept and no second item remains.
+          const mirrored = CALENDAR_PART.mirroredItem(item, note.id, mirror.lineId, "Agenda");
+          const twin = exists ? items.get(mirrored.id) : null;
+          if (!items.upsert(twin ? { ...mirrored, updated: "" } : mirrored)) return "";
           items.remove(item.id);
           if (inserted.changed) api.update(note.id, inserted.body, "agenda");
           else items.syncNote(note.id, note.body, { updatedAt: note.updated });
@@ -7165,10 +7295,17 @@
           }
           if (!msg || msg.origin === windowId || !dir) return;
           if (msg.kind === "reminder-history") {
-            if (msg.dir === dir) items?.history?.refresh?.().catch(warn);
+            if (msg.dir !== dir) return;
+            if (opening) missedHistory = true;
+            else items?.history?.refresh?.().catch(warn);
             return;
           }
           if (typeof msg.id !== "string" || !/^[\w.-]+$/.test(msg.id)) return;
+          // While the folder is being read the file may already have been read in its older state: look again afterwards.
+          if (opening) {
+            missedRemote.set(msg.id, msg.conflictBackupPath || missedRemote.get(msg.id) || "");
+            return;
+          }
           reloadFromDisk(msg.id, msg.conflictBackupPath || "").catch(warn);
         },
         async close() {
@@ -9170,6 +9307,13 @@
     }
     // Switching off or retiring a restored folder never deletes foreign tabs OR
     // empty foreign folders; both are user content.
+    // Reminders that go out of sight together with a note: its calendar reminders (hidden ones too) and the legacy
+    // front-matter reminder. The Notes list and the Zen sidebar menu ask before they move such a note to Trash.
+    function reminderCountOfNote(store, n) {
+      if (!n) return 0;
+      const stored = store.items?.list({ noteId: n.id, kind: "reminder", includeHidden: true }) || [];
+      return stored.length + (n.remind > 0 ? 1 : 0);
+    }
     function retireNotesFolder(f, removeTab = () => {}) {
       const foreignTabs = [...(f.querySelectorAll?.("tab") || [])].some((t) => !t.hasAttribute(NOTES_ATTR));
       const foreignFolders = [...(f.querySelectorAll?.("zen-folder") || [])].some((child) => restoredPseudoFolderKind(child) !== "notes");
@@ -9264,7 +9408,9 @@
         // ignored until the minute is over, so a script or add-on that keeps touching our tabs cannot start a loop.
         // Requests from the notes themselves (schedule) are never limited.
         touch(ms = 400) {
-          if (dead) return false;
+          // While the host cannot project (the notes are still loading at startup) there is nothing to repair, and the
+          // burst of events from session restore must not use up the allowance for the first minute.
+          if (dead || !api.ready()) return false;
           const t = now();
           touches = touches.filter((x) => t - x < 60000);
           if (touches.length >= 12) return false;
@@ -9297,7 +9443,7 @@
     if (window.__zentralNotesTestSeam) {
       window.__zentralNotesTestSeam.core = {
         flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART,
-        DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
+        DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS, SHARED_TURN_WAIT_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
         makeFolderUid, ensureFolderUids, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
@@ -10015,6 +10161,9 @@
     function createSheet({ store, adapter, env, ensureStore }) {
       const token = {};
       const cleanups = [];
+      // The host's logger lives in another closure. A failed side effect (calendar or Agenda sync) is reported here
+      // and never thrown at the person who pressed Save.
+      const warn = (error) => console.warn("[ZentralNotes]", error);
       const listen = (target, type, fn, opts) => {
         target.addEventListener(type, fn, opts);
         cleanups.push(() => target.removeEventListener(type, fn, opts));
@@ -10874,7 +11023,7 @@
         const allow = { heading: gate.on("C03") && gate.on("C06"), self: gate.on("C04"), path: gate.on("C08") };
         return expandWikiLinks(body, wikiResolver(store.list().concat(store.list({ trashed: true })), store.meta.folders, { allow }), { self: { body }, allow });
       }
-      function newNote(folderId) {
+      function newNote(folderId, { focus = true } = {}) {
         const folder = typeof folderId === "string" ? cleanFolder(folderId) : "";
         if (folder && store.meta.folders.find((f) => f.id === folder)?.collapsed) store.setFolderCollapsed(folder, false);
         const n = store.create("", folder);
@@ -10882,7 +11031,7 @@
         // "last" start in the editor.
         mode = cleanDefaultView(getPref(PREF.DEFAULT_VIEW, "last")) === "split" ? "split" : "edit";
         store.setMeta({ mode });
-        openNote(n.id);
+        openNote(n.id, { focus });
       }
       function setMode(next) {
         if (mode === next) return;
@@ -12418,7 +12567,7 @@
         endMode.value = currentRule?.count ? "count" : currentRule?.until ? "until" : "never";
         const count = h("input", { type: "number", class: "zn-field", min: "1", max: "5000", step: "1", "aria-label": "Repeat occurrence count" }); count.value = String(currentRule?.count || 10);
         const countRow = h("label", { class: "zn-field-row" }, h("span", {}, "Occurrences"), count);
-        const until = field("Last occurrence date", currentRule?.until ? C.ymd(new Date(currentRule.until - 86400000)) : "", "YYYY-MM-DD");
+        const until = field("Last occurrence date", currentRule?.untilKey || "", "YYYY-MM-DD"); // the civil day itself: never `until` minus 24 hours (23-hour days)
         const untilPick = chip("Choose date…"), untilHost = h("div", { class: "zn-recurrence-until" }, until.row, untilPick);
         const recurrenceBox = h("div", { class: "zn-recurrence-editor zn-cal-compose-section" },
           h("strong", {}, "Recurrence"),
@@ -13751,7 +13900,7 @@
         ok.addEventListener("click", () => {
           store.setMeta({ calendarAgendaDefaults: editor.read() });
           closeDialog(); flash("Zen Agenda defaults saved");
-          agendaController?.schedule?.();
+          env.refreshAgenda?.(); // the Zen Agenda folder follows the new rule at once
         });
         cancel.addEventListener("click", closeDialog);
       }
@@ -13769,13 +13918,13 @@
           if (Object.keys(value).length) next[noteId] = value; else delete next[noteId];
           store.setMeta({ calendarNoteAgendaOverrides: CALENDAR_PART.cleanNoteAgendaOverrides(next) });
           closeDialog(); flash("Note Agenda defaults saved");
-          agendaController?.schedule?.();
+          env.refreshAgenda?.(); // the Zen Agenda folder follows the new rule at once
         });
         clear.addEventListener("click", () => {
           const next = { ...all }; delete next[noteId];
           store.setMeta({ calendarNoteAgendaOverrides: CALENDAR_PART.cleanNoteAgendaOverrides(next) });
           closeDialog(); flash("Note now inherits Agenda defaults");
-          agendaController?.schedule?.();
+          env.refreshAgenda?.(); // the Zen Agenda folder follows the new rule at once
         });
         cancel.addEventListener("click", closeDialog);
       }
@@ -13894,11 +14043,7 @@
       }
       // T2.3e: count every independently stored reminder, including items hidden because the note is in Trash,
       // plus the legacy single `remind` field (which is not part of calendar.json).
-      function noteReminderCount(n) {
-        if (!n) return 0;
-        const stored = store.items?.list({ noteId: n.id, kind: "reminder", includeHidden: true }) || [];
-        return stored.length + (n.remind > 0 ? 1 : 0);
-      }
+      function noteReminderCount(n) { return reminderCountOfNote(store, n); }
       function reminderImpact(notes) {
         const unique = new Map();
         for (const n of notes || []) if (n && !unique.has(n.id)) unique.set(n.id, n);
@@ -15370,7 +15515,7 @@
         endMode.value = currentRule?.count ? "count" : currentRule?.until ? "until" : "never";
         const count = h("input", { class: "zn-field", type: "number", min: "1", max: "5000", step: "1", "aria-label": "Repeat occurrence count" }); count.value = String(currentRule?.count || 10);
         const countRow = h("label", { class: "zn-field-row" }, h("span", {}, "Occurrences"), count);
-        const untilInitial = currentRule?.until ? CALENDAR_PART.ymd(new Date(currentRule.until - 86400000)) : "";
+        const untilInitial = currentRule?.untilKey || ""; // the civil day itself: never `until` minus 24 hours (23-hour days)
         const until = field("Last occurrence date", untilInitial, "YYYY-MM-DD");
         const untilPick = chip("Choose date…");
         const untilHost = h("div", { class: "zn-recurrence-until" }, until.row, untilPick);
@@ -17962,15 +18107,52 @@
       });
       listen(root, "focusout", () => armGrace());
 
+      // ---- the notes are still being read, or the folder cannot be reached ----------
+      // The sheet is on screen at once (its place in the panel is taken with the first frame), but the store behind it
+      // is still empty. Nothing in the sheet may act on it then: a note created now is dropped when the folder is read,
+      // and text typed now is replaced by the note that opens. So the sheet says what it is waiting for, the editor
+      // cannot be typed in, and presses and keys do nothing, except closing (button or Esc) and the resize grips.
+      let busy = ""; // "" | "loading" | "unavailable"
+      function setBusy(next) {
+        if (busy === next) return;
+        const was = busy;
+        busy = next;
+        if (next) {
+          root.dataset.loading = next;
+          root.setAttribute("aria-busy", "true");
+          ta.readOnly = true;
+          statusEl.textContent = next === "loading" ? "Loading notes\u2026" : "Notes folder unavailable. Trying again\u2026";
+        } else {
+          delete root.dataset.loading;
+          root.removeAttribute("aria-busy");
+          ta.readOnly = false;
+          if (was) statusEl.textContent = "";
+        }
+      }
+      const busyAllows = (e) => {
+        const t = e.target;
+        if (e.type === "keydown") return e.key === "Escape";
+        return !!t && (t === btnClose || btnClose.contains?.(t) || !!t.closest?.(".zn-rz"));
+      };
+      for (const type of ["pointerdown", "mousedown", "click", "dblclick", "auxclick", "contextmenu", "keydown", "beforeinput", "input", "paste", "cut", "drop", "dragstart"])
+        listen(root, type, (e) => {
+          if (!busy || busyAllows(e)) return;
+          e.stopPropagation();
+          e.preventDefault?.();
+        }, true);
+
       // ---- open / close -------------------------------------------------------------
-      async function open() {
+      // `focus: false` = brought back at start-up (nobody asked): the keyboard stays where it is.
+      let openFocus = true;
+      async function open({ focus = true } = {}) {
         if (destroyed) return;
         if (isOpen) {
           if (collapsed) expand(false);
-          focusEditor();
+          if (!busy) focusEditor();
           return;
         }
         isOpen = true;
+        openFocus = focus !== false;
         outsideClaim = false;
         adapter.attach(root);
         root.hidden = false;
@@ -17986,14 +18168,25 @@
         adapter.setActive(true);
         watchParentPanelHidden();
         raise();
+        setBusy("loading");
         try {
           await ensureStore();
         } catch (error) {
           console.warn("[ZentralNotes] store unavailable", error);
-          statusEl.textContent = "Notes folder unavailable";
+          if (!isOpen || destroyed) return;
+          setBusy("unavailable");
+          // The host keeps trying; the sheet comes alive by itself when the folder can be read (no need to reopen it).
+          // Not awaited: requests to open Notes elsewhere must not queue behind a folder that may stay away.
+          env.storeWhenReady?.().then(() => {
+            if (isOpen && !destroyed && busy === "unavailable") finishOpen();
+          }).catch(warn);
           return;
         }
         if (!isOpen || destroyed) return;
+        finishOpen();
+      }
+      function finishOpen() {
+        setBusy("");
         store.purgeBlankDateNotes?.(); // sweep stale generated date notes after the store and calendar items are loaded
         // W9: a forced start view is also stored, so opening another note later keeps whatever the user switches to.
         mode = startMode(getPref(PREF.DEFAULT_VIEW, "last"), store.meta.mode);
@@ -18001,8 +18194,8 @@
         if (adapter.kind) store.setMeta({ openIn: adapter.kind });
         store.refresh().catch(() => {});
         const id = store.latestId();
-        if (id) openNote(id);
-        else newNote();
+        if (id) openNote(id, { focus: openFocus });
+        else newNote("", { focus: openFocus });
         layout();
         if (adapter.cardMode && hoverMode()) armGrace();
         showHistoryRecovery();
@@ -18055,7 +18248,13 @@
         trackOpenNote("");
         if (leavingId) store.purgeBlankDateNotes?.({ onlyIds: [leavingId] });
         // Closing by hand forgets "open in", a window or panel going away keeps it (restored with Open on Startup).
-        if (adapter.kind && !destroying) store.setMeta({ openIn: "" });
+        // Closed while the notes were still being read: the stored value arrives with them, so it is cleared after that.
+        if (adapter.kind && !destroying) {
+          const forget = () => { if (!isOpen) store.setMeta({ openIn: "" }); };
+          if (busy && env.withStore) env.withStore(forget);
+          else forget();
+        }
+        setBusy("");
         store.flush().catch((error) => console.warn("[ZentralNotes] flush failed", error));
         window.removeEventListener("mousedown", onOutsidePress, true);
         window.removeEventListener("mousedown", onPress, true);
@@ -18157,6 +18356,18 @@
           const folder = store.meta.folders.find((entry) => entry.id === id && entry.uid === uid);
           if (!folder) return false;
           askFolderDelete(folder, () => store.meta.folders.find((entry) => entry.uid === uid) || null);
+          return true;
+        },
+        // "Move note to trash" chosen in the Zen sidebar menu while this sheet is open (also folded away at its edge).
+        // Same rule as in the list: a note with reminders asks first. The sheet leaves the note if it was showing it.
+        sidebarNoteTrash: (id = "") => {
+          if (!isOpen || destroyed) return false;
+          const target = store.get(id);
+          if (!target || target.trashed) return false;
+          const leave = () => { if (id !== currentId) return; currentId = ""; if (view === "editor") showEditor(); else scheduleList(); };
+          // Nothing to ask without reminders, so a dialog that is open in this sheet stays as it is.
+          if (!noteReminderCount(target)) { store.trash(id); leave(); return true; }
+          askNoteTrash(id, leave);
           return true;
         },
         sidebarFolderExport: (id = "", uid = "") => {
@@ -18937,21 +19148,32 @@
           if (topic === OBS_TOPIC) store.onRemoteMessage(data);
         },
       };
-      let storePromise = null, storeReady = false;
+      let storePromise = null, storeReady = false, remoteObserved = false;
       function ensureStore() {
-        if (!storePromise)
+        if (!storePromise) {
+          // Listen BEFORE the folder is read: what another window saves in the meantime is replayed by the store once
+          // the reading is done. Registered afterwards, such a save was missed and this window kept the older text.
+          if (!remoteObserved && !disposed) {
+            try {
+              Services.obs.addObserver(remoteObserver, OBS_TOPIC);
+              remoteObserved = true;
+            } catch (error) {
+              warn(error);
+            }
+          }
           storePromise = store
-            .open()
+            // Application startup (not the store's own open): note-less items get their Agenda line. Idempotent. It runs
+            // inside the store's start-up turn, so a second window loads the result instead of repeating it.
+            .open({ startup: () => { if (!disposed) store.backfillAgendaLinks(); } })
             .then(() => {
               storeReady = true;
-              if (!disposed) Services.obs.addObserver(remoteObserver, OBS_TOPIC);
-              // Application startup (not the store's own open): note-less items get their Agenda line. Idempotent.
-              try { if (!disposed) store.backfillAgendaLinks(); } catch (error) { warn(error); }
+              settleStoreWait();
             })
             .catch((error) => {
               storePromise = null;
               throw error;
             });
+        }
         return storePromise;
       }
       onCleanup(() => {
@@ -18959,6 +19181,52 @@
           Services.obs.removeObserver(remoteObserver, OBS_TOPIC);
         } catch (_) {}
       });
+      // What must run once the notes are loaded, however many attempts that takes. A folder that cannot be reached at
+      // start-up (a drive that appears late, a settings file another program holds) used to end reminders, the Agenda
+      // folder and the restore of Notes for the whole session: each asked once and gave up. Here a failed attempt is
+      // repeated quietly, so they start late instead of never. Resolves when the notes are loaded; never rejects.
+      const STORE_RETRY_MS = [1500, 4000, 10000, 30000];
+      let storeWait = null, storeRetryTimer = 0, storeTries = 0;
+      function settleStoreWait() {
+        const wait = storeWait;
+        storeWait = null;
+        storeTries = 0;
+        if (storeRetryTimer) window.clearTimeout(storeRetryTimer);
+        storeRetryTimer = 0;
+        wait?.resolve();
+      }
+      function tryStoreAgain() {
+        if (disposed || storeReady) return;
+        ensureStore().catch((error) => {
+          if (disposed || storeRetryTimer) return;
+          if (!storeTries) warn(error); // said once; the following attempts are quiet
+          const delay = STORE_RETRY_MS[Math.min(storeTries++, STORE_RETRY_MS.length - 1)];
+          storeRetryTimer = window.setTimeout(() => {
+            storeRetryTimer = 0;
+            tryStoreAgain();
+          }, delay);
+        });
+      }
+      function storeWhenReady() {
+        if (storeReady) return Promise.resolve();
+        if (!storeWait) {
+          let resolve;
+          const promise = new Promise((done) => (resolve = done));
+          storeWait = { promise, resolve };
+          tryStoreAgain();
+        }
+        return storeWait.promise;
+      }
+      onCleanup(() => {
+        if (storeRetryTimer) window.clearTimeout(storeRetryTimer);
+        storeRetryTimer = 0;
+      });
+      // The sidebar guards are bound at startup, so a placeholder can be used before the notes are loaded. Anything
+      // that writes waits for the store: opening it reads the folder afresh and would drop a note created earlier.
+      const withStore = (run) => {
+        if (storeReady) return run();
+        ensureStore().then(() => { if (!disposed) run(); }).catch(warn);
+      };
       const quitObserver = {
         observe() {
           store.flush().catch(warn);
@@ -19188,7 +19456,11 @@
       }
       const tick = createTimeTickService({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), warn });
       onCleanup(() => tick.destroy());
-      const env = { openLink, copyText, exportNote, exportAll, exportZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now() };
+      const env = { openLink, copyText, exportNote, exportAll, exportZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now(),
+        // Visibility rules live in meta.json, which raises no store event: the sheet asks for the Zen Agenda refresh.
+        refreshAgenda: () => { if (!disposed && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); } },
+        // For a sheet that was opened before the notes could be read: when they are there, and a write that must wait for them.
+        storeWhenReady, withStore };
 
       // ---- reminders (P2): ONE coarse timer for the next due note, armed by the scheduler (no polling) ----
       let soundCtx = null;
@@ -19336,8 +19608,8 @@
       let dayPlanTimer = 0;
       const remindersBoot = window.setTimeout(() => {
         if (disposed || !enabledNow()) return;
-        ensureStore().then(() => {
-          if (disposed) return;
+        storeWhenReady().then(() => {
+          if (disposed || remindersStarted) return;
           remindersStarted = true;
           reminders.start();
           // Give the browser and Notes UI time to settle, then show one compact daily plan.
@@ -19678,7 +19950,9 @@
         busy(on) { zenBusy = on; if (!on) zenQuietUntil = Date.now() + 500; },
         sweepStrays: zenSweepStrays,
         reorder: zenReorder,
-        ready: () => !zenMoveBroken && !!(window.gBrowser && window.gZenFolders?.createFolder),
+        // Not before the notes are loaded: an empty store at startup does not mean that the notes are gone, and a run
+        // against it would remove the entries that session restore just brought back.
+        ready: () => storeReady && !zenMoveBroken && !!(window.gBrowser && window.gZenFolders?.createFolder),
         hasRoot: () => !!zenRootEl(),
         ensureRoot() {
           zenSweepStale();
@@ -19956,6 +20230,9 @@
       }
       const agendaOwnTab = (tab) => !!agendaTabKey(tab);
       const agendaOwnedDay = (child) => child.hasAttribute?.("bgalazka-notes-agenda-day") || child.id?.startsWith("zentral-notes-agenda-day-");
+      // The day a folder stands for: our attribute, or the id, which survives a session restore when the attribute does not.
+      const agendaDayOf = (folder) => folder?.getAttribute?.("bgalazka-notes-agenda-day") ||
+        (folder?.id?.startsWith("zentral-notes-agenda-day-") ? folder.id.slice("zentral-notes-agenda-day-".length) : "");
       // Move only the outermost foreign subtrees/tabs, preserving nested data.
       // Failure leaves the user content and its original managed container.
       function evacuateProjectionForeign(folder, root, ownFolder, ownTab, onMoved = () => {}) {
@@ -20223,7 +20500,9 @@
           if (!storePromise) return false;
           const entry = agendaEntryForKey(key);
           if (entry) {
-            const hydrated = entry.label ? entry : (CALENDAR_PART?.agendaZenItem?.(entry, agendaDateFromKey(key), nowMs()) || entry);
+            // Not in the last projection (the first run after startup is still pending): build the same entry the
+            // projection would, so the tab shows its time, kind and tooltip at once instead of a bare title.
+            const hydrated = entry.label ? entry : (CALENDAR_PART?.agendaZenItem?.(entry, agendaDateFromKey(key), Date.now()) || entry);
             return agendaApplyTabEntry(tab, { ...hydrated, key });
           }
           agendaController.schedule(0);
@@ -20294,13 +20573,15 @@
             }
             if (!root.contains(tab)) continue;
             const actualFolder = tab.closest?.("zen-folder");
-            const actualDay = actualFolder?.getAttribute?.("bgalazka-notes-agenda-day") || "";
+            // A restored day folder has no attribute yet (it gets one further down). Read by attribute alone, each of its
+            // entries looked misplaced and the first run after a restart closed and re-created every Agenda tab.
+            const actualDay = agendaDayOf(actualFolder);
             const actualParent = actualDay && agendaDayEl("day:" + actualDay) === actualFolder ? "day:" + actualDay : "?misplaced";
             out.push({ key, kind: "item", parent: actualParent });
           }
           if (root.isConnected === false) return [];
           for (const folder of root.querySelectorAll?.("zen-folder") || []) {
-            const date = folder.getAttribute("bgalazka-notes-agenda-day") || (folder.id.startsWith("zentral-notes-agenda-day-") ? folder.id.slice("zentral-notes-agenda-day-".length) : "");
+            const date = agendaDayOf(folder);
             if (date !== "overdue" && !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
             folder.setAttribute("bgalazka-notes-agenda-day", date);
             folder.setAttribute("bgalazka-notes-agenda-key", "day:" + date);
@@ -20396,6 +20677,7 @@
         getDays: agendaDays,
         getOverdue: () => ({ enabled: prefBool(PREF.AGENDA_OVERDUE, true), days: Math.max(1, Math.min(31, prefInt(PREF.AGENDA_OVERDUE_DAYS, 7))), cap: Math.max(1, Math.min(100, prefInt(PREF.AGENDA_OVERDUE_CAP, 10))) }),
         getEnabled: agendaEnabled,
+        getReady: () => storeReady,
         getPosition: agendaPosition,
         now: () => Date.now(),
         getWindowIsMasterPolicy: true,
@@ -20419,7 +20701,7 @@
         if (skipWorkspaceSync !== true) syncSharedWorkspace();
         agendaController.invalidate?.();
         if (!agendaEnabled()) { agendaController.runNow(); return; }
-        ensureStore().then(() => { if (!disposed && agendaEnabled()) agendaController.schedule(); }).catch(warn);
+        storeWhenReady().then(() => { if (!disposed && agendaEnabled()) agendaController.schedule(); }).catch(warn);
       };
       const agendaItemUnsub = store.items?.on?.((ev) => {
         if (CALENDAR_PART?.agendaItemEventAffectsProjection(ev) && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); }
@@ -20442,6 +20724,7 @@
         if (structural || linked) { bindAgenda(true); agendaController.invalidate?.(); agendaController.schedule(); }
       });
       onCleanup(() => { agendaItemUnsub?.(); agendaHistoryUnsub?.(); agendaNoteUnsub?.(); });
+      // Only the projection waits (it is not on the critical start-up path); the guards are bound at the end of start().
       const agendaBoot = window.setTimeout(agendaSoon, 6500);
       onCleanup(() => window.clearTimeout(agendaBoot));
       // Resolve XUL labels and shadow-retargeted folder menu triggers without
@@ -21171,7 +21454,7 @@
         if (zen.dead) zen = makeZen(); // toggling the preference revives it after a kill
         bindZen(true);
         if (skipWorkspaceSync !== true) syncSharedWorkspace();
-        ensureStore().then(() => { if (disposed || zenMode() === "off") return; zen.schedule(); if (agendaEnabled()) agendaController.schedule(); }).catch(warn);
+        storeWhenReady().then(() => { if (disposed || zenMode() === "off") return; zen.schedule(); if (agendaEnabled()) agendaController.schedule(); }).catch(warn);
       };
       let watchedWorkspaceManager = null, workspaceNativeBound = false, workspaceFallbackTimer = 0, lastWorkspaceId = "";
       const onSharedWorkspaceChanged = () => {
@@ -21287,6 +21570,7 @@
         window.addEventListener("SSTabRestored", onPseudoTabRestored, true);
         onCleanup(() => window.removeEventListener("SSTabRestored", onPseudoTabRestored, true));
       }
+      // Only the projection waits (it is not on the critical start-up path); the guards are bound at the end of start().
       const zenBoot = window.setTimeout(zenSoon, 6000);
       onCleanup(() => window.clearTimeout(zenBoot));
       // A click (or Enter) on one of our tabs opens the note instead of selecting the tab. Capture phase, our tabs only;
@@ -21446,15 +21730,28 @@
         try { if (ev.dataTransfer) ev.dataTransfer.dropEffect = "none"; } catch (_) {}
         if (ev.type === "drop" && targetManaged && draggedTab && !draggedManaged) {
           const decision = dropDecision({ tab: { attrs: {}, title: draggedTab.label || "", url: tabUrl(draggedTab) }, intoNotes: true });
-          if (decision.action === "capture-url") store.create(decision.body, zenMode() === "selected" ? TABBAR_FOLDER : "");
+          if (decision.action === "capture-url") withStore(() => store.create(decision.body, zenMode() === "selected" ? TABBAR_FOLDER : ""));
         }
       };
       // Right-click menus: our own items are added once; for our targets every native item is hidden with CSS (never removed).
       const ZEN_MENU_ITEMS = [
         ["open", "Open note", (tab) => activateZenTab(tab)],
-        ["out", "Remove from sidebar folder", (tab) => { const id = zenNoteIdFromTab(tab); if (id && zenMode() === "selected") { store.setFolder(id, ""); zen.schedule(0); } }],
-        ["trash", "Move note to trash", (tab) => { const id = zenNoteIdFromTab(tab); if (id) askNoteTrash(id, () => { if (id === currentId) { currentId = ""; showEditor(); } }); }],
+        ["out", "Remove from sidebar folder", (tab) => { const id = zenNoteIdFromTab(tab); if (id && zenMode() === "selected") withStore(() => { store.setFolder(id, ""); zen.schedule(0); }); }],
+        ["trash", "Move note to trash", (tab) => { const id = zenNoteIdFromTab(tab); if (id) trashNoteFromSidebar(id); }],
       ];
+      // A note without reminders goes to Trash at once (it can be restored there). A note with reminders asks first,
+      // and that question is a card of the Notes sheet, so the sheet opens. A sheet that is already open may be showing
+      // this very note: then the sheet does the work and moves on to another note.
+      function trashNoteFromSidebar(id) {
+        return ensureStore().then(() => {
+          const target = store.get(id);
+          if (disposed || !target || target.trashed) return null;
+          const reminders = reminderCountOfNote(store, target);
+          const held = [...bindings.values(), floating].find((binding) => binding?.held());
+          if (!reminders && !held) { store.trash(id); return null; }
+          return (reminders ? showNotes("") : Promise.resolve(held)).then((handle) => (disposed ? null : sheetOf(handle)?.sidebarNoteTrash?.(id)));
+        }).catch(warn);
+      }
       let zenCtxTab = null;
       const onTabMenuShowing = (ev) => {
         const menu = ev.target;
@@ -21493,7 +21790,7 @@
         const item = document.createXULElement("menuitem");
         item.setAttribute("label", "New note in this folder");
         item.setAttribute("zentral-notes-folder-own", "new");
-        item.addEventListener("command", () => { store.create("", isRoot ? (zenMode() === "selected" ? TABBAR_FOLDER : "") : meta.id); });
+        item.addEventListener("command", () => withStore(() => { store.create("", isRoot ? (zenMode() === "selected" ? TABBAR_FOLDER : "") : meta.id); }));
         menu.append(item);
         const menuMode = zenMode();
         const parentId = isRoot ? (menuMode === "selected" ? TABBAR_FOLDER : "") : meta.id;
@@ -21687,13 +21984,14 @@
           // cards for both bars), brings an autohidden panel out first, and moves Notes away from any other
           // bar or the card. Resolves to the binding (or the card) that now shows the sheet.
           open: () => openFrom(kind),
-          // Open the sheet on THIS bar (called by openFrom once the host is decided).
-          openHere() {
+          // Open the sheet on THIS bar (called by openFrom once the host is decided). `focus: false` = brought back at
+          // start-up, not asked for: the keyboard stays where it is.
+          openHere({ focus = true } = {}) {
             lastUsed = binding;
             followKind = kind;
             followTries = 0;
             if (!sheet) sheet = createSheet({ store, adapter, env, ensureStore });
-            const opened = sheet.open();
+            const opened = sheet.open({ focus });
             syncAllReveals();
             return opened;
           },
@@ -21716,7 +22014,10 @@
         adapter.onClosed = (info) => {
           syncAllReveals();
           // Closed by hand: stay closed. Closed because its bar went away: come back on the next bar.
-          if (info?.manual) followKind = "";
+          if (info?.manual) {
+            followKind = "";
+            endRestore(); // and a start-up restore that is still waiting must not open it again
+          }
         };
         button.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -21782,8 +22083,8 @@
       // Requests run one after the other: a panel sync, a shortcut and a button press arriving together used to
       // each pick a host while the others were still opening, which could leave two Notes open (S6 B2).
       let openChain = Promise.resolve();
-      function openFrom(want = "") {
-        const run = openChain.then(() => openFromNow(want), () => openFromNow(want));
+      function openFrom(want = "", options = {}) {
+        const run = openChain.then(() => openFromNow(want, options), () => openFromNow(want, options));
         openChain = run.then(() => {}, () => {});
         return run;
       }
@@ -21809,10 +22110,14 @@
         if (tri.isOpen()) closeOthers(tri);
         else Promise.resolve(openFrom("triple")).catch(warn);
       }
-      async function openFromNow(want = "") {
+      // `restore` = Notes comes back at start-up, nobody asked for it: it opens only in its panel bar (never as the
+      // card), an autohidden panel stays hidden (the sheet folds with it, exactly like a sheet that was opened before
+      // the panel slid away) and the keyboard focus is not taken.
+      async function openFromNow(want = "", { restore = false } = {}) {
+        if (!restore) endRestore(); // a request (a button, the shortcut, a reminder) decides; start-up restore is over
         let route = routeFor(want);
-        if (!route.host) return openCard();
-        if (panelsHidden()) {
+        if (!route.host) return restore ? null : openCard();
+        if (panelsHidden() && !restore) {
           const shown = await ensurePanelShown();
           if (disposed) return null;
           if (!shown) return openCard(true);
@@ -21820,8 +22125,9 @@
           if (!route.host) return openCard();
         }
         const host = route.host;
+        if (restore && host.isOpen()) return host;
         closeOthers(host);
-        await host.openHere();
+        await host.openHere({ focus: !restore });
         return host;
       }
       // Open (or keep open) and say where it is now.
@@ -21870,6 +22176,7 @@
           floating?.close();
           return;
         }
+        attachObservers(); // a slider or panel root built (or rebuilt) since the last look is watched from now on
         const found = discoverBars();
         for (const [el, b] of [...bindings]) {
           if (!el.isConnected || !found.some((f) => f.el === el)) {
@@ -21928,33 +22235,58 @@
         }
       }
       // "Open on Startup" (a panel setting) also brings Notes back where it was: meta.openIn names the bar kind
-      // (primary panel, Triple View bottom bar, Super Pin). One quiet attempt per sync until it has decided.
+      // (primary panel, Triple View bottom bar, Super Pin). The result must not depend on which of three things
+      // happens first: the notes being read, the second panel being built, the start-up panel sliding away (the panel
+      // code hides it 1.2 s after opening it). So:
+      //  - the decision waits for the notes, however long reading them takes (storeWhenReady);
+      //  - the bar only has to exist; when the panel has already slid away the sheet opens folded inside it;
+      //  - a bar that is not there yet is waited for: every panel change looks again, a few short timers cover a bar
+      //    that exists but has no box yet, and after RESTORE_WINDOW_MS start-up is over (a panel opened a minute later
+      //    does not make Notes appear by itself);
+      //  - anything the person does with Notes in the meantime ends it (endRestore).
+      const RESTORE_RETRY_MS = 250, RESTORE_RETRIES = 8, RESTORE_WINDOW_MS = 60000;
       let restoreState = prefStr("zen.workspace.bgalazka.open_at_startup", "null") !== "null" ? "pending" : "off";
+      let restoreTries = 0, restoreRetryTimer = 0, restoreWindowTimer = 0;
+      function endRestore() {
+        if (restoreState !== "off") restoreState = "done";
+        if (restoreRetryTimer) window.clearTimeout(restoreRetryTimer);
+        if (restoreWindowTimer) window.clearTimeout(restoreWindowTimer);
+        restoreRetryTimer = restoreWindowTimer = 0;
+      }
       function maybeRestore() {
         if (restoreState !== "pending" || disposed || !enabledNow()) return;
-        if (!document.getElementById("zen-app-panel-root")?.hasAttribute("open")) return;
+        if (!panelRootOpen()) return;
         restoreState = "checking";
-        Promise.resolve(ensureStore())
+        storeWhenReady()
           .then(() => {
+            if (restoreState !== "checking" || disposed) return null;
             const want = store.meta.openIn;
-            if (!want) {
-              restoreState = "done";
+            if (!want || !enabledNow()) return endRestore();
+            const present = [...bindings.values()].filter((x) => x.present());
+            const kind = followTarget({ want, kinds: present.map((x) => x.kind), triple: document.documentElement.hasAttribute("bgalazka-triple-view") });
+            const host = kind ? routeFor(kind).host : null;
+            if (!host) {
+              // e.g. Triple View is not up yet
+              restoreState = "pending";
+              if (!restoreWindowTimer) restoreWindowTimer = window.setTimeout(endRestore, RESTORE_WINDOW_MS);
+              if (restoreTries < RESTORE_RETRIES && !restoreRetryTimer) {
+                restoreTries++;
+                restoreRetryTimer = window.setTimeout(() => {
+                  restoreRetryTimer = 0;
+                  scheduleSync();
+                }, RESTORE_RETRY_MS);
+              }
               return null;
             }
-            const b = [...bindings.values()].find((x) => x.kind === want && x.visible());
-            if (!b) {
-              restoreState = "pending"; // e.g. Triple View is not up yet: the next sync tries again
-              return null;
-            }
-            restoreState = "done";
-            return b.isOpen() ? null : b.open();
+            endRestore();
+            return host.isOpen() ? null : openFrom(kind, { restore: true });
           })
           .catch((error) => {
-            restoreState = "done";
+            endRestore();
             warn(error);
           });
       }
-      onCleanup(() => (restoreState = "done"));
+      onCleanup(endRestore);
       let syncTimer = 0;
       const scheduleSync = () => {
         if (!syncTimer && !disposed) syncTimer = window.setTimeout(syncBars, 60);
@@ -21988,6 +22320,9 @@
         if (!bodyObserved && document.body) {
           bodyObserved = true;
           mo.observe(document.body, { childList: true });
+          // The panel suite appends its root to the document element, not to the body: without this a panel built
+          // after the retries below have ended (the apps panel switched on later) never got a Notes button.
+          if (document.documentElement) mo.observe(document.documentElement, { childList: true });
         }
         return !!slider;
       }
@@ -22342,13 +22677,25 @@
           (doc.head || doc.documentElement).appendChild(st);
         } catch (_) {}
       }
+      // CustomizableUI is one module object for the whole application, and it is frozen: nothing can be stored on it.
+      // The registration itself is the shared fact (one widget serves every window; its command looks up the window
+      // that was clicked). Which window made it is known to that window only: its callbacks live there, so the widget
+      // must not outlive it.
+      let ownsWidget = false;
+      const notesWindows = () => {
+        try {
+          return [...Services.wm.getEnumerator("navigator:browser")];
+        } catch (_) {
+          return [];
+        }
+      };
       function claimWidget() {
         const cui = getCUI();
         if (!cui || disposed || !enabledNow()) return;
         iconStyle(document); // every window needs the icon rule, not only the owner of the widget
-        if (cui.__zentralNotesOwner === windowId) return;
+        if (ownsWidget) return;
         try {
-          if (cui.getWidget?.(TOOLBAR_WIDGET_ID)?.provider) cui.destroyWidget(TOOLBAR_WIDGET_ID);
+          if (cui.getWidget?.(TOOLBAR_WIDGET_ID)?.provider) return; // registered by another window
           cui.createWidget({
             id: TOOLBAR_WIDGET_ID,
             type: "button",
@@ -22363,31 +22710,35 @@
               (w?.__zentralNotesToggle || window.__zentralNotesToggle)?.();
             },
           });
-          cui.__zentralNotesOwner = windowId;
+          ownsWidget = true;
           // A widget registered after startup is not put back where the user placed it until customize mode
           // runs; place it in every open window now.
-          try {
-            for (const w of Services.wm.getEnumerator("navigator:browser")) {
+          for (const w of notesWindows()) {
+            try {
               iconStyle(w.document);
-              try {
-                cui.ensureWidgetPlacedInWindow?.(TOOLBAR_WIDGET_ID, w);
-              } catch (_) {}
-            }
-          } catch (_) {}
+              cui.ensureWidgetPlacedInWindow?.(TOOLBAR_WIDGET_ID, w);
+            } catch (_) {}
+          }
         } catch (error) {
           warn(error);
         }
       }
       function releaseWidget() {
         const cui = getCUI();
-        if (!cui || cui.__zentralNotesOwner !== windowId) return;
+        if (!cui || !ownsWidget) return;
+        ownsWidget = false;
         try {
           cui.destroyWidget(TOOLBAR_WIDGET_ID);
         } catch (_) {}
-        cui.__zentralNotesOwner = null;
-        try {
-          for (const w of Services.wm.getEnumerator("navigator:browser")) if (w !== window && w.__zentralNotesClaimWidget) return w.__zentralNotesClaimWidget();
-        } catch (_) {}
+        // Another window that runs Notes registers it again, with callbacks of its own.
+        if (!enabledNow()) return;
+        for (const w of notesWindows()) {
+          if (w === window || typeof w.__zentralNotesClaimWidget !== "function") continue;
+          try {
+            w.__zentralNotesClaimWidget();
+          } catch (_) {}
+          if (cui.getWidget?.(TOOLBAR_WIDGET_ID)?.provider) return;
+        }
       }
       window.__zentralNotesToggle = () => {
         if (!disposed && enabledNow()) toggleFromShortcut();
@@ -22424,6 +22775,15 @@
         document.removeEventListener("visibilitychange", onTimeVisibility);
         try { Services.obs.removeObserver(wakeObserver, "wake_notification"); } catch (_) {}
       });
+
+      // ---- Sidebar guards from the first moment (SB6.8) ---------------------------------------------------------
+      // Session restore brings our placeholder tabs back before any timer of this file has run. A click, a key, a drag
+      // or a selection on one of them must already be ours, or the person lands on a blank page (and a middle click
+      // closes the entry). So the listeners are bound here, at the end of start-up, where everything they use exists.
+      // They act on our own tabs only and cost nothing while a projection is off. The projections themselves keep
+      // their boot timers and never run before the notes are loaded (`getReady`, `zenApi.ready`).
+      bindAgenda(agendaEnabled());
+      bindZen(zenMode() !== "off");
 
       const api = {
         destroy() {

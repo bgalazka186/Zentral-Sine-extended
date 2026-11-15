@@ -12,9 +12,14 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   document.createXULElement = (tag) => document.createElement(tag);
   const operations = [], events = [], listeners = new Map(), timers = new Map();
   let timerId = 0, tabId = 0, definition, clockOffset = 0;
+  // The clock of the fake window is virtual: it starts at the real time and moves only when a test fires a timer or
+  // calls advanceClock. With the real clock running underneath, a delay computed as "due - now" depended on how busy
+  // the machine was: a debounce re-armed 30 ms later asked for 220 ms instead of 250, fireTimer(250) no longer found
+  // it, and a test failed only when the whole suite ran in parallel.
+  const clockBase = Date.now();
   class FakeDate extends Date {
-    constructor(...args) { super(...(args.length ? args : [Date.now() + clockOffset])); }
-    static now() { return Date.now() + clockOffset; }
+    constructor(...args) { super(...(args.length ? args : [clockBase + clockOffset])); }
+    static now() { return clockBase + clockOffset; }
   }
   const record = (node, parent) => {
     if (!node || !["tab", "zen-folder"].includes(node.localName)) return;
@@ -113,6 +118,7 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   const destroy = definition.init();
   return { ...dom, window: win, sidebar, operations, events, timers, values, files, observers, obs, emit, destroy,
     addWorkspace, workspaceListenerCount: () => workspaceListeners.size,
+    listenerCount: (type) => listeners.get(type)?.size || 0, // window listeners of one event type (idle-cost checks)
     async switchWorkspace(id) { if (!workspaces.has(id)) throw new Error("missing workspace"); win.gZenWorkspaces.activeWorkspace = id; for (const listener of [...workspaceListeners]) await listener({ workspace: { uuid: id }, onInit: false }); },
     advanceClock(ms) { clockOffset += Number(ms) || 0; },
     triggerMutations() { for (const observer of [...mutationObservers]) observer.callback([]); },

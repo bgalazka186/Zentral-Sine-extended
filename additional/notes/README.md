@@ -35,7 +35,7 @@ Highlights are written as `==text==` (yellow) or `=={green}text==` (also `blue`,
 
 ### Reminder storage failures
 
-Calendar reminder banners and missed-reminder digests are not displayed when their history claim cannot be saved. Unsaved claims are rolled back without discarding other pending history, and the scheduler makes up to three 30-second retries. A damaged or unreadable history file remains protected and requires attention before alerts can be saved. Notes windows in the same browser process coordinate history writes and claims through a shared process registry when the browser exposes its hidden window; external programs and environments without that registry do not participate. Live Zen validation is still needed.
+Calendar reminder banners and missed-reminder digests are not displayed when their history claim cannot be saved. Unsaved claims are rolled back without discarding other pending history, and the scheduler makes up to three 30-second retries. A damaged or unreadable history file remains protected and requires attention before alerts can be saved. Notes windows in the same browser process coordinate note saves, history writes and claims through one shared registry. It lives on the global that the browser's system modules share, which exists on every platform; the hidden window (Firefox keeps one on macOS only) is the fallback. A step waits at most 8 seconds for the same step in another window, so a window that was closed in the middle of a save cannot block the others. External programs do not participate. Live Zen validation is still needed.
 
 ### Concurrent calendar edits
 
@@ -106,6 +106,16 @@ Not in preferences. Each note is one plain **Markdown file** in `zentral-notes/`
 ### Saving behavior
 
 A note saves **0.8 s after you stop typing**, and at least **every 5 seconds while you keep typing** (setting: 2-60 s), so a crash costs a few seconds at most. It also saves when you leave the editor, close the sheet, close the window and when Zen quits. If a write fails the note stays marked unsaved, the footer says so, and it retries every 10 seconds.
+
+### Starting up
+
+Notes can be opened before its folder has been read (a large folder, a cold disk, a second window starting at the same moment). The sheet appears at once and says **Loading notes…**; until the notes are there the editor cannot be typed in and buttons do nothing, so nothing typed is lost when the note opens. Close and Esc work. If the folder cannot be reached the sheet says so and Notes tries again by itself (after 1.5, 4 and 10 seconds, then every 30 seconds); the open sheet, reminders, the Agenda folder and the Zen sidebar folder start when it succeeds.
+
+`meta.json` (folders, their colors and permanent ids, settings) is never replaced by defaults because it could not be read for a moment: Notes does not start from an empty folder tree and writes nothing to the file until it has read it. A damaged `meta.json` is copied to `meta.json.corrupt` before the settings start fresh.
+
+With **Open on Startup** (a panel setting) Notes comes back in the bar it was in, whichever finishes first: reading the notes, building the second panel, or the start-up panel sliding away. It comes back folded when the panel has already slid away, does not take the keyboard focus, and never opens as the standalone card instead. A bar that is built late (Triple View) is waited for up to one minute; closing Notes or opening it yourself in that time ends the restore. Two windows that start together read the folder one after the other, so start-up work (permanent folder ids, the Agenda lines of older reminders) is done once. A panel that is switched on or rebuilt after start-up gets its Notes button too.
+
+Not covered yet: two windows that are already running each keep their own copy of `meta.json` and the last one to save wins, so a folder added in one window can disappear when the other window later saves a setting. Live Zen validation of this section is still needed.
 
 ## Settings
 
