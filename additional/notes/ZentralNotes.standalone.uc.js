@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.162
+// @version 3.3.163
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.162, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.163, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.162";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.163";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2798,7 +2798,9 @@ const __zentralEmbeddedLoader = (function () {
     };
   }
 
-  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null }) {
+  // `beforeWrite` (optional, async) runs before every calendar write, outside the calendar lock. The note store uses it to
+  // put pending note text on disk first, so `calendar.json` never refers to a note line that was not saved (UI4.7).
+  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null, beforeWrite = null }) {
     const items = new Map();
     const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite, perf, withHistoryLock });
     const categoryDefs = new Map();
@@ -2904,7 +2906,9 @@ const __zentralEmbeddedLoader = (function () {
         safeWarn(error); return Promise.reject(error);
       }
       dirty = false; pendingWrites++;
-      const task = chain.catch(() => {}).then(() => withCalendarLock(io.join(dir, ITEMS_FILE), async () => {
+      // A failing hook is reported but never blocks the calendar: its own write error is shown by its owner.
+      const prepare = typeof beforeWrite === "function" ? () => Promise.resolve().then(beforeWrite).catch(safeWarn) : () => null;
+      const task = chain.catch(() => {}).then(prepare).then(() => withCalendarLock(io.join(dir, ITEMS_FILE), async () => {
         try {
           if (writeBlocked) throw new Error("Calendar storage is protected because its existing file could not be read safely.");
           const captured = snapshot(), remote = await readCalendarForWrite(dir, captured);
@@ -10806,6 +10810,9 @@ __zentralShim.register = function (def) {
       // deleted for good removes them. Every call is guarded: the calendar must never break saving a note.
       const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, withHistoryLock,
         isNoteVisible: (id) => !!notes.get(id) && !notes.get(id).trashed,
+        // The two files are not one transaction, so the order is fixed: note text first, then the calendar record that
+        // refers to it. A crash in between leaves a line the next start rebuilds, never a record without its line.
+        beforeWrite: () => notesFlush || (dirty.size ? flushDirty() : chain),
         onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); } }) : null;
       function syncItems(id, stabilize = false, sourceEdit = false) {
         if (!items) return;
@@ -11070,7 +11077,16 @@ __zentralShim.register = function (def) {
         lastSnapText.set(note.id, text);
         for (const old of pruneHistory([...names, name].map((n) => ({ name: n })), o.keep || HISTORY_DEFAULTS.keep)) await io.remove(io.join(histDir(note.id), old)).catch(() => {});
       }
+      // The note flush that is queued or running (null when idle). A calendar write waits for it instead of starting a
+      // second pass, so one blocked note is attempted, and reported, once per save.
+      let notesFlush = null;
       function flushDirty() {
+        const run = flushDirtyNow();
+        notesFlush = run;
+        run.then(() => { if (notesFlush === run) notesFlush = null; });
+        return run;
+      }
+      function flushDirtyNow() {
         return queue(async () => {
           if (closed || !dir) return;
           if (retryTimer !== null) {
@@ -11615,7 +11631,12 @@ __zentralShim.register = function (def) {
           const inserted = exists ? { body: note.body, changed: false } : CALENDAR_PART.insertAgendaLine(note.body, mirror.line, item.x.category);
           if (!exists && !inserted.changed) return "";
           // The re-keyed item is stored BEFORE the note text changes, so the note sync finds it by id and keeps its extras.
-          if (!items.upsert(CALENDAR_PART.mirroredItem(item, note.id, mirror.lineId, "Agenda"))) return "";
+          // When the line is already there, the note sync has built a twin from the text (another window wrote the line,
+          // or the note was saved and the calendar was not before a crash). The manual record is the same reminder:
+          // it replaces the twin as the newer version, so its details are kept and no second item remains.
+          const mirrored = CALENDAR_PART.mirroredItem(item, note.id, mirror.lineId, "Agenda");
+          const twin = exists ? items.get(mirrored.id) : null;
+          if (!items.upsert(twin ? { ...mirrored, updated: "" } : mirrored)) return "";
           items.remove(item.id);
           if (inserted.changed) api.update(note.id, inserted.body, "agenda");
           else items.syncNote(note.id, note.body, { updatedAt: note.updated });

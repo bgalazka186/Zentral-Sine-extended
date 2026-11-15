@@ -5795,6 +5795,9 @@
       // deleted for good removes them. Every call is guarded: the calendar must never break saving a note.
       const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, withHistoryLock,
         isNoteVisible: (id) => !!notes.get(id) && !notes.get(id).trashed,
+        // The two files are not one transaction, so the order is fixed: note text first, then the calendar record that
+        // refers to it. A crash in between leaves a line the next start rebuilds, never a record without its line.
+        beforeWrite: () => notesFlush || (dirty.size ? flushDirty() : chain),
         onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); } }) : null;
       function syncItems(id, stabilize = false, sourceEdit = false) {
         if (!items) return;
@@ -6059,7 +6062,16 @@
         lastSnapText.set(note.id, text);
         for (const old of pruneHistory([...names, name].map((n) => ({ name: n })), o.keep || HISTORY_DEFAULTS.keep)) await io.remove(io.join(histDir(note.id), old)).catch(() => {});
       }
+      // The note flush that is queued or running (null when idle). A calendar write waits for it instead of starting a
+      // second pass, so one blocked note is attempted, and reported, once per save.
+      let notesFlush = null;
       function flushDirty() {
+        const run = flushDirtyNow();
+        notesFlush = run;
+        run.then(() => { if (notesFlush === run) notesFlush = null; });
+        return run;
+      }
+      function flushDirtyNow() {
         return queue(async () => {
           if (closed || !dir) return;
           if (retryTimer !== null) {
@@ -6604,7 +6616,12 @@
           const inserted = exists ? { body: note.body, changed: false } : CALENDAR_PART.insertAgendaLine(note.body, mirror.line, item.x.category);
           if (!exists && !inserted.changed) return "";
           // The re-keyed item is stored BEFORE the note text changes, so the note sync finds it by id and keeps its extras.
-          if (!items.upsert(CALENDAR_PART.mirroredItem(item, note.id, mirror.lineId, "Agenda"))) return "";
+          // When the line is already there, the note sync has built a twin from the text (another window wrote the line,
+          // or the note was saved and the calendar was not before a crash). The manual record is the same reminder:
+          // it replaces the twin as the newer version, so its details are kept and no second item remains.
+          const mirrored = CALENDAR_PART.mirroredItem(item, note.id, mirror.lineId, "Agenda");
+          const twin = exists ? items.get(mirrored.id) : null;
+          if (!items.upsert(twin ? { ...mirrored, updated: "" } : mirrored)) return "";
           items.remove(item.id);
           if (inserted.changed) api.update(note.id, inserted.body, "agenda");
           else items.syncNote(note.id, note.body, { updatedAt: note.updated });

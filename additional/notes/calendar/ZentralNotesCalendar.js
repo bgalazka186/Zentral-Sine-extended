@@ -1587,7 +1587,9 @@
     };
   }
 
-  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null }) {
+  // `beforeWrite` (optional, async) runs before every calendar write, outside the calendar lock. The note store uses it to
+  // put pending note text on disk first, so `calendar.json` never refers to a note line that was not saved (UI4.7).
+  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null, beforeWrite = null }) {
     const items = new Map();
     const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite, perf, withHistoryLock });
     const categoryDefs = new Map();
@@ -1693,7 +1695,9 @@
         safeWarn(error); return Promise.reject(error);
       }
       dirty = false; pendingWrites++;
-      const task = chain.catch(() => {}).then(() => withCalendarLock(io.join(dir, ITEMS_FILE), async () => {
+      // A failing hook is reported but never blocks the calendar: its own write error is shown by its owner.
+      const prepare = typeof beforeWrite === "function" ? () => Promise.resolve().then(beforeWrite).catch(safeWarn) : () => null;
+      const task = chain.catch(() => {}).then(prepare).then(() => withCalendarLock(io.join(dir, ITEMS_FILE), async () => {
         try {
           if (writeBlocked) throw new Error("Calendar storage is protected because its existing file could not be read safely.");
           const captured = snapshot(), remote = await readCalendarForWrite(dir, captured);

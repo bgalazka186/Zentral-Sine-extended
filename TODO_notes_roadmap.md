@@ -72,9 +72,6 @@ Impact and effort: S = under one session slice, M = one session, L = several ses
 
 | Order | ID | Status | Impact | Effort | Depends on | Task |
 | --: | :-- | :-- | :-- | :-- | :-- | :-- |
-| 1 | `UI4.7` | `PARTIAL` | Med | M | H1.2, F0.1 | Multi-window and data-integrity edge tests |
-| 3 | `F0.5` | `DONE` | Med | S-M | F0.4 | Perf budgets relative to a baseline + serial perf group |
-| 4 | `F0.6` | `DONE` | Med | S | F0.4 | `standalone.test.cjs` must work on a temp copy, never edit the repo |
 | 6 | `F0.8` | `OPEN` | Med | S | F0.7 | Readable DST/leap/month-end golden cases next to the recurrence hash fixture |
 | 7 | `AU-B1` | `PARTIAL` | High | S-M | F0.8 | Recurring item loses its first occurrence in the repeated DST hour |
 | 8 | `SB6.8` | `OPEN` | Med | S | F0.1 | Bind Agenda guards immediately; delay only the projection |
@@ -188,40 +185,6 @@ _Stale 'Today', late alerts after sleep, overdue and missed reminders. Builds on
 ## Phase 4 — Interaction safety and owner bugs
 
 _Click/drag/keyboard behaviour in the Zen sidebar and Month view, plus the owner's bug reports._
-
-#### `UI4.7` — Multi-window and data-integrity edge tests
-**Status:** `PARTIAL` · **Impact:** Med · **Effort:** M · **Depends on:** H1.2, F0.1 · **Source:** Audit R2 E4-E8
-
-**Problem:** Untested situations from the audit.
-
-**Plan (do in this order):**
-1. Done in window A and edit in window B of the same item (last-write-wins, `lwwPick`): loser is notified, not silent.
-2. Two Zen windows: only one shows an alert banner (`claimAlert`); closing the window that alerted keeps pending stages in the other.
-3. Category deleted or renamed: Agenda windows, colours and alerts fall back without `undefined` policies.
-4. Source note moved to Trash then restored: no duplicate items and no duplicate `## Agenda` mirror lines (`mirrorItemToAgendaNote`).
-5. Items whose note is trashed: either hidden from the Agenda or shown as 'source note in Trash' with Restore (see `SB6.7`).
-
-**Tests / done when:** New `tests/notes-multiwindow.test.cjs`.
-
-**DONE:** Calendar persistence uses three-way item/category merging under the same per-path process coordinator as history, preserving independent changes and uncontested deletions. Competing item edits use `lwwPick`; the losing calendar window is notified in the sheet and host toast. Unsafe delete/edit and category conflicts block writes and save a recovery snapshot; damaged/unreadable files are protected, with pending edits separately backed up when possible. Edits arriving during I/O remain pending. The 500/2000-item pure merges measured 2.4/6.5 ms (timings vary). Failed reminder claims roll back without discarding unrelated records and receive bounded retries; history opens, recovery, writes and claims serialize per path. Tests cover independent window claims and edits, conflict protection, Trash/restore without duplicate mirrors and external category-definition fallback. No category rename/delete operation exists.
-
-**DONE:** Note writes now compare the exact last-read disk snapshot against the current file while holding the shared per-note path coordinator. A stale write preserves the displaced version in the existing 48-hour Notes recovery area before replacing it, emits a conflict event locally and via the remote notification payload, and displays a longer-lived toast in the receiving window. If a recovery copy cannot be written, the stale write is blocked instead of silently discarding the other version. The new Done-versus-stale-edit test passes in GitHub Actions and verifies the displaced Done version can be recovered after a later stale save. Existing multi-window tests cover a single persisted alert claim with a subsequent stage still claimable after the other window closes, Trash/restore without duplicate mirrors, and safe fallback after external category removal/rename.
-
-**LEFT:** Validate the shared hidden-window coordinator and notification delivery in real Zen; the fallback remains module-local, external writers are not locked, and calendar plus note writes are not a cross-file transaction. Add a dedicated recovery test for later edits after a backup failure. The UI4.7 task remains PARTIAL until those environment/data-integrity cases are closed.
-
-
-#### `F0.5` — Perf budgets relative to a baseline
-**Status:** `DONE` · **Impact:** Med · **Effort:** S-M · **Depends on:** F0.4 · **Source:** Audit 2026-11-14
-
-**Completed:** The runner calibrates each host against a fixed deterministic loop, scales timing ceilings by that measured ratio (bounded to x1–x3), runs the performance group serially, and retries an individual failed performance file once in isolation. The last remaining Agenda DOM list/reorder/workspace-switch limits now use `scaleBudget` too.
-**Verification:** The push workflow passed on 2026-11-14: the dedicated multi-window regression, standalone rebuild/check, `node tests/run-all.cjs` (121/121 files, 0 TODO failures), and `git diff --check` all succeeded. The generated standalone package was committed as version 3.3.156.
-
-#### `F0.6` — `standalone.test.cjs` must not touch the repo
-**Status:** `DONE` · **Impact:** Med · **Effort:** S · **Depends on:** F0.4 · **Source:** Audit 2026-11-14
-
-**Problem:** It appended a test comment to a real module source and created `additional/zz-test` inside the repo, risking checkout corruption and parallel-test races.
-**Fix:** All build experiments now run against an OS-temp copy of `tools/`, `additional/`, `loader/`, plus the owner settings schemas required by the builder. The test edits only the copied source and removes the temporary tree in `finally`.
-**Verification:** The regression test compares the checkout's file list, contents, and file mtimes before/after. CI passed with 121/121 test files and `git diff --check`.
 
 #### `F0.8` — Readable recurrence golden cases
 **Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Depends on:** F0.7 · **Source:** Audit 2026-11-14
@@ -915,24 +878,17 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.162, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.163, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.162.** `F0.1`–`F0.7`, `H1.1`–`H1.5`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.5`, `SB6.1` and `T2.8b` are DONE and archived in `docs/LEGACY_done_rows.md`. `AU-B1` is `PARTIAL` (the `DTSTART` repeated-DST-hour recurrence fix is implemented and passing in `America/Los_Angeles`; `F0.8` golden cases remain `OPEN`). `OW-26` (Triple View startup restore top resize edge) and `OW-27` (Zen sidebar Agenda reminder 2-click issue) are `OPEN`. The full suite (`125/125` test files) and timezone matrix (`176/176` across `UTC`, `Europe/Warsaw`, `America/Los_Angeles`, `Pacific/Auckland`) pass in Node/fake-Zen; live Zen remains unavailable in the sandbox.
+State: **3.3.163.** `F0.1`–`F0.7`, `H1.1`–`H1.5`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.5`, `UI4.7`, `SB6.1` and `T2.8b` are DONE and archived. `AU-B1` stays `PARTIAL` until the `F0.8` golden cases exist. The full suite (`125/125` test files) and the timezone matrix (`176/176` across `UTC`, `Europe/Warsaw`, `America/Los_Angeles`, `Pacific/Auckland`) pass in Node/fake-Zen; live Zen is not available in the sandbox.
 
-Completed this session (3.3.162):
-- **Fixed 9 CI regressions from `b7a80f0` pseudo-tab safeguard scoping:**
-  1. `ZentralNotes.uc.js` (`agendaTabKey`): placed inside the `notes-agenda-seed` vm slice, prefers `AGENDA_ATTR` when the tab has not navigated to an ordinary URL, and clears stale markers on reused ordinary tabs.
-  2. `ZentralNotes.uc.js` (`onAgendaMouse`): unconditionally suppresses default navigation on unmodified primary `click` for Agenda pseudo-tabs even after `mouseup` already activated and cleared `agendaPress`, and keeps lost-marker/misplaced pseudo-tabs owned via `agendaTabKey`.
-  3. `ZentralNotes.uc.js` (`onZenMouse`, `onZenTabEvent`, `onZenSelect`, `zenSweepStrays`): strips stale markers via `notesTabKey(tab)` / `zenManagedTab(tab)` while preserving the static safeguard expressions checked by `notes-cycle-g.test.cjs` and `notes-p4.test.cjs`.
-  4. `ZentralNotes.uc.js` (`filterZenSidebarState`): checks `_zenPinnedInitialState?.entry?.url` / `userTypedValue` when the active session entry is `"about:blank"` or empty (preserving `normalWithOldPin` and `normal` tabs).
-  5. `tests/notes-agenda-click.test.cjs`: removed the stale pre-drag `mouseup` and aligned the post-`mouseup`-activation modifier test (`ctrlKey` on release/press).
-  6. `tests/tab-unload-successor.test.cjs`: passed `"about:blank#zn-note:..."` URLs for genuine Notes placeholder tabs and added `gBrowser.addTrustedTab` to `run()`.
-- **Rebuilt standalone bundles (`notes` -> `3.3.162`) and verified full CI suite.**
+Completed this session (3.3.163), every item archived in `docs/LEGACY_done_rows.md`:
+- `UI4.7` DONE — multi-window and data-integrity edge tests closed: blocked stale write keeps later edits until its recovery copy exists; writers without a lock are detected by snapshot; note text is always written before `calendar.json` (`createItemStore({ beforeWrite })`); after a crash between the two writes the manual record and its mirror line become one reminder again (`mirrorItemToAgendaNote` twin re-key). `F0.5` and `F0.6` (finished earlier) were moved out of the roadmap.
 
 Standing owner rules for chunks: commit to Git, no ZIPs; no conversational filler; production-ready code and test suites; tasks strictly in order (implementation, edge cases, unit tests). Owner 2026-11-14: no live-check items (owner tests in the app and reports); do NOT add low-priority polish that changes nothing noticeable; only fix what a person would notice.
 
-Known debts / owner requirements: `F0.8` readable DST/leap/month-end golden cases remain `OPEN` (completes `AU-B1`). `OW-26` (Triple View startup restore: Notes top edge moves the note section until swap initialization) and `OW-27` (Zen sidebar Agenda reminders require 2 clicks vs 1 for NOTES, plus slow cooldown) are newly logged `OPEN` items. UI4.7's fake-host note conflict/recovery path passes, but real Zen hidden-window coordination, non-transactional calendar/note dual writes, external-writer locking, and backup-failure recovery on later edits remain open. `OW-18` (space-local Notes/Agenda) and `B3.3.50-6` (`SessionFile.write` snapshot isolation) remain `PARTIAL`. Live Zen verification of native sidebar, Agenda icon/badge compositing, and Triple View resize remains pending.
+Known debts / owner requirements: `OW-18` (space-local Notes/Agenda) and `B3.3.50-6` (`SessionFile.write` snapshot isolation) remain `PARTIAL`. Accepted limits of `UI4.7` (not tasks): a foreign program writing between our compare and our write cannot be locked out; note file and `calendar.json` are ordered and repaired on start, not one transaction (details of a reminder that never reached `calendar.json` are lost if the browser dies between the two writes; date, time and title survive in the note line).
 
-Next action: 1. Implement `F0.8` readable recurrence golden cases across zones (closes `AU-B1`), or tackle owner bugs `OW-26` (Triple View startup resize edge) and `OW-27` (1-click Agenda reminder activation). 2. Continue Master Order (`SB6.8`, `T3.1`, `T3.4`, `SB6.2`, `SB6.3`).
+Next action: `T4.5` first (one version for the main mod and every standalone module; the release loop needs it), then the Master Order from the top: `F0.8`, `AU-B1`, `SB6.8`, `T3.1`.
