@@ -479,6 +479,9 @@ function openTripleWindow(world, { id, width = 420, height = 800, right = 12, to
     hide() { html.toggleAttribute("bgalazka-hover-panel-enabled", true); html.toggleAttribute("bgalazka-hover-panel-hidden", true); },
     reveal() { html.toggleAttribute("bgalazka-hover-panel-hidden", false); },
     get hidden() { return html.hasAttribute("bgalazka-hover-panel-hidden"); },
+    // The panel gets another height (the window was resized, a toolbar of the browser came or went). Nobody is told:
+    // the ResizeObservers notice it after the next frame, as in the browser.
+    resizePanel(height) { panel.height = height; laid.key = null; },
     get slideOffset() { return offsetX(); },
     // The elements of the stack as they are now.
     parts() {

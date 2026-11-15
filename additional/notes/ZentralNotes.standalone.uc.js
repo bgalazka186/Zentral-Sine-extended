@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.173
+// @version 3.3.174
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.173, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.174, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.173";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.174";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -24043,14 +24043,16 @@ __zentralShim.register = function (def) {
     // bar released the variable, which put the sheet below the panel and overcounted the free height.)
     // `strip` / `frac` / `fracUp`: the gap is only the thin strip of a folded sheet, the split of the band that
     // folded (its upper part as a fraction), and the strip's own upper part that goes with it (see gapFrac).
-    const SLOT = { owner: null, px: 0, gap: false, quad: false, pseudo: false, up: -1, suspended: null, strip: false, frac: -1, fracUp: -1 };
+    // `moved`: an edge of the gap was dragged, so how it is divided between the two panels is the user's. Until then
+    // (and again after a size or reset action) the gap is centred on the divider every time it is asked for.
+    const SLOT = { owner: null, px: 0, gap: false, quad: false, pseudo: false, up: -1, suspended: null, strip: false, frac: -1, fracUp: -1, moved: false };
     function releaseSlot() {
       SLOT.suspended = null;
       if (!SLOT.owner && !SLOT.px) return;
       const r = document.documentElement;
       SLOT.owner = null;
       SLOT.px = 0;
-      SLOT.gap = SLOT.quad = SLOT.pseudo = SLOT.strip = false;
+      SLOT.gap = SLOT.quad = SLOT.pseudo = SLOT.strip = SLOT.moved = false;
       SLOT.up = SLOT.frac = SLOT.fracUp = -1;
       r.style.removeProperty("--zentral-notes-panel-reserve");
       r.style.removeProperty("--zentral-notes-gap");
@@ -24097,11 +24099,14 @@ __zentralShim.register = function (def) {
         if (cur < 0) return -1;
         return SLOT.strip && SLOT.frac >= 0 && cur === SLOT.fracUp ? SLOT.frac : Math.min(1, cur / SLOT.px);
       }
-      // No explicit edge position: an open gap keeps the ratio it has (so a resize or a swap never moves Notes
-      // relative to the panels); a fresh gap is split EVENLY, the divider sits in the middle of Notes and both
-      // panels give (and, on close, take back) the same room.
+      // No explicit edge position. A gap whose edge was dragged keeps the ratio it has (so a resize or a swap never
+      // moves Notes relative to the panels). Any other gap is split EVENLY: the divider sits in the middle of Notes
+      // and both panels give (and, on close, take back) the same room. The suite answers with what a panel on its
+      // floor could really give, and that answer is not a ratio to keep: kept, a pair divided 30 / 70 whose panel
+      // grew by 100 px had its band 18 px off the place a new band takes, the suite took it for a dragged one and
+      // replaced the saved split when Notes closed.
       function keptGapUp(px) {
-        const frac = gapFrac();
+        const frac = SLOT.moved ? gapFrac() : -1;
         return frac >= 0 ? Math.round(px * frac) : Math.round(px / 2);
       }
       const visiblePages = () => [...(slider()?.querySelectorAll(":scope > browser") || [])].filter((x) => !x.hidden && x.getClientRects().length);
@@ -24217,12 +24222,16 @@ __zentralShim.register = function (def) {
           const asStrip = wants && !(wantPx > 0) && strip > 0 && base > 200;
           const px = !wants ? 0 : wantPx > 0 ? fit(clampSlotPx(base, wantPx)) : asStrip ? Math.round(strip) : fit(slotPx(base, fraction));
           const up = !between || px <= 0 ? -1 : wantUp >= 0 ? Math.min(Math.round(wantUp), px) : upFrac >= 0 ? Math.round(px * Math.min(1, upFrac)) : keptGapUp(px);
+          // The split is the user's from the first drag of an edge that changes what is on screen (a press that moves
+          // nothing does not count) until a size or reset action centres the gap again.
+          const held = SLOT.owner === api && SLOT.gap && SLOT.px > 0;
+          const moved = !between || px <= 0 || upFrac >= 0 ? false : wantUp >= 0 ? (held && SLOT.moved) || px !== SLOT.px || up !== liveGapUp() : held && SLOT.moved;
           // Read before the slot is rewritten below: what the strip has to remember of the band it replaces.
           const keep = between && asStrip && px > 0 ? (upFrac >= 0 ? Math.min(1, upFrac) : gapFrac()) : -1;
           const pseudo = !between && px > 0 && pseudoOk;
           const quad = !between && px > 0 && (pseudo || rootEl.hasAttribute("bgalazka-triple-view"));
           const hasQuad = rootEl.hasAttribute("bgalazka-quad-view");
-          if (SLOT.owner === api && px === SLOT.px && between === SLOT.gap && quad === SLOT.quad && pseudo === SLOT.pseudo && quad === hasQuad && up === SLOT.up)
+          if (SLOT.owner === api && px === SLOT.px && between === SLOT.gap && quad === SLOT.quad && pseudo === SLOT.pseudo && quad === hasQuad && up === SLOT.up && moved === SLOT.moved)
             return quad || (between && px > 0);
           if (px <= 0) {
             const stay = SLOT.suspended === api;
@@ -24236,6 +24245,7 @@ __zentralShim.register = function (def) {
           SLOT.quad = quad;
           SLOT.pseudo = pseudo;
           SLOT.up = up;
+          SLOT.moved = moved;
           SLOT.strip = between && asStrip;
           SLOT.frac = SLOT.strip ? keep : -1;
           SLOT.fracUp = SLOT.strip ? up : -1;

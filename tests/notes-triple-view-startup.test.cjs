@@ -37,7 +37,7 @@ function suiteMath() {
     for (let k = sv.indexOf("}) {", i) + 3; k < sv.length; k++) { if (sv[k] === "{") depth++; else if (sv[k] === "}" && --depth === 0) return sv.slice(i, k + 1); }
     throw new Error("unbalanced " + name);
   };
-  const names = ["tripleFloor", "tripleHeights", "tripleShareFor", "tripleGapUp", "tripleShareAfterNotes"];
+  const names = ["tripleFloor", "tripleHeights", "tripleShareFor", "tripleGapUp", "tripleBandAsOpened", "tripleShareAfterNotes"];
   return new Function(names.map(grab).join("\n") + "\nreturn { " + names.join(", ") + " };")();
 }
 
@@ -475,6 +475,238 @@ const upperGave = (t, pair) => { const s = stack(t); return (s.upper + s.lower +
     await pressStrip(t, world);
     assertAtRest(t, "opened after the swap");
     assert.deepEqual(place(t), mirrored, "it opens exactly as a sheet that was open during the swap");
+    assert.deepEqual(world.warnings, []);
+    await end();
+  });
+
+  // =====================================================================================================================
+  // 7. Notes that goes away leaves the split of the pair as it was saved (owner 2026-11-15)
+  // =====================================================================================================================
+  // A pair too uneven for the band to be centred on its divider: one page stands on its floor and the band is off
+  // centre. Until 3.3.173 the divider went to the middle of the band whenever Notes went away, and the suite saves the
+  // split each time: a pair saved 30 / 70 came back as 41 / 59, at the first start-up whose panel slid away.
+  // Now a band that lies where a new band is put goes away without a trace. One whose edge was dragged still ends
+  // with the divider in its middle (section 6): its place is not remembered, so that is what brings it back there.
+  const noteButton = (t) => t.parts().bar.firstElementChild;
+  const pages = (t) => { const st = stack(t); return [st.upper, st.lower]; };
+  async function dragDivider(t, world, dy) {
+    const h = t.rect(t.parts().handle), x = h.left + h.width / 2, y = h.top + h.height / 2;
+    const target = t.pointer.down(x, y, 5);
+    assert.ok(target && target._classes.has("bgalazka-triple-drag-handle"), "the press reaches the divider's handle");
+    for (let i = 1; i <= 4; i++) { t.pointer.move(x, y + (dy * i) / 4, 5); await world.advance(20); }
+    t.pointer.up(x, y + dy, 5);
+    await world.advance(1500);
+  }
+
+  await test("a band lies where it was opened: centred on the divider, or as near to that as a page on its floor allows", async () => {
+    const asOpened = (o) => M.tripleBandAsOpened(o);
+    assert.equal(asOpened({ usable: 371, gap: 345, share: 0.5, top: 716 * 0.5 - 173 }), true, "an even pair, half from each page");
+    assert.equal(asOpened({ usable: 371, gap: 345, share: 0.5, top: 716 * 0.5 - 173 - 40 }), false, "the upper page gave 40 px more: an edge was dragged");
+    assert.equal(asOpened({ usable: 371, gap: 345, share: 0.3, top: 120 }), true, "30 / 70: the upper page is on its floor, which is where a new band leaves it");
+    assert.equal(asOpened({ usable: 371, gap: 345, share: 0.3, top: 136 }), false, "the same pair with the upper page 16 px off its floor");
+    assert.equal(asOpened({ usable: 481, gap: 435, share: 0.7, top: 361 }), true, "70 / 30: the lower page is on its floor");
+    assert.equal(asOpened({ usable: 481, gap: 435, share: 0.7, top: 300 }), false);
+    assert.equal(asOpened({ usable: 716, gap: 0, share: 0.3, top: 214.8 }), true, "no band: nothing lies anywhere");
+    assert.equal(asOpened({ usable: 371, gap: 345, share: 0.3, top: 120.4 }), true, "the split the suite reports is a whole px: under a px is the same place");
+    assert.equal(asOpened({ usable: 371, gap: 345, share: 0.5, top: 716 * 0.5 - 172 }), true, "a band of an odd height after a swap (172 of 345 instead of 173): one px is the same place");
+    assert.equal(asOpened({ usable: 371, gap: 345, share: 0.5, top: 716 * 0.5 - 171 }), false, "two px are not");
+    // Whatever the pair and the band: a new band is in its place, and stays there through the suite's own report
+    // (it writes the split a floor allowed back as whole px, and fits again from that).
+    let seed = 20261116, pushed = 0;
+    const random = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    for (let i = 0; i < 4000; i++) {
+      const room = 220 + Math.floor(random() * 1400), gap = 1 + Math.floor(random() * core.gapMaxPx(room)), share = 0.05 + random() * 0.9, usable = room - gap;
+      const first = M.tripleHeights({ usable, gap, share, up: Math.round(gap / 2) }).top;
+      assert.equal(asOpened({ usable, gap, share, top: first }), true, `a new band (room ${room}, band ${gap}, share ${share})`);
+      const reported = Math.round(M.tripleGapUp({ usable, gap, share, top: first }));
+      if (reported !== Math.round(gap / 2)) pushed++;
+      const second = M.tripleHeights({ usable, gap, share, up: reported }).top;
+      assert.equal(asOpened({ usable, gap, share, top: second }), true, `and after the reported split is applied (room ${room}, band ${gap}, share ${share}: ${first} then ${second})`);
+    }
+    assert.ok(pushed > 300, "many of them were pushed off centre by a floor (" + pushed + ")");
+  });
+
+  for (const [name, options, room, wasShare] of [
+    ["30 / 70 in a panel of 800 px", { share: 0.3 }, 716, 0.4092],
+    ["70 / 30 in a panel of 1000 px", { share: 0.7, window: { height: 1000 } }, 916, 0.6321],
+    ["20 / 80 in a panel of 800 px", { share: 0.2 }, 716, 0.4095],
+  ]) {
+    await test(`a pair divided ${name}: a start-up whose panel slides away with Notes open leaves the saved split alone (it became ${wasShare})`, async () => {
+      const { world, t, pair, end } = await startUp({ ...options, revealAt: 5000 });
+      const st = assertAtRest(t, "shown again");
+      assert.ok(Math.min(st.upper, st.lower) <= 121, `one page is on its floor: the band cannot be centred on the divider (${st.upper} / ${st.lower})`);
+      assert.ok(Math.abs(pair.share - options.share) < 1e-9, `the saved split is still ${options.share} (it is ${pair.share})`);
+      const before = place(t);
+      for (let i = 0; i < 30; i++) { t.hide(); await world.advance(1500); t.reveal(); await world.advance(1500); }
+      assertAtRest(t, "after thirty rounds");
+      assert.ok(Math.abs(pair.share - options.share) < 1e-9, `and after thirty more rounds (${pair.share})`);
+      assert.deepEqual(place(t), before, "Notes and both pages are where they were");
+      // The button on the bar: closed, each page has what the saved split gives it.
+      for (let i = 0; i < 3; i++) {
+        noteButton(t).click(); await world.advance(800);
+        // (Without Notes the suite's own floor is 160 px: a page saved lower than that is shown at 160, the saved split stays.)
+        const closedTop = Math.round(M.tripleHeights({ usable: room, share: options.share }).top);
+        assert.deepEqual(pages(t), [closedTop, room - closedTop], "closed, round " + (i + 1) + ": the pages are divided as saved");
+        assert.ok(Math.abs(pair.share - options.share) < 1e-9, "closed, round " + (i + 1) + ": the saved split is unchanged");
+        noteButton(t).click(); await world.advance(1500);
+        assert.deepEqual(place(t), before, "open, round " + (i + 1) + ": the band and both pages are where they were");
+      }
+      assert.deepEqual(world.warnings, []);
+      await end();
+    });
+  }
+
+  await test("the panel gets higher and lower while Notes is open: the band stays where a new one is put, and the saved split survives", async () => {
+    const { world, t, pair, end } = await startUp({ share: 0.3, hide: false });
+    assert.deepEqual(pages(t), [120, 251]);
+    for (const height of [900, 760, 800]) {
+      t.resizePanel(height); await world.advance(1500);
+      const st = assertAtRest(t, height + " px");
+      // Kept as a ratio (95 of 345), the band of a panel of 900 px left the upper page 18 px above its floor: not
+      // where a new band is put, so the suite took it for a dragged one and the split was replaced on closing.
+      assert.equal(st.upper, 120, `${height} px: the upper page is on its floor, as under a band that has just been opened (it has ${st.upper})`);
+      const room = st.upper + st.lower + st.gap;
+      noteButton(t).click(); await world.advance(800);
+      assert.ok(Math.abs(pair.share - 0.3) < 1e-9, `${height} px, closed: the saved split is still 0.3 (it is ${pair.share})`);
+      assert.deepEqual(pages(t), [Math.round(room * 0.3), room - Math.round(room * 0.3)]);
+      noteButton(t).click(); await world.advance(1500);
+      assert.deepEqual(pages(t), [st.upper, st.lower], height + " px: open again, the pages are as before");
+    }
+    await end();
+  });
+
+  await test("a press on an edge that moves nothing is not a drag: the band is still treated as new", async () => {
+    const { world, t, pair, end } = await startUp({ share: 0.3, hide: false });
+    const before = place(t);
+    // The upper page is on its floor: the top edge cannot go up. Then a press and release without a move.
+    const d = await dragEdge(t, world, "n", -40);
+    assert.equal(d.hit, "grip-n");
+    assert.deepEqual(place(t), before, "nothing moved");
+    const sheet = t.rect(t.parts().sheet);
+    t.pointer.down(sheet.left + 40, sheet.bottom - 3, 4); t.pointer.up(sheet.left + 40, sheet.bottom - 3, 4);
+    await world.advance(1500);
+    assert.deepEqual(place(t), before);
+    t.resizePanel(900); await world.advance(1500);
+    assert.equal(assertAtRest(t, "900 px").upper, 120, "after a resize the upper page is on its floor: the band was centred again, not kept as a ratio");
+    noteButton(t).click(); await world.advance(800);
+    assert.ok(Math.abs(pair.share - 0.3) < 1e-9, "closed: the saved split is still 0.3 (it is " + pair.share + ")");
+    await end();
+  });
+
+  await test("an edge of Notes was dragged: on closing the divider goes to the middle of the band, as before, and Notes comes back where it was", async () => {
+    const { world, t, pair, end } = await startUp({ share: 0.3, hide: false });
+    // The top edge comes down by 40 px: the upper page leaves its floor. A new band of this height would hold it there.
+    await assertEdgeOnly(t, world, "n", 40, "top grip down");
+    const open = place(t);
+    assert.deepEqual([open[0], open[3], open[4]], [305, 160, 251]);
+    noteButton(t).click(); await world.advance(800);
+    assert.deepEqual(pages(t), [160 + 153, 716 - 160 - 153], "closed: each page took back half of the band");
+    assert.ok(Math.abs(pair.share - (160 + 153) / 716) < 0.002, "and that split is saved (" + pair.share + ")");
+    noteButton(t).click(); await world.advance(1500);
+    assert.deepEqual(place(t), open, "open again: the band and both pages are where the drag left them");
+    // That band is a new one, centred on the divider: from here on nothing changes any more.
+    const share = pair.share;
+    for (let i = 0; i < 3; i++) { noteButton(t).click(); await world.advance(800); noteButton(t).click(); await world.advance(1500); }
+    assert.ok(Math.abs(pair.share - share) < 1e-9);
+    assert.deepEqual(place(t), open);
+    await end();
+  });
+
+  await test("the far edge of such a band is dragged (the page on its floor does not move): the band is still where a new one of that height is put", async () => {
+    const { world, t, pair, end } = await startUp({ share: 0.3, hide: false });
+    await assertEdgeOnly(t, world, "s", 40, "bottom grip down");
+    const open = place(t);
+    assert.deepEqual([open[0], open[3], open[4]], [385, 120, 211]);
+    noteButton(t).click(); await world.advance(800);
+    assert.ok(Math.abs(pair.share - 0.3) < 1e-9, "closed: the saved split is still 0.3 (it is " + pair.share + ")");
+    assert.deepEqual(pages(t), [215, 501]);
+    noteButton(t).click(); await world.advance(1500);
+    assert.deepEqual(place(t), open, "open again at the height it was dragged to: where it was");
+    await end();
+  });
+
+  await test("the panel is resized under a band whose edge was dragged: the band keeps the ratio of the drag", async () => {
+    const { world, t, end } = await startUp({ hide: false });
+    await assertEdgeOnly(t, world, "n", -40, "top grip up");
+    const dragged = stack(t);
+    assert.ok(Math.abs(dragged.up / dragged.gap - 0.5) > 0.04, "the band is off centre (" + dragged.up + " of " + dragged.gap + ")");
+    t.resizePanel(900); await world.advance(1500);
+    const after = assertAtRest(t, "900 px");
+    assert.ok(after.gap > dragged.gap, "the band grew with the panel");
+    assert.ok(Math.abs(after.up / after.gap - dragged.up / dragged.gap) < 0.01, `and kept its ratio (${dragged.up} of ${dragged.gap}, then ${after.up} of ${after.gap}); centred it would have jumped`);
+    await end();
+  });
+
+  await test("\"Reset position and size\" after a drag: the band is a new one again, and closing it leaves the split alone", async () => {
+    const { world, t, pair, end } = await startUp({ share: 0.3, hide: false });
+    const fresh = place(t);
+    await assertEdgeOnly(t, world, "s", 40, "bottom grip down");
+    const head = t.parts().sheet.querySelectorAll(".zn-head")[0];
+    head.dispatchEvent(new t.w.Ev("dblclick", { bubbles: true }));
+    await world.advance(1500);
+    assert.deepEqual(place(t), fresh, "the band is back at its preferred height, where a new band is put");
+    t.resizePanel(900); await world.advance(1500);
+    assert.equal(assertAtRest(t, "900 px").upper, 120, "a resize centres it again (a dragged band would keep its ratio)");
+    noteButton(t).click(); await world.advance(800);
+    assert.ok(Math.abs(pair.share - 0.3) < 1e-9, "closed: the saved split is still 0.3 (it is " + pair.share + ")");
+    await end();
+  });
+
+  await test("the divider is dragged away from a band that a floor had pushed off centre: Notes still comes back where it was", async () => {
+    const { world, t, pair, end } = await startUp({ share: 0.3, hide: false });
+    await dragDivider(t, world, 60);
+    const open = place(t);
+    assert.ok(open[0] === 345 && Math.abs(open[3] - 180) <= 1 && open[3] + open[4] === 371, `the divider took the band with it: 60 px from the lower page to the upper one (${open[3]} / ${open[4]})`);
+    const dragged = pair.share;
+    assert.ok(Math.abs(dragged - 0.3) > 0.05, "the drag of the divider is a new split, and it is saved (" + dragged + ")");
+    // A new band on this divider would be centred (there is room now); this one is not. Its place is not remembered,
+    // so the divider goes to its middle, and the next band is where this one was.
+    noteButton(t).click(); await world.advance(800);
+    assert.ok(Math.abs(pages(t)[0] - (open[3] + 173)) <= 1, `closed: the upper page has its height plus half of the band (${pages(t)[0]})`);
+    assert.ok(Math.abs(pair.share - dragged) > 0.05, "which is not the split the divider was dragged to");
+    noteButton(t).click(); await world.advance(1500);
+    assert.deepEqual(place(t), open, "open again: where it was");
+    await end();
+  });
+
+  await test("\"Swap top and bottom panels\" with such a pair, then Notes closes: the swapped split is what stays", async () => {
+    const { world, t, pair, end } = await startUp({ share: 0.3, hide: false });
+    t.parts().swap.click(); await world.advance(2000);
+    const st = assertAtRest(t, "swapped");
+    assert.deepEqual([st.upper, st.lower], [251, 120], "the pages trade their heights");
+    assert.ok(Math.abs(pair.share - 0.7) < 1e-9, "the pair is saved as 70 / 30");
+    noteButton(t).click(); await world.advance(800);
+    assert.ok(Math.abs(pair.share - 0.7) < 1e-9, "closed: still 70 / 30 (it is " + pair.share + ")");
+    assert.deepEqual(pages(t), [501, 215]);
+    noteButton(t).click(); await world.advance(1500);
+    assert.deepEqual(pages(t), [251, 120], "open again: as before");
+    await end();
+  });
+
+  await test("an even pair with a band of an odd height is swapped, then the panel slides away: the saved split does not move by the odd px", async () => {
+    const { world, t, pair, end } = await startUp({ hide: false });
+    assert.equal(stack(t).gap, 345);
+    t.parts().swap.click(); await world.advance(2000);
+    assert.equal(stack(t).up, 172, "the swap mirrors the upper part of the band: 172 of 345, a new band has 173");
+    for (let i = 0; i < 3; i++) { t.hide(); await world.advance(1500); t.reveal(); await world.advance(1500); }
+    assert.ok(Math.abs(pair.share - 0.5) < 1e-9, "the saved split is still one half (it is " + pair.share + "; it became 0.5014)");
+    t.parts().swap.click(); await world.advance(2000);
+    noteButton(t).click(); await world.advance(800);
+    assert.ok(Math.abs(pair.share - 0.5) < 1e-9);
+    assert.deepEqual(pages(t), [358, 358]);
+    await end();
+  });
+
+  await test("a sheet folded to its strip while the panel slides away: the saved split is left alone too", async () => {
+    const { world, t, pair, end } = await startUp({ share: 0.3, meta: { dock: "hover", hideTrigger: "click" }, revealAt: 5000 });
+    assert.ok(Math.abs(pair.share - 0.3) < 1e-9, "after the start-up: " + pair.share);
+    if (!stack(t).folded) await pressOutside(t, world);
+    assert.deepEqual([stack(t).folded, stack(t).gap], [true, 10]);
+    for (let i = 0; i < 5; i++) { t.hide(); await world.advance(1500); t.reveal(); await world.advance(1500); }
+    assert.ok(Math.abs(pair.share - 0.3) < 1e-9, "after five rounds with the strip: " + pair.share);
+    await pressStrip(t, world);
+    const st = assertAtRest(t, "opened from the strip");
+    assert.deepEqual([st.gap, st.upper, st.lower], [345, 120, 251]);
     assert.deepEqual(world.warnings, []);
     await end();
   });

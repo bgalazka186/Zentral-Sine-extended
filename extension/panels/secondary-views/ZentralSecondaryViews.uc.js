@@ -293,9 +293,20 @@
         const s = Number.isFinite(share) ? share : 0.5;
         return Math.max(0, Math.min(gap, (usable + gap) * s - top));
       }
+      // Pure: does the band of Notes lie where a band that has just been opened would lie? A new band is centred
+      // on the divider (Notes takes Math.round(gap / 2) from the upper panel) and is off centre only as far as a
+      // floor pushes it. `top` = the upper panel's height now. Also true for a band whose edge was dragged back to
+      // that place: the two cannot be told apart and need not be. One px either way is the same place: the swap
+      // mirrors the upper part of a band of an odd height to the other half (172 of 345 instead of 173), and the
+      // split a floor allowed is reported in whole px.
+      function tripleBandAsOpened({ usable, gap = 0, share = 0.5, top }) {
+        if (!(gap > 0) || !Number.isFinite(top)) return true;
+        return Math.abs(tripleHeights({ usable, gap, share, up: Math.round(gap / 2) }).top - top) < 1.5;
+      }
       // Pure: the share that puts the divider in the MIDDLE of the Notes band that is closing. `top` = the upper
       // panel's height while Notes was open, `gap` = the band's height, `total` = both panels plus the band. Both
-      // panels then take back half of it, whatever the edges had been dragged to. No band = unchanged.
+      // panels then take back half of it, whatever the edges had been dragged to. No band = unchanged. Only for
+      // a band that does not lie where it was opened (tripleBandAsOpened; see onNotesGap for why).
       // The middle is a whole px, rounded the way Notes divides a new band (Math.round(px / 2) in its bar
       // adapter), so a band that closes and opens again takes from the upper panel exactly what the close gave
       // back to it. With the exact half, a band of an odd height moved the divider half a px up at every close
@@ -342,7 +353,10 @@
           if (applied !== Math.round(up))
             document.documentElement.style.setProperty("--zentral-notes-gap-up", `${applied}px`);
         }
-        state.notesOpen = gap > 0 ? { top, gap, total: usable + gap } : null;
+        state.notesOpen =
+          gap > 0
+            ? { top, gap, total: usable + gap, asOpened: tripleBandAsOpened({ usable, gap, share: state.share, top }) }
+            : null;
         const topValue = `${Math.round(top)}px`,
           bottomValue = `${Math.round(usable - top)}px`;
         if (panel.style.getPropertyValue("--bgalazka-top-share") !== topValue)
@@ -419,11 +433,17 @@
           }, 250);
       };
       // Notes (bottom bar of Triple View) opens / closes its gap at the divider: fit both panels again.
-      // When the band goes away both panels share it equally: the divider returns to the middle of Notes.
+      // A band that lay where it was opened goes away without a trace: each panel takes back what it gave and
+      // the saved split is the one from before (owner 2026-11-15). Until 3.3.173 the divider went to the middle of
+      // every band. For a pair too uneven to centre the band (one panel on its floor) that replaced the saved
+      // split: 30 / 70 came back as 41 / 59, at the first start-up whose panel slid away with Notes open.
+      // A band that lies elsewhere (an edge of Notes was dragged, or the divider was dragged away from a band a
+      // floor had pushed off centre) still ends with the divider in its middle. Its place is not remembered, the
+      // next band is centred on the divider, so this is what brings Notes back where it was.
       const onNotesGap = () => {
         const was = state.notesOpen;
         if (was && notesGap() === 0 && state.mode === "triple") {
-          state.share = tripleShareAfterNotes({ ...was, share: state.share });
+          if (!was.asOpened) state.share = tripleShareAfterNotes({ ...was, share: state.share });
           state.notesOpen = null;
           if (state.pair && state.second) rememberPair();
         }
