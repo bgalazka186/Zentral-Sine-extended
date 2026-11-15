@@ -5755,9 +5755,23 @@
       } catch (_) {}
       return null;
     }
-    // How long a save or a reminder claim waits for the same step in another window. Only reached when that window was
-    // closed in the middle of the step; a normal step takes milliseconds.
+    // How long a save or a reminder claim waits for the same step in another window. Only reached when that window
+    // stopped answering in the middle of the step; a normal step takes milliseconds, and a window that was closed is
+    // noticed within a second (`windowGone` below).
     const SHARED_TURN_WAIT_MS = 8000;
+    // Reading the whole folder at start-up is one long step: a cold disk or thousands of notes take longer than 8 s,
+    // and a second window that stopped waiting would read the folder side by side with the first (two sets of folder
+    // ids, every older reminder mirrored twice), which is what the start-up turn exists to prevent.
+    const STARTUP_TURN_WAIT_MS = 120000;
+    // After `unload` the browser runs no further promise step of this window: a step that is still waiting for the
+    // disk is never finished and its gate is never released. The other windows ask (the answer travels on the gate)
+    // and stop waiting for it. Not `window.closed`: that turns true a moment earlier, while steps still complete.
+    let windowGone = false, windowGoneWatched = false;
+    function watchWindowGone() {
+      if (windowGoneWatched) return;
+      windowGoneWatched = true;
+      try { window.addEventListener("unload", () => { windowGone = true; }, { once: true }); } catch (_) {}
+    }
     function sharedReminderHistoryCoordinator() {
       if (!CALENDAR_PART?.createHistoryCoordinator) return undefined;
       try {
@@ -5773,8 +5787,10 @@
         }
         if (typeof registry.get !== "function" || typeof registry.set !== "function" || typeof registry.delete !== "function") return undefined;
         let told = false;
+        watchWindowGone();
         return CALENDAR_PART.createHistoryCoordinator(registry, {
           waitMs: SHARED_TURN_WAIT_MS,
+          isAlive: () => !windowGone,
           setTimer: (fn, ms) => window.setTimeout(fn, ms),
           clearTimer: (id) => window.clearTimeout(id),
           onTimeout: () => {
@@ -5834,6 +5850,10 @@
         // The two files are not one transaction, so the order is fixed: note text first, then the calendar record that
         // refers to it. A crash in between leaves a line the next start rebuilds, never a record without its line.
         beforeWrite: () => notesFlush || (dirty.size ? flushDirty() : chain),
+        // The flush above only tries. Until a note is in its file (the write failed, or it was edited again meanwhile)
+        // the calendar file gets its new records in the form that does not need the note; see `withheld` in the
+        // calendar module.
+        noteFileState: (id) => { const note = notes.get(id); return !note ? "saved" : !note._onDisk ? "absent" : dirty.has(id) ? "stale" : "saved"; },
         onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); } }) : null;
       function syncItems(id, stabilize = false, sourceEdit = false) {
         if (!items) return;
@@ -6040,7 +6060,8 @@
       }
 
       function queue(task) {
-        chain = chain.then(task).catch((error) => warn(error));
+        // A step that failed, even one whose report failed too, never stops or skips the steps queued after it.
+        chain = chain.then(task, task).catch((error) => { try { warn(error); } catch (_) {} });
         return chain;
       }
 
@@ -6152,7 +6173,10 @@
       function flushDirty() {
         const run = flushDirtyNow();
         notesFlush = run;
-        run.then(() => { if (notesFlush === run) notesFlush = null; });
+        // Cleared however the flush ends: a rejected one that stayed here would be handed to every later calendar
+        // write, and no note would be flushed before the calendar again.
+        const clear = () => { if (notesFlush === run) notesFlush = null; };
+        run.then(clear, clear);
         return run;
       }
       function flushDirtyNow() {
@@ -6164,7 +6188,7 @@
           }
           state.save = "saving";
           emit("status");
-          let failed = "";
+          let failed = "", landed = false;
           for (const id of [...dirty]) {
             const note = notes.get(id);
             if (!note) {
@@ -6175,7 +6199,7 @@
             try {
               await writeNoteFile(note, snapshot);
               await snapHistory(note, snapshot).catch(warn); // history never makes a save fail
-              if (serializeNote(note) === snapshot) dirty.delete(id);
+              if (serializeNote(note) === snapshot) { dirty.delete(id); landed = true; }
               else autosaver.touch();
             } catch (error) {
               failed = String(error?.message || error);
@@ -6186,6 +6210,8 @@
           state.save = failed ? "error" : dirty.size ? "dirty" : "saved";
           if (failed) retryTimer = setTimer(() => autosaver.touch(), 10000);
           emit("status");
+          // Calendar records that waited for the text of a note (noteFileState) can be written now.
+          if (landed) { try { items?.noteTextSaved?.(); } catch (error) { warn(error); } }
         });
       }
 
@@ -6429,7 +6455,7 @@
               await withHistoryLock("startup:" + dir, async () => {
                 await load();
                 await api.flush().catch(warn); // nothing to write on an ordinary start
-              });
+              }, { waitMs: STARTUP_TURN_WAIT_MS });
             } else await load();
             // What another window saved while this one was reading the folder.
             const missed = [...missedRemote];
@@ -9443,7 +9469,7 @@
     if (window.__zentralNotesTestSeam) {
       window.__zentralNotesTestSeam.core = {
         flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART,
-        DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS, SHARED_TURN_WAIT_MS,
+        DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS, SHARED_TURN_WAIT_MS, STARTUP_TURN_WAIT_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
         makeFolderUid, ensureFolderUids, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
@@ -19223,9 +19249,11 @@
       });
       // The sidebar guards are bound at startup, so a placeholder can be used before the notes are loaded. Anything
       // that writes waits for the store: opening it reads the folder afresh and would drop a note created earlier.
+      // A folder that cannot be reached is tried again (storeWhenReady): the action runs when the notes are there,
+      // it is not dropped after one failed attempt.
       const withStore = (run) => {
         if (storeReady) return run();
-        ensureStore().then(() => { if (!disposed) run(); }).catch(warn);
+        storeWhenReady().then(() => { if (!disposed) run(); }).catch(warn);
       };
       const quitObserver = {
         observe() {
@@ -22805,7 +22833,7 @@
       // Opt-in test seam: the real per-window coordinator and native adapters,
       // without opening a Notes sheet or publishing privileged objects normally.
       if (window.__zentralNotesTestSeam) {
-        const sidebar = { store, ensureStore, zenApi, zen, agendaApi, agendaController, tick, reminders,
+        const sidebar = { store, ensureStore, storeWhenReady, withStore, zenApi, zen, agendaApi, agendaController, tick, reminders,
           onAgendaMouse, onAgendaSelect, onAgendaTabEvent, onAgendaAttr, agendaEnsureVisuals, onAgendaFolderMenuShowing,
           onAgendaFolderMenuHidden, onAgendaTabMenuShowing };
         window.__zentralNotesTestSeam.sidebar = sidebar;

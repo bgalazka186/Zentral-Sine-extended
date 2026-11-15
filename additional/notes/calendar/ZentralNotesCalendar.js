@@ -1040,6 +1040,12 @@
     const x = item?.x || {}, id = String(x.historyId || ""), key = String(x.key || "");
     return x.src === "list" && !!id && !!x.noteId && key === agendaMirrorLineId(id) && item.id === noteLineItemId(x.noteId, key);
   }
+  // The reverse of mirroredItem: the reminder a mirrored line stands for, as it was before a note carried its line
+  // (same id, same details, no note). null for anything that is not a mirrored reminder.
+  function unmirroredItem(item) {
+    if (!isMirroredAgendaItem(item)) return null;
+    return cleanItem({ ...item, id: item.x.historyId, etag: "", x: { ...item.x, src: "manual", noteId: "", heading: "", key: "", legacyKey: "", historyId: "" } }, 0);
+  }
   function removeMirroredAgendaLine(body, item) {
     const text = String(body || "");
     if (!isMirroredAgendaItem(item)) return { body: text, changed: false };
@@ -1250,29 +1256,61 @@
   // `waitMs` (with the caller's timers) limits how long a turn waits for the one before it: a window that was closed in
   // the middle of its turn never finishes it, and without a limit every later turn for that key would wait for ever.
   // After the limit the turn runs on its own (what every turn did before the registry was shared) and `onTimeout(key)`
-  // is told once. 0 = no limit.
+  // is told once. 0 = no limit. One call can name its own limit (third argument `{ waitMs }`): reading a whole folder
+  // takes longer than one save.
+  // A turn whose window was closed is never finished: the browser stops running the promise steps of a closed window,
+  // so its gate stays pending for ever (the gate itself can still be touched; browser windows and system modules share
+  // one compartment, nothing turns into a dead object). `isAlive` is how the others find out: the owner's own answer
+  // travels on the gate, and a gate whose owner says "gone" counts as released at once. A turn that is already waiting
+  // asks once a second, so a window closed in the middle of a long turn costs the others a second, not the whole limit.
+  // A gate that cannot even be touched (a dead object after all) is treated the same way and never fails the waiter.
   const localHistoryLocks = new Map();
-  function createHistoryCoordinator(registry = localHistoryLocks, { waitMs = 0, setTimer = null, clearTimer = null, onTimeout = null } = {}) {
-    const limited = waitMs > 0 && typeof setTimer === "function";
-    const waitFor = (previous, key) => !limited ? previous : new Promise((resolve) => {
-      let timer = null, over = false;
-      const end = (late) => {
-        if (over) return;
-        over = true;
-        if (late) { try { onTimeout?.(key); } catch (_) {} }
-        else if (timer !== null) { try { clearTimer?.(timer); } catch (_) {} }
-        resolve();
-      };
-      timer = setTimer(() => end(true), waitMs);
-      Promise.resolve(previous).then(() => end(false), () => end(false));
-    });
-    return async (key, work) => {
+  const HISTORY_GATE_PROBE_MS = 1000;
+  const HISTORY_GATE_OWNER = "zentralTurnOwnerAlive";
+  const historyGateGone = (gate) => {
+    try {
+      const alive = gate[HISTORY_GATE_OWNER];
+      return typeof alive === "function" ? alive() === false : (void gate.then, false);
+    } catch (_) { return true; }
+  };
+  function createHistoryCoordinator(registry = localHistoryLocks, { waitMs = 0, setTimer = null, clearTimer = null, onTimeout = null, isAlive = null } = {}) {
+    const timed = typeof setTimer === "function";
+    const waitFor = (previous, key, limit) => {
+      if (historyGateGone(previous)) return undefined;
+      if (!timed) return previous;
+      return new Promise((resolve) => {
+        let timer = null, probe = null, over = false;
+        const end = (late) => {
+          if (over) return;
+          over = true;
+          for (const id of [timer, probe]) if (id !== null) { try { clearTimer?.(id); } catch (_) {} }
+          timer = probe = null;
+          if (late) { try { onTimeout?.(key); } catch (_) {} }
+          resolve();
+        };
+        try { Promise.resolve(previous).then(() => end(false), () => end(false)); } catch (_) { return end(false); }
+        if (limit > 0) timer = setTimer(() => { timer = null; end(true); }, limit);
+        if (limit > 0 && limit <= HISTORY_GATE_PROBE_MS) return;
+        const look = () => {
+          probe = null;
+          if (over) return;
+          if (historyGateGone(previous)) end(false);
+          else probe = setTimer(look, HISTORY_GATE_PROBE_MS);
+        };
+        probe = setTimer(look, HISTORY_GATE_PROBE_MS);
+      });
+    };
+    return async (key, work, { waitMs: ownWaitMs } = {}) => {
       const previous = registry.get(key);
       let release;
       const gate = new Promise((resolve) => { release = resolve; });
+      if (typeof isAlive === "function") { try { Object.defineProperty(gate, HISTORY_GATE_OWNER, { value: isAlive }); } catch (_) {} }
       registry.set(key, gate);
-      try { if (previous) await waitFor(previous, key); return await work(); }
-      finally {
+      try {
+        // A throw here means the gate could not even be looked at: the same as released.
+        if (previous) { try { await waitFor(previous, key, Number.isFinite(ownWaitMs) && ownWaitMs >= 0 ? ownWaitMs : waitMs); } catch (_) {} }
+        return await work();
+      } finally {
         try { if (registry.get(key) === gate) registry.delete(key); } catch (_) {}
         release();
       }
@@ -1606,7 +1644,7 @@
 
   // `beforeWrite` (optional, async) runs before every calendar write, outside the calendar lock. The note store uses it to
   // put pending note text on disk first, so `calendar.json` never refers to a note line that was not saved (UI4.7).
-  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null, beforeWrite = null }) {
+  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null, beforeWrite = null, noteFileState = null }) {
     const items = new Map();
     const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite, perf, withHistoryLock });
     const categoryDefs = new Map();
@@ -1615,6 +1653,7 @@
     let dirty = false, timer = null, chain = Promise.resolve(), retryCount = 0, pendingWrites = 0;
     let storage = { state: "unopened", error: "", backupPath: "" }, writeBlocked = false, protectedText = null;
     let baseline = { items: [], categories: [] };
+    let heldBack = false; // the last write left out records whose note text was not in its file
     const withCalendarLock = withHistoryLock || createHistoryCoordinator();
     const shown = (it) => !it.x.noteId || (!hidden.has(it.x.noteId) && (!isNoteVisible || isNoteVisible(it.x.noteId)));
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
@@ -1703,6 +1742,61 @@
       patch(items, captured.items, merged.items, (v) => v.id, "item");
       patch(categoryDefs, captured.categories, merged.categories, (v) => categoryKey(v.name), "category");
     }
+    // The note file and the calendar file are not one transaction, and the hook only TRIES to save the notes. A record
+    // must not start pointing at a note before that note is in its file: after a restart a record without its line is
+    // dropped by the note sync, and a record of a note that was never created stays hidden for good. `noteFileState(id)`
+    // says where the note stands: "saved" (the file has the text), "stale" (the file has older text), "absent" (no file).
+    // Until the note is saved, a write presents such a record in the form that does not need the note:
+    //   - a reminder that became a note line: the reminder itself (`unmirroredItem`), with its details of today;
+    //   - a record that is only linked to the note: without the link, and only while the note has no file at all;
+    //   - a line somebody typed: nothing, the text is all there is to it.
+    // `noteTextSaved()` brings the real records along once the note is saved. A record that already points at its note
+    // in the file is written as usual: a moved time or an edited detail never waits for the note.
+    // Returns id -> the version to present (null = none).
+    function withheld(captured) {
+      const held = new Map();
+      if (typeof noteFileState !== "function") return held;
+      const before = new Map(baseline.items.map((record) => [record.id, record])), asked = new Map();
+      const stateOf = (noteId) => {
+        if (!asked.has(noteId)) {
+          let fileState = "saved";
+          try { fileState = noteFileState(noteId); } catch (error) { safeWarn(error); }
+          asked.set(noteId, fileState === "stale" || fileState === "absent" ? fileState : "saved");
+        }
+        return asked.get(noteId);
+      };
+      const identity = (record) => String(record.x?.historyId || record.id);
+      const mine = new Set(), waiting = new Map(); // identity -> the held record
+      for (const record of captured.items) {
+        mine.add(record.id);
+        const noteId = record.x?.noteId, old = before.get(record.id) || null;
+        if (!noteId || old?.x?.noteId === noteId) continue;
+        const fileState = stateOf(noteId);
+        if (fileState === "saved") continue;
+        if (record.x.src === "manual") {
+          // Only linked to the note. Behind a note without a file it would be hidden after a restart: written with
+          // the link it had before (usually none).
+          if (fileState === "absent") held.set(record.id, cleanItem({ ...record, etag: "", x: { ...record.x, noteId: old?.x?.noteId || "", heading: old?.x?.heading || "" } }, 0));
+          continue;
+        }
+        held.set(record.id, old);
+        waiting.set(identity(record), record);
+      }
+      if (!waiting.size) return held;
+      const replaced = new Map(); // identity -> the record of the file that the held one took the place of
+      for (const old of baseline.items) if (!mine.has(old.id) && waiting.has(identity(old))) replaced.set(identity(old), old);
+      for (const [key, record] of waiting) {
+        const old = replaced.get(key) || null;
+        // The line was moved here from another note whose file still has it: that record stands as it is.
+        if (old && old.x.src !== "manual" && old.x.noteId && stateOf(old.x.noteId) !== "saved") { held.set(old.id, old); continue; }
+        // Otherwise the reminder itself, with its details of today (no note file has its line: a moved line whose
+        // old note was saved without it would be dropped there); failing that, the reminder as the file has it.
+        const reminder = unmirroredItem(record);
+        if (reminder && !mine.has(reminder.id) && !held.has(reminder.id)) held.set(reminder.id, reminder);
+        else if (old && old.x.src === "manual") held.set(old.id, old);
+      }
+      return held;
+    }
     function writeNow() {
       if (timer !== null) { clearTimer(timer); timer = null; }
       const dir = getDir();
@@ -1717,8 +1811,12 @@
       const task = chain.catch(() => {}).then(prepare).then(() => withCalendarLock(io.join(dir, ITEMS_FILE), async () => {
         try {
           if (writeBlocked) throw new Error("Calendar storage is protected because its existing file could not be read safely.");
-          const captured = snapshot(), remote = await readCalendarForWrite(dir, captured);
-          const merged = remote ? mergeCalendarSnapshots(baseline, captured, remote) : { ...captured, conflicts: [], safe: true };
+          const captured = snapshot(), held = withheld(captured);
+          // What this window presents to the file: its records, the held ones in the form that needs no note.
+          const local = !held.size ? captured : { categories: captured.categories,
+            items: [...captured.items.filter((record) => !held.has(record.id)), ...[...held.values()].filter(Boolean)] };
+          const remote = await readCalendarForWrite(dir, captured);
+          const merged = remote ? mergeCalendarSnapshots(baseline, local, remote) : { ...local, conflicts: [], safe: true };
           if (!merged.safe) {
             const backupPath = await backupLocalCalendar(dir, captured, remote);
             writeBlocked = true; storage = { state: "conflict", error: "Calendar edits conflict with changes from another window.", backupPath };
@@ -1729,10 +1827,14 @@
           perf?.recordBytes?.("calendar.bytes", text);
           await io.writeUTF8(io.join(dir, ITEMS_FILE), text, { tmpPath: io.join(dir, ITEMS_FILE + ".tmp") });
           baseline = JSON.parse(JSON.stringify({ items: merged.items, categories: merged.categories }));
-          applyMerged(captured, merged);
+          applyMerged(local, merged);
           for (const conflict of merged.conflicts) if (conflict.winner === "remote") emit("conflict", conflict.id, conflict);
           retryCount = 0; protectedText = null; storage = { state: "ready", error: "", backupPath: "" };
           if (dirty && timer === null && !writeBlocked) scheduleTimer(delayMs);
+          // Held records keep the store unsaved, without a timer of their own: they wait for `noteTextSaved()` or for
+          // the next change, so a note that cannot be saved is not tried again faster than its own retry.
+          heldBack = held.size > 0;
+          if (heldBack) dirty = true;
           return true;
         } catch (error) {
           dirty = true; retryCount++; safeWarn(error);
@@ -1774,7 +1876,7 @@
           }
           if (!exists || missingError) {
             if (dirty || pendingWrites) return state();
-            items.clear(); categoryDefs.clear(); hidden.clear(); dirty = false; writeBlocked = false;
+            items.clear(); categoryDefs.clear(); hidden.clear(); dirty = false; writeBlocked = false; heldBack = false;
             baseline = { items: [], categories: [] }; protectedText = null;
             storage = { state: "missing", error: "", backupPath: "" };
           } else {
@@ -1817,7 +1919,7 @@
           return state();
         }
         if (dirty || pendingWrites) return state();
-        items.clear(); categoryDefs.clear(); hidden.clear(); dirty = false; writeBlocked = false; retryCount = 0;
+        items.clear(); categoryDefs.clear(); hidden.clear(); dirty = false; writeBlocked = false; retryCount = 0; heldBack = false;
         for (const it of parsedItems) if (!items.has(it.id)) items.set(it.id, it);
         for (const category of parsedCategories) categoryDefs.set(categoryKey(category.name), category);
         baseline = snapshot(); protectedText = null;
@@ -1988,6 +2090,9 @@
       on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
       history,
       flush() { return Promise.all([writeNow(), history.flush()]); },
+      // The owner of the note files saved text: records that waited for it (see `withheld`) are written now, straight
+      // after the note as in every other save (no debounce: another window is about to read that note).
+      noteTextSaved() { if (heldBack && dirty && !writeBlocked && getDir()) writeNow().catch(() => {}); },
     };
   }
 
@@ -2046,10 +2151,13 @@
     // UNTIL is the last civil day of the series. `untilKey` is that day (YYYY-MM-DD, the value editors show);
     // `until` is its end in the system zone. Never derive the day from `until` by subtracting 24 hours: a 23-hour
     // day would give the day before.
+    // The end is the first instant of the NEXT day, asked for directly. Not "the start of the last day plus one day":
+    // where clocks go forward at midnight (Cuba, Lebanon, Egypt, Chile) such a day starts at 01:00, one day later is
+    // 01:00 again, and the first hour after the last day was still let through (for an all-day item: one more day).
     let until = 0, untilKey = "";
     if (o.UNTIL) {
       const u = /^(\d{4})(\d{2})(\d{2})/.exec(o.UNTIL);
-      if (u) { const last = new Date(+u[1], +u[2] - 1, +u[3]); until = addDays(last.getTime(), 1); untilKey = ymd(last); }
+      if (u) { const last = new Date(+u[1], +u[2] - 1, +u[3]); until = new Date(+u[1], +u[2] - 1, +u[3] + 1).getTime(); untilKey = ymd(last); }
     }
     const byday = o.BYDAY ? [...new Set(o.BYDAY.split(",").map((d) => DAY_CODES.indexOf(d.slice(-2))).filter((n) => n >= 0))].sort((a, b) => a - b) : [];
     return { freq: o.FREQ, interval, count, until, untilKey, byday };
@@ -3290,7 +3398,7 @@
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

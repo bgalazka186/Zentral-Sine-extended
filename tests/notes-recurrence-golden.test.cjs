@@ -13,6 +13,8 @@
 //   * 29 February and the 29th/30th/31st exist only where the month has that day; COUNT counts real occurrences;
 //   * UNTIL ("Last occurrence date") is a civil day in the item's zone: the series ends with that day there, wherever
 //     the computer is;
+//   * where clocks change AT midnight (Chile, Egypt, Lebanon, Cuba) a day can start at 01:00 or have two midnights:
+//     the last day still ends where the next day begins, and nothing of the next day is let through;
 //   * a timed event keeps its elapsed length, so its wall-clock end shifts on a transition day;
 //   * all-day items are civil dates and never drift with the zone.
 const assert = require("node:assert/strict"), test = require("node:test");
@@ -336,6 +338,70 @@ const TIMED = [
       "Mon 2025-12-29 00:30 +13:00 = 2025-12-28T11:30Z",
     ],
   },
+  // ---- clocks that change at midnight (F0.13) ----
+  {
+    name: "UNTIL, Santiago: daily 23:30 with last date 5 September; 6 September has no midnight (00:00 becomes 01:00)",
+    zone: "America/Santiago", start: "2026-09-04T03:30:00.000Z", rule: "RRULE:FREQ=DAILY;UNTIL=20260905", from: "2026-08-25", to: "2026-09-20",
+    expect: [
+      "Thu 2026-09-03 23:30 -04:00 = 2026-09-04T03:30Z",
+      "Fri 2026-09-04 23:30 -04:00 = 2026-09-05T03:30Z",
+      "Sat 2026-09-05 23:30 -04:00 = 2026-09-06T03:30Z",
+    ],
+  },
+  {
+    name: "UNTIL, Cairo: daily 23:30 with last date 23 April; 24 April has no midnight",
+    zone: "Africa/Cairo", start: "2026-04-21T21:30:00.000Z", rule: "RRULE:FREQ=DAILY;UNTIL=20260423", from: "2026-04-10", to: "2026-05-10",
+    expect: [
+      "Tue 2026-04-21 23:30 +02:00 = 2026-04-21T21:30Z",
+      "Wed 2026-04-22 23:30 +02:00 = 2026-04-22T21:30Z",
+      "Thu 2026-04-23 23:30 +02:00 = 2026-04-23T21:30Z",
+    ],
+  },
+  {
+    name: "UNTIL, Havana: daily 00:30 with last date 8 March, a day that starts at 01:00; nothing on 9 March",
+    zone: "America/Havana", start: "2026-03-06T05:30:00.000Z", rule: "RRULE:FREQ=DAILY;UNTIL=20260308", from: "2026-03-01", to: "2026-03-20",
+    expect: [
+      "Fri 2026-03-06 00:30 -05:00 = 2026-03-06T05:30Z",
+      "Sat 2026-03-07 00:30 -05:00 = 2026-03-07T05:30Z",
+      "Sun 2026-03-08 01:00 -04:00 = 2026-03-08T05:00Z",
+    ],
+    expectSystemZone: [
+      "Fri 2026-03-06 00:30 -05:00 = 2026-03-06T05:30Z",
+      "Sat 2026-03-07 00:30 -05:00 = 2026-03-07T05:30Z",
+      "Sun 2026-03-08 01:30 -04:00 = 2026-03-08T05:30Z",
+    ],
+  },
+  {
+    name: "UNTIL, Beirut: daily 00:15 with last date 29 March, a day that starts at 01:00; nothing on 30 March",
+    zone: "Asia/Beirut", start: "2026-03-26T22:15:00.000Z", rule: "RRULE:FREQ=DAILY;UNTIL=20260329", from: "2026-03-20", to: "2026-04-10",
+    expect: [
+      "Fri 2026-03-27 00:15 +02:00 = 2026-03-26T22:15Z",
+      "Sat 2026-03-28 00:15 +02:00 = 2026-03-27T22:15Z",
+      "Sun 2026-03-29 01:00 +03:00 = 2026-03-28T22:00Z",
+    ],
+    expectSystemZone: [
+      "Fri 2026-03-27 00:15 +02:00 = 2026-03-26T22:15Z",
+      "Sat 2026-03-28 00:15 +02:00 = 2026-03-27T22:15Z",
+      "Sun 2026-03-29 01:15 +03:00 = 2026-03-28T22:15Z",
+    ],
+  },
+  {
+    name: "UNTIL, Havana: daily 00:30 with last date 31 October; 1 November has two midnights and neither 00:30 is let through",
+    zone: "America/Havana", start: "2026-10-30T04:30:00.000Z", rule: "RRULE:FREQ=DAILY;UNTIL=20261031", from: "2026-10-20", to: "2026-11-10",
+    expect: [
+      "Fri 2026-10-30 00:30 -04:00 = 2026-10-30T04:30Z",
+      "Sat 2026-10-31 00:30 -04:00 = 2026-10-31T04:30Z",
+    ],
+  },
+  {
+    name: "UNTIL, Havana: daily 00:30 with last date 1 November, the day with two midnights, keeps one 00:30 (the earlier)",
+    zone: "America/Havana", start: "2026-10-30T04:30:00.000Z", rule: "RRULE:FREQ=DAILY;UNTIL=20261101", from: "2026-10-20", to: "2026-11-10",
+    expect: [
+      "Fri 2026-10-30 00:30 -04:00 = 2026-10-30T04:30Z",
+      "Sat 2026-10-31 00:30 -04:00 = 2026-10-31T04:30Z",
+      "Sun 2026-11-01 00:30 -04:00 = 2026-11-01T04:30Z",
+    ],
+  },
 ];
 const SYSTEM_ZONES = ["UTC", "Europe/Warsaw", "America/Los_Angeles", "Pacific/Auckland"];
 
@@ -388,6 +454,39 @@ test("UNTIL keeps the civil date a person typed, in every system zone and on 23-
   });
   assert.equal(C.parseRule("RRULE:FREQ=DAILY;COUNT=3").untilKey, "", "no UNTIL, no date");
   assert.equal(C.parseRule("RRULE:FREQ=DAILY").until, 0);
+});
+
+// The series ends at the first instant of the day after the last date. Written out for the zones whose clocks change
+// at midnight; the instants follow from the published rules (2026: Chile forward 6 September, Egypt forward 24 April,
+// Lebanon forward 29 March, Cuba forward 8 March and back 1 November).
+const UNTIL_BOUNDARIES = [
+  { zone: "America/Santiago", last: "2026-09-05", ends: "2026-09-06T04:00:00.000Z", why: "6 September starts at 01:00 -03:00" },
+  { zone: "Africa/Cairo", last: "2026-04-23", ends: "2026-04-23T22:00:00.000Z", why: "24 April starts at 01:00 +03:00" },
+  { zone: "Asia/Beirut", last: "2026-03-28", ends: "2026-03-28T22:00:00.000Z", why: "29 March starts at 01:00 +03:00" },
+  { zone: "Asia/Beirut", last: "2026-03-29", ends: "2026-03-29T21:00:00.000Z", why: "the 23-hour day itself: 30 March starts at 00:00 +03:00" },
+  { zone: "America/Havana", last: "2026-03-07", ends: "2026-03-08T05:00:00.000Z", why: "8 March starts at 01:00 -04:00" },
+  { zone: "America/Havana", last: "2026-03-08", ends: "2026-03-09T04:00:00.000Z", why: "the 23-hour day itself: 9 March starts at 00:00 -04:00" },
+  { zone: "America/Havana", last: "2026-10-31", ends: "2026-11-01T04:00:00.000Z", why: "1 November has two midnights: the first one" },
+  { zone: "America/Havana", last: "2026-11-01", ends: "2026-11-02T05:00:00.000Z", why: "the 25-hour day itself: 2 November starts at 00:00 -05:00" },
+  { zone: "Europe/Warsaw", last: "2026-03-28", ends: "2026-03-28T23:00:00.000Z", why: "control: an ordinary midnight" },
+];
+test("UNTIL ends where the next day begins, also where a day starts at 01:00 or has two midnights", () => {
+  for (const c of UNTIL_BOUNDARIES) {
+    const text = "RRULE:FREQ=DAILY;UNTIL=" + c.last.replace(/-/g, "");
+    // Zone stored on the item: the same instant on every computer, including computers in the other midnight zones.
+    for (const system of [...SYSTEM_ZONES, "America/Havana", "Asia/Beirut", "America/Santiago"]) withSystemZone(system, () => {
+      assert.equal(new Date(C.recurrenceUntilMs(C.parseRule(text), c.zone)).toISOString(), c.ends, `${c.zone} ${c.last} on a computer in ${system}: ${c.why}`);
+    });
+    // No zone on the item: the computer's own zone gives the same instant.
+    withSystemZone(c.zone, () => {
+      const rule = C.parseRule(text);
+      assert.equal(rule.untilKey, c.last);
+      assert.equal(new Date(rule.until).toISOString(), c.ends, `computer in ${c.zone}, ${c.last}: ${c.why}`);
+      assert.equal(new Date(C.recurrenceUntilMs(rule, "")).toISOString(), c.ends);
+      assert.equal(C.localDateKey(rule.until - 1), c.last, "one millisecond earlier is still the last day");
+      assert.notEqual(C.localDateKey(rule.until), c.last, "the boundary itself is the next day");
+    });
+  }
 });
 
 test("the expected table is internally consistent: every local time and offset equals its UTC instant", () => {
@@ -476,4 +575,26 @@ for (const c of ALL_DAY) {
       for (const occurrence of occurrences) assert.ok(C.validOccurrenceIdentity(item, occurrence), occurrence.start.date);
     }));
   }
+}
+
+// F0.13: the computer is in a zone whose clocks change at midnight. A series whose last date was the day the clocks go
+// forward showed one day more: that day starts at 01:00, and the end of the series was taken one day after its start.
+const ALL_DAY_MIDNIGHT = [
+  { zone: "America/Havana", name: "daily all-day ends on 8 March, the day that starts at 01:00", start: "2026-03-06", rule: "RRULE:FREQ=DAILY;UNTIL=20260308", from: "2026-03-01", to: "2026-03-20", expect: ["2026-03-06", "2026-03-07", "2026-03-08"] },
+  { zone: "America/Havana", name: "daily all-day ends on 7 March, the day before it", start: "2026-03-05", rule: "RRULE:FREQ=DAILY;UNTIL=20260307", from: "2026-03-01", to: "2026-03-20", expect: ["2026-03-05", "2026-03-06", "2026-03-07"] },
+  { zone: "America/Havana", name: "weekly all-day Sunday ends on 8 March", start: "2026-02-22", rule: "RRULE:FREQ=WEEKLY;UNTIL=20260308", from: "2026-02-01", to: "2026-04-01", expect: ["2026-02-22", "2026-03-01", "2026-03-08"] },
+  { zone: "America/Havana", name: "daily all-day ends on 1 November, the day with two midnights", start: "2026-10-30", rule: "RRULE:FREQ=DAILY;UNTIL=20261101", from: "2026-10-20", to: "2026-11-10", expect: ["2026-10-30", "2026-10-31", "2026-11-01"] },
+  { zone: "America/Havana", name: "daily all-day ends on 31 October, the day before it", start: "2026-10-30", rule: "RRULE:FREQ=DAILY;UNTIL=20261031", from: "2026-10-20", to: "2026-11-10", expect: ["2026-10-30", "2026-10-31"] },
+  { zone: "Asia/Beirut", name: "daily all-day ends on 29 March, the day that starts at 01:00", start: "2026-03-27", rule: "RRULE:FREQ=DAILY;UNTIL=20260329", from: "2026-03-20", to: "2026-04-10", expect: ["2026-03-27", "2026-03-28", "2026-03-29"] },
+  { zone: "America/Santiago", name: "daily all-day ends on 6 September, the day that starts at 01:00", start: "2026-09-04", rule: "RRULE:FREQ=DAILY;UNTIL=20260906", from: "2026-08-25", to: "2026-09-20", expect: ["2026-09-04", "2026-09-05", "2026-09-06"] },
+  { zone: "Africa/Cairo", name: "daily all-day ends on 24 April, the day that starts at 01:00", start: "2026-04-22", rule: "RRULE:FREQ=DAILY;UNTIL=20260424", from: "2026-04-10", to: "2026-05-10", expect: ["2026-04-22", "2026-04-23", "2026-04-24"] },
+  { zone: "America/Havana", name: "daily all-day through the day that starts at 01:00 has no missing or doubled day", start: "2026-03-07", rule: "RRULE:FREQ=DAILY;COUNT=4", from: "2026-03-01", to: "2026-03-20", expect: ["2026-03-07", "2026-03-08", "2026-03-09", "2026-03-10"] },
+];
+for (const c of ALL_DAY_MIDNIGHT) {
+  test(`UNTIL, clocks changing at midnight: ${c.name} [system zone ${c.zone}]`, () => withSystemZone(c.zone, () => {
+    const item = C.makeItem({ id: "golden", summary: "Golden", start: { date: c.start }, recurrence: [c.rule], x: { kind: "reminder", src: "manual" } });
+    const occurrences = C.expandItem(item, ...window(c));
+    assert.deepEqual(occurrences.map((occurrence) => occurrence.start.date), c.expect);
+    for (const occurrence of occurrences) assert.ok(C.validOccurrenceIdentity(item, occurrence), occurrence.start.date);
+  }));
 }

@@ -66,6 +66,128 @@ async function twoWindows(world) {
     assert.equal(registry.has("j"), false);
   });
 
+  // A gate that can no longer be touched (a dead object: every access throws "can't access dead object"). Fake windows
+  // cannot die, so the object is modelled: a proxy that throws on any access (optionally only after `kill()`).
+  const deadGate = (promise = null) => {
+    let dead = !promise;
+    const proxy = new Proxy(promise || {}, {
+      get(target, prop) {
+        if (dead) throw new TypeError("can't access dead object");
+        const value = Reflect.get(target, prop, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+      has() { if (dead) throw new TypeError("can't access dead object"); return false; },
+    });
+    return { proxy, kill: () => { dead = true; } };
+  };
+  const fakeTimers = () => {
+    const timers = [];
+    return { timers, live: () => timers.filter((t) => t.live).map((t) => t.ms),
+      fire: (ms) => { const t = timers.find((x) => x.live && x.ms === ms); assert.ok(t, "a live timer of " + ms + " ms"); t.live = false; t.fn(); },
+      setTimer: (fn, ms) => { timers.push({ fn, ms, live: true }); return timers.length; },
+      clearTimer: (id) => { if (timers[id - 1]) timers[id - 1].live = false; } };
+  };
+
+  await test("pure: a closed window is never waited for; its unfinished turn is skipped at once, or within a second when the wait had begun", async () => {
+    const registry = new Map(), clock = fakeTimers(), timedOut = [];
+    const options = { waitMs: 8000, setTimer: clock.setTimer, clearTimer: clock.clearTimer, onTimeout: (key) => timedOut.push(key) };
+    let aOpen = true;
+    const windowA = C.createHistoryCoordinator(registry, { ...options, isAlive: () => aOpen });
+    const windowB = C.createHistoryCoordinator(registry, { ...options, isAlive: () => true });
+    // Window A is in the middle of reading the folder; window B queues behind it with the long start-up limit.
+    windowA("startup:/notes", () => new Promise(() => {}));
+    let loaded = false;
+    const second = windowB("startup:/notes", async () => { loaded = true; return "loaded"; }, { waitMs: 120000 });
+    await new Promise((r) => setImmediate(r));
+    clock.fire(1000); await new Promise((r) => setImmediate(r));
+    assert.equal(loaded, false, "window A is open and busy: wait");
+    aOpen = false; // window A is closed; the browser never runs the rest of its turn
+    clock.fire(1000);
+    assert.equal(await second, "loaded", "one second, not two minutes");
+    assert.deepEqual(clock.live(), [], "the long timer is cancelled");
+    // A turn that finds the unfinished turn of a closed window does not wait at all (the save window A began at its
+    // own closing is such a turn).
+    windowA("note:/a.md", () => new Promise(() => {}));
+    await new Promise((r) => setImmediate(r));
+    assert.equal(await windowB("note:/a.md", async () => "saved"), "saved");
+    assert.deepEqual(clock.live(), []);
+    assert.deepEqual(timedOut, [], "neither was a time-out");
+    // The same without timers (a coordinator nobody gave a clock).
+    const plainA = C.createHistoryCoordinator(registry, { isAlive: () => false }), plainB = C.createHistoryCoordinator(registry);
+    plainA("k", () => new Promise(() => {}));
+    assert.equal(await plainB("k", async () => "ran"), "ran");
+    // A window that is open and slow is still waited for: only the limit ends that wait.
+    const slow = C.createHistoryCoordinator(registry, { ...options, isAlive: () => true });
+    slow("slow", () => new Promise(() => {}));
+    let late = false; windowB("slow", async () => { late = true; });
+    await new Promise((r) => setImmediate(r));
+    clock.fire(1000); clock.fire(1000); await new Promise((r) => setImmediate(r));
+    assert.equal(late, false);
+    clock.fire(8000); await new Promise((r) => setImmediate(r));
+    assert.equal(late, true);
+    assert.deepEqual(timedOut, ["slow"]);
+  });
+
+  await test("pure: a gate that cannot be touched any more counts as released; the work runs at once, nothing is reported", async () => {
+    for (const mode of ["no limit", "limit"]) {
+      const registry = new Map(), clock = fakeTimers(), timedOut = [];
+      const lock = mode === "limit"
+        ? C.createHistoryCoordinator(registry, { waitMs: 8000, setTimer: clock.setTimer, clearTimer: clock.clearTimer, onTimeout: (key) => timedOut.push(key) })
+        : C.createHistoryCoordinator(registry);
+      registry.set("note:/n.md", deadGate().proxy); // left behind by a window that was closed in the middle of its save
+      let ran = 0;
+      assert.equal(await lock("note:/n.md", async () => { ran++; return "saved"; }), "saved", mode + ": the save is not lost");
+      assert.equal(ran, 1);
+      assert.deepEqual(clock.live(), [], mode + ": no timer is left armed");
+      assert.deepEqual(timedOut, [], mode + ": this is not a time-out");
+      assert.equal(registry.size, 0, mode + ": the dead gate is gone, later turns see a clean key");
+      assert.equal(await lock("note:/n.md", async () => "again"), "again");
+    }
+  });
+
+  await test("pure: a gate that stops being touchable while another turn waits for it is noticed within a second", async () => {
+    const registry = new Map(), clock = fakeTimers(), timedOut = [];
+    const lock = C.createHistoryCoordinator(registry, { waitMs: 8000, setTimer: clock.setTimer, clearTimer: clock.clearTimer, onTimeout: (key) => timedOut.push(key) });
+    const owner = deadGate(new Promise(() => {})); // alive and busy
+    registry.set("k", owner.proxy);
+    let done = false;
+    const turn = lock("k", async () => "ran").then((v) => { done = true; return v; });
+    await new Promise((r) => setImmediate(r));
+    assert.equal(done, false, "the holder is alive: wait");
+    assert.deepEqual(clock.live().sort((a, b) => a - b), [1000, 8000], "the limit, and one look per second");
+    clock.fire(1000); await new Promise((r) => setImmediate(r));
+    assert.equal(done, false, "still alive after a second: keep waiting");
+    assert.deepEqual(clock.live().sort((a, b) => a - b), [1000, 8000]);
+    owner.kill(); // its window is closed now
+    clock.fire(1000);
+    assert.equal(await turn, "ran");
+    assert.deepEqual(clock.live(), [], "both timers are cancelled");
+    assert.deepEqual(timedOut, [], "noticed, not timed out");
+    // A short limit does not need the extra look.
+    const quick = C.createHistoryCoordinator(new Map([["q", new Promise(() => {})]]), { waitMs: 500, setTimer: clock.setTimer, clearTimer: clock.clearTimer });
+    quick("q", async () => 1); await new Promise((r) => setImmediate(r));
+    assert.deepEqual(clock.live(), [500]);
+  });
+
+  await test("pure: one call can wait longer than the others (reading a whole folder at start-up)", async () => {
+    const registry = new Map(), clock = fakeTimers(), timedOut = [];
+    const lock = C.createHistoryCoordinator(registry, { waitMs: 8000, setTimer: clock.setTimer, clearTimer: clock.clearTimer, onTimeout: (key) => timedOut.push(key) });
+    lock("startup:/notes", () => new Promise(() => {}));
+    const second = lock("startup:/notes", async () => "loaded", { waitMs: 120000 });
+    lock("note:/a.md", () => new Promise(() => {}));
+    const save = lock("note:/a.md", async () => "saved");
+    await new Promise((r) => setImmediate(r));
+    assert.deepEqual(clock.live().filter((ms) => ms !== 1000).sort((a, b) => a - b), [8000, 120000], "each call waits for its own limit");
+    clock.fire(8000);
+    assert.equal(await save, "saved");
+    let loaded = false; second.then(() => { loaded = true; });
+    await new Promise((r) => setImmediate(r));
+    assert.equal(loaded, false, "the start-up turn is still waiting after the ordinary limit");
+    clock.fire(120000);
+    assert.equal(await second, "loaded");
+    assert.deepEqual(timedOut, ["note:/a.md", "startup:/notes"]);
+  });
+
   await test("no hidden window: two windows claim one alert stage once, through the global the system modules share", async () => {
     const home = sharedGlobal(), world = createPanelWorld({ sharedGlobal: home });
     const { a, b } = await twoWindows(world);

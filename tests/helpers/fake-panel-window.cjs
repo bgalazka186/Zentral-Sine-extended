@@ -169,7 +169,9 @@ function createPanelWorld({ sharedGlobal = null, hiddenWindow = null, freezeCui 
   }
   const meta = () => (disk.has(DIR + "/meta.json") ? JSON.parse(disk.get(DIR + "/meta.json")) : null);
   const noteFiles = () => [...disk.keys()].filter((k) => k.startsWith(DIR + "/") && k.endsWith(".md") && !k.slice(DIR.length + 1).includes("/"));
-  return { DIR, disk, prefs, windows, writes, warnings, widgets, cui, cuiLog, timers, openWindow, advance, flush, settle, hold, failNext, meta, noteFiles, get now() { return now; } };
+  // The topics a window listens to through Services.obs (one entry per registration).
+  const observerTopics = (id) => [...observers].filter((e) => e.id === id).map((e) => e.topic);
+  return { DIR, disk, prefs, windows, writes, warnings, widgets, cui, cuiLog, timers, openWindow, advance, flush, settle, hold, failNext, meta, noteFiles, observerTopics, get now() { return now; } };
 }
 // A note file as Notes writes it.
 const noteText = (title, { folder = "", body = "", updated = "2026-11-01T10:00:00.000Z" } = {}) =>
