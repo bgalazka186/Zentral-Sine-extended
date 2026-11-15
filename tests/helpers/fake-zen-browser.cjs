@@ -113,6 +113,7 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   const destroy = definition.init();
   return { ...dom, window: win, sidebar, operations, events, timers, values, files, observers, obs, emit, destroy,
     addWorkspace, workspaceListenerCount: () => workspaceListeners.size,
+    listenerCount: (type) => listeners.get(type)?.size || 0, // window listeners of one event type (idle-cost checks)
     async switchWorkspace(id) { if (!workspaces.has(id)) throw new Error("missing workspace"); win.gZenWorkspaces.activeWorkspace = id; for (const listener of [...workspaceListeners]) await listener({ workspace: { uuid: id }, onInit: false }); },
     advanceClock(ms) { clockOffset += Number(ms) || 0; },
     triggerMutations() { for (const observer of [...mutationObservers]) observer.callback([]); },

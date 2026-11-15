@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.165
+// @version 3.3.166
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.165, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.166, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.165";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.166";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -4106,7 +4106,7 @@ const __zentralEmbeddedLoader = (function () {
   }
   // Coalesced, store-change-driven controller for the virtual Zen Agenda folder. The host
   // supplies DOM/Zen operations through `api`; this controller owns no browser globals.
-  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
+  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getReady = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
     let dead = false, timer = null, timerAt = Infinity, last = [], busy = false, consecutiveChanges = 0, blockedUntil = 0;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
     function armAt(due) {
@@ -4140,6 +4140,10 @@ const __zentralEmbeddedLoader = (function () {
       const revision = api.mutationCount?.() || 0;
       try {
         if (!getEnabled()) { api.removeAll?.(); last = []; clearScheduled(); return []; }
+        // The items are not loaded yet (startup, before the store has opened). An empty list now would not mean that
+        // nothing is due: reconciling against it would remove the entries that session restore just brought back. The
+        // host schedules a run when the store is ready.
+        if (!getReady()) return last;
         sourceItems = getItems?.() || [];
         policies = getWindowIsMasterPolicy ? prepareAgendaWindows(sourceItems, getWindow) : null;
         fullProjection = agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow, policies);
@@ -14325,7 +14329,9 @@ __zentralShim.register = function (def) {
         // ignored until the minute is over, so a script or add-on that keeps touching our tabs cannot start a loop.
         // Requests from the notes themselves (schedule) are never limited.
         touch(ms = 400) {
-          if (dead) return false;
+          // While the host cannot project (the notes are still loading at startup) there is nothing to repair, and the
+          // burst of events from session restore must not use up the allowance for the first minute.
+          if (dead || !api.ready()) return false;
           const t = now();
           touches = touches.filter((x) => t - x < 60000);
           if (touches.length >= 12) return false;
@@ -24031,6 +24037,12 @@ __zentralShim.register = function (def) {
           Services.obs.removeObserver(remoteObserver, OBS_TOPIC);
         } catch (_) {}
       });
+      // The sidebar guards are bound at startup, so a placeholder can be used before the notes are loaded. Anything
+      // that writes waits for the store: opening it reads the folder afresh and would drop a note created earlier.
+      const withStore = (run) => {
+        if (storeReady) return run();
+        ensureStore().then(() => { if (!disposed) run(); }).catch(warn);
+      };
       const quitObserver = {
         observe() {
           store.flush().catch(warn);
@@ -24752,7 +24764,9 @@ __zentralShim.register = function (def) {
         busy(on) { zenBusy = on; if (!on) zenQuietUntil = Date.now() + 500; },
         sweepStrays: zenSweepStrays,
         reorder: zenReorder,
-        ready: () => !zenMoveBroken && !!(window.gBrowser && window.gZenFolders?.createFolder),
+        // Not before the notes are loaded: an empty store at startup does not mean that the notes are gone, and a run
+        // against it would remove the entries that session restore just brought back.
+        ready: () => storeReady && !zenMoveBroken && !!(window.gBrowser && window.gZenFolders?.createFolder),
         hasRoot: () => !!zenRootEl(),
         ensureRoot() {
           zenSweepStale();
@@ -25030,6 +25044,9 @@ __zentralShim.register = function (def) {
       }
       const agendaOwnTab = (tab) => !!agendaTabKey(tab);
       const agendaOwnedDay = (child) => child.hasAttribute?.("bgalazka-notes-agenda-day") || child.id?.startsWith("zentral-notes-agenda-day-");
+      // The day a folder stands for: our attribute, or the id, which survives a session restore when the attribute does not.
+      const agendaDayOf = (folder) => folder?.getAttribute?.("bgalazka-notes-agenda-day") ||
+        (folder?.id?.startsWith("zentral-notes-agenda-day-") ? folder.id.slice("zentral-notes-agenda-day-".length) : "");
       // Move only the outermost foreign subtrees/tabs, preserving nested data.
       // Failure leaves the user content and its original managed container.
       function evacuateProjectionForeign(folder, root, ownFolder, ownTab, onMoved = () => {}) {
@@ -25370,13 +25387,15 @@ __zentralShim.register = function (def) {
             }
             if (!root.contains(tab)) continue;
             const actualFolder = tab.closest?.("zen-folder");
-            const actualDay = actualFolder?.getAttribute?.("bgalazka-notes-agenda-day") || "";
+            // A restored day folder has no attribute yet (it gets one further down). Read by attribute alone, each of its
+            // entries looked misplaced and the first run after a restart closed and re-created every Agenda tab.
+            const actualDay = agendaDayOf(actualFolder);
             const actualParent = actualDay && agendaDayEl("day:" + actualDay) === actualFolder ? "day:" + actualDay : "?misplaced";
             out.push({ key, kind: "item", parent: actualParent });
           }
           if (root.isConnected === false) return [];
           for (const folder of root.querySelectorAll?.("zen-folder") || []) {
-            const date = folder.getAttribute("bgalazka-notes-agenda-day") || (folder.id.startsWith("zentral-notes-agenda-day-") ? folder.id.slice("zentral-notes-agenda-day-".length) : "");
+            const date = agendaDayOf(folder);
             if (date !== "overdue" && !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
             folder.setAttribute("bgalazka-notes-agenda-day", date);
             folder.setAttribute("bgalazka-notes-agenda-key", "day:" + date);
@@ -25472,6 +25491,7 @@ __zentralShim.register = function (def) {
         getDays: agendaDays,
         getOverdue: () => ({ enabled: prefBool(PREF.AGENDA_OVERDUE, true), days: Math.max(1, Math.min(31, prefInt(PREF.AGENDA_OVERDUE_DAYS, 7))), cap: Math.max(1, Math.min(100, prefInt(PREF.AGENDA_OVERDUE_CAP, 10))) }),
         getEnabled: agendaEnabled,
+        getReady: () => storeReady,
         getPosition: agendaPosition,
         now: () => Date.now(),
         getWindowIsMasterPolicy: true,
@@ -25518,6 +25538,7 @@ __zentralShim.register = function (def) {
         if (structural || linked) { bindAgenda(true); agendaController.invalidate?.(); agendaController.schedule(); }
       });
       onCleanup(() => { agendaItemUnsub?.(); agendaHistoryUnsub?.(); agendaNoteUnsub?.(); });
+      // Only the projection waits (it is not on the critical start-up path); the guards are bound at the end of start().
       const agendaBoot = window.setTimeout(agendaSoon, 6500);
       onCleanup(() => window.clearTimeout(agendaBoot));
       // Resolve XUL labels and shadow-retargeted folder menu triggers without
@@ -26363,6 +26384,7 @@ __zentralShim.register = function (def) {
         window.addEventListener("SSTabRestored", onPseudoTabRestored, true);
         onCleanup(() => window.removeEventListener("SSTabRestored", onPseudoTabRestored, true));
       }
+      // Only the projection waits (it is not on the critical start-up path); the guards are bound at the end of start().
       const zenBoot = window.setTimeout(zenSoon, 6000);
       onCleanup(() => window.clearTimeout(zenBoot));
       // A click (or Enter) on one of our tabs opens the note instead of selecting the tab. Capture phase, our tabs only;
@@ -26522,13 +26544,13 @@ __zentralShim.register = function (def) {
         try { if (ev.dataTransfer) ev.dataTransfer.dropEffect = "none"; } catch (_) {}
         if (ev.type === "drop" && targetManaged && draggedTab && !draggedManaged) {
           const decision = dropDecision({ tab: { attrs: {}, title: draggedTab.label || "", url: tabUrl(draggedTab) }, intoNotes: true });
-          if (decision.action === "capture-url") store.create(decision.body, zenMode() === "selected" ? TABBAR_FOLDER : "");
+          if (decision.action === "capture-url") withStore(() => store.create(decision.body, zenMode() === "selected" ? TABBAR_FOLDER : ""));
         }
       };
       // Right-click menus: our own items are added once; for our targets every native item is hidden with CSS (never removed).
       const ZEN_MENU_ITEMS = [
         ["open", "Open note", (tab) => activateZenTab(tab)],
-        ["out", "Remove from sidebar folder", (tab) => { const id = zenNoteIdFromTab(tab); if (id && zenMode() === "selected") { store.setFolder(id, ""); zen.schedule(0); } }],
+        ["out", "Remove from sidebar folder", (tab) => { const id = zenNoteIdFromTab(tab); if (id && zenMode() === "selected") withStore(() => { store.setFolder(id, ""); zen.schedule(0); }); }],
         ["trash", "Move note to trash", (tab) => { const id = zenNoteIdFromTab(tab); if (id) trashNoteFromSidebar(id); }],
       ];
       // A note without reminders goes to Trash at once (it can be restored there). A note with reminders asks first,
@@ -26582,7 +26604,7 @@ __zentralShim.register = function (def) {
         const item = document.createXULElement("menuitem");
         item.setAttribute("label", "New note in this folder");
         item.setAttribute("zentral-notes-folder-own", "new");
-        item.addEventListener("command", () => { store.create("", isRoot ? (zenMode() === "selected" ? TABBAR_FOLDER : "") : meta.id); });
+        item.addEventListener("command", () => withStore(() => { store.create("", isRoot ? (zenMode() === "selected" ? TABBAR_FOLDER : "") : meta.id); }));
         menu.append(item);
         const menuMode = zenMode();
         const parentId = isRoot ? (menuMode === "selected" ? TABBAR_FOLDER : "") : meta.id;
@@ -27513,6 +27535,15 @@ __zentralShim.register = function (def) {
         document.removeEventListener("visibilitychange", onTimeVisibility);
         try { Services.obs.removeObserver(wakeObserver, "wake_notification"); } catch (_) {}
       });
+
+      // ---- Sidebar guards from the first moment (SB6.8) ---------------------------------------------------------
+      // Session restore brings our placeholder tabs back before any timer of this file has run. A click, a key, a drag
+      // or a selection on one of them must already be ours, or the person lands on a blank page (and a middle click
+      // closes the entry). So the listeners are bound here, at the end of start-up, where everything they use exists.
+      // They act on our own tabs only and cost nothing while a projection is off. The projections themselves keep
+      // their boot timers and never run before the notes are loaded (`getReady`, `zenApi.ready`).
+      bindAgenda(agendaEnabled());
+      bindZen(zenMode() !== "off");
 
       const api = {
         destroy() {

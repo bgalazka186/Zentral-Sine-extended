@@ -72,7 +72,6 @@ Impact and effort: S = under one session slice, M = one session, L = several ses
 
 | Order | ID | Status | Impact | Effort | Depends on | Task |
 | --: | :-- | :-- | :-- | :-- | :-- | :-- |
-| 8 | `SB6.8` | `OPEN` | Med | S | F0.1 | Bind Agenda guards immediately; delay only the projection |
 | 9 | `T3.1` | `OPEN` | High | S-M | — | Fix second panel startup initialization bug & settings font-scaling overlap |
 | 10 | `OW-26` | `OPEN` | High | S-M | T3.1 | [new] Triple View startup restore: Notes top edge moves section until panel swap |
 | 10 | `OW-04` | `OPEN` | High | M | none | [new] Limit the visible hour range in Week/Day (e.g. 08-20) with automatic extension |
@@ -407,16 +406,6 @@ _Visible hours and sizing first (they change geometry every later feature uses),
 ## Phase 6 — Zen sidebar polish
 
 _Labels, menus, quick actions, hover cards, caps and diagnostics for Agenda and Notes pseudo-tabs._
-
-#### `SB6.8` — Bind Agenda guards immediately; delay only the projection
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Depends on:** F0.1 · **Source:** Audit R1 B10
-
-**Problem:** `bindAgenda` is only called from `agendaSoon` (6.5 s boot timer), so the click guard and restore listeners are missing for the first seconds; restored `about:blank` Agenda tabs can be clicked unguarded.
-
-**Plan (do in this order):**
-1. Call `bindAgenda(agendaEnabled())` at startup; keep the 6.5 s delay only for `runNow`.
-
-**Tests / done when:** Harness: click before boot timer is guarded.
 
 #### `OW-27` — [new] Opening reminders in Zen sidebar takes 2 clicks vs 1 click for NOTES
 **Status:** `OPEN` · **Impact:** High · **Effort:** S-M · **Depends on:** none · **Source:** Owner 2026-11-14
@@ -855,20 +844,21 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.165, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.166, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.165.** `F0.1`–`F0.9`, `H1.1`–`H1.5`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.5`, `UI4.7`, `AU-B1`, `SB6.1`, `T2.8b` and `T4.5` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`129/129` test files) and the timezone matrix (`180/180` across `UTC`, `Europe/Warsaw`, `America/Los_Angeles`, `Pacific/Auckland`) pass in Node/fake-Zen; live Zen is not available in the sandbox.
+State: **3.3.166.** `F0.1`–`F0.9`, `H1.1`–`H1.5`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.5`, `UI4.7`, `AU-B1`, `SB6.1`, `SB6.8`, `T2.8b` and `T4.5` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`130/130` test files) and the timezone matrix (`180/180` across `UTC`, `Europe/Warsaw`, `America/Los_Angeles`, `Pacific/Auckland`) pass in Node/fake-Zen; live Zen is not available in the sandbox.
 
-Completed this session (3.3.163–3.3.165), every item archived in `docs/LEGACY_done_rows.md`:
+Completed this session (3.3.163–3.3.166), every item archived in `docs/LEGACY_done_rows.md`:
 - `UI4.7` DONE — multi-window and data-integrity edge tests closed: blocked stale write keeps later edits until its recovery copy exists; writers without a lock are detected by snapshot; note text is always written before `calendar.json` (`createItemStore({ beforeWrite })`); after a crash between the two writes the manual record and its mirror line become one reminder again (`mirrorItemToAgendaNote` twin re-key). `F0.5` and `F0.6` (finished earlier) were moved out of the roadmap.
 - `T4.5` DONE — one version everywhere: `tools/sync-version.cjs` (+ `--check`, `--set`), `tests/version-sync.test.cjs`, CI workflow and release-loop documentation.
 - `F0.8` + `AU-B1` DONE — readable recurrence golden table (`tests/notes-recurrence-golden.test.cjs`, 3 zones x 4 system zones). Fixed what it exposed: `UNTIL` now ends a series with its last day in the item's zone (`recurrenceUntilMs`), and both recurrence editors show the stored last date (`parseRule().untilKey`) instead of the day before on a 23-hour day.
 - `F0.9` DONE (not a planned row, found while preparing `SB6.8`) — `tests/notes-undefined-identifiers.test.cjs` fails on any name used without a declaration and on any calendar function that is named but not exported. It exposed four defects, all fixed with behaviour tests: the sidebar command `Move note to trash` threw and did nothing; the three Save buttons of the Zen Agenda visibility dialogs threw after saving, so the sidebar folder was not refreshed; a failed side effect of Save left the calendar composer open (a second press stored the item twice); a restored Agenda tab outside the last projection got a bare title and the wrong icon.
+- `SB6.8` DONE — sidebar guards are bound at start-up for Agenda and for NOTES entries; the boot timers only start the projections. Closed with it: projections never run before the notes are loaded (restored entries were removed and re-created), the first Agenda run after a restart adopts the restored tabs instead of replacing them, and writes from the guarded menus wait for the store. Test: `tests/notes-sidebar-startup.test.cjs`.
 
 Standing owner rules for chunks: commit to Git, no ZIPs; no conversational filler; production-ready code and test suites; tasks strictly in order (implementation, edge cases, unit tests). Owner 2026-11-14: no live-check items (owner tests in the app and reports); do NOT add low-priority polish that changes nothing noticeable; only fix what a person would notice. One version everywhere: `node tools/sync-version.cjs` after `build-standalone.cjs --bump` (see "How to add a feature").
 
 Known debts / owner requirements: `OW-18` (space-local Notes/Agenda) and `B3.3.50-6` (`SessionFile.write` snapshot isolation) remain `PARTIAL`. Accepted limits of `UI4.7` (not tasks): a foreign program writing between our compare and our write cannot be locked out; note file and `calendar.json` are ordered and repaired on start, not one transaction (details of a reminder that never reached `calendar.json` are lost if the browser dies between the two writes; date, time and title survive in the note line). FOUND while testing, needs an owner decision (nothing changed): once a calendar line has its hidden `%%zn-item-id%%`, retyping its date or time in the note text does not move the stored item (`syncNote` always keeps `old.start`); only the calendar UI moves it. Safe fix idea: remember the schedule parsed from each line and let the text win only when that parsed schedule changed in an edit. FOUND, not changed: for a skipped hour (clocks forward) an item with its own zone moves to 03:00, an item in the system zone to 03:30; both are pinned in the golden table. PERF finding (measured, not changed): `zonedDateTimeToMs` scans minute by minute; one call costs about 1.1 ms for `Pacific/Auckland`, 3.5 ms for `Europe/Warsaw` and 5.9 ms for `America/Los_Angeles`, and a recurring item with its own zone pays it per occurrence (a daily item in a month grid: 100-200 ms per render). Fix it with a budget test when zones become a first-class feature (`OW-23`).
 
-Next action: Continue the Master Order from the top: `SB6.8`, `T3.1`, `OW-26`, `OW-04`, `OW-03`.
+Next action: Continue the Master Order from the top: `T3.1`, `OW-26`, `OW-04`, `OW-03`, `OW-23`.
