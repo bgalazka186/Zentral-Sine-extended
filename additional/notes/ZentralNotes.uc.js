@@ -12503,7 +12503,11 @@
         const workDays = patch ? days.filter((day) => patch.days.has(C.localDateKey(day))) : days;
         const firstDay = workDays[0], firstBounds = C.zonedDayBounds(C.localDateKey(firstDay), zone) || [firstDay, C.addDays(firstDay, 1)];
         const lastDay = workDays[workDays.length - 1], lastBounds = C.zonedDayBounds(C.localDateKey(lastDay), zone) || [lastDay, C.addDays(lastDay, 1)];
-        const from = firstBounds[0], until = lastBounds[1];
+        // Timed items belong to the days of the display zone, all-day items to the dates as written: the range holds
+        // both. With the zone's days alone an all-day reminder of the first day shown was left out wherever the
+        // display zone is behind the computer's (the reminder begins at the computer's midnight, hours before that
+        // day begins in the zone); in Day view that is every all-day reminder.
+        const from = Math.min(firstBounds[0], firstDay), until = Math.max(lastBounds[1], C.addDays(lastDay, 1));
         const expanded = C.expandRange(items, from, until);
         // OW-04. Three steps, in this order: (1) the times of the timed items of every day that is drawn, (2) the
         // hours of the grid from those times, (3) the lanes of each day inside those hours.
@@ -12536,7 +12540,11 @@
         // event shorter than that take the lane of a box of that height: they cannot cover an event or each other.
         // Such a box which would begin too late to end inside the grid (a reminder at 19:50 in a grid that ends at
         // 20:00, or at 23:50 in the whole day) is moved up until it ends with the grid, and takes its lane there.
+        // The box of a short event may reach up to 4px over the item that follows it (its lower padding): half-hour
+        // events one after another at 36px an hour are 18px apart and stay in one lane. More than that and the two
+        // stand side by side. A reminder keeps the whole box, as it always had.
         const minBoxMin = Math.max(1, Math.ceil((20 / CALENDAR_HOUR_PX) * 60));
+        const overlapMin = Math.floor((4 / CALENDAR_HOUR_PX) * 60);
         const lastBoxStart = grid.endMin - minBoxMin;
         const laidOut = new Map();
         for (const day of workDays) {
@@ -12545,7 +12553,8 @@
           const layoutItems = spans.map((span) => {
             if (!span.reminder && span.endMin - span.startMin >= minBoxMin) return span.item;
             const start = span.start - Math.max(0, span.startMin - lastBoxStart) * 60000;
-            return { ...span.item, x: { ...(span.item.x || {}), kind: "event" }, start: { dateTime: new Date(start).toISOString() }, end: { dateTime: new Date(start + minBoxMin * 60000).toISOString() } };
+            const length = span.reminder ? minBoxMin : Math.max(1, span.endMin - span.startMin, minBoxMin - overlapMin);
+            return { ...span.item, x: { ...(span.item.x || {}), kind: "event" }, start: { dateTime: new Date(start).toISOString() }, end: { dateTime: new Date(start + length * 60000).toISOString() } };
           });
           const entries = C.layoutDay(layoutItems, day, zone);
           for (const entry of entries) { entry.span = spanById.get(String(entry.item.id)) || null; entry.original = entry.span ? entry.span.item : entry.item; }
@@ -13252,7 +13261,8 @@
         const bounds = days.map((day) => C.zonedDayBounds(C.localDateKey(day), zone) || [day, C.addDays(day, 1)]);
         const changed = new Set();
         for (const master of [oldItem, newItem]) if (master) {
-          for (const occurrence of C.expandRange([master], bounds[0][0], bounds[bounds.length - 1][1])) {
+          // As in calendarTimeGridView: the days of the display zone and the dates as written.
+          for (const occurrence of C.expandRange([master], Math.min(bounds[0][0], days[0]), Math.max(bounds[bounds.length - 1][1], C.addDays(days[days.length - 1], 1)))) {
             const [start, end] = C.itemRange(occurrence);
             for (let i = 0; i < days.length; i++) if (C.isAllDay(occurrence) ? C.allDayOf([occurrence], days[i]).length : C.isReminder(occurrence) ? start >= bounds[i][0] && start < bounds[i][1] : start < bounds[i][1] && end > bounds[i][0]) changed.add(C.localDateKey(days[i]));
           }

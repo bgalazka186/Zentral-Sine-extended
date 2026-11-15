@@ -1,5 +1,20 @@
 "use strict";
 /* T2.4b: month, upcoming-days and Agenda views, filters, category colours, all-day strip and source-note navigation. */
+// This file builds its calendar around "now", and what it asserts held at some hours of the day only. Just after
+// midnight the first free slot of "When am I free?" (09:00-13:30 that day) lay over the event whose busy band is
+// looked for at 11:30; and whether "today" in the display zone is the first day of the week decided another case.
+// It ran on the real clock, so the time-zone matrix failed at those hours (seen 2026-11-16 00:06 in Europe/Warsaw).
+// The clock is therefore fixed: every `Date.now()` and `new Date()` of this file, of the calendar module and of the
+// Notes script begins at the instant below (a Sunday evening in Europe, noon in Los Angeles, Monday morning in
+// Auckland) and goes on with the real clock, so timers and time stamps still move.
+{
+  const RealDate = Date, CLOCK_START = RealDate.UTC(2026, 10, 15, 20, 0, 0), REAL_START = RealDate.now();
+  class FixedDate extends RealDate {
+    constructor(...args) { if (args.length) super(...args); else super(FixedDate.now()); }
+    static now() { return CLOCK_START + (RealDate.now() - REAL_START); }
+  }
+  globalThis.Date = FixedDate;
+}
 const assert = require("node:assert/strict"), fs = require("node:fs"), path = require("node:path"), vm = require("node:vm");
 const source = fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.uc.js"), "utf8");
 const css = fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.css"), "utf8");

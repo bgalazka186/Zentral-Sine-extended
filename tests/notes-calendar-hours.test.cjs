@@ -604,6 +604,23 @@ const span = (r) => [r.startMin, r.endMin, r.extendedTop, r.extendedBottom];
     assert.ok(hello.left !== again.left && Math.round(parseFloat(hello.width)) === 50 && Math.round(parseFloat(again.width)) === 50, `so each has half the width; left ${hello.left} / ${again.left}, width ${hello.width} / ${again.width}`);
     assert.ok(box("Remind").left !== box("Remind once more").left, "two reminders ten minutes apart: side by side, as before");
     drop("hello"); drop("again"); drop("remind"); drop("remind2");
+    // One after another with nothing between them: a box may reach 4 px over the next one, not more. At 36 px an hour
+    // half an hour is 18 px, so three half-hour events keep one lane and the whole width (in 3.3.173 they stood side
+    // by side); three quarter-hour events, 9 px apart, cannot.
+    await pick(".zn-calendar-density-select", "Extra compact");
+    put("half1", "Half one", local(WED, 9), local(WED, 9, 30));
+    put("half2", "Half two", local(WED, 9, 30), local(WED, 10));
+    put("half3", "Half three", local(WED, 10), local(WED, 10, 30));
+    put("quarter1", "Quarter one", local(WED, 14), local(WED, 14, 15));
+    put("quarter2", "Quarter two", local(WED, 14, 15), local(WED, 14, 30));
+    await flushRaf();
+    const halves = ["Half one", "Half two", "Half three"].map(box);
+    assert.deepEqual(halves.map((b) => [b.top, b.bottom - b.top, b.left, b.width]), [[36, 20, "0%", "100%"], [54, 20, "0%", "100%"], [72, 20, "0%", "100%"]], "half-hour events in a row: one lane, each 2 px over the next");
+    assert.ok(box("Quarter one").left !== box("Quarter two").left && box("Quarter one").width === "50%", "quarter-hour events in a row: side by side");
+    await pick(".zn-calendar-density-select", "Comfortable");
+    const wide = ["Half one", "Half two", "Half three"].map(box);
+    assert.deepEqual(wide.map((b) => [b.top, b.bottom - b.top, b.width]), [[54, 27, "100%"], [81, 27, "100%"], [108, 27, "100%"]], "at 54 px an hour they are simply as long as they are");
+    drop("half1"); drop("half2"); drop("half3"); drop("quarter1"); drop("quarter2");
     await flushRaf();
     await showView("Week");
   });
@@ -922,6 +939,40 @@ const span = (r) => [r.startMin, r.endMin, r.extendedTop, r.extendedBottom];
     assert.equal(hoursOnly(), null, "with all hours shown there is nothing to offer");
     dialogButton("Close").click(); await flushRaf();
     await press();
+  });
+
+  await test("an all-day reminder is in the all-day row whatever the display zone is, also on the first day shown", async () => {
+    // Pago Pago is behind every zone a computer of this test runs in: its day begins hours after the computer's
+    // midnight, which is where an all-day reminder begins. Until 3.3.174 the first day shown lost its all-day
+    // reminders that way (in Day view: the day), while all-day events stayed.
+    stamp += 1000;
+    for (const [id, summary, date, kind] of [["allday-mon", "Pay the rent", MON, "reminder"], ["allday-wed", "Renew the pass", WED, "reminder"], ["allday-wed-event", "Conference", WED, "event"]]) {
+      assert.ok(store.items.upsert({ id, summary, start: { date }, x: { kind, src: "manual" } }), "the store took " + id);
+    }
+    await flushRaf();
+    const allDayOf = (key) => root.querySelectorAll(".zn-cal-time-allday-cell").find((cell) => cell.getAttribute("data-day") === key).querySelectorAll(".zn-cal-item").map((el) => el.textContent.replace(/^All day/, "").trim()).sort();
+    for (const zone of ["", "Pacific/Pago_Pago", "Pacific/Kiritimati"]) {
+      store.setMeta({ calendarDisplayZone: zone, calendarCursor: WED });
+      await showView("Week");
+      assert.deepEqual(allDayOf(MON), ["Pay the rent"], `Week, display zone "${zone}": the reminder of Monday, the first day shown`);
+      assert.deepEqual(allDayOf(WED), ["Conference", "Renew the pass"], `Week, display zone "${zone}": Wednesday`);
+      assert.deepEqual(allDayOf(TUE), [], "and nothing where nothing is");
+      // A change of that reminder is an update of its day alone, which has to find the day: the new title shows.
+      const timeline = q(root, ".zn-cal-time-scroll");
+      for (const title of ["Pay the rent today", "Pay the rent"]) {
+        stamp += 1000;
+        store.items.upsert({ ...store.items.get("allday-mon"), summary: title });
+        await flushRaf();
+        assert.deepEqual(allDayOf(MON), [title], `Week, display zone "${zone}": the reminder of Monday was renamed`);
+      }
+      assert.ok(q(root, ".zn-cal-time-scroll") === timeline, "by an update of Monday, not by drawing the week again");
+      await showView("Day");
+      assert.deepEqual(allDayOf(WED), ["Conference", "Renew the pass"], `Day, display zone "${zone}": the reminder and the event of the day`);
+    }
+    store.setMeta({ calendarDisplayZone: "" });
+    drop("allday-mon"); drop("allday-wed"); drop("allday-wed-event");
+    await showView("Week");
+    assert.equal(root.querySelectorAll(".zn-cal-time-allday-cell .zn-cal-item").length, 0);
   });
 
   await test("the hours are remembered with the other calendar settings; a stored value that makes no sense is replaced", async () => {
