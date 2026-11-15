@@ -1147,6 +1147,72 @@
       }
       return { folders: cleanFolders(moved), changes, id: newId };
     }
+    // ---- the settings file with several windows (T3.1) ----
+    // Every window holds the whole settings file (meta.json) in memory. Written back whole, the window that saved last
+    // undid what the others had saved: a folder made in window A was gone as soon as window B saved anything. So a save
+    // reads the file first and merges three ways: `base` = this window at its last look at the file, `mine` = this
+    // window now, `theirs` = the file now. What one side changed is that side's; where both changed the same thing the
+    // side that saves now wins; what either side deleted stays deleted.
+    const stableJson = (v) => JSON.stringify(v, (_, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.keys(x).sort().reduce((o, k) => { o[k] = x[k]; return o; }, {}) : x));
+    const sameJson = (a, b) => a === b || stableJson(a) === stableJson(b);
+    // Folders are matched by their permanent uid (a moved folder changes its id, never its uid), older entries without
+    // one by id; then field by field, so a colour set in one window and a rename made in the other are both kept.
+    function mergeFolders(base, mine, theirs) {
+      const B = cleanFolders(base), M = cleanFolders(mine), T = cleanFolders(theirs);
+      if (sameJson(M, B)) return T;
+      if (sameJson(T, B) || sameJson(T, M)) return M;
+      const keyOf = (f) => f.uid || "id:" + f.id;
+      const index = (list) => new Map(list.map((f) => [keyOf(f), f]));
+      const b = index(B), m = index(M), t = index(T);
+      const merged = [];
+      for (const f of M) {
+        const was = b.get(keyOf(f)), other = t.get(keyOf(f));
+        if (was && !other) continue; // deleted in the file
+        if (!was || !other) { merged.push(f); continue; } // made here
+        const entry = {};
+        for (const field of new Set([...Object.keys(was), ...Object.keys(f), ...Object.keys(other)])) {
+          const value = sameJson(f[field], was[field]) ? other[field] : f[field];
+          if (value !== undefined) entry[field] = value;
+        }
+        merged.push(entry);
+      }
+      for (const f of T) if (!b.has(keyOf(f)) && !m.has(keyOf(f))) merged.push(f); // made in the file
+      // One entry per folder id. Two windows can make the same folder independently (the date folder of a first
+      // reminder): the entry that is in the file is the folder, so every window ends with the same uid for it.
+      const out = [], at = new Map();
+      for (const f of merged) {
+        const i = at.get(f.id);
+        if (i === undefined) { at.set(f.id, out.length); out.push(f); }
+        else if (!t.has(keyOf(out[i])) && t.has(keyOf(f))) out[i] = f;
+      }
+      return cleanFolders(out);
+    }
+    // Folders and the alert / Agenda rules are the same in every window: a window takes them over (`taken`). All other
+    // settings (layout, view, the note opened last) are each window's own, and the file gets a value from the window
+    // that changed it last; a window that did not change a value never writes its older copy over the file's.
+    const META_SHARED_KEYS = Object.freeze(["folders", "calendarAlertSettings", "calendarNoteAlertOverrides", "calendarAgendaDefaults", "calendarNoteAgendaOverrides"]);
+    const META_PER_NOTE_KEYS = Object.freeze(["calendarNoteAlertOverrides", "calendarNoteAgendaOverrides"]);
+    function mergeMetaMap(base, mine, theirs) {
+      const b = base || {}, m = mine || {}, t = theirs || {}, out = {};
+      for (const k of Object.keys(t)) {
+        if (Object.hasOwn(m, k)) out[k] = sameJson(m[k], b[k]) ? t[k] : m[k];
+        else if (!Object.hasOwn(b, k)) out[k] = t[k]; // made in the file (in `b` too: removed here)
+      }
+      for (const k of Object.keys(m)) if (!Object.hasOwn(t, k) && !Object.hasOwn(b, k)) out[k] = m[k]; // made here
+      return out;
+    }
+    // -> { file: what to write, taken: the shared values that differ from this window's }. `theirs` null = no file.
+    function mergeMeta(base, mine, theirs) {
+      if (!theirs) return { file: { ...mine }, taken: {} };
+      const was = base || {}, file = {}, taken = {};
+      for (const key of Object.keys(mine)) {
+        if (key === "folders") file[key] = mergeFolders(was[key], mine[key], theirs[key]);
+        else if (META_PER_NOTE_KEYS.includes(key)) file[key] = mergeMetaMap(was[key], mine[key], theirs[key]);
+        else file[key] = Object.hasOwn(theirs, key) && sameJson(mine[key], was[key]) ? theirs[key] : mine[key];
+        if (META_SHARED_KEYS.includes(key) && !sameJson(file[key], mine[key])) taken[key] = file[key];
+      }
+      return { file, taken };
+    }
     // The tree as visible rows (a collapsed folder hides what is inside). `pinned` is the virtual first row.
     const TREE_ORDERS = Object.freeze(["folders-first", "notes-first", "mixed-by-name"]);
     const cleanTreeOrder = (v) => (TREE_ORDERS.includes(v) ? v : "folders-first");
@@ -5836,6 +5902,10 @@
       let metaTimer = null;
       let metaDirty = false;
       let metaReady = false; // true once meta.json has been read (or is known to be absent); nothing is written before
+      let metaBase = null; // this window's settings at its last look at the file; a value that differs is its own change (mergeMeta)
+      let metaRetry = 0; // saves of the settings that failed in a row
+      let keptDamagedMeta = ""; // the damaged text already copied to meta.json.corrupt
+      let missedMeta = false; // another window saved the settings while this one was reading the folder
       let closed = false;
       let opening = false; // the folder is being read; messages from other windows wait in missedRemote
       const missedRemote = new Map(); // note id -> conflict copy path named by the message
@@ -5983,31 +6053,43 @@
         }
         return absent ? { state: "missing" } : { state: "unreadable", error: failure };
       }
-      async function loadMeta() {
-        metaReady = false;
-        meta = { ...DEFAULT_META, geo: {}, recent: [], folders: [] };
+      // The file as a settings object: { state: "ok", value } | "missing" (none, empty or damaged) | "unreadable".
+      async function readMeta(whenDamaged) {
         const read = await readMetaFile();
-        if (read.state === "unreadable")
-          throw new Error("The Notes settings file (meta.json) is there but could not be read: " + String(read.error?.message || read.error));
-        if (read.state === "ok") {
-          let raw = null;
+        if (read.state !== "ok") return read;
+        let raw = null;
+        try {
+          raw = JSON.parse(read.text);
+        } catch (_) {}
+        if (raw && typeof raw === "object" && !Array.isArray(raw)) return { state: "ok", value: metaFromRaw(raw) };
+        if (typeof read.text === "string" && read.text.trim() && read.text !== keptDamagedMeta) {
+          // Damaged: keep what was there (one copy, replaced by a newer damaged file).
+          warn("The Notes settings file (meta.json) is damaged; a copy is kept as meta.json.corrupt and " + whenDamaged);
           try {
-            raw = JSON.parse(read.text);
-          } catch (_) {}
-          if (raw && typeof raw === "object" && !Array.isArray(raw)) applyMetaRaw(raw);
-          else if (typeof read.text === "string" && read.text.trim()) {
-            // Damaged: keep what was there (one copy, replaced by a newer damaged file) and start from defaults.
-            warn("The Notes settings file (meta.json) is damaged; a copy is kept as meta.json.corrupt and the settings start fresh");
-            try {
-              await io.writeUTF8(io.join(dir, "meta.json.corrupt"), read.text, {});
-            } catch (error) {
-              warn(error);
-            }
+            await io.writeUTF8(io.join(dir, "meta.json.corrupt"), read.text, {});
+            keptDamagedMeta = read.text;
+          } catch (error) {
+            warn(error);
           }
         }
+        return { state: "missing" };
+      }
+      async function loadMeta() {
+        metaReady = false;
+        keptDamagedMeta = "";
+        meta = metaFromRaw(null);
+        const read = await readMeta("the settings start fresh");
+        if (read.state === "unreadable")
+          throw new Error("The Notes settings file (meta.json) is there but could not be read: " + String(read.error?.message || read.error));
+        if (read.state === "ok") meta = read.value;
+        metaBase = cloneJson(meta);
+        metaRetry = 0;
         metaReady = true;
       }
-      function applyMetaRaw(raw) {
+      // A complete settings object: the defaults, with every valid value of `raw` (what a file holds).
+      function metaFromRaw(raw) {
+        const meta = { ...DEFAULT_META, geo: {}, recent: [], folders: [] }; // a new object, not the store's
+        if (!raw || typeof raw !== "object") return meta;
         try {
           if (typeof raw.lastNoteId === "string") meta.lastNoteId = raw.lastNoteId;
           if (raw.size === "full" || raw.size === "peek" || raw.size === "span") meta.size = raw.size;
@@ -6057,6 +6139,7 @@
             meta.calendarNoteAgendaOverrides = CALENDAR_PART.cleanNoteAgendaOverrides(raw.calendarNoteAgendaOverrides);
           }
         } catch (_) {}
+        return meta;
       }
 
       function queue(task) {
@@ -6065,18 +6148,61 @@
         return chain;
       }
 
+      const cloneJson = (v) => JSON.parse(JSON.stringify(v));
+      // The windows of the application save the settings one after another (the coordinator they share).
+      const metaTurn = (task) => (typeof withHistoryLock === "function" ? withHistoryLock("meta:" + io.join(dir, "meta.json"), task) : task());
+      const META_RETRY_MS = [2000, 5000, 15000, 60000];
+      // Shared settings that another window changed become this window's, and what is drawn from them is drawn again
+      // (folder trees, the Zen sidebar folders, the Zen Agenda folder).
+      function takeMeta(taken) {
+        const keys = Object.keys(taken);
+        if (!keys.length) return;
+        for (const key of keys) meta[key] = cloneJson(taken[key]);
+        emit("tree", "", { remote: true });
+      }
+      // Read, merge, write (see mergeMeta). Never writes over a file it could not read: that file holds what the other
+      // windows saved. A failed save stays pending and is tried again.
+      async function saveMeta() {
+        try {
+          const read = await readMeta("this window's settings are written");
+          if (read.state === "unreadable")
+            throw new Error("The Notes settings file (meta.json) could not be read, so it was not written over; the change is saved later: " + String(read.error?.message || read.error));
+          const mine = cloneJson(meta);
+          const { file, taken } = mergeMeta(metaBase, mine, read.state === "ok" ? read.value : null);
+          takeMeta(taken);
+          if (read.state !== "ok" || !sameJson(file, read.value)) {
+            await io.writeUTF8(io.join(dir, "meta.json"), JSON.stringify(file), { tmpPath: io.join(dir, "meta.json.tmp") });
+            // The other windows look at the file only when something they share changed (not for every note opened here).
+            if (!closed && (read.state !== "ok" || META_SHARED_KEYS.some((key) => !sameJson(file[key], read.value[key])))) notify({ origin: windowId, kind: "meta", dir });
+          }
+          metaBase = { ...mine, ...cloneJson(taken) };
+          metaRetry = 0;
+        } catch (error) {
+          metaDirty = true;
+          if (!metaRetry) warn(error);
+          if (!closed && metaTimer === null) metaTimer = setTimer(writeMetaNow, META_RETRY_MS[Math.min(metaRetry, META_RETRY_MS.length - 1)]);
+          metaRetry++;
+        }
+      }
       function writeMetaNow() {
         if (metaTimer !== null) clearTimer(metaTimer);
         metaTimer = null;
         // Never before the file has been read: what is in memory then are the defaults, not the person's settings.
         if (!metaDirty || !dir || !metaReady) return Promise.resolve();
         metaDirty = false;
-        const text = JSON.stringify(meta);
-        return queue(() =>
-          io.writeUTF8(io.join(dir, "meta.json"), text, {
-            tmpPath: io.join(dir, "meta.json.tmp"),
-          }),
-        );
+        return queue(() => metaTurn(saveMeta));
+      }
+      // Another window saved the settings: take over what is the same in every window. Nothing is written, and what
+      // this window changed itself and has not saved yet stays its own change.
+      function refreshMeta(again = true) {
+        if (!dir || !metaReady || closed) return Promise.resolve();
+        return queue(async () => {
+          const read = await readMeta("the settings of the open windows are kept");
+          if (read.state === "unreadable" && again && !closed) setTimer(() => refreshMeta(false), 1500);
+          if (read.state !== "ok" || !metaBase) return;
+          takeMeta(mergeMeta(metaBase, cloneJson(meta), read.value).taken);
+          for (const key of META_SHARED_KEYS) metaBase[key] = cloneJson(read.value[key]);
+        });
       }
       function setMeta(patch) {
         let changed = false;
@@ -6431,6 +6557,7 @@
           opening = true;
           missedRemote.clear();
           missedHistory = false;
+          missedMeta = false;
           const load = async () => {
             await loadAll();
             await loadMeta();
@@ -6457,10 +6584,16 @@
                 await api.flush().catch(warn); // nothing to write on an ordinary start
               }, { waitMs: STARTUP_TURN_WAIT_MS });
             } else await load();
-            // What another window saved while this one was reading the folder.
-            const missed = [...missedRemote];
-            missedRemote.clear();
-            for (const [id, backup] of missed) await reloadFromDisk(id, backup).catch(warn);
+            // What another window saved while this one was reading the folder, and while this catching up runs.
+            while (missedRemote.size || missedMeta) {
+              const missed = [...missedRemote];
+              missedRemote.clear();
+              for (const [id, backup] of missed) await reloadFromDisk(id, backup).catch(warn);
+              if (missedMeta) {
+                missedMeta = false;
+                await refreshMeta();
+              }
+            }
             if (missedHistory) items?.history?.refresh?.().catch(warn);
           } finally {
             opening = false;
@@ -7324,6 +7457,12 @@
             if (msg.dir !== dir) return;
             if (opening) missedHistory = true;
             else items?.history?.refresh?.().catch(warn);
+            return;
+          }
+          if (msg.kind === "meta") {
+            if (msg.dir !== dir) return;
+            if (opening) missedMeta = true;
+            else refreshMeta();
             return;
           }
           if (typeof msg.id !== "string" || !/^[\w.-]+$/.test(msg.id)) return;
@@ -9487,7 +9626,7 @@
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
-        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
+        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, mergeFolders, mergeMeta, META_SHARED_KEYS, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,

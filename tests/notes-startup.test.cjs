@@ -479,6 +479,27 @@ const REAL_FOLDERS = ["Home/fhome00001/", "Work projects/fwork00001/blue"];
     await a.close(); await b.close();
   });
 
+  await test("...and neither is a save made while that window catches up on what it missed", async () => {
+    const w = world({ mode: "" });
+    const a = w.openWindow({ id: "a" }), b = w.openWindow({ id: "b" });
+    a.start(); b.start();
+    await a.seam.ensureStore();
+    const release = w.hold((op, p, id) => id === "b" && op === "read" && p === META);
+    const loading = b.seam.ensureStore();
+    await w.settle();
+    a.seam.store.update("n1", "# One\nfirst change\n");
+    await a.seam.store.flush();
+    // Window b reads n1.md once more when it has loaded. That read takes a moment, and window a saves n2.md meanwhile.
+    const again = w.hold((op, p, id) => id === "b" && op === "read" && p === DIR + "/n1.md");
+    release(); await w.settle();
+    a.seam.store.update("n2", "# Two\nsecond change\n");
+    await a.seam.store.flush();
+    again(); await loading; await w.settle();
+    assert.match(b.seam.store.get("n1").body, /first change/);
+    assert.match(b.seam.store.get("n2").body, /second change/, "window b shows the second save too");
+    await a.close(); await b.close();
+  });
+
   // =====================================================================================================================
   // 5. The settings file
   // =====================================================================================================================
