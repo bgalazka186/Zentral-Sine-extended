@@ -2612,6 +2612,28 @@
     ]
   },
   {
+    "property": "zen.workspace.zentral.notes.language",
+    "label": "Notes language",
+    "type": "dropdown",
+    "defaultValue": "en",
+    "options": [
+      {
+        "label": "English",
+        "value": "en"
+      },
+      {
+        "label": "Polski",
+        "value": "pl"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.language_accept_all",
+    "label": "Accept date words from other languages",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
     "label": "A Notes panel opens in",
     "type": "dropdown",
     "defaultValue": "last",

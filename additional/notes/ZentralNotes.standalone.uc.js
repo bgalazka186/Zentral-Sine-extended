@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.193
+// @version 3.3.195
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.193, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.195, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.193";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.195";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1208,6 +1208,271 @@ const __zentralEmbeddedLoader = (function () {
 })();
 
 },
+"additional/notes/i18n/en.js": function (window) {
+// Pure English language table for Zentral Notes & Calendar (AU-B4a / AU-B4b).
+// Adding a language is a data file, not parser or UI logic.
+(function () {
+  "use strict";
+
+  const freezeDeep = (value) => {
+    if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+    Object.freeze(value);
+    for (const key of Object.keys(value)) freezeDeep(value[key]);
+    return value;
+  };
+
+  const lang = freezeDeep({
+    code: "en",
+    locale: "en-GB",
+    name: "English",
+    todayLabel: "Today",
+    overdueLabel: "Overdue",
+    agendaLabels: ["Today", "Tomorrow"],
+    dateKinds: {
+      today: "Today",
+      tomorrow: "Tomorrow",
+      next: "Next work day",
+      other: "Other date\u2026",
+      earlier: "Earlier days",
+    },
+    relative: {
+      "-2": ["day before yesterday", "the day before yesterday"],
+      "-1": ["yesterday"],
+      "0": ["today"],
+      "1": ["tomorrow", "tmr", "tmrw"],
+      "2": ["day after tomorrow", "the day after tomorrow", "overmorrow"],
+    },
+    weekdays: [
+      ["sunday", "sun"],
+      ["monday", "mon"],
+      ["tuesday", "tue", "tues"],
+      ["wednesday", "wed"],
+      ["thursday", "thu", "thur", "thurs"],
+      ["friday", "fri"],
+      ["saturday", "sat"],
+    ],
+    weekdayPrefixes: ["on", "this", "next"],
+    weekdaysDisplay: {
+      short: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+      long: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+    },
+    months: [
+      ["january", "jan"],
+      ["february", "feb"],
+      ["march", "mar"],
+      ["april", "apr"],
+      ["may"],
+      ["june", "jun"],
+      ["july", "jul"],
+      ["august", "aug"],
+      ["september", "sep", "sept"],
+      ["october", "oct"],
+      ["november", "nov"],
+      ["december", "dec"],
+    ],
+    offsets: {
+      phrases: [
+        { phrase: "next week", unit: "w", count: 1 },
+        { phrase: "last week", unit: "w", count: -1 },
+        { phrase: "next month", unit: "m", count: 1 },
+        { phrase: "last month", unit: "m", count: -1 },
+        { phrase: "next year", unit: "y", count: 1 },
+        { phrase: "last year", unit: "y", count: -1 },
+        { phrase: "in a day", unit: "d", count: 1 },
+        { phrase: "in a week", unit: "w", count: 1 },
+        { phrase: "in a month", unit: "m", count: 1 },
+        { phrase: "in a year", unit: "y", count: 1 },
+      ],
+      counted: [
+        {
+          prefix: "in",
+          suffix: "",
+          sign: 1,
+          units: {
+            d: ["day", "days"],
+            w: ["week", "weeks"],
+            m: ["month", "months"],
+            y: ["year", "years"],
+          },
+        },
+        {
+          prefix: "",
+          suffix: "from now",
+          sign: 1,
+          units: {
+            d: ["day", "days"],
+            w: ["week", "weeks"],
+            m: ["month", "months"],
+            y: ["year", "years"],
+          },
+        },
+        {
+          prefix: "",
+          suffix: "ago",
+          sign: -1,
+          units: {
+            d: ["day", "days"],
+            w: ["week", "weeks"],
+            m: ["month", "months"],
+            y: ["year", "years"],
+          },
+        },
+      ],
+    },
+    ordinals: ["st", "nd", "rd", "th", "."],
+    strings: {},
+  });
+
+  if (typeof window !== "undefined" && window) {
+    if (!window.__zentralNotesLangTables) window.__zentralNotesLangTables = {};
+    window.__zentralNotesLangTables[lang.code] = lang;
+    if (window.__zentralNotesLoader && typeof window.__zentralNotesLoader.define === "function") {
+      window.__zentralNotesLoader.define("notes-lang-en", lang);
+    }
+  }
+  if (typeof module === "object" && module) module.exports = lang;
+})();
+
+},
+"additional/notes/i18n/pl.js": function (window) {
+// Pure Polish language table for Zentral Notes & Calendar (AU-B4a / AU-B4b).
+// Adding a language is a data file, not parser or UI logic.
+(function () {
+  "use strict";
+
+  const freezeDeep = (value) => {
+    if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+    Object.freeze(value);
+    for (const key of Object.keys(value)) freezeDeep(value[key]);
+    return value;
+  };
+
+  const lang = freezeDeep({
+    code: "pl",
+    locale: "pl-PL",
+    name: "Polski (Polish)",
+    todayLabel: "Dzi\u015b",
+    overdueLabel: "Zaleg\u0142e",
+    agendaLabels: ["Dzi\u015b", "Jutro", "Pojutrze"],
+    dateKinds: {
+      today: "Dzi\u015b",
+      tomorrow: "Jutro",
+      next: "Nast\u0119pny dzie\u0144 roboczy",
+      other: "Inna data\u2026",
+      earlier: "Wcze\u015bniejsze dni",
+    },
+    relative: {
+      "-2": ["przedwczoraj"],
+      "-1": ["wczoraj"],
+      "0": ["dzi\u015b", "dzis", "dzisiaj"],
+      "1": ["jutro"],
+      "2": ["pojutrze"],
+      "3": ["popojutrze"],
+    },
+    weekdays: [
+      ["niedziela", "niedziel\u0119", "niedziele", "niedz", "ndz", "nd"],
+      ["poniedzia\u0142ek", "poniedzialek", "pon", "pn"],
+      ["wtorek", "wt"],
+      ["\u015broda", "\u015brod\u0119", "sroda", "srode", "\u015br", "sr"],
+      ["czwartek", "czw", "cz"],
+      ["pi\u0105tek", "piatek", "pt"],
+      ["sobota", "sobot\u0119", "sobote", "sob", "sb"],
+    ],
+    weekdayPrefixes: [
+      "w",
+      "we",
+      "na",
+      "ten",
+      "ta",
+      "t\u0119",
+      "przysz\u0142y",
+      "przysz\u0142a",
+      "przysz\u0142\u0105",
+      "w przysz\u0142y",
+      "w przysz\u0142\u0105",
+      "nast\u0119pny",
+      "nast\u0119pna",
+      "nast\u0119pn\u0105",
+      "w nast\u0119pny",
+      "w nast\u0119pn\u0105",
+    ],
+    weekdaysDisplay: {
+      short: ["Pon", "Wt", "\u015ar", "Czw", "Pt", "Sob", "Ndz"],
+      long: ["poniedzia\u0142ek", "wtorek", "\u015broda", "czwartek", "pi\u0105tek", "sobota", "niedziela"],
+    },
+    months: [
+      ["stycze\u0144", "stycznia", "styczniu", "sty"],
+      ["luty", "lutego", "lutym", "lut"],
+      ["marzec", "marca", "marcu", "mar"],
+      ["kwiecie\u0144", "kwietnia", "kwietniu", "kwi", "kwiec"],
+      ["maj", "maja", "maju"],
+      ["czerwiec", "czerwca", "czerwcu", "cze", "czerw"],
+      ["lipiec", "lipca", "lipcu", "lip"],
+      ["sierpie\u0144", "sierpnia", "sierpniu", "sie", "sierp"],
+      ["wrzesie\u0144", "wrze\u015bnia", "wrze\u015bniu", "wrz", "wrzes"],
+      ["pa\u017adziernik", "pa\u017adziernika", "pa\u017adzierniku", "pa\u017a", "paz"],
+      ["listopad", "listopada", "listopadzie", "lis", "list"],
+      ["grudzie\u0144", "grudnia", "grudniu", "gru", "grudz"],
+    ],
+    offsets: {
+      phrases: [
+        { phrase: "za dzie\u0144", unit: "d", count: 1 },
+        { phrase: "dzie\u0144 temu", unit: "d", count: -1 },
+        { phrase: "za tydzie\u0144", unit: "w", count: 1 },
+        { phrase: "tydzie\u0144 temu", unit: "w", count: -1 },
+        { phrase: "przysz\u0142y tydzie\u0144", unit: "w", count: 1 },
+        { phrase: "w przysz\u0142ym tygodniu", unit: "w", count: 1 },
+        { phrase: "nast\u0119pny tydzie\u0144", unit: "w", count: 1 },
+        { phrase: "w nast\u0119pnym tygodniu", unit: "w", count: 1 },
+        { phrase: "zesz\u0142y tydzie\u0144", unit: "w", count: -1 },
+        { phrase: "w zesz\u0142ym tygodniu", unit: "w", count: -1 },
+        { phrase: "za miesi\u0105c", unit: "m", count: 1 },
+        { phrase: "przysz\u0142y miesi\u0105c", unit: "m", count: 1 },
+        { phrase: "w przysz\u0142ym miesi\u0105cu", unit: "m", count: 1 },
+        { phrase: "za rok", unit: "y", count: 1 },
+        { phrase: "przysz\u0142y rok", unit: "y", count: 1 },
+        { phrase: "w przysz\u0142ym roku", unit: "y", count: 1 },
+      ],
+      counted: [
+        {
+          prefix: "za",
+          suffix: "",
+          sign: 1,
+          units: {
+            d: ["dzie\u0144", "dni"],
+            w: ["tydzie\u0144", "tygodnie", "tygodni"],
+            m: ["miesi\u0105c", "miesi\u0105ce", "miesi\u0119cy"],
+            y: ["rok", "lata", "lat"],
+          },
+        },
+        {
+          prefix: "",
+          suffix: "temu",
+          sign: -1,
+          units: {
+            d: ["dzie\u0144", "dni"],
+            w: ["tydzie\u0144", "tygodnie", "tygodni"],
+            m: ["miesi\u0105c", "miesi\u0105ce", "miesi\u0119cy"],
+            y: ["rok", "lata", "lat"],
+          },
+        },
+      ],
+    },
+    ordinals: [".", "-go", "go", "-ego", "ego"],
+    strings: {},
+  });
+
+  if (typeof window !== "undefined" && window) {
+    if (!window.__zentralNotesLangTables) window.__zentralNotesLangTables = {};
+    window.__zentralNotesLangTables[lang.code] = lang;
+    if (window.__zentralNotesLoader && typeof window.__zentralNotesLoader.define === "function") {
+      window.__zentralNotesLoader.define("notes-lang-pl", lang);
+    }
+  }
+  if (typeof module === "object" && module) module.exports = lang;
+})();
+
+},
 "additional/notes/calendar/ZentralNotesCalendar.js": function (window) {
 /*
  * ZENTRAL FILE GUIDE - additional/notes/calendar/ZentralNotesCalendar.js
@@ -1262,26 +1527,284 @@ const __zentralEmbeddedLoader = (function () {
   const addDays = (ms, n) => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, d.getHours(), d.getMinutes()).getTime(); };
   const iso = (ms) => new Date(ms).toISOString();
 
-  // ---------- parsing ----------
-  const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-  // Month aliases are offline and cover English, German and Polish (including Polish genitive forms).
-  const MONTH_ALIASES = Object.create(null);
-  const MONTH_WORDS = [
-    ["january", "jan", "januar", "styczen", "stycznia", "sty"],
-    ["february", "feb", "februar", "luty", "lutego", "lut"],
-    ["march", "mar", "maerz", "marz", "marzec", "marca"],
-    ["april", "apr", "kwiecien", "kwietnia", "kwi"],
-    ["may", "mai", "maj", "maja"],
-    ["june", "jun", "juni", "czerwiec", "czerwca", "cze"],
-    ["july", "jul", "juli", "lipiec", "lipca", "lip"],
-    ["august", "aug", "sierpien", "sierpnia", "sie"],
-    ["september", "sep", "sept", "wrzesien", "wrzesnia", "wrz"],
-    ["october", "oct", "oktober", "okt", "pazdziernik", "pazdziernika", "paz"],
-    ["november", "nov", "listopad", "listopada", "lis"],
-    ["december", "dec", "dezember", "dez", "grudzien", "grudnia", "gru"],
-  ];
-  MONTH_WORDS.forEach((words, i) => words.forEach((word) => { MONTH_ALIASES[word] = i + 1; }));
-  const monthWord = (word) => String(word || "").toLowerCase().replace(/\.$/, "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  // ---------- language registry & parsing (AU-B4a) ----------
+  // Language dictionaries live in pure data files (`additional/notes/i18n/*.js`); parser logic is table-driven.
+  const NOTES_LANGUAGES = Object.freeze(["en", "pl"]);
+  const DEFAULT_NOTES_LANGUAGE = "en";
+  const LANG_REGISTRY = new Map();
+  const foldLanguageText = (text) =>
+    String(text ?? "")
+      .replace(/[\u0141\u0142]/g, "l")
+      .replace(/\u00df/g, "ss")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  const escapeRegExp = (text) => String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Legacy German month words accepted when acceptAll !== false so multilingual month dates keep working.
+  const EXTRA_MONTH_ALIASES = Object.freeze({
+    januar: 1,
+    februar: 2,
+    maerz: 3,
+    marz: 3,
+    mai: 5,
+    juni: 6,
+    juli: 7,
+    oktober: 10,
+    okt: 10,
+    dezember: 12,
+    dez: 12,
+  });
+
+  function compileLanguageTable(raw) {
+    if (!raw || typeof raw !== "object" || typeof raw.code !== "string" || !raw.code.trim()) return null;
+    const code = raw.code.trim().toLowerCase();
+    const locale = typeof raw.locale === "string" && raw.locale.trim() ? raw.locale.trim() : code;
+    const name = typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : code;
+    const agendaLabels = Object.freeze(
+      Array.isArray(raw.agendaLabels) && raw.agendaLabels.length
+        ? raw.agendaLabels.map((s) => String(s))
+        : ["Today", "Tomorrow"],
+    );
+    const todayLabel = typeof raw.todayLabel === "string" && raw.todayLabel ? raw.todayLabel : agendaLabels[0] || "Today";
+    const overdueLabel = typeof raw.overdueLabel === "string" && raw.overdueLabel ? raw.overdueLabel : "Overdue";
+    const dk = raw.dateKinds && typeof raw.dateKinds === "object" ? raw.dateKinds : {};
+    const dateKinds = Object.freeze({
+      today: String(dk.today || todayLabel),
+      tomorrow: String(dk.tomorrow || agendaLabels[1] || "Tomorrow"),
+      next: String(dk.next || "Next work day"),
+      other: String(dk.other || "Other date\u2026"),
+      earlier: String(dk.earlier || "Earlier days"),
+    });
+    const shortMon = Array.isArray(raw.weekdaysDisplay?.short) && raw.weekdaysDisplay.short.length === 7
+      ? raw.weekdaysDisplay.short.map((s) => String(s))
+      : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const longMon = Array.isArray(raw.weekdaysDisplay?.long) && raw.weekdaysDisplay.long.length === 7
+      ? raw.weekdaysDisplay.long.map((s) => String(s))
+      : ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    const weekdaysDisplay = Object.freeze({
+      short: Object.freeze(shortMon),
+      long: Object.freeze(longMon),
+      shortSun: Object.freeze([shortMon[6], ...shortMon.slice(0, 6)]),
+      longSun: Object.freeze([longMon[6], ...longMon.slice(0, 6)]),
+    });
+
+    const relativeMap = new Map();
+    const multiWordPhrases = new Set();
+    if (raw.relative && typeof raw.relative === "object") {
+      for (const [offsetKey, words] of Object.entries(raw.relative)) {
+        const offset = Number(offsetKey);
+        if (!Number.isInteger(offset) || !Array.isArray(words)) continue;
+        for (const w of words) {
+          const folded = foldLanguageText(w);
+          if (!folded) continue;
+          relativeMap.set(folded, offset);
+          if (folded.includes(" ")) multiWordPhrases.add(folded);
+        }
+      }
+    }
+
+    const weekdayMap = new Map();
+    const prefixes = Array.isArray(raw.weekdayPrefixes)
+      ? raw.weekdayPrefixes.map((p) => foldLanguageText(p)).filter(Boolean)
+      : [];
+    if (Array.isArray(raw.weekdays) && raw.weekdays.length === 7) {
+      raw.weekdays.forEach((words, wd) => {
+        if (!Array.isArray(words)) return;
+        for (const w of words) {
+          const folded = foldLanguageText(String(w || "").replace(/\.$/, ""));
+          if (!folded) continue;
+          weekdayMap.set(folded, wd);
+          for (const pref of prefixes) {
+            const full = pref + " " + folded;
+            weekdayMap.set(full, wd);
+            multiWordPhrases.add(full);
+          }
+        }
+      });
+    }
+
+    const monthMap = new Map();
+    if (Array.isArray(raw.months) && raw.months.length === 12) {
+      raw.months.forEach((words, idx) => {
+        if (!Array.isArray(words)) return;
+        for (const w of words) {
+          const folded = foldLanguageText(String(w || "").replace(/\.$/, ""));
+          if (folded) monthMap.set(folded, idx + 1);
+        }
+      });
+    }
+
+    const phraseOffsets = new Map();
+    if (Array.isArray(raw.offsets?.phrases)) {
+      for (const entry of raw.offsets.phrases) {
+        const folded = foldLanguageText(entry?.phrase);
+        const count = Number(entry?.count);
+        const unit = String(entry?.unit || "");
+        if (!folded || !Number.isInteger(count) || !["d", "w", "m", "y"].includes(unit)) continue;
+        phraseOffsets.set(folded, Object.freeze({ unit, count }));
+        if (folded.includes(" ")) multiWordPhrases.add(folded);
+      }
+    }
+
+    const countedRules = [];
+    const countedPrefixRes = [];
+    if (Array.isArray(raw.offsets?.counted)) {
+      for (const rule of raw.offsets.counted) {
+        const pref = foldLanguageText(rule?.prefix);
+        const suff = foldLanguageText(rule?.suffix);
+        const sign = rule?.sign === -1 ? -1 : 1;
+        const unitMap = new Map();
+        const unitWords = [];
+        for (const unit of ["d", "w", "m", "y"]) {
+          for (const u of rule?.units?.[unit] || []) {
+            const fu = foldLanguageText(u);
+            if (fu) { unitMap.set(fu, unit); unitWords.push(escapeRegExp(fu)); }
+          }
+        }
+        if (!unitWords.length) continue;
+        unitWords.sort((a, b) => b.length - a.length);
+        const unitGroup = "(?:" + unitWords.join("|") + ")";
+        const head = pref ? escapeRegExp(pref) + " " : "";
+        const tail = suff ? " " + escapeRegExp(suff) : "";
+        countedRules.push({
+          re: new RegExp("^" + head + "(\\d{1,4}) (" + unitGroup + ")" + tail + "$"),
+          sign,
+          unitMap,
+        });
+        const rawPref = pref ? pref.replace(/ /g, "\\s+") + "\\s+" : "";
+        const rawSuff = suff ? "\\s+" + suff.replace(/ /g, "\\s+") : "";
+        countedPrefixRes.push(new RegExp("^(" + rawPref + "\\d{1,4}\\s+[\\p{L}.]+" + rawSuff + ")(?=\\s|$)", "iu"));
+      }
+    }
+
+    const ordinalSuffixes = Array.isArray(raw.ordinals)
+      ? raw.ordinals.map((s) => foldLanguageText(s)).filter(Boolean).sort((a, b) => b.length - a.length)
+      : ["."];
+    const ordinalRe = ordinalSuffixes.length
+      ? new RegExp("^(\\d{1,2})(?:" + ordinalSuffixes.map(escapeRegExp).join("|") + ")?$")
+      : /^(\d{1,2})\.?$/;
+
+    // Verify each candidate span with parseDateText in parseDatePrefix.
+    const sortedPhrases = [...multiWordPhrases].sort((a, b) => b.length - a.length);
+    const wordCounts = [...new Set(sortedPhrases.map((p) => p.split(" ").length))].sort((a, b) => b - a);
+    const phraseSpanRes = [
+      ...countedPrefixRes,
+      ...wordCounts.map((n) => new RegExp("^([\\p{L}.-]+(?:\\s+[\\p{L}.-]+){" + (n - 1) + "})(?=\\s|$)", "iu")),
+    ];
+
+    return Object.freeze({
+      code,
+      locale,
+      name,
+      todayLabel,
+      overdueLabel,
+      agendaLabels,
+      dateKinds,
+      weekdaysDisplay,
+      relativeMap,
+      weekdayMap,
+      monthMap,
+      phraseOffsets,
+      countedRules,
+      ordinalRe,
+      prefixRes: phraseSpanRes,
+      strings: raw.strings && typeof raw.strings === "object" ? raw.strings : Object.freeze({}),
+    });
+  }
+
+  function registerLanguage(raw) {
+    const compiled = compileLanguageTable(raw);
+    if (!compiled) return null;
+    LANG_REGISTRY.set(compiled.code, compiled);
+    return compiled;
+  }
+
+  // Bootstrap built-in language tables across browser loader, standalone bundle, VM test harness, and Node require.
+  (function bootstrapBuiltinLanguages() {
+    if (typeof window !== "undefined" && window) {
+      const preloaded = window.__zentralNotesLangTables;
+      if (preloaded && typeof preloaded === "object") {
+        for (const key of Object.keys(preloaded)) registerLanguage(preloaded[key]);
+      }
+      if (window.__zentralNotesLoader && typeof window.__zentralNotesLoader.get === "function") {
+        for (const code of NOTES_LANGUAGES) {
+          if (!LANG_REGISTRY.has(code)) {
+            const mod = window.__zentralNotesLoader.get("notes-lang-" + code);
+            if (mod) registerLanguage(mod);
+          }
+        }
+      }
+    }
+    if (typeof require === "function") {
+      try { if (!LANG_REGISTRY.has("en")) registerLanguage(require("../i18n/en.js")); } catch (_) {}
+      try { if (!LANG_REGISTRY.has("pl")) registerLanguage(require("../i18n/pl.js")); } catch (_) {}
+    }
+    // Minimal inline fallback if neither loader nor require supplied English yet.
+    if (!LANG_REGISTRY.has("en")) {
+      registerLanguage({
+        code: "en",
+        locale: "en-GB",
+        name: "English",
+        agendaLabels: ["Today", "Tomorrow"],
+        relative: { "-1": ["yesterday"], "0": ["today"], "1": ["tomorrow"] },
+        weekdays: [["sunday", "sun"], ["monday", "mon"], ["tuesday", "tue"], ["wednesday", "wed"], ["thursday", "thu"], ["friday", "fri"], ["saturday", "sat"]],
+        months: [["january", "jan"], ["february", "feb"], ["march", "mar"], ["april", "apr"], ["may"], ["june", "jun"], ["july", "jul"], ["august", "aug"], ["september", "sep", "sept"], ["october", "oct"], ["november", "nov"], ["december", "dec"]],
+        ordinals: ["st", "nd", "rd", "th", "."],
+      });
+    }
+  })();
+
+  function cleanNotesLanguage(value) {
+    const s = String(value ?? "").trim().toLowerCase();
+    if (!s) return DEFAULT_NOTES_LANGUAGE;
+    if (LANG_REGISTRY.has(s)) return s;
+    const base = s.split(/[-_]/)[0];
+    if (base && LANG_REGISTRY.has(base)) return base;
+    return DEFAULT_NOTES_LANGUAGE;
+  }
+  function notesLanguageTable(lang) {
+    return LANG_REGISTRY.get(cleanNotesLanguage(lang)) || LANG_REGISTRY.get(DEFAULT_NOTES_LANGUAGE);
+  }
+  function notesLocaleFor(lang) {
+    return notesLanguageTable(lang)?.locale || "en-GB";
+  }
+  function normalizeDateParseOptions(opts) {
+    if (!opts) return { lang: DEFAULT_NOTES_LANGUAGE, acceptAll: true };
+    if (typeof opts === "string") return { lang: cleanNotesLanguage(opts), acceptAll: true };
+    return {
+      lang: cleanNotesLanguage(opts.lang),
+      acceptAll: opts.acceptAll !== false,
+    };
+  }
+  function activeLanguageTables(opts) {
+    const { lang, acceptAll } = normalizeDateParseOptions(opts);
+    const primary = notesLanguageTable(lang);
+    if (!acceptAll) return { tables: [primary], acceptAll: false };
+    const rest = [];
+    for (const [code, table] of LANG_REGISTRY) if (code !== primary.code) rest.push(table);
+    return { tables: [primary, ...rest], acceptAll: true };
+  }
+  function lookupMonthWord(word, tables, acceptAll) {
+    const folded = foldLanguageText(String(word || "").replace(/\.$/, ""));
+    if (!folded) return 0;
+    for (const table of tables) {
+      const m = table.monthMap.get(folded);
+      if (m) return m;
+    }
+    return acceptAll ? EXTRA_MONTH_ALIASES[folded] || 0 : 0;
+  }
+  function parseOrdinalDayToken(token, tables) {
+    const plain = /^(\d{1,2})\.?$/.exec(String(token || "").trim());
+    if (plain) return +plain[1];
+    const folded = foldLanguageText(token);
+    for (const table of tables) {
+      const m = table.ordinalRe.exec(folded);
+      if (m) return +m[1];
+    }
+    return 0;
+  }
   const dateFromParts = (year, month, date) => {
     if (!Number.isInteger(year) || year < 1 || year > 9999) return null;
     const d = parseYmd(year + "-" + p2(month) + "-" + p2(date));
@@ -1311,9 +1834,16 @@ const __zentralEmbeddedLoader = (function () {
     return new Date(year, month, Math.min(source.getDate(), lastDate.getDate())).getTime();
   }
   // A date as people type it: ISO, day/month/year, dotted/dashed/slashed dates, month names, @today, @tomorrow,
-  // @+3d / @-2d / @+1w / @+1m, @monday. Numeric day-first forms are deliberate; no locale-dependent guessing.
+  // @jutro, @pojutrze, @+3d / @-2d / @+1w / @+1m, 'in 3 days' / 'za 3 dni', 'next week', weekdays, and ordinals.
+  // Numeric day-first forms are deliberate; no locale-dependent guessing.
   // Two-digit years use 00-49 => 2000-2049 and 50-99 => 1950-1999.
-  function parseDateText(text, now) {
+  function applyCalendarOffset(base, count, unit) {
+    if (unit === "d") return addDays(base, count);
+    if (unit === "w") return addDays(base, count * 7);
+    if (unit === "m" || unit === "y") return shiftCalendarDate(base, count, unit);
+    return null;
+  }
+  function parseDateText(text, now, opts) {
     const t = String(text || "").trim().toLowerCase().replace(/^[@/]/, "").replace(/[,.]$/, "").trim();
     if (!t) return null;
     const base = dayStart(now);
@@ -1321,51 +1851,66 @@ const __zentralEmbeddedLoader = (function () {
     if (m) return dateFromParts(+m[1], +m[2], +m[3]);
     m = /^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/.exec(t);
     if (m) return dateFromParts(m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3], +m[2], +m[1]);
-    m = /^(\d{1,2})\.?\s+([a-z\u00c0-\u024f]+)(?:\s+(\d{2,4}))?$/.exec(t);
+    const { tables, acceptAll } = activeLanguageTables(opts);
+    m = /^(\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?)\s+([\p{L}]+)\.?(?:\s+(\d{2,4}))?$/iu.exec(t);
     if (m) {
-      const month = MONTH_ALIASES[monthWord(m[2])];
-      if (!month) return null;
-      return m[3] ? dateFromParts(m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3], month, +m[1]) : futureMonthDay(month, +m[1], base);
+      const date = parseOrdinalDayToken(m[1], tables);
+      const month = date ? lookupMonthWord(m[2], tables, acceptAll) : 0;
+      if (month && date) return m[3] ? dateFromParts(m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3], month, date) : futureMonthDay(month, date, base);
     }
-    m = /^([a-z\u00c0-\u024f]+)\s+(\d{1,2})(?:,?\s+(\d{2,4}))?$/.exec(t);
+    m = /^([\p{L}]+)\.?\s+(\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?)(?:,?\s+(\d{2,4}))?$/iu.exec(t);
     if (m) {
-      const month = MONTH_ALIASES[monthWord(m[1])];
-      if (!month) return null;
-      return m[3] ? dateFromParts(m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3], month, +m[2]) : futureMonthDay(month, +m[2], base);
+      const month = lookupMonthWord(m[1], tables, acceptAll);
+      const date = month ? parseOrdinalDayToken(m[2], tables) : 0;
+      if (month && date) return m[3] ? dateFromParts(m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3], month, date) : futureMonthDay(month, date, base);
     }
     m = /^(\d{1,2})[./-](\d{1,2})\.?$/.exec(t);
     if (m) return futureMonthDay(+m[2], +m[1], base);
-    if (t === "today") return base;
-    if (t === "tomorrow") return addDays(base, 1);
-    if (t === "yesterday") return addDays(base, -1);
     m = /^([+-])(\d{1,4})([dwmy])$/.exec(t);
     if (m) {
-      const n = (m[1] === "-" ? -1 : 1) * +m[2], d = new Date(base);
-      if (m[3] === "d") return addDays(base, n);
-      if (m[3] === "w") return addDays(base, n * 7);
-      if (m[3] === "m" || m[3] === "y") return shiftCalendarDate(base, n, m[3]);
+      const n = (m[1] === "-" ? -1 : 1) * +m[2];
+      return applyCalendarOffset(base, n, m[3]);
     }
-    const wd = WEEKDAYS.findIndex((w) => w === t || w.slice(0, 3) === t);
-    if (wd >= 0) return addDays(base, ((wd - new Date(base).getDay() + 7) % 7) || 7);
+    const folded = foldLanguageText(t);
+    if (!folded) return null;
+    for (const table of tables) {
+      if (table.relativeMap.has(folded)) return addDays(base, table.relativeMap.get(folded));
+    }
+    for (const table of tables) {
+      const phrase = table.phraseOffsets.get(folded);
+      if (phrase) return applyCalendarOffset(base, phrase.count, phrase.unit);
+      for (const rule of table.countedRules) {
+        const cm = rule.re.exec(folded);
+        if (cm) {
+          const unit = rule.unitMap.get(cm[2]);
+          if (unit) return applyCalendarOffset(base, rule.sign * +cm[1], unit);
+        }
+      }
+    }
+    for (const table of tables) {
+      const wd = table.weekdayMap.get(folded);
+      if (wd !== undefined) return addDays(base, ((wd - new Date(base).getDay() + 7) % 7) || 7);
+    }
     return null;
   }
   // Inline dates are deliberately recognised only in visible plain-text runs by the renderer. This scanner only
   // supplies candidates; the Markdown renderer decides whether the run is inside code, math or a link.
-  function inlineDateTokens(text, now) {
+  function inlineDateTokens(text, now, opts) {
     const source = String(text || ""), out = [];
-    const month = "[a-z\\u00c0-\\u024f]+\\.?";
-    const relative = "@(?:today|tomorrow|yesterday|[+-]\\d{1,4}[dwmy]|(?:mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?))";
+    const month = "[\\p{L}]+\\.?";
+    const dayOrd = "\\d{1,2}(?:-[\\p{L}]+|[\\p{L}]+|\\.)?";
+    const relative = "@(?:[+-]\\d{1,4}[dwmy]|[\\p{L}]+)";
     const patterns = [
       relative,
       "\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}",
       "\\d{1,2}[/-]\\d{1,2}(?:[/-]\\d{2,4})?",
       "\\d{1,2}\\.\\d{1,2}\\.(?:\\d{2,4})?",
-      "\\d{1,2}\\.?\\s+" + month + "(?:\\s+\\d{2,4})?",
-      month + "\\s+\\d{1,2}(?:,?\\s+\\d{2,4})?",
+      dayOrd + "\\s+" + month + "(?:\\s+\\d{2,4})?",
+      month + "\\s+" + dayOrd + "(?:,?\\s+\\d{2,4})?",
     ];
-    const re = new RegExp("(?<![\\w/@])(" + patterns.join("|") + ")(?:[ T](\\d{1,2}):(\\d{2}))?(?![\\w/-])", "giu");
+    const re = new RegExp("(?<![\\p{L}\\p{N}_/@])(" + patterns.join("|") + ")(?:[ T](\\d{1,2}):(\\d{2}))?(?![\\p{L}\\p{N}_/-])", "giu");
     for (let m; (m = re.exec(source)); ) {
-      const raw = m[1], day = parseDateText(raw, now);
+      const raw = m[1], day = parseDateText(raw, now, opts);
       // An unknown word can look like a month name (for example "12 and 25 listopada"). Do not let
       // that rejected candidate consume the next, valid date; resume one character after its start.
       if (day === null) { re.lastIndex = m.index + 1; continue; }
@@ -1384,27 +1929,35 @@ const __zentralEmbeddedLoader = (function () {
     return out;
   }
   const stripDateIgnoreMarks = (line) => String(line || "").replace(DATE_IGNORE_RE, "");
-  // A date prefix for list/heading lines; month-name forms can contain spaces.
-  function parseDatePrefix(text, now) {
+  // A date prefix for list/heading lines; month-name and relative phrases can contain spaces.
+  function parseDatePrefix(text, now, opts) {
     const s = String(text || "").trim();
+    if (!s) return null;
+    const { tables } = activeLanguageTables(opts);
+    const phrasePatterns = [];
+    for (const table of tables) for (const re of table.prefixRes) phrasePatterns.push(re);
     const patterns = [
       /^(\d{4}[./-]\d{1,2}[./-]\d{1,2})(?=\s|$)/,
       /^(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})(?=\s|$)/,
       /^(\d{1,2}[./-]\d{1,2}\.?)(?=\s|$)/,
-      /^(\d{1,2}\.?\s+[a-z\u00c0-\u024f]+\.?\s+\d{2,4})(?=\s|$)/i,
-      /^(\d{1,2}\.?\s+[a-z\u00c0-\u024f]+\.?)(?=\s|$)/i,
-      /^([a-z\u00c0-\u024f]+\.?\s+\d{1,2},?\s+\d{2,4})(?=\s|$)/i,
-      /^([a-z\u00c0-\u024f]+\.?\s+\d{1,2},?)(?=\s|$)/i,
+      /^(\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?\s+[\p{L}]+\.?\s+\d{2,4})(?=\s|$)/iu,
+      /^(\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?\s+[\p{L}]+\.?)(?=\s|$)/iu,
+      /^([\p{L}]+\.?\s+\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?,?\s+\d{2,4})(?=\s|$)/iu,
+      /^([\p{L}]+\.?\s+\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?,?)(?=\s|$)/iu,
+      ...phrasePatterns,
       /^(\S+)/,
     ];
     for (const re of patterns) {
       const m = re.exec(s);
       if (!m) continue;
-      const raw = m[1], day = parseDateText(raw, now);
+      const raw = m[1], day = parseDateText(raw, now, opts);
       // This is deliberately prefix-only. These patterns are anchored and non-global, so lastIndex cannot
       // resume a search later in the line; a leading non-date token means this is not a dated list/heading.
       if (day === null) continue;
-      const yearless = /^\d{1,2}[./-]\d{1,2}\.?$/.test(raw) || /^\d{1,2}\.?\s+[a-z\u00c0-\u024f]+\.?$/i.test(raw) || /^[a-z\u00c0-\u024f]+\.?\s+\d{1,2},?$/i.test(raw);
+      const yearless =
+        /^\d{1,2}[./-]\d{1,2}\.?$/.test(raw)
+        || (/^\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?\s+[\p{L}]+\.?$/iu.test(raw) && !phrasePatterns.some((pr) => pr.test(raw)))
+        || (/^[\p{L}]+\.?\s+\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?,?$/iu.test(raw) && !phrasePatterns.some((pr) => pr.test(raw)));
       return { day, raw, rest: s.slice(raw.length).trim(), yearless };
     }
     return null;
@@ -1493,17 +2046,19 @@ const __zentralEmbeddedLoader = (function () {
     }
     m = /^(\d{1,2})\.?$/.exec(raw);
     if (m) { const shown = parseYmd(opts.base) || new Date(today); return key(shown.getFullYear(), shown.getMonth() + 1, +m[1]); }
-    if (!/[a-z\u00c0-\u024f]/.test(raw)) return "";
-    const ms = parseDateText(raw, now);
+    const ordinal = parseOrdinalDayToken(raw, activeLanguageTables(opts).tables);
+    if (ordinal) { const shown = parseYmd(opts.base) || new Date(today); return key(shown.getFullYear(), shown.getMonth() + 1, ordinal); }
+    if (!/[\p{L}]/u.test(raw)) return "";
+    const ms = parseDateText(raw, now, opts);
     return ms === null ? "" : ymd(new Date(ms));
   }
   // One line of a plain list: "- 06:00-14:00 Work", "10-08 Jan Kowalski", "2026-11-20 14:00 Dentist" -> parts or null.
   // The leading date is optional when `defaultDay` (local midnight ms) is given.
-  function parseLine(line, now, defaultDay) {
+  function parseLine(line, now, defaultDay, opts) {
     let t = String(line || "").replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/, "").trim();
     if (!t) return null;
     let day = defaultDay ?? null, yearless = false;
-    const prefix = parseDatePrefix(t, now);
+    const prefix = parseDatePrefix(t, now, opts);
     // "03.12." (trailing dot) is a day-month date; "03.12" / "03:12" stay clock times.
     if (prefix && (!/^\d{1,2}[:.]\d{2}$/.test(prefix.raw) || /^\d{1,2}\.\d{1,2}\.$/.test(prefix.raw))) {
       day = prefix.day; t = prefix.rest; yearless = prefix.yearless;
@@ -1879,9 +2434,10 @@ const __zentralEmbeddedLoader = (function () {
   }
   const SHORT_WEEKDAY_NAMES = Object.freeze(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
   const LONG_WEEKDAY_NAMES = Object.freeze(["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]);
-  function weekdayLabels(weekStart = 1, style = "short") {
+  function weekdayLabels(weekStart = 1, style = "short", lang = DEFAULT_NOTES_LANGUAGE) {
     const ws = cleanWeekStart(weekStart);
-    const names = style === "long" ? LONG_WEEKDAY_NAMES : SHORT_WEEKDAY_NAMES;
+    const table = notesLanguageTable(lang);
+    const names = style === "long" ? table.weekdaysDisplay.longSun : table.weekdaysDisplay.shortSun;
     return Array.from({ length: 7 }, (_, i) => names[(ws + i) % 7]);
   }
   // Pure week-of-year number in civil coordinates (immune to DST): ISO 8601 when weekStart = 1 (Monday),
@@ -2387,20 +2943,20 @@ const __zentralEmbeddedLoader = (function () {
     return match.length === 1 ? cleanCategoryName(match[0][1]) : null;
   }
   const stripItemCategoryMarks = (line) => String(line || "").replace(ITEM_CATEGORY_RE, "");
-  function parseMarkedLine(line, heading, now) {
+  function parseMarkedLine(line, heading, now, opts) {
     const ignored = ignoredDateTokens(line);
     let sourceLine = stripItemCategoryMarks(stripItemIdMarks(stripDateIgnoreMarks(line)));
     const listText = sourceLine.replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)(?:\[[ xX]\]\s+)?/, "");
-    const prefix = parseDatePrefix(listText, now);
+    const prefix = parseDatePrefix(listText, now, opts);
     // Ignoring a leading date disables that trigger; a dated heading may still supply its own date.
     if (prefix && ignored.some((raw) => raw === prefix.raw.toLowerCase() || raw.startsWith(prefix.raw.toLowerCase() + " "))) {
       const at = sourceLine.indexOf(prefix.raw);
       if (at >= 0) sourceLine = sourceLine.slice(0, at) + sourceLine.slice(at + prefix.raw.length);
     }
-    const dayOfHeading = heading.text ? (parseDatePrefix(heading.text, now)?.day ?? null) : null;
-    return { sourceLine, parsed: parseLine(sourceLine, now, dayOfHeading) };
+    const dayOfHeading = heading.text ? (parseDatePrefix(heading.text, now, opts)?.day ?? null) : null;
+    return { sourceLine, parsed: parseLine(sourceLine, now, dayOfHeading, opts) };
   }
-  function visitCalendarListLines(body, now, visit) {
+  function visitCalendarListLines(body, now, visit, opts) {
     const lines = String(body || "").split("\n");
     let fence = "", heading = { level: 0, text: "" }, sec = null;
     for (let i = 0; i < lines.length; i++) {
@@ -2416,12 +2972,12 @@ const __zentralEmbeddedLoader = (function () {
       const mk = MARKER_RE.exec(line);
       if (mk) { sec = { category: (mk[1] || "").trim().slice(0, 80), level: heading.level }; continue; }
       if (!sec) continue;
-      const result = parseMarkedLine(line, heading, now);
+      const result = parseMarkedLine(line, heading, now, opts);
       if (result.parsed) visit({ index: i, line, heading, category: sec.category, ...result });
     }
     return lines;
   }
-  function ensureNoteItemIds(body, noteId, now = 0) {
+  function ensureNoteItemIds(body, noteId, now = 0, opts) {
     const lines = String(body || "").split("\n"), seen = new Set();
     let changed = false;
     visitCalendarListLines(body, now, (entry) => {
@@ -2439,7 +2995,7 @@ const __zentralEmbeddedLoader = (function () {
         lines[entry.index] = core + " %%zn-item-id:" + id + "%%" + trailing;
         changed = true;
       }
-    });
+    }, opts);
     return { body: changed ? lines.join("\n") : String(body || ""), changed, count: seen.size };
   }
   // The jump target for note-less items: a `## Agenda` heading in their date note. An existing heading of any level
@@ -2684,7 +3240,7 @@ const __zentralEmbeddedLoader = (function () {
     });
     return { body: changed ? lines.join("\n") : text, changed, found, safe };
   }
-  function extractNoteItems(body, noteId, now = 0) {
+  function extractNoteItems(body, noteId, now = 0, opts) {
     const lines = String(body || "").split("\n");
     const out = [], seen = new Map();
     let fence = "", heading = { level: 0, text: "" }, sec = null;
@@ -2701,7 +3257,7 @@ const __zentralEmbeddedLoader = (function () {
       const mk = MARKER_RE.exec(line);
       if (mk) { sec = { category: (mk[1] || "").trim().slice(0, 80), level: heading.level }; continue; }
       if (!sec) continue;
-      const result = parseMarkedLine(line, heading, now), sourceLine = result.sourceLine, parsed = result.parsed;
+      const result = parseMarkedLine(line, heading, now, opts), sourceLine = result.sourceLine, parsed = result.parsed;
       if (!parsed) continue;
       const norm = sourceLine.replace(/\s+/g, " ").trim().toLowerCase() + "|" + heading.text;
       const n = (seen.get(norm) || 0) + 1; seen.set(norm, n);
@@ -3243,7 +3799,7 @@ const __zentralEmbeddedLoader = (function () {
 
   // `beforeWrite` (optional, async) runs before every calendar write, outside the calendar lock. The note store uses it to
   // put pending note text on disk first, so `calendar.json` never refers to a note line that was not saved (UI4.7).
-  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null, beforeWrite = null, noteFileState = null }) {
+  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null, beforeWrite = null, noteFileState = null, getParseOptions = () => ({}) }) {
     const items = new Map();
     const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite, perf, withHistoryLock });
     const categoryDefs = new Map();
@@ -3622,15 +4178,15 @@ const __zentralEmbeddedLoader = (function () {
         return n;
       },
       // Auto-managed hidden IDs travel with Markdown lines, giving identical repeated rows stable per-line identity.
-      ensureNoteIds(noteId, body) { return ensureNoteItemIds(body, noteId, now()); },
+      ensureNoteIds(noteId, body) { return ensureNoteItemIds(body, noteId, now(), getParseOptions()); },
       // Rebuild the note-derived items. During upgrade, migrate extras from legacy IDs using the old content/ordinal key.
       // Thereafter exact line IDs win; unique legacy matches are safe, while an unidentified duplicate never inherits
       // another duplicate's metadata.
       syncNote(noteId, body, { sourceEdit = false, updatedAt = 0 } = {}) {
         const had = [...items.values()].filter((it) => it.x.noteId === noteId && it.x.src === "list");
         if (!had.length && !/%%\s*calendar/i.test(String(body || ""))) return false;
-        const fresh = extractNoteItems(body, noteId, now());
-        const checkedLines = sourceEdit ? listCheckboxStates(body, now()) : null;
+        const fresh = extractNoteItems(body, noteId, now(), getParseOptions());
+        const checkedLines = sourceEdit ? listCheckboxStates(body, now(), getParseOptions()) : null;
         const exact = new Map(had.map((it) => [it.id, it]));
         const byLegacy = new Map();
         for (const it of had) {
@@ -4823,7 +5379,13 @@ const __zentralEmbeddedLoader = (function () {
   const DEFAULT_DATE_FORMAT = "DD-MM-YYYY";
   const cleanDateFormat = (v) => (DATE_FORMATS.includes(v) ? v : DEFAULT_DATE_FORMAT);
   // Local calendar-day key of an instant; never uses toISOString (UTC shifts a day near midnight).
-  const localDateKey = (ms) => (Number.isFinite(Number(ms)) ? ymd(new Date(Number(ms))) : "");
+  const localDateKey = (ms) => {
+    if (ms && typeof ms === "object") {
+      if (typeof ms.date === "string" && parseYmd(ms.date)) return ms.date;
+      if (typeof ms.dateTime === "string") ms = Date.parse(ms.dateTime);
+    }
+    return Number.isFinite(Number(ms)) ? ymd(new Date(Number(ms))) : "";
+  };
   // "YYYY-MM-DD" key -> text in the chosen format; "" for an invalid key. `locale` only matters for "long".
   function formatDateKey(key, fmt = DEFAULT_DATE_FORMAT, locale) {
     const d = parseYmd(key);
@@ -4899,8 +5461,12 @@ const __zentralEmbeddedLoader = (function () {
   // Agenda window: today .. today+days-1 (default 4 days = T..T+3). Counts live items per local day (recurrences expanded); `isDone(item)` is supplied by the reminder lifecycle (T2.7a), the item model has no done flag yet.
   const AGENDA_LABELS = Object.freeze(["Today", "Tomorrow"]);
   function agendaDayLabel(offset, day, locale = undefined) {
-    if (offset === 0 || offset === 1) return AGENDA_LABELS[offset];
-    return new Date(day).toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
+    const table = locale === undefined ? null : notesLanguageTable(locale);
+    const specialLabels = locale === "pl" || (table && table.code !== "en" && table.code !== "pl");
+    const labels = table?.agendaLabels || AGENDA_LABELS;
+    if (offset >= 0 && offset < labels.length && (offset < 2 || specialLabels)) return labels[offset];
+    const resolvedLocale = locale === undefined ? undefined : (LANG_REGISTRY.has(String(locale).toLowerCase()) ? notesLocaleFor(locale) : locale);
+    return new Date(day).toLocaleDateString(resolvedLocale, { weekday: "short", day: "numeric", month: "short" });
   }
   // Agenda visibility is independent of reminder alerts, snooze and recurrence state.
   // Each layer is sparse: an omitted field inherits from the next layer.
@@ -4994,14 +5560,14 @@ const __zentralEmbeddedLoader = (function () {
     }
     return Number.isFinite(next) ? next : null;
   }
-  function agendaBuckets(items, now, days = 4, isDone = () => false) {
+  function agendaBuckets(items, now, days = 4, isDone = () => false, locale = undefined) {
     const n = Math.max(1, Math.min(31, Math.floor(Number(days)) || 4));
     const base = dayStart(now);
     const out = [];
     for (let i = 0; i < n; i++) {
       const from = addDays(base, i), to = addDays(base, i + 1);
       const list = expandRange(items, from, to).filter((it) => !isDone(it));
-      out.push({ offset: i, key: localDateKey(from), label: agendaDayLabel(i, from), from, to, count: list.length, items: list });
+      out.push({ offset: i, key: localDateKey(from), label: agendaDayLabel(i, from, locale), from, to, count: list.length, items: list });
     }
     return out;
   }
@@ -5083,7 +5649,7 @@ const __zentralEmbeddedLoader = (function () {
       ended: !isReminder(item) && end > start && end <= Number(now),
     };
   }
-  function agendaZenProjection(items, now, days = 4, isDone = () => false, getWindow = null, policies = null) {
+  function agendaZenProjection(items, now, days = 4, isDone = () => false, getWindow = null, policies = null, options = {}) {
     // Expand the complete local window once, then fan overlapping multi-day events into
     // each day bucket. Calling expandRange once per day is needlessly O(days * items).
     const sourceItems = items || [];
@@ -5108,7 +5674,7 @@ const __zentralEmbeddedLoader = (function () {
     const candidateTo = fastDefault ? windowEnd : addDays(windowEnd, maxLead);
     const buckets = Array.from({ length: n }, (_, offset) => {
       const from = addDays(base, offset), to = addDays(base, offset + 1);
-      return { offset, key: localDateKey(from), label: agendaDayLabel(offset, from), from, to, count: 0, items: [] };
+      return { offset, key: localDateKey(from), label: agendaDayLabel(offset, from, options?.lang), from, to, count: 0, items: [] };
     });
     let candidates;
     if (fastDefault) {
@@ -5155,7 +5721,7 @@ const __zentralEmbeddedLoader = (function () {
   }
   // Separate, occurrence-scoped overdue bucket. Civil-day look-back excludes
   // today even for a past time today; item visibility and lifecycle still apply.
-  function agendaOverdueProjection(items, now, { enabled = true, days = 7, cap = 10, isDone = () => false, getWindow = null, policies = null } = {}) {
+  function agendaOverdueProjection(items, now, { enabled = true, days = 7, cap = 10, isDone = () => false, getWindow = null, policies = null, lang = undefined } = {}) {
     if (!enabled || !Number.isFinite(Number(now))) return null;
     const countDays = Math.max(1, Math.min(31, Math.floor(Number(days)) || 7));
     const limit = Math.max(1, Math.min(100, Math.floor(Number(cap)) || 10));
@@ -5169,7 +5735,7 @@ const __zentralEmbeddedLoader = (function () {
       return entry;
     });
     if (overdue.length > limit) shown.push({ key: "more:overdue", label: "+" + (overdue.length - limit) + " more", summary: "Open more overdue reminders", openDate: localDateKey(itemRange(overdue[limit])[0]) });
-    return { key: "day:overdue", date: "overdue", label: "Overdue", count: overdue.length, items: shown };
+    return { key: "day:overdue", date: "overdue", label: notesLanguageTable(lang).overdueLabel, count: overdue.length, items: shown };
   }
   // Only days with at least one visible item get a Zen Agenda folder. Empty
   // days (count === 0) are omitted so no empty Tomorrow / Day N folders are
@@ -5188,7 +5754,7 @@ const __zentralEmbeddedLoader = (function () {
   }
   // Coalesced, store-change-driven controller for the virtual Zen Agenda folder. The host
   // supplies DOM/Zen operations through `api`; this controller owns no browser globals.
-  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getReady = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
+  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getReady = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), getLanguage = () => undefined, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
     let dead = false, timer = null, timerAt = Infinity, last = [], busy = false, consecutiveChanges = 0, blockedUntil = 0;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
     function armAt(due) {
@@ -5228,8 +5794,8 @@ const __zentralEmbeddedLoader = (function () {
         if (!getReady()) return last;
         sourceItems = getItems?.() || [];
         policies = getWindowIsMasterPolicy ? prepareAgendaWindows(sourceItems, getWindow) : null;
-        fullProjection = agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow, policies);
-        overdue = agendaOverdueProjection(sourceItems, now(), { ...getOverdue(), isDone, getWindow, policies });
+        fullProjection = agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow, policies, { lang: getLanguage() });
+        overdue = agendaOverdueProjection(sourceItems, now(), { ...getOverdue(), isDone, getWindow, policies, lang: getLanguage() });
         const projection = [...(overdue ? [overdue] : []), ...agendaVisibleDays(fullProjection)];
         if (!projection.length) {
           api.removeAll?.(); last = projection; scheduleBoundary(sourceItems, policies, fullProjection, overdue); return projection;
@@ -6290,7 +6856,7 @@ const __zentralEmbeddedLoader = (function () {
   }
 
   const api = {
-    KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
+    KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
@@ -7027,6 +7593,8 @@ __zentralShim.register = function (def) {
       HIDDEN_MENU: "zen.workspace.zentral.notes.hidden_tools_menu",
       DATE_MODE: "zen.workspace.zentral.notes.date_notes_mode",
       DATE_DISPLAY: "zen.workspace.zentral.notes.date_display_format",
+      NOTES_LANGUAGE: "zen.workspace.zentral.notes.language",
+      NOTES_LANGUAGE_ACCEPT_ALL: "zen.workspace.zentral.notes.language_accept_all",
       MD_FLAVOR: "zen.workspace.zentral.notes.markdown_flavor",
       TILDE: "zen.workspace.zentral.notes.single_tilde",
       IGNORE_SYNTAX: "zen.workspace.zentral.notes.ignore_syntax",
@@ -13011,6 +13579,7 @@ __zentralShim.register = function (def) {
       warn = () => {},
       getHistory = () => ({ on: true, ...HISTORY_DEFAULTS }),
       getDateFormat = () => "",
+      getParseOptions = () => { try { return { lang: Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en"), acceptAll: Services.prefs.getBoolPref(PREF.NOTES_LANGUAGE_ACCEPT_ALL, true) }; } catch (_) { return { lang: "en", acceptAll: true }; } },
     }) {
       const notes = new Map();
       // Exact bytes last read or written for each note. This detects stale writes even when a window is dirty.
@@ -13051,7 +13620,7 @@ __zentralShim.register = function (def) {
       // refresh ignore it). Items written as marked lists inside a note are rebuilt from the note text; a note in Trash or
       // with a missing file only HIDES its items (restoring it brings dragged times and calendar notes back); a note that is
       // deleted for good removes them. Every call is guarded: the calendar must never break saving a note.
-      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, withHistoryLock,
+      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, withHistoryLock, getParseOptions,
         isNoteVisible: (id) => !!notes.get(id) && !notes.get(id).trashed,
         // The two files are not one transaction, so the order is fixed: note text first, then the calendar record that
         // refers to it. A crash in between leaves a line the next start rebuilds, never a record without its line.
@@ -16943,7 +17512,7 @@ __zentralShim.register = function (def) {
       const ignored = Number.isInteger(env.dateLine) && env.dateLine >= 0
         ? CALENDAR_PART.ignoredDateTokens(env.dateLineText?.(env.dateLine) || "")
         : [];
-      const tokens = CALENDAR_PART.inlineDateTokens(source, env.dateNow?.() ?? Date.now());
+      const tokens = CALENDAR_PART.inlineDateTokens(source, env.dateNow?.() ?? Date.now(), env.dateParseOpts?.());
       if (!tokens.length) { parent.append(document.createTextNode(source)); return; }
       let at = 0;
       for (const token of tokens) {
@@ -18408,6 +18977,7 @@ __zentralShim.register = function (def) {
         renderEmbed,
         displayDateKey: (key) => displayDateKey(key),
         dateNow: () => nowMs(),
+        dateParseOpts: () => { try { return { lang: Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en"), acceptAll: Services.prefs.getBoolPref(PREF.NOTES_LANGUAGE_ACCEPT_ALL, true) }; } catch (_) { return { lang: "en", acceptAll: true }; } },
         dateLineText: (line) => {
           const body = note()?.body || "";
           return normalizeNewlines(body).split("\n")[line] || "";
@@ -19010,7 +19580,7 @@ __zentralShim.register = function (def) {
         const todayBtn = chip("Today");
         const grid = h("div", { class: "zn-cal-grid" + (showWeeks ? " has-week-numbers" : ""), role: "grid", tabindex: "0", "aria-label": "Choose a day" });
         const root = h("div", { class: "zn-cal" + (compact ? " is-compact" : "") }, ...(topBar ? [topBar] : []), h("div", { class: "zn-cal-head" }, prev, title, next, todayBtn), grid);
-        const dowLabels = C.weekdayLabels(weekStart, "short");
+        const dowLabels = C.weekdayLabels(weekStart, "short", (() => { try { return Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en"); } catch (_) { return "en"; } })());
         const draw = () => {
           const monthName = new Date(view.year, view.month, 1).toLocaleString(undefined, { month: compact ? "short" : "long", year: "numeric" });
           title.textContent = monthName;
@@ -19134,12 +19704,14 @@ __zentralShim.register = function (def) {
         })));
       }
       function calendarDisplayZone() { return CALENDAR_PART?.cleanZone?.(store.meta.calendarDisplayZone) || ""; }
+      function calendarTodayLabel() { try { return CALENDAR_PART.notesLanguageTable(Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en")).todayLabel; } catch (_) { return "Today"; } }
       function calendarTodayKey() { return CALENDAR_PART.zonedDateKey(nowMs(), calendarDisplayZone()); }
       function calendarTodayDay() { return CALENDAR_PART.parseYmd(calendarTodayKey())?.getTime() || CALENDAR_PART.dayStart(nowMs()); }
       function calendarDayLabel(day, options = {}) {
         const d = new Date(day);
         const date = displayDateKey(CALENDAR_PART.localDateKey(day));
-        const weekday = options.weekday === false ? "" : d.toLocaleDateString(undefined, { weekday: options.weekday || "long" });
+        const locale = (() => { try { return CALENDAR_PART.notesLocaleFor(Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en")); } catch (_) { return undefined; } })();
+        const weekday = options.weekday === false ? "" : d.toLocaleDateString(locale, { weekday: options.weekday || "long" });
         return weekday ? weekday + ", " + date : date;
       }
       function calendarItemColor(item) {
@@ -19574,7 +20146,7 @@ __zentralShim.register = function (def) {
         const isToday = CALENDAR_PART.localDateKey(day) === CALENDAR_PART.localDateKey(nowMs());
         const section = h("section", { class: "zn-cal-day-group" + (selected ? " is-selected" : "") + (isToday ? " is-today" : ""), tabindex: "0", "aria-label": calendarDayLabel(day, { year: true }) });
         bindCalendarDayContext(section, day);
-        const head = h("div", { class: "zn-cal-day-head" }, h("strong", {}, calendarDayLabel(day, { year: true })), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, "Today")] : []), h("span", {}, `${dayItems.length} item${dayItems.length === 1 ? "" : "s"}`));
+        const head = h("div", { class: "zn-cal-day-head" }, h("strong", {}, calendarDayLabel(day, { year: true })), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), h("span", {}, `${dayItems.length} item${dayItems.length === 1 ? "" : "s"}`));
         section.append(head);
         const allDay = dayItems.filter((item) => CALENDAR_PART.isAllDay(item));
         const timed = dayItems.filter((item) => !CALENDAR_PART.isAllDay(item));
@@ -19627,7 +20199,7 @@ __zentralShim.register = function (def) {
       function calendarMonthView(items, cursor, compact) {
         const date = new Date(cursor), year = date.getFullYear(), month = date.getMonth();
         const weekStart = calendarWeekStartDay(), showWeeks = calendarShowWeekNumbers();
-        const dowNames = CALENDAR_PART.weekdayLabels(weekStart, "short");
+        const dowNames = CALENDAR_PART.weekdayLabels(weekStart, "short", (() => { try { return Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en"); } catch (_) { return "en"; } })());
         const grid = CALENDAR_PART.monthGrid(year, month, weekStart);
         const first = grid[0][0], afterLast = CALENDAR_PART.addDays(grid[5][6], 1);
         const expanded = CALENDAR_PART.expandRange(items, first, afterLast);
@@ -19895,7 +20467,7 @@ __zentralShim.register = function (def) {
           if (page.count >= 160) break;
           const itemDay = CALENDAR_PART.itemRange(item)[0];
           const isToday = CALENDAR_PART.localDateKey(itemDay) === calendarTodayKey();
-          const row = h("div", { class: "zn-cal-agenda-row" + (isToday ? " is-today" : "") }, h("span", { class: "zn-cal-agenda-date" }, calendarDayLabel(itemDay, { year: true }), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, "Today")] : [])), calendarItemButton(item, true));
+          const row = h("div", { class: "zn-cal-agenda-row" + (isToday ? " is-today" : "") }, h("span", { class: "zn-cal-agenda-date" }, calendarDayLabel(itemDay, { year: true }), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : [])), calendarItemButton(item, true));
           page.list.append(row); page.count++;
         }
         page.offset = limit;
@@ -20308,7 +20880,7 @@ __zentralShim.register = function (def) {
         );
         for (const day of days) {
           const isToday = C.localDateKey(day) === todayKey;
-          const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", Today" : "") }, h("strong", {}, new Date(day).toLocaleDateString(undefined, { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, "Today")] : []));
+          const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", Today" : "") }, h("strong", {}, new Date(day).toLocaleDateString(undefined, { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []));
           dayHead.addEventListener("click", () => { store.setMeta({ calendarCursor: C.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); });
           bindCalendarDayContext(dayHead, day);
           header.append(dayHead);
@@ -24183,7 +24755,7 @@ __zentralShim.register = function (def) {
         let good = ""; // the time / date read last: what a refused text is replaced by, and the month a day alone is in
         let refused = false;
         const parse = (text) => {
-          if (!isTime) return { value: C.parseDateEntry(text, { now: nowMs(), base: good || opts.base?.() || "", format: dateDisplayFormat() }), end: "" };
+          if (!isTime) return { value: C.parseDateEntry(text, { now: nowMs(), base: good || opts.base?.() || "", format: dateDisplayFormat(), lang: (() => { try { return Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en"); } catch (_) { return "en"; } })(), acceptAll: (() => { try { return Services.prefs.getBoolPref(PREF.NOTES_LANGUAGE_ACCEPT_ALL, true); } catch (_) { return true; } })() }), end: "" };
           const two = opts.range?.() ? C.parseTimeRange(text) : null;
           if (two && two.endMin >= 0) return { value: C.clockOfMinutes(two.startMin), end: C.clockOfMinutes(two.endMin) };
           return { value: C.clockOfMinutes(C.parseClock(text)), end: "" };
@@ -30053,6 +30625,7 @@ __zentralShim.register = function (def) {
         api: agendaApi, perf: PERF,
         getItems: agendaItems,
         getDays: agendaDays,
+        getLanguage: () => { try { return CALENDAR_PART.cleanNotesLanguage(Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en")); } catch (_) { return "en"; } },
         getOverdue: () => ({ enabled: prefBool(PREF.AGENDA_OVERDUE, true), days: Math.max(1, Math.min(31, prefInt(PREF.AGENDA_OVERDUE_DAYS, 7))), cap: Math.max(1, Math.min(100, prefInt(PREF.AGENDA_OVERDUE_CAP, 10))) }),
         getEnabled: agendaEnabled,
         getReady: () => storeReady,

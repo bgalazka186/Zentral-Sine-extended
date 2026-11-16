@@ -58,7 +58,9 @@ const FIREFOX_CHROME = ["ChromeUtils", "PathUtils", "IOUtils", "Cc", "Ci", "Comp
 const PART = ["window", "module"]; // a pure part: `module.exports` under Node, the module loader on `window` in the browser
 const SOURCES = {
   "additional/notes/ZentralNotes.uc.js": [...WEB, ...FIREFOX_CHROME],
-  "additional/notes/calendar/ZentralNotesCalendar.js": [...PART, "setTimeout", "clearTimeout"],
+  "additional/notes/calendar/ZentralNotesCalendar.js": [...PART, "setTimeout", "clearTimeout", "require"],
+  "additional/notes/i18n/en.js": PART,
+  "additional/notes/i18n/pl.js": PART,
   "additional/notes/flavors/ZentralNotesFlavors.js": PART,
   "additional/notes/flavors/ZentralNotesShortcuts.js": PART,
   "additional/notes/paste/ZentralNotesPasteHtml.js": PART,

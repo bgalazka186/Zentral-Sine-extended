@@ -912,6 +912,28 @@
     ]
   },
   {
+    "property": "zen.workspace.zentral.notes.language",
+    "label": "Notes language",
+    "type": "dropdown",
+    "defaultValue": "en",
+    "options": [
+      {
+        "label": "English",
+        "value": "en"
+      },
+      {
+        "label": "Polski",
+        "value": "pl"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.language_accept_all",
+    "label": "Accept date words from other languages",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
     "property": "zen.workspace.zentral.notes.history_enabled",
     "label": "Keep earlier versions of each note (history/<note id>/ in the notes folder)",
     "type": "checkbox",

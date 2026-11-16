@@ -176,6 +176,8 @@
       HIDDEN_MENU: "zen.workspace.zentral.notes.hidden_tools_menu",
       DATE_MODE: "zen.workspace.zentral.notes.date_notes_mode",
       DATE_DISPLAY: "zen.workspace.zentral.notes.date_display_format",
+      NOTES_LANGUAGE: "zen.workspace.zentral.notes.language",
+      NOTES_LANGUAGE_ACCEPT_ALL: "zen.workspace.zentral.notes.language_accept_all",
       MD_FLAVOR: "zen.workspace.zentral.notes.markdown_flavor",
       TILDE: "zen.workspace.zentral.notes.single_tilde",
       IGNORE_SYNTAX: "zen.workspace.zentral.notes.ignore_syntax",
@@ -6160,6 +6162,7 @@
       warn = () => {},
       getHistory = () => ({ on: true, ...HISTORY_DEFAULTS }),
       getDateFormat = () => "",
+      getParseOptions = () => { try { return { lang: Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en"), acceptAll: Services.prefs.getBoolPref(PREF.NOTES_LANGUAGE_ACCEPT_ALL, true) }; } catch (_) { return { lang: "en", acceptAll: true }; } },
     }) {
       const notes = new Map();
       // Exact bytes last read or written for each note. This detects stale writes even when a window is dirty.
@@ -6200,7 +6203,7 @@
       // refresh ignore it). Items written as marked lists inside a note are rebuilt from the note text; a note in Trash or
       // with a missing file only HIDES its items (restoring it brings dragged times and calendar notes back); a note that is
       // deleted for good removes them. Every call is guarded: the calendar must never break saving a note.
-      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, withHistoryLock,
+      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, withHistoryLock, getParseOptions,
         isNoteVisible: (id) => !!notes.get(id) && !notes.get(id).trashed,
         // The two files are not one transaction, so the order is fixed: note text first, then the calendar record that
         // refers to it. A crash in between leaves a line the next start rebuilds, never a record without its line.
@@ -10092,7 +10095,7 @@
       const ignored = Number.isInteger(env.dateLine) && env.dateLine >= 0
         ? CALENDAR_PART.ignoredDateTokens(env.dateLineText?.(env.dateLine) || "")
         : [];
-      const tokens = CALENDAR_PART.inlineDateTokens(source, env.dateNow?.() ?? Date.now());
+      const tokens = CALENDAR_PART.inlineDateTokens(source, env.dateNow?.() ?? Date.now(), env.dateParseOpts?.());
       if (!tokens.length) { parent.append(document.createTextNode(source)); return; }
       let at = 0;
       for (const token of tokens) {
@@ -11557,6 +11560,7 @@
         renderEmbed,
         displayDateKey: (key) => displayDateKey(key),
         dateNow: () => nowMs(),
+        dateParseOpts: () => { try { return { lang: Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en"), acceptAll: Services.prefs.getBoolPref(PREF.NOTES_LANGUAGE_ACCEPT_ALL, true) }; } catch (_) { return { lang: "en", acceptAll: true }; } },
         dateLineText: (line) => {
           const body = note()?.body || "";
           return normalizeNewlines(body).split("\n")[line] || "";
@@ -12159,7 +12163,7 @@
         const todayBtn = chip("Today");
         const grid = h("div", { class: "zn-cal-grid" + (showWeeks ? " has-week-numbers" : ""), role: "grid", tabindex: "0", "aria-label": "Choose a day" });
         const root = h("div", { class: "zn-cal" + (compact ? " is-compact" : "") }, ...(topBar ? [topBar] : []), h("div", { class: "zn-cal-head" }, prev, title, next, todayBtn), grid);
-        const dowLabels = C.weekdayLabels(weekStart, "short");
+        const dowLabels = C.weekdayLabels(weekStart, "short", (() => { try { return Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en"); } catch (_) { return "en"; } })());
         const draw = () => {
           const monthName = new Date(view.year, view.month, 1).toLocaleString(undefined, { month: compact ? "short" : "long", year: "numeric" });
           title.textContent = monthName;
@@ -12283,12 +12287,14 @@
         })));
       }
       function calendarDisplayZone() { return CALENDAR_PART?.cleanZone?.(store.meta.calendarDisplayZone) || ""; }
+      function calendarTodayLabel() { try { return CALENDAR_PART.notesLanguageTable(Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en")).todayLabel; } catch (_) { return "Today"; } }
       function calendarTodayKey() { return CALENDAR_PART.zonedDateKey(nowMs(), calendarDisplayZone()); }
       function calendarTodayDay() { return CALENDAR_PART.parseYmd(calendarTodayKey())?.getTime() || CALENDAR_PART.dayStart(nowMs()); }
       function calendarDayLabel(day, options = {}) {
         const d = new Date(day);
         const date = displayDateKey(CALENDAR_PART.localDateKey(day));
-        const weekday = options.weekday === false ? "" : d.toLocaleDateString(undefined, { weekday: options.weekday || "long" });
+        const locale = (() => { try { return CALENDAR_PART.notesLocaleFor(Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en")); } catch (_) { return undefined; } })();
+        const weekday = options.weekday === false ? "" : d.toLocaleDateString(locale, { weekday: options.weekday || "long" });
         return weekday ? weekday + ", " + date : date;
       }
       function calendarItemColor(item) {
@@ -12723,7 +12729,7 @@
         const isToday = CALENDAR_PART.localDateKey(day) === CALENDAR_PART.localDateKey(nowMs());
         const section = h("section", { class: "zn-cal-day-group" + (selected ? " is-selected" : "") + (isToday ? " is-today" : ""), tabindex: "0", "aria-label": calendarDayLabel(day, { year: true }) });
         bindCalendarDayContext(section, day);
-        const head = h("div", { class: "zn-cal-day-head" }, h("strong", {}, calendarDayLabel(day, { year: true })), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, "Today")] : []), h("span", {}, `${dayItems.length} item${dayItems.length === 1 ? "" : "s"}`));
+        const head = h("div", { class: "zn-cal-day-head" }, h("strong", {}, calendarDayLabel(day, { year: true })), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), h("span", {}, `${dayItems.length} item${dayItems.length === 1 ? "" : "s"}`));
         section.append(head);
         const allDay = dayItems.filter((item) => CALENDAR_PART.isAllDay(item));
         const timed = dayItems.filter((item) => !CALENDAR_PART.isAllDay(item));
@@ -12776,7 +12782,7 @@
       function calendarMonthView(items, cursor, compact) {
         const date = new Date(cursor), year = date.getFullYear(), month = date.getMonth();
         const weekStart = calendarWeekStartDay(), showWeeks = calendarShowWeekNumbers();
-        const dowNames = CALENDAR_PART.weekdayLabels(weekStart, "short");
+        const dowNames = CALENDAR_PART.weekdayLabels(weekStart, "short", (() => { try { return Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en"); } catch (_) { return "en"; } })());
         const grid = CALENDAR_PART.monthGrid(year, month, weekStart);
         const first = grid[0][0], afterLast = CALENDAR_PART.addDays(grid[5][6], 1);
         const expanded = CALENDAR_PART.expandRange(items, first, afterLast);
@@ -13044,7 +13050,7 @@
           if (page.count >= 160) break;
           const itemDay = CALENDAR_PART.itemRange(item)[0];
           const isToday = CALENDAR_PART.localDateKey(itemDay) === calendarTodayKey();
-          const row = h("div", { class: "zn-cal-agenda-row" + (isToday ? " is-today" : "") }, h("span", { class: "zn-cal-agenda-date" }, calendarDayLabel(itemDay, { year: true }), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, "Today")] : [])), calendarItemButton(item, true));
+          const row = h("div", { class: "zn-cal-agenda-row" + (isToday ? " is-today" : "") }, h("span", { class: "zn-cal-agenda-date" }, calendarDayLabel(itemDay, { year: true }), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : [])), calendarItemButton(item, true));
           page.list.append(row); page.count++;
         }
         page.offset = limit;
@@ -13457,7 +13463,7 @@
         );
         for (const day of days) {
           const isToday = C.localDateKey(day) === todayKey;
-          const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", Today" : "") }, h("strong", {}, new Date(day).toLocaleDateString(undefined, { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, "Today")] : []));
+          const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", Today" : "") }, h("strong", {}, new Date(day).toLocaleDateString(undefined, { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []));
           dayHead.addEventListener("click", () => { store.setMeta({ calendarCursor: C.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); });
           bindCalendarDayContext(dayHead, day);
           header.append(dayHead);
@@ -17332,7 +17338,7 @@
         let good = ""; // the time / date read last: what a refused text is replaced by, and the month a day alone is in
         let refused = false;
         const parse = (text) => {
-          if (!isTime) return { value: C.parseDateEntry(text, { now: nowMs(), base: good || opts.base?.() || "", format: dateDisplayFormat() }), end: "" };
+          if (!isTime) return { value: C.parseDateEntry(text, { now: nowMs(), base: good || opts.base?.() || "", format: dateDisplayFormat(), lang: (() => { try { return Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en"); } catch (_) { return "en"; } })(), acceptAll: (() => { try { return Services.prefs.getBoolPref(PREF.NOTES_LANGUAGE_ACCEPT_ALL, true); } catch (_) { return true; } })() }), end: "" };
           const two = opts.range?.() ? C.parseTimeRange(text) : null;
           if (two && two.endMin >= 0) return { value: C.clockOfMinutes(two.startMin), end: C.clockOfMinutes(two.endMin) };
           return { value: C.clockOfMinutes(C.parseClock(text)), end: "" };
@@ -23202,6 +23208,7 @@
         api: agendaApi, perf: PERF,
         getItems: agendaItems,
         getDays: agendaDays,
+        getLanguage: () => { try { return CALENDAR_PART.cleanNotesLanguage(Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en")); } catch (_) { return "en"; } },
         getOverdue: () => ({ enabled: prefBool(PREF.AGENDA_OVERDUE, true), days: Math.max(1, Math.min(31, prefInt(PREF.AGENDA_OVERDUE_DAYS, 7))), cap: Math.max(1, Math.min(100, prefInt(PREF.AGENDA_OVERDUE_CAP, 10))) }),
         getEnabled: agendaEnabled,
         getReady: () => storeReady,
