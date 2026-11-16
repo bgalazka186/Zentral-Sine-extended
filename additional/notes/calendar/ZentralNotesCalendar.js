@@ -803,6 +803,74 @@
     if (cluster.length) flush();
     return out;
   }
+  // Side-by-side columns for Week/Day grid boxes measured in clock-grid minutes [0..1440].
+  // Clustering on drawn clock-grid intervals keeps repeated fall-back events (1st-pass CEST vs 2nd-pass CET at 02:15)
+  // in separate side-by-side lanes instead of burying each other, and prevents short pre-gap boxes (01:50 + 20px) on
+  // spring-forward days from falsely colliding with post-gap events (03:05).
+  function layoutGridSpans(spans, { minBoxMin = 1, overlapMin = 0, gridEndMin = 1440 } = {}) {
+    const minBox = Math.max(1, Math.ceil(Number(minBoxMin) || 1));
+    const allowOverlap = Math.max(0, Math.floor(Number(overlapMin) || 0));
+    const endCap = Number.isFinite(Number(gridEndMin)) ? Number(gridEndMin) : 1440;
+    const lastBoxStart = endCap - minBox;
+    const rows = (spans || []).map((span) => {
+      const reminder = !!span.reminder;
+      const rawStart = Number(span.startMin) || 0;
+      const rawEnd = reminder ? rawStart : (Number(span.endMin) || 0);
+      const naturalLen = rawEnd - rawStart;
+      let boxStartMin, boxEndMin;
+      if (!reminder && naturalLen >= minBox) {
+        boxStartMin = rawStart;
+        boxEndMin = rawEnd;
+      } else {
+        boxStartMin = rawStart - Math.max(0, rawStart - lastBoxStart);
+        const length = reminder ? minBox : Math.max(1, naturalLen, minBox - allowOverlap);
+        boxEndMin = boxStartMin + length;
+      }
+      return {
+        span,
+        item: span.item,
+        original: span.item,
+        realStart: Number(span.start) || 0,
+        startMin: boxStartMin,
+        endMin: Math.max(boxStartMin + 1, boxEndMin),
+      };
+    }).sort((a, b) => (
+      a.startMin - b.startMin ||
+      a.realStart - b.realStart ||
+      (b.endMin - b.startMin) - (a.endMin - a.startMin) ||
+      (String(a.item?.id || "") < String(b.item?.id || "") ? -1 : String(a.item?.id || "") > String(b.item?.id || "") ? 1 : 0)
+    ));
+    const out = [];
+    let cluster = [], clusterEnd = -Infinity;
+    const flush = () => {
+      const laneEnds = [];
+      for (const r of cluster) {
+        let lane = laneEnds.findIndex((end) => end <= r.startMin);
+        if (lane < 0) { lane = laneEnds.length; laneEnds.push(r.endMin); } else laneEnds[lane] = r.endMin;
+        r.lane = lane;
+      }
+      for (const r of cluster) {
+        out.push({
+          item: r.item,
+          original: r.original,
+          span: r.span,
+          lane: r.lane,
+          lanes: laneEnds.length,
+          startMin: r.startMin,
+          endMin: r.endMin,
+        });
+      }
+      cluster = [];
+      clusterEnd = -Infinity;
+    };
+    for (const r of rows) {
+      if (cluster.length && r.startMin >= clusterEnd) flush();
+      cluster.push(r);
+      clusterEnd = Math.max(clusterEnd, r.endMin);
+    }
+    if (cluster.length) flush();
+    return out;
+  }
   // Merged "taken" ranges [[s,e],...] of timed and all-day events in [from, to); reminders take no time.
   function busyRanges(items, from, to) {
     // Expand masters here so callers such as freeSlots cannot accidentally ignore a recurring event. Already-expanded
@@ -1517,12 +1585,27 @@
     const count = Math.trunc(Number(hiddenCount));
     return count > 0 ? "+" + count + " more" : "";
   }
-  function reminderSnoozeTomorrowMinutes(at) {
+  function reminderSnoozeTomorrowMinutes(at, zone = "") {
     const stamp = Number(at);
     if (!Number.isFinite(stamp)) return 0;
-    const date = new Date(stamp);
-    date.setDate(date.getDate() + 1);
-    const minutes = Math.round((date.getTime() - stamp) / 60000);
+    const validZone = cleanZone(zone);
+    let target = NaN;
+    if (validZone) {
+      const baseKey = zonedDateKey(stamp, validZone);
+      const baseClock = clockIn(stamp, validZone);
+      const baseDay = parseYmd(baseKey);
+      if (baseDay && baseClock) {
+        const nextKey = ymd(new Date(baseDay.getFullYear(), baseDay.getMonth(), baseDay.getDate() + 1));
+        const zoned = zonedDateTimeToMs(nextKey, baseClock, validZone);
+        if (Number.isFinite(zoned)) target = zoned;
+      }
+    }
+    if (!Number.isFinite(target)) {
+      const date = new Date(stamp);
+      date.setDate(date.getDate() + 1);
+      target = date.getTime();
+    }
+    const minutes = Math.round((target - stamp) / 60000);
     return Number.isFinite(minutes) && minutes > 0 ? minutes : 0;
   }
   function reminderAlertShouldClose(identity, records, seen = new Set()) {
@@ -4204,7 +4287,25 @@
     const start = cleanWhen(item?.start);
     if (!start) return null;
     const explicit = Number(targetMs);
-    const moved = Number.isFinite(explicit) && explicit > 0 ? Math.floor(explicit) : snoozeDays(whenMs(start), days);
+    let moved;
+    if (Number.isFinite(explicit) && explicit > 0) {
+      moved = Math.floor(explicit);
+    } else {
+      const baseMs = whenMs(start);
+      const stepDays = Math.round(Number(days) || 0);
+      const zone = start.date ? "" : cleanZone(item?.x?.tz);
+      if (zone && Number.isFinite(baseMs)) {
+        const baseKey = zonedDateKey(baseMs, zone);
+        const baseClock = clockIn(baseMs, zone);
+        const baseDay = parseYmd(baseKey);
+        if (baseDay && baseClock) {
+          const nextKey = ymd(new Date(baseDay.getFullYear(), baseDay.getMonth(), baseDay.getDate() + stepDays));
+          const zoned = zonedDateTimeToMs(nextKey, baseClock, zone);
+          if (Number.isFinite(zoned) && zoned > 0) moved = zoned;
+        }
+      }
+      if (!Number.isFinite(moved)) moved = snoozeDays(baseMs, stepDays);
+    }
     if (!Number.isFinite(moved) || moved <= 0) return null;
     return start.date ? { date: ymd(new Date(dayStart(moved))) } : { dateTime: iso(moved) };
   }
@@ -4982,7 +5083,7 @@
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

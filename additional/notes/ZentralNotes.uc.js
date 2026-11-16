@@ -5073,7 +5073,7 @@
       if (!recurring && !calendarItem.start?.date) {
         actions.push({ id: "snooze-10", label: "Snooze 10 min", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, 10)) });
         actions.push({ id: "snooze-60", label: "Snooze 1 hour", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, 60)) });
-        actions.push({ id: "snooze-tomorrow", label: "Tomorrow", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, CALENDAR_PART.reminderSnoozeTomorrowMinutes(Date.now()))) });
+        actions.push({ id: "snooze-tomorrow", label: "Tomorrow", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, CALENDAR_PART.reminderSnoozeTomorrowMinutes(Date.now(), calendarItem.x?.tz || ""))) });
       }
       actions.push({ id: "dismiss", label: "Dismiss", callback: guard(() => store.applyReminderLifecycle(calendarItem, "dismissed")) });
       return actions;
@@ -12419,7 +12419,10 @@
         if (item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length)) return flash("Recurring occurrences need exception support before they can be snoozed");
         const startMs = CALENDAR_PART.itemRange(item)[0];
         const allDay = CALENDAR_PART.isAllDay(item);
-        const dateField = field("New date", CALENDAR_PART.ymd(new Date(startMs)), "14, 14.11 or 2026-11-14");
+        const initialDate = allDay
+          ? (calendarItemDate(item) || CALENDAR_PART.ymd(new Date(startMs)))
+          : (CALENDAR_PART.zonedDateKey(startMs, item.x?.tz || "") || CALENDAR_PART.ymd(new Date(startMs)));
+        const dateField = field("New date", initialDate, "14, 14.11 or 2026-11-14");
         const dateEntry = bindEntry(dateField, { kind: "date" });
         const datePick = chip("Choose date…");
         const dateHost = h("div", { class: "zn-cal-snooze-date" }, dateField.row, datePick);
@@ -12613,7 +12616,7 @@
         const historyWritable = !!history && !history.storageState().writeBlocked;
         const agendaVisible = agendaWindowForItem(item, store).enabled;
         const model = CALENDAR_PART.calendarItemMenuModel(item, { state: lifecycle, historyWritable, agendaVisible, agendaWritable: !!currentCalendarItem(item) });
-        const date = new Date(CALENDAR_PART.itemRange(item)[0]);
+        const date = CALENDAR_PART.parseYmd(calendarItemDate(item)) || new Date(CALENDAR_PART.itemRange(item)[0]);
         const nextMonday = (8 - date.getDay()) % 7 || 7;
         const commands = {
           open: () => { const latest = currentCalendarItem(item); if (latest) openCalendarItem(latest); },
@@ -13529,19 +13532,10 @@
         const minBoxPx = C.calendarMinBoxPx(hourPx);
         const minBoxMin = Math.max(1, Math.ceil((minBoxPx / hourPx) * 60));
         const overlapMin = Math.floor((minBoxPx / 5 / hourPx) * 60);
-        const lastBoxStart = grid.endMin - minBoxMin;
         const laidOut = new Map();
         for (const day of workDays) {
           const dayKey = C.localDateKey(day), { bounds, spans } = timed.get(dayKey);
-          const spanById = new Map(spans.map((span) => [String(span.item.id), span]));
-          const layoutItems = spans.map((span) => {
-            if (!span.reminder && span.endMin - span.startMin >= minBoxMin) return span.item;
-            const start = span.start - Math.max(0, span.startMin - lastBoxStart) * 60000;
-            const length = span.reminder ? minBoxMin : Math.max(1, span.endMin - span.startMin, minBoxMin - overlapMin);
-            return { ...span.item, x: { ...(span.item.x || {}), kind: "event" }, start: { dateTime: new Date(start).toISOString() }, end: { dateTime: new Date(start + length * 60000).toISOString() } };
-          });
-          const entries = C.layoutDay(layoutItems, day, zone);
-          for (const entry of entries) { entry.span = spanById.get(String(entry.item.id)) || null; entry.original = entry.span ? entry.span.item : entry.item; }
+          const entries = C.layoutGridSpans(spans, { minBoxMin, overlapMin, gridEndMin: grid.endMin });
           laidOut.set(dayKey, { bounds, entries });
         }
         const gridRow = h("div", { class: "zn-cal-time-grid-row" });
@@ -14184,10 +14178,11 @@
         }
         askCalendarComposer({ kind: "reminder", allDay: false, date: selectedDate || undefined, summary: usefulTitle, noteId, heading, linkCurrent: false });
       }
-      function askCalendarSlotEvent(start, end) {
-        const C = CALENDAR_PART;
-        const startDate = C.ymd(new Date(start)), endDate = C.ymd(new Date(end));
-        askCalendarComposer({ kind: "event", allDay: false, date: startDate, startTime: C.clockIn(start), endDate, endTime: C.clockIn(end), linkCurrent: false });
+      function askCalendarSlotEvent(start, end, zone = calendarDisplayZone()) {
+        const C = CALENDAR_PART, validZone = C.cleanZone(zone);
+        const startDate = C.zonedDateKey(start, validZone) || C.ymd(new Date(start));
+        const endDate = C.zonedDateKey(end, validZone) || C.ymd(new Date(end));
+        askCalendarComposer({ kind: "event", allDay: false, date: startDate, startTime: C.clockIn(start, validZone), endDate, endTime: C.clockIn(end, validZone), tz: validZone, linkCurrent: false });
       }
       function askCreateCalendarItem(kind, allDay, date = "") {
         const selected = date || store.meta.calendarCursor || CALENDAR_PART.ymd(new Date(nowMs()));
@@ -14300,17 +14295,22 @@
           }
           if (!Number.isInteger(min) || min < 15 || min > 1440) { duration.dataset.bad = "true"; duration.focus(); return; }
           const work = workOnly.checked ? C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK) : null;
-          const slots = C.freeSlots(calendarBaseItems(), fromDay, C.addDays(throughDay, 1), min, { work, hours: shownHours.on && hoursOnly.checked ? shownHours : null, blockAllDay: allDayBusy.checked, zone: calendarDisplayZone() });
+          const zone = calendarDisplayZone();
+          const slots = C.freeSlots(calendarBaseItems(), fromDay, C.addDays(throughDay, 1), min, { work, hours: shownHours.on && hoursOnly.checked ? shownHours : null, blockAllDay: allDayBusy.checked, zone });
           results.replaceChildren();
           if (!slots.length) { results.append(h("p", { class: "zn-empty" }, "No matching free time was found in this range.")); return; }
           results.append(h("p", { class: "zn-empty" }, `${slots.length} free slot${slots.length === 1 ? "" : "s"} found · showing up to 20`));
           for (const [slotStart, slotEnd] of slots.slice(0, 20)) {
-            const date = new Date(slotStart).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-            const crossesDay = C.ymd(new Date(slotStart)) !== C.ymd(new Date(slotEnd));
-            const endLabel = crossesDay ? new Date(slotEnd).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : C.clockIn(slotEnd);
-            const label = `${date} · ${C.clockIn(slotStart)}–${endLabel} · ${Math.round((slotEnd - slotStart) / 60000)} min`;
+            const startKey = C.zonedDateKey(slotStart, zone) || C.ymd(new Date(slotStart));
+            const endKey = C.zonedDateKey(slotEnd, zone) || C.ymd(new Date(slotEnd));
+            const startCivil = C.parseYmd(startKey) || new Date(slotStart);
+            const endCivil = C.parseYmd(endKey) || new Date(slotEnd);
+            const date = startCivil.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+            const crossesDay = startKey !== endKey;
+            const endLabel = crossesDay ? `${endCivil.toLocaleDateString(undefined, { month: "short", day: "numeric" })}, ${C.clockIn(slotEnd, zone)}` : C.clockIn(slotEnd, zone);
+            const label = `${date} · ${C.clockIn(slotStart, zone)}–${endLabel} · ${Math.round((slotEnd - slotStart) / 60000)} min`;
             const button = h("button", { type: "button", class: "zn-cal-free-slot" }, label);
-            button.addEventListener("click", () => { closeDialog(); askCalendarSlotEvent(slotStart, slotEnd); });
+            button.addEventListener("click", () => { closeDialog(); askCalendarSlotEvent(slotStart, slotEnd, zone); });
             results.append(button);
           }
         };
@@ -22097,8 +22097,10 @@
             },
             snooze: () => {
               const current = latest(); if (!current) return true;
-              if (!item) return !!store.snoozeReminder(entry.id, C.reminderSnoozeTomorrowMinutes(Date.now()));
-              const start = C.snoozedItemStart(current, 0, C.addDays(Date.now(), 1)); if (!start) return false;
+              const now = Date.now();
+              if (!item) return !!store.snoozeReminder(entry.id, C.reminderSnoozeTomorrowMinutes(now));
+              const tomorrowMins = C.reminderSnoozeTomorrowMinutes(now, current.x?.tz || "");
+              const start = C.snoozedItemStart(current, 0, tomorrowMins > 0 ? now + tomorrowMins * 60000 : C.addDays(now, 1)); if (!start) return false;
               const master = store.items?.get?.(current.x?.series || current.id); if (!master) return false;
               if (current.x?.series) {
                 const moved = C.moveOccurrence(master, current, start, "this", Date.now()); if (!moved) return false;

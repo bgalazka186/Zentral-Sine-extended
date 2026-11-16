@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.192
+// @version 3.3.193
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.192, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.193, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.192";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.193";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2014,6 +2014,74 @@ const __zentralEmbeddedLoader = (function () {
     if (cluster.length) flush();
     return out;
   }
+  // Side-by-side columns for Week/Day grid boxes measured in clock-grid minutes [0..1440].
+  // Clustering on drawn clock-grid intervals keeps repeated fall-back events (1st-pass CEST vs 2nd-pass CET at 02:15)
+  // in separate side-by-side lanes instead of burying each other, and prevents short pre-gap boxes (01:50 + 20px) on
+  // spring-forward days from falsely colliding with post-gap events (03:05).
+  function layoutGridSpans(spans, { minBoxMin = 1, overlapMin = 0, gridEndMin = 1440 } = {}) {
+    const minBox = Math.max(1, Math.ceil(Number(minBoxMin) || 1));
+    const allowOverlap = Math.max(0, Math.floor(Number(overlapMin) || 0));
+    const endCap = Number.isFinite(Number(gridEndMin)) ? Number(gridEndMin) : 1440;
+    const lastBoxStart = endCap - minBox;
+    const rows = (spans || []).map((span) => {
+      const reminder = !!span.reminder;
+      const rawStart = Number(span.startMin) || 0;
+      const rawEnd = reminder ? rawStart : (Number(span.endMin) || 0);
+      const naturalLen = rawEnd - rawStart;
+      let boxStartMin, boxEndMin;
+      if (!reminder && naturalLen >= minBox) {
+        boxStartMin = rawStart;
+        boxEndMin = rawEnd;
+      } else {
+        boxStartMin = rawStart - Math.max(0, rawStart - lastBoxStart);
+        const length = reminder ? minBox : Math.max(1, naturalLen, minBox - allowOverlap);
+        boxEndMin = boxStartMin + length;
+      }
+      return {
+        span,
+        item: span.item,
+        original: span.item,
+        realStart: Number(span.start) || 0,
+        startMin: boxStartMin,
+        endMin: Math.max(boxStartMin + 1, boxEndMin),
+      };
+    }).sort((a, b) => (
+      a.startMin - b.startMin ||
+      a.realStart - b.realStart ||
+      (b.endMin - b.startMin) - (a.endMin - a.startMin) ||
+      (String(a.item?.id || "") < String(b.item?.id || "") ? -1 : String(a.item?.id || "") > String(b.item?.id || "") ? 1 : 0)
+    ));
+    const out = [];
+    let cluster = [], clusterEnd = -Infinity;
+    const flush = () => {
+      const laneEnds = [];
+      for (const r of cluster) {
+        let lane = laneEnds.findIndex((end) => end <= r.startMin);
+        if (lane < 0) { lane = laneEnds.length; laneEnds.push(r.endMin); } else laneEnds[lane] = r.endMin;
+        r.lane = lane;
+      }
+      for (const r of cluster) {
+        out.push({
+          item: r.item,
+          original: r.original,
+          span: r.span,
+          lane: r.lane,
+          lanes: laneEnds.length,
+          startMin: r.startMin,
+          endMin: r.endMin,
+        });
+      }
+      cluster = [];
+      clusterEnd = -Infinity;
+    };
+    for (const r of rows) {
+      if (cluster.length && r.startMin >= clusterEnd) flush();
+      cluster.push(r);
+      clusterEnd = Math.max(clusterEnd, r.endMin);
+    }
+    if (cluster.length) flush();
+    return out;
+  }
   // Merged "taken" ranges [[s,e],...] of timed and all-day events in [from, to); reminders take no time.
   function busyRanges(items, from, to) {
     // Expand masters here so callers such as freeSlots cannot accidentally ignore a recurring event. Already-expanded
@@ -2728,12 +2796,27 @@ const __zentralEmbeddedLoader = (function () {
     const count = Math.trunc(Number(hiddenCount));
     return count > 0 ? "+" + count + " more" : "";
   }
-  function reminderSnoozeTomorrowMinutes(at) {
+  function reminderSnoozeTomorrowMinutes(at, zone = "") {
     const stamp = Number(at);
     if (!Number.isFinite(stamp)) return 0;
-    const date = new Date(stamp);
-    date.setDate(date.getDate() + 1);
-    const minutes = Math.round((date.getTime() - stamp) / 60000);
+    const validZone = cleanZone(zone);
+    let target = NaN;
+    if (validZone) {
+      const baseKey = zonedDateKey(stamp, validZone);
+      const baseClock = clockIn(stamp, validZone);
+      const baseDay = parseYmd(baseKey);
+      if (baseDay && baseClock) {
+        const nextKey = ymd(new Date(baseDay.getFullYear(), baseDay.getMonth(), baseDay.getDate() + 1));
+        const zoned = zonedDateTimeToMs(nextKey, baseClock, validZone);
+        if (Number.isFinite(zoned)) target = zoned;
+      }
+    }
+    if (!Number.isFinite(target)) {
+      const date = new Date(stamp);
+      date.setDate(date.getDate() + 1);
+      target = date.getTime();
+    }
+    const minutes = Math.round((target - stamp) / 60000);
     return Number.isFinite(minutes) && minutes > 0 ? minutes : 0;
   }
   function reminderAlertShouldClose(identity, records, seen = new Set()) {
@@ -5415,7 +5498,25 @@ const __zentralEmbeddedLoader = (function () {
     const start = cleanWhen(item?.start);
     if (!start) return null;
     const explicit = Number(targetMs);
-    const moved = Number.isFinite(explicit) && explicit > 0 ? Math.floor(explicit) : snoozeDays(whenMs(start), days);
+    let moved;
+    if (Number.isFinite(explicit) && explicit > 0) {
+      moved = Math.floor(explicit);
+    } else {
+      const baseMs = whenMs(start);
+      const stepDays = Math.round(Number(days) || 0);
+      const zone = start.date ? "" : cleanZone(item?.x?.tz);
+      if (zone && Number.isFinite(baseMs)) {
+        const baseKey = zonedDateKey(baseMs, zone);
+        const baseClock = clockIn(baseMs, zone);
+        const baseDay = parseYmd(baseKey);
+        if (baseDay && baseClock) {
+          const nextKey = ymd(new Date(baseDay.getFullYear(), baseDay.getMonth(), baseDay.getDate() + stepDays));
+          const zoned = zonedDateTimeToMs(nextKey, baseClock, zone);
+          if (Number.isFinite(zoned) && zoned > 0) moved = zoned;
+        }
+      }
+      if (!Number.isFinite(moved)) moved = snoozeDays(baseMs, stepDays);
+    }
     if (!Number.isFinite(moved) || moved <= 0) return null;
     return start.date ? { date: ymd(new Date(dayStart(moved))) } : { dateTime: iso(moved) };
   }
@@ -6193,7 +6294,7 @@ const __zentralEmbeddedLoader = (function () {
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -11823,7 +11924,7 @@ __zentralShim.register = function (def) {
       if (!recurring && !calendarItem.start?.date) {
         actions.push({ id: "snooze-10", label: "Snooze 10 min", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, 10)) });
         actions.push({ id: "snooze-60", label: "Snooze 1 hour", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, 60)) });
-        actions.push({ id: "snooze-tomorrow", label: "Tomorrow", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, CALENDAR_PART.reminderSnoozeTomorrowMinutes(Date.now()))) });
+        actions.push({ id: "snooze-tomorrow", label: "Tomorrow", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, CALENDAR_PART.reminderSnoozeTomorrowMinutes(Date.now(), calendarItem.x?.tz || ""))) });
       }
       actions.push({ id: "dismiss", label: "Dismiss", callback: guard(() => store.applyReminderLifecycle(calendarItem, "dismissed")) });
       return actions;
@@ -19169,7 +19270,10 @@ __zentralShim.register = function (def) {
         if (item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length)) return flash("Recurring occurrences need exception support before they can be snoozed");
         const startMs = CALENDAR_PART.itemRange(item)[0];
         const allDay = CALENDAR_PART.isAllDay(item);
-        const dateField = field("New date", CALENDAR_PART.ymd(new Date(startMs)), "14, 14.11 or 2026-11-14");
+        const initialDate = allDay
+          ? (calendarItemDate(item) || CALENDAR_PART.ymd(new Date(startMs)))
+          : (CALENDAR_PART.zonedDateKey(startMs, item.x?.tz || "") || CALENDAR_PART.ymd(new Date(startMs)));
+        const dateField = field("New date", initialDate, "14, 14.11 or 2026-11-14");
         const dateEntry = bindEntry(dateField, { kind: "date" });
         const datePick = chip("Choose date…");
         const dateHost = h("div", { class: "zn-cal-snooze-date" }, dateField.row, datePick);
@@ -19363,7 +19467,7 @@ __zentralShim.register = function (def) {
         const historyWritable = !!history && !history.storageState().writeBlocked;
         const agendaVisible = agendaWindowForItem(item, store).enabled;
         const model = CALENDAR_PART.calendarItemMenuModel(item, { state: lifecycle, historyWritable, agendaVisible, agendaWritable: !!currentCalendarItem(item) });
-        const date = new Date(CALENDAR_PART.itemRange(item)[0]);
+        const date = CALENDAR_PART.parseYmd(calendarItemDate(item)) || new Date(CALENDAR_PART.itemRange(item)[0]);
         const nextMonday = (8 - date.getDay()) % 7 || 7;
         const commands = {
           open: () => { const latest = currentCalendarItem(item); if (latest) openCalendarItem(latest); },
@@ -20279,19 +20383,10 @@ __zentralShim.register = function (def) {
         const minBoxPx = C.calendarMinBoxPx(hourPx);
         const minBoxMin = Math.max(1, Math.ceil((minBoxPx / hourPx) * 60));
         const overlapMin = Math.floor((minBoxPx / 5 / hourPx) * 60);
-        const lastBoxStart = grid.endMin - minBoxMin;
         const laidOut = new Map();
         for (const day of workDays) {
           const dayKey = C.localDateKey(day), { bounds, spans } = timed.get(dayKey);
-          const spanById = new Map(spans.map((span) => [String(span.item.id), span]));
-          const layoutItems = spans.map((span) => {
-            if (!span.reminder && span.endMin - span.startMin >= minBoxMin) return span.item;
-            const start = span.start - Math.max(0, span.startMin - lastBoxStart) * 60000;
-            const length = span.reminder ? minBoxMin : Math.max(1, span.endMin - span.startMin, minBoxMin - overlapMin);
-            return { ...span.item, x: { ...(span.item.x || {}), kind: "event" }, start: { dateTime: new Date(start).toISOString() }, end: { dateTime: new Date(start + length * 60000).toISOString() } };
-          });
-          const entries = C.layoutDay(layoutItems, day, zone);
-          for (const entry of entries) { entry.span = spanById.get(String(entry.item.id)) || null; entry.original = entry.span ? entry.span.item : entry.item; }
+          const entries = C.layoutGridSpans(spans, { minBoxMin, overlapMin, gridEndMin: grid.endMin });
           laidOut.set(dayKey, { bounds, entries });
         }
         const gridRow = h("div", { class: "zn-cal-time-grid-row" });
@@ -20934,10 +21029,11 @@ __zentralShim.register = function (def) {
         }
         askCalendarComposer({ kind: "reminder", allDay: false, date: selectedDate || undefined, summary: usefulTitle, noteId, heading, linkCurrent: false });
       }
-      function askCalendarSlotEvent(start, end) {
-        const C = CALENDAR_PART;
-        const startDate = C.ymd(new Date(start)), endDate = C.ymd(new Date(end));
-        askCalendarComposer({ kind: "event", allDay: false, date: startDate, startTime: C.clockIn(start), endDate, endTime: C.clockIn(end), linkCurrent: false });
+      function askCalendarSlotEvent(start, end, zone = calendarDisplayZone()) {
+        const C = CALENDAR_PART, validZone = C.cleanZone(zone);
+        const startDate = C.zonedDateKey(start, validZone) || C.ymd(new Date(start));
+        const endDate = C.zonedDateKey(end, validZone) || C.ymd(new Date(end));
+        askCalendarComposer({ kind: "event", allDay: false, date: startDate, startTime: C.clockIn(start, validZone), endDate, endTime: C.clockIn(end, validZone), tz: validZone, linkCurrent: false });
       }
       function askCreateCalendarItem(kind, allDay, date = "") {
         const selected = date || store.meta.calendarCursor || CALENDAR_PART.ymd(new Date(nowMs()));
@@ -21050,17 +21146,22 @@ __zentralShim.register = function (def) {
           }
           if (!Number.isInteger(min) || min < 15 || min > 1440) { duration.dataset.bad = "true"; duration.focus(); return; }
           const work = workOnly.checked ? C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK) : null;
-          const slots = C.freeSlots(calendarBaseItems(), fromDay, C.addDays(throughDay, 1), min, { work, hours: shownHours.on && hoursOnly.checked ? shownHours : null, blockAllDay: allDayBusy.checked, zone: calendarDisplayZone() });
+          const zone = calendarDisplayZone();
+          const slots = C.freeSlots(calendarBaseItems(), fromDay, C.addDays(throughDay, 1), min, { work, hours: shownHours.on && hoursOnly.checked ? shownHours : null, blockAllDay: allDayBusy.checked, zone });
           results.replaceChildren();
           if (!slots.length) { results.append(h("p", { class: "zn-empty" }, "No matching free time was found in this range.")); return; }
           results.append(h("p", { class: "zn-empty" }, `${slots.length} free slot${slots.length === 1 ? "" : "s"} found · showing up to 20`));
           for (const [slotStart, slotEnd] of slots.slice(0, 20)) {
-            const date = new Date(slotStart).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-            const crossesDay = C.ymd(new Date(slotStart)) !== C.ymd(new Date(slotEnd));
-            const endLabel = crossesDay ? new Date(slotEnd).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : C.clockIn(slotEnd);
-            const label = `${date} · ${C.clockIn(slotStart)}–${endLabel} · ${Math.round((slotEnd - slotStart) / 60000)} min`;
+            const startKey = C.zonedDateKey(slotStart, zone) || C.ymd(new Date(slotStart));
+            const endKey = C.zonedDateKey(slotEnd, zone) || C.ymd(new Date(slotEnd));
+            const startCivil = C.parseYmd(startKey) || new Date(slotStart);
+            const endCivil = C.parseYmd(endKey) || new Date(slotEnd);
+            const date = startCivil.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+            const crossesDay = startKey !== endKey;
+            const endLabel = crossesDay ? `${endCivil.toLocaleDateString(undefined, { month: "short", day: "numeric" })}, ${C.clockIn(slotEnd, zone)}` : C.clockIn(slotEnd, zone);
+            const label = `${date} · ${C.clockIn(slotStart, zone)}–${endLabel} · ${Math.round((slotEnd - slotStart) / 60000)} min`;
             const button = h("button", { type: "button", class: "zn-cal-free-slot" }, label);
-            button.addEventListener("click", () => { closeDialog(); askCalendarSlotEvent(slotStart, slotEnd); });
+            button.addEventListener("click", () => { closeDialog(); askCalendarSlotEvent(slotStart, slotEnd, zone); });
             results.append(button);
           }
         };
@@ -28847,8 +28948,10 @@ __zentralShim.register = function (def) {
             },
             snooze: () => {
               const current = latest(); if (!current) return true;
-              if (!item) return !!store.snoozeReminder(entry.id, C.reminderSnoozeTomorrowMinutes(Date.now()));
-              const start = C.snoozedItemStart(current, 0, C.addDays(Date.now(), 1)); if (!start) return false;
+              const now = Date.now();
+              if (!item) return !!store.snoozeReminder(entry.id, C.reminderSnoozeTomorrowMinutes(now));
+              const tomorrowMins = C.reminderSnoozeTomorrowMinutes(now, current.x?.tz || "");
+              const start = C.snoozedItemStart(current, 0, tomorrowMins > 0 ? now + tomorrowMins * 60000 : C.addDays(now, 1)); if (!start) return false;
               const master = store.items?.get?.(current.x?.series || current.id); if (!master) return false;
               if (current.x?.series) {
                 const moved = C.moveOccurrence(master, current, start, "this", Date.now()); if (!moved) return false;
