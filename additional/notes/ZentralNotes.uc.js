@@ -5904,6 +5904,7 @@
       const listeners = new Set();
       const backedUp = new Set();
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, cardDock: "", cardW: 0,
+        allNewChoice: "note",
         calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarTab: "tree",
         calendarView: "month", calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
         // The hours Week and Day show ({ on, startMin, endMin }; off = the whole day). Replaced as a whole, never changed in place.
@@ -6135,6 +6136,7 @@
             meta[k] = Number.isFinite(v) && v > 0 ? clampShare(v) : 0;
           }
           if (CALENDAR_PART) {
+            meta.allNewChoice = CALENDAR_PART.cleanAllNotesNewChoice(raw.allNewChoice);
             meta.calendarLayout = CALENDAR_PART.cleanCalendarLayout(raw.calendarLayout);
             meta.calendarSplitLR = CALENDAR_PART.cleanCalendarShare(raw.calendarSplitLR, DEFAULT_META.calendarSplitLR);
             meta.calendarSplitTB = CALENDAR_PART.cleanCalendarShare(raw.calendarSplitTB, DEFAULT_META.calendarSplitTB);
@@ -10524,6 +10526,9 @@
         spellcheck: "false",
       });
       const btnNew = iconButton("plus", "New note (Ctrl+N)", "zn-new");
+      const btnNewMenu = iconButton("caret", "Create menu", "zn-new-menu");
+      btnNewMenu.setAttribute("aria-haspopup", "menu");
+      const newSplit = h("span", { class: "zn-new-split", role: "group", "aria-label": "Create in All notes" }, btnNew, btnNewMenu);
       const btnFolder = iconButton("folder", "New folder", "zn-newfolder");
       const chipAll = h("button", { type: "button", class: "zn-chip" }, "Notes");
       const chipRecent = h("button", { type: "button", class: "zn-chip" }, "Recent");
@@ -10534,7 +10539,7 @@
       const listEl = h(
         "div",
         { class: "zn-list" },
-        h("div", { class: "zn-list-head" }, h("span", { class: "zn-search-wrap" }, icon("search", 13), search), btnFolder, btnNew),
+        h("div", { class: "zn-list-head" }, h("span", { class: "zn-search-wrap" }, icon("search", 13), search), btnFolder, newSplit),
         h("div", { class: "zn-chips" }, chipAll, chipRecent, chipTrash, chipTags, h("span", { class: "zn-grow" }), chipEmpty),
         listItems,
       );
@@ -10703,7 +10708,16 @@
         store.setMeta({ [key]: drag.share });
       }
       // Split view as two windows: only where the sheet floats over a host and the option is on.
+      function syncAllNewButton() {
+        const opts = { agendaEnabled: !!getPref(PREF.AGENDA_ENABLED, false), calendarAvailable: !!store.items };
+        const choice = CALENDAR_PART ? CALENDAR_PART.cleanAllNotesNewChoice(store.meta.allNewChoice, opts) : "note";
+        const label = CALENDAR_PART ? CALENDAR_PART.allNotesNewButtonLabel(choice, opts) : "New note (Ctrl+N)";
+        btnNew.title = label;
+        btnNew.setAttribute("aria-label", label);
+        btnNew.dataset.choice = choice;
+      }
       function applyState() {
+        syncAllNewButton();
         const n = note();
         root.dataset.view = view;
         root.dataset.mode = mode;
@@ -18214,10 +18228,49 @@
       cleanups.push(() => {
         if (rafDrag) window.cancelAnimationFrame(rafDrag);
       });
+      // OW-07: '+' in All notes opens the remembered create action in one click, while its menu arrow offers
+      // New note, New folder, New reminder, New event, and (when Agenda is off) Date note.
+      function selectedCalendarDayKey() {
+        if (CALENDAR_PART) {
+          const picked = CALENDAR_PART.parseYmd(store.meta.calendarCursor);
+          return CALENDAR_PART.ymd(picked || new Date(nowMs()));
+        }
+        return parseYmd(store.meta.calendarCursor) ? store.meta.calendarCursor : ymdOf(nowMs());
+      }
+      function runAllNewChoice(rawChoice, { remember = false } = {}) {
+        const opts = { agendaEnabled: !!getPref(PREF.AGENDA_ENABLED, false), calendarAvailable: !!store.items };
+        const choice = CALENDAR_PART ? CALENDAR_PART.cleanAllNotesNewChoice(rawChoice, opts) : "note";
+        if (remember) {
+          store.setMeta({ allNewChoice: choice });
+          syncAllNewButton();
+        }
+        if (choice === "folder") return askFolderName("New folder", "", (name) => store.addFolder(name, ""));
+        if (choice === "reminder") return askCreateCalendarItem("reminder", false, selectedCalendarDayKey());
+        if (choice === "event") return askCreateCalendarItem("event", false, selectedCalendarDayKey());
+        if (choice === "date") {
+          const dayKey = selectedCalendarDayKey();
+          return openDay(parseYmd(dayKey) || nowMs(), dayKey);
+        }
+        return newNote();
+      }
+      function openAllNewMenu() {
+        const opts = { choice: store.meta.allNewChoice, agendaEnabled: !!getPref(PREF.AGENDA_ENABLED, false), calendarAvailable: !!store.items };
+        const entries = CALENDAR_PART ? CALENDAR_PART.allNotesNewMenuModel(opts) : [
+          { id: "note", icon: "plus", label: "New note", active: true, enabled: true, reason: "" },
+          { id: "folder", icon: "folder", label: "New folder", active: false, enabled: true, reason: "" },
+        ];
+        showMenu(newSplit, entries.map((entry) => ({
+          icon: entry.active ? "check" : entry.icon,
+          label: entry.label,
+          enabled: entry.enabled,
+          reason: entry.reason || undefined,
+          action: () => runAllNewChoice(entry.id, { remember: true }),
+        })));
+      }
       // Cycle F #7: with pref new_note_chooser the + button asks first (Blank is focused, so Enter = blank note).
       // Ctrl+N and the menu entries stay instant. Esc only closes the menu.
       function newNoteChooser() {
-        if (!getPref(PREF.NEW_CHOOSER, false)) return newNote();
+        if (!getPref(PREF.NEW_CHOOSER, false)) return runAllNewChoice(store.meta.allNewChoice);
         const now = Date.now();
         const day = (k, label) => ({ icon: "bell", label: label + "  " + dateTarget(k, now).ymd, action: () => openDateNote(k) });
         showMenu(btnNew, [
@@ -18229,6 +18282,9 @@
         ]);
       }
       listen(btnNew, "click", () => newNoteChooser());
+      listen(btnNew, "contextmenu", (e) => { e.preventDefault(); openAllNewMenu(); });
+      listen(btnNew, "keydown", (e) => { if (e.key === "ArrowDown") { e.preventDefault(); openAllNewMenu(); } });
+      listen(btnNewMenu, "click", () => openAllNewMenu());
       listen(btnFolder, "click", () => askFolderName("New folder", "", (name) => store.addFolder(name, "")));
       listen(btnCalendarLayout, "click", () => {
         const mode = CALENDAR_PART?.cleanCalendarLayout?.(store.meta.calendarLayout) || "auto";

@@ -511,7 +511,23 @@
   color: var(--zn-text);
   font: inherit;
 }
-.zentral-notes-sheet .zn-new { background: color-mix(in srgb, var(--zn-accent) 24%, transparent); opacity: 1; }
+.zentral-notes-sheet .zn-new-split {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--zn-accent) 24%, transparent);
+}
+.zentral-notes-sheet .zn-new { background: transparent; opacity: 1; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.zentral-notes-sheet .zn-new-menu {
+  width: 16px;
+  padding: 0;
+  opacity: 0.85;
+  border-left: 1px solid color-mix(in srgb, var(--zn-line) 70%, transparent);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.zentral-notes-sheet .zn-new-menu:hover { opacity: 1; }
 .zentral-notes-sheet .zn-chips { display: flex; align-items: center; gap: 4px; padding: 0 6px 4px; }
 .zentral-notes-sheet .zn-chip {
   appearance: none;

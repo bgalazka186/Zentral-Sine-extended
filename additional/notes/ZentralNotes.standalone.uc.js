@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.181
+// @version 3.3.182
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.181, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.182, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.181";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.182";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -5317,12 +5317,44 @@ const __zentralEmbeddedLoader = (function () {
     return lr > rr ? local : remote; // exact ties deliberately prefer remote
   }
 
+  // OW-07: '+' menu in All notes (New note, New folder, New reminder, New event, and Date note when Agenda is off),
+  // remembering the last choice for a one-click default and falling back cleanly when Agenda hides Date note.
+  const ALL_NOTES_NEW_CHOICES = Object.freeze(["note", "folder", "reminder", "event", "date"]);
+  function cleanAllNotesNewChoice(value, { agendaEnabled = false, calendarAvailable = true } = {}) {
+    const choice = typeof value === "string" ? value.trim() : "";
+    if (!ALL_NOTES_NEW_CHOICES.includes(choice)) return "note";
+    if (choice === "date" && agendaEnabled) return "note";
+    if ((choice === "reminder" || choice === "event") && !calendarAvailable) return "note";
+    return choice;
+  }
+  function allNotesNewMenuModel({ choice = "note", agendaEnabled = false, calendarAvailable = true } = {}) {
+    const activeChoice = cleanAllNotesNewChoice(choice, { agendaEnabled, calendarAvailable });
+    const unavailableReason = calendarAvailable ? "" : "Calendar item storage is unavailable";
+    const entries = [
+      { id: "note", icon: "plus", label: "New note", active: activeChoice === "note", enabled: true, reason: "" },
+      { id: "folder", icon: "folder", label: "New folder", active: activeChoice === "folder", enabled: true, reason: "" },
+      { id: "reminder", icon: "bell", label: "New reminder", active: activeChoice === "reminder", enabled: !!calendarAvailable, reason: unavailableReason },
+      { id: "event", icon: "calendar-plus", label: "New event", active: activeChoice === "event", enabled: !!calendarAvailable, reason: unavailableReason },
+    ];
+    if (!agendaEnabled)
+      entries.push({ id: "date", icon: "calendar", label: "Date note", active: activeChoice === "date", enabled: true, reason: "" });
+    return entries;
+  }
+  function allNotesNewButtonLabel(choice, opts = {}) {
+    const clean = cleanAllNotesNewChoice(choice, opts);
+    if (clean === "folder") return "New folder";
+    if (clean === "reminder") return "New reminder";
+    if (clean === "event") return "New event";
+    if (clean === "date") return "Date note";
+    return "New note (Ctrl+N)";
+  }
+
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -11783,6 +11815,7 @@ __zentralShim.register = function (def) {
       const listeners = new Set();
       const backedUp = new Set();
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, cardDock: "", cardW: 0,
+        allNewChoice: "note",
         calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarTab: "tree",
         calendarView: "month", calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
         // The hours Week and Day show ({ on, startMin, endMin }; off = the whole day). Replaced as a whole, never changed in place.
@@ -12014,6 +12047,7 @@ __zentralShim.register = function (def) {
             meta[k] = Number.isFinite(v) && v > 0 ? clampShare(v) : 0;
           }
           if (CALENDAR_PART) {
+            meta.allNewChoice = CALENDAR_PART.cleanAllNotesNewChoice(raw.allNewChoice);
             meta.calendarLayout = CALENDAR_PART.cleanCalendarLayout(raw.calendarLayout);
             meta.calendarSplitLR = CALENDAR_PART.cleanCalendarShare(raw.calendarSplitLR, DEFAULT_META.calendarSplitLR);
             meta.calendarSplitTB = CALENDAR_PART.cleanCalendarShare(raw.calendarSplitTB, DEFAULT_META.calendarSplitTB);
@@ -16403,6 +16437,9 @@ __zentralShim.register = function (def) {
         spellcheck: "false",
       });
       const btnNew = iconButton("plus", "New note (Ctrl+N)", "zn-new");
+      const btnNewMenu = iconButton("caret", "Create menu", "zn-new-menu");
+      btnNewMenu.setAttribute("aria-haspopup", "menu");
+      const newSplit = h("span", { class: "zn-new-split", role: "group", "aria-label": "Create in All notes" }, btnNew, btnNewMenu);
       const btnFolder = iconButton("folder", "New folder", "zn-newfolder");
       const chipAll = h("button", { type: "button", class: "zn-chip" }, "Notes");
       const chipRecent = h("button", { type: "button", class: "zn-chip" }, "Recent");
@@ -16413,7 +16450,7 @@ __zentralShim.register = function (def) {
       const listEl = h(
         "div",
         { class: "zn-list" },
-        h("div", { class: "zn-list-head" }, h("span", { class: "zn-search-wrap" }, icon("search", 13), search), btnFolder, btnNew),
+        h("div", { class: "zn-list-head" }, h("span", { class: "zn-search-wrap" }, icon("search", 13), search), btnFolder, newSplit),
         h("div", { class: "zn-chips" }, chipAll, chipRecent, chipTrash, chipTags, h("span", { class: "zn-grow" }), chipEmpty),
         listItems,
       );
@@ -16582,7 +16619,16 @@ __zentralShim.register = function (def) {
         store.setMeta({ [key]: drag.share });
       }
       // Split view as two windows: only where the sheet floats over a host and the option is on.
+      function syncAllNewButton() {
+        const opts = { agendaEnabled: !!getPref(PREF.AGENDA_ENABLED, false), calendarAvailable: !!store.items };
+        const choice = CALENDAR_PART ? CALENDAR_PART.cleanAllNotesNewChoice(store.meta.allNewChoice, opts) : "note";
+        const label = CALENDAR_PART ? CALENDAR_PART.allNotesNewButtonLabel(choice, opts) : "New note (Ctrl+N)";
+        btnNew.title = label;
+        btnNew.setAttribute("aria-label", label);
+        btnNew.dataset.choice = choice;
+      }
       function applyState() {
+        syncAllNewButton();
         const n = note();
         root.dataset.view = view;
         root.dataset.mode = mode;
@@ -24093,10 +24139,49 @@ __zentralShim.register = function (def) {
       cleanups.push(() => {
         if (rafDrag) window.cancelAnimationFrame(rafDrag);
       });
+      // OW-07: '+' in All notes opens the remembered create action in one click, while its menu arrow offers
+      // New note, New folder, New reminder, New event, and (when Agenda is off) Date note.
+      function selectedCalendarDayKey() {
+        if (CALENDAR_PART) {
+          const picked = CALENDAR_PART.parseYmd(store.meta.calendarCursor);
+          return CALENDAR_PART.ymd(picked || new Date(nowMs()));
+        }
+        return parseYmd(store.meta.calendarCursor) ? store.meta.calendarCursor : ymdOf(nowMs());
+      }
+      function runAllNewChoice(rawChoice, { remember = false } = {}) {
+        const opts = { agendaEnabled: !!getPref(PREF.AGENDA_ENABLED, false), calendarAvailable: !!store.items };
+        const choice = CALENDAR_PART ? CALENDAR_PART.cleanAllNotesNewChoice(rawChoice, opts) : "note";
+        if (remember) {
+          store.setMeta({ allNewChoice: choice });
+          syncAllNewButton();
+        }
+        if (choice === "folder") return askFolderName("New folder", "", (name) => store.addFolder(name, ""));
+        if (choice === "reminder") return askCreateCalendarItem("reminder", false, selectedCalendarDayKey());
+        if (choice === "event") return askCreateCalendarItem("event", false, selectedCalendarDayKey());
+        if (choice === "date") {
+          const dayKey = selectedCalendarDayKey();
+          return openDay(parseYmd(dayKey) || nowMs(), dayKey);
+        }
+        return newNote();
+      }
+      function openAllNewMenu() {
+        const opts = { choice: store.meta.allNewChoice, agendaEnabled: !!getPref(PREF.AGENDA_ENABLED, false), calendarAvailable: !!store.items };
+        const entries = CALENDAR_PART ? CALENDAR_PART.allNotesNewMenuModel(opts) : [
+          { id: "note", icon: "plus", label: "New note", active: true, enabled: true, reason: "" },
+          { id: "folder", icon: "folder", label: "New folder", active: false, enabled: true, reason: "" },
+        ];
+        showMenu(newSplit, entries.map((entry) => ({
+          icon: entry.active ? "check" : entry.icon,
+          label: entry.label,
+          enabled: entry.enabled,
+          reason: entry.reason || undefined,
+          action: () => runAllNewChoice(entry.id, { remember: true }),
+        })));
+      }
       // Cycle F #7: with pref new_note_chooser the + button asks first (Blank is focused, so Enter = blank note).
       // Ctrl+N and the menu entries stay instant. Esc only closes the menu.
       function newNoteChooser() {
-        if (!getPref(PREF.NEW_CHOOSER, false)) return newNote();
+        if (!getPref(PREF.NEW_CHOOSER, false)) return runAllNewChoice(store.meta.allNewChoice);
         const now = Date.now();
         const day = (k, label) => ({ icon: "bell", label: label + "  " + dateTarget(k, now).ymd, action: () => openDateNote(k) });
         showMenu(btnNew, [
@@ -24108,6 +24193,9 @@ __zentralShim.register = function (def) {
         ]);
       }
       listen(btnNew, "click", () => newNoteChooser());
+      listen(btnNew, "contextmenu", (e) => { e.preventDefault(); openAllNewMenu(); });
+      listen(btnNew, "keydown", (e) => { if (e.key === "ArrowDown") { e.preventDefault(); openAllNewMenu(); } });
+      listen(btnNewMenu, "click", () => openAllNewMenu());
       listen(btnFolder, "click", () => askFolderName("New folder", "", (name) => store.addFolder(name, "")));
       listen(btnCalendarLayout, "click", () => {
         const mode = CALENDAR_PART?.cleanCalendarLayout?.(store.meta.calendarLayout) || "auto";
