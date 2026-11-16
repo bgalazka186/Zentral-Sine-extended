@@ -57,8 +57,9 @@
 
    A wide sheet has the folder tree beside the calendar, a sheet that is higher than wide has it above ("top /
    bottom"), and a sheet too small for both shows one of them at a time ("tabs"; the calendar is the tab that is
-   opened here). `--details` names the layout of every cell. In a calendar pane under 470 px wide Month is a list
-   of days, which has nothing to fit and is only named. */
+   opened here). `--details` names the layout of every cell. In a calendar pane under 470 px wide (or below the
+   configured height threshold) Month is a date-only picker: this audit checks all 42 date cells, their seven-column
+   grid, accessible item counts, date-only contents and bounds inside the picker surface. */
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -216,9 +217,33 @@ function measure(font) {
     if (Math.max(...heights) - row > 0.6) issues.push({ kind: "month-rows", what, highest: round(Math.max(...heights)) });
     return { issues, summary: `${what}, ${q(".zn-cal-month-wrap").dataset.density}${paneScrolls ? ", scrolls" : ""}`, key: `${content.clientHeight}|${content.scrollHeight}|${round(row)}|${lines}` };
   }
-  // Month in a pane under 470 px wide is a list of days: nothing to fit.
-  if (q(".zn-cal-compact-list")) return { issues: [], summary: "a list of days (the pane is too narrow for the grid)", key: "list" };
-  return { issues: [{ kind: "page-error", what: "neither a timeline nor a Month grid nor a list is shown" }], summary: "nothing", key: "" };
+  const picker = q(".zn-cal-picker-grid");
+  if (picker) {
+    const wrap = q(".zn-cal-picker-wrap"), cells = qa(".zn-cal-picker-day");
+    const grid = picker.getBoundingClientRect(), bounds = content.getBoundingClientRect();
+    const widths = cells.map((cell) => cell.getBoundingClientRect().width);
+    const heights = cells.map((cell) => cell.getBoundingClientRect().height);
+    const minWidth = Math.min(...widths), minHeight = Math.min(...heights);
+    const rowSpread = Math.max(...heights) - minHeight;
+    const columns = getComputedStyle(picker).gridTemplateColumns.trim().split(/\\s+/).length;
+    let invalidCells = 0, clipped = 0;
+    for (const cell of cells) {
+      const rect = cell.getBoundingClientRect(), label = cell.getAttribute("aria-label") || "";
+      if (!/^\\d{1,2}$/.test(cell.textContent.trim()) || cell.children.length || !/\\d+ items?$/.test(label)) invalidCells++;
+      if (rect.left < grid.left - 0.5 || rect.right > grid.right + 0.5 || rect.top < grid.top - 0.5 || rect.bottom > grid.bottom + 0.5) clipped++;
+    }
+    const what = `${content.clientHeight}/${content.scrollHeight} px, ${cells.length} date cells, ${round(minWidth)}×${round(minHeight)} px minimum`;
+    if (cells.length !== 42) issues.push({ kind: "picker-cells", what, actual: cells.length });
+    if (columns !== 7) issues.push({ kind: "picker-columns", what, actual: columns });
+    if (invalidCells) issues.push({ kind: "picker-content", what, cells: invalidCells });
+    if (clipped) issues.push({ kind: "picker-clipped", what, cells: clipped });
+    if (minWidth < 12 || minHeight < 20) issues.push({ kind: "picker-cell-small", what });
+    if (rowSpread > 0.6) issues.push({ kind: "picker-rows", what, spread: round(rowSpread) });
+    if (grid.top < bounds.top - 0.5 && content.scrollTop === 0) issues.push({ kind: "picker-above", what });
+    return { issues, summary: `${what}, 7 columns, ${wrap?.dataset?.picker ? "picker" : "date grid"}`, key: `${content.clientHeight}|${content.scrollHeight}|${cells.length}|${round(minWidth)}|${round(minHeight)}` };
+  }
+  if (q(".zn-cal-compact-list")) return { issues: [{ kind: "page-error", what: "the retired compact Month list is still rendered" }], summary: "retired list", key: "retired-list" };
+  return { issues: [{ kind: "page-error", what: "neither a timeline, Month grid nor date picker is shown" }], summary: "nothing", key: "" };
 }
 
 (async () => {
