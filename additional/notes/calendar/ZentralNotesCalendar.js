@@ -652,17 +652,61 @@
       return isReminder(it) ? s >= from && s < to : s < to && e > from;
     }).sort((a, b) => itemRange(a)[0] - itemRange(b)[0] || itemRange(b)[1] - itemRange(a)[1] || (a.id < b.id ? -1 : 1));
   }
+  const WEEK_START_DAYS = Object.freeze([1, 0]);
+  function cleanWeekStart(value) {
+    if (value === 0 || value === "0") return 0;
+    if (value === 1 || value === "1") return 1;
+    if (typeof value === "string") {
+      const s = value.trim().toLowerCase();
+      if (s === "sun" || s === "sunday") return 0;
+      if (s === "mon" || s === "monday") return 1;
+    }
+    return 1;
+  }
+  function cleanWeekNumbers(value) {
+    return value === true;
+  }
+  const SHORT_WEEKDAY_NAMES = Object.freeze(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
+  const LONG_WEEKDAY_NAMES = Object.freeze(["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]);
+  function weekdayLabels(weekStart = 1, style = "short") {
+    const ws = cleanWeekStart(weekStart);
+    const names = style === "long" ? LONG_WEEKDAY_NAMES : SHORT_WEEKDAY_NAMES;
+    return Array.from({ length: 7 }, (_, i) => names[(ws + i) % 7]);
+  }
+  // Pure week-of-year number in civil coordinates (immune to DST): ISO 8601 when weekStart = 1 (Monday),
+  // Sunday-first week-of-year (Week 1 contains Jan 1) when weekStart = 0 (Sunday).
+  function weekNumber(day, weekStart = 1) {
+    const d = new Date(dayStart(day));
+    const u = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+    const ws = cleanWeekStart(weekStart);
+    if (ws === 0) {
+      const dow = new Date(u).getUTCDay();
+      const sat = u + (6 - dow) * 86400000;
+      const year = new Date(sat).getUTCFullYear();
+      const jan1 = Date.UTC(year, 0, 1);
+      const week1Sun = jan1 - new Date(jan1).getUTCDay() * 86400000;
+      const sun = u - dow * 86400000;
+      return Math.floor((sun - week1Sun) / (7 * 86400000)) + 1;
+    }
+    const isoDow = new Date(u).getUTCDay() || 7;
+    const thu = u + (4 - isoDow) * 86400000;
+    const isoYear = new Date(thu).getUTCFullYear();
+    const jan1 = Date.UTC(isoYear, 0, 1);
+    return Math.ceil(((thu - jan1) / 86400000 + 1) / 7);
+  }
   // Month grid: 6 weeks x 7 days of local midnights; weekStart 0 = Sunday, 1 = Monday.
   function monthGrid(year, month, weekStart = 1) {
+    const ws = cleanWeekStart(weekStart);
     const first = new Date(year, month, 1);
-    const lead = (first.getDay() - weekStart + 7) % 7;
+    const lead = (first.getDay() - ws + 7) % 7;
     const days = [];
     for (let i = 0; i < 42; i++) days.push(new Date(year, month, 1 - lead + i).getTime());
     return Array.from({ length: 6 }, (_, w) => days.slice(w * 7, w * 7 + 7));
   }
   // Seven local midnights containing `day`; defaults to Monday-first to match the month view.
   function weekDays(day, weekStart = 1) {
-    const start = dayStart(day), offset = (new Date(start).getDay() - ((Number(weekStart) || 0) + 7) % 7 + 7) % 7;
+    const ws = cleanWeekStart(weekStart);
+    const start = dayStart(day), offset = (new Date(start).getDay() - ws + 7) % 7;
     const first = addDays(start, -offset);
     return Array.from({ length: 7 }, (_, i) => addDays(first, i));
   }
@@ -3322,6 +3366,9 @@
   function weekText(items, weekFrom, opts = {}) {
     const names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     const lines = [];
+    if (opts && opts.weekNumbers === true) {
+      lines.push("# Week " + weekNumber(weekFrom, opts.weekStart === undefined ? 1 : opts.weekStart), "");
+    }
     for (let i = 0; i < 7; i++) {
       const d = addDays(weekFrom, i);
       lines.push("## " + names[new Date(d).getDay()] + " " + ymd(new Date(d)));
@@ -3365,8 +3412,9 @@
   // What the mini-calendar draws for a month: 6 weeks of local days, item count, heat level and dominant category.
   // selected = local midnight ms or 0. A single expansion supplies all cells, including recurring occurrences.
   function pickerMonth(year, month, { weekStart = 1, now = 0, selected = 0, items = [] } = {}) {
+    const ws = cleanWeekStart(weekStart);
     const today = now ? dayStart(now) : 0, sel = selected ? dayStart(selected) : 0;
-    const grid = monthGrid(year, month, weekStart);
+    const grid = monthGrid(year, month, ws);
     const first = grid[0][0], last = addDays(grid[5][6], 1);
     const stats = new Map();
     for (const it of expandRange(Array.isArray(items) ? items : [], first, last)) {
@@ -3404,6 +3452,7 @@
   }
   // Keyboard moves in the picker: arrows = 1 day / 1 week, PageUp/PageDown = 1 month, Home/End = start/end of week.
   function pickerKey(day, key, weekStart = 1) {
+    const ws = cleanWeekStart(weekStart);
     const d = new Date(day);
     switch (key) {
       case "ArrowLeft": return addDays(day, -1);
@@ -3412,8 +3461,8 @@
       case "ArrowDown": return addDays(day, 7);
       case "PageUp": return new Date(d.getFullYear(), d.getMonth() - 1, Math.min(d.getDate(), new Date(d.getFullYear(), d.getMonth(), 0).getDate())).getTime();
       case "PageDown": return new Date(d.getFullYear(), d.getMonth() + 1, Math.min(d.getDate(), new Date(d.getFullYear(), d.getMonth() + 2, 0).getDate())).getTime();
-      case "Home": return addDays(day, -((d.getDay() - weekStart + 7) % 7));
-      case "End": return addDays(day, 6 - ((d.getDay() - weekStart + 7) % 7));
+      case "Home": return addDays(day, -((d.getDay() - ws + 7) % 7));
+      case "End": return addDays(day, 6 - ((d.getDay() - ws + 7) % 7));
       default: return day;
     }
   }
@@ -4877,7 +4926,7 @@
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

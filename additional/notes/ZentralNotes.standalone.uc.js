@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.189
+// @version 3.3.190
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.189, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.190, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.189";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.190";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1863,17 +1863,61 @@ const __zentralEmbeddedLoader = (function () {
       return isReminder(it) ? s >= from && s < to : s < to && e > from;
     }).sort((a, b) => itemRange(a)[0] - itemRange(b)[0] || itemRange(b)[1] - itemRange(a)[1] || (a.id < b.id ? -1 : 1));
   }
+  const WEEK_START_DAYS = Object.freeze([1, 0]);
+  function cleanWeekStart(value) {
+    if (value === 0 || value === "0") return 0;
+    if (value === 1 || value === "1") return 1;
+    if (typeof value === "string") {
+      const s = value.trim().toLowerCase();
+      if (s === "sun" || s === "sunday") return 0;
+      if (s === "mon" || s === "monday") return 1;
+    }
+    return 1;
+  }
+  function cleanWeekNumbers(value) {
+    return value === true;
+  }
+  const SHORT_WEEKDAY_NAMES = Object.freeze(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
+  const LONG_WEEKDAY_NAMES = Object.freeze(["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]);
+  function weekdayLabels(weekStart = 1, style = "short") {
+    const ws = cleanWeekStart(weekStart);
+    const names = style === "long" ? LONG_WEEKDAY_NAMES : SHORT_WEEKDAY_NAMES;
+    return Array.from({ length: 7 }, (_, i) => names[(ws + i) % 7]);
+  }
+  // Pure week-of-year number in civil coordinates (immune to DST): ISO 8601 when weekStart = 1 (Monday),
+  // Sunday-first week-of-year (Week 1 contains Jan 1) when weekStart = 0 (Sunday).
+  function weekNumber(day, weekStart = 1) {
+    const d = new Date(dayStart(day));
+    const u = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+    const ws = cleanWeekStart(weekStart);
+    if (ws === 0) {
+      const dow = new Date(u).getUTCDay();
+      const sat = u + (6 - dow) * 86400000;
+      const year = new Date(sat).getUTCFullYear();
+      const jan1 = Date.UTC(year, 0, 1);
+      const week1Sun = jan1 - new Date(jan1).getUTCDay() * 86400000;
+      const sun = u - dow * 86400000;
+      return Math.floor((sun - week1Sun) / (7 * 86400000)) + 1;
+    }
+    const isoDow = new Date(u).getUTCDay() || 7;
+    const thu = u + (4 - isoDow) * 86400000;
+    const isoYear = new Date(thu).getUTCFullYear();
+    const jan1 = Date.UTC(isoYear, 0, 1);
+    return Math.ceil(((thu - jan1) / 86400000 + 1) / 7);
+  }
   // Month grid: 6 weeks x 7 days of local midnights; weekStart 0 = Sunday, 1 = Monday.
   function monthGrid(year, month, weekStart = 1) {
+    const ws = cleanWeekStart(weekStart);
     const first = new Date(year, month, 1);
-    const lead = (first.getDay() - weekStart + 7) % 7;
+    const lead = (first.getDay() - ws + 7) % 7;
     const days = [];
     for (let i = 0; i < 42; i++) days.push(new Date(year, month, 1 - lead + i).getTime());
     return Array.from({ length: 6 }, (_, w) => days.slice(w * 7, w * 7 + 7));
   }
   // Seven local midnights containing `day`; defaults to Monday-first to match the month view.
   function weekDays(day, weekStart = 1) {
-    const start = dayStart(day), offset = (new Date(start).getDay() - ((Number(weekStart) || 0) + 7) % 7 + 7) % 7;
+    const ws = cleanWeekStart(weekStart);
+    const start = dayStart(day), offset = (new Date(start).getDay() - ws + 7) % 7;
     const first = addDays(start, -offset);
     return Array.from({ length: 7 }, (_, i) => addDays(first, i));
   }
@@ -4533,6 +4577,9 @@ const __zentralEmbeddedLoader = (function () {
   function weekText(items, weekFrom, opts = {}) {
     const names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     const lines = [];
+    if (opts && opts.weekNumbers === true) {
+      lines.push("# Week " + weekNumber(weekFrom, opts.weekStart === undefined ? 1 : opts.weekStart), "");
+    }
     for (let i = 0; i < 7; i++) {
       const d = addDays(weekFrom, i);
       lines.push("## " + names[new Date(d).getDay()] + " " + ymd(new Date(d)));
@@ -4576,8 +4623,9 @@ const __zentralEmbeddedLoader = (function () {
   // What the mini-calendar draws for a month: 6 weeks of local days, item count, heat level and dominant category.
   // selected = local midnight ms or 0. A single expansion supplies all cells, including recurring occurrences.
   function pickerMonth(year, month, { weekStart = 1, now = 0, selected = 0, items = [] } = {}) {
+    const ws = cleanWeekStart(weekStart);
     const today = now ? dayStart(now) : 0, sel = selected ? dayStart(selected) : 0;
-    const grid = monthGrid(year, month, weekStart);
+    const grid = monthGrid(year, month, ws);
     const first = grid[0][0], last = addDays(grid[5][6], 1);
     const stats = new Map();
     for (const it of expandRange(Array.isArray(items) ? items : [], first, last)) {
@@ -4615,6 +4663,7 @@ const __zentralEmbeddedLoader = (function () {
   }
   // Keyboard moves in the picker: arrows = 1 day / 1 week, PageUp/PageDown = 1 month, Home/End = start/end of week.
   function pickerKey(day, key, weekStart = 1) {
+    const ws = cleanWeekStart(weekStart);
     const d = new Date(day);
     switch (key) {
       case "ArrowLeft": return addDays(day, -1);
@@ -4623,8 +4672,8 @@ const __zentralEmbeddedLoader = (function () {
       case "ArrowDown": return addDays(day, 7);
       case "PageUp": return new Date(d.getFullYear(), d.getMonth() - 1, Math.min(d.getDate(), new Date(d.getFullYear(), d.getMonth(), 0).getDate())).getTime();
       case "PageDown": return new Date(d.getFullYear(), d.getMonth() + 1, Math.min(d.getDate(), new Date(d.getFullYear(), d.getMonth() + 2, 0).getDate())).getTime();
-      case "Home": return addDays(day, -((d.getDay() - weekStart + 7) % 7));
-      case "End": return addDays(day, 6 - ((d.getDay() - weekStart + 7) % 7));
+      case "Home": return addDays(day, -((d.getDay() - ws + 7) % 7));
+      case "End": return addDays(day, 6 - ((d.getDay() - ws + 7) % 7));
       default: return day;
     }
   }
@@ -6088,7 +6137,7 @@ const __zentralEmbeddedLoader = (function () {
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -12817,7 +12866,7 @@ __zentralShim.register = function (def) {
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, cardDock: "", cardW: 0,
         allNewChoice: "note", calendarClockMode: "both",
         calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarTab: "tree",
-        calendarView: "month", calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
+        calendarView: "month", calendarWeekStart: 1, calendarWeekNumbers: false, calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
         // The hours Week and Day show ({ on, startMin, endMin }; off = the whole day). Replaced as a whole, never changed in place.
         calendarHours: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHours(null) : { on: false, startMin: 480, endMin: 1200 },
         // The size of each calendar view ("auto" = fitted to the pane, or px; OW-03). Replaced as a whole, never changed in place.
@@ -13057,6 +13106,8 @@ __zentralShim.register = function (def) {
             if (meta.calendarTreeCollapsed && meta.calendarPaneCollapsed) meta.calendarTreeCollapsed = meta.calendarPaneCollapsed = false;
             meta.calendarTab = raw.calendarTab === "calendar" ? "calendar" : "tree";
             meta.calendarView = ["month", "upcoming", "agenda", "week", "day"].includes(raw.calendarView) ? raw.calendarView : "month";
+            meta.calendarWeekStart = CALENDAR_PART.cleanWeekStart(raw.calendarWeekStart);
+            meta.calendarWeekNumbers = CALENDAR_PART.cleanWeekNumbers(raw.calendarWeekNumbers);
             // `calendarDensity` (one of three steps for all views, until 3.3.175) is read only where no size is stored yet.
             meta.calendarScale = CALENDAR_PART.cleanCalendarScale(raw.calendarScale, raw.calendarDensity);
             meta.calendarPicker = CALENDAR_PART.cleanCalendarPicker(raw.calendarPicker);
@@ -18736,27 +18787,35 @@ __zentralShim.register = function (def) {
         remindEl.classList.toggle("is-due", passed);
         remindEl.title = (passed ? "Reminder time passed: " : "Reminder: ") + reminderText(n.remind) + " (click to change)";
       }
-      // Shared date picker (T2.2a): every date surface uses this same Monday-first, keyboard-accessible month grid.
+      const calendarWeekStartDay = () => (CALENDAR_PART ? CALENDAR_PART.cleanWeekStart(store.meta.calendarWeekStart) : 1);
+      const calendarShowWeekNumbers = () => (CALENDAR_PART ? CALENDAR_PART.cleanWeekNumbers(store.meta.calendarWeekNumbers) : false);
+      // Shared date picker (T2.2a): every date surface uses this same keyboard-accessible month grid, honouring
+      // the configured week start day (AU-B5) and optional week numbers column.
       // `selected` / return values are local-midnight ms. Optional clock controls are composed separately below.
-      function buildDatePicker({ selected, items = [], onPick, compact = false, topBar = null }) {
+      function buildDatePicker({ selected, items = [], onPick, compact = false, topBar = null, weekStart: weekStartOpt, weekNumbers: weekNumbersOpt }) {
         const C = CALENDAR_PART;
         if (!C) return null;
-        const weekStart = 1;
+        const weekStart = weekStartOpt === undefined ? calendarWeekStartDay() : C.cleanWeekStart(weekStartOpt);
+        const showWeeks = weekNumbersOpt === undefined ? calendarShowWeekNumbers() : C.cleanWeekNumbers(weekNumbersOpt);
         let cursor = selected ? C.dayStart(selected) : C.dayStart(nowMs());
         let view = { year: new Date(cursor).getFullYear(), month: new Date(cursor).getMonth() };
         const title = h("div", { class: "zn-cal-title", "aria-live": "polite" });
         const prev = iconButton("chevronLeft", "Previous month", "zn-cal-nav"), next = iconButton("chevronRight", "Next month", "zn-cal-nav");
         const todayBtn = chip("Today");
-        const grid = h("div", { class: "zn-cal-grid", role: "grid", tabindex: "0", "aria-label": "Choose a day" });
+        const grid = h("div", { class: "zn-cal-grid" + (showWeeks ? " has-week-numbers" : ""), role: "grid", tabindex: "0", "aria-label": "Choose a day" });
         const root = h("div", { class: "zn-cal" + (compact ? " is-compact" : "") }, ...(topBar ? [topBar] : []), h("div", { class: "zn-cal-head" }, prev, title, next, todayBtn), grid);
-        const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        const dowLabels = C.weekdayLabels(weekStart, "short");
         const draw = () => {
           const monthName = new Date(view.year, view.month, 1).toLocaleString(undefined, { month: compact ? "short" : "long", year: "numeric" });
           title.textContent = monthName;
           const rows = C.pickerMonth(view.year, view.month, { weekStart, now: nowMs(), selected: cursor, items });
-          grid.replaceChildren(
-            ...Array.from({ length: 7 }, (_, i) => h("span", { class: "zn-cal-dow" }, names[(weekStart + i) % 7])),
-            ...rows.flat().map((c) => {
+          const bodyNodes = [];
+          for (const row of rows) {
+            if (showWeeks && row.length) {
+              const wk = C.weekNumber(row[0].day, weekStart);
+              bodyNodes.push(h("span", { class: "zn-cal-week-num", role: "rowheader", "aria-label": "Week " + wk }, String(wk)));
+            }
+            for (const c of row) {
               const b = h("button", { type: "button", class: "zn-cal-day", "data-day": String(c.day), tabindex: "-1", "aria-label": new Date(c.day).toDateString() + (c.count ? ", " + c.count + " item" + (c.count > 1 ? "s" : "") : "") }, String(c.date));
               if (!c.inMonth) b.classList.add("is-out");
               if (c.today) b.classList.add("is-today");
@@ -18764,8 +18823,13 @@ __zentralShim.register = function (def) {
               if (c.day === cursor) { b.classList.add("is-cursor"); b.setAttribute("aria-selected", "true"); }
               if (c.count) b.append(h("i", { class: "zn-cal-dot" }));
               b.addEventListener("click", () => { cursor = c.day; selected = c.day; onPick?.(c.day); draw(); grid.focus({ preventScroll: true }); });
-              return b;
-            }),
+              bodyNodes.push(b);
+            }
+          }
+          grid.replaceChildren(
+            ...(showWeeks ? [h("span", { class: "zn-cal-dow zn-cal-week-col-head", "aria-label": "Week number" }, "W#")] : []),
+            ...dowLabels.map((label) => h("span", { class: "zn-cal-dow" }, label)),
+            ...bodyNodes,
           );
         };
         const go = (delta) => {
@@ -19356,7 +19420,9 @@ __zentralShim.register = function (def) {
       }
       function calendarMonthView(items, cursor, compact) {
         const date = new Date(cursor), year = date.getFullYear(), month = date.getMonth();
-        const grid = CALENDAR_PART.monthGrid(year, month, 1);
+        const weekStart = calendarWeekStartDay(), showWeeks = calendarShowWeekNumbers();
+        const dowNames = CALENDAR_PART.weekdayLabels(weekStart, "short");
+        const grid = CALENDAR_PART.monthGrid(year, month, weekStart);
         const first = grid[0][0], afterLast = CALENDAR_PART.addDays(grid[5][6], 1);
         const expanded = CALENDAR_PART.expandRange(items, first, afterLast);
         calendarPeriod.textContent = date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
@@ -19365,9 +19431,13 @@ __zentralShim.register = function (def) {
           calendarContent.dataset.picker = "true";
           const pickerPrefs = CALENDAR_PART.cleanCalendarPicker(store.meta.calendarPicker);
           const pickerWrap = h("div", { class: "zn-cal-month-wrap zn-cal-picker-wrap" });
-          const names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-          const dows = h("div", { class: "zn-cal-month-dows" }, ...names.map((name) => h("span", {}, name)));
-          const cells = h("div", { class: "zn-cal-month-grid zn-cal-picker-grid", role: "grid", "aria-label": "Choose a date in " + date.toLocaleDateString(undefined, { month: "long", year: "numeric" }), title: "Colour legend: no items, 1 item, 2–3 items, 4 or more items." });
+          const dows = h(
+            "div",
+            { class: "zn-cal-month-dows" + (showWeeks ? " has-week-numbers" : "") },
+            ...(showWeeks ? [h("span", { class: "zn-cal-week-col-head", "aria-label": "Week number" }, "W#")] : []),
+            ...dowNames.map((name) => h("span", {}, name)),
+          );
+          const cells = h("div", { class: "zn-cal-month-grid zn-cal-picker-grid" + (showWeeks ? " has-week-numbers" : ""), role: "grid", "aria-label": "Choose a date in " + date.toLocaleDateString(undefined, { month: "long", year: "numeric" }), title: "Colour legend: no items, 1 item, 2–3 items, 4 or more items." });
           const selected = CALENDAR_PART.parseYmd(store.meta.calendarCursor)?.getTime() || cursor;
           const selection = h("div", { class: "zn-cal-month-selection zn-cal-picker-selection" });
           let focusedDay = selected, selectedDay = selected, visibleYear = year, visibleMonth = month;
@@ -19394,53 +19464,59 @@ __zentralShim.register = function (def) {
             const monthDate = new Date(visibleYear, visibleMonth, 1);
             calendarPeriod.textContent = monthDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
             const rows = CALENDAR_PART.pickerMonth(visibleYear, visibleMonth, {
-              weekStart: 1, now: nowMs(), selected: selectedDay, items,
+              weekStart, now: nowMs(), selected: selectedDay, items,
             });
-            const buttons = rows.flat().map((cell) => {
-              const key = CALENDAR_PART.localDateKey(cell.day);
-              const dateName = calendarDayLabel(cell.day, { year: true });
-              const countText = cell.count + " item" + (cell.count === 1 ? "" : "s");
-              const button = h("button", {
-                type: "button", class: "zn-cal-picker-day is-heat-" + cell.level,
-                role: "gridcell", tabindex: cell.day === focusedDay ? "0" : "-1",
-                "data-day": key, "data-day-value": String(cell.day),
-                "aria-label": dateName + ", " + countText,
-                "aria-selected": cell.day === selectedDay ? "true" : "false",
-                "aria-pressed": cell.day === selectedDay ? "true" : "false",
-                title: countText + ". Colour legend: 0 none, 1 light, 2–3 medium, 4+ strong.",
-              }, String(cell.date));
-              if (!cell.inMonth) button.classList.add("is-out");
-              if (cell.today) button.classList.add("is-today");
-              if (cell.day === selectedDay) button.classList.add("is-selected");
-              if (cell.day === focusedDay) button.classList.add("is-cursor");
-              const tint = tintFor(cell.dominantCategory);
-              if (tint) {
-                button.style.setProperty("--zn-cal-picker-tint", tint);
-                const ptok = CALENDAR_PART.derivePaletteTokens?.(tint, currentSurfaceSpec(), { kind: "calendar" });
-                if (ptok) button.style.setProperty("--zn-cal-picker-tint-safe", ptok.outline);
+            const nodes = [];
+            for (const row of rows) {
+              if (showWeeks && row.length) {
+                const wk = CALENDAR_PART.weekNumber(row[0].day, weekStart);
+                nodes.push(h("span", { class: "zn-cal-week-num", role: "rowheader", "aria-label": "Week " + wk }, String(wk)));
               }
-              button.addEventListener("click", () => selectPickerDay(cell.day));
-              button.addEventListener("keydown", (event) => {
-                if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) return;
-                event.preventDefault();
-                event.stopPropagation();
-                movePickerFocus(cell.day, event.key);
-              });
-              return button;
-            });
-            cells.replaceChildren(...buttons);
+              for (const cell of row) {
+                const key = CALENDAR_PART.localDateKey(cell.day);
+                const dateName = calendarDayLabel(cell.day, { year: true });
+                const countText = cell.count + " item" + (cell.count === 1 ? "" : "s");
+                const button = h("button", {
+                  type: "button", class: "zn-cal-picker-day is-heat-" + cell.level,
+                  role: "gridcell", tabindex: cell.day === focusedDay ? "0" : "-1",
+                  "data-day": key, "data-day-value": String(cell.day),
+                  "aria-label": dateName + ", " + countText,
+                  "aria-selected": cell.day === selectedDay ? "true" : "false",
+                  "aria-pressed": cell.day === selectedDay ? "true" : "false",
+                  title: countText + ". Colour legend: 0 none, 1 light, 2–3 medium, 4+ strong.",
+                }, String(cell.date));
+                if (!cell.inMonth) button.classList.add("is-out");
+                if (cell.today) button.classList.add("is-today");
+                if (cell.day === selectedDay) button.classList.add("is-selected");
+                if (cell.day === focusedDay) button.classList.add("is-cursor");
+                const tint = tintFor(cell.dominantCategory);
+                if (tint) {
+                  button.style.setProperty("--zn-cal-picker-tint", tint);
+                  const ptok = CALENDAR_PART.derivePaletteTokens?.(tint, currentSurfaceSpec(), { kind: "calendar" });
+                  if (ptok) button.style.setProperty("--zn-cal-picker-tint-safe", ptok.outline);
+                }
+                button.addEventListener("click", () => selectPickerDay(cell.day));
+                button.addEventListener("keydown", (event) => {
+                  if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  movePickerFocus(cell.day, event.key);
+                });
+                nodes.push(button);
+              }
+            }
+            cells.replaceChildren(...nodes);
           };
           const movePickerFocus = (day, key) => {
-            const next = CALENDAR_PART.pickerKey(day, key, 1);
+            const next = CALENDAR_PART.pickerKey(day, key, weekStart);
             if (next === day) return;
             focusedDay = next;
             const date = new Date(next);
             if (date.getFullYear() !== visibleYear || date.getMonth() !== visibleMonth) {
               visibleYear = date.getFullYear();
               visibleMonth = date.getMonth();
-              const first = CALENDAR_PART.monthGrid(visibleYear, visibleMonth, 1)[0][0];
-              const weeks = CALENDAR_PART.monthGrid(visibleYear, visibleMonth, 1);
-              pickerExpanded = CALENDAR_PART.expandRange(items, first, CALENDAR_PART.addDays(weeks[5][6], 1));
+              const weeks = CALENDAR_PART.monthGrid(visibleYear, visibleMonth, weekStart);
+              pickerExpanded = CALENDAR_PART.expandRange(items, weeks[0][0], CALENDAR_PART.addDays(weeks[5][6], 1));
               buildPickerCells();
             } else {
               for (const button of [...cells.querySelectorAll(".zn-cal-picker-day")]) {
@@ -19461,7 +19537,7 @@ __zentralShim.register = function (def) {
             if (date.getFullYear() !== visibleYear || date.getMonth() !== visibleMonth) {
               visibleYear = date.getFullYear();
               visibleMonth = date.getMonth();
-              const weeks = CALENDAR_PART.monthGrid(visibleYear, visibleMonth, 1);
+              const weeks = CALENDAR_PART.monthGrid(visibleYear, visibleMonth, weekStart);
               pickerExpanded = CALENDAR_PART.expandRange(items, weeks[0][0], CALENDAR_PART.addDays(weeks[5][6], 1));
               focusedDay = day;
               buildPickerCells();
@@ -19483,8 +19559,14 @@ __zentralShim.register = function (def) {
         calendarContent.dataset.picker = "false";
         const monthWrap = h("div", { class: "zn-cal-month-wrap" });
         monthWrap.dataset.density = "comfortable"; // the look of the cells; fitCalendarMonth sets the one of their height
-        const dows = h("div", { class: "zn-cal-month-dows" }, ...["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((name) => h("span", {}, name)));
-        const cells = h("div", { class: "zn-cal-month-grid", role: "grid", "aria-label": date.toLocaleDateString(undefined, { month: "long", year: "numeric" }) });
+        if (showWeeks) monthWrap.dataset.weekNumbers = "true";
+        const dows = h(
+          "div",
+          { class: "zn-cal-month-dows" + (showWeeks ? " has-week-numbers" : "") },
+          ...(showWeeks ? [h("span", { class: "zn-cal-week-col-head", "aria-label": "Week number" }, "W#")] : []),
+          ...dowNames.map((name) => h("span", {}, name)),
+        );
+        const cells = h("div", { class: "zn-cal-month-grid" + (showWeeks ? " has-week-numbers" : ""), role: "grid", "aria-label": date.toLocaleDateString(undefined, { month: "long", year: "numeric" }) });
         const selected = CALENDAR_PART.parseYmd(store.meta.calendarCursor) ? CALENDAR_PART.parseYmd(store.meta.calendarCursor).getTime() : calendarTodayDay();
         const today = calendarTodayDay();
         const selection = h("div", { class: "zn-cal-month-selection" });
@@ -19501,7 +19583,12 @@ __zentralShim.register = function (def) {
           const entries = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.addDays(day, 1));
           selection.replaceChildren(calendarDayGroup(day, entries, { selected: true }));
         };
-        for (const week of grid) for (const day of week) {
+        for (const week of grid) {
+          if (showWeeks && week.length) {
+            const wk = CALENDAR_PART.weekNumber(week[0], weekStart);
+            cells.append(h("span", { class: "zn-cal-week-num", role: "rowheader", "aria-label": "Week " + wk }, String(wk)));
+          }
+          for (const day of week) {
           const inMonth = new Date(day).getMonth() === month;
           const dayItems = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.addDays(day, 1));
           const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", tabindex: "0", "aria-selected": day === selected ? "true" : "false", "aria-label": "Calendar day " + calendarDayLabel(day, { year: true }), "data-day": CALENDAR_PART.ymd(new Date(day)) });
@@ -19552,6 +19639,7 @@ __zentralShim.register = function (def) {
           });
           cell.append(mini); cells.append(cell);
           draw(calendarMonthLines);
+          }
         }
         monthWrap.append(dows, cells);
         calendarContent.append(monthWrap);
@@ -19957,7 +20045,8 @@ __zentralShim.register = function (def) {
         track.addEventListener("lostpointercapture", (event) => { if (calendarDrag?.button === track && calendarDrag.pointerId === event.pointerId) cancelCalendarDrag(); });
       }
       function calendarTimeGridView(items, cursor, mode, patch = null) {
-        const C = CALENDAR_PART, zone = calendarDisplayZone(), days = mode === "week" ? C.weekDays(cursor, 1) : [C.dayStart(cursor)];
+        const C = CALENDAR_PART, zone = calendarDisplayZone(), weekStart = calendarWeekStartDay(), showWeeks = calendarShowWeekNumbers();
+        const days = mode === "week" ? C.weekDays(cursor, weekStart) : [C.dayStart(cursor)];
         const workDays = patch ? days.filter((day) => patch.days.has(C.localDateKey(day))) : days;
         const firstDay = workDays[0], firstBounds = C.zonedDayBounds(C.localDateKey(firstDay), zone) || [firstDay, C.addDays(firstDay, 1)];
         const lastDay = workDays[workDays.length - 1], lastBounds = C.zonedDayBounds(C.localDateKey(lastDay), zone) || [lastDay, C.addDays(lastDay, 1)];
@@ -19994,7 +20083,7 @@ __zentralShim.register = function (def) {
         const gridHours = (grid.endMin - grid.startMin) / 60;
         const gridClock = (minute) => { const m = Math.floor(minute); return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
         const fmt = (day) => calendarDayLabel(day, { weekday: mode === "week" ? "short" : "long", year: true });
-        calendarPeriod.textContent = mode === "week" ? `${fmt(days[0])} – ${fmt(days[6])}` : fmt(days[0]);
+        calendarPeriod.textContent = mode === "week" ? `${fmt(days[0])} – ${fmt(days[days.length - 1])}` : fmt(days[0]);
         const cols = `42px repeat(${days.length}, minmax(0, 1fr))`;
         const todayKey = C.zonedDateKey(nowMs(), zone);
         const root = h("div", { class: "zn-cal-time-view is-" + mode, "aria-label": mode === "week" ? "Week calendar" : "Day calendar" });
@@ -20002,7 +20091,12 @@ __zentralShim.register = function (def) {
         root.style.setProperty("--zn-cal-hours", String(gridHours));
         const header = h("div", { class: "zn-cal-time-head" });
         header.style.gridTemplateColumns = cols;
-        header.append(h("span", { class: "zn-cal-time-corner", "aria-hidden": "true" }));
+        const cornerWeek = showWeeks ? C.weekNumber(days[0], weekStart) : 0;
+        header.append(
+          showWeeks
+            ? h("span", { class: "zn-cal-time-corner zn-cal-week-num", "aria-label": "Week " + cornerWeek, title: "Week " + cornerWeek }, "W" + cornerWeek)
+            : h("span", { class: "zn-cal-time-corner", "aria-hidden": "true" }),
+        );
         for (const day of days) {
           const isToday = C.localDateKey(day) === todayKey;
           const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", Today" : "") }, h("strong", {}, new Date(day).toLocaleDateString(undefined, { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, "Today")] : []));
@@ -20923,7 +21017,7 @@ __zentralShim.register = function (def) {
         // A note-id removal may refer to several hidden items, not a master id.
         if (!oldItem && !newItem) return false;
         const cursor = C.parseYmd(store.meta.calendarCursor)?.getTime() || calendarTodayDay();
-        const days = mode === "week" ? C.weekDays(cursor, 1) : [C.dayStart(cursor)], zone = calendarDisplayZone();
+        const days = mode === "week" ? C.weekDays(cursor, calendarWeekStartDay()) : [C.dayStart(cursor)], zone = calendarDisplayZone();
         const bounds = days.map((day) => C.zonedDayBounds(C.localDateKey(day), zone) || [day, C.addDays(day, 1)]);
         const changed = new Set();
         for (const master of [oldItem, newItem]) if (master) {
@@ -21167,11 +21261,38 @@ __zentralShim.register = function (def) {
       });
       function calendarWeekStart() {
         const C = CALENDAR_PART, stored = C.parseYmd(store.meta.calendarCursor);
-        return C.weekDays(stored ? stored.getTime() : C.dayStart(nowMs()), 1)[0];
+        return C.weekDays(stored ? stored.getTime() : C.dayStart(nowMs()), calendarWeekStartDay())[0];
       }
       function calendarWeekMarkdown() {
-        const C = CALENDAR_PART, start = calendarWeekStart();
-        return { start, text: C.weekText(calendarBaseItems(), start, { category: true }) };
+        const C = CALENDAR_PART, weekStart = calendarWeekStartDay(), start = calendarWeekStart();
+        return { start, text: C.weekText(calendarBaseItems(), start, { category: true, weekNumbers: calendarShowWeekNumbers(), weekStart }) };
+      }
+      function askCalendarWeekSettings() {
+        const C = CALENDAR_PART;
+        if (!C) return;
+        const startSelect = h("select", { class: "zn-select", "aria-label": "First day of week" },
+          h("option", { value: "1" }, "Monday"),
+          h("option", { value: "0" }, "Sunday"),
+        );
+        startSelect.value = String(calendarWeekStartDay());
+        const numbersToggle = h("input", { type: "checkbox", "aria-label": "Show week numbers" });
+        numbersToggle.checked = calendarShowWeekNumbers();
+        const startRow = h("label", { class: "zn-cal-alert-select-row" }, h("span", {}, "First day of week"), startSelect);
+        const numbersRow = h("label", { class: "zn-fstyle-check" }, numbersToggle, h("span", {}, "Show week numbers in Month, Week, Day, date pickers and week export"));
+        const note = h("p", { class: "zn-empty", role: "status" }, "Used across Month, Week, narrow date picker, date popups and week Markdown export.");
+        const cancel = chip("Cancel"), save = chip("Apply", true);
+        const submit = () => {
+          const nextStart = C.cleanWeekStart(startSelect.value);
+          const nextNumbers = numbersToggle.checked === true;
+          store.setMeta({ calendarWeekStart: nextStart, calendarWeekNumbers: nextNumbers });
+          closeDialog();
+          renderCalendar();
+          flash("Week starts on " + (nextStart === 0 ? "Sunday" : "Monday") + (nextNumbers ? " · week numbers on" : ""));
+        };
+        save.addEventListener("click", submit);
+        cancel.addEventListener("click", closeDialog);
+        openCalendarCard("Week start and week numbers", startRow, numbersRow, note, h("div", { class: "zn-dialog-actions" }, cancel, save));
+        startSelect.focus({ preventScroll: true });
       }
       function openReminderHistory() {
         const history = reminderHistoryStore();
@@ -21228,6 +21349,7 @@ __zentralShim.register = function (def) {
         { id: "reminder-alert-settings", label: "Reminder sounds & quiet hours…", icon: "volume-2", run: askCalendarAlertSettings },
         { id: "agenda-visibility-defaults", label: "Zen Agenda visibility defaults…", icon: "calendar-check", run: askAgendaVisibilityDefaults },
         { sep: true },
+        { id: "calendar-week-settings", icon: "calendar", label: "Week start & numbers: " + (calendarWeekStartDay() === 0 ? "Sunday" : "Monday") + (calendarShowWeekNumbers() ? ", W#" : "") + "…", run: askCalendarWeekSettings },
         { icon: "clock", label: "Visible hours: " + (CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours).on ? calendarHoursText(store.meta.calendarHours).long : "all 24") + "…", action: () => queueMicrotask(askCalendarHours) },
         { icon: "globe", label: "Display time zone: " + (calendarDisplayZone() || "Local"), action: () => queueMicrotask(askCalendarDisplayZone) },
         { icon: "clock", label: "When am I free?…", action: () => queueMicrotask(askCalendarFreeSlots) },

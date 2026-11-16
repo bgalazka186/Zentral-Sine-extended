@@ -1930,6 +1930,7 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal.is-compact .zn-cal-head { gap: 2px; margin-bottom: 2px; }
 .zentral-notes-sheet .zn-cal-title { flex: 1; text-align: center; font-weight: 600; text-transform: capitalize; }
 .zentral-notes-sheet .zn-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; outline: none; }
+.zentral-notes-sheet .zn-cal-grid.has-week-numbers { grid-template-columns: 1.9em repeat(7, minmax(0, 1fr)); }
 .zentral-notes-sheet .zn-cal.is-compact .zn-cal-grid { gap: 1px; }
 .zentral-notes-sheet .zn-cal-dow { text-align: center; font-size: 0.75em; color: var(--zn-muted); padding: 2px 0; }
 .zentral-notes-sheet .zn-cal.is-compact .zn-cal-dow { padding: 1px 0; font-size: 0.7em; }
@@ -1994,6 +1995,11 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-month-wrap { display: flex; flex-direction: column; min-height: 0; }
 .zentral-notes-sheet .zn-cal-month-dows,
 .zentral-notes-sheet .zn-cal-month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.zentral-notes-sheet .zn-cal-month-dows.has-week-numbers,
+.zentral-notes-sheet .zn-cal-month-grid.has-week-numbers { grid-template-columns: 2.1em repeat(7, minmax(0, 1fr)); }
+.zentral-notes-sheet .zn-cal-week-col-head,
+.zentral-notes-sheet .zn-cal-week-num { display: flex; align-items: center; justify-content: center; min-width: 0; padding: 1px 2px; color: var(--zn-muted); font-size: .72em; font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; user-select: none; }
+.zentral-notes-sheet .zn-cal-month-grid > .zn-cal-week-num { border-right: 1px solid color-mix(in srgb, var(--zn-line) 70%, transparent); }
 .zentral-notes-sheet .zn-cal-month-dows { flex: 0 0 auto; margin-bottom: 3px; }
 .zentral-notes-sheet .zn-cal-month-dows > span { padding: 3px 2px; text-align: center; color: var(--zn-muted); font-size: .76em; font-weight: 650; }
 /* OW-03: the height of the six weeks. A cell never grows with what is in it; it shows as many items as it holds
