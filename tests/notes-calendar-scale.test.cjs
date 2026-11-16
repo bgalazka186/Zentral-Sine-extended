@@ -890,6 +890,7 @@ const AUTO = { month: "auto", week: "auto", day: "auto", upcoming: "auto", agend
     await resized();
     assert.ok(q(".zn-cal-picker-grid"), "the picker is visible for the category-tint check");
     chip.click();
+    chip.click();
     const options = qa(".zn-menu-item").find((entry) => entry.textContent.trim() === "Date picker settings");
     assert.ok(options);
     options.click();

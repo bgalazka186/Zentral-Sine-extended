@@ -365,15 +365,15 @@ const setSize = async (root, px) => {
   store.items.upsert({ id: "view-live-refresh", summary: "Added while open", start: { dateTime: new Date(day + 17 * 3600000).toISOString() }, x: { kind: "reminder", noteId: note.id, category: "Projects" } });
   assert.ok(root.querySelectorAll(".zn-cal-agenda-row").length > beforeRefresh, "calendar refreshes when the item store changes while open");
 
-  // The month grid falls back to a grouped list when the actual calendar pane is too narrow.
+  // A narrow Month is now a date-only picker; the compact spacing still applies to its grid.
   calendarPane.getBoundingClientRect = () => ({ left: 0, top: 0, right: 390, bottom: 700, width: 390, height: 700 });
   await chooseMenu(root, ".zn-calendar-view-select", "Month");
-  assert.equal(content.dataset.compact, "true", "narrow calendar uses compact list fallback");
-  assert.ok(q(root, ".zn-cal-compact-list"), "compact month list is rendered instead of a squeezed 7-column grid");
-  assert.equal(content.dataset.fit, "false", "a list has nothing to fit");
-  assert.equal(q(root, ".zn-calendar-size-select").textContent, "Comfortable", "Month as a list offers the three spacings");
+  assert.equal(content.dataset.compact, "true", "narrow calendar uses date-picker mode");
+  assert.ok(q(root, ".zn-cal-picker-grid"), "the narrow fallback shows a date-only heat grid");
+  assert.equal(content.dataset.fit, "false", "a date picker has no week height to fit");
+  assert.equal(q(root, ".zn-calendar-size-select").textContent, "Size: Auto picker", "Month identifies its automatic date-picker mode");
   await chooseMenu(root, ".zn-calendar-size-select", "Extra compact");
-  assert.ok(q(root, ".zn-cal-compact-list"), "the spacing preserves the narrow-pane fallback");
+  assert.ok(q(root, ".zn-cal-picker-grid"), "spacing preserves the narrow-pane date picker");
   assert.equal(content.dataset.density, "extra-compact");
   await chooseMenu(root, ".zn-calendar-size-select", "Comfortable");
   assert.equal(store.meta.calendarScale.month, "auto");

@@ -29,8 +29,8 @@ for (const anchor of [{ left: 2, right: 3, top: 2, bottom: 3 }, { left: 997, rig
   const env = { getPref: (_k, fallback) => fallback, setPref() {}, openLink() {}, copyText() {}, exportNote() {}, exportAll() {}, revealFolder() {} };
   const sheet = win.__zentralNotesTestSeam.core.createSheet({ store, adapter, env, ensureStore: () => store.open() });
   const root = sheet.root; root.ownerDocument = document; Object.defineProperty(root, "offsetParent", { get: () => host });
-  root.getBoundingClientRect = () => ({ left: 750, top: 350, right: 950, bottom: 650, width: 200, height: 300 });
-  const pane = root.querySelector(".zn-calendar-pane"); pane.getBoundingClientRect = () => ({ left: 750, top: 350, right: 1350, bottom: 650, width: 600, height: 300 });
+  root.getBoundingClientRect = () => ({ left: 750, top: 150, right: 950, bottom: 650, width: 200, height: 500 });
+  const pane = root.querySelector(".zn-calendar-pane"); pane.getBoundingClientRect = () => ({ left: 750, top: 150, right: 1350, bottom: 650, width: 600, height: 500 });
   await sheet.open(); await flush(); root.all().find(el => el.title === "All notes").click(); await flush();
   const cell = root.querySelector(".zn-cal-month-cell"); assert.ok(cell);
   cell.getBoundingClientRect = () => ({ left: 800, top: 420, right: 940, bottom: 500, width: 140, height: 80 });
