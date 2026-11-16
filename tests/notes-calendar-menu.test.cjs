@@ -171,7 +171,7 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   // OW-05: the All notes row menu shares the same note-to-composer entry used by future drag/drop.
   store.setMeta({ calendarCursor: tomorrowKey });
   await flush();
-  const noteRow = root.querySelectorAll(".zn-item").find((node) => node.dataset.id === note.id);
+  const noteRow = root.querySelectorAll(".zn-item").find((node) => node.getAttribute("data-id") === note.id);
   assert.ok(noteRow, "All notes renders the source note row");
   const noteContext = new Ev("contextmenu", { bubbles: true, clientX: 90, clientY: 94 });
   noteRow.dispatchEvent(noteContext);
@@ -195,7 +195,7 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   const trashChip = root.querySelectorAll(".zn-chips .zn-chip").find((button) => button.textContent.startsWith("Trash"));
   assert.ok(trashChip);
   trashChip.click(); await flush();
-  const deletedRow = root.querySelectorAll(".zn-item").find((node) => node.dataset.id === deletedNote.id);
+  const deletedRow = root.querySelectorAll(".zn-item").find((node) => node.getAttribute("data-id") === deletedNote.id);
   assert.ok(deletedRow, "Trash lists the deleted note");
   const deletedContext = new Ev("contextmenu", { bubbles: true, clientX: 90, clientY: 94 });
   deletedRow.dispatchEvent(deletedContext);
