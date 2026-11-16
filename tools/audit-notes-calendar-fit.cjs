@@ -225,11 +225,11 @@ function measure(font) {
     const heights = cells.map((cell) => cell.getBoundingClientRect().height);
     const minWidth = Math.min(...widths), minHeight = Math.min(...heights);
     const rowSpread = Math.max(...heights) - minHeight;
-    const columns = getComputedStyle(picker).gridTemplateColumns.trim().split(/\\s+/).length;
+    const columns = getComputedStyle(picker).gridTemplateColumns.trim().split(/\s+/).length;
     let invalidCells = 0, clipped = 0;
     for (const cell of cells) {
       const rect = cell.getBoundingClientRect(), label = cell.getAttribute("aria-label") || "";
-      if (!/^\\d{1,2}$/.test(cell.textContent.trim()) || cell.children.length || !/\\d+ items?$/.test(label)) invalidCells++;
+      if (!/^\d{1,2}$/.test(cell.textContent.trim()) || cell.children.length || !/\d+ items?$/.test(label)) invalidCells++;
       if (rect.left < grid.left - 0.5 || rect.right > grid.right + 0.5 || rect.top < grid.top - 0.5 || rect.bottom > grid.bottom + 0.5) clipped++;
     }
     const what = `${content.clientHeight}/${content.scrollHeight} px, ${cells.length} date cells, ${round(minWidth)}×${round(minHeight)} px minimum`;
@@ -240,7 +240,7 @@ function measure(font) {
     if (minWidth < 12 || minHeight < 20) issues.push({ kind: "picker-cell-small", what });
     if (rowSpread > 0.6) issues.push({ kind: "picker-rows", what, spread: round(rowSpread) });
     if (grid.top < bounds.top - 0.5 && content.scrollTop === 0) issues.push({ kind: "picker-above", what });
-    return { issues, summary: `${what}, 7 columns, ${wrap?.dataset?.picker ? "picker" : "date grid"}`, key: `${content.clientHeight}|${content.scrollHeight}|${cells.length}|${round(minWidth)}|${round(minHeight)}` };
+    return { issues, summary: `${what}, 7 columns, ${content.dataset.picker === "true" ? "picker" : "date grid"}`, key: `${content.clientHeight}|${content.scrollHeight}|${cells.length}|${round(minWidth)}|${round(minHeight)}` };
   }
   if (q(".zn-cal-compact-list")) return { issues: [{ kind: "page-error", what: "the retired compact Month list is still rendered" }], summary: "retired list", key: "retired-list" };
   return { issues: [{ kind: "page-error", what: "neither a timeline, Month grid nor date picker is shown" }], summary: "nothing", key: "" };
