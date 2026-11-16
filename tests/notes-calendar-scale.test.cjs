@@ -868,6 +868,9 @@ const AUTO = { month: "auto", week: "auto", day: "auto", upcoming: "auto", agend
     widthSlider.dispatchEvent(new Ev("input", { bubbles: true }));
     await flushRaf();
     assert.equal(C.cleanCalendarPicker(store.meta.calendarPicker).minWidth, 600);
+    paneWidth = 550;
+    await resized();
+    assert.ok(q(".zn-cal-picker-grid"), "the changed width threshold takes effect");
     paneWidth = 700;
     await resized();
     assert.equal(q(".zn-cal-picker-grid"), null, "a wide, tall pane stays in full-month mode");
@@ -883,6 +886,9 @@ const AUTO = { month: "auto", week: "auto", day: "auto", upcoming: "auto", agend
     paneHeight = 700;
     await resized();
     assert.equal(q(".zn-cal-picker-grid"), null);
+    paneWidth = 550;
+    await resized();
+    assert.ok(q(".zn-cal-picker-grid"), "the picker is visible for the category-tint check");
     chip.click();
     const options = qa(".zn-menu-item").find((entry) => entry.textContent.trim() === "Date picker settings");
     assert.ok(options);
