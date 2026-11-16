@@ -5080,18 +5080,50 @@
     }
     // One manual top-layer stack, with a single delegated listener. All strings
     // come from textContent; the caller owns the scope and the teardown.
-    function createReminderAlertStack({ document, history, listen, warn = () => {}, onBulkEnd = () => {} }) {
+    function createReminderAlertStack({
+      document, history, listen, warn = () => {}, onBulkEnd = () => {},
+      now = () => Date.now(), setTimer = (fn, ms) => window.setTimeout?.(fn, ms), clearTimer = (id) => window.clearTimeout?.(id),
+    }) {
       const cards = new Map();
-      let host = null, stopClick = null, stopped = false, bulkRunning = false;
+      let host = null, stopClick = null, stopped = false, bulkRunning = false, countdownTimer = null;
       const html = (tag, cls, text) => {
         const el = document.createElementNS("http://www.w3.org/1999/xhtml", tag);
         if (cls) el.setAttribute("class", cls);
         if (text !== undefined) el.textContent = String(text);
         return el;
       };
+      const stopCountdown = () => {
+        if (countdownTimer !== null) {
+          clearTimer(countdownTimer);
+          countdownTimer = null;
+        }
+      };
+      const syncCountdown = () => {
+        stopCountdown();
+        if (stopped) return;
+        const at = now();
+        let nextDelay = 0;
+        for (const card of cards.values()) {
+          if (card.stage !== "pre" || !card.countdownEl || !(card.dueAt > 0)) continue;
+          const d = CALENDAR_PART.reminderCountdownDelayMs(card.dueAt, at);
+          if (d > 0 && (!nextDelay || d < nextDelay)) nextDelay = d;
+        }
+        if (nextDelay > 0) countdownTimer = setTimer(tickCountdown, nextDelay);
+      };
+      function tickCountdown() {
+        countdownTimer = null;
+        if (stopped) return;
+        const at = now();
+        for (const card of cards.values()) {
+          if (card.stage !== "pre" || !card.countdownEl || !(card.dueAt > 0)) continue;
+          card.countdownEl.textContent = CALENDAR_PART.reminderPreCountdownText(card.dueAt, at);
+        }
+        syncCountdown();
+      }
       const close = (key) => {
         const card = cards.get(key); if (!card) return;
         cards.delete(key); card.node?.remove();
+        syncCountdown();
         if (!cards.size && host) {
           try { host.hidePopover?.(); } catch (_) {}
           host.hidden = true;
@@ -5209,7 +5241,7 @@
           }
           renderDigest(card); return !!card.entries.length;
         },
-        show({ identity, title, stage, actions = [] }) {
+        show({ identity, title, stage, dueAt = 0, actions = [] }) {
           if (stopped || !identity?.itemId || !identity?.occurrenceId) return false;
           if (["done", "dismissed"].includes(history?.stateFor?.(identity.itemId, identity.occurrenceId))) return false;
           const presentation = CALENDAR_PART.reminderAlertPresentation(stage);
@@ -5221,7 +5253,18 @@
           node.setAttribute("data-key", key);
           node.setAttribute("data-stage", presentation.stage);
           node.setAttribute("role", presentation.stage === "followup" ? "alert" : "status");
-          node.append(html("div", "zn-reminder-stage", presentation.label));
+          const dueStamp = Number(dueAt) > 0 ? Number(dueAt) : 0;
+          let countdownEl = null;
+          if (presentation.stage === "pre" && dueStamp > 0 && CALENDAR_PART.reminderPreCountdownText) {
+            const head = html("div", "zn-reminder-head");
+            head.append(html("div", "zn-reminder-stage", presentation.label));
+            countdownEl = html("span", "zn-reminder-countdown", CALENDAR_PART.reminderPreCountdownText(dueStamp, now()));
+            countdownEl.setAttribute("aria-hidden", "true");
+            head.append(countdownEl);
+            node.append(head);
+          } else {
+            node.append(html("div", "zn-reminder-stage", presentation.label));
+          }
           node.append(html("div", "zn-reminder-title", title || "Untitled reminder"));
           const row = html("div", "zn-reminder-actions"), callbacks = new Map();
           for (const action of actions) {
@@ -5234,14 +5277,19 @@
           closeButton.setAttribute("type", "button"); closeButton.setAttribute("data-action", "close");
           row.append(closeButton); node.append(row);
           const records = history?.list?.({ itemId: identity.itemId, occurrenceId: identity.occurrenceId }) || [];
-          cards.set(key, { identity: { ...identity }, node, actions: callbacks, rank: presentation.rank, seen: new Set(records.map((record) => record.id)) });
+          cards.set(key, {
+            identity: { ...identity }, node, actions: callbacks,
+            stage: presentation.stage, dueAt: dueStamp, countdownEl,
+            rank: presentation.rank, seen: new Set(records.map((record) => record.id)),
+          });
           parent.append(node); parent.hidden = false;
           try { if (typeof parent.showPopover === "function") { if (!parent.matches(":popover-open")) parent.showPopover(); } else parent.removeAttribute("popover"); } catch (_) { parent.removeAttribute("popover"); }
+          syncCountdown();
           return true;
         },
         destroy() {
           if (stopped) return;
-          stopped = true; offHistory?.(); stopClick?.(); cards.clear();
+          stopped = true; stopCountdown(); offHistory?.(); stopClick?.(); cards.clear();
           try { host?.hidePopover?.(); } catch (_) {}
           host?.remove(); host = null;
         },
@@ -21544,11 +21592,11 @@
           const ctx = soundCtx || (soundCtx = new Ctx());
           if (ctx.state === "suspended") ctx.resume?.().catch?.(() => {});
           const urgent = stage === "due", gentle = stage === "pre";
-          const pulses = urgent ? [0, 0.16, 0.32] : gentle ? [0] : [0, 0.28];
+          const pulses = urgent ? [0, 0.16, 0.32] : gentle ? [0, 0.2] : [0, 0.28];
           const volume = policy?.volume ?? ({ quiet: 0.08, normal: 0.2, loud: 0.35 })[level] ?? 0.2;
-          pulses.forEach((at) => {
+          pulses.forEach((at, index) => {
             const osc = ctx.createOscillator(), gain = ctx.createGain();
-            osc.frequency.value = gentle ? 620 : urgent ? 1040 : 880;
+            osc.frequency.value = gentle ? (index ? 784 : 660) : urgent ? 1040 : 880;
             gain.gain.setValueAtTime(0.0001, ctx.currentTime + at);
             gain.gain.exponentialRampToValueAtTime(volume, ctx.currentTime + at + 0.02);
             gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + at + (urgent ? 0.13 : 0.22));
@@ -21597,6 +21645,9 @@
       }
       const alertStack = createReminderAlertStack({
         document, history: store.items?.history, warn,
+        now: () => Date.now(),
+        setTimer: (fn, ms) => window.setTimeout(fn, ms),
+        clearTimer: (id) => window.clearTimeout(id),
         onBulkEnd() { store.items?.history?.flush?.().catch?.(warn); },
         listen(target, type, fn) {
           if (lifecycle?.listen) return lifecycle.listen(target, type, fn);
@@ -21621,9 +21672,16 @@
         for (const n of visible) {
           const item = n.__calendarReminder ? n.__calendarItem : null;
           const identity = item ? CALENDAR_PART.reminderIdentity(item) : { itemId: "note-reminder:" + n.id, occurrenceId: "note-reminder:" + n.id };
+          const dueAt = item ? (CALENDAR_PART.reminderDueAt?.(item) || 0) : (Number(n.remind) || 0);
           const actions = createReminderAlertActions({ store, note: n, openNote: openReminderNote, showNotes, warn });
           try {
-            alertStack.show({ identity, title: item?.summary || titleOf(n.body) || "Untitled note", stage: n.__stage || "followup", actions });
+            alertStack.show({
+              identity,
+              title: item?.summary || titleOf(n.body) || "Untitled note",
+              stage: n.__stage || "followup",
+              ...(dueAt > 0 ? { dueAt } : {}),
+              actions,
+            });
           } catch (error) { warn(error); }
         }
       }

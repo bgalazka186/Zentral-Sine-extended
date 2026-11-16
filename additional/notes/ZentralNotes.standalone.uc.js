@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.185
+// @version 3.3.186
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.185, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.186, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.185";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.186";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1655,8 +1655,38 @@ const __zentralEmbeddedLoader = (function () {
     }
     return out.sort((a, b) => a.at - b.at || ["pre", "due", "followup"].indexOf(a.stage) - ["pre", "due", "followup"].indexOf(b.stage));
   }
+  function reminderDueAt(item) {
+    if (!item?.start) return 0;
+    const start = whenMs(item.start);
+    if (!Number.isFinite(start) || start <= 0) return 0;
+    const googleLead = (item.reminders?.overrides || []).reduce((max, override) => Math.max(max, Number(override?.minutes) || 0), 0);
+    return start - googleLead * MIN;
+  }
+  function reminderPreCountdownText(dueAt, now = Date.now()) {
+    const due = Number(dueAt), at = Number(now);
+    if (!Number.isFinite(due) || due <= 0 || !Number.isFinite(at)) return "";
+    const remaining = due - at;
+    if (remaining <= 0) return "Due now";
+    const totalSec = Math.max(1, Math.ceil(remaining / 1000));
+    if (totalSec >= 3600) {
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      return `Due in ${h}h ${m}m`;
+    }
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `Due in ${m}:${String(s).padStart(2, "0")}`;
+  }
+  function reminderCountdownDelayMs(dueAt, now = Date.now()) {
+    const due = Number(dueAt), at = Number(now);
+    if (!Number.isFinite(due) || due <= 0 || !Number.isFinite(at)) return 0;
+    const remaining = due - at;
+    if (remaining <= 0) return 0;
+    if (remaining > 3600000) return (remaining % 60000) || 60000;
+    return (remaining % 1000) || 1000;
+  }
   const DEFAULT_ALERT_SETTINGS = Object.freeze({
-    stages: Object.freeze({ pre: Object.freeze({ sound: "quiet", quietAllow: Object.freeze([]) }), due: Object.freeze({ sound: "loud", quietAllow: Object.freeze([]) }), followup: Object.freeze({ sound: "normal", quietAllow: Object.freeze([]) }) }),
+    stages: Object.freeze({ pre: Object.freeze({ sound: "normal", quietAllow: Object.freeze([]) }), due: Object.freeze({ sound: "loud", quietAllow: Object.freeze([]) }), followup: Object.freeze({ sound: "normal", quietAllow: Object.freeze([]) }) }),
     quietHours: Object.freeze({ enabled: false, start: "22:00", end: "07:00", days: Object.freeze([0, 1, 2, 3, 4, 5, 6]), allowed: Object.freeze({ pre: Object.freeze([]), due: Object.freeze([]), followup: Object.freeze([]) }) }),
   });
   function cleanSoundRule(raw, fallback = {}) {
@@ -6008,7 +6038,7 @@ const __zentralEmbeddedLoader = (function () {
 
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
-    cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
+    cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
     cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
@@ -11648,18 +11678,50 @@ __zentralShim.register = function (def) {
     }
     // One manual top-layer stack, with a single delegated listener. All strings
     // come from textContent; the caller owns the scope and the teardown.
-    function createReminderAlertStack({ document, history, listen, warn = () => {}, onBulkEnd = () => {} }) {
+    function createReminderAlertStack({
+      document, history, listen, warn = () => {}, onBulkEnd = () => {},
+      now = () => Date.now(), setTimer = (fn, ms) => window.setTimeout?.(fn, ms), clearTimer = (id) => window.clearTimeout?.(id),
+    }) {
       const cards = new Map();
-      let host = null, stopClick = null, stopped = false, bulkRunning = false;
+      let host = null, stopClick = null, stopped = false, bulkRunning = false, countdownTimer = null;
       const html = (tag, cls, text) => {
         const el = document.createElementNS("http://www.w3.org/1999/xhtml", tag);
         if (cls) el.setAttribute("class", cls);
         if (text !== undefined) el.textContent = String(text);
         return el;
       };
+      const stopCountdown = () => {
+        if (countdownTimer !== null) {
+          clearTimer(countdownTimer);
+          countdownTimer = null;
+        }
+      };
+      const syncCountdown = () => {
+        stopCountdown();
+        if (stopped) return;
+        const at = now();
+        let nextDelay = 0;
+        for (const card of cards.values()) {
+          if (card.stage !== "pre" || !card.countdownEl || !(card.dueAt > 0)) continue;
+          const d = CALENDAR_PART.reminderCountdownDelayMs(card.dueAt, at);
+          if (d > 0 && (!nextDelay || d < nextDelay)) nextDelay = d;
+        }
+        if (nextDelay > 0) countdownTimer = setTimer(tickCountdown, nextDelay);
+      };
+      function tickCountdown() {
+        countdownTimer = null;
+        if (stopped) return;
+        const at = now();
+        for (const card of cards.values()) {
+          if (card.stage !== "pre" || !card.countdownEl || !(card.dueAt > 0)) continue;
+          card.countdownEl.textContent = CALENDAR_PART.reminderPreCountdownText(card.dueAt, at);
+        }
+        syncCountdown();
+      }
       const close = (key) => {
         const card = cards.get(key); if (!card) return;
         cards.delete(key); card.node?.remove();
+        syncCountdown();
         if (!cards.size && host) {
           try { host.hidePopover?.(); } catch (_) {}
           host.hidden = true;
@@ -11777,7 +11839,7 @@ __zentralShim.register = function (def) {
           }
           renderDigest(card); return !!card.entries.length;
         },
-        show({ identity, title, stage, actions = [] }) {
+        show({ identity, title, stage, dueAt = 0, actions = [] }) {
           if (stopped || !identity?.itemId || !identity?.occurrenceId) return false;
           if (["done", "dismissed"].includes(history?.stateFor?.(identity.itemId, identity.occurrenceId))) return false;
           const presentation = CALENDAR_PART.reminderAlertPresentation(stage);
@@ -11789,7 +11851,18 @@ __zentralShim.register = function (def) {
           node.setAttribute("data-key", key);
           node.setAttribute("data-stage", presentation.stage);
           node.setAttribute("role", presentation.stage === "followup" ? "alert" : "status");
-          node.append(html("div", "zn-reminder-stage", presentation.label));
+          const dueStamp = Number(dueAt) > 0 ? Number(dueAt) : 0;
+          let countdownEl = null;
+          if (presentation.stage === "pre" && dueStamp > 0 && CALENDAR_PART.reminderPreCountdownText) {
+            const head = html("div", "zn-reminder-head");
+            head.append(html("div", "zn-reminder-stage", presentation.label));
+            countdownEl = html("span", "zn-reminder-countdown", CALENDAR_PART.reminderPreCountdownText(dueStamp, now()));
+            countdownEl.setAttribute("aria-hidden", "true");
+            head.append(countdownEl);
+            node.append(head);
+          } else {
+            node.append(html("div", "zn-reminder-stage", presentation.label));
+          }
           node.append(html("div", "zn-reminder-title", title || "Untitled reminder"));
           const row = html("div", "zn-reminder-actions"), callbacks = new Map();
           for (const action of actions) {
@@ -11802,14 +11875,19 @@ __zentralShim.register = function (def) {
           closeButton.setAttribute("type", "button"); closeButton.setAttribute("data-action", "close");
           row.append(closeButton); node.append(row);
           const records = history?.list?.({ itemId: identity.itemId, occurrenceId: identity.occurrenceId }) || [];
-          cards.set(key, { identity: { ...identity }, node, actions: callbacks, rank: presentation.rank, seen: new Set(records.map((record) => record.id)) });
+          cards.set(key, {
+            identity: { ...identity }, node, actions: callbacks,
+            stage: presentation.stage, dueAt: dueStamp, countdownEl,
+            rank: presentation.rank, seen: new Set(records.map((record) => record.id)),
+          });
           parent.append(node); parent.hidden = false;
           try { if (typeof parent.showPopover === "function") { if (!parent.matches(":popover-open")) parent.showPopover(); } else parent.removeAttribute("popover"); } catch (_) { parent.removeAttribute("popover"); }
+          syncCountdown();
           return true;
         },
         destroy() {
           if (stopped) return;
-          stopped = true; offHistory?.(); stopClick?.(); cards.clear();
+          stopped = true; stopCountdown(); offHistory?.(); stopClick?.(); cards.clear();
           try { host?.hidePopover?.(); } catch (_) {}
           host?.remove(); host = null;
         },
@@ -28112,11 +28190,11 @@ __zentralShim.register = function (def) {
           const ctx = soundCtx || (soundCtx = new Ctx());
           if (ctx.state === "suspended") ctx.resume?.().catch?.(() => {});
           const urgent = stage === "due", gentle = stage === "pre";
-          const pulses = urgent ? [0, 0.16, 0.32] : gentle ? [0] : [0, 0.28];
+          const pulses = urgent ? [0, 0.16, 0.32] : gentle ? [0, 0.2] : [0, 0.28];
           const volume = policy?.volume ?? ({ quiet: 0.08, normal: 0.2, loud: 0.35 })[level] ?? 0.2;
-          pulses.forEach((at) => {
+          pulses.forEach((at, index) => {
             const osc = ctx.createOscillator(), gain = ctx.createGain();
-            osc.frequency.value = gentle ? 620 : urgent ? 1040 : 880;
+            osc.frequency.value = gentle ? (index ? 784 : 660) : urgent ? 1040 : 880;
             gain.gain.setValueAtTime(0.0001, ctx.currentTime + at);
             gain.gain.exponentialRampToValueAtTime(volume, ctx.currentTime + at + 0.02);
             gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + at + (urgent ? 0.13 : 0.22));
@@ -28165,6 +28243,9 @@ __zentralShim.register = function (def) {
       }
       const alertStack = createReminderAlertStack({
         document, history: store.items?.history, warn,
+        now: () => Date.now(),
+        setTimer: (fn, ms) => window.setTimeout(fn, ms),
+        clearTimer: (id) => window.clearTimeout(id),
         onBulkEnd() { store.items?.history?.flush?.().catch?.(warn); },
         listen(target, type, fn) {
           if (lifecycle?.listen) return lifecycle.listen(target, type, fn);
@@ -28189,9 +28270,16 @@ __zentralShim.register = function (def) {
         for (const n of visible) {
           const item = n.__calendarReminder ? n.__calendarItem : null;
           const identity = item ? CALENDAR_PART.reminderIdentity(item) : { itemId: "note-reminder:" + n.id, occurrenceId: "note-reminder:" + n.id };
+          const dueAt = item ? (CALENDAR_PART.reminderDueAt?.(item) || 0) : (Number(n.remind) || 0);
           const actions = createReminderAlertActions({ store, note: n, openNote: openReminderNote, showNotes, warn });
           try {
-            alertStack.show({ identity, title: item?.summary || titleOf(n.body) || "Untitled note", stage: n.__stage || "followup", actions });
+            alertStack.show({
+              identity,
+              title: item?.summary || titleOf(n.body) || "Untitled note",
+              stage: n.__stage || "followup",
+              ...(dueAt > 0 ? { dueAt } : {}),
+              actions,
+            });
           } catch (error) { warn(error); }
         }
       }

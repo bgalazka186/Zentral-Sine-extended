@@ -2375,7 +2375,23 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
 }
 @keyframes zn-reminder-calm-accent { from { border-color: #ffb7a8; } to { border-color: #ffdea8; } }
 @media (prefers-reduced-motion: reduce) { .zn-reminder-card[data-stage="followup"] { animation: none; } }
+.zn-reminder-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
 .zn-reminder-stage { font-weight: 700; font-size: .85em; margin-bottom: 4px; }
+.zn-reminder-head .zn-reminder-stage { margin-bottom: 0; }
+.zn-reminder-countdown {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid #9bbcf0;
+  background: #2f4363;
+  color: #ffffff;
+  font-size: .78em;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .zn-reminder-title { font-weight: 600; line-height: 1.35; }
 .zn-reminder-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .zn-reminder-actions button {
