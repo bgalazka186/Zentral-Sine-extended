@@ -26035,7 +26035,7 @@
         return null;
       }
       function pseudoEventInside(event, root) {
-        return !!root && pseudoEventPath(event).some((node) => node === root || root.contains?.(node));
+        return !!root && pseudoEventPath(event).some((node) => node === root || (typeof node?.nodeType === "number" && root.contains?.(node)));
       }
       function pseudoUrlForTab(tab) {
         let live = "";

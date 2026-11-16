@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral RSS Display
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.201
+// @version 3.3.202
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.201, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.202, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.201";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.202";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -938,9 +938,14 @@ function nativeSidebarSide() {
     for (let round = 0; round < 4 && !stopped; round++) {
       const pending = [];
       for (const read of [
+        () => window.SessionStore?.promiseInitialized,
         () => window.SessionStore?.promiseAllWindowsRestored,
+        () => window.delayedStartupPromise,
         () => window.gZenWorkspaces?.promiseInitialized,
         () => window.gZenStartup?.promiseInitialized,
+        () => window.gZenPinnedTabManager?.promiseInitialized,
+        () => window.gZenSessionStore?.promiseInitialized,
+        () => window.gZenWindowSync?.promiseInitialized,
       ]) {
         try {
           const promise = read();

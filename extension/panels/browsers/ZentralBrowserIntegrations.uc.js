@@ -851,6 +851,10 @@
     const ADDON_HOST_FOLDER_LABEL = "Zentral Add-on Hosts";
     const addonHostByAppId = new Map();
     const addonHostByTab = new WeakMap();
+    // Remember each host browser's original native tab stack even after TabClose
+    // drops the live bridge record, so gBrowser.getPanel/getBrowserContainer can
+    // never walk 3 parentNode hops from #zen-app-panel-slider to #zen-app-panel-root.
+    const addonHostOriginalStackByBrowser = new WeakMap();
     let addonHostFolder = null;
     let addonFolderRepairTimer = null;
     let repairingAddonFolder = false;
@@ -1091,6 +1095,11 @@
         };
         addonHostByAppId.set(appId, record);
         addonHostByTab.set(tab, record);
+        addonHostOriginalStackByBrowser.set(browser, {
+          tab,
+          originalParent,
+          originalNextSibling,
+        });
         record.onProgressReady=()=>{
           if(record.progressRepairTimer)ctx.clearTimeout(record.progressRepairTimer);
           record.progressRepairTimer=ctx.setTimeout(()=>{
@@ -1129,6 +1138,63 @@
       }
     }
 
+    function isZentralPanelShellNode(node) {
+      const id = node?.id;
+      return (
+        id === "zen-app-panel-root" ||
+        id === "zen-app-panel-clip" ||
+        id === "zen-app-panel-slider" ||
+        id === "bgalazka-super-panel"
+      );
+    }
+
+    function getHostStackForBrowser(browser) {
+      if (!browser) return null;
+      const tab = browser._bgalazkaAddonHostTab;
+      const live = tab && addonHostByTab.get(tab);
+      if (live) return live;
+      return addonHostOriginalStackByBrowser.get(browser) || null;
+    }
+
+    function resolveSafeBrowserContainer(browser, host) {
+      const container = host?.originalParent?.parentNode;
+      if (container && !isZentralPanelShellNode(container)) return container;
+      const tab = host?.tab || browser?._bgalazkaAddonHostTab;
+      const panel = tab?.linkedPanel && document.getElementById(tab.linkedPanel);
+      const inner = panel?.querySelector?.(".browserContainer");
+      if (inner && !isZentralPanelShellNode(inner)) return inner;
+      return null;
+    }
+
+    function resolveSafeTabPanel(browser, host) {
+      const fromStack = host?.originalParent?.parentNode?.parentNode;
+      if (fromStack && !isZentralPanelShellNode(fromStack)) return fromStack;
+      const tab = host?.tab || browser?._bgalazkaAddonHostTab;
+      const fromLinkedPanel =
+        tab?.linkedPanel && document.getElementById(tab.linkedPanel);
+      if (fromLinkedPanel && !isZentralPanelShellNode(fromLinkedPanel))
+        return fromLinkedPanel;
+      return null;
+    }
+
+    function evacuateBrowserFromZentralPanel(browser, host = null) {
+      if (!browser || !browser.closest?.("#zen-app-panel-root")) return;
+      const originalParent = host?.originalParent;
+      if (
+        originalParent &&
+        !isZentralPanelShellNode(originalParent) &&
+        !originalParent.closest?.("#zen-app-panel-root")
+      ) {
+        try {
+          originalParent.appendChild(browser);
+          return;
+        } catch (_) {}
+      }
+      try {
+        browser.remove();
+      } catch (_) {}
+    }
+
     function moveAddonHostBrowser(record, parent, before = null) {
       const browser = record.browser;
       if (browser.parentNode === parent) return;
@@ -1137,7 +1203,13 @@
       // tabbrowser filter to that new owner once, without a polling/retry loop.
       const oldProgress = browser.webProgress;
       const filter = gBrowser._tabFilters?.get(record.tab);
+      const sameRoot =
+        typeof parent.getRootNode === "function" &&
+        typeof browser.getRootNode === "function"
+          ? parent.getRootNode() === browser.getRootNode()
+          : true;
       if (
+        sameRoot &&
         typeof parent.moveBefore === "function" &&
         typeof browser.connectedMoveCallback === "function"
       ) {
@@ -1237,13 +1309,35 @@
 
     function removeEmptyAddonHostFolder() {
       const folder = findAddonHostFolder();
-      if (!folder || addonHostByAppId.size) return;
+      if (!folder || !folder.isConnected || addonHostByAppId.size) return;
+      const realTabs = Array.from(
+        folder.tabs || folder.querySelectorAll?.("tab") || [],
+      ).filter(
+        (tab) =>
+          tab &&
+          tab.isConnected &&
+          !tab.closing &&
+          !tab.hasAttribute?.("zen-empty-tab"),
+      );
+      if (realTabs.length) return;
       addonHostFolder = null;
+      const hasEmptyPlaceholder = !!(
+        folder._emptyTab?.isConnected ||
+        folder.emptyTab?.isConnected ||
+        folder.querySelector?.("tab[zen-empty-tab]")
+      );
+      if (!hasEmptyPlaceholder) {
+        // ZenFolder.delete() expects an internal empty placeholder tab and can
+        // throw in ZenWindowSync when it is already absent.
+        try {
+          folder.remove?.();
+        } catch (_) {}
+        return;
+      }
       try {
         // Zen's folder owns an internal about:blank placeholder. delete() is the
         // correct API because it cleans that placeholder and folder state too.
-        const maybePromise = folder.delete?.();
-        maybePromise?.catch?.(() => {});
+        Promise.resolve(folder.delete?.()).catch(() => {});
       } catch (_) {}
     }
 
@@ -1603,6 +1697,7 @@
     function installAddonHostSelectionGuards() {
       if (addonHostSelectionGuardsInstalled) return true;
       const undo = [];
+      let guardsActive = true;
       const guardSetter = (object, name, tabForValue) => {
         const own = Object.getOwnPropertyDescriptor(object, name);
         let owner = object;
@@ -1621,6 +1716,7 @@
           throw new Error(`Cannot guard native ${name} selection`);
         }
         const guardedSet = function (value) {
+          if (!guardsActive) return descriptor.set.call(this, value);
           const tab = tabForValue.call(this, value);
           if (!isAddonHostTab(tab)) return descriptor.set.call(this, value);
           // This also applies during bridge teardown, while marked tabs still
@@ -1648,13 +1744,134 @@
           else delete object[name];
         });
       };
+      const guardMethod = (object, name, wrap) => {
+        if (!object) return;
+        const own = Object.getOwnPropertyDescriptor(object, name);
+        let owner = object;
+        let descriptor;
+        while (
+          owner &&
+          !(descriptor = Object.getOwnPropertyDescriptor(owner, name))
+        ) {
+          owner = Object.getPrototypeOf(owner);
+        }
+        if (
+          typeof descriptor?.value !== "function" ||
+          own?.configurable === false
+        ) {
+          return;
+        }
+        const orig = descriptor.value;
+        const wrapped = wrap(orig);
+        Object.defineProperty(object, name, {
+          configurable: true,
+          enumerable: descriptor.enumerable,
+          writable: true,
+          value: wrapped,
+        });
+        undo.push(() => {
+          if (Object.getOwnPropertyDescriptor(object, name)?.value !== wrapped)
+            return;
+          if (own) Object.defineProperty(object, name, own);
+          else delete object[name];
+        });
+      };
       try {
         guardSetter(gBrowser, "selectedTab", (value) => value);
         guardSetter(gBrowser.tabContainer, "selectedItem", (value) => value);
         guardSetter(gBrowser.tabContainer, "selectedIndex", function (value) {
           return this.getItemAtIndex(value);
         });
+        // Native tabbrowser teardown (discardBrowser / _endRemoveTab) walks
+        // browser.parentNode.parentNode.parentNode via getBrowserContainer /
+        // getPanel and calls .remove() on it. For a browser adopted into
+        // #zen-app-panel-slider, 3 hops up is #zen-app-panel-root itself.
+        // Guard these lookups and lifecycle transitions so native teardown
+        // always resolves the host tab's real tabpanel and never detaches
+        // Zentral's panel root.
+        guardMethod(
+          gBrowser,
+          "getBrowserContainer",
+          (orig) =>
+            function (aBrowser) {
+              if (!guardsActive) return orig.call(this, aBrowser);
+              const browser = aBrowser || this.selectedBrowser;
+              const host = getHostStackForBrowser(browser);
+              if (host && browser?.parentNode !== host.originalParent) {
+                const container = resolveSafeBrowserContainer(browser, host);
+                if (container) return container;
+              }
+              const result = orig.call(this, aBrowser);
+              if (isZentralPanelShellNode(result)) {
+                const container = resolveSafeBrowserContainer(browser, host);
+                if (container) return container;
+              }
+              return result;
+            },
+        );
+        guardMethod(
+          gBrowser,
+          "getPanel",
+          (orig) =>
+            function (aBrowser) {
+              if (!guardsActive) return orig.call(this, aBrowser);
+              const browser = aBrowser || this.selectedBrowser;
+              const host = getHostStackForBrowser(browser);
+              if (host && browser?.parentNode !== host.originalParent) {
+                const panel = resolveSafeTabPanel(browser, host);
+                if (panel) return panel;
+              }
+              const result = orig.call(this, aBrowser);
+              if (isZentralPanelShellNode(result)) {
+                return resolveSafeTabPanel(browser, host);
+              }
+              return result;
+            },
+        );
+        guardMethod(
+          gBrowser,
+          "discardBrowser",
+          (orig) =>
+            function (aTab, aForceDiscard, ...rest) {
+              if (!guardsActive)
+                return orig.call(this, aTab, aForceDiscard, ...rest);
+              const record = aTab && addonHostByTab.get(aTab);
+              if (record && !record.removing) {
+                if (!aForceDiscard) return false;
+                detachExternalHostTab(record);
+              } else if (
+                aTab?.linkedBrowser?.closest?.("#zen-app-panel-root")
+              ) {
+                evacuateBrowserFromZentralPanel(
+                  aTab.linkedBrowser,
+                  getHostStackForBrowser(aTab.linkedBrowser),
+                );
+              }
+              return orig.call(this, aTab, aForceDiscard, ...rest);
+            },
+        );
+        guardMethod(
+          gBrowser,
+          "_endRemoveTab",
+          (orig) =>
+            function (aTab, ...rest) {
+              if (!guardsActive) return orig.call(this, aTab, ...rest);
+              const record = aTab && addonHostByTab.get(aTab);
+              if (record && !record.removing) {
+                detachExternalHostTab(record);
+              } else if (
+                aTab?.linkedBrowser?.closest?.("#zen-app-panel-root")
+              ) {
+                evacuateBrowserFromZentralPanel(
+                  aTab.linkedBrowser,
+                  getHostStackForBrowser(aTab.linkedBrowser),
+                );
+              }
+              return orig.call(this, aTab, ...rest);
+            },
+        );
       } catch (error) {
+        guardsActive = false;
         undo.reverse().forEach((restore) => restore());
         console.warn(
           "[BgalazkaExtension] Real Tab IDs disabled for this panel: selection guard unavailable",
@@ -1664,6 +1881,7 @@
       }
       addonHostSelectionGuardsInstalled = true;
       removeAddonHostSelectionGuards = () => {
+        guardsActive = false;
         undo.reverse().forEach((restore) => restore());
         addonHostSelectionGuardsInstalled = false;
         removeAddonHostSelectionGuards = null;
@@ -1775,10 +1993,20 @@
       if (record.removing || addonHostByAppId.get(record.appId) !== record)
         return;
 
-      // This path means the user/Zen closed the backing tab directly. Let the
-      // tab close finish first, then ask Zentral to unload the matching private
-      // Map entry/browser. Our own programmatic teardown removes the Map record
-      // before removeTab(), so it never enters this branch.
+      // This path means the user/Zen closed the backing tab directly. Restore
+      // the linkedBrowser before native teardown can walk its parent chain,
+      // then ask Zentral to unload the matching private Map entry/browser.
+      detachExternalHostTab(record);
+    };
+
+    function detachExternalHostTab(record) {
+      if (
+        !record ||
+        record.removing ||
+        addonHostByAppId.get(record.appId) !== record
+      )
+        return;
+      record.removing = true;
       try {
         restoreAddonHostBrowserToTab(record);
       } catch (error) {
@@ -1786,19 +2014,31 @@
           "[Zentral] Could not restore closing host browser:",
           error,
         );
+        evacuateBrowserFromZentralPanel(record.browser, record);
+      } finally {
+        record.removing = false;
       }
-      if(record.progressRepairTimer)ctx.clearTimeout(record.progressRepairTimer);
-      record.browser.removeEventListener("XULFrameLoaderCreated",record.onProgressReady);
+      if (record.progressRepairTimer)
+        ctx.clearTimeout(record.progressRepairTimer);
+      record.browser?.removeEventListener(
+        "XULFrameLoaderCreated",
+        record.onProgressReady,
+      );
       addonHostByTab.delete(record.tab);
       addonHostByAppId.delete(record.appId);
-      record.browser.zenModeActive = false;
+      if (record.browser) {
+        record.browser.zenModeActive = false;
+        record.browser._bgalazkaAddonHostBrowser = false;
+        record.browser._bgalazkaAddonHostTab = null;
+        delete record.browser._zentralMoveTo;
+      }
       ctx.setTimeout(() => {
         try {
           window.Zentral?.Apps?.closeApp?.(record.appId);
         } catch (_) {}
         removeEmptyAddonHostFolder();
       }, 0);
-    };
+    }
 
     const addonHostTabDiscardedHandler = (event) => {
       const tab = event.target;
@@ -1811,17 +2051,17 @@
       repairAddonHostSelectionAfterTransition(tab);
     };
 
-    // Capture TabSelect so a real panel-host tab is redirected before normal
-    // bubbling listeners can treat its reparented browser as the active page.
+    // Capture TabSelect and TabClose so a real panel-host tab is redirected or
+    // restored before native/bubbling teardown can touch its reparented browser.
     window.addEventListener("TabSelect", addonHostTabSelectHandler, true);
-    window.addEventListener("TabClose", addonHostTabCloseHandler);
+    window.addEventListener("TabClose", addonHostTabCloseHandler, true);
     window.addEventListener(
       "TabBrowserDiscarded",
       addonHostTabDiscardedHandler,
     );
     ctx.registerCleanup(() => {
       window.removeEventListener("TabSelect", addonHostTabSelectHandler, true);
-      window.removeEventListener("TabClose", addonHostTabCloseHandler);
+      window.removeEventListener("TabClose", addonHostTabCloseHandler, true);
       window.removeEventListener(
         "TabBrowserDiscarded",
         addonHostTabDiscardedHandler,

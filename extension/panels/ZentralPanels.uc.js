@@ -2791,9 +2791,12 @@
         safeCall(hookAppsInstance, "hookAppsInstance"),
       );
 
-      // SessionStore may restore last session's host tabs and Zen folder before
-      // this script starts. They do not belong to this window's live bridge.
+      // SessionStore / Zen pinned-folder storage may restore last session's
+      // host tabs and Zen folder asynchronously during cold startup. They do
+      // not belong to this window's live bridge.
+      let restoredHostPruneTimer = null;
       function pruneRestoredAddonHosts() {
+        if (extensionDisposed) return;
         const folder =
           ctx.findAddonHostFolder() ||
           [...document.querySelectorAll("zen-folder")].find(
@@ -2804,11 +2807,17 @@
           ctx.addonHostFolder = folder;
           ctx.keepAddonHostFolderCollapsed(folder);
         }
-        for (const tab of [
+        const candidates = new Set([
           ...(window.gZenWorkspaces?.allStoredTabs ??
             window.gBrowser?.tabs ??
             []),
-        ]) {
+          ...(folder?.tabs ?? []),
+        ]);
+        for (const tab of candidates) {
+          if (!tab?.isConnected || tab.closing) continue;
+          // Never remove Zen's internal empty-folder placeholder tab: deleting
+          // it corrupts ZenFolder.delete() and throws in ZenWindowSync.
+          if (tab.hasAttribute("zen-empty-tab")) continue;
           if (ctx.addonHostByTab.get(tab)) continue;
           if (
             tab.hasAttribute("bgalazka-addon-host") ||
@@ -2831,18 +2840,55 @@
         }
         if (!ctx.addonHostByAppId.size) ctx.removeEmptyAddonHostFolder();
       }
+      const scheduleRestoredHostPrune = () => {
+        if (extensionDisposed || restoredHostPruneTimer !== null) return;
+        restoredHostPruneTimer = setTimeout(() => {
+          restoredHostPruneTimer = null;
+          pruneRestoredAddonHosts();
+        }, 0);
+      };
+      const onRestoredHostTab = (event) => {
+        const tab = event.target;
+        if (
+          !tab ||
+          tab.localName !== "tab" ||
+          tab.hasAttribute("zen-empty-tab") ||
+          ctx.addonHostByTab.get(tab)
+        )
+          return;
+        const folder = tab.group;
+        if (
+          tab.hasAttribute("bgalazka-addon-host") ||
+          tab.hasAttribute("bgalazka-addon-host-fallback") ||
+          folder?.id === "bgalazka-zentral-addon-hosts" ||
+          folder?.getAttribute?.("label") === ctx.ADDON_HOST_FOLDER_LABEL
+        ) {
+          scheduleRestoredHostPrune();
+        }
+      };
       pruneRestoredAddonHosts();
       const restoredHostObserver = { observe: pruneRestoredAddonHosts };
       Services.obs.addObserver(
         restoredHostObserver,
         "sessionstore-windows-restored",
       );
-      registerCleanup(() =>
+      window.addEventListener("SSTabRestored", onRestoredHostTab);
+      const cancelNativeHostPrune =
+        typeof ZentralRuntime?.whenNativeReady === "function"
+          ? ZentralRuntime.whenNativeReady(pruneRestoredAddonHosts)
+          : null;
+      registerCleanup(() => {
+        if (restoredHostPruneTimer !== null) {
+          clearTimeout(restoredHostPruneTimer);
+          restoredHostPruneTimer = null;
+        }
+        cancelNativeHostPrune?.();
+        window.removeEventListener("SSTabRestored", onRestoredHostTab);
         Services.obs.removeObserver(
           restoredHostObserver,
           "sessionstore-windows-restored",
-        ),
-      );
+        );
+      });
 
       // Hot-reload/startup normalization: if the opt-in bridge was already on
       // and a standalone panel browser predates this extension instance, unload it
@@ -3686,6 +3732,9 @@
         const onNativeReady = () => {
           if (startupCancelled || extensionDisposed) return;
           startupReady = true;
+          try {
+            pruneRestoredAddonHosts();
+          } catch (_) {}
           // Sync once synchronously so sleeping Essential tabs linked in a Triple View pair
           // are visible on the very first attempt even without ZentralStartup.
           try {

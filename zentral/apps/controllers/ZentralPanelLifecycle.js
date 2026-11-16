@@ -51,9 +51,18 @@
         preloadWaitTimer = null,
         finishPreloadWait = null;
       const navigationRequested = new WeakMap();
+      const ensurePanelRootConnected = (self) => {
+        if (self?._destroyed) return false;
+        const root = access.dom.root;
+        if (root && !root.isConnected && document.documentElement) {
+          document.documentElement.appendChild(root);
+        }
+        return !!root?.isConnected;
+      };
       return {
         // Responsibility: ZentralPanelHost
         getOrCreateAppBrowser(app) {
+          ensurePanelRootConnected(this);
           let b = access.state.appBrowsers.get(app.id);
           if (b && b.isConnected) return { browser: b, isNew: false };
 
@@ -330,6 +339,7 @@
         // Responsibility: ZentralPanelPresentation
         openPanel(app) {
           if (!Core.getPref(Constants.Apps.PREF_ENABLED, true)) return;
+          ensurePanelRootConnected(this);
           // Switching apps while the panel is already open keeps the panel where it is: no slide-out/slide-in,
           // so whatever is docked to it (the Notes sheet lives inside the slider) does not seem to close and reopen.
           const wasOpen =
