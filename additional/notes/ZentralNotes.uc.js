@@ -5084,12 +5084,14 @@
       document, history, listen, warn = () => {}, onBulkEnd = () => {},
       now = () => Date.now(), setTimer = (fn, ms) => window.setTimeout?.(fn, ms), clearTimer = (id) => window.clearTimeout?.(id),
       maxVisible = CALENDAR_PART?.REMINDER_STACK_LIMIT || 3,
+      getAlertSettings = null,
     }) {
       const cards = new Map();
       const digestKey = "__missed_reminders_digest__";
       const stackLimit = Math.max(1, Math.trunc(Number(maxVisible) || 3));
-      let host = null, stopClick = null, stopped = false, bulkRunning = false, countdownTimer = null;
-      let nextSeq = 1, stackExpanded = false, moreBtn = null;
+      let host = null, stopClick = null, stopEscape = null, stopped = false, bulkRunning = false, countdownTimer = null;
+      let nextSeq = 1, stackExpanded = false, moreBtn = null, scrimEl = null;
+      let wasOverlay = false, previousFocus = null, lastEscEvent = null;
       const html = (tag, cls, text) => {
         const el = document.createElementNS("http://www.w3.org/1999/xhtml", tag);
         if (cls) el.setAttribute("class", cls);
@@ -5101,6 +5103,40 @@
           clearTimer(countdownTimer);
           countdownTimer = null;
         }
+      };
+      const teardownEscape = () => {
+        if (stopEscape) {
+          stopEscape();
+          stopEscape = null;
+        }
+      };
+      const ensureEscape = () => {
+        if (stopEscape || stopped) return;
+        const onKeydown = (event) => {
+          if (stopped || !wasOverlay || event?.key !== "Escape" || event === lastEscEvent) return;
+          lastEscEvent = event;
+          const regular = [];
+          for (const [k, card] of cards.entries()) {
+            if (!card.digest && card.node?.parentElement && card.layout === "centred") regular.push({ key: k, card });
+          }
+          if (!regular.length) return;
+          regular.sort((a, b) => (b.card.rank - a.card.rank) || (a.card.seq - b.card.seq));
+          const { key, card } = regular[0];
+          event.preventDefault();
+          event.stopPropagation();
+          const dismiss = card.actions.get("dismiss");
+          if (typeof dismiss === "function") {
+            try { if (dismiss() !== false) close(key); } catch (error) { warn(error); }
+          } else if (!card.actions.size) {
+            close(key);
+          }
+        };
+        const offs = [];
+        if (document?.documentElement) offs.push(listen(document.documentElement, "keydown", onKeydown));
+        if (document && document !== document.documentElement && typeof document.addEventListener === "function") {
+          offs.push(listen(document, "keydown", onKeydown));
+        }
+        stopEscape = () => { while (offs.length) { try { offs.pop()?.(); } catch (_) {} } };
       };
       const syncCountdown = () => {
         stopCountdown();
@@ -5124,6 +5160,13 @@
         }
         syncCountdown();
       }
+      function restorePriorFocus() {
+        const target = previousFocus;
+        previousFocus = null;
+        if (target && target.isConnected !== false) {
+          try { target.focus?.({ preventScroll: true }); } catch (_) {}
+        }
+      }
       function syncStackLayout() {
         if (stopped) return;
         const digestCard = cards.get(digestKey);
@@ -5135,7 +5178,21 @@
         if (regular.length <= stackLimit) stackExpanded = false;
         const visibleRegular = stackExpanded ? regular : regular.slice(0, stackLimit);
         const hiddenCount = Math.max(0, regular.length - stackLimit);
+        const topOverlay = visibleRegular.find((c) => c.layout === "centred") || null;
+        const hasOverlay = !!topOverlay;
         const desired = [];
+        if (hasOverlay) {
+          if (!wasOverlay && document?.activeElement && (!host || !host.contains(document.activeElement))) {
+            previousFocus = document.activeElement;
+          }
+          if (!scrimEl) {
+            scrimEl = html("div", "zn-reminder-scrim");
+            scrimEl.setAttribute("aria-hidden", "true");
+          }
+          desired.push(scrimEl);
+        } else {
+          scrimEl?.remove();
+        }
         if (digestCard?.node) desired.push(digestCard.node);
         for (const card of visibleRegular) {
           if (card.stage === "pre" && card.countdownEl && card.dueAt > 0 && CALENDAR_PART?.reminderPreCountdownText) {
@@ -5149,13 +5206,26 @@
         }
         if (!desired.length) {
           moreBtn?.remove();
+          teardownEscape();
           if (host) {
+            host.removeAttribute("data-overlay");
             try { host.hidePopover?.(); } catch (_) {}
             host.hidden = true;
+          }
+          if (wasOverlay) {
+            wasOverlay = false;
+            restorePriorFocus();
           }
           return;
         }
         const parent = ensureHost();
+        if (hasOverlay) {
+          parent.setAttribute("data-overlay", "true");
+          ensureEscape();
+        } else {
+          parent.removeAttribute("data-overlay");
+          teardownEscape();
+        }
         if (hiddenCount > 0) {
           if (!moreBtn) {
             moreBtn = html("button", "zn-reminder-more");
@@ -5175,7 +5245,20 @@
           if (parent.children[i] !== n) parent.insertBefore(n, parent.children[i] || null);
         }
         parent.hidden = false;
-        try { if (typeof parent.showPopover === "function") { if (!parent.matches(":popover-open")) parent.showPopover(); } else parent.removeAttribute("popover"); } catch (_) { parent.removeAttribute("popover"); }
+        try {
+          if (typeof parent.showPopover === "function") {
+            if (hasOverlay && !wasOverlay && parent.matches(":popover-open")) parent.hidePopover?.();
+            if (!parent.matches(":popover-open")) parent.showPopover();
+          } else {
+            parent.removeAttribute("popover");
+          }
+        } catch (_) { parent.removeAttribute("popover"); }
+        if (hasOverlay && (!wasOverlay || !parent.contains(document?.activeElement))) {
+          try { topOverlay.primaryButton?.focus?.({ preventScroll: true }); } catch (_) {}
+        } else if (!hasOverlay && wasOverlay) {
+          restorePriorFocus();
+        }
+        wasOverlay = hasOverlay;
       }
       const close = (key, { silent = false } = {}) => {
         const card = cards.get(key); if (!card) return;
@@ -5303,12 +5386,18 @@
           }
           renderDigest(card); return !!card.entries.length;
         },
-        show({ identity, title, stage, dueAt = 0, actions = [] }) {
+        show({ identity, title, stage, layout: layoutOverride = "", dueAt = 0, actions = [] }) {
           if (stopped || !identity?.itemId || !identity?.occurrenceId) return false;
           if (["done", "dismissed"].includes(history?.stateFor?.(identity.itemId, identity.occurrenceId))) return false;
+          const settings = typeof getAlertSettings === "function" ? getAlertSettings() : null;
           const presentation = CALENDAR_PART?.reminderAlertPresentation
-            ? CALENDAR_PART.reminderAlertPresentation(stage)
-            : { stage: "followup", rank: 3, label: "Reminder overdue", layout: "centred", persistent: true };
+            ? CALENDAR_PART.reminderAlertPresentation(stage, settings)
+            : { stage: "followup", rank: 3, label: "Reminder overdue", layout: "centred", overlay: true, persistent: true };
+          const resolvedLayout = layoutOverride
+            ? (CALENDAR_PART?.cleanAlertLayout ? CALENDAR_PART.cleanAlertLayout(layoutOverride, presentation.layout) : layoutOverride)
+            : (presentation.layout || "corner");
+          const isOverlay = resolvedLayout === "centred";
+          const isPersistent = presentation.stage !== "pre" || resolvedLayout !== "corner";
           const key = JSON.stringify([identity.itemId, identity.occurrenceId]);
           const existing = cards.get(key);
           if (existing && existing.rank > presentation.rank) return true;
@@ -5317,9 +5406,10 @@
           const node = html("section", "zn-reminder-card");
           node.setAttribute("data-key", key);
           node.setAttribute("data-stage", presentation.stage);
-          node.setAttribute("data-layout", presentation.layout || "corner");
-          if (presentation.persistent) node.setAttribute("data-persistent", "true");
-          node.setAttribute("role", presentation.stage === "followup" ? "alert" : "status");
+          node.setAttribute("data-layout", resolvedLayout);
+          if (isPersistent) node.setAttribute("data-persistent", "true");
+          node.setAttribute("role", isOverlay ? "alertdialog" : (presentation.stage === "followup" ? "alert" : "status"));
+          if (isOverlay) node.setAttribute("aria-modal", "true");
           const dueStamp = Number(dueAt) > 0 ? Number(dueAt) : 0;
           let countdownEl = null;
           if (presentation.stage === "pre" && dueStamp > 0 && CALENDAR_PART?.reminderPreCountdownText) {
@@ -5333,24 +5423,30 @@
             node.append(html("div", "zn-reminder-stage", presentation.label));
           }
           node.append(html("div", "zn-reminder-title", title || "Untitled reminder"));
+          const orderedActions = isOverlay && CALENDAR_PART?.orderOverlayAlertActions
+            ? CALENDAR_PART.orderOverlayAlertActions(actions)
+            : actions;
           const row = html("div", "zn-reminder-actions"), callbacks = new Map();
-          for (const action of actions) {
+          let primaryButton = null;
+          for (const action of orderedActions) {
             if (!action?.id || typeof action.callback !== "function") continue;
             const button = html("button", action.id === "done" ? "zn-reminder-action-primary" : "", action.label);
             button.setAttribute("type", "button"); button.setAttribute("data-action", action.id);
+            if (action.id === "done" || !primaryButton) primaryButton = button;
             callbacks.set(action.id, action.callback); row.append(button);
           }
-          if (!presentation.persistent || !callbacks.size) {
+          if (!isPersistent || !callbacks.size) {
             const closeButton = html("button", "zn-reminder-close", "Close");
             closeButton.setAttribute("type", "button"); closeButton.setAttribute("data-action", "close");
+            if (!primaryButton) primaryButton = closeButton;
             row.append(closeButton);
           }
           node.append(row);
           const records = history?.list?.({ itemId: identity.itemId, occurrenceId: identity.occurrenceId }) || [];
           cards.set(key, {
             identity: { ...identity }, node, actions: callbacks,
-            stage: presentation.stage, layout: presentation.layout || "corner",
-            persistent: !!presentation.persistent,
+            stage: presentation.stage, layout: resolvedLayout,
+            persistent: isPersistent, primaryButton,
             dueAt: dueStamp, countdownEl,
             rank: presentation.rank, seq: nextSeq++,
             seen: new Set(records.map((record) => record.id)),
@@ -5361,8 +5457,10 @@
         },
         destroy() {
           if (stopped) return;
-          stopped = true; stopCountdown(); offHistory?.(); stopClick?.(); cards.clear();
+          stopped = true; stopCountdown(); teardownEscape(); offHistory?.(); stopClick?.(); cards.clear();
+          scrimEl?.remove(); scrimEl = null;
           moreBtn?.remove(); moreBtn = null;
+          previousFocus = null; wasOverlay = false;
           try { host?.hidePopover?.(); } catch (_) {}
           host?.remove(); host = null;
         },
@@ -5424,9 +5522,10 @@
       return api;
     }
 
-    function createReminderScheduler({ store, now = () => Date.now(), setTimer, clearTimer, onDue, onDigest = null, getDigestDays = () => 7, deferUntilStart = false }) {
+    function createReminderScheduler({ store, now = () => Date.now(), setTimer, clearTimer, onDue, onDigest = null, getDigestDays = () => 7, deferUntilStart = false, isActiveWindow = null, activeYieldMs = 120 }) {
       let timer = null, debounceTimer = null, destroyed = false, busy = false, again = false;
       let started = !deferUntilStart, digestRequested = false;
+      const deferredOverlays = new Set();
       const stop = () => { if (timer !== null) { clearTimer(timer); timer = null; } };
       const stopDebounce = () => { if (debounceTimer !== null) { clearTimer(debounceTimer); debounceTimer = null; } };
       let windowKey = "", occurrenceCache = new Map(), dirtySeries = new Set(), notesDirty = true, pendingNotes = [];
@@ -5594,11 +5693,22 @@
               notesDirty = true;
             }
             const calendar = calendarCandidates(nowAt);
-            let retryClaim = false;
+            let retryClaim = false, deferredYield = false;
             for (const item of calendar.due) {
               if (destroyed) return;
               const identity = item.__historyIdentity;
               const history = store.items?.history;
+              if (!item.__skipped && !item.__coalesced && typeof isActiveWindow === "function" && CALENDAR_PART?.reminderAlertPresentation) {
+                const pres = CALENDAR_PART.reminderAlertPresentation(item.__stage, store.meta?.calendarAlertSettings);
+                if (pres.overlay && !isActiveWindow()) {
+                  const deferKey = JSON.stringify([identity.itemId, identity.occurrenceId, item.__stage, item.__scheduledStart?.date || "", item.__scheduledStart?.dateTime || ""]);
+                  if (!deferredOverlays.has(deferKey)) {
+                    deferredOverlays.add(deferKey);
+                    deferredYield = true;
+                    continue;
+                  }
+                }
+              }
               const entry = { itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: item.summary, start: item.__scheduledStart, stage: item.__stage, at: nowAt, action: item.__skipped ? "skipped" : "alerted", coalesced: item.__coalesced, requirePending: true };
               // claimAlert re-reads the shared history first so a second window does not show the same banner.
               let record = null;
@@ -5614,6 +5724,10 @@
             if (fired.length) { try { onDue(fired.map((n) => n.__calendarReminder ? n : (store.get(n.id) || n))); } catch (_) {} }
             const nextNote = nextReminderAt(pendingNoteCandidates(), now());
             let next = calendar.next && nextNote ? Math.min(calendar.next, nextNote) : calendar.next || nextNote;
+            if (deferredYield) {
+              const yieldAt = now() + Math.max(20, Number(activeYieldMs) || 120);
+              next = next ? Math.min(next, yieldAt) : yieldAt;
+            }
             // A failed claim was rolled back and is still due. Retry a bounded
             // number of times, even when it was the last stage in the schedule.
             if (retryClaim) next = next ? Math.min(next, now() + 30000) : now() + 30000;
@@ -15541,9 +15655,10 @@
         nameField?.input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); submit(); } });
         if (nameField) { nameField.input.focus?.({ preventScroll: true }); }
       }
-      function buildAlertSoundEditor(raw, { inherit = false, getLayers = null } = {}) {
+      function buildAlertSoundEditor(raw, { inherit = false, includeLayout = false, getLayers = null } = {}) {
         const source = raw?.stages || raw || {};
         const rows = [], fields = {};
+        const layoutLabels = { corner: "Corner card", large: "Large card", centred: "Centred overlay" };
         for (const stage of ["pre", "due", "followup"]) {
           const rule = source[stage] && typeof source[stage] === "object" ? source[stage] : {};
           const soundExplicit = rule.soundSpecified === true || (rule.soundSpecified === undefined && Object.prototype.hasOwnProperty.call(rule, "sound"));
@@ -15553,6 +15668,17 @@
           if (inheritOption) sound.append(inheritOption);
           for (const level of CALENDAR_PART.SOUND_LEVELS) sound.append(h("option", { value: level }, level[0].toUpperCase() + level.slice(1)));
           sound.value = soundExplicit ? rule.sound : (inherit ? "" : (rule.sound || "normal"));
+          let layout = null;
+          if (includeLayout) {
+            const defaultLayout = stage === "pre" ? "corner" : stage === "due" ? "large" : "centred";
+            layout = h("select", { class: "zn-select", "aria-label": stage + " alert layout" });
+            for (const mode of (CALENDAR_PART.ALERT_LAYOUTS || ["corner", "large", "centred"])) {
+              layout.append(h("option", { value: mode }, layoutLabels[mode] || mode));
+            }
+            layout.value = CALENDAR_PART.cleanAlertLayout
+              ? CALENDAR_PART.cleanAlertLayout(rule.layout, defaultLayout)
+              : (rule.layout || defaultLayout);
+          }
           const allowToggle = h("input", { type: "checkbox", "aria-label": stage + " quiet-hours bypass override" });
           allowToggle.checked = inherit ? allowExplicit : true;
           const allowChecks = {};
@@ -15567,11 +15693,18 @@
           }
           allowToggle.addEventListener("change", () => { for (const check of Object.values(allowChecks)) check.disabled = inherit && !allowToggle.checked; });
           const allowCaption = h("span", {}, inherit ? "Override quiet-hours bypass list" : "Quiet-hours bypass sounds");
-          const row = h("div", { class: "zn-cal-alert-rule" },
-            h("label", {}, h("span", {}, stage === "pre" ? "Tier 1 · Pre-alert sound" : stage === "due" ? "Tier 2 · Due sound" : "Tier 3 · Follow-up sound"), sound),
-            h("label", {}, allowToggle, allowCaption), allowRow);
+          const rowChildren = [
+            h("label", { class: "zn-cal-alert-select-row" }, h("span", {}, stage === "pre" ? "Tier 1 · Pre-alert sound" : stage === "due" ? "Tier 2 · Due sound" : "Tier 3 · Follow-up sound"), sound),
+          ];
+          if (layout) {
+            rowChildren.push(
+              h("label", { class: "zn-cal-alert-select-row" }, h("span", {}, stage === "pre" ? "Tier 1 · Pre-alert display" : stage === "due" ? "Tier 2 · Due display" : "Tier 3 · Follow-up display"), layout)
+            );
+          }
+          rowChildren.push(h("label", {}, allowToggle, allowCaption), allowRow);
+          const row = h("div", { class: "zn-cal-alert-rule" }, ...rowChildren);
           rows.push(row);
-          fields[stage] = { sound, inheritOption, allowToggle, allowCaption, allowChecks };
+          fields[stage] = { sound, layout, inheritOption, allowToggle, allowCaption, allowChecks };
         }
         const syncInheritance = (layersInput = null) => {
           if (!inherit || !CALENDAR_PART?.describeInheritance) return;
@@ -15592,6 +15725,7 @@
             for (const stage of ["pre", "due", "followup"]) {
               const field = fields[stage], rule = {};
               if (field.sound.value) rule.sound = field.sound.value;
+              if (field.layout?.value) rule.layout = field.layout.value;
               if (!inherit || field.allowToggle.checked) rule.quietAllow = ["quiet", "normal", "loud"].filter((level) => field.allowChecks[level].checked);
               if (Object.keys(rule).length) out[stage] = rule;
             }
@@ -15690,7 +15824,7 @@
           const input = h("input", { type: "checkbox", "aria-label": "Quiet hours " + label }); input.checked = current.quietHours.days.includes(day);
           return { day, input, node: h("label", {}, input, h("span", {}, label)) };
         });
-        const soundEditor = buildAlertSoundEditor(current, { inherit: false });
+        const soundEditor = buildAlertSoundEditor(current, { inherit: false, includeLayout: true });
         const status = h("p", { class: "zn-empty", role: "status", "aria-live": "polite" }, "Quiet hours are off by default. During an enabled window, only sounds listed for that stage can bypass quiet mode. Visual alerts and due times are unchanged.");
         const ok = chip("Save alert settings", true), cancel = chip("Cancel");
         openCalendarCard("Reminder sounds and quiet hours",
@@ -21721,6 +21855,7 @@
         now: () => Date.now(),
         setTimer: (fn, ms) => window.setTimeout(fn, ms),
         clearTimer: (id) => window.clearTimeout(id),
+        getAlertSettings: () => store.meta?.calendarAlertSettings,
         onBulkEnd() { store.items?.history?.flush?.().catch?.(warn); },
         listen(target, type, fn) {
           if (lifecycle?.listen) return lifecycle.listen(target, type, fn);
@@ -21745,13 +21880,16 @@
         for (const n of visible) {
           const item = n.__calendarReminder ? n.__calendarItem : null;
           const identity = item ? CALENDAR_PART.reminderIdentity(item) : { itemId: "note-reminder:" + n.id, occurrenceId: "note-reminder:" + n.id };
+          const stage = n.__stage || "followup";
+          const presentation = CALENDAR_PART.reminderAlertPresentation?.(stage, store.meta?.calendarAlertSettings);
           const dueAt = item ? (CALENDAR_PART.reminderDueAt?.(item) || 0) : (Number(n.remind) || 0);
           const actions = createReminderAlertActions({ store, note: n, openNote: openReminderNote, showNotes, warn });
           try {
             alertStack.show({
               identity,
               title: item?.summary || titleOf(n.body) || "Untitled note",
-              stage: n.__stage || "followup",
+              stage,
+              ...(presentation?.layout ? { layout: presentation.layout } : {}),
               ...(dueAt > 0 ? { dueAt } : {}),
               actions,
             });
@@ -21803,6 +21941,13 @@
         onDigest: showMissedReminders,
         getDigestDays: () => prefInt(PREF.MISSED_DAYS, 7),
         deferUntilStart: true,
+        isActiveWindow: () => {
+          try {
+            if (typeof document?.hasFocus === "function" && document.hasFocus()) return true;
+            const focused = Services?.focus?.activeWindow || Services?.wm?.getMostRecentWindow?.("navigator:browser");
+            return !focused || focused === window;
+          } catch (_) { return true; }
+        },
       });
       onCleanup(() => reminders.destroy());
       // The store opens lazily; reminders need it, so open it shortly after startup (not on the critical path).

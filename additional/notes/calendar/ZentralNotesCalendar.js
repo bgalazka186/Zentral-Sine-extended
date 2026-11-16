@@ -474,15 +474,32 @@
     if (remaining > 3600000) return (remaining % 60000) || 60000;
     return (remaining % 1000) || 1000;
   }
+  const ALERT_LAYOUTS = Object.freeze(["corner", "large", "centred"]);
+  function cleanAlertLayout(value, fallback = "corner") {
+    const raw = String(value || "").trim().toLowerCase();
+    const normalized = raw === "centered" ? "centred" : raw;
+    if (ALERT_LAYOUTS.includes(normalized)) return normalized;
+    const fb = String(fallback || "").trim().toLowerCase();
+    const normFb = fb === "centered" ? "centred" : fb;
+    return ALERT_LAYOUTS.includes(normFb) ? normFb : "corner";
+  }
   const DEFAULT_ALERT_SETTINGS = Object.freeze({
-    stages: Object.freeze({ pre: Object.freeze({ sound: "normal", quietAllow: Object.freeze([]) }), due: Object.freeze({ sound: "loud", quietAllow: Object.freeze([]) }), followup: Object.freeze({ sound: "normal", quietAllow: Object.freeze([]) }) }),
+    stages: Object.freeze({
+      pre: Object.freeze({ sound: "normal", layout: "corner", quietAllow: Object.freeze([]) }),
+      due: Object.freeze({ sound: "loud", layout: "large", quietAllow: Object.freeze([]) }),
+      followup: Object.freeze({ sound: "normal", layout: "centred", quietAllow: Object.freeze([]) }),
+    }),
     quietHours: Object.freeze({ enabled: false, start: "22:00", end: "07:00", days: Object.freeze([0, 1, 2, 3, 4, 5, 6]), allowed: Object.freeze({ pre: Object.freeze([]), due: Object.freeze([]), followup: Object.freeze([]) }) }),
   });
   function cleanSoundRule(raw, fallback = {}) {
     const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+    const rawLayout = String(src.layout || "").trim().toLowerCase();
+    const layoutExplicit = ALERT_LAYOUTS.includes(rawLayout === "centered" ? "centred" : rawLayout);
     return {
       sound: SOUND_LEVELS.includes(src.sound) ? src.sound : (SOUND_LEVELS.includes(fallback.sound) ? fallback.sound : "normal"),
       soundSpecified: typeof src.soundSpecified === "boolean" ? src.soundSpecified : SOUND_LEVELS.includes(src.sound),
+      layout: cleanAlertLayout(src.layout, fallback.layout || "corner"),
+      layoutSpecified: typeof src.layoutSpecified === "boolean" ? src.layoutSpecified : layoutExplicit,
       quietAllow: Array.isArray(src.quietAllow) ? [...new Set(src.quietAllow.filter((level) => SOUND_LEVELS.includes(level) && level !== "silent"))] : [...(fallback.quietAllow || [])],
       quietAllowSpecified: typeof src.quietAllowSpecified === "boolean" ? src.quietAllowSpecified : Array.isArray(src.quietAllow),
     };
@@ -1369,15 +1386,34 @@
   }
   const REMINDER_STACK_LIMIT = 3;
   // Display and cross-window retirement rules for occurrence-scoped reminder cards.
-  function reminderAlertPresentation(stage) {
+  function reminderAlertPresentation(stage, alertSettings = null) {
     const value = ["pre", "due", "followup"].includes(stage) ? stage : "followup";
+    const defaultLayout = value === "pre" ? "corner" : value === "due" ? "large" : "centred";
+    const configured = alertSettings ? cleanAlertSettings(alertSettings).stages[value]?.layout : "";
+    const layout = cleanAlertLayout(configured, defaultLayout);
     return {
       stage: value,
       rank: value === "pre" ? 1 : value === "due" ? 2 : 3,
       label: value === "pre" ? "Coming up" : value === "due" ? "Due now" : "Reminder overdue",
-      layout: value === "pre" ? "corner" : value === "due" ? "large" : "centred",
-      persistent: value !== "pre",
+      layout,
+      overlay: layout === "centred",
+      persistent: value !== "pre" || layout !== "corner",
     };
+  }
+  function orderOverlayAlertActions(actions) {
+    if (!Array.isArray(actions)) return [];
+    const bucket = (id) => {
+      const k = String(id || "");
+      if (k === "done") return 0;
+      if (k.startsWith("snooze")) return 1;
+      if (k === "open") return 2;
+      if (k === "dismiss") return 3;
+      return 4;
+    };
+    return actions
+      .map((action, index) => ({ action, index, order: bucket(action?.id) }))
+      .sort((a, b) => (a.order - b.order) || (a.index - b.index))
+      .map((entry) => entry.action);
   }
   function reminderStackMoreLabel(hiddenCount, expanded = false) {
     if (expanded === true) return "Show fewer";
@@ -4838,8 +4874,8 @@
 
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
-    cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
+    cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
     cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
