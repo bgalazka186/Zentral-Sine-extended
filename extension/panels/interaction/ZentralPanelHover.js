@@ -531,9 +531,12 @@
             if (root?.contains(document.activeElement))
               gBrowser.selectedBrowser?.focus();
             ctx.syncAppPanelBrowserActivity?.();
-          } else if (enabled) {
-            apps?.startPositionTracking?.();
-            ctx.requestPanelActivity?.();
+          } else {
+            if (enabled) {
+              apps?.startPositionTracking?.();
+              ctx.requestPanelActivity?.();
+            }
+            ctx.scheduleSecondaryGeometryFit?.();
           }
           syncPanelFallbackPolling();
         }

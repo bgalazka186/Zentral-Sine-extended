@@ -533,6 +533,9 @@
   .bgalazka-triple-drag-handle {
   pointer-events: auto !important;
 }
+:root[bgalazka-hover-panel-hidden] .bgalazka-triple-drag-handle {
+  pointer-events: none !important;
+}
 :root[bgalazka-triple-view="true"][bgalazka-triple-populated="true"]
   #bgalazka-super-panel {
   order: 1 !important;

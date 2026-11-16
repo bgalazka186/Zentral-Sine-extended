@@ -240,7 +240,7 @@ function openTripleWindow(world, { id, width = 420, height = 800, right = 12, to
     const t = decl(root, "transform");
     const m = /translateX\(\s*calc\(\s*(-?)100%\s*([+-])\s*var\(--bgalazka-hover-outset,\s*([\d.]+)px\)/.exec(t || "");
     const to = m ? (m[1] === "-" ? -1 : 1) * (panel.width + num(root.style.getPropertyValue("--bgalazka-hover-outset"), num(m[3]))) : 0;
-    if (to !== slide.to) Object.assign(slide, { from: slideNow(), to, at: world.now, ms: to === 0 ? 0 : hideMs }); // the transition is part of the hidden rule only
+    if (to !== slide.to) Object.assign(slide, { from: slideNow(), to, at: world.now, ms: /transform/.test(decl(root, "transition")) ? hideMs : 0 });
     return slideNow();
   }
 
@@ -453,7 +453,7 @@ function openTripleWindow(world, { id, width = 420, height = 800, right = 12, to
     window: win, document, Services, globalThis: { Services }, console, Event: Ev, Math, JSON, Number, Object, Array, Map, Set, Date, Promise,
     ChromeUtils: { generateQI: () => () => null }, Ci: { nsIWebProgress: { NOTIFY_LOCATION: 1, NOTIFY_STATE_NETWORK: 2 } },
     ZoomManager: { getZoomForBrowser: () => 1, setZoomForBrowser() {} },
-    ResizeObserver: observers.ResizeObserver,
+    MutationObserver: observers.MutationObserver, ResizeObserver: observers.ResizeObserver,
     requestAnimationFrame: (fn) => win.requestAnimationFrame(fn), cancelAnimationFrame: (frame) => win.cancelAnimationFrame(frame),
   }, { filename: SECONDARY_VIEWS });
   const run = part(ctx);

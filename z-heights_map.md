@@ -55,12 +55,12 @@ when the ordering rules below are broken.
 | 2147483642 | Dock ghost while a floating panel is dragged | `.zentral-notes-ghost` | additional/notes/ZentralNotes.css:1618 |
 | 2147483642 | Dock ghost while a floating panel is dragged | `:root[zentral-geometry-dragging] #zentral-dock-ghost` | extension/panels/floating/ZentralFloatingPanels.css:285 |
 | 2147483640 | Reveal edge and invisible drag shields | `#bgalazka-panel-reveal-edge` | extension/appearance/ZentralAppearance.css:208 |
-| 2147483640 | Reveal edge and invisible drag shields | `.bgalazka-pill-drag-shield` | extension/panels/browsers/ZentralBrowserIntegrations.css:691 |
-| 2147483640 | Reveal edge and invisible drag shields | `.bgalazka-triple-drag-shield` | extension/panels/browsers/ZentralBrowserIntegrations.css:762 |
+| 2147483640 | Reveal edge and invisible drag shields | `.bgalazka-pill-drag-shield` | extension/panels/browsers/ZentralBrowserIntegrations.css:694 |
+| 2147483640 | Reveal edge and invisible drag shields | `.bgalazka-triple-drag-shield` | extension/panels/browsers/ZentralBrowserIntegrations.css:765 |
 | 2147483640 | Reveal edge and invisible drag shields | `#zentral-panel-drag-shield` | extension/panels/floating/ZentralFloatingPanels.css:126 |
 | 2147483638 | Dock ghost (floating panel preview) | `#zentral-dock-ghost` | extension/panels/floating/ZentralFloatingPanels.css:111 |
 | 2147483603 | Triple View drag handle | `.bgalazka-triple-drag-handle` | extension/panels/browsers/ZentralBrowserIntegrations.css:520 |
-| 2147483601 | Super Pin panel | `:root[bgalazka-super-pin="true"] #bgalazka-super-panel` | extension/panels/browsers/ZentralBrowserIntegrations.css:558 |
+| 2147483601 | Super Pin panel | `:root[bgalazka-super-pin="true"] #bgalazka-super-panel` | extension/panels/browsers/ZentralBrowserIntegrations.css:561 |
 | 2147483600 | Zentral panel root | `#zen-app-panel-root` | zentral/apps/styles/ZentralAppsInjected.css:1043 |
 | 2147483600 | Zentral panel root | `#zen-app-panel-root` | zentral/apps/styles/ZentralAppsInjected.css:1527 |
 | 2147483600 | Zentral panel root | `#zen-app-panel-root` | zentral/apps/styles/ZentralVerticalBarLayout.css:281 |
@@ -118,7 +118,7 @@ Ordering inside one component. Listed by file; values only matter relative to si
 | extension/appearance/ZentralAppearance.css | 404 | 3 | `:root[bgalazka-tab-isolation="true"] .tabbrowser-tab .bgalazka-tab-icon-panel[data-loaded="true"]::after` |
 | extension/panels/browsers/ZentralBrowserIntegrations.css | 248 | 2 | `.zen-app-tile .bgalazka-tile-audio` |
 | extension/panels/browsers/ZentralBrowserIntegrations.css | 410 | 1 | `:root[bgalazka-corner-tiles="true"] :is( .tabbrowser-tab, #zen-essentials-container .tabbrowser-tab, [zen-essential="true"] ) .zen-app-tile.bgalazka-tab-icon-panel` |
-| extension/panels/browsers/ZentralBrowserIntegrations.css | 702 | 3 | `:root[bgalazka-super-pin="true"] .bgalazka-second-resize` |
+| extension/panels/browsers/ZentralBrowserIntegrations.css | 705 | 3 | `:root[bgalazka-super-pin="true"] .bgalazka-second-resize` |
 | extension/panels/geometry/ZentralPanelGeometry.css | 43 | 30 | `.zen-app-resize-strip-top, .zen-app-resize-strip-bottom` |
 | extension/panels/geometry/ZentralPanelGeometry.css | 141 | 31 | `.zen-app-resize-strip-outer, .zen-app-resize-strip-inner, .zen-app-resize-corner` |
 | extension/panels/navigation/styles/ZentralPanelToolbar.css | 214 | 5 | `:root[bgalazka-webtoolbar-autohide="true"] #zen-app-panel-toolbar` |
