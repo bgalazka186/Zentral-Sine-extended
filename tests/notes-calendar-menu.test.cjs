@@ -205,6 +205,7 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   assert.match(disabledCalendar.textContent, /Restore the note before adding it to Calendar/);
   assert.equal(q(root, ".zn-cal-compose-card"), null, "a trashed note cannot open the calendar composer");
   root.querySelectorAll(".zn-chips .zn-chip").find((button) => button.textContent.trim() === "Notes").click(); await flush();
+  store.setMeta({ calendarCursor: dayKey }); await flush();
 
   // Month marks share the exact item menu model and keyboard contract, for events as well as reminders.
   const monthMark = root.querySelectorAll(".zn-cal-month-mark").find((node) => node.textContent.trim() === "Standalone review");
