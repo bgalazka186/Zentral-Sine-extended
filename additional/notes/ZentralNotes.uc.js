@@ -827,8 +827,37 @@
       return NOTE_COLORS.includes(s0) ? s0 : cleanHex(s0) || "none";
     };
     const cleanHighlightColor = (v) => (HIGHLIGHT_COLORS.includes(v) ? v : cleanHex(v) || "");
+    const PALETTE_VAR_NAMES = Object.freeze([
+      "--zn-pal-bg", "--zn-pal-fg", "--zn-pal-hue-fg", "--zn-pal-muted", "--zn-pal-outline",
+      "--zn-pal-hover", "--zn-pal-hover-fg", "--zn-pal-selected-bg", "--zn-pal-selected-fg", "--zn-pal-selected-outline",
+      "--zn-pal-disabled-bg", "--zn-pal-disabled-fg", "--zn-pal-disabled-outline", "--zn-pal-hl-bg", "--zn-pal-hl-fg",
+    ]);
+    function clearPaletteVars(el) {
+      if (!el?.style) return;
+      for (const k of PALETTE_VAR_NAMES) el.style.removeProperty(k);
+    }
+    function applyPaletteVars(el, rawColor, kind = "swatch", surfaceSpec = null) {
+      if (!el?.style || !CALENDAR_PART?.derivePaletteTokens) return null;
+      const tok = CALENDAR_PART.derivePaletteTokens(rawColor, surfaceSpec || "dark", { kind });
+      el.style.setProperty("--zn-pal-bg", tok.bg);
+      el.style.setProperty("--zn-pal-fg", tok.fg);
+      el.style.setProperty("--zn-pal-hue-fg", tok.hueFg);
+      el.style.setProperty("--zn-pal-muted", tok.muted);
+      el.style.setProperty("--zn-pal-outline", tok.outline);
+      el.style.setProperty("--zn-pal-hover", tok.hoverBg);
+      el.style.setProperty("--zn-pal-hover-fg", tok.hoverFg);
+      el.style.setProperty("--zn-pal-selected-bg", tok.selectedBg);
+      el.style.setProperty("--zn-pal-selected-fg", tok.selectedFg);
+      el.style.setProperty("--zn-pal-selected-outline", tok.selectedOutline);
+      el.style.setProperty("--zn-pal-disabled-bg", tok.disabledBg);
+      el.style.setProperty("--zn-pal-disabled-fg", tok.disabledFg);
+      el.style.setProperty("--zn-pal-disabled-outline", tok.disabledOutline);
+      el.style.setProperty("--zn-pal-hl-bg", tok.hlBg);
+      el.style.setProperty("--zn-pal-hl-fg", tok.hlFg);
+      return tok;
+    }
     // The element carries `data-color="custom"` plus the colour in --zn-cc (the sheet CSS reads it); a palette name stays a name.
-    function setColorData(el, color) {
+    function setColorData(el, color, surfaceSpec = null, kind = "swatch") {
       const hex = cleanHex(color);
       if (hex) {
         el.dataset.color = "custom";
@@ -837,6 +866,8 @@
         el.dataset.color = color || "none";
         el.style.removeProperty("--zn-cc");
       }
+      if (surfaceSpec && color && color !== "none") applyPaletteVars(el, hex || color, kind, surfaceSpec);
+      else if (surfaceSpec) clearPaletteVars(el);
     }
     const cleanFolderColor = (v) => (FOLDER_COLORS.includes(v) ? v : cleanHex(v));
     const FOLDER_PARTS = Object.freeze(["back", "front", "stroke", "label", "accent", "tint", "hover"]);
@@ -1796,9 +1827,9 @@
     });
     const colorHex = (name) => TINT_HEX[name] || cleanHex(name);
     // `depth` = nesting level in the Zen sidebar: the NOTES root is level 1, so a top-level folder of the All notes tree is 2.
-    function resolveFolderVisual(raw = {}, depth = 2) {
+    function resolveFolderVisual(raw = {}, depth = 2, modeOverride = "") {
       const record = { b: colorHex(raw.b ?? raw.color) || "", d: cleanFolderParts(raw.d ?? raw.parts), o: cleanFolderOpacity(raw.o ?? raw.opacity) };
-      const shared = window.__zentralFolderColorStyleBridge;
+      const shared = !modeOverride ? window.__zentralFolderColorStyleBridge : null;
       if (shared?.version === 1 && shared.revision >= 3 && typeof shared.resolve === "function") {
         try {
           const resolved = shared.resolve(record, depth);
@@ -1808,7 +1839,7 @@
       // Notes-only install (or an older shared module): the same core, fed from the shared preferences.
       const defaults = colorfulFolderDefaults();
       return FOLDER_STYLE.resolve(record, depth, {
-        mode: defaults.mode,
+        mode: modeOverride || defaults.mode,
         defaults: { b: defaults.b, d: defaults.d, o: defaults.o },
         layers: defaults.layers,
         ignoreLabel: defaults.ignoreLabel,
@@ -9637,7 +9668,7 @@
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS, SHARED_TURN_WAIT_MS, STARTUP_TURN_WAIT_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
-        makeFolderUid, ensureFolderUids, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
+        makeFolderUid, ensureFolderUids, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_STYLE, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition, calendarMenuPosition, normalizeContextMenuItems,
@@ -10045,7 +10076,7 @@
           if (n.t === "math") node.className = "zn-math";
           else if (n.t === "hl") {
             node.className = "zn-hl";
-            setColorData(node, n.color);
+            setColorData(node, n.color, env.surfaceSpec?.());
           } else if (n.t === "a") {
             // No href attribute: a real link inside browser chrome could
             // navigate the window. Clicks go through env.openLink instead.
@@ -10488,7 +10519,155 @@
       // The NOTES root style code below reads string preferences with this; it used to name a helper that only exists in the
       // controller scope, so clicking the root style button threw a ReferenceError and did nothing.
       const prefStr = (k, d) => String(getPref(k, d) ?? d);
-      const setPref = (k, v) => env.setPref?.(k, v);
+      const THEME_PALETTE_PREFS = new Set([PREF.THEME, PREF.LOOK_BG, PREF.LOOK_TEXT, PREF.LOOK_ACCENT, PREF.LOOK_LINE]);
+      const paletteRefreshers = new Set();
+      function currentSurfaceSpec() {
+        const rootDoc = document.documentElement;
+        const attrTheme = rootDoc?.getAttribute?.("zentral-notes-theme") || "";
+        const theme = NOTE_THEMES.some(([k]) => k === attrTheme)
+          ? attrTheme
+          : normalizeTheme(prefStr(PREF.THEME, "zentral"));
+        const explicitScheme = rootDoc?.getAttribute?.("zentral-notes-scheme") || "";
+        let scheme = explicitScheme === "light" || explicitScheme === "dark" ? explicitScheme : "";
+        if (!scheme) {
+          try {
+            if (window.matchMedia?.("(prefers-color-scheme: light)")?.matches) scheme = "light";
+            else if (window.matchMedia?.("(prefers-color-scheme: dark)")?.matches) scheme = "dark";
+          } catch (_) {}
+        }
+        let hostSurface = "", hostText = "", hostAccent = "", hostLine = "";
+        try {
+          const cs = window.getComputedStyle?.(rootDoc || root);
+          const pick = (...vars) => {
+            for (const name of vars) {
+              const v = String(cs?.getPropertyValue?.(name) || "").trim();
+              if (v && CALENDAR_PART?.parseColorRgb?.(v)) return v;
+            }
+            return "";
+          };
+          if (theme === "recommended") {
+            hostSurface = pick("--zl-popup", "--arrowpanel-background");
+            hostText = pick("--zl-popup-text", "--arrowpanel-color");
+            hostLine = pick("--zl-button-border-color", "--arrowpanel-border-color");
+          } else if (theme === "zentral") {
+            hostSurface = pick("--bgalazka-look-toolbar-surface", "--bgalazka-look-surface");
+            hostText = pick("--bgalazka-look-text");
+            hostAccent = pick("--zen-primary-color");
+          }
+        } catch (_) {}
+        const ovColor = (prefKey, varName) => {
+          const p = cleanHex(prefStr(prefKey, "").trim());
+          if (p) return p;
+          const inline = cleanHex(String(rootDoc?.style?.getPropertyValue?.(varName) || "").trim());
+          return inline || "";
+        };
+        const overrides = {
+          bg: ovColor(PREF.LOOK_BG, "--zentral-notes-ov-bg"),
+          text: ovColor(PREF.LOOK_TEXT, "--zentral-notes-ov-text"),
+          accent: ovColor(PREF.LOOK_ACCENT, "--zentral-notes-ov-accent"),
+        };
+        if (!CALENDAR_PART?.resolveThemeSurface) {
+          return { theme, scheme: scheme || "dark", isLight: scheme === "light", surface: "#1e1e24", text: "#e9e9f0", muted: "#a4a4b2", line: "#363640", accent: "#83a5ff", accentOutline: "#83a5ff", accentFill: "#83a5ff", accentOnFill: "#10141d" };
+        }
+        return CALENDAR_PART.resolveThemeSurface(theme, { scheme, hostSurface, hostText, hostAccent, hostLine, overrides });
+      }
+      function syncSheetSurfaceTokens() {
+        const s = currentSurfaceSpec();
+        root.dataset.scheme = s.scheme;
+        root.style.setProperty("--zn-accent-safe", s.accent);
+        root.style.setProperty("--zn-accent-outline", s.accentOutline);
+        root.style.setProperty("--zn-accent-on-fill", s.accentOnFill);
+        root.style.setProperty("--zn-surface-resolved", s.surface);
+        root.style.setProperty("--zn-text-resolved", s.text);
+        root.style.setProperty("--zn-muted-resolved", s.muted);
+        return s;
+      }
+      const setSheetColorData = (el, color, kind = "swatch") => setColorData(el, color, currentSurfaceSpec(), kind);
+      function applyCalendarItemColors(el, color, kind = "calendar") {
+        if (!el?.style) return;
+        if (color) el.style.setProperty("--zn-cal-item-color", color);
+        else el.style.removeProperty("--zn-cal-item-color");
+        if (!CALENDAR_PART?.derivePaletteTokens) return;
+        const surf = currentSurfaceSpec();
+        const tok = CALENDAR_PART.derivePaletteTokens(color || surf.accent, surf, { kind });
+        el.style.setProperty("--zn-cal-item-bg", tok.bg);
+        el.style.setProperty("--zn-cal-item-fg", tok.fg);
+        el.style.setProperty("--zn-cal-item-muted", tok.muted);
+        el.style.setProperty("--zn-cal-item-outline", tok.outline);
+        el.style.setProperty("--zn-cal-item-hover", tok.hoverBg);
+        el.style.setProperty("--zn-cal-item-selected-bg", tok.selectedBg);
+        el.style.setProperty("--zn-cal-item-selected-fg", tok.selectedFg);
+        el.style.setProperty("--zn-cal-item-selected-outline", tok.selectedOutline);
+        el.style.setProperty("--zn-cal-item-disabled-bg", tok.disabledBg);
+        el.style.setProperty("--zn-cal-item-disabled-fg", tok.disabledFg);
+        el.style.setProperty("--zn-cal-item-disabled-outline", tok.disabledOutline);
+      }
+      const FOLDER_ROW_ALL_VARS = Object.freeze([
+        "--zn-frow-back", "--zn-frow-front", "--zn-frow-stroke", "--zn-frow-label",
+        "--zn-frow-accent", "--zn-frow-tint", "--zn-frow-hover", "--zn-frow-selected",
+        "--zn-frow-disabled-bg", "--zn-frow-disabled-fg", "--zn-frow-disabled-outline",
+      ]);
+      function applyFolderRowVisual(row, raw, depth = 2, modeOverride = "") {
+        const resolved = resolveFolderVisual(raw, depth, modeOverride);
+        const visualParts = resolved.parts || {};
+        const rowColor = resolved.base || cleanHex(visualParts.accent) || cleanHex(visualParts.front) || cleanHex(visualParts.back) || cleanHex(visualParts.label) || "";
+        const hasVisual = Object.keys(resolved.properties || {}).length > 0;
+        if (!hasVisual) {
+          row.removeAttribute("data-color");
+          row.style.removeProperty("--zn-fc");
+          clearPaletteVars(row);
+          for (const v of FOLDER_ROW_ALL_VARS) row.style.removeProperty(v);
+          return resolved;
+        }
+        setSheetColorData(row, rowColor || "custom", "swatch");
+        row.style.setProperty("--zn-fc", rowColor || "#707780");
+        const backVal = resolved.properties?.["--zen-folder-behind-bgcolor"] || "";
+        const frontVal = resolved.properties?.["--zen-folder-front-bgcolor"] || "";
+        if (backVal) row.style.setProperty("--zn-frow-back", backVal); else row.style.removeProperty("--zn-frow-back");
+        if (frontVal) row.style.setProperty("--zn-frow-front", frontVal); else row.style.removeProperty("--zn-frow-front");
+        const surf = currentSurfaceSpec();
+        const ftok = CALENDAR_PART?.resolveFolderSurfaceTokens?.(resolved, surf);
+        if (ftok) {
+          row.style.setProperty("--zn-frow-stroke", ftok.stroke);
+          row.style.setProperty("--zn-frow-label", ftok.label);
+          row.style.setProperty("--zn-frow-accent", ftok.accent);
+          row.style.setProperty("--zn-frow-tint", ftok.tint);
+          row.style.setProperty("--zn-frow-hover", ftok.hover);
+          row.style.setProperty("--zn-frow-selected", ftok.selected);
+          row.style.setProperty("--zn-frow-disabled-bg", ftok.disabledBg);
+          row.style.setProperty("--zn-frow-disabled-fg", ftok.disabledFg);
+          row.style.setProperty("--zn-frow-disabled-outline", ftok.disabledOutline);
+        }
+        return resolved;
+      }
+      function refreshSheetThemeColors() {
+        if (destroyed) return;
+        syncSheetSurfaceTokens();
+        if (isOpen) {
+          applyState();
+          if (view === "editor" && mode !== "edit") refreshRead();
+          if (view === "list") {
+            scheduleList();
+            if (!calendarPane.hidden) renderCalendar();
+          }
+        }
+        for (const fn of [...paletteRefreshers]) {
+          try { if (fn() === false) paletteRefreshers.delete(fn); } catch (_) { paletteRefreshers.delete(fn); }
+        }
+      }
+      listen(window, "zentral-notes-theme-changed", refreshSheetThemeColors);
+      try {
+        const mq = window.matchMedia?.("(prefers-color-scheme: light)");
+        if (mq?.addEventListener) {
+          const onMq = () => refreshSheetThemeColors();
+          mq.addEventListener("change", onMq);
+          cleanups.push(() => { try { mq.removeEventListener("change", onMq); } catch (_) {} });
+        }
+      } catch (_) {}
+      const setPref = (k, v) => {
+        env.setPref?.(k, v);
+        if (THEME_PALETTE_PREFS.has(k)) refreshSheetThemeColors();
+      };
       let shortcutCache = { raw: null, hid: null, list: [] };
       const hiddenTools = () => parseHidden(getPref(PREF.HIDDEN_TOOLS, DEFAULT_HIDDEN_TOOLS));
       function shortcutList() {
@@ -10718,6 +10897,7 @@
         btnNew.dataset.choice = choice;
       }
       function applyState() {
+        syncSheetSurfaceTokens();
         syncAllNewButton();
         const n = note();
         root.dataset.view = view;
@@ -10731,12 +10911,12 @@
         const categoryInfo = activeCategory ? store.items?.category?.(activeCategory) : null;
         categoryText.textContent = activeCategory || "Category";
         categoryDot.hidden = !categoryInfo;
-        if (categoryInfo) setColorData(categoryDot, categoryInfo.color);
-        else setColorData(categoryDot, "none");
+        if (categoryInfo) setSheetColorData(categoryDot, categoryInfo.color);
+        else setSheetColorData(categoryDot, "none");
         btnCategory.title = activeCategory ? `Calendar category: ${activeCategory} (change section category)` : "Choose or create a category for the calendar section at the caret";
         paintReminderChip(n);
         paintFindState();
-                setColorData(root, n?.color || "none");
+        setSheetColorData(root, n?.color || "none");
         root.dataset.trashed = n?.trashed ? "true" : "false";
         titleEl.textContent =
           view === "list" ? (filter === "trash" ? "Trash" : "All notes") : titleOf(n?.body || "") || "Untitled note";
@@ -10744,7 +10924,7 @@
         btnPin.classList.toggle("is-on", !!n?.pinned);
         btnPin.title = n?.pinned ? "Unpin note" : "Pin note to the top of the list";
         btnPin.setAttribute("aria-pressed", n?.pinned ? "true" : "false");
-        setColorData(colorDot, n?.color || "none");
+        setSheetColorData(colorDot, n?.color || "none");
         const big = store.meta.size !== "peek";
         btnSize.replaceChildren(icon(big ? "minimize" : "maximize"));
         btnSize.title = big ? "Smaller (hold: fill the whole area)" : "Larger (hold: fill the whole area)";
@@ -10779,7 +10959,7 @@
         tSplit.title = mode === "split" ? "Close split view" : "Split view: editor and preview";
         tMode.replaceChildren(icon(mode === "read" ? "edit" : "eye"));
         tMode.title = mode === "read" ? "Edit (Ctrl+E)" : "Read (Ctrl+E)";
-        setColorData(hlDot, store.meta.highlight);
+        setSheetColorData(hlDot, store.meta.highlight);
         const gone = hiddenTools();
         for (const [btn, base, id] of TOOL_TITLES) {
           const combo = shortcutList().find((x) => x.id === id)?.combo;
@@ -10831,7 +11011,7 @@
           const categoryInfo = activeCategory ? store.items?.category?.(activeCategory) : null;
           categoryText.textContent = activeCategory || "Category";
           categoryDot.hidden = !categoryInfo;
-          if (categoryInfo) setColorData(categoryDot, categoryInfo.color); else setColorData(categoryDot, "none");
+          if (categoryInfo) setSheetColorData(categoryDot, categoryInfo.color); else setSheetColorData(categoryDot, "none");
           btnCategory.title = activeCategory ? `Calendar category: ${activeCategory} (change section category)` : "Choose or create a category for the calendar section at the caret";
           titleEl.textContent =
             view === "list" ? titleEl.textContent : titleOf(n.body) || "Untitled note";
@@ -11136,6 +11316,7 @@
       };
       // Delegates to the caller's env (live: later changes to it stay visible) and only adds the two lookups.
       env = Object.assign(Object.create(env), {
+        surfaceSpec: () => currentSurfaceSpec(),
         noteInfo,
         renderEmbed,
         displayDateKey: (key) => displayDateKey(key),
@@ -12217,7 +12398,7 @@
           }
         }
         const color = calendarItemColor(item);
-        if (color) button.style.setProperty("--zn-cal-item-color", color);
+        applyCalendarItemColors(button, color, "calendar");
         button.append(h("span", { class: "zn-cal-item-time" }, calendarItemTime(item)), h("span", { class: "zn-cal-item-title" }, item.summary || "Untitled item"));
         if (item.x?.category) button.append(h("span", { class: "zn-cal-item-category" }, item.x.category));
         if (item.x?.calNote) button.append(h("span", { class: "zn-cal-item-note" }, item.x.calNote.slice(0, 110)));
@@ -12353,7 +12534,11 @@
               if (cell.day === selectedDay) button.classList.add("is-selected");
               if (cell.day === focusedDay) button.classList.add("is-cursor");
               const tint = tintFor(cell.dominantCategory);
-              if (tint) button.style.setProperty("--zn-cal-picker-tint", tint);
+              if (tint) {
+                button.style.setProperty("--zn-cal-picker-tint", tint);
+                const ptok = CALENDAR_PART.derivePaletteTokens?.(tint, currentSurfaceSpec(), { kind: "calendar" });
+                if (ptok) button.style.setProperty("--zn-cal-picker-tint-safe", ptok.outline);
+              }
               button.addEventListener("click", () => selectPickerDay(cell.day));
               button.addEventListener("keydown", (event) => {
                 if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) return;
@@ -12450,7 +12635,7 @@
           const markOf = (item) => {
             const reminder = CALENDAR_PART.isReminder(item), lifecycle = reminder ? reminderLifecycleState(item) : "";
             const mark = h("button", { type: "button", class: "zn-cal-month-mark" + (reminder ? " is-reminder is-" + lifecycle : " is-event"), title: [item.summary, reminder ? "Reminder: " + lifecycle : "", item.x?.calNote].filter(Boolean).join(" — "), "aria-haspopup": "menu" }, item.summary || "Untitled");
-            const color = calendarItemColor(item); if (color) mark.style.setProperty("--zn-cal-item-color", color);
+            applyCalendarItemColors(mark, calendarItemColor(item), "calendar");
             mark.addEventListener("click", (event) => { event.stopPropagation(); openCalendarItem(item); });
             mark.addEventListener("contextmenu", (event) => showCalendarItemMenu(event, item, mark));
             mark.addEventListener("keydown", (event) => {
@@ -13092,6 +13277,7 @@
             const reminder = C.isReminder(original);
             const button = calendarItemButton(original, true);
             button.classList.add(reminder ? "zn-cal-time-reminder" : "zn-cal-time-event");
+            applyCalendarItemColors(button, calendarItemColor(original), "time");
             const top = gridY(entry.startMin);
             const height = reminder ? minBoxPx : Math.max(minBoxPx, ((entry.span ? entry.span.endMin - entry.span.startMin : entry.endMin - entry.startMin)) / 60 * hourPx);
             button.style.top = top + "px";
@@ -14571,7 +14757,7 @@
           clearCalendarNoteDrop();
         });
       }
-      setColorData(item, n.color);
+      setSheetColorData(item, n.color);
       item.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -14672,12 +14858,7 @@
         const row = h("div", { class: "zn-rootrow", role: "treeitem", tabindex: "0", "aria-level": "1", title: "NOTES folder in the Zen sidebar: click for colors and icon" },
           h("span", { class: "zn-frow-icon" + (emoji ? " is-emoji" : " is-folder") }, emoji ? h("span", { class: "zn-frow-emoji" }, emoji) : icon("folder", 14)),
           h("span", { class: "zn-rootrow-name" }, "NOTES"), edit);
-        const resolved = resolveFolderVisual({ b: colorHex(prefStr(PREF.ZEN_ROOT_COLOR, "")) || "", d: parseFolderParts(prefStr(PREF.ZEN_ROOT_PARTS, "{}")), o: parseFolderOpacity(prefStr(PREF.ZEN_ROOT_PART_OPACITY, "{}")) }, 1);
-        for (const [target, source] of [["--zn-frow-back", "--zen-folder-behind-bgcolor"], ["--zn-frow-front", "--zen-folder-front-bgcolor"], ["--zn-frow-stroke", "--zen-folder-stroke"], ["--zn-frow-label", "--bgalazka-fc-label"], ["--zn-frow-accent", "--tab-group-color"], ["--zn-frow-tint", "--tab-group-color-pale"], ["--zn-frow-hover", "--tab-group-background-color-hover"]]) {
-          const value = resolved.properties?.[source] || "";
-          if (value) row.style.setProperty(target, value);
-        }
-        if (Object.keys(resolved.properties || {}).length) setColorData(row, resolved.base || "custom");
+        applyFolderRowVisual(row, { b: colorHex(prefStr(PREF.ZEN_ROOT_COLOR, "")) || "", d: parseFolderParts(prefStr(PREF.ZEN_ROOT_PARTS, "{}")), o: parseFolderOpacity(prefStr(PREF.ZEN_ROOT_PART_OPACITY, "{}")) }, 1);
         const open = (e) => { e.preventDefault?.(); e.stopPropagation?.(); askRootStyle(); };
         row.addEventListener("click", open);
         row.addEventListener("contextmenu", open);
@@ -14699,34 +14880,7 @@
           h("span", { class: "zn-item-actions" }, add, more),
         );
         row.style.setProperty("--d", String(depth));
-        const resolved = resolveFolderVisual({ b: node.color, d: node.parts, o: node.opacity }, depth + 2);
-        const visualParts = resolved.parts || {};
-        const rowColor = resolved.base || cleanHex(visualParts.accent) || cleanHex(visualParts.front) || cleanHex(visualParts.back) || cleanHex(visualParts.label) || "";
-        const hasVisual = Object.keys(resolved.properties || {}).length > 0;
-        if (hasVisual) {
-          // A detail-only global palette (for example a custom label color)
-          // still needs the data-color selector so its layer variables apply.
-          setColorData(row, rowColor || "custom");
-          if (rowColor) row.style.setProperty("--zn-fc", rowColor);
-          else row.style.setProperty("--zn-fc", "#707780");
-        } else {
-          row.removeAttribute("data-color");
-          row.style.removeProperty("--zn-fc");
-        }
-        const rowProperties = {
-          "--zn-frow-back": "--zen-folder-behind-bgcolor",
-          "--zn-frow-front": "--zen-folder-front-bgcolor",
-          "--zn-frow-stroke": "--zen-folder-stroke",
-          "--zn-frow-label": "--bgalazka-fc-label",
-          "--zn-frow-accent": "--tab-group-color",
-          "--zn-frow-tint": "--tab-group-color-pale",
-          "--zn-frow-hover": "--tab-group-background-color-hover",
-        };
-        for (const [targetProperty, sourceProperty] of Object.entries(rowProperties)) {
-          const value = resolved.properties?.[sourceProperty] || "";
-          if (value) row.style.setProperty(targetProperty, value);
-          else row.style.removeProperty(targetProperty);
-        }
+        applyFolderRowVisual(row, { b: node.color, d: node.parts, o: node.opacity }, depth + 2);
         const toggle = () => store.setFolderCollapsed(node.id, open);
         chev.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -14839,10 +14993,11 @@
       }
       // Small dialogs for folder actions (one text field, a confirm, a target picker).
       // Colour and icon of a folder: shown in this tree and on the folder in the Zen sidebar. The icon is one emoji.
-      function askFolderStyle(node, save, title, level = 2) {
+      function askFolderStyle(node, save, title, level) {
         // Same controls and rules as the Zen sidebar editor of Colorful Folders: Simple = a primary color (the folder) and
         // a secondary color (its outline), Detailed = every layer with its own transparency. In Simple, choosing a color or
         // a look drops the Detailed layers (Simple overrides Detailed); a Detailed layer left on Auto follows the primary.
+        const resolvedLevel = Number.isFinite(level) ? level : (node?.id ? folderDepth(node.id) + 1 : 2);
         let color = node.color || "";
         let parts = cleanFolderParts(node.parts);
         let opacity = cleanFolderOpacity(node.opacity);
@@ -14856,20 +15011,45 @@
         const detailTab = chip("Detailed");
         const modes = h("div", { class: "zn-fstyle-modes", role: "tablist" }, simpleTab, detailTab);
 
+        const previewIconWrap = h("span", { class: "zn-frow-icon is-folder" }, icon("folder", 14));
+        const previewRow = h(
+          "div",
+          { class: "zn-item zn-frow zn-fstyle-preview-row" },
+          previewIconWrap,
+          h("span", { class: "zn-item-main" }, h("span", { class: "zn-item-title" }, node.label || "Folder")),
+          h("span", { class: "zn-item-time" }, "3"),
+        );
+        const previewStates = h(
+          "div",
+          { class: "zn-fstyle-preview-states" },
+          h("span", { class: "zn-fstyle-state-pill", "data-state": "hover" }, "Hover"),
+          h("span", { class: "zn-fstyle-state-pill", "data-state": "selected" }, "Selected"),
+          h("span", { class: "zn-fstyle-state-pill", "data-state": "disabled" }, "Disabled"),
+        );
+        const previewBox = h("div", { class: "zn-fstyle-preview", role: "region", "aria-label": "Folder style preview" }, previewRow, previewStates);
+
         const palette = h("div", { class: "zn-fstyle-presets" });
         const presetButtons = [];
         const syncPalette = () => {
-          for (const button of presetButtons) button.classList.toggle("is-on", button._theme?.b === color && serializeFolderParts(button._theme?.d) === serializeFolderParts(parts) && serializeFolderOpacity(button._theme?.o) === serializeFolderOpacity(opacity));
+          const surf = currentSurfaceSpec();
+          for (const button of presetButtons) {
+            const theme = button._theme;
+            button.classList.toggle("is-on", theme?.b === color && serializeFolderParts(theme?.d) === serializeFolderParts(parts) && serializeFolderOpacity(theme?.o) === serializeFolderOpacity(opacity));
+            const tok = applyPaletteVars(button, theme?.b || theme?.d?.front || theme?.d?.stroke || "#667788", "swatch", surf);
+            if (button._swatch && tok) button._swatch.style.borderColor = tok.outline;
+          }
         };
         for (const group of folderColorPresets()) {
           palette.append(h("div", { class: "zn-fstyle-group-label" }, group.group));
           const row = h("div", { class: "zn-fstyle-colors" });
           for (const theme of group.items) {
+            const swatch = h("span", { class: "zn-fstyle-preset-swatch", "aria-hidden": "true" });
+            swatch.style.background = "linear-gradient(135deg, " + (theme.d?.back || theme.b) + " 0 35%, " + (theme.d?.front || theme.b) + " 35% 70%, " + (theme.d?.stroke || theme.b) + " 70% 100%)";
             const button = chip(theme.n);
+            button.insertBefore(swatch, button.firstChild);
             button._theme = theme;
+            button._swatch = swatch;
             button.title = group.group + " · " + theme.n;
-            button.style.background = "linear-gradient(135deg, " + (theme.d?.back || theme.b) + " 0 35%, " + (theme.d?.front || theme.b) + " 35% 70%, " + (theme.d?.stroke || theme.b) + " 70% 100%)";
-            button.style.borderColor = theme.d?.stroke || theme.b;
             button.addEventListener("click", () => {
               color = theme.b;
               parts = cleanFolderParts(theme.d);
@@ -14918,6 +15098,7 @@
           if (v >= 100) { delete opacity.back; delete opacity.front; } else { opacity.back = v; opacity.front = v; }
           bodyAlphaValue.textContent = v >= 100 ? "Auto" : v + "%";
           syncPalette();
+          syncPreview();
         });
         const alphaRow = h("div", { class: "zn-fstyle-edge" }, h("span", {}, "Folder opacity (0% = transparent)"), bodyAlpha, bodyAlphaValue);
 
@@ -14945,11 +15126,25 @@
             opacity[part] = Number(alpha.value);
             opacityValue.textContent = alpha.value + "%";
             syncPalette();
+            syncPreview();
           });
           auto.addEventListener("click", () => { delete parts[part]; delete opacity[part]; syncAll(); });
           detail.append(line);
           partInputs.set(part, { input, hex, opacity: alpha, opacityValue });
         }
+        function syncPreview() {
+          const emoji = cleanFolderIcon(f.input.value.trim()) || "";
+          previewIconWrap.className = "zn-frow-icon" + (emoji ? " is-emoji" : " is-folder");
+          previewIconWrap.replaceChildren(emoji ? h("span", { class: "zn-frow-emoji" }, emoji) : icon("folder", 14));
+          const activeParts = editMode === "simple" ? edgeOnly() : parts;
+          applyFolderRowVisual(previewRow, { b: color, d: activeParts, o: opacity }, resolvedLevel, editMode);
+          for (const k of ["--zn-frow-label", "--zn-frow-accent", "--zn-frow-stroke", "--zn-frow-tint", "--zn-frow-hover", "--zn-frow-selected", "--zn-frow-disabled-bg", "--zn-frow-disabled-fg", "--zn-frow-disabled-outline"]) {
+            const v = previewRow.style.getPropertyValue(k);
+            if (v) previewStates.style.setProperty(k, v);
+            else previewStates.style.removeProperty(k);
+          }
+        }
+        f.input.addEventListener("input", syncPreview);
         function syncAll(skipPrimary = false, skipEdge = false, skipPart = "") {
           if (!skipPrimary) picker.sync(colorHex(color) || "#667788");
           const edge = parts.stroke || "";
@@ -14966,6 +15161,7 @@
             controls.opacityValue.textContent = opacity[part] === undefined ? "Auto" : opacity[part] + "%";
           }
           syncPalette();
+          syncPreview();
         }
         function setMode(next) {
           editMode = next === "simple" ? "simple" : "detailed";
@@ -14998,9 +15194,15 @@
         const cancel = chip("Close");
         openCard(
           title || "Folder color and icon",
-          h("div", { class: "zn-fstyle" }, modes, primaryBox, edgeRow, edgeWarn, alphaRow, detail, h("div", { class: "zn-fstyle-group-label" }, "Collections"), palette, behaviorBox, f.row, status),
+          h("div", { class: "zn-fstyle" }, modes, previewBox, primaryBox, edgeRow, edgeWarn, alphaRow, detail, h("div", { class: "zn-fstyle-group-label" }, "Collections"), palette, behaviorBox, f.row, status),
           h("div", { class: "zn-dialog-actions" }, reset, cancel, apply, ok),
         );
+        paletteRefreshers.add(() => {
+          if (!previewBox.isConnected) return false;
+          syncPalette();
+          syncPreview();
+          return true;
+        });
         const commit = (closeAfter) => {
           const icon = f.input.value.trim();
           if (icon && !cleanFolderIcon(icon)) {
@@ -15056,18 +15258,33 @@
         const hexField = h("input", { type: "text", class: "zn-field zn-hex-field", spellcheck: "false", maxlength: "7", placeholder: "#rrggbb", "aria-label": "Color as #rrggbb" });
         hexField.value = cur;
         const quick = h("div", { class: "zn-quick zn-flow" });
+        const previewRem = h("span", { class: "zn-palette-preview-reminder zn-cal-item is-reminder is-compact" }, h("span", { class: "zn-cal-item-time" }, "09:00"), h("span", { class: "zn-cal-item-title" }, "Reminder"));
+        const preview = h(
+          "div",
+          { class: "zn-palette-preview", role: "region", "aria-label": "Color contrast preview" },
+          h("span", { class: "zn-palette-preview-pill", "data-state": "normal" }, "Normal"),
+          h("span", { class: "zn-palette-preview-pill", "data-state": "hover" }, "Hover"),
+          h("span", { class: "zn-palette-preview-pill", "data-state": "selected" }, "Selected"),
+          h("span", { class: "zn-palette-preview-pill", "data-state": "disabled" }, "Disabled"),
+          previewRem,
+        );
+        const paintPreview = () => {
+          applyPaletteVars(preview, cur, "swatch", currentSurfaceSpec());
+          applyCalendarItemColors(previewRem, cur, "calendar");
+        };
         const set = (hex) => {
           cur = hex;
           native.value = hex;
           hexField.value = hex;
           delete hexField.dataset.bad;
+          paintPreview();
           onChange(hex);
         };
         const paintQuick = () => {
           quick.replaceChildren();
           for (const c of quickColors()) {
             const b = h("button", { type: "button", class: "zn-swatch", title: c + " (right-click removes it)", "aria-label": "Quick color " + c });
-            setColorData(b, c);
+            setSheetColorData(b, c);
             b.addEventListener("click", () => set(c));
             b.addEventListener("contextmenu", (e) => {
               e.preventDefault();
@@ -15091,7 +15308,14 @@
           paintQuick();
         });
         paintQuick();
-        const el = h("div", { class: "zn-color-picker" }, h("div", { class: "zn-color-picker-row" }, native, hexField, keep), quick);
+        paintPreview();
+        const el = h("div", { class: "zn-color-picker" }, h("div", { class: "zn-color-picker-row" }, native, hexField, keep), quick, preview);
+        paletteRefreshers.add(() => {
+          if (!el.isConnected) return false;
+          paintQuick();
+          paintPreview();
+          return true;
+        });
         return { el, value: () => cur, sync: (hex) => { const clean = cleanHex(hex); if (clean) set(clean); } };
       }
       function askCustomColor(title, current, onOk) {
@@ -15988,10 +16212,12 @@
           for (const it of list) {
             if (it.sep) m.append(h("div", { class: "zn-sep" }));
             else if (it.swatches) {
+              const surf = currentSurfaceSpec();
               const row = h("div", { class: "zn-swatches" });
               for (const c of it.swatches) {
                 const b = h("button", { type: "button", class: "zn-swatch", title: c, "aria-label": c });
                 b.dataset.color = c;
+                applyPaletteVars(b, c === "none" ? surf.muted : (colorHex(c) || c), "swatch", surf);
                 if (c === it.current) b.classList.add("is-on");
                 b.addEventListener("click", () => {
                   closeMenu();
@@ -16005,7 +16231,7 @@
                 const crow = h("div", { class: "zn-swatches zn-swatches-custom" });
                 for (const c of quickColors()) {
                   const b = h("button", { type: "button", class: "zn-swatch", title: c + " (right-click removes it from the quick colors)", "aria-label": "Custom color " + c });
-                  setColorData(b, c);
+                  setSheetColorData(b, c);
                   if (c === cleanHex(it.current)) b.classList.add("is-on");
                   b.addEventListener("click", () => {
                     closeMenu();
@@ -17921,6 +18147,8 @@
             const c = stored();
             swatch.style.background = c || "transparent";
             swatch.dataset.empty = c ? "false" : "true";
+            if (c) applyPaletteVars(swatch, c, "swatch", currentSurfaceSpec());
+            else clearPaletteVars(swatch);
             theme.classList.toggle("is-on", !c);
             const v = hsl();
             sh.value = String(v.h);
@@ -24380,6 +24608,7 @@
         for (const [k, v] of Object.entries(look.vars)) rootEl.style.setProperty(k, v);
         if (look.flags.length) rootEl.setAttribute("zentral-notes-ov", look.flags.join(" "));
         else rootEl.removeAttribute("zentral-notes-ov");
+        window.dispatchEvent?.(new Event("zentral-notes-theme-changed"));
       }
       applyViewPrefs();
       onCleanup(() => {

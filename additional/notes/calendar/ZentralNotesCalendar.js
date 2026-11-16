@@ -4246,12 +4246,400 @@
     return { hours, minutes };
   }
 
+  // ---- T3.6a: accessible color-palette contrast & surface-aware token derivation -------------------------
+  const PALETTE_COLOR_HEX = Object.freeze({
+    yellow: "#f5c542",
+    green: "#4cc38a",
+    blue: "#5aa9ff",
+    pink: "#ff7eb6",
+    purple: "#a78bfa",
+    orange: "#ff9f43",
+    red: "#ff6b6b",
+    teal: "#2ec4b6",
+    gray: "#9aa0a6",
+    brown: "#a1887f",
+    lime: "#b5d334",
+    cyan: "#4dd0e1",
+  });
+  const CSS_NAMED_HEX = Object.freeze({
+    white: "#ffffff",
+    black: "#000000",
+    gray: "#808080",
+    grey: "#808080",
+  });
+  const NOTE_THEME_SURFACES = Object.freeze({
+    light: Object.freeze({ scheme: "light", surface: "#fbfbfd", text: "#1d1d22", accent: "#3b6df0", line: "#dcdce4" }),
+    dark: Object.freeze({ scheme: "dark", surface: "#17171c", text: "#e9e9f0", accent: "#83a5ff", line: "#31313a" }),
+    paper: Object.freeze({ scheme: "light", surface: "#f4ecd8", text: "#3b3226", accent: "#9a6b2f", line: "#d5cbb4" }),
+    recommended: Object.freeze({
+      light: Object.freeze({ scheme: "light", surface: "#ffffff", text: "#18181b", accent: "#2459b4", line: "#d0d0d7" }),
+      dark: Object.freeze({ scheme: "dark", surface: "#1f1f24", text: "#eeeeee", accent: "#9bbdff", line: "#44444c" }),
+    }),
+    zentral: Object.freeze({
+      light: Object.freeze({ scheme: "light", surface: "#f5f5f8", text: "#1c1c22", accent: "#2f62d9", line: "#d4d4dc" }),
+      dark: Object.freeze({ scheme: "dark", surface: "#1e1e24", text: "#e9e9f0", accent: "#83a5ff", line: "#363640" }),
+    }),
+  });
+
+  function clampByte(n) {
+    return Math.max(0, Math.min(255, Math.round(Number(n) || 0)));
+  }
+  function rgbToHex(rgb) {
+    if (!rgb || typeof rgb !== "object") return "";
+    return "#" + [rgb.r, rgb.g, rgb.b].map((v) => clampByte(v).toString(16).padStart(2, "0")).join("");
+  }
+  function parseColorRgb(input, surfaceHex = "#1e1e24") {
+    if (!input) return null;
+    if (typeof input === "object" && Number.isFinite(input.r) && Number.isFinite(input.g) && Number.isFinite(input.b)) {
+      return { r: clampByte(input.r), g: clampByte(input.g), b: clampByte(input.b) };
+    }
+    const raw = String(input).trim().toLowerCase();
+    if (!raw) return null;
+    if (raw === "transparent") return surfaceHex ? parseColorRgb(surfaceHex, null) : { r: 30, g: 30, b: 36 };
+    const named = PALETTE_COLOR_HEX[raw] || CSS_NAMED_HEX[raw];
+    if (named) return parseColorRgb(named, surfaceHex);
+    const hex3 = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(raw);
+    if (hex3) {
+      return {
+        r: parseInt(hex3[1] + hex3[1], 16),
+        g: parseInt(hex3[2] + hex3[2], 16),
+        b: parseInt(hex3[3] + hex3[3], 16),
+      };
+    }
+    const hex6 = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})?$/.exec(raw);
+    if (hex6) {
+      const r = parseInt(hex6[1], 16), g = parseInt(hex6[2], 16), b = parseInt(hex6[3], 16);
+      if (!hex6[4]) return { r, g, b };
+      const a = parseInt(hex6[4], 16) / 255;
+      const bg = (surfaceHex && parseColorRgb(surfaceHex, null)) || { r: 30, g: 30, b: 36 };
+      return {
+        r: clampByte(r * a + bg.r * (1 - a)),
+        g: clampByte(g * a + bg.g * (1 - a)),
+        b: clampByte(b * a + bg.b * (1 - a)),
+      };
+    }
+    const fn = /^rgba?\(([^)]+)\)$/.exec(raw);
+    if (fn) {
+      const parts = fn[1].replace(/\//g, " ").trim().split(/[\s,]+/).filter(Boolean);
+      if (parts.length >= 3) {
+        const ch = (s) => (s.endsWith("%") ? (parseFloat(s) / 100) * 255 : parseFloat(s));
+        const r = clampByte(ch(parts[0])), g = clampByte(ch(parts[1])), b = clampByte(ch(parts[2]));
+        let a = 1;
+        if (parts[3] !== undefined) a = Math.max(0, Math.min(1, parts[3].endsWith("%") ? parseFloat(parts[3]) / 100 : parseFloat(parts[3])));
+        if (a >= 0.999) return { r, g, b };
+        const bg = (surfaceHex && parseColorRgb(surfaceHex, null)) || { r: 30, g: 30, b: 36 };
+        return {
+          r: clampByte(r * a + bg.r * (1 - a)),
+          g: clampByte(g * a + bg.g * (1 - a)),
+          b: clampByte(b * a + bg.b * (1 - a)),
+        };
+      }
+    }
+    return null;
+  }
+  function relativeLuminance(color, surfaceHex) {
+    const rgb = parseColorRgb(color, surfaceHex);
+    if (!rgb) return 0;
+    const lin = (v) => {
+      const s = v / 255;
+      return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * lin(rgb.r) + 0.7152 * lin(rgb.g) + 0.0722 * lin(rgb.b);
+  }
+  function contrastRatio(fg, bg) {
+    const l1 = relativeLuminance(fg, typeof bg === "string" ? bg : undefined);
+    const l2 = relativeLuminance(bg);
+    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+  }
+  function mixSrgb(colorA, colorB, weightA = 0.5) {
+    const w = Math.max(0, Math.min(1, Number(weightA)));
+    const a = parseColorRgb(colorA) || { r: 128, g: 128, b: 128 };
+    const b = parseColorRgb(colorB) || { r: 30, g: 30, b: 36 };
+    return rgbToHex({
+      r: a.r * w + b.r * (1 - w),
+      g: a.g * w + b.g * (1 - w),
+      b: a.b * w + b.b * (1 - w),
+    });
+  }
+  function colorHsl(color) {
+    const rgb = parseColorRgb(color);
+    if (!rgb) return null;
+    const r = rgb.r / 255, g = rgb.g / 255, b = rgb.b / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    const l = (max + min) / 2;
+    let h = 0, s = 0;
+    if (d > 1e-7) {
+      s = d / (1 - Math.abs(2 * l - 1));
+      if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+      else if (max === g) h = ((b - r) / d + 2) * 60;
+      else h = ((r - g) / d + 4) * 60;
+    }
+    return { h: ((h % 360) + 360) % 360, s: s * 100, l: l * 100 };
+  }
+  function hslToHex(h, s, l) {
+    const hh = (((Number(h) || 0) % 360) + 360) % 360;
+    const ss = Math.max(0, Math.min(100, Number(s) || 0)) / 100;
+    const ll = Math.max(0, Math.min(100, Number(l) || 0)) / 100;
+    const c = (1 - Math.abs(2 * ll - 1)) * ss;
+    const x = c * (1 - Math.abs(((hh / 60) % 2) - 1));
+    const m = ll - c / 2;
+    let r = 0, g = 0, b = 0;
+    if (hh < 60) [r, g, b] = [c, x, 0];
+    else if (hh < 120) [r, g, b] = [x, c, 0];
+    else if (hh < 180) [r, g, b] = [0, c, x];
+    else if (hh < 240) [r, g, b] = [0, x, c];
+    else if (hh < 300) [r, g, b] = [x, 0, c];
+    else [r, g, b] = [c, 0, x];
+    return rgbToHex({ r: (r + m) * 255, g: (g + m) * 255, b: (b + m) * 255 });
+  }
+  function hueDistanceDeg(colorA, colorB) {
+    const a = colorHsl(colorA), b = colorHsl(colorB);
+    if (!a || !b || a.s < 2 || b.s < 2) return 0;
+    const diff = Math.abs(a.h - b.h) % 360;
+    return diff > 180 ? 360 - diff : diff;
+  }
+  function splitCssArgs(inner) {
+    const out = [];
+    let depth = 0, start = 0;
+    for (let i = 0; i < inner.length; i++) {
+      const ch = inner[i];
+      if (ch === "(") depth++;
+      else if (ch === ")" && depth > 0) depth--;
+      else if (ch === "," && depth === 0) {
+        out.push(inner.slice(start, i).trim());
+        start = i + 1;
+      }
+    }
+    const tail = inner.slice(start).trim();
+    if (tail) out.push(tail);
+    return out;
+  }
+  function resolveCssColor(expr, surfaceSpec = null) {
+    const surfaceHex = surfaceSpec?.surface || "#1e1e24";
+    const isLight = surfaceSpec ? !!surfaceSpec.isLight : relativeLuminance(surfaceHex) > 0.35;
+    const raw = String(expr || "").trim();
+    if (!raw) return "";
+    const direct = parseColorRgb(raw, surfaceHex);
+    if (direct) return rgbToHex(direct);
+    const lower = raw.toLowerCase();
+    if (lower.startsWith("light-dark(") && raw.endsWith(")")) {
+      const args = splitCssArgs(raw.slice(11, -1));
+      if (args.length >= 2) return resolveCssColor(isLight ? args[0] : args[1], surfaceSpec);
+    }
+    if (lower.startsWith("color-mix(") && raw.endsWith(")")) {
+      const args = splitCssArgs(raw.slice(10, -1));
+      if (args.length >= 3 && /^in\s+srgb/i.test(args[0])) {
+        const parseStop = (token) => {
+          const m = /^(.*?)\s+(-?\d+(?:\.\d+)?)%\s*$/.exec(token.trim());
+          if (m) return { color: m[1].trim(), pct: Math.max(0, Math.min(100, parseFloat(m[2]))) };
+          return { color: token.trim(), pct: null };
+        };
+        const a = parseStop(args[1]), b = parseStop(args[2]);
+        const ca = resolveCssColor(a.color, surfaceSpec) || surfaceHex;
+        const cb = resolveCssColor(b.color, surfaceSpec) || surfaceHex;
+        let wa = 0.5;
+        if (a.pct !== null && b.pct !== null) {
+          const sum = a.pct + b.pct;
+          if (sum <= 0) return surfaceHex;
+          const mixed = mixSrgb(ca, cb, a.pct / sum);
+          return sum < 100 ? mixSrgb(mixed, surfaceHex, sum / 100) : mixed;
+        }
+        if (a.pct !== null) wa = a.pct / 100;
+        else if (b.pct !== null) wa = 1 - b.pct / 100;
+        return mixSrgb(ca, cb, wa);
+      }
+    }
+    return "";
+  }
+  function ensureContrastHex(seedColor, bgOrBgs, minRatio = 4.5, options = {}) {
+    const bgs = (Array.isArray(bgOrBgs) ? bgOrBgs : [bgOrBgs])
+      .map((b) => rgbToHex(parseColorRgb(b)))
+      .filter(Boolean);
+    if (!bgs.length) return rgbToHex(parseColorRgb(seedColor)) || "#83a5ff";
+    const seedRgb = parseColorRgb(seedColor, bgs[0]) || { r: 131, g: 165, b: 255 };
+    const seedHex = rgbToHex(seedRgb);
+    const passes = (hex) => bgs.every((bg) => contrastRatio(hex, bg) >= minRatio);
+    if (passes(seedHex)) return seedHex;
+    const hsl = colorHsl(seedRgb) || { h: 220, s: 0, l: 50 };
+    const sat = options.desaturate ? Math.min(hsl.s, options.maxSat ?? 45) : hsl.s;
+    const avgLum = bgs.reduce((acc, bg) => acc + relativeLuminance(bg), 0) / bgs.length;
+    const solveDir = (darken) => {
+      const poleL = darken ? 0 : 100;
+      const poleHex = hslToHex(hsl.h, sat, poleL);
+      if (!passes(poleHex)) return "";
+      let far = poleL, near = hsl.l;
+      for (let i = 0; i < 24; i++) {
+        const mid = (far + near) / 2;
+        if (passes(hslToHex(hsl.h, sat, mid))) far = mid;
+        else near = mid;
+      }
+      return hslToHex(hsl.h, sat, far);
+    };
+    const preferDark = avgLum >= 0.179;
+    const first = solveDir(preferDark);
+    if (first) return first;
+    const second = solveDir(!preferDark);
+    if (second) return second;
+    const blackMin = Math.min(...bgs.map((b) => contrastRatio("#000000", b)));
+    const whiteMin = Math.min(...bgs.map((b) => contrastRatio("#ffffff", b)));
+    return blackMin >= whiteMin ? "#000000" : "#ffffff";
+  }
+  function resolveThemeSurface(theme = "zentral", options = {}) {
+    const cleanTheme = Object.prototype.hasOwnProperty.call(NOTE_THEME_SURFACES, theme) ? theme : "zentral";
+    const reqScheme = options.scheme === "light" ? "light" : options.scheme === "dark" ? "dark" : "";
+    const baseEntry = NOTE_THEME_SURFACES[cleanTheme];
+    let base = baseEntry.surface ? baseEntry : baseEntry[reqScheme || "dark"];
+    if ((cleanTheme === "zentral" || cleanTheme === "recommended") && !reqScheme && options.hostSurface) {
+      const hostLum = relativeLuminance(options.hostSurface);
+      base = baseEntry[hostLum > 0.35 ? "light" : "dark"];
+    }
+    const ov = options.overrides && typeof options.overrides === "object" ? options.overrides : {};
+    const rawSurface = ov.bg || (cleanTheme === "zentral" || cleanTheme === "recommended" ? options.hostSurface : "") || base.surface;
+    const surface = rgbToHex(parseColorRgb(rawSurface)) || base.surface;
+    const isLight = relativeLuminance(surface) > 0.35;
+    const scheme = isLight ? "light" : "dark";
+    if (!baseEntry.surface) base = baseEntry[scheme];
+    const rawText = ov.text || (cleanTheme === "zentral" || cleanTheme === "recommended" ? options.hostText : "") || (isLight ? "#1c1c22" : "#e9e9f0");
+    const text = ensureContrastHex(rawText, surface, 7.0);
+    const mutedSeed = mixSrgb(text, surface, 0.68);
+    const muted = ensureContrastHex(mutedSeed, surface, 4.55);
+    const lineSeed = options.hostLine || mixSrgb(text, surface, isLight ? 0.18 : 0.22);
+    const line = rgbToHex(parseColorRgb(lineSeed, surface)) || base.line;
+    let rawAccent = ov.accent || (cleanTheme === "zentral" ? options.hostAccent : "") || base.accent;
+    const accentHsl = colorHsl(rawAccent);
+    // Zen's primary color can be pure black/near-gray on dark workspaces; fall back to the theme's chromatic accent when hostAccent is achromatic and clashes with surface.
+    if (!ov.accent && cleanTheme === "zentral" && options.hostAccent && accentHsl && accentHsl.s < 8 && contrastRatio(rawAccent, surface) < 3.0) {
+      rawAccent = base.accent;
+    }
+    const accent = ensureContrastHex(rawAccent, surface, 4.55);
+    const accentOutline = ensureContrastHex(rawAccent, surface, 3.1);
+    const accentFill = ensureContrastHex(rawAccent, surface, 3.0);
+    const onWhite = contrastRatio("#ffffff", accentFill);
+    const darkInk = isLight ? "#101826" : "#10141d";
+    const onDark = contrastRatio(darkInk, accentFill);
+    const accentOnFill = onWhite >= 4.5 && onWhite >= onDark ? "#ffffff" : onDark >= 4.5 ? darkInk : ensureContrastHex(darkInk, accentFill, 4.55);
+    return Object.freeze({
+      theme: cleanTheme,
+      scheme,
+      isLight,
+      surface,
+      text,
+      muted,
+      line,
+      accent,
+      accentOutline,
+      accentFill,
+      accentOnFill,
+    });
+  }
+  const paletteTokenCache = new Map();
+  function derivePaletteTokens(rawColor, surfaceInput, options = {}) {
+    const surfaceSpec = surfaceInput?.surface && surfaceInput?.text
+      ? surfaceInput
+      : resolveThemeSurface(typeof surfaceInput === "string" ? surfaceInput : "dark");
+    const kind = options.kind === "time" ? "time" : options.kind === "calendar" ? "calendar" : "swatch";
+    const sourceHex = rgbToHex(parseColorRgb(rawColor, surfaceSpec.surface)) || surfaceSpec.accent;
+    const cacheKey = `${sourceHex}|${surfaceSpec.surface}|${surfaceSpec.text}|${kind}`;
+    if (paletteTokenCache.has(cacheKey)) return paletteTokenCache.get(cacheKey);
+
+    const tintSeed = ensureContrastHex(sourceHex, surfaceSpec.surface, 3.1);
+    const weights = kind === "time"
+      ? (surfaceSpec.isLight ? [0.15, 0.22, 0.28] : [0.18, 0.25, 0.31])
+      : (surfaceSpec.isLight ? [0.11, 0.18, 0.25] : [0.13, 0.20, 0.27]);
+    const bg = mixSrgb(tintSeed, surfaceSpec.surface, weights[0]);
+    const hoverBg = mixSrgb(tintSeed, surfaceSpec.surface, weights[1]);
+    const selectedBg = mixSrgb(tintSeed, surfaceSpec.surface, weights[2]);
+    const allBgs = [surfaceSpec.surface, bg, hoverBg, selectedBg];
+
+    const outline = ensureContrastHex(sourceHex, [surfaceSpec.surface, bg, hoverBg], 3.08);
+    const selectedOutline = ensureContrastHex(sourceHex, [surfaceSpec.surface, selectedBg], 3.4);
+    const hueFg = ensureContrastHex(sourceHex, allBgs, 4.6);
+    const textFg = ensureContrastHex(surfaceSpec.text, allBgs, 4.6);
+    const fg = kind === "swatch" ? hueFg : textFg;
+    const mutedSeed = mixSrgb(tintSeed, surfaceSpec.text, 0.32);
+    const muted = ensureContrastHex(mutedSeed, allBgs, 4.6);
+    const hoverFg = ensureContrastHex(fg, [hoverBg], 4.6);
+    const selectedFg = ensureContrastHex(kind === "swatch" ? hueFg : textFg, [selectedBg], 4.6);
+
+    const disabledBg = mixSrgb(tintSeed, surfaceSpec.surface, 0.06);
+    const disabledSeed = mixSrgb(outline, surfaceSpec.surface, 0.38);
+    const disabledFg = ensureContrastHex(disabledSeed, [surfaceSpec.surface, disabledBg], 3.15, { desaturate: true, maxSat: 48 });
+    const disabledOutline = mixSrgb(outline, surfaceSpec.surface, 0.45);
+
+    const hlBg = mixSrgb(tintSeed, surfaceSpec.surface, surfaceSpec.isLight ? 0.30 : 0.28);
+    const hlFg = ensureContrastHex(surfaceSpec.text, [hlBg], 4.6);
+
+    const out = Object.freeze({
+      source: sourceHex,
+      bg,
+      fg,
+      hueFg,
+      muted,
+      outline,
+      hoverBg,
+      hoverFg,
+      hoverOutline: selectedOutline,
+      selectedBg,
+      selectedFg,
+      selectedOutline,
+      disabledBg,
+      disabledFg,
+      disabledOutline,
+      hlBg,
+      hlFg,
+    });
+    if (paletteTokenCache.size > 1024) paletteTokenCache.clear();
+    paletteTokenCache.set(cacheKey, out);
+    return out;
+  }
+  function resolveFolderSurfaceTokens(resolvedVisual, surfaceInput) {
+    const surfaceSpec = surfaceInput?.surface && surfaceInput?.text
+      ? surfaceInput
+      : resolveThemeSurface(typeof surfaceInput === "string" ? surfaceInput : "dark");
+    const props = resolvedVisual?.properties || {};
+    const parts = resolvedVisual?.parts || {};
+    const seedHex = resolveCssColor(resolvedVisual?.base || parts.accent || parts.front || parts.back || parts.label || surfaceSpec.accent, surfaceSpec) || surfaceSpec.accent;
+    const baseTokens = derivePaletteTokens(seedHex, surfaceSpec, { kind: "swatch" });
+
+    const rawTint = resolveCssColor(props["--tab-group-color-pale"], surfaceSpec);
+    const tint = rawTint && Math.abs(relativeLuminance(rawTint) - relativeLuminance(surfaceSpec.surface)) <= 0.25
+      ? rawTint
+      : baseTokens.bg;
+    const rawHover = resolveCssColor(props["--tab-group-background-color-hover"], surfaceSpec);
+    const hover = rawHover && rawHover !== surfaceSpec.surface && Math.abs(relativeLuminance(rawHover) - relativeLuminance(surfaceSpec.surface)) <= 0.30
+      ? rawHover
+      : baseTokens.hoverBg;
+    const selected = baseTokens.selectedBg;
+    const rowBgs = [surfaceSpec.surface, tint, hover, selected];
+
+    const rawStroke = resolveCssColor(props["--zen-folder-stroke"], surfaceSpec) || seedHex;
+    const stroke = ensureContrastHex(rawStroke, [surfaceSpec.surface, tint], 3.08);
+    const rawLabel = resolveCssColor(props["--bgalazka-fc-label"], surfaceSpec) || surfaceSpec.text;
+    const label = props["--bgalazka-fc-label"]
+      ? ensureContrastHex(rawLabel, rowBgs, 4.6)
+      : ensureContrastHex(surfaceSpec.text, rowBgs, 4.6);
+    const rawAccent = resolveCssColor(props["--tab-group-color"], surfaceSpec) || seedHex;
+    const accent = ensureContrastHex(rawAccent, rowBgs, 4.6);
+
+    return Object.freeze({
+      tint,
+      hover,
+      selected,
+      stroke,
+      label,
+      accent,
+      disabledBg: baseTokens.disabledBg,
+      disabledFg: baseTokens.disabledFg,
+      disabledOutline: baseTokens.disabledOutline,
+    });
+  }
+
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, clockMinuteFromAngle, stepClockHand, clockDialPoints, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);
