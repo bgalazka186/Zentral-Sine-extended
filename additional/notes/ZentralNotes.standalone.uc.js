@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.178
+// @version 3.3.179
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.178, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.179, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.178";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.179";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -3853,6 +3853,22 @@ const __zentralEmbeddedLoader = (function () {
     if (!Number.isFinite(a) || !Number.isFinite(b) || a < 0 || b > 1440 || b <= a) { a = DEFAULT_CALENDAR_HOURS.startMin; b = DEFAULT_CALENDAR_HOURS.endMin; }
     return { on: o.on === true, startMin: a, endMin: b };
   }
+
+  // Responsive main Month date picker. "auto" switches at either threshold; the other modes are explicit overrides.
+  const DEFAULT_CALENDAR_PICKER = Object.freeze({ mode: "auto", minWidth: 470, minHeight: 360, colorMode: "count" });
+  function cleanCalendarPicker(value) {
+    const o = value && typeof value === "object" ? value : {};
+    const bounded = (v, fallback, min, max) => {
+      const number = typeof v === "number" || (typeof v === "string" && v.trim() !== "") ? Number(v) : NaN;
+      return Number.isFinite(number) ? Math.max(min, Math.min(max, Math.round(number))) : fallback;
+    };
+    return {
+      mode: ["auto", "picker", "month"].includes(o.mode) ? o.mode : DEFAULT_CALENDAR_PICKER.mode,
+      minWidth: bounded(o.minWidth, DEFAULT_CALENDAR_PICKER.minWidth, 320, 720),
+      minHeight: bounded(o.minHeight, DEFAULT_CALENDAR_PICKER.minHeight, 240, 720),
+      colorMode: ["count", "category"].includes(o.colorMode) ? o.colorMode : DEFAULT_CALENDAR_PICKER.colorMode,
+    };
+  }
   // The hours the grid has to show: the chosen ones, widened by whole hours until every timed item of the days in
   // view lies inside. Off = 0..1440. The hours follow the times of the items, not the size of their boxes: a reminder
   // at 19:50 lies inside 08:00-20:00 (the grid keeps its box inside), one at 20:00 sharp lies after it.
@@ -4397,19 +4413,65 @@ const __zentralEmbeddedLoader = (function () {
     return lines.join("\n").trim() + "\n";
   }
 
+  // Day heat: count the live occurrences touching one local civil day and find its most common category.
+  // Ties are resolved by category name, so the tint does not flicker with item order.
+  function dayHeat(items, day) {
+    const parsed = typeof day === "string" ? parseYmd(day) : null;
+    const value = parsed ? parsed.getTime() : Number(day);
+    if (!Number.isFinite(value)) return { day: 0, count: 0, level: 0, dominantCategory: "" };
+    const from = dayStart(value), to = addDays(from, 1);
+    const categories = new Map();
+    const entries = expandRange(Array.isArray(items) ? items : [], from, to);
+    for (const item of entries) {
+      const name = String(item?.x?.category || "").trim();
+      if (name) categories.set(name, (categories.get(name) || 0) + 1);
+    }
+    let dominantCategory = "", dominantCount = 0;
+    for (const [name, count] of categories) {
+      if (count > dominantCount || (count === dominantCount && (!dominantCategory || name < dominantCategory))) {
+        dominantCategory = name;
+        dominantCount = count;
+      }
+    }
+    const count = entries.length;
+    return { day: from, count, level: count === 0 ? 0 : count === 1 ? 1 : count <= 3 ? 2 : 3, dominantCategory };
+  }
+
   // ---------- date picker model ----------
-  // What the mini-calendar draws for a month: 6 weeks of cells with today / selected / other-month flags and how many
-  // items fall on each day (for the dots). `selected` = local midnight ms or 0.
+  // What the mini-calendar draws for a month: 6 weeks of local days, item count, heat level and dominant category.
+  // selected = local midnight ms or 0. A single expansion supplies all cells, including recurring occurrences.
   function pickerMonth(year, month, { weekStart = 1, now = 0, selected = 0, items = [] } = {}) {
     const today = now ? dayStart(now) : 0, sel = selected ? dayStart(selected) : 0;
     const grid = monthGrid(year, month, weekStart);
     const first = grid[0][0], last = addDays(grid[5][6], 1);
-    const counts = new Map();
-    for (const it of expandRange(items, first, last)) {
+    const stats = new Map();
+    for (const it of expandRange(Array.isArray(items) ? items : [], first, last)) {
       const [s, e] = itemRange(it);
-      for (let d = Math.max(dayStart(s), first); d < Math.min(isReminder(it) ? s + 1 : e, last); d = addDays(d, 1)) counts.set(d, (counts.get(d) || 0) + 1);
+      const category = String(it?.x?.category || "").trim();
+      for (let d = Math.max(dayStart(s), first); d < Math.min(isReminder(it) ? s + 1 : e, last); d = addDays(d, 1)) {
+        let stat = stats.get(d);
+        if (!stat) stats.set(d, stat = { count: 0, categories: new Map() });
+        stat.count++;
+        if (category) stat.categories.set(category, (stat.categories.get(category) || 0) + 1);
+      }
     }
-    return grid.map((w) => w.map((d) => ({ day: d, date: new Date(d).getDate(), inMonth: new Date(d).getMonth() === month, today: d === today, selected: d === sel, count: counts.get(d) || 0 })));
+    return grid.map((week) => week.map((d) => {
+      const stat = stats.get(d), categories = stat?.categories || new Map();
+      let dominantCategory = "", dominantCount = 0;
+      for (const [name, count] of categories) {
+        if (count > dominantCount || (count === dominantCount && (!dominantCategory || name < dominantCategory))) {
+          dominantCategory = name;
+          dominantCount = count;
+        }
+      }
+      const count = stat?.count || 0;
+      return {
+        day: d, date: new Date(d).getDate(), inMonth: new Date(d).getMonth() === month,
+        today: d === today, selected: d === sel, count,
+        level: count === 0 ? 0 : count === 1 ? 1 : count <= 3 ? 2 : 3,
+        dominantCategory,
+      };
+    }));
   }
   // Month stepping for the picker arrows: { year, month } after `delta` months (works across years).
   function stepMonth(year, month, delta) {
@@ -5200,9 +5262,9 @@ const __zentralEmbeddedLoader = (function () {
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, visibleHourRange, gridOffsetOf, gridMinuteAt,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -11669,6 +11731,7 @@ __zentralShim.register = function (def) {
         calendarHours: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHours(null) : { on: false, startMin: 480, endMin: 1200 },
         // The size of each calendar view ("auto" = fitted to the pane, or px; OW-03). Replaced as a whole, never changed in place.
         calendarScale: CALENDAR_PART ? CALENDAR_PART.cleanCalendarScale(null) : { month: "auto", week: "auto", day: "auto", upcoming: "auto", agenda: "auto" },
+        calendarPicker: CALENDAR_PART ? CALENDAR_PART.cleanCalendarPicker(null) : { mode: "auto", minWidth: 470, minHeight: 360, colorMode: "count" },
         calendarAlertSettings: CALENDAR_PART ? CALENDAR_PART.cleanAlertSettings(null) : {}, calendarNoteAlertOverrides: {},
         calendarAgendaDefaults: {}, calendarNoteAgendaOverrides: {} };
       let meta = { ...DEFAULT_META };
@@ -11903,6 +11966,7 @@ __zentralShim.register = function (def) {
             meta.calendarView = ["month", "upcoming", "agenda", "week", "day"].includes(raw.calendarView) ? raw.calendarView : "month";
             // `calendarDensity` (one of three steps for all views, until 3.3.175) is read only where no size is stored yet.
             meta.calendarScale = CALENDAR_PART.cleanCalendarScale(raw.calendarScale, raw.calendarDensity);
+            meta.calendarPicker = CALENDAR_PART.cleanCalendarPicker(raw.calendarPicker);
             meta.calendarSnap = CALENDAR_PART.cleanCalendarSnap(raw.calendarSnap);
             meta.calendarHours = CALENDAR_PART.cleanCalendarHours(raw.calendarHours);
             const daysForward = Number(raw.calendarDaysForward);
@@ -18033,15 +18097,121 @@ __zentralShim.register = function (def) {
         calendarPeriod.textContent = date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
         if (compact) {
           calendarContent.dataset.compact = "true";
-          const monthStart = new Date(year, month, 1).getTime(), dayCount = new Date(year, month + 1, 0).getDate();
-          const groups = CALENDAR_PART.daysForward(expanded, monthStart, dayCount).filter((group) => group.items.length);
-          const list = h("div", { class: "zn-cal-compact-list", "aria-label": "Month agenda" });
-          if (!groups.length) list.append(h("p", { class: "zn-cal-empty-day" }, "No calendar items this month"));
-          for (const group of groups) list.append(calendarDayGroup(group.day, group.items, { compact: true }));
-          calendarContent.append(list);
+          calendarContent.dataset.picker = "true";
+          const pickerPrefs = CALENDAR_PART.cleanCalendarPicker(store.meta.calendarPicker);
+          const pickerWrap = h("div", { class: "zn-cal-month-wrap zn-cal-picker-wrap" });
+          const names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+          const dows = h("div", { class: "zn-cal-month-dows" }, ...names.map((name) => h("span", {}, name)));
+          const cells = h("div", { class: "zn-cal-month-grid zn-cal-picker-grid", role: "grid", "aria-label": "Choose a date in " + date.toLocaleDateString(undefined, { month: "long", year: "numeric" }), title: "Colour legend: no items, 1 item, 2–3 items, 4 or more items." });
+          const selected = CALENDAR_PART.parseYmd(store.meta.calendarCursor)?.getTime() || cursor;
+          const selection = h("div", { class: "zn-cal-month-selection zn-cal-picker-selection" });
+          let focusedDay = selected, selectedDay = selected, visibleYear = year, visibleMonth = month;
+          let pickerExpanded = expanded;
+          const tintFor = (category) => {
+            if (pickerPrefs.colorMode !== "category" || !category) return "";
+            const color = store.items?.category?.(category)?.color || "";
+            return colorHex(color) || color;
+          };
+          const refreshSelection = () => {
+            for (const button of [...cells.querySelectorAll(".zn-cal-picker-day")]) {
+              const day = Number(button.getAttribute("data-day-value"));
+              const active = day === selectedDay, cursor = day === focusedDay;
+              button.classList.toggle("is-selected", active);
+              button.classList.toggle("is-cursor", cursor);
+              button.setAttribute("tabindex", cursor ? "0" : "-1");
+              button.setAttribute("aria-selected", active ? "true" : "false");
+              button.setAttribute("aria-pressed", active ? "true" : "false");
+            }
+            const entries = CALENDAR_PART.itemsInRange(pickerExpanded, selectedDay, CALENDAR_PART.addDays(selectedDay, 1));
+            selection.replaceChildren(calendarDayGroup(selectedDay, entries, { selected: true }));
+          };
+          const buildPickerCells = () => {
+            const monthDate = new Date(visibleYear, visibleMonth, 1);
+            calendarPeriod.textContent = monthDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+            const rows = CALENDAR_PART.pickerMonth(visibleYear, visibleMonth, {
+              weekStart: 1, now: nowMs(), selected: selectedDay, items,
+            });
+            const buttons = rows.flat().map((cell) => {
+              const key = CALENDAR_PART.localDateKey(cell.day);
+              const dateName = calendarDayLabel(cell.day, { year: true });
+              const countText = cell.count + " item" + (cell.count === 1 ? "" : "s");
+              const button = h("button", {
+                type: "button", class: "zn-cal-picker-day is-heat-" + cell.level,
+                role: "gridcell", tabindex: cell.day === focusedDay ? "0" : "-1",
+                "data-day": key, "data-day-value": String(cell.day),
+                "aria-label": dateName + ", " + countText,
+                "aria-selected": cell.day === selectedDay ? "true" : "false",
+                "aria-pressed": cell.day === selectedDay ? "true" : "false",
+                title: countText + ". Colour legend: 0 none, 1 light, 2–3 medium, 4+ strong.",
+              }, String(cell.date));
+              if (!cell.inMonth) button.classList.add("is-out");
+              if (cell.today) button.classList.add("is-today");
+              if (cell.day === selectedDay) button.classList.add("is-selected");
+              if (cell.day === focusedDay) button.classList.add("is-cursor");
+              const tint = tintFor(cell.dominantCategory);
+              if (tint) button.style.setProperty("--zn-cal-picker-tint", tint);
+              button.addEventListener("click", () => selectPickerDay(cell.day));
+              button.addEventListener("keydown", (event) => {
+                if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) return;
+                event.preventDefault();
+                event.stopPropagation();
+                movePickerFocus(cell.day, event.key);
+              });
+              return button;
+            });
+            cells.replaceChildren(...buttons);
+          };
+          const movePickerFocus = (day, key) => {
+            const next = CALENDAR_PART.pickerKey(day, key, 1);
+            if (next === day) return;
+            focusedDay = next;
+            const date = new Date(next);
+            if (date.getFullYear() !== visibleYear || date.getMonth() !== visibleMonth) {
+              visibleYear = date.getFullYear();
+              visibleMonth = date.getMonth();
+              const first = CALENDAR_PART.monthGrid(visibleYear, visibleMonth, 1)[0][0];
+              const weeks = CALENDAR_PART.monthGrid(visibleYear, visibleMonth, 1);
+              pickerExpanded = CALENDAR_PART.expandRange(items, first, CALENDAR_PART.addDays(weeks[5][6], 1));
+              buildPickerCells();
+            } else {
+              for (const button of [...cells.querySelectorAll(".zn-cal-picker-day")]) {
+                const active = Number(button.getAttribute("data-day-value")) === focusedDay;
+                button.setAttribute("tabindex", active ? "0" : "-1");
+                button.classList.toggle("is-cursor", active);
+              }
+            }
+            const targetKey = CALENDAR_PART.localDateKey(next);
+            [...cells.querySelectorAll(".zn-cal-picker-day")].find((button) => button.getAttribute("data-day") === targetKey)?.focus({ preventScroll: true });
+          };
+          function selectPickerDay(day) {
+            const key = CALENDAR_PART.localDateKey(day);
+            selectedDay = day;
+            focusedDay = day;
+            store.setMeta({ calendarCursor: key });
+            const date = new Date(day);
+            if (date.getFullYear() !== visibleYear || date.getMonth() !== visibleMonth) {
+              visibleYear = date.getFullYear();
+              visibleMonth = date.getMonth();
+              const weeks = CALENDAR_PART.monthGrid(visibleYear, visibleMonth, 1);
+              pickerExpanded = CALENDAR_PART.expandRange(items, weeks[0][0], CALENDAR_PART.addDays(weeks[5][6], 1));
+              focusedDay = day;
+              buildPickerCells();
+            }
+            refreshSelection();
+            const height = calendarPaneHeight();
+            if (height > 0 && height < 280) {
+              store.setMeta({ calendarCursor: key, calendarView: "day" });
+              renderCalendar();
+            }
+          }
+          pickerWrap.append(dows, cells);
+          calendarContent.append(pickerWrap, selection);
+          buildPickerCells();
+          refreshSelection();
           return;
         }
         calendarContent.dataset.compact = "false";
+        calendarContent.dataset.picker = "false";
         const monthWrap = h("div", { class: "zn-cal-month-wrap" });
         monthWrap.dataset.density = "comfortable"; // the look of the cells; fitCalendarMonth sets the one of their height
         const dows = h("div", { class: "zn-cal-month-dows" }, ...["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((name) => h("span", {}, name)));
@@ -18203,7 +18373,17 @@ __zentralShim.register = function (def) {
         const height = Number(scroll?.clientHeight);
         return height > 0 ? Math.max(1, height - 3) : NaN;
       }
-      const calendarMonthNarrow = () => calendarPaneWidth() > 0 && calendarPaneWidth() < 470;
+      const calendarPaneHeight = () => {
+        const rect = calendarPane.getBoundingClientRect?.();
+        return Math.max(0, Number(calendarPane.clientHeight) || Number(rect?.height) || Number(calendarPane.offsetHeight) || 0);
+      };
+      const calendarMonthNarrow = () => {
+        const picker = CALENDAR_PART?.cleanCalendarPicker?.(store.meta.calendarPicker) || { mode: "auto", minWidth: 470, minHeight: 360 };
+        if (picker.mode === "picker") return true;
+        if (picker.mode === "month") return false;
+        const width = calendarPaneWidth(), height = calendarPaneHeight();
+        return (width > 0 && width < picker.minWidth) || (height > 0 && height < picker.minHeight);
+      };
       // The text size of the calendar in px (NaN where it cannot be read).
       function calendarFontPx() {
         let fontPx = NaN;
@@ -19252,6 +19432,7 @@ __zentralShim.register = function (def) {
         calendarContent.replaceChildren();
         calendarContent.dataset.view = view;
         const compact = view === "month" && calendarMonthNarrow();
+        calendarContent.dataset.picker = compact ? "true" : "false";
         // OW-03. The size of this view: "auto" (Week and Day: the hours fill the timeline; Month: the weeks fill the
         // pane) or px. The look (paddings, text sizes) follows the setting; the fitted hour, and the look of the
         // Month grid, are set by the view once it is measured.
@@ -19290,6 +19471,12 @@ __zentralShim.register = function (def) {
         const fit = calendarFit;
         if (!fit) return;
         const month = fit.view === "month", unit = month ? "a week" : "an hour";
+        if (fit.view === "month" && fit.compact) {
+          const picker = CALENDAR_PART.cleanCalendarPicker(store.meta.calendarPicker);
+          calendarSizeSelect.textContent = picker.mode === "auto" ? "Size: Auto picker" : "Size: Date picker";
+          calendarSizeSelect.title = "Select automatic, date-picker or full-month mode; set width, height and colour thresholds.";
+          return;
+        }
         if (!calendarSizedView(fit.view, fit.compact)) {
           calendarSizeSelect.textContent = ({ comfortable: "Comfortable", compact: "Compact", "extra-compact": "Extra compact" })[CALENDAR_PART.calendarScaleDensity(fit.view, fit.size)];
           calendarSizeSelect.title = "Spacing of this list";
@@ -19355,23 +19542,65 @@ __zentralShim.register = function (def) {
           store.setMeta({ calendarScale: { ...C.cleanCalendarScale(store.meta.calendarScale), [name]: C.cleanCalendarScaleValue(name, value) } });
           renderCalendar();
         };
-        // The two lists, and Month drawn as a list in a narrow pane, have nothing to fit: the three spacings.
-        if (!calendarSizedView(name, compact))
+        const pickerSettings = C.cleanCalendarPicker(store.meta.calendarPicker);
+        const currentPickerPrefs = () => C.cleanCalendarPicker(store.meta.calendarPicker);
+        const setPicker = (patch) => {
+          store.setMeta({ calendarPicker: { ...C.cleanCalendarPicker(store.meta.calendarPicker), ...patch } });
+          renderCalendar();
+        };
+        const pickerOptions = {
+          label: "Date picker settings",
+          icon: "calendar",
+          group: [
+            { heading: true, label: "When to use the date picker" },
+            { label: "Automatic", icon: pickerSettings.mode === "auto" ? "check" : undefined, action: () => setPicker({ mode: "auto" }) },
+            { label: "Always use date picker", icon: pickerSettings.mode === "picker" ? "check" : undefined, action: () => setPicker({ mode: "picker" }) },
+            { label: "Always use full month", icon: pickerSettings.mode === "month" ? "check" : undefined, action: () => setPicker({ mode: "month" }) },
+            { sep: true },
+            { slider: {
+              min: 320, max: 720, label: "Date picker width threshold", fitLabel: "Reset to 470 px",
+              state: () => { const value = currentPickerPrefs().minWidth; return { auto: false, value, text: value + " px" }; },
+              input: (value) => setPicker({ minWidth: value }), fit: () => setPicker({ minWidth: 470 }),
+            } },
+            { slider: {
+              min: 240, max: 720, label: "Date picker height threshold", fitLabel: "Reset to 360 px",
+              state: () => { const value = currentPickerPrefs().minHeight; return { auto: false, value, text: value + " px" }; },
+              input: (value) => setPicker({ minHeight: value }), fit: () => setPicker({ minHeight: 360 }),
+            } },
+            { sep: true },
+            { heading: true, label: "Day colour" },
+            { label: "Colour by item count", icon: pickerSettings.colorMode === "count" ? "check" : undefined, action: () => setPicker({ colorMode: "count" }) },
+            { label: "Count + dominant category tint", icon: pickerSettings.colorMode === "category" ? "check" : undefined, action: () => setPicker({ colorMode: "category" }) },
+          ],
+        };
+        // In the date-picker fallback there is no week-height slider; keep the spacing choices and the settings group.
+        if (!calendarSizedView(name, compact)) {
+          if (name === "month") return showMenu(calendarSizeSelect, [
+            { heading: true, label: "Date picker" },
+            { label: "Comfortable", action: () => setSize(C.calendarScaleStep(name, "comfortable")) },
+            { label: "Compact", action: () => setSize(C.calendarScaleStep(name, "compact")) },
+            { label: "Extra compact", action: () => setSize(C.calendarScaleStep(name, "extra-compact")) },
+            { sep: true },
+            pickerOptions,
+          ]);
           return calendarChoiceMenu(calendarSizeSelect,
             [{ value: "comfortable", label: "Comfortable" }, { value: "compact", label: "Compact" }, { value: "extra-compact", label: "Extra compact" }],
             C.calendarScaleDensity(name, sizeNow()), (value) => setSize(C.calendarScaleStep(name, value)));
+        }
         const limits = C.CALENDAR_SCALE_LIMITS[name], month = name === "month", what = month ? "Height of a week" : "Height of an hour";
         // While the size is fitted the slider stands at what is drawn, so the first move starts from there.
         const drawn = () => {
           const px = month ? calendarFit?.rowPx : calendarFit?.hourPx;
           return Math.max(limits.min, Math.min(limits.max, Math.round(Number.isFinite(px) && px > 0 ? px : limits.comfortable)));
         };
-        showMenu(calendarSizeSelect, [
+        const menuItems = [
           { heading: true, label: what },
           { slider: { min: limits.min, max: limits.max, label: what + " in px", fitLabel: "Fit to the pane",
               state: () => (sizeNow() === "auto" ? { auto: true, value: drawn(), text: "Fit · " + drawn() + " px" } : { auto: false, value: sizeNow(), text: sizeNow() + " px" }),
               input: (value) => setSize(value), fit: () => setSize("auto") } },
-        ]);
+        ];
+        if (name === "month") menuItems.push({ sep: true }, pickerOptions);
+        showMenu(calendarSizeSelect, menuItems);
       });
       listen(calendarSnapSelect, "click", () => calendarChoiceMenu(calendarSnapSelect,
         CALENDAR_PART.CALENDAR_SNAP_STEPS.map((step) => ({ value: String(step), label: step + " minutes" })),
