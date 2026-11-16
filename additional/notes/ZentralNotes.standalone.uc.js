@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.186
+// @version 3.3.187
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.186, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.187, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.186";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.187";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2578,11 +2578,22 @@ const __zentralEmbeddedLoader = (function () {
       ...(raw.coalesced === true ? { coalesced: true } : {}),
     };
   }
+  const REMINDER_STACK_LIMIT = 3;
   // Display and cross-window retirement rules for occurrence-scoped reminder cards.
   function reminderAlertPresentation(stage) {
     const value = ["pre", "due", "followup"].includes(stage) ? stage : "followup";
-    return { stage: value, rank: value === "pre" ? 1 : value === "due" ? 2 : 3,
-      label: value === "pre" ? "Coming up" : value === "due" ? "Due now" : "Reminder overdue" };
+    return {
+      stage: value,
+      rank: value === "pre" ? 1 : value === "due" ? 2 : 3,
+      label: value === "pre" ? "Coming up" : value === "due" ? "Due now" : "Reminder overdue",
+      layout: value === "pre" ? "corner" : value === "due" ? "large" : "centred",
+      persistent: value !== "pre",
+    };
+  }
+  function reminderStackMoreLabel(hiddenCount, expanded = false) {
+    if (expanded === true) return "Show fewer";
+    const count = Math.trunc(Number(hiddenCount));
+    return count > 0 ? "+" + count + " more" : "";
   }
   function reminderSnoozeTomorrowMinutes(at) {
     const stamp = Number(at);
@@ -6039,7 +6050,7 @@ const __zentralEmbeddedLoader = (function () {
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
     cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
@@ -11681,9 +11692,13 @@ __zentralShim.register = function (def) {
     function createReminderAlertStack({
       document, history, listen, warn = () => {}, onBulkEnd = () => {},
       now = () => Date.now(), setTimer = (fn, ms) => window.setTimeout?.(fn, ms), clearTimer = (id) => window.clearTimeout?.(id),
+      maxVisible = CALENDAR_PART?.REMINDER_STACK_LIMIT || 3,
     }) {
       const cards = new Map();
+      const digestKey = "__missed_reminders_digest__";
+      const stackLimit = Math.max(1, Math.trunc(Number(maxVisible) || 3));
       let host = null, stopClick = null, stopped = false, bulkRunning = false, countdownTimer = null;
+      let nextSeq = 1, stackExpanded = false, moreBtn = null;
       const html = (tag, cls, text) => {
         const el = document.createElementNS("http://www.w3.org/1999/xhtml", tag);
         if (cls) el.setAttribute("class", cls);
@@ -11698,7 +11713,7 @@ __zentralShim.register = function (def) {
       };
       const syncCountdown = () => {
         stopCountdown();
-        if (stopped) return;
+        if (stopped || !CALENDAR_PART?.reminderCountdownDelayMs) return;
         const at = now();
         let nextDelay = 0;
         for (const card of cards.values()) {
@@ -11710,7 +11725,7 @@ __zentralShim.register = function (def) {
       };
       function tickCountdown() {
         countdownTimer = null;
-        if (stopped) return;
+        if (stopped || !CALENDAR_PART?.reminderPreCountdownText) return;
         const at = now();
         for (const card of cards.values()) {
           if (card.stage !== "pre" || !card.countdownEl || !(card.dueAt > 0)) continue;
@@ -11718,17 +11733,69 @@ __zentralShim.register = function (def) {
         }
         syncCountdown();
       }
-      const close = (key) => {
+      function syncStackLayout() {
+        if (stopped) return;
+        const digestCard = cards.get(digestKey);
+        const regular = [];
+        for (const card of cards.values()) {
+          if (!card.digest && card.node) regular.push(card);
+        }
+        regular.sort((a, b) => (b.rank - a.rank) || (a.seq - b.seq));
+        if (regular.length <= stackLimit) stackExpanded = false;
+        const visibleRegular = stackExpanded ? regular : regular.slice(0, stackLimit);
+        const hiddenCount = Math.max(0, regular.length - stackLimit);
+        const desired = [];
+        if (digestCard?.node) desired.push(digestCard.node);
+        for (const card of visibleRegular) {
+          if (card.stage === "pre" && card.countdownEl && card.dueAt > 0 && CALENDAR_PART?.reminderPreCountdownText) {
+            card.countdownEl.textContent = CALENDAR_PART.reminderPreCountdownText(card.dueAt, now());
+          }
+          desired.push(card.node);
+        }
+        const visibleNodes = new Set(desired);
+        for (const card of regular) {
+          if (!visibleNodes.has(card.node) && card.node.parentElement) card.node.remove();
+        }
+        if (!desired.length) {
+          moreBtn?.remove();
+          if (host) {
+            try { host.hidePopover?.(); } catch (_) {}
+            host.hidden = true;
+          }
+          return;
+        }
+        const parent = ensureHost();
+        if (hiddenCount > 0) {
+          if (!moreBtn) {
+            moreBtn = html("button", "zn-reminder-more");
+            moreBtn.setAttribute("type", "button");
+            moreBtn.setAttribute("data-action", "toggle-more");
+          }
+          moreBtn.setAttribute("aria-expanded", stackExpanded ? "true" : "false");
+          moreBtn.textContent = CALENDAR_PART?.reminderStackMoreLabel
+            ? CALENDAR_PART.reminderStackMoreLabel(hiddenCount, stackExpanded)
+            : (stackExpanded ? "Show fewer" : "+" + hiddenCount + " more");
+          desired.push(moreBtn);
+        } else {
+          moreBtn?.remove();
+        }
+        for (let i = 0; i < desired.length; i++) {
+          const n = desired[i];
+          if (parent.children[i] !== n) parent.insertBefore(n, parent.children[i] || null);
+        }
+        parent.hidden = false;
+        try { if (typeof parent.showPopover === "function") { if (!parent.matches(":popover-open")) parent.showPopover(); } else parent.removeAttribute("popover"); } catch (_) { parent.removeAttribute("popover"); }
+      }
+      const close = (key, { silent = false } = {}) => {
         const card = cards.get(key); if (!card) return;
         cards.delete(key); card.node?.remove();
-        syncCountdown();
-        if (!cards.size && host) {
-          try { host.hidePopover?.(); } catch (_) {}
-          host.hidden = true;
+        if (!silent) {
+          syncStackLayout();
+          syncCountdown();
         }
       };
       const onHistory = (event) => {
-        if (stopped || bulkRunning || (event?.kind === "append" && ["alerted", "skipped"].includes(event.action))) return;
+        if (stopped || bulkRunning || !CALENDAR_PART?.reminderAlertShouldClose || (event?.kind === "append" && ["alerted", "skipped"].includes(event.action))) return;
         for (const [key, card] of [...cards]) {
           if (card.digest) {
             card.entries = card.entries.filter((entry) => {
@@ -11753,11 +11820,18 @@ __zentralShim.register = function (def) {
         (document.body || document.documentElement).append(host);
         stopClick = listen(host, "click", (event) => {
           const button = event.target?.closest?.("button[data-action]");
-          const node = button?.closest?.(".zn-reminder-card");
-          const key = node?.getAttribute("data-key"), card = cards.get(key);
-          if (!card || !button) return;
-          event.preventDefault(); event.stopPropagation();
+          if (!button) return;
           const action = button.getAttribute("data-action");
+          if (action === "toggle-more") {
+            event.preventDefault(); event.stopPropagation();
+            stackExpanded = !stackExpanded;
+            syncStackLayout();
+            return;
+          }
+          const node = button.closest?.(".zn-reminder-card");
+          const key = node?.getAttribute("data-key"), card = cards.get(key);
+          if (!card) return;
+          event.preventDefault(); event.stopPropagation();
           if (action === "close") { close(key); return; }
           const callback = card.actions.get(action);
           if (!callback) return;
@@ -11765,10 +11839,10 @@ __zentralShim.register = function (def) {
         });
         return host;
       }
-      const digestKey = "__missed_reminders_digest__";
       function renderDigest(card) {
         if (!card.entries.length) { close(digestKey); return; }
-        const parent = ensureHost(), previous = card.node, node = html("section", "zn-reminder-card");
+        ensureHost();
+        const previous = card.node, node = html("section", "zn-reminder-card");
         node.setAttribute("data-key", digestKey); node.setAttribute("data-stage", "followup"); node.setAttribute("role", "status");
         const count = card.entries.length;
         node.append(html("div", "zn-reminder-stage", "Missed reminders"));
@@ -11820,9 +11894,8 @@ __zentralShim.register = function (def) {
           node.append(list);
         }
         card.node = node; card.actions = callbacks;
-        if (previous?.parentElement) previous.replaceWith(node); else parent.append(node);
-        parent.hidden = false;
-        try { if (typeof parent.showPopover === "function") { if (!parent.matches(":popover-open")) parent.showPopover(); } else parent.removeAttribute("popover"); } catch (_) { parent.removeAttribute("popover"); }
+        if (previous?.parentElement) previous.replaceWith(node);
+        syncStackLayout();
       }
       return {
         showDigest(entries) {
@@ -11842,18 +11915,23 @@ __zentralShim.register = function (def) {
         show({ identity, title, stage, dueAt = 0, actions = [] }) {
           if (stopped || !identity?.itemId || !identity?.occurrenceId) return false;
           if (["done", "dismissed"].includes(history?.stateFor?.(identity.itemId, identity.occurrenceId))) return false;
-          const presentation = CALENDAR_PART.reminderAlertPresentation(stage);
+          const presentation = CALENDAR_PART?.reminderAlertPresentation
+            ? CALENDAR_PART.reminderAlertPresentation(stage)
+            : { stage: "followup", rank: 3, label: "Reminder overdue", layout: "centred", persistent: true };
           const key = JSON.stringify([identity.itemId, identity.occurrenceId]);
           const existing = cards.get(key);
           if (existing && existing.rank > presentation.rank) return true;
-          if (existing) close(key);
-          const parent = ensureHost(), node = html("section", "zn-reminder-card");
+          if (existing) close(key, { silent: true });
+          ensureHost();
+          const node = html("section", "zn-reminder-card");
           node.setAttribute("data-key", key);
           node.setAttribute("data-stage", presentation.stage);
+          node.setAttribute("data-layout", presentation.layout || "corner");
+          if (presentation.persistent) node.setAttribute("data-persistent", "true");
           node.setAttribute("role", presentation.stage === "followup" ? "alert" : "status");
           const dueStamp = Number(dueAt) > 0 ? Number(dueAt) : 0;
           let countdownEl = null;
-          if (presentation.stage === "pre" && dueStamp > 0 && CALENDAR_PART.reminderPreCountdownText) {
+          if (presentation.stage === "pre" && dueStamp > 0 && CALENDAR_PART?.reminderPreCountdownText) {
             const head = html("div", "zn-reminder-head");
             head.append(html("div", "zn-reminder-stage", presentation.label));
             countdownEl = html("span", "zn-reminder-countdown", CALENDAR_PART.reminderPreCountdownText(dueStamp, now()));
@@ -11867,27 +11945,33 @@ __zentralShim.register = function (def) {
           const row = html("div", "zn-reminder-actions"), callbacks = new Map();
           for (const action of actions) {
             if (!action?.id || typeof action.callback !== "function") continue;
-            const button = html("button", "", action.label);
+            const button = html("button", action.id === "done" ? "zn-reminder-action-primary" : "", action.label);
             button.setAttribute("type", "button"); button.setAttribute("data-action", action.id);
             callbacks.set(action.id, action.callback); row.append(button);
           }
-          const closeButton = html("button", "zn-reminder-close", "Close");
-          closeButton.setAttribute("type", "button"); closeButton.setAttribute("data-action", "close");
-          row.append(closeButton); node.append(row);
+          if (!presentation.persistent || !callbacks.size) {
+            const closeButton = html("button", "zn-reminder-close", "Close");
+            closeButton.setAttribute("type", "button"); closeButton.setAttribute("data-action", "close");
+            row.append(closeButton);
+          }
+          node.append(row);
           const records = history?.list?.({ itemId: identity.itemId, occurrenceId: identity.occurrenceId }) || [];
           cards.set(key, {
             identity: { ...identity }, node, actions: callbacks,
-            stage: presentation.stage, dueAt: dueStamp, countdownEl,
-            rank: presentation.rank, seen: new Set(records.map((record) => record.id)),
+            stage: presentation.stage, layout: presentation.layout || "corner",
+            persistent: !!presentation.persistent,
+            dueAt: dueStamp, countdownEl,
+            rank: presentation.rank, seq: nextSeq++,
+            seen: new Set(records.map((record) => record.id)),
           });
-          parent.append(node); parent.hidden = false;
-          try { if (typeof parent.showPopover === "function") { if (!parent.matches(":popover-open")) parent.showPopover(); } else parent.removeAttribute("popover"); } catch (_) { parent.removeAttribute("popover"); }
+          syncStackLayout();
           syncCountdown();
           return true;
         },
         destroy() {
           if (stopped) return;
           stopped = true; stopCountdown(); offHistory?.(); stopClick?.(); cards.clear();
+          moreBtn?.remove(); moreBtn = null;
           try { host?.hidePopover?.(); } catch (_) {}
           host?.remove(); host = null;
         },
@@ -28182,7 +28266,7 @@ __zentralShim.register = function (def) {
       let soundCtx = null;
       function playReminderSound(stage = "followup", policy = null) {
         if (policy && !policy.play) return;
-        const level = policy?.sound || "normal";
+        const level = policy?.sound || CALENDAR_PART?.DEFAULT_ALERT_SETTINGS?.stages?.[stage]?.sound || "normal";
         if (level === "silent") return;
         try {
           const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -28257,7 +28341,7 @@ __zentralShim.register = function (def) {
       onCleanup(() => alertStack.destroy());
       function showReminders(list) {
         if (disposed) return;
-        const visible = list.slice(0, 15), sounds = new Map();
+        const visible = list.slice(0, 200), sounds = new Map();
         for (const entry of visible) {
           const item = entry.__calendarReminder ? entry.__calendarItem : { x: { noteId: entry.id } };
           const stage = entry.__stage || "followup";
