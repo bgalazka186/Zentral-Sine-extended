@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.191
+// @version 3.3.192
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.191, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.192, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.191";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.192";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -5573,12 +5573,13 @@ const __zentralEmbeddedLoader = (function () {
     const m = ((Math.floor(Number(minute) || 0) % 60) + 60) % 60;
     return m * 6;
   }
-  function clockMinuteFromAngle(angleDeg, snap = 15) {
+  const ANALOG_CLOCK_SNAP = 5;
+  function clockMinuteFromAngle(angleDeg, snap = ANALOG_CLOCK_SNAP) {
     const deg = ((Number(angleDeg) || 0) % 360 + 360) % 360;
     const step = snap === 1 ? 1 : cleanCalendarSnap(snap);
     return (Math.round((deg / 6) / step) * step) % 60;
   }
-  function stepClockHand(minutesOfDay, hand, deltaSteps = 1, { snap = 15 } = {}) {
+  function stepClockHand(minutesOfDay, hand, deltaSteps = 1, { snap = ANALOG_CLOCK_SNAP } = {}) {
     const total = ((Math.floor(Number(minutesOfDay) || 0) % 1440) + 1440) % 1440;
     const h = Math.floor(total / 60), m = total % 60;
     const delta = Math.trunc(Number(deltaSteps) || 0);
@@ -6192,7 +6193,7 @@ const __zentralEmbeddedLoader = (function () {
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -21518,9 +21519,10 @@ __zentralShim.register = function (def) {
         { icon: "download", label: "Save this week as Markdown…", action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.exportCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((saved) => { if (saved) flash("Week exported"); }).catch((error) => flash("Week export failed: " + String(error?.message || error))); } },
         { icon: "printer", label: "Print this week…", action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.printCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((printed) => { if (printed) flash("Week opened for printing"); }).catch((error) => flash("Week print failed: " + String(error?.message || error))); } },
       ]));
-      // OW-10: shared Clock with analog face (draggable/clickable hour then minute hand, locale 12h/24h, snap step,
-      // wheel & keyboard role=slider), digital hour/minute selectors, Analog/Digital/Both toggle, and Start/End range reuse.
-      function buildClockPicker({ value = "09:00", onPick, endValue, onEndPick, snap, locale, mode } = {}) {
+      // OW-10: shared Clock with analog face (draggable/clickable hour then minute hand, locale 12h/24h, fixed 5-min
+      // resolution delinked from Week/Day calendarSnap, wheel & keyboard role=slider), digital hour/minute selectors,
+      // Analog/Digital/Both toggle, and Start/End range reuse.
+      function buildClockPicker({ value = "09:00", onPick, endValue, onEndPick, locale, mode } = {}) {
         const C = CALENDAR_PART;
         const parseMins = (raw, fallback = 9 * 60) => {
           if (C) {
@@ -21541,7 +21543,7 @@ __zentralShim.register = function (def) {
         let activeHand = "hour";
         const effLocale = locale ?? (env.locale?.() || (typeof navigator === "object" && navigator?.language) || undefined);
         const hour12 = C ? C.clockUses12Hour(effLocale) : false;
-        const currentSnap = () => (snap !== undefined ? (snap === 1 ? 1 : (C ? C.cleanCalendarSnap(snap) : 15)) : (C ? C.cleanCalendarSnap(store.meta.calendarSnap) : 15));
+        const analogSnap = C?.ANALOG_CLOCK_SNAP || 5;
         let currentMode = C ? C.cleanClockMode(mode ?? store.meta.calendarClockMode) : "digital";
 
         const makeDigitalSet = (label, initialMins, onChange) => {
@@ -21638,7 +21640,7 @@ __zentralShim.register = function (def) {
         const stepActive = (hand, delta) => {
           activeHand = hand;
           if (!C) return;
-          const next = C.stepClockHand(activeMins(), hand, delta, { snap: currentSnap() });
+          const next = C.stepClockHand(activeMins(), hand, delta, { snap: analogSnap });
           commitActiveMins(C.parseClock(next));
         };
 
@@ -21667,7 +21669,7 @@ __zentralShim.register = function (def) {
           else if (e.key === "PageUp") { e.preventDefault(); stepActive("minute", 3); }
           else if (e.key === "PageDown") { e.preventDefault(); stepActive("minute", -3); }
           else if (e.key === "Home") { e.preventDefault(); activeHand = "minute"; commitActiveMins(Math.floor(activeMins() / 60) * 60); }
-          else if (e.key === "End") { e.preventDefault(); activeHand = "minute"; commitActiveMins(Math.floor(activeMins() / 60) * 60 + (60 - currentSnap())); }
+          else if (e.key === "End") { e.preventDefault(); activeHand = "minute"; commitActiveMins(Math.floor(activeMins() / 60) * 60 + (60 - analogSnap)); }
         });
         const onWheel = (handOf) => (e) => {
           e.preventDefault();
@@ -21697,7 +21699,7 @@ __zentralShim.register = function (def) {
               minSlider.focus?.({ preventScroll: true });
             }
           } else {
-            const nextM = C.clockMinuteFromAngle(angleDeg, currentSnap());
+            const nextM = C.clockMinuteFromAngle(angleDeg, analogSnap);
             commitActiveMins(curH * 60 + nextM);
           }
         };

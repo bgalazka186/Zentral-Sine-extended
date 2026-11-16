@@ -14769,9 +14769,10 @@
         { icon: "download", label: "Save this week as Markdown…", action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.exportCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((saved) => { if (saved) flash("Week exported"); }).catch((error) => flash("Week export failed: " + String(error?.message || error))); } },
         { icon: "printer", label: "Print this week…", action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.printCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((printed) => { if (printed) flash("Week opened for printing"); }).catch((error) => flash("Week print failed: " + String(error?.message || error))); } },
       ]));
-      // OW-10: shared Clock with analog face (draggable/clickable hour then minute hand, locale 12h/24h, snap step,
-      // wheel & keyboard role=slider), digital hour/minute selectors, Analog/Digital/Both toggle, and Start/End range reuse.
-      function buildClockPicker({ value = "09:00", onPick, endValue, onEndPick, snap, locale, mode } = {}) {
+      // OW-10: shared Clock with analog face (draggable/clickable hour then minute hand, locale 12h/24h, fixed 5-min
+      // resolution delinked from Week/Day calendarSnap, wheel & keyboard role=slider), digital hour/minute selectors,
+      // Analog/Digital/Both toggle, and Start/End range reuse.
+      function buildClockPicker({ value = "09:00", onPick, endValue, onEndPick, locale, mode } = {}) {
         const C = CALENDAR_PART;
         const parseMins = (raw, fallback = 9 * 60) => {
           if (C) {
@@ -14792,7 +14793,7 @@
         let activeHand = "hour";
         const effLocale = locale ?? (env.locale?.() || (typeof navigator === "object" && navigator?.language) || undefined);
         const hour12 = C ? C.clockUses12Hour(effLocale) : false;
-        const currentSnap = () => (snap !== undefined ? (snap === 1 ? 1 : (C ? C.cleanCalendarSnap(snap) : 15)) : (C ? C.cleanCalendarSnap(store.meta.calendarSnap) : 15));
+        const analogSnap = C?.ANALOG_CLOCK_SNAP || 5;
         let currentMode = C ? C.cleanClockMode(mode ?? store.meta.calendarClockMode) : "digital";
 
         const makeDigitalSet = (label, initialMins, onChange) => {
@@ -14889,7 +14890,7 @@
         const stepActive = (hand, delta) => {
           activeHand = hand;
           if (!C) return;
-          const next = C.stepClockHand(activeMins(), hand, delta, { snap: currentSnap() });
+          const next = C.stepClockHand(activeMins(), hand, delta, { snap: analogSnap });
           commitActiveMins(C.parseClock(next));
         };
 
@@ -14918,7 +14919,7 @@
           else if (e.key === "PageUp") { e.preventDefault(); stepActive("minute", 3); }
           else if (e.key === "PageDown") { e.preventDefault(); stepActive("minute", -3); }
           else if (e.key === "Home") { e.preventDefault(); activeHand = "minute"; commitActiveMins(Math.floor(activeMins() / 60) * 60); }
-          else if (e.key === "End") { e.preventDefault(); activeHand = "minute"; commitActiveMins(Math.floor(activeMins() / 60) * 60 + (60 - currentSnap())); }
+          else if (e.key === "End") { e.preventDefault(); activeHand = "minute"; commitActiveMins(Math.floor(activeMins() / 60) * 60 + (60 - analogSnap)); }
         });
         const onWheel = (handOf) => (e) => {
           e.preventDefault();
@@ -14948,7 +14949,7 @@
               minSlider.focus?.({ preventScroll: true });
             }
           } else {
-            const nextM = C.clockMinuteFromAngle(angleDeg, currentSnap());
+            const nextM = C.clockMinuteFromAngle(angleDeg, analogSnap);
             commitActiveMins(curH * 60 + nextM);
           }
         };

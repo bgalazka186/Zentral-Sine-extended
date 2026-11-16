@@ -177,20 +177,25 @@ function pointerOnDial(Ev, dial, angleDeg, radiusRatio = 0.82) {
       assert.equal(C.clockHourFromAngle(info.angleDeg, { hour12: true, period }), h, `12h round-trip for ${h}`);
     }
 
-    // Minute angle <-> snapped minute across snap settings and 360-degree wraparound.
+    // Minute angle <-> snapped minute: analog clock defaults to fixed 5-minute resolution (delinked from calendarSnap).
+    assert.equal(C.ANALOG_CLOCK_SNAP, 5);
     assert.equal(C.clockAngleOfMinute(0), 0);
     assert.equal(C.clockAngleOfMinute(15), 90);
     assert.equal(C.clockAngleOfMinute(45), 270);
+    assert.equal(C.clockMinuteFromAngle(22), 5, "default analog snap is 5 minutes");
+    assert.equal(C.clockMinuteFromAngle(134), 20, "22.3 min snaps to 20 by default");
     assert.equal(C.clockMinuteFromAngle(88, 15), 15);
     assert.equal(C.clockMinuteFromAngle(96, 5), 15);
     assert.equal(C.clockMinuteFromAngle(103, 5), 15);
     assert.equal(C.clockMinuteFromAngle(106, 5), 20);
-    assert.equal(C.clockMinuteFromAngle(356, 15), 0);
+    assert.equal(C.clockMinuteFromAngle(356), 0);
     assert.equal(C.clockMinuteFromAngle(222, 1), 37);
 
-    // Hand stepping (keyboard / wheel).
-    assert.equal(C.stepClockHand(23 * 60 + 20, "hour", 1, { snap: 15 }), "00:20");
-    assert.equal(C.stepClockHand(0 * 60 + 20, "hour", -1, { snap: 15 }), "23:20");
+    // Hand stepping (keyboard / wheel): defaults to 5-minute steps.
+    assert.equal(C.stepClockHand(14 * 60 + 10, "minute", 1), "14:15", "default minute step is 5 minutes");
+    assert.equal(C.stepClockHand(14 * 60 + 0, "minute", -1), "14:55", "default backward minute step wraps to :55");
+    assert.equal(C.stepClockHand(23 * 60 + 20, "hour", 1), "00:20");
+    assert.equal(C.stepClockHand(0 * 60 + 20, "hour", -1), "23:20");
     assert.equal(C.stepClockHand(14 * 60 + 45, "minute", 1, { snap: 15 }), "14:00");
     assert.equal(C.stepClockHand(14 * 60 + 0, "minute", -1, { snap: 15 }), "14:45");
     assert.equal(C.stepClockHand(14 * 60 + 37, "minute", 1, { snap: 15 }), "14:45");
@@ -198,9 +203,19 @@ function pointerOnDial(Ev, dial, angleDeg, radiusRatio = 0.82) {
     assert.equal(C.stepClockHand(14 * 60 + 10, "minute", 1, { snap: 5 }), "14:15");
   });
 
-  await test("composer shows compact calendar + clock together, selects hour then snapped minute, supports keyboard/wheel/toggle, and reuses for event end", async () => {
-    const h = await makeSheet({ snap: 15, locale: "pl-PL" });
+  await test("composer shows compact calendar + clock together, analog clock always uses 5-min resolution even when calendarSnap is 30, and Week/Day Snap keeps 30 min", async () => {
+    const h = await makeSheet({ snap: 30, locale: "pl-PL" });
     try {
+      // Switch to Week view briefly to confirm Snap button still shows and regulates Week/Day 30-min snap.
+      const viewBtn = h.q(".zn-calendar-view-select");
+      viewBtn.click();
+      await h.flush();
+      h.qa(".zn-menu .zn-menu-item").find((b) => b.textContent.trim() === "Week").click();
+      await h.flush();
+      assert.equal(h.q(".zn-calendar-snap-select").textContent.trim(), "Snap 30 min", "Week view Snap setting keeps 30 min");
+      const slot = C.calendarNoteDropSlot("time", "2026-11-18", { offsetPx: 54 * 10.35, hourPx: 54, snapMin: h.store.meta.calendarSnap });
+      assert.equal(slot.startTime, "10:30", "Week/Day snap still snaps timeline gestures to 30 min");
+
       // Open timed event composer via All notes '+' menu -> New event.
       h.q(".zn-new-menu").click();
       await h.flush();
@@ -229,39 +244,44 @@ function pointerOnDial(Ev, dial, angleDeg, radiusRatio = 0.82) {
       await h.flush();
       assert.equal(card.querySelector('[aria-label="End date (exclusive)"]').value, "2026-11-26");
 
-      // Analog clock: click inner ring at 90 deg (15:xx) -> sets hour to 15 and advances active hand to "minute",
-      // then click at 176 deg (~29.3 min -> snaps to 30 with snap=15) -> sets Start time to 15:30.
+      // Analog clock: even with store.meta.calendarSnap === 30, dial resolves at 5-minute resolution!
+      // Click inner ring at 90 deg (15:xx) -> sets hour to 15 and advances active hand to "minute",
+      // then click at 148 deg (~24.7 min -> snaps to 25 at 5-min resolution, NOT 30!).
       const dial = clock.querySelector(".zn-cal-clock-dial");
       assert.equal(Boolean(dial), true);
       assert.equal(clock.dataset.hand, "hour");
       pointerOnDial(h.Ev, dial, 90, 0.45); // inner 24h ring -> 15
       assert.equal(clock.dataset.hand, "minute", "picking hour automatically switches to the minute hand");
-      pointerOnDial(h.Ev, dial, 176, 0.85); // ~29.3 min -> snaps to 30
-      assert.equal(card.querySelector('[aria-label="Start time"]').value, "15:30");
+      pointerOnDial(h.Ev, dial, 148, 0.85); // ~24.7 min -> snaps to 25 (5-min analog resolution, NOT 30!)
+      assert.equal(card.querySelector('[aria-label="Start time"]').value, "15:25");
 
-      // Accessible role="slider" keyboard + wheel support.
+      // Accessible role="slider" keyboard + wheel support also step by 5 minutes regardless of calendarSnap=30.
       const sliders = [...clock.querySelectorAll('[role="slider"]')];
       assert.equal(sliders.length, 2, "hour and minute analog sliders are exposed");
       const [hourSlider, minSlider] = sliders;
       assert.equal(hourSlider.getAttribute("aria-valuenow"), "15");
-      assert.equal(minSlider.getAttribute("aria-valuenow"), "30");
+      assert.equal(minSlider.getAttribute("aria-valuenow"), "25");
 
       minSlider.dispatchEvent(new h.Ev("keydown", { key: "ArrowUp", bubbles: true }));
-      assert.equal(card.querySelector('[aria-label="Start time"]').value, "15:45");
+      assert.equal(card.querySelector('[aria-label="Start time"]').value, "15:30", "ArrowUp steps by 5 minutes even when calendarSnap is 30");
+      minSlider.dispatchEvent(new h.Ev("keydown", { key: "End", bubbles: true }));
+      assert.equal(card.querySelector('[aria-label="Start time"]').value, "15:55", "End jumps to :55 (last 5-minute tick), not :30");
+      minSlider.dispatchEvent(new h.Ev("keydown", { key: "ArrowDown", bubbles: true }));
+      assert.equal(card.querySelector('[aria-label="Start time"]').value, "15:50");
       hourSlider.dispatchEvent(new h.Ev("keydown", { key: "ArrowDown", bubbles: true }));
-      assert.equal(card.querySelector('[aria-label="Start time"]').value, "14:45");
+      assert.equal(card.querySelector('[aria-label="Start time"]').value, "14:50");
       dial.dispatchEvent(new h.Ev("wheel", { deltaY: -100, bubbles: true, cancelable: true })); // active hand is hour after hourSlider keydown
-      assert.equal(card.querySelector('[aria-label="Start time"]').value, "15:45");
+      assert.equal(card.querySelector('[aria-label="Start time"]').value, "15:50");
 
-      // Event End reuse: switch analog clock target to End and pick 17:15 via hour then minute.
+      // Event End reuse: switch analog clock target to End and pick 17:10 via hour then minute (again 5-min resolution, not 30!).
       const endTargetBtn = [...clock.querySelectorAll(".zn-cal-clock-target")].find((b) => b.dataset.target === "end");
       assert.equal(Boolean(endTargetBtn), true);
       endTargetBtn.click();
       assert.equal(clock.dataset.hand, "hour");
       pointerOnDial(h.Ev, dial, 150, 0.45); // inner 24h ring at 150 deg (5 * 30) -> 17
-      pointerOnDial(h.Ev, dial, 92, 0.85);  // ~15.3 min -> snaps to 15
-      assert.equal(card.querySelector('[aria-label="End time"]').value, "17:15");
-      assert.equal(card.querySelector('[aria-label="Start time"]').value, "15:45", "Start time stays untouched while editing End time");
+      pointerOnDial(h.Ev, dial, 62, 0.85);  // ~10.3 min -> snaps to 10 (NOT 0!)
+      assert.equal(card.querySelector('[aria-label="End time"]').value, "17:10");
+      assert.equal(card.querySelector('[aria-label="Start time"]').value, "15:50", "Start time stays untouched while editing End time");
 
       // Mode toggle: Analog / Digital / Both persists in store.meta.calendarClockMode.
       const analogModeBtn = [...clock.querySelectorAll(".zn-cal-clock-mode")].find((b) => b.dataset.mode === "analog");
@@ -353,9 +373,9 @@ function pointerOnDial(Ev, dial, angleDeg, radiusRatio = 0.82) {
       dial.dispatchEvent(new h.Ev("pointerup", { bubbles: true, ...pt(180, 0.85), button: 0, pointerId: 2 }));
       assert.equal(clock.dataset.hand, "minute");
 
-      // Drag minute hand across 120 deg (20 min) -> 240 deg (40 min, snap=10).
-      dial.dispatchEvent(new h.Ev("pointerdown", { bubbles: true, ...pt(120, 0.85), button: 0, pointerId: 2 }));
-      assert.equal(card.querySelector('[aria-label="Start time"]').value, "06:20");
+      // Drag minute hand across 148 deg (~24.7 min -> 25 min, fixed 5-min analog snap even with calendarSnap=10) -> 242 deg (40 min).
+      dial.dispatchEvent(new h.Ev("pointerdown", { bubbles: true, ...pt(148, 0.85), button: 0, pointerId: 2 }));
+      assert.equal(card.querySelector('[aria-label="Start time"]').value, "06:25");
       dial.dispatchEvent(new h.Ev("pointermove", { bubbles: true, ...pt(242, 0.85), pointerId: 2 }));
       assert.equal(card.querySelector('[aria-label="Start time"]').value, "06:40");
       dial.dispatchEvent(new h.Ev("pointerup", { bubbles: true, ...pt(242, 0.85), button: 0, pointerId: 2 }));
