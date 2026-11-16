@@ -7,8 +7,9 @@
  *   creation/unload, collaborates with CornerPanels, PanelStyles and SecondaryViews. Container-service
  *   fallback is intentional.
  * Ownership / failure: Tracks host records until native tab removal succeeds; failed removal must retain
- *   ownership and restore the browser. Visible rendering is separate from loaded-page notification/audio
- *   activity. Cleanup registers with ctx.
+ *   ownership and restore the browser. Native tabbrowser guards (getBrowserContainer, getPanel, discardBrowser,
+ *   _endRemoveTab, capture TabClose) prevent native teardown from walking 3 parentNode hops into #zen-app-panel-root.
+ *   Visible rendering is separate from loaded-page notification/audio activity. Cleanup registers with ctx.
  * Registration: browser-integrations
  * Loaded/created by: loader/ZentralCatalog.js
  * Published lazy ctx API: ADDON_HOST_FOLDER_LABEL; MOBILE_UA_STRING; addonHostByAppId; addonHostByTab;

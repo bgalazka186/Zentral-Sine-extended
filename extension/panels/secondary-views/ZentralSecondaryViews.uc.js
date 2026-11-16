@@ -493,9 +493,15 @@
       });
       function moveBrowser(browser, parent) {
         if (browser.parentNode === parent) return;
+        const sameRoot =
+          typeof parent.getRootNode === "function" &&
+          typeof browser.getRootNode === "function"
+            ? parent.getRootNode() === browser.getRootNode()
+            : true;
         if (typeof browser._zentralMoveTo === "function")
           browser._zentralMoveTo(parent);
         else if (
+          sameRoot &&
           typeof parent.moveBefore === "function" &&
           typeof browser.connectedMoveCallback === "function"
         )

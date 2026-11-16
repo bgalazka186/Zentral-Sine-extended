@@ -341,7 +341,7 @@ function createAddonHostHarness() {
     Services,
     gBrowser,
     Ci: { nsIWebProgress: { NOTIFY_ALL: 0xff }, nsIWebNavigation: { LOAD_FLAGS_NONE: 0 } },
-    ChromeUtils: { importESModule: () => ({}) },
+    ChromeUtils: { importESModule: () => ({}), generateQI: () => () => {} },
     Element: window.Element,
     CustomEvent,
     Event: Ev,
@@ -456,6 +456,9 @@ function createAddonHostHarness() {
   return {
     window,
     document,
+    context,
+    parts,
+    Services,
     gBrowser,
     apps,
     ctx,
@@ -466,6 +469,10 @@ function createAddonHostHarness() {
     tabs,
     warnings,
     flushTimers,
+    dispatchWindowEvent,
+    CustomEvent,
+    createNativeTab,
+    createZenFolder,
     openAdoptedApp,
     cleanup() { cleanups.splice(0).reverse().forEach((fn) => fn()); },
   };
@@ -757,10 +764,227 @@ function createAddonHostHarness() {
 
   await test("ZentralNotes pseudoEventInside ignores non-Node targets (e.g. window) in composedPath", async () => {
     const src = read("additional/notes/ZentralNotes.uc.js");
+    const match = src.match(/function pseudoEventPath[\s\S]*?function pseudoEventInside[\s\S]*?\n      \}/);
+    assert.ok(match, "found pseudoEventPath + pseudoEventInside in ZentralNotes.uc.js");
+    const runner = vm.runInNewContext(`(function(){ ${match[0]}; return pseudoEventInside; })()`, {});
+    const child = { nodeType: 1 };
+    const root = {
+      nodeType: 1,
+      contains(node) {
+        if (!node || typeof node.nodeType !== "number") {
+          throw new TypeError("Node.contains: Argument 1 does not implement interface Node.");
+        }
+        return node === child;
+      },
+    };
+    const fakeWin = { isWindow: true }; // non-Node entry (no nodeType) as emitted by Gecko composedPath()
+    assert.equal(runner({ composedPath: () => [fakeWin, child] }, root), true, "matches child without throwing on window");
+    assert.equal(runner({ composedPath: () => [fakeWin, { nodeType: 1 }] }, root), false, "returns false without throwing on window");
+  });
+
+  await test("end-to-end Triple View (OW-30) + Real Tab IDs + ZentralSecondaryViews survives cold-start host discard/removal and recovers cleanly", async () => {
+    const h = createAddonHostHarness();
+    const { window, document, gBrowser, apps, ctx, panelRoot, panelSlider } = h;
+
+    // Minimal toolbar inside slider so ZentralSecondaryViews finds native chrome
+    const toolbar = document.createElement("div");
+    toolbar.id = "zen-app-panel-toolbar";
+    panelSlider.appendChild(toolbar);
+    panelSlider.getBoundingClientRect = () => ({ left: 0, top: 0, width: 820, height: 1400, right: 820, bottom: 1400 });
+    panelRoot.getBoundingClientRect = () => ({ left: 0, top: 0, width: 820, height: 1400, right: 820, bottom: 1400 });
+
+    // Wire apps.getOrCreateAppBrowser through real add-on host adoption (mirroring ZentralPanels.uc.js)
+    const rawGetOrCreate = apps.getOrCreateAppBrowser.bind(apps);
+    apps.getOrCreateAppBrowser = (app) =>
+      ctx.callGetOrCreateWithAddonHostBrowser(rawGetOrCreate, app, 0);
+    const rawCloseApp = apps.closeApp.bind(apps);
+    apps.closeApp = (appId, ...args) => {
+      ctx.removeAddonHostRecord(appId);
+      const res = rawCloseApp(appId, ...args);
+      if (!ctx.addonHostByAppId.size) ctx.removeEmptyAddonHostFolder();
+      return res;
+    };
+    apps.renderGrid = () => {};
+    apps.loadApps = () => {};
+    apps.capturePanelViewState = () => ({ open: panelRoot.hasAttribute("open") });
+    apps.restorePanelViewState = () => {};
+
+    const topApp = { id: "bgalazka-essential-top", title: "Messenger", url: "https://www.messenger.com/" };
+    const bottomApp = { id: "bgalazka-essential-bottom", title: "WhatsApp", url: "https://web.whatsapp.com/" };
+    const pair = {
+      top: topApp.id,
+      bottom: bottomApp.id,
+      share: 0.5,
+      apps: { [topApp.id]: topApp, [bottomApp.id]: bottomApp },
+    };
+
+    Object.assign(ctx, {
+      startupPanelCoordinator: true,
+      linkedPairFor: (id) => (id === topApp.id || id === bottomApp.id ? pair : null),
+      saveTriplePair() {},
+      unlinkTriplePair() {},
+      applyBrowserZoom() {},
+      attachNavigationListeners() {},
+      attachZenInternetPanelBrowser() {},
+      updateZenCssBrowser() {},
+      zenCssEnabled: () => false,
+      updateWebToolbarState() {},
+      syncPanelFallbackPolling() {},
+      requestPanelActivity() {},
+      persistPanelZoom() {},
+      saveLinkedTriplePairs() {},
+      parseSVG: () => document.createElement("svg"),
+      looksLikeUrl: () => true,
+      buildSearchUrl: (q) => q,
+      navigatePanelHistory() {},
+      getPanelQuickSwitchTarget: () => null,
+      PREF_ICONS: {},
+      linkedTriplePairs: [pair],
+      scheduleSecondaryGeometryFit() {},
+      cancelPanelRetry() {},
+      isPanelBrowserMediaActive: () => false,
+      getActiveAppBrowser: () =>
+        [...panelSlider.querySelectorAll("browser")].find((b) => b.style.display !== "none") || null,
+      floating: {
+        owns: () => false,
+        apply() {},
+        clear() {},
+        setHost() {},
+      },
+      panelDragShield: null,
+      updateRevealEdgeGeometry() {},
+      syncPanelPushState() {},
+    });
+    h.context.MutationObserver = class { observe() {} disconnect() {} };
+    h.context.ResizeObserver = class { observe() {} disconnect() {} };
+    h.context.performance = { now: () => Date.now() };
+    window.SessionStore = { getCustomTabValue: () => "" };
+
+    vm.runInContext(read("extension/panels/secondary-views/ZentralSecondaryViews.uc.js"), h.context, {
+      filename: "extension/panels/secondary-views/ZentralSecondaryViews.uc.js",
+    });
+    const secGen = h.parts.get("secondary-views")(ctx);
+    secGen.next();
+    secGen.next();
+
+    // Cold-startup Triple View open via OW-30 ctx.openStartupTriplePair
+    const opened = ctx.openStartupTriplePair(topApp.id);
+    assert.equal(opened, true, "openStartupTriplePair opens linked pair");
+    assert.equal(document.documentElement.getAttribute("bgalazka-triple-view"), "true");
+    assert.equal(panelRoot.isConnected, true);
+
+    const topHost = ctx.addonHostByAppId.get(topApp.id);
+    const bottomHost = ctx.addonHostByAppId.get(bottomApp.id);
+    assert.ok(topHost && bottomHost, "both Triple View panels backed by real add-on host tabs");
+    assert.equal(topHost.browser.parentNode, panelSlider);
+    assert.equal(bottomHost.browser.parentNode, panelSlider);
+    assert.notEqual(gBrowser.getPanel(topHost.browser), panelRoot);
+    assert.notEqual(gBrowser.getPanel(bottomHost.browser), panelRoot);
+
+    // 1. Unforced Zen tab-unloader discard on top host tab is refused; Triple View stays intact
+    assert.equal(gBrowser.discardBrowser(topHost.tab, false), false);
+    assert.equal(panelRoot.isConnected, true);
+    assert.equal(document.documentElement.getAttribute("bgalazka-triple-view"), "true");
+
+    // 2. External Zen removal of top host tab + forced discard of bottom host tab NEVER detaches #zen-app-panel-root
+    gBrowser.removeTab(topHost.tab);
+    gBrowser.discardBrowser(bottomHost.tab, true);
+    h.flushTimers();
+    assert.equal(panelRoot.isConnected, true, "#zen-app-panel-root survives both host tabs dying");
+    assert.equal(document.getElementById("zen-app-panel-root"), panelRoot);
+    assert.equal(ctx.addonHostByAppId.size, 0);
+
+    // 3. Re-opening Triple View recovers cleanly with fresh adopted host tabs and valid webNavigation
+    apps.openPanel(topApp);
+    assert.equal(panelRoot.isConnected, true);
+    assert.equal(document.documentElement.getAttribute("bgalazka-triple-view"), "true");
+    const recoveredTop = ctx.addonHostByAppId.get(topApp.id);
+    const recoveredBottom = ctx.addonHostByAppId.get(bottomApp.id);
+    assert.ok(recoveredTop?.browser?.webNavigation, "recovered top panel has valid webNavigation");
+    assert.ok(recoveredBottom?.browser?.webNavigation, "recovered bottom panel has valid webNavigation");
+    assert.equal(recoveredTop.browser.parentNode, panelSlider);
+    assert.equal(recoveredBottom.browser.parentNode, panelSlider);
+
+    // 4. Verify ZentralSecondaryViews.moveBrowser also guards sameRoot when Real Tab IDs is OFF
+    const secSrc = read("extension/panels/secondary-views/ZentralSecondaryViews.uc.js");
     assert.ok(
-      src.includes('typeof node?.nodeType === "number" && root.contains?.(node)'),
-      "pseudoEventInside guards root.contains() against non-Node composedPath entries",
+      secSrc.includes("parent.getRootNode() === browser.getRootNode()"),
+      "ZentralSecondaryViews.moveBrowser checks sameRoot before calling moveBefore",
     );
+
+    h.cleanup();
+  });
+
+  await test("real ZentralPanels pruneRestoredAddonHosts removes stale previous-session tabs while preserving zen-empty-tab and live hosts", async () => {
+    const h = createAddonHostHarness();
+    const { window, document, gBrowser, ctx } = h;
+
+    // Extract the exact pruneRestoredAddonHosts + onRestoredHostTab implementation from ZentralPanels.uc.js
+    const panelsSrc = read("extension/panels/ZentralPanels.uc.js");
+    const startIdx = panelsSrc.indexOf("let restoredHostPruneTimer = null;");
+    const endIdx = panelsSrc.indexOf("// Hot-reload/startup normalization:");
+    assert.ok(startIdx > 0 && endIdx > startIdx, "located pruneRestoredAddonHosts block in ZentralPanels.uc.js");
+    const block = panelsSrc.slice(startIdx, endIdx);
+
+    // Recreate exact user profile scenario: previous session restored #bgalazka-zentral-addon-hosts
+    // containing zen-empty-tab + 3 stale restored tabs (hostAttr: null) + 1 live host tab.
+    const stale1 = h.createNativeTab("Messenger", { pinned: true });
+    const stale2 = h.createNativeTab("WhatsApp", { pinned: true });
+    const stale3 = h.createNativeTab("Google Gemini", { pinned: true });
+    const folder = h.createZenFolder([stale1, stale2, stale3], {
+      id: "bgalazka-zentral-addon-hosts",
+      label: "Zentral Add-on Hosts",
+      collapsed: false,
+    });
+    const emptyPlaceholder = folder._emptyTab;
+    assert.equal(emptyPlaceholder.hasAttribute("zen-empty-tab"), true);
+
+    // Also open one live add-on host tab that MUST survive pruning
+    const liveApp = { id: "live-app", title: "Live", url: "https://live.example/" };
+    h.openAdoptedApp(liveApp);
+    const liveRecord = ctx.addonHostByAppId.get("live-app");
+    assert.equal(liveRecord.tab.group, folder);
+
+    // Execute real ZentralPanels prune block against this window
+    const localCleanups = [];
+    const runPrune = vm.runInContext(
+      `(function(ctx, registerCleanup) {
+        const ZentralRuntime = window.ZentralRuntime;
+        let extensionDisposed = false;
+        ${block}
+        return { pruneRestoredAddonHosts, dispose: () => { extensionDisposed = true; } };
+      })`,
+      h.context,
+      { filename: "extension/panels/ZentralPanels.uc.js#pruneRestoredAddonHosts" },
+    );
+    const api = runPrune(ctx, (fn) => localCleanups.push(fn));
+
+    // Stale restored tabs were removed; zen-empty-tab and live host tab survived!
+    assert.equal(stale1.isConnected, false, "stale Messenger tab pruned");
+    assert.equal(stale2.isConnected, false, "stale WhatsApp tab pruned");
+    assert.equal(stale3.isConnected, false, "stale Google Gemini tab pruned");
+    assert.equal(emptyPlaceholder.isConnected, true, "zen-empty-tab placeholder preserved");
+    assert.equal(liveRecord.tab.isConnected, true, "live add-on host tab preserved");
+    assert.equal(h.panelRoot.isConnected, true, "#zen-app-panel-root untouched");
+
+    // Late SSTabRestored brings another stale tab into the host folder -> pruned on next tick
+    const lateStale = h.createNativeTab("Late Restored", { pinned: true });
+    folder.addTabs([lateStale]);
+    h.dispatchWindowEvent(new h.CustomEvent("SSTabRestored", { bubbles: true }), lateStale);
+    h.flushTimers();
+    assert.equal(lateStale.isConnected, false, "late SSTabRestored stale tab pruned");
+    assert.equal(emptyPlaceholder.isConnected, true, "zen-empty-tab still preserved after late prune");
+    assert.equal(liveRecord.tab.isConnected, true, "live host still preserved after late prune");
+
+    // Now close the live host -> removeEmptyAddonHostFolder() calls folder.delete() cleanly with valid emptyPlaceholder!
+    ctx.removeAddonHostRecord("live-app");
+    assert.doesNotThrow(() => ctx.removeEmptyAddonHostFolder());
+    assert.equal(folder.deleteCalls, 1, "folder.delete() succeeds once because zen-empty-tab was preserved");
+    assert.equal(folder.isConnected, false, "empty host folder cleanly deleted");
+
+    api.dispose();
+    localCleanups.forEach((fn) => fn());
+    h.cleanup();
   });
 
   console.log(`\nALL ${passed} ADD-ON HOST ROOT-PROTECTION TESTS PASSED`);
