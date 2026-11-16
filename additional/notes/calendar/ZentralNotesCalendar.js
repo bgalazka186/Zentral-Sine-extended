@@ -2642,6 +2642,22 @@
     if (!Number.isFinite(a) || !Number.isFinite(b) || a < 0 || b > 1440 || b <= a) { a = DEFAULT_CALENDAR_HOURS.startMin; b = DEFAULT_CALENDAR_HOURS.endMin; }
     return { on: o.on === true, startMin: a, endMin: b };
   }
+
+  // Responsive main Month date picker. "auto" switches at either threshold; the other modes are explicit overrides.
+  const DEFAULT_CALENDAR_PICKER = Object.freeze({ mode: "auto", minWidth: 470, minHeight: 360, colorMode: "count" });
+  function cleanCalendarPicker(value) {
+    const o = value && typeof value === "object" ? value : {};
+    const bounded = (v, fallback, min, max) => {
+      const number = typeof v === "number" || (typeof v === "string" && v.trim() !== "") ? Number(v) : NaN;
+      return Number.isFinite(number) ? Math.max(min, Math.min(max, Math.round(number))) : fallback;
+    };
+    return {
+      mode: ["auto", "picker", "month"].includes(o.mode) ? o.mode : DEFAULT_CALENDAR_PICKER.mode,
+      minWidth: bounded(o.minWidth, DEFAULT_CALENDAR_PICKER.minWidth, 320, 720),
+      minHeight: bounded(o.minHeight, DEFAULT_CALENDAR_PICKER.minHeight, 240, 720),
+      colorMode: ["count", "category"].includes(o.colorMode) ? o.colorMode : DEFAULT_CALENDAR_PICKER.colorMode,
+    };
+  }
   // The hours the grid has to show: the chosen ones, widened by whole hours until every timed item of the days in
   // view lies inside. Off = 0..1440. The hours follow the times of the items, not the size of their boxes: a reminder
   // at 19:50 lies inside 08:00-20:00 (the grid keeps its box inside), one at 20:00 sharp lies after it.
@@ -3186,19 +3202,65 @@
     return lines.join("\n").trim() + "\n";
   }
 
+  // Day heat: count the live occurrences touching one local civil day and find its most common category.
+  // Ties are resolved by category name, so the tint does not flicker with item order.
+  function dayHeat(items, day) {
+    const parsed = typeof day === "string" ? parseYmd(day) : null;
+    const value = parsed ? parsed.getTime() : Number(day);
+    if (!Number.isFinite(value)) return { day: 0, count: 0, level: 0, dominantCategory: "" };
+    const from = dayStart(value), to = addDays(from, 1);
+    const categories = new Map();
+    const entries = expandRange(Array.isArray(items) ? items : [], from, to);
+    for (const item of entries) {
+      const name = String(item?.x?.category || "").trim();
+      if (name) categories.set(name, (categories.get(name) || 0) + 1);
+    }
+    let dominantCategory = "", dominantCount = 0;
+    for (const [name, count] of categories) {
+      if (count > dominantCount || (count === dominantCount && (!dominantCategory || name < dominantCategory))) {
+        dominantCategory = name;
+        dominantCount = count;
+      }
+    }
+    const count = entries.length;
+    return { day: from, count, level: count === 0 ? 0 : count === 1 ? 1 : count <= 3 ? 2 : 3, dominantCategory };
+  }
+
   // ---------- date picker model ----------
-  // What the mini-calendar draws for a month: 6 weeks of cells with today / selected / other-month flags and how many
-  // items fall on each day (for the dots). `selected` = local midnight ms or 0.
+  // What the mini-calendar draws for a month: 6 weeks of local days, item count, heat level and dominant category.
+  // selected = local midnight ms or 0. A single expansion supplies all cells, including recurring occurrences.
   function pickerMonth(year, month, { weekStart = 1, now = 0, selected = 0, items = [] } = {}) {
     const today = now ? dayStart(now) : 0, sel = selected ? dayStart(selected) : 0;
     const grid = monthGrid(year, month, weekStart);
     const first = grid[0][0], last = addDays(grid[5][6], 1);
-    const counts = new Map();
-    for (const it of expandRange(items, first, last)) {
+    const stats = new Map();
+    for (const it of expandRange(Array.isArray(items) ? items : [], first, last)) {
       const [s, e] = itemRange(it);
-      for (let d = Math.max(dayStart(s), first); d < Math.min(isReminder(it) ? s + 1 : e, last); d = addDays(d, 1)) counts.set(d, (counts.get(d) || 0) + 1);
+      const category = String(it?.x?.category || "").trim();
+      for (let d = Math.max(dayStart(s), first); d < Math.min(isReminder(it) ? s + 1 : e, last); d = addDays(d, 1)) {
+        let stat = stats.get(d);
+        if (!stat) stats.set(d, stat = { count: 0, categories: new Map() });
+        stat.count++;
+        if (category) stat.categories.set(category, (stat.categories.get(category) || 0) + 1);
+      }
     }
-    return grid.map((w) => w.map((d) => ({ day: d, date: new Date(d).getDate(), inMonth: new Date(d).getMonth() === month, today: d === today, selected: d === sel, count: counts.get(d) || 0 })));
+    return grid.map((week) => week.map((d) => {
+      const stat = stats.get(d), categories = stat?.categories || new Map();
+      let dominantCategory = "", dominantCount = 0;
+      for (const [name, count] of categories) {
+        if (count > dominantCount || (count === dominantCount && (!dominantCategory || name < dominantCategory))) {
+          dominantCategory = name;
+          dominantCount = count;
+        }
+      }
+      const count = stat?.count || 0;
+      return {
+        day: d, date: new Date(d).getDate(), inMonth: new Date(d).getMonth() === month,
+        today: d === today, selected: d === sel, count,
+        level: count === 0 ? 0 : count === 1 ? 1 : count <= 3 ? 2 : 3,
+        dominantCategory,
+      };
+    }));
   }
   // Month stepping for the picker arrows: { year, month } after `delta` months (works across years).
   function stepMonth(year, month, delta) {
@@ -3989,9 +4051,9 @@
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, visibleHourRange, gridOffsetOf, gridMinuteAt,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

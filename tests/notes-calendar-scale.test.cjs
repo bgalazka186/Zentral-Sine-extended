@@ -374,8 +374,8 @@ const AUTO = { month: "auto", week: "auto", day: "auto", upcoming: "auto", agend
   const layoutBox = q(".zn-all-layout"), calendarPane = q(".zn-calendar-pane");
   layoutBox.getBoundingClientRect = () => ({ left: 0, top: 0, right: 1100, bottom: 700, width: 1100, height: 700 });
   q(".zn-all-panels").getBoundingClientRect = layoutBox.getBoundingClientRect;
-  let paneWidth = 700;
-  calendarPane.getBoundingClientRect = () => ({ left: 400, top: 0, right: 400 + paneWidth, bottom: 700, width: paneWidth, height: 700 });
+  let paneWidth = 700, paneHeight = 700;
+  calendarPane.getBoundingClientRect = () => ({ left: 400, top: 0, right: 400 + paneWidth, bottom: paneHeight, width: paneWidth, height: paneHeight });
   await sheet.open(); await flushRaf();
   root.all().find((el) => el.title === "All notes").click(); await flushRaf();
 
@@ -819,25 +819,133 @@ const AUTO = { month: "auto", week: "auto", day: "auto", upcoming: "auto", agend
     await flushRaf();
   });
 
-  await test("Month in a narrow pane is a list: the three spacings, no slider", async () => {
+  const pickerCell = (key) => qa(".zn-cal-picker-day").find((button) => button.getAttribute("data-day") === key);
+  await test("Month date picker: responsive widths, date-only heat cells, select-only clicks and arrow navigation", async () => {
+    paneHeight = 700;
     paneWidth = 420;
     await resized();
-    assert.ok(q(".zn-cal-compact-list"), "under 470 px the month is a list");
-    assert.equal(content.dataset.fit, "false");
-    assert.equal(chip.textContent, "Comfortable");
-    chip.click();
-    assert.equal(q(".zn-menu .zn-menu-slider"), null);
-    chip.click();
-    await pick(".zn-calendar-size-select", "Compact");
-    assert.deepEqual([chip.textContent, content.dataset.density, store.meta.calendarScale.month], ["Compact", "compact", 52]);
-    // Wide again: the grid, with weeks of the 52 px the spacing stands for.
+    assert.ok(q(".zn-cal-picker-grid"), "under the default width threshold Month becomes a date picker");
+    assert.equal(qa(".zn-cal-picker-day").length, 42, "six weeks of dates");
+    assert.equal(q(".zn-cal-compact-list"), null, "the old item-list fallback is gone");
+    const wed = C.parseYmd(WED).getTime(), expected = C.dayHeat(store.items.list(), wed);
+    const hot = pickerCell(WED);
+    assert.ok(hot, "the selected month has its Wednesday cell");
+    assert.equal(hot.textContent, "18", "a cell shows only its date number");
+    assert.ok(hot.classList.contains("is-heat-" + expected.level), "the count chooses one of four heat intensities");
+    assert.match(hot.getAttribute("aria-label"), new RegExp(String(expected.count) + " items?"), "the accessible name includes the count");
+    assert.equal(hot.querySelector(".zn-cal-month-items"), null, "there are no item marks inside the cell");
+    assert.equal(hot.querySelector(".zn-cal-month-mark"), null, "there are no item controls inside the cell");
+    assert.match(hot.getAttribute("title"), /Colour legend/);
+
+    pickerCell(THU).click();
+    assert.equal(store.meta.calendarCursor, THU, "click selects a local date key");
+    assert.equal(store.meta.calendarView, "month", "OW-06: a Month click selects, it does not open Day view");
+    assert.ok(pickerCell(THU).classList.contains("is-selected"));
+    assert.ok(q(".zn-cal-picker-selection .zn-cal-day-group"), "the selected day's items are listed below the grid");
+    const thu = pickerCell(THU);
+    thu.focus();
+    thu.dispatchEvent(new Ev("keydown", { key: "ArrowRight", bubbles: true }));
+    assert.ok(pickerCell(FRI)?.classList.contains("is-cursor"), "ArrowRight moves the roving focus by one local day");
+    assert.equal(pickerCell(FRI).getAttribute("tabindex"), "0");
+    assert.ok(document.activeElement === pickerCell(FRI), "the next date receives keyboard focus");
+
+    paneWidth = 520;
+    await resized();
+    assert.equal(q(".zn-cal-picker-grid"), null, "above the width threshold the full Month grid returns");
+    assert.ok(q(".zn-cal-month-items"), "full Month retains its event marks");
     paneWidth = 700;
     await resized();
+    assert.equal(q(".zn-cal-picker-grid"), null, "a wide pane keeps the full Month grid");
+
+    // The threshold and colour choices are user settings, and the manual mode overrides geometry.
+    chip.click();
+    const settingsGroup = qa(".zn-menu-item").find((entry) => entry.textContent.trim() === "Date picker settings");
+    assert.ok(settingsGroup, "Month size menu exposes date-picker settings");
+    settingsGroup.click();
+    const widthSlider = qa(".zn-menu-slider input").find((entry) => entry.getAttribute("aria-label") === "Date picker width threshold");
+    assert.ok(widthSlider, "width threshold is configurable");
+    widthSlider.value = "600";
+    widthSlider.dispatchEvent(new Ev("input", { bubbles: true }));
+    await flushRaf();
+    assert.equal(C.cleanCalendarPicker(store.meta.calendarPicker).minWidth, 600);
+    paneWidth = 700;
+    await resized();
+    assert.equal(q(".zn-cal-picker-grid"), null, "a wide, tall pane stays in full-month mode");
+    const heightSlider = qa(".zn-menu-slider input").find((entry) => entry.getAttribute("aria-label") === "Date picker height threshold");
+    assert.ok(heightSlider, "height threshold is configurable too");
+    heightSlider.value = "500";
+    heightSlider.dispatchEvent(new Ev("input", { bubbles: true }));
+    await flushRaf();
+    assert.equal(C.cleanCalendarPicker(store.meta.calendarPicker).minHeight, 500);
+    paneHeight = 480;
+    await resized();
+    assert.ok(q(".zn-cal-picker-grid"), "the changed height threshold takes effect independently of width");
+    paneHeight = 700;
+    await resized();
+    assert.equal(q(".zn-cal-picker-grid"), null);
+    chip.click();
+    const options = qa(".zn-menu-item").find((entry) => entry.textContent.trim() === "Date picker settings");
+    assert.ok(options);
+    options.click();
+    const tintOption = qa(".zn-menu-item").find((entry) => entry.textContent.trim() === "Count + dominant category tint");
+    assert.ok(tintOption);
+    tintOption.click();
+    assert.equal(C.cleanCalendarPicker(store.meta.calendarPicker).colorMode, "category");
+    store.items.upsertCategory({ name: "Picker tint", color: "#abcdef" });
+    store.items.upsert({
+      id: "picker-tint", summary: "Tinted reminder",
+      start: { dateTime: new Date(C.parseYmd(WED).getTime() + 8 * 3600000).toISOString() },
+      x: { kind: "reminder", category: "Picker tint" },
+    });
+    await flushRaf();
+    assert.equal(pickerCell(WED).style.getPropertyValue("--zn-cal-picker-tint"), "#abcdef", "category mode tints the count intensity with the dominant category colour");
+    paneWidth = 700;
+    await resized();
+    assert.equal(q(".zn-cal-picker-grid"), null, "the automatic picker turns off when the pane is wide enough");
+    chip.click();
+    const manualGroup = qa(".zn-menu-item").find((entry) => entry.textContent.trim() === "Date picker settings");
+    assert.ok(manualGroup);
+    manualGroup.click();
+    const forcePicker = qa(".zn-menu-item").find((entry) => entry.textContent.trim() === "Always use date picker");
+    assert.ok(forcePicker);
+    forcePicker.click();
+    await flushRaf();
+    assert.ok(q(".zn-cal-picker-grid"), "manual date-picker mode works above both thresholds");
+    chip.click();
+    const modeGroup = qa(".zn-menu-item").find((entry) => entry.textContent.trim() === "Date picker settings");
+    assert.ok(modeGroup);
+    modeGroup.click();
+    const forceFull = qa(".zn-menu-item").find((entry) => entry.textContent.trim() === "Always use full month");
+    assert.ok(forceFull);
+    forceFull.click();
+    await flushRaf();
+    assert.equal(q(".zn-cal-picker-grid"), null, "manual full-month mode overrides picker geometry");
     assert.ok(q(".zn-cal-month-grid"));
-    assert.equal(chip.textContent, "Size: 52 px");
-    assert.equal(content.style.getPropertyValue("--zn-cal-month-row"), "52px");
-    const { fit } = openSize(); fit.click(); await flushRaf(); await closeSize();
-    assert.deepEqual(plain(store.meta.calendarScale), AUTO);
+
+    // Automatic height threshold also selects the picker; with no room below it, selecting a day opens Day view.
+    const autoGroupTrigger = chip;
+    autoGroupTrigger.click();
+    const autoGroup = qa(".zn-menu-item").find((entry) => entry.textContent.trim() === "Date picker settings");
+    assert.ok(autoGroup);
+    autoGroup.click();
+    const automatic = qa(".zn-menu-item").find((entry) => entry.textContent.trim() === "Automatic");
+    assert.ok(automatic);
+    automatic.click();
+    paneWidth = 700;
+    paneHeight = 260;
+    await resized();
+    assert.ok(q(".zn-cal-picker-grid"), "a short pane also activates picker mode");
+    const pickDay = pickerCell(FRI);
+    assert.ok(pickDay);
+    pickDay.click();
+    assert.equal(store.meta.calendarCursor, FRI);
+    assert.equal(store.meta.calendarView, "day", "the picker opens Day view when the pane cannot fit the selected-day list");
+    paneWidth = 700; paneHeight = 700;
+    await resized();
+    await showView("Month");
+    assert.deepEqual(plain(C.cleanCalendarPicker(store.meta.calendarPicker)), {
+      mode: "auto", minWidth: 600, minHeight: 500, colorMode: "category",
+    }, "picker preferences persist independently of calendar cell spacing");
   });
 
   await test("the style sheet: a fitted timeline has no scrollbar; fitted weeks fill the pane and start at its top; a short event shows its title", async () => {

@@ -2,7 +2,7 @@ name: Notes regression validation
 
 on:
   push:
-    branches: [beta]
+    branches: [beta, "arena/**"]
   workflow_dispatch:
 
 permissions:
