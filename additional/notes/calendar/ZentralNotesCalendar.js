@@ -4634,12 +4634,173 @@
     });
   }
 
+  // OW-11: pure resolver describing what 'Inherit' gives (and which layer provides it) across
+  // Agenda window, item colour (T2.3g), category stage notify defaults, alert sound/quietAllow,
+  // and note-section category inheritance.
+  function describeInheritance(kind, item = null, layers = {}) {
+    const k = String(kind || "").trim();
+    const srcLayers = layers && typeof layers === "object" ? layers : {};
+    const noteObj = srcLayers.note && typeof srcLayers.note === "object" ? srcLayers.note : {};
+    const catObj = srcLayers.category && typeof srcLayers.category === "object" ? srcLayers.category : {};
+    const globalObj = srcLayers.global && typeof srcLayers.global === "object" ? srcLayers.global : {};
+    const noteTitle = String(noteObj.title ?? srcLayers.noteTitle ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+    const catName = cleanCategoryName(catObj.name ?? srcLayers.categoryName ?? "");
+    const hasCategory = Boolean(catName || srcLayers.category || srcLayers.categoryNotify || srcLayers.categoryAgenda || srcLayers.categoryColor);
+    const noteSourceLabel = noteTitle ? "note " + noteTitle : "linked note";
+    const catSourceLabel = catName ? "category " + catName : "category";
+    const pack = (value, source, sourceName, valueLabel, sourceLabel, labelOverride = "", inherited = null) => ({
+      value,
+      source,
+      sourceName,
+      valueLabel,
+      sourceLabel,
+      label: labelOverride || ("Inherit (" + valueLabel + ", from " + sourceLabel + ")"),
+      ...(inherited ? { inherited } : {}),
+    });
+
+    const agendaKeyMap = {
+      "agenda.enabled": "enabled", agendaEnabled: "enabled",
+      "agenda.leadDays": "leadDays", agendaLeadDays: "leadDays",
+      "agenda.tailDays": "tailDays", agendaTailDays: "tailDays",
+    };
+    if (Object.prototype.hasOwnProperty.call(agendaKeyMap, k)) {
+      const key = agendaKeyMap[k];
+      const fallback = key === "enabled" ? true : 0;
+      const fmt = (v) => key === "enabled"
+        ? (v ? "Show in Agenda" : "Hide from Agenda")
+        : (v === 0 ? "Same day" : v === 1 ? "1 day" : v + " days");
+      const noteAgenda = cleanAgendaWindow(noteObj.agenda ?? srcLayers.noteAgenda);
+      const catAgenda = cleanAgendaWindow(catObj.agenda ?? srcLayers.categoryAgenda);
+      const globalAgenda = cleanAgendaWindow(globalObj.agenda ?? srcLayers.globalAgenda);
+      let inherited;
+      if (Object.prototype.hasOwnProperty.call(noteAgenda, key)) {
+        inherited = pack(noteAgenda[key], "note", noteTitle, fmt(noteAgenda[key]), noteSourceLabel);
+      } else if (Object.prototype.hasOwnProperty.call(catAgenda, key)) {
+        inherited = pack(catAgenda[key], "category", catName, fmt(catAgenda[key]), catSourceLabel);
+      } else {
+        const val = Object.prototype.hasOwnProperty.call(globalAgenda, key) ? globalAgenda[key] : fallback;
+        inherited = pack(val, "global", "", fmt(val), "global defaults");
+      }
+      const itemAgenda = cleanAgendaWindow(item?.x?.agendaWindow);
+      if (Object.prototype.hasOwnProperty.call(itemAgenda, key)) {
+        return pack(itemAgenda[key], "item", "", fmt(itemAgenda[key]), "this item", fmt(itemAgenda[key]), inherited);
+      }
+      return inherited;
+    }
+
+    if (k === "color" || k === "colour") {
+      const rawNote = String(noteObj.color ?? srcLayers.noteColor ?? "").trim();
+      const rawCat = String(catObj.color ?? srcLayers.categoryColor ?? "").trim();
+      const resolved = resolveItemColor(rawNote, rawCat);
+      if (resolved && rawNote && rawNote !== "none") {
+        const lower = rawNote.toLowerCase();
+        const hex = PALETTE_COLOR_HEX[lower] || resolveCssColor(rawNote) || rawNote;
+        const valLabel = PALETTE_COLOR_HEX[lower] ? (lower + " " + hex) : hex;
+        const srcLbl = noteTitle ? ("note " + noteTitle + " colour") : "note colour";
+        return pack(hex, "note", noteTitle, valLabel, srcLbl, "Inherit (" + srcLbl + ": " + valLabel + ")");
+      }
+      if (resolved && rawCat && rawCat !== "none") {
+        const lower = rawCat.toLowerCase();
+        const hex = PALETTE_COLOR_HEX[lower] || resolveCssColor(rawCat) || rawCat;
+        const valLabel = PALETTE_COLOR_HEX[lower] ? (lower + " " + hex) : hex;
+        const srcLbl = catName ? ("category " + catName + " colour") : "category colour";
+        return pack(hex, "category", catName, valLabel, srcLbl, "Inherit (" + srcLbl + ": " + valLabel + ")");
+      }
+      return pack("", "none", "", "none", "default accent", "Inherit (no note or category colour)");
+    }
+
+    const notifyMatch = /^notify\.(pre|due|followup)(?:\.(enabled|leadMinutes|delayMinutes))?$/.exec(k);
+    if (notifyMatch) {
+      const stage = notifyMatch[1], field = notifyMatch[2] || "";
+      const catNotify = cleanCategoryNotify(catObj.notify ?? srcLayers.categoryNotify);
+      const baseRule = catNotify[stage];
+      const baseSource = hasCategory ? "category" : "global";
+      const baseSourceName = hasCategory ? catName : "";
+      const baseSourceLabel = hasCategory ? catSourceLabel : "global defaults";
+      const itemRule = cleanNotifyOverrides(item?.x?.notify)[stage];
+      if (field) {
+        const fmtField = (v) => field === "enabled" ? (v ? "On" : "Off") : (v + " min");
+        const inh = pack(baseRule[field], baseSource, baseSourceName, fmtField(baseRule[field]), baseSourceLabel);
+        if (itemRule && Object.prototype.hasOwnProperty.call(itemRule, field)) {
+          return pack(itemRule[field], "item", "", fmtField(itemRule[field]), "this item", fmtField(itemRule[field]), inh);
+        }
+        return inh;
+      }
+      const pickShape = (r) => stage === "pre"
+        ? { enabled: r.enabled, leadMinutes: r.leadMinutes }
+        : stage === "followup"
+          ? { enabled: r.enabled, delayMinutes: r.delayMinutes }
+          : { enabled: r.enabled };
+      const fmtStage = (r) => !r.enabled
+        ? "Off"
+        : stage === "pre"
+          ? ("On, " + r.leadMinutes + " min")
+          : stage === "followup"
+            ? ("On, " + r.delayMinutes + " min")
+            : "On";
+      const inhShape = pickShape(baseRule);
+      const inh = pack(inhShape, baseSource, baseSourceName, fmtStage(inhShape), baseSourceLabel);
+      if (itemRule && (Object.prototype.hasOwnProperty.call(itemRule, "enabled") || Object.prototype.hasOwnProperty.call(itemRule, "leadMinutes") || Object.prototype.hasOwnProperty.call(itemRule, "delayMinutes"))) {
+        const merged = pickShape({ ...baseRule, ...itemRule });
+        return pack(merged, "item", "", fmtStage(merged), "this item", fmtStage(merged), inh);
+      }
+      return inh;
+    }
+
+    const alertMatch = /^alert\.(pre|due|followup)\.(sound|quietAllow)$/.exec(k);
+    if (alertMatch) {
+      const stage = alertMatch[1], prop = alertMatch[2];
+      const globalAlert = cleanAlertSettings(globalObj.alert ?? srcLayers.globalAlert);
+      const catStage = cleanCategoryNotify(catObj.notify ?? srcLayers.categoryNotify)[stage];
+      const noteStage = cleanNotifyOverrides(noteObj.notify ?? srcLayers.noteNotify)[stage] || {};
+      const itemStage = cleanNotifyOverrides(item?.x?.notify)[stage] || {};
+      if (prop === "sound") {
+        const hasSound = (r) => Boolean(r && (r.soundSpecified === true || (r.soundSpecified === undefined && SOUND_LEVELS.includes(r.sound))));
+        const cap = (s) => s ? s[0].toUpperCase() + s.slice(1) : "Normal";
+        let inh;
+        if (hasSound(noteStage)) inh = pack(noteStage.sound, "note", noteTitle, cap(noteStage.sound), noteSourceLabel);
+        else if (hasSound(catStage)) inh = pack(catStage.sound, "category", catName, cap(catStage.sound), catSourceLabel);
+        else {
+          const gSound = globalAlert.stages[stage].sound || "normal";
+          inh = pack(gSound, "global", "", cap(gSound), "global defaults");
+        }
+        if (hasSound(itemStage)) return pack(itemStage.sound, "item", "", cap(itemStage.sound), "this item", cap(itemStage.sound), inh);
+        return inh;
+      }
+      const hasAllow = (r) => Boolean(r && (r.quietAllowSpecified === true || (r.quietAllowSpecified === undefined && Array.isArray(r.quietAllow))));
+      const fmtAllow = (arr) => arr.length ? arr.join(", ") : "none";
+      let inh;
+      if (hasAllow(noteStage)) inh = pack([...noteStage.quietAllow], "note", noteTitle, fmtAllow(noteStage.quietAllow), noteSourceLabel);
+      else if (hasAllow(catStage)) inh = pack([...catStage.quietAllow], "category", catName, fmtAllow(catStage.quietAllow), catSourceLabel);
+      else {
+        const gAllow = [...globalAlert.quietHours.allowed[stage]];
+        inh = pack(gAllow, "global", "", fmtAllow(gAllow), "global defaults");
+      }
+      if (hasAllow(itemStage)) return pack([...itemStage.quietAllow], "item", "", fmtAllow(itemStage.quietAllow), "this item", fmtAllow(itemStage.quietAllow), inh);
+      return inh;
+    }
+
+    if (k === "category") {
+      const sec = cleanCategoryName(srcLayers.sectionCategory ?? item?._sectionCategory ?? item?.x?.category ?? "");
+      const valLabel = sec || "no category";
+      const srcLabel = noteTitle ? ("note " + noteTitle + " section") : "note section";
+      const inh = pack(sec, "note", noteTitle, valLabel, srcLabel);
+      if (typeof item?.x?.categoryOverride === "string") {
+        const ov = cleanCategoryName(item.x.categoryOverride);
+        return pack(ov, "item", "", ov || "no category", "this item", ov || "no category", inh);
+      }
+      return inh;
+    }
+
+    return pack(null, "none", "", "", "none", "Inherit");
+  }
+
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

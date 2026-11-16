@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.184
+// @version 3.3.185
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.184, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.185, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.184";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.185";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -5845,12 +5845,173 @@ const __zentralEmbeddedLoader = (function () {
     });
   }
 
+  // OW-11: pure resolver describing what 'Inherit' gives (and which layer provides it) across
+  // Agenda window, item colour (T2.3g), category stage notify defaults, alert sound/quietAllow,
+  // and note-section category inheritance.
+  function describeInheritance(kind, item = null, layers = {}) {
+    const k = String(kind || "").trim();
+    const srcLayers = layers && typeof layers === "object" ? layers : {};
+    const noteObj = srcLayers.note && typeof srcLayers.note === "object" ? srcLayers.note : {};
+    const catObj = srcLayers.category && typeof srcLayers.category === "object" ? srcLayers.category : {};
+    const globalObj = srcLayers.global && typeof srcLayers.global === "object" ? srcLayers.global : {};
+    const noteTitle = String(noteObj.title ?? srcLayers.noteTitle ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+    const catName = cleanCategoryName(catObj.name ?? srcLayers.categoryName ?? "");
+    const hasCategory = Boolean(catName || srcLayers.category || srcLayers.categoryNotify || srcLayers.categoryAgenda || srcLayers.categoryColor);
+    const noteSourceLabel = noteTitle ? "note " + noteTitle : "linked note";
+    const catSourceLabel = catName ? "category " + catName : "category";
+    const pack = (value, source, sourceName, valueLabel, sourceLabel, labelOverride = "", inherited = null) => ({
+      value,
+      source,
+      sourceName,
+      valueLabel,
+      sourceLabel,
+      label: labelOverride || ("Inherit (" + valueLabel + ", from " + sourceLabel + ")"),
+      ...(inherited ? { inherited } : {}),
+    });
+
+    const agendaKeyMap = {
+      "agenda.enabled": "enabled", agendaEnabled: "enabled",
+      "agenda.leadDays": "leadDays", agendaLeadDays: "leadDays",
+      "agenda.tailDays": "tailDays", agendaTailDays: "tailDays",
+    };
+    if (Object.prototype.hasOwnProperty.call(agendaKeyMap, k)) {
+      const key = agendaKeyMap[k];
+      const fallback = key === "enabled" ? true : 0;
+      const fmt = (v) => key === "enabled"
+        ? (v ? "Show in Agenda" : "Hide from Agenda")
+        : (v === 0 ? "Same day" : v === 1 ? "1 day" : v + " days");
+      const noteAgenda = cleanAgendaWindow(noteObj.agenda ?? srcLayers.noteAgenda);
+      const catAgenda = cleanAgendaWindow(catObj.agenda ?? srcLayers.categoryAgenda);
+      const globalAgenda = cleanAgendaWindow(globalObj.agenda ?? srcLayers.globalAgenda);
+      let inherited;
+      if (Object.prototype.hasOwnProperty.call(noteAgenda, key)) {
+        inherited = pack(noteAgenda[key], "note", noteTitle, fmt(noteAgenda[key]), noteSourceLabel);
+      } else if (Object.prototype.hasOwnProperty.call(catAgenda, key)) {
+        inherited = pack(catAgenda[key], "category", catName, fmt(catAgenda[key]), catSourceLabel);
+      } else {
+        const val = Object.prototype.hasOwnProperty.call(globalAgenda, key) ? globalAgenda[key] : fallback;
+        inherited = pack(val, "global", "", fmt(val), "global defaults");
+      }
+      const itemAgenda = cleanAgendaWindow(item?.x?.agendaWindow);
+      if (Object.prototype.hasOwnProperty.call(itemAgenda, key)) {
+        return pack(itemAgenda[key], "item", "", fmt(itemAgenda[key]), "this item", fmt(itemAgenda[key]), inherited);
+      }
+      return inherited;
+    }
+
+    if (k === "color" || k === "colour") {
+      const rawNote = String(noteObj.color ?? srcLayers.noteColor ?? "").trim();
+      const rawCat = String(catObj.color ?? srcLayers.categoryColor ?? "").trim();
+      const resolved = resolveItemColor(rawNote, rawCat);
+      if (resolved && rawNote && rawNote !== "none") {
+        const lower = rawNote.toLowerCase();
+        const hex = PALETTE_COLOR_HEX[lower] || resolveCssColor(rawNote) || rawNote;
+        const valLabel = PALETTE_COLOR_HEX[lower] ? (lower + " " + hex) : hex;
+        const srcLbl = noteTitle ? ("note " + noteTitle + " colour") : "note colour";
+        return pack(hex, "note", noteTitle, valLabel, srcLbl, "Inherit (" + srcLbl + ": " + valLabel + ")");
+      }
+      if (resolved && rawCat && rawCat !== "none") {
+        const lower = rawCat.toLowerCase();
+        const hex = PALETTE_COLOR_HEX[lower] || resolveCssColor(rawCat) || rawCat;
+        const valLabel = PALETTE_COLOR_HEX[lower] ? (lower + " " + hex) : hex;
+        const srcLbl = catName ? ("category " + catName + " colour") : "category colour";
+        return pack(hex, "category", catName, valLabel, srcLbl, "Inherit (" + srcLbl + ": " + valLabel + ")");
+      }
+      return pack("", "none", "", "none", "default accent", "Inherit (no note or category colour)");
+    }
+
+    const notifyMatch = /^notify\.(pre|due|followup)(?:\.(enabled|leadMinutes|delayMinutes))?$/.exec(k);
+    if (notifyMatch) {
+      const stage = notifyMatch[1], field = notifyMatch[2] || "";
+      const catNotify = cleanCategoryNotify(catObj.notify ?? srcLayers.categoryNotify);
+      const baseRule = catNotify[stage];
+      const baseSource = hasCategory ? "category" : "global";
+      const baseSourceName = hasCategory ? catName : "";
+      const baseSourceLabel = hasCategory ? catSourceLabel : "global defaults";
+      const itemRule = cleanNotifyOverrides(item?.x?.notify)[stage];
+      if (field) {
+        const fmtField = (v) => field === "enabled" ? (v ? "On" : "Off") : (v + " min");
+        const inh = pack(baseRule[field], baseSource, baseSourceName, fmtField(baseRule[field]), baseSourceLabel);
+        if (itemRule && Object.prototype.hasOwnProperty.call(itemRule, field)) {
+          return pack(itemRule[field], "item", "", fmtField(itemRule[field]), "this item", fmtField(itemRule[field]), inh);
+        }
+        return inh;
+      }
+      const pickShape = (r) => stage === "pre"
+        ? { enabled: r.enabled, leadMinutes: r.leadMinutes }
+        : stage === "followup"
+          ? { enabled: r.enabled, delayMinutes: r.delayMinutes }
+          : { enabled: r.enabled };
+      const fmtStage = (r) => !r.enabled
+        ? "Off"
+        : stage === "pre"
+          ? ("On, " + r.leadMinutes + " min")
+          : stage === "followup"
+            ? ("On, " + r.delayMinutes + " min")
+            : "On";
+      const inhShape = pickShape(baseRule);
+      const inh = pack(inhShape, baseSource, baseSourceName, fmtStage(inhShape), baseSourceLabel);
+      if (itemRule && (Object.prototype.hasOwnProperty.call(itemRule, "enabled") || Object.prototype.hasOwnProperty.call(itemRule, "leadMinutes") || Object.prototype.hasOwnProperty.call(itemRule, "delayMinutes"))) {
+        const merged = pickShape({ ...baseRule, ...itemRule });
+        return pack(merged, "item", "", fmtStage(merged), "this item", fmtStage(merged), inh);
+      }
+      return inh;
+    }
+
+    const alertMatch = /^alert\.(pre|due|followup)\.(sound|quietAllow)$/.exec(k);
+    if (alertMatch) {
+      const stage = alertMatch[1], prop = alertMatch[2];
+      const globalAlert = cleanAlertSettings(globalObj.alert ?? srcLayers.globalAlert);
+      const catStage = cleanCategoryNotify(catObj.notify ?? srcLayers.categoryNotify)[stage];
+      const noteStage = cleanNotifyOverrides(noteObj.notify ?? srcLayers.noteNotify)[stage] || {};
+      const itemStage = cleanNotifyOverrides(item?.x?.notify)[stage] || {};
+      if (prop === "sound") {
+        const hasSound = (r) => Boolean(r && (r.soundSpecified === true || (r.soundSpecified === undefined && SOUND_LEVELS.includes(r.sound))));
+        const cap = (s) => s ? s[0].toUpperCase() + s.slice(1) : "Normal";
+        let inh;
+        if (hasSound(noteStage)) inh = pack(noteStage.sound, "note", noteTitle, cap(noteStage.sound), noteSourceLabel);
+        else if (hasSound(catStage)) inh = pack(catStage.sound, "category", catName, cap(catStage.sound), catSourceLabel);
+        else {
+          const gSound = globalAlert.stages[stage].sound || "normal";
+          inh = pack(gSound, "global", "", cap(gSound), "global defaults");
+        }
+        if (hasSound(itemStage)) return pack(itemStage.sound, "item", "", cap(itemStage.sound), "this item", cap(itemStage.sound), inh);
+        return inh;
+      }
+      const hasAllow = (r) => Boolean(r && (r.quietAllowSpecified === true || (r.quietAllowSpecified === undefined && Array.isArray(r.quietAllow))));
+      const fmtAllow = (arr) => arr.length ? arr.join(", ") : "none";
+      let inh;
+      if (hasAllow(noteStage)) inh = pack([...noteStage.quietAllow], "note", noteTitle, fmtAllow(noteStage.quietAllow), noteSourceLabel);
+      else if (hasAllow(catStage)) inh = pack([...catStage.quietAllow], "category", catName, fmtAllow(catStage.quietAllow), catSourceLabel);
+      else {
+        const gAllow = [...globalAlert.quietHours.allowed[stage]];
+        inh = pack(gAllow, "global", "", fmtAllow(gAllow), "global defaults");
+      }
+      if (hasAllow(itemStage)) return pack([...itemStage.quietAllow], "item", "", fmtAllow(itemStage.quietAllow), "this item", fmtAllow(itemStage.quietAllow), inh);
+      return inh;
+    }
+
+    if (k === "category") {
+      const sec = cleanCategoryName(srcLayers.sectionCategory ?? item?._sectionCategory ?? item?.x?.category ?? "");
+      const valLabel = sec || "no category";
+      const srcLabel = noteTitle ? ("note " + noteTitle + " section") : "note section";
+      const inh = pack(sec, "note", noteTitle, valLabel, srcLabel);
+      if (typeof item?.x?.categoryOverride === "string") {
+        const ov = cleanCategoryName(item.x.categoryOverride);
+        return pack(ov, "item", "", ov || "no category", "this item", ov || "no category", inh);
+      }
+      return inh;
+    }
+
+    return pack(null, "none", "", "", "none", "Inherit");
+  }
+
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -19887,11 +20048,6 @@ __zentralShim.register = function (def) {
         const noteAlertRow = h("div", { class: "zn-cal-note-alert-row" }, noteAlertDefaults, noteAgendaDefaults);
         noteAlertDefaults.addEventListener("click", () => { if (noteSelect.value) askNoteAlertDefaults(noteSelect.value); else status.textContent = "Choose a linked note first."; });
         noteAgendaDefaults.addEventListener("click", () => { if (noteSelect.value) askNoteAgendaDefaults(noteSelect.value); else status.textContent = "Choose a linked note first."; });
-        const agendaWindowEditor = buildAgendaWindowEditor(original?.x?.agendaWindow || {}, { inherit: true });
-        const agendaWindowSection = h("div", { class: "zn-recurrence-editor zn-cal-compose-section" },
-          h("strong", {}, "Agenda visibility (independent of alerts)"), agendaWindowEditor.element,
-          h("p", { class: "zn-empty" }, "Choose whether this item appears in Zen Agenda and how many local calendar days before or after its date it remains visible. Inherited values come from the linked note, category, then global defaults."));
-
         const categorySelect = h("select", { class: "zn-select", "aria-label": "Calendar category" });
         const categories = store.items.categoryList();
         let inheritCategory = "__zentral_note_category__", sourceCategory = "";
@@ -19907,6 +20063,36 @@ __zentralShim.register = function (def) {
         categorySelect.value = original?.x?.src === "list" && typeof original.x.categoryOverride !== "string" ? inheritCategory : (original?.x?.category || options.category || "");
         const selectedCategory = () => categorySelect.value === inheritCategory ? sourceCategory : categorySelect.value;
         const categoryRow = h("label", { class: "zn-field-row" }, h("span", {}, "Category"), categorySelect);
+        const composeLayers = () => {
+          const noteId = noteSelect.value;
+          const linked = noteId ? store.get(noteId) : null;
+          const catName = selectedCategory();
+          const catEntry = catName ? store.items.category(catName) : null;
+          return {
+            sectionCategory: sourceCategory,
+            note: linked ? {
+              id: linked.id,
+              title: titleOf(linked.body) || "",
+              color: linked.color || "",
+              agenda: (store.meta.calendarNoteAgendaOverrides || {})[linked.id] || null,
+              notify: (store.meta.calendarNoteAlertOverrides || {})[linked.id] || null,
+            } : null,
+            category: catEntry ? {
+              name: catEntry.name,
+              color: catEntry.color || "",
+              agenda: catEntry.agenda || null,
+              notify: catEntry.notify || null,
+            } : null,
+            global: {
+              agenda: store.meta.calendarAgendaDefaults || null,
+              alert: store.meta.calendarAlertSettings || null,
+            },
+          };
+        };
+        const agendaWindowEditor = buildAgendaWindowEditor(original?.x?.agendaWindow || {}, { inherit: true, getLayers: composeLayers });
+        const agendaWindowSection = h("div", { class: "zn-recurrence-editor zn-cal-compose-section" },
+          h("strong", {}, "Agenda visibility (independent of alerts)"), agendaWindowEditor.element,
+          h("p", { class: "zn-empty" }, "Choose whether this item appears in Zen Agenda and how many local calendar days before or after its date it remains visible. Inherited values come from the linked note, category, then global defaults."));
         const colorPreview = h("span", { class: "zn-cal-compose-color", "aria-hidden": "true" });
         const colorLabel = h("span", { class: "zn-cal-compose-color-label", "aria-live": "polite" }, "Color follows the linked note, then the category");
         const colorRow = h("div", { class: "zn-cal-compose-color-row" }, colorPreview, colorLabel);
@@ -19960,12 +20146,13 @@ __zentralShim.register = function (def) {
         endMode.addEventListener("change", syncRecurrence);
         syncRecurrence();
 
-        const notifySection = h("div", { class: "zn-recurrence-editor zn-cal-compose-alerts" }, h("strong", {}, "Reminder alerts"));
+        const notifyInheritHint = h("p", { class: "zn-empty zn-cal-compose-notify-inherit", "aria-live": "polite" });
+        const notifySection = h("div", { class: "zn-recurrence-editor zn-cal-compose-alerts" }, h("strong", {}, "Reminder alerts"), notifyInheritHint);
         const notifyInputs = {};
         const notifySelects = {};
         const categoryDefaults = () => C.cleanCategoryNotify(store.items.category(selectedCategory())?.notify);
         const oldNotify = original?.x?.notify || {};
-        const alertSoundEditor = buildAlertSoundEditor(oldNotify, { inherit: true });
+        const alertSoundEditor = buildAlertSoundEditor(oldNotify, { inherit: true, getLayers: composeLayers });
         const alertRules = [
           ["pre", "Tier 1 · Gentle pre-alert", "leadMinutes", [1, 2, 3, 5, 7, 10], 5],
           ["due", "Tier 2 · At due time", null, [], null],
@@ -20016,17 +20203,22 @@ __zentralShim.register = function (def) {
           save.textContent = original ? "Save calendar item" : (reminder ? "Create reminder" : "Create event");
           paintPreview();
         };
-        function currentColor() {
-          const noteId = noteSelect.value;
-          const linked = noteId ? store.get(noteId) : null;
-          const inherited = linked && linked.color && linked.color !== "none" ? colorHex(linked.color) : "";
-          const categoryColor = store.items.category(selectedCategory())?.color || "";
-          return inherited || categoryColor || "";
+        function syncComposeInheritance() {
+          const layers = composeLayers();
+          agendaWindowEditor.syncInheritance?.(layers);
+          alertSoundEditor.syncInheritance?.(layers);
+          const preDesc = C.describeInheritance("notify.pre", null, layers);
+          const dueDesc = C.describeInheritance("notify.due", null, layers);
+          const folDesc = C.describeInheritance("notify.followup", null, layers);
+          notifyInheritHint.textContent = `Stage defaults (from ${preDesc.sourceLabel}): Tier 1 ${preDesc.valueLabel} · Tier 2 ${dueDesc.valueLabel} · Tier 3 ${folDesc.valueLabel}`;
+          const cDesc = C.describeInheritance("color", null, layers);
+          colorPreview.style.backgroundColor = cDesc.value || "transparent";
+          colorLabel.textContent = cDesc.value
+            ? `Effective item colour: ${cDesc.label}`
+            : `No inherited or category colour (${cDesc.label})`;
         }
         function paintColor() {
-          const color = currentColor();
-          colorPreview.style.backgroundColor = color || "transparent";
-          colorLabel.textContent = color ? `Effective item colour: ${color}` : "No inherited or category colour";
+          syncComposeInheritance();
         }
         function paintPreview() {
           const all = allDay.checked, reminder = kind.value === "reminder";
@@ -21746,8 +21938,8 @@ __zentralShim.register = function (def) {
         const nameField = old ? null : field("Category name", "", "e.g. Birthdays");
         const color = colorPicker(old?.color || "#7d8da8", () => {});
         const defaults = CALENDAR_PART.cleanCategoryNotify(old?.notify);
-        const soundEditor = buildAlertSoundEditor(old?.notify || defaults, { inherit: true });
-        const agendaEditor = buildAgendaWindowEditor(old?.agenda || {}, { inherit: true });
+        const soundEditor = buildAlertSoundEditor(old?.notify || defaults, { inherit: true, getLayers: () => ({ global: { alert: store.meta.calendarAlertSettings } }) });
+        const agendaEditor = buildAgendaWindowEditor(old?.agenda || {}, { inherit: true, getLayers: () => ({ global: { agenda: store.meta.calendarAgendaDefaults } }) });
         const stageChoice = (label, value) => {
           const select = h("select", { class: "zn-select", "aria-label": label });
           select.append(h("option", { value: "on" }, "On"), h("option", { value: "off" }, "Off"));
@@ -21796,7 +21988,7 @@ __zentralShim.register = function (def) {
         nameField?.input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); submit(); } });
         if (nameField) { nameField.input.focus?.({ preventScroll: true }); }
       }
-      function buildAlertSoundEditor(raw, { inherit = false } = {}) {
+      function buildAlertSoundEditor(raw, { inherit = false, getLayers = null } = {}) {
         const source = raw?.stages || raw || {};
         const rows = [], fields = {};
         for (const stage of ["pre", "due", "followup"]) {
@@ -21804,7 +21996,8 @@ __zentralShim.register = function (def) {
           const soundExplicit = rule.soundSpecified === true || (rule.soundSpecified === undefined && Object.prototype.hasOwnProperty.call(rule, "sound"));
           const allowExplicit = rule.quietAllowSpecified === true || (rule.quietAllowSpecified === undefined && Object.prototype.hasOwnProperty.call(rule, "quietAllow"));
           const sound = h("select", { class: "zn-select", "aria-label": stage + " sound level" });
-          if (inherit) sound.append(h("option", { value: "" }, "Inherit"));
+          const inheritOption = inherit ? h("option", { value: "" }, "Inherit") : null;
+          if (inheritOption) sound.append(inheritOption);
           for (const level of CALENDAR_PART.SOUND_LEVELS) sound.append(h("option", { value: level }, level[0].toUpperCase() + level.slice(1)));
           sound.value = soundExplicit ? rule.sound : (inherit ? "" : (rule.sound || "normal"));
           const allowToggle = h("input", { type: "checkbox", "aria-label": stage + " quiet-hours bypass override" });
@@ -21820,14 +22013,27 @@ __zentralShim.register = function (def) {
             allowRow.append(h("label", {}, check, h("span", {}, level)));
           }
           allowToggle.addEventListener("change", () => { for (const check of Object.values(allowChecks)) check.disabled = inherit && !allowToggle.checked; });
+          const allowCaption = h("span", {}, inherit ? "Override quiet-hours bypass list" : "Quiet-hours bypass sounds");
           const row = h("div", { class: "zn-cal-alert-rule" },
             h("label", {}, h("span", {}, stage === "pre" ? "Tier 1 · Pre-alert sound" : stage === "due" ? "Tier 2 · Due sound" : "Tier 3 · Follow-up sound"), sound),
-            h("label", {}, allowToggle, h("span", {}, inherit ? "Override quiet-hours bypass list" : "Quiet-hours bypass sounds")), allowRow);
+            h("label", {}, allowToggle, allowCaption), allowRow);
           rows.push(row);
-          fields[stage] = { sound, allowToggle, allowChecks };
+          fields[stage] = { sound, inheritOption, allowToggle, allowCaption, allowChecks };
         }
+        const syncInheritance = (layersInput = null) => {
+          if (!inherit || !CALENDAR_PART?.describeInheritance) return;
+          const layers = layersInput || getLayers?.() || {};
+          for (const stage of ["pre", "due", "followup"]) {
+            const field = fields[stage];
+            if (field.inheritOption) field.inheritOption.textContent = CALENDAR_PART.describeInheritance("alert." + stage + ".sound", null, layers).label;
+            const qDesc = CALENDAR_PART.describeInheritance("alert." + stage + ".quietAllow", null, layers);
+            field.allowCaption.textContent = "Override quiet-hours bypass list — " + qDesc.label;
+          }
+        };
+        syncInheritance();
         return {
           element: h("div", { class: "zn-cal-alert-editor" }, ...rows),
+          syncInheritance,
           read() {
             const out = {};
             for (const stage of ["pre", "due", "followup"]) {
@@ -21840,11 +22046,12 @@ __zentralShim.register = function (def) {
           },
         };
       }
-      function buildAgendaWindowEditor(raw, { inherit = true } = {}) {
+      function buildAgendaWindowEditor(raw, { inherit = true, getLayers = null } = {}) {
         const current = CALENDAR_PART.cleanAgendaWindow(raw);
         const makeSelect = (label, key, maximum, defaultValue) => {
           const select = h("select", { class: "zn-select", "aria-label": label });
-          if (inherit) select.append(h("option", { value: "" }, "Inherit"));
+          const inheritOption = inherit ? h("option", { value: "" }, "Inherit") : null;
+          if (inheritOption) select.append(inheritOption);
           if (key === "enabled") {
             select.append(h("option", { value: "on" }, "Show in Agenda"), h("option", { value: "off" }, "Hide from Agenda"));
             select.value = Object.prototype.hasOwnProperty.call(current, key) ? (current[key] ? "on" : "off") : (inherit ? "" : (defaultValue ? "on" : "off"));
@@ -21853,22 +22060,31 @@ __zentralShim.register = function (def) {
             for (let n = 1; n <= maximum; n++) select.append(h("option", { value: String(n) }, n + " day" + (n === 1 ? "" : "s")));
             select.value = Object.prototype.hasOwnProperty.call(current, key) ? String(current[key]) : (inherit ? "" : String(defaultValue));
           }
-          return select;
+          return { select, inheritOption };
         };
         const enabled = makeSelect("Agenda inclusion", "enabled", 0, true);
         const lead = makeSelect("Days before item to show in Agenda", "leadDays", CALENDAR_PART.AGENDA_WINDOW_MAX_DAYS, 0);
         const tail = makeSelect("Days after item to keep in Agenda", "tailDays", CALENDAR_PART.AGENDA_WINDOW_MAX_DAYS, 0);
+        const syncInheritance = (layersInput = null) => {
+          if (!inherit || !CALENDAR_PART?.describeInheritance) return;
+          const layers = layersInput || getLayers?.() || {};
+          if (enabled.inheritOption) enabled.inheritOption.textContent = CALENDAR_PART.describeInheritance("agenda.enabled", null, layers).label;
+          if (lead.inheritOption) lead.inheritOption.textContent = CALENDAR_PART.describeInheritance("agenda.leadDays", null, layers).label;
+          if (tail.inheritOption) tail.inheritOption.textContent = CALENDAR_PART.describeInheritance("agenda.tailDays", null, layers).label;
+        };
+        syncInheritance();
         const element = h("div", { class: "zn-cal-agenda-window-editor" },
-          h("label", { class: "zn-field-row" }, h("span", {}, "Agenda inclusion"), enabled),
-          h("label", { class: "zn-field-row" }, h("span", {}, "Show before"), lead),
-          h("label", { class: "zn-field-row" }, h("span", {}, "Keep after"), tail));
+          h("label", { class: "zn-field-row" }, h("span", {}, "Agenda inclusion"), enabled.select),
+          h("label", { class: "zn-field-row" }, h("span", {}, "Show before"), lead.select),
+          h("label", { class: "zn-field-row" }, h("span", {}, "Keep after"), tail.select));
         return {
           element,
+          syncInheritance,
           read() {
             const out = {};
-            if (enabled.value) out.enabled = enabled.value === "on";
-            if (lead.value !== "") out.leadDays = Number(lead.value);
-            if (tail.value !== "") out.tailDays = Number(tail.value);
+            if (enabled.select.value) out.enabled = enabled.select.value === "on";
+            if (lead.select.value !== "") out.leadDays = Number(lead.select.value);
+            if (tail.select.value !== "") out.tailDays = Number(tail.select.value);
             return CALENDAR_PART.cleanAgendaWindow(out);
           },
         };
@@ -21891,7 +22107,7 @@ __zentralShim.register = function (def) {
         const target = store.get(noteId);
         if (!target || !CALENDAR_PART) return;
         const all = store.meta.calendarNoteAgendaOverrides || {};
-        const editor = buildAgendaWindowEditor(all[noteId] || {}, { inherit: true });
+        const editor = buildAgendaWindowEditor(all[noteId] || {}, { inherit: true, getLayers: () => ({ global: { agenda: store.meta.calendarAgendaDefaults } }) });
         const ok = chip("Save note Agenda defaults", true), clear = chip("Use inherited defaults"), cancel = chip("Cancel");
         openCalendarCard("Zen Agenda · " + (titleOf(target.body) || "Note"), editor.element,
           h("p", { class: "zn-empty" }, "These visibility rules apply to calendar items linked to this note unless an individual item overrides them. They do not change alert due times, snooze, or recurrence."),
@@ -21947,7 +22163,7 @@ __zentralShim.register = function (def) {
         if (!target || !CALENDAR_PART) return;
         const all = store.meta.calendarNoteAlertOverrides || {};
         const current = all[noteId] || {};
-        const editor = buildAlertSoundEditor(current, { inherit: true });
+        const editor = buildAlertSoundEditor(current, { inherit: true, getLayers: () => ({ global: { alert: store.meta.calendarAlertSettings } }) });
         const ok = chip("Save note defaults", true), clear = chip("Use inherited defaults"), cancel = chip("Cancel");
         openCalendarCard("Reminder sounds · " + (titleOf(target.body) || "Note"), editor.element,
           h("p", { class: "zn-empty" }, "These sound and quiet-hour bypass rules apply to reminders linked to this note unless an individual reminder overrides them."),
