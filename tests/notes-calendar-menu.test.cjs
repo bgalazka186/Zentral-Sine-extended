@@ -282,7 +282,7 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
     entry.click(); await flush();
     const card = q(root, ".zn-cal-compose-card");
     assert.ok(card, `${label} opens the full calendar composer`);
-    for (const name of ["Title", "Start date", "Linked note", "Calendar category", "Description", "Calendar note", "Time zone (IANA; blank = local)", "Repeat frequency"]) {
+    for (const name of ["Title", "Start date", "Linked note", "Calendar category", "Description", "Calendar note", "Time zone", "Repeat frequency"]) {
       assert.ok(card.querySelector(`[aria-label="${name}"]`), `composer includes ${name}`);
     }
     return card;
@@ -341,7 +341,7 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
     const category = card.querySelector('[aria-label="Calendar category"]'); category.value = "Work"; category.dispatchEvent(new Ev("change"));
     card.querySelector('[aria-label="Description"]').value = "A focused description";
     card.querySelector('[aria-label="Calendar note"]').value = "Calendar-only note";
-    const zone = card.querySelector('[aria-label="Time zone (IANA; blank = local)"]'); zone.value = "Europe/Warsaw"; zone.dispatchEvent(new Ev("input"));
+    const zone = card.querySelector('[aria-label="Time zone"]'); zone.value = "Europe/Warsaw"; zone.dispatchEvent(new Ev("input"));
     const frequency = card.querySelector('[aria-label="Repeat frequency"]'); frequency.value = "WEEKLY"; frequency.dispatchEvent(new Ev("change"));
     card.querySelector('[aria-label="Repeat interval"]').value = "2";
     for (const weekday of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]) card.querySelector(`[aria-label="${weekday}"]`).checked = false;

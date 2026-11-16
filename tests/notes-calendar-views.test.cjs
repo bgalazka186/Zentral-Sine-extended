@@ -382,12 +382,12 @@ const setSize = async (root, px) => {
   await chooseMenu(root, ".zn-calendar-tools", "Display time zone: Local");
   const zoneCard = q(root, '.zn-dialog-card[aria-label="Calendar display time zone"]');
   assert.ok(zoneCard, "display-zone editor opens from Calendar Tools");
-  const zoneInput = q(zoneCard, '[aria-label="IANA display time zone"]');
+  const zoneInput = q(zoneCard, '[aria-label="Display time zone"]');
   const applyZone = zoneCard.querySelectorAll("button").find((el) => el.textContent.trim() === "Apply time zone");
   zoneInput.value = "Mars/Olympus";
   applyZone.click();
   assert.equal(store.meta.calendarDisplayZone, "", "invalid IANA identifiers are refused without replacing the current zone");
-  assert.match(zoneCard.textContent, /Enter a valid IANA time zone/);
+  assert.match(zoneCard.textContent, /Choose a time zone from the list/);
   zoneInput.value = "Europe/Warsaw";
   applyZone.click();
   await flushRaf();

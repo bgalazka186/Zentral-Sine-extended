@@ -505,7 +505,7 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     await new Promise((r) => setImmediate(r));
     const calendarNote = qa(".zn-calendar-note-field")[0];
     const heading = qa(".zn-field").find((input) => input.getAttribute("aria-label") === "Heading jump target");
-    const zone = qa(".zn-field").find((input) => input.getAttribute("aria-label") === "Time zone (IANA; blank = local)");
+    const zone = qa(".zn-field").find((input) => input.getAttribute("aria-label") === "Time zone");
     assert.ok(calendarNote && heading && zone, "calendar note, heading and time-zone controls are present");
     type(calendarNote, "Bring the access badge and check the handover notes.");
     type(heading, "Morning shifts");

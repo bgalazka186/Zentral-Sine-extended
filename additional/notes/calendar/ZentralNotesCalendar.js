@@ -2740,17 +2740,69 @@
   }
 
   // ---------- time zones ----------
-  // An IANA zone name the engine knows, or "" (stored in x.tz so a Google sync can keep it).
+  // A zone the calendar can compute with, or "" (stored in x.tz so a Google sync can keep it). Two kinds (OW-23):
+  // an IANA name the engine knows ("Europe/Warsaw", returned as it was written), and a fixed offset from UTC, which
+  // may be written "UTC+3", "utc+03:00", "GMT-5:30", "+0530" and is always returned as "UTC+03:00". A fixed offset
+  // has no daylight-saving time and needs nothing from the engine; "UTC+0" is the IANA zone "UTC".
+  const FIXED_ZONE_MIN = -12 * 60, FIXED_ZONE_MAX = 14 * 60;
+  // Minutes east of UTC for a typed offset, or null. Only the quarter hours real zones use; "utc" alone is not an offset.
+  function parseZoneOffset(text) {
+    const m = /^(?:(?:utc|gmt)\s*)?([+\-\u2212\u2013])\s*(\d{1,2})(?:\s*[:.h]?\s*(\d{2}))?$/i.exec(String(text ?? "").trim());
+    if (!m) return null;
+    const hours = Number(m[2]), minutes = m[3] === undefined ? 0 : Number(m[3]);
+    if (hours > 14 || ![0, 15, 30, 45].includes(minutes)) return null;
+    const total = (m[1] === "+" ? 1 : -1) * (hours * 60 + minutes);
+    return total < FIXED_ZONE_MIN || total > FIXED_ZONE_MAX ? null : total || 0;
+  }
+  // "UTC+03:00" / "UTC-05:30" for whole minutes east of UTC ("UTC" for none), "" outside -12:00..+14:00.
+  function fixedZoneId(minutes) {
+    if (!Number.isInteger(minutes) || minutes < FIXED_ZONE_MIN || minutes > FIXED_ZONE_MAX) return "";
+    if (!minutes) return "UTC";
+    const abs = Math.abs(minutes);
+    return "UTC" + (minutes < 0 ? "-" : "+") + p2(Math.floor(abs / 60)) + ":" + p2(abs % 60);
+  }
+  // Minutes east of UTC of a zone in the stored form of a fixed offset, null for every other zone (IANA names, "").
+  function zoneFixedOffset(zone) {
+    const m = typeof zone === "string" && zone.length === 9 ? /^UTC([+-])(\d{2}):(\d{2})$/.exec(zone) : null;
+    return m ? (m[1] === "+" ? 1 : -1) * (Number(m[2]) * 60 + Number(m[3])) : null;
+  }
+  // Asking the engine whether it knows a name builds a formatter; the answer for a name never changes.
+  const ZONE_NAMES = new Map(), ZONE_FORMATTERS = new Map(), ZONE_CACHE_MAX = 600;
   function cleanZone(name) {
     const t = String(name || "").trim();
     if (!t) return "";
-    try { new Intl.DateTimeFormat("en", { timeZone: t }); return t; } catch (_) { return ""; }
+    const known = ZONE_NAMES.get(t);
+    if (known !== undefined) return known;
+    const offset = parseZoneOffset(t);
+    let clean = "";
+    if (offset !== null) clean = fixedZoneId(offset);
+    else { try { new Intl.DateTimeFormat("en", { timeZone: t }); clean = t; } catch (_) { clean = ""; } }
+    if (ZONE_NAMES.size >= ZONE_CACHE_MAX) ZONE_NAMES.clear();
+    ZONE_NAMES.set(t, clean);
+    return clean;
+  }
+  // One formatter per IANA zone (building one costs far more than using it). Never for the computer's own zone:
+  // that one can change while the program runs.
+  function zoneFormatter(zone) {
+    let formatter = ZONE_FORMATTERS.get(zone);
+    if (formatter) return formatter;
+    try { formatter = new Intl.DateTimeFormat("en-US", { timeZone: zone, calendar: "gregory", numberingSystem: "latn", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }); }
+    catch (_) { return null; }
+    if (ZONE_FORMATTERS.size >= ZONE_CACHE_MAX) ZONE_FORMATTERS.clear();
+    ZONE_FORMATTERS.set(zone, formatter);
+    return formatter;
   }
   function zoneParts(ms, zone = "") {
     const z = cleanZone(zone), date = new Date(Number(ms));
     if (!Number.isFinite(date.getTime())) return null;
+    const fixed = zoneFixedOffset(z);
+    if (fixed !== null) {
+      const wall = new Date(date.getTime() + fixed * MIN);
+      if (!Number.isFinite(wall.getTime())) return null;
+      return { year: wall.getUTCFullYear(), month: wall.getUTCMonth() + 1, day: wall.getUTCDate(), hour: wall.getUTCHours(), minute: wall.getUTCMinutes(), second: wall.getUTCSeconds() };
+    }
     try {
-      const formatter = new Intl.DateTimeFormat("en-US", { ...(z ? { timeZone: z } : {}), calendar: "gregory", numberingSystem: "latn", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+      const formatter = z ? zoneFormatter(z) : new Intl.DateTimeFormat("en-US", { calendar: "gregory", numberingSystem: "latn", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
       const parts = Object.create(null);
       for (const part of formatter.formatToParts(date)) if (part.type !== "literal") parts[part.type] = Number(part.value);
       if (![parts.year, parts.month, parts.day, parts.hour, parts.minute, parts.second].every(Number.isFinite)) return null;
@@ -2796,6 +2848,249 @@
   function clockIn(ms, zone) {
     const parts = zoneParts(ms, zone);
     return parts ? p2(parts.hour) + ":" + p2(parts.minute) : "--:--";
+  }
+
+  // ---------- choosing a time zone (OW-23) ----------
+  // The country of every zone, as area=CC:city,city|CC:...; from zone.tab of the tz database, plus the older spellings
+  // some engines still list (Asia/Calcutta beside Asia/Kolkata). The engine names the country (Intl.DisplayNames).
+  const ZONE_COUNTRIES = "Africa=AO:Luanda|BF:Ouagadougou|BI:Bujumbura|BJ:Porto-Novo|BW:Gaborone|CD:Kinshasa,Lubumbashi|CF:Bangui|CG:Brazzaville|CI:Abidjan|CM:Douala|DJ:Djibouti|DZ:Algiers|EG:Cairo|EH:El_Aaiun|ER:Asmara,Asmera|ES:Ceuta|ET:Addis_Ababa|GA:Libreville|GH:Accra|GM:Banjul|GN:Conakry|GQ:Malabo|GW:Bissau|KE:Nairobi|LR:Monrovia|LS:Maseru|LY:Tripoli|MA:Casablanca|ML:Bamako|MR:Nouakchott|MW:Blantyre|MZ:Maputo|NA:Windhoek|NE:Niamey|NG:Lagos|RW:Kigali|SD:Khartoum|SL:Freetown|SN:Dakar|SO:Mogadishu|SS:Juba|ST:Sao_Tome|SZ:Mbabane|TD:Ndjamena|TG:Lome|TN:Tunis|TZ:Dar_es_Salaam|UG:Kampala|ZA:Johannesburg|ZM:Lusaka|ZW:Harare;America=AG:Antigua|AI:Anguilla|AR:Argentina/Buenos_Aires,Argentina/Catamarca,Argentina/Cordoba,Argentina/Jujuy,Argentina/La_Rioja,Argentina/Mendoza,Argentina/Rio_Gallegos,Argentina/Salta,Argentina/San_Juan,Argentina/San_Luis,Argentina/Tucuman,Argentina/Ushuaia,Buenos_Aires,Catamarca,Cordoba,Jujuy,Mendoza|AW:Aruba|BB:Barbados|BL:St_Barthelemy|BO:La_Paz|BQ:Kralendijk|BR:Araguaina,Bahia,Belem,Boa_Vista,Campo_Grande,Cuiaba,Eirunepe,Fortaleza,Maceio,Manaus,Noronha,Porto_Velho,Recife,Rio_Branco,Santarem,Sao_Paulo|BS:Nassau|BZ:Belize|CA:Atikokan,Blanc-Sablon,Cambridge_Bay,Coral_Harbour,Creston,Dawson,Dawson_Creek,Edmonton,Fort_Nelson,Glace_Bay,Goose_Bay,Halifax,Inuvik,Iqaluit,Moncton,Rankin_Inlet,Regina,Resolute,St_Johns,Swift_Current,Toronto,Vancouver,Whitehorse,Winnipeg|CL:Coyhaique,Punta_Arenas,Santiago|CO:Bogota|CR:Costa_Rica|CU:Havana|CW:Curacao|DM:Dominica|DO:Santo_Domingo|EC:Guayaquil|GD:Grenada|GF:Cayenne|GL:Danmarkshavn,Godthab,Nuuk,Scoresbysund,Thule|GP:Guadeloupe|GT:Guatemala|GY:Guyana|HN:Tegucigalpa|HT:Port-au-Prince|JM:Jamaica|KN:St_Kitts|KY:Cayman|LC:St_Lucia|MF:Marigot|MQ:Martinique|MS:Montserrat|MX:Bahia_Banderas,Cancun,Chihuahua,Ciudad_Juarez,Hermosillo,Matamoros,Mazatlan,Merida,Mexico_City,Monterrey,Ojinaga,Tijuana|NI:Managua|PA:Panama|PE:Lima|PM:Miquelon|PR:Puerto_Rico|PY:Asuncion|SR:Paramaribo|SV:El_Salvador|SX:Lower_Princes|TC:Grand_Turk|TT:Port_of_Spain|US:Adak,Anchorage,Boise,Chicago,Denver,Detroit,Indiana/Indianapolis,Indiana/Knox,Indiana/Marengo,Indiana/Petersburg,Indiana/Tell_City,Indiana/Vevay,Indiana/Vincennes,Indiana/Winamac,Indianapolis,Juneau,Kentucky/Louisville,Kentucky/Monticello,Los_Angeles,Louisville,Menominee,Metlakatla,New_York,Nome,North_Dakota/Beulah,North_Dakota/Center,North_Dakota/New_Salem,Phoenix,Sitka,Yakutat|UY:Montevideo|VC:St_Vincent|VE:Caracas|VG:Tortola|VI:St_Thomas;Antarctica=AQ:Casey,Davis,DumontDUrville,Mawson,McMurdo,Palmer,Rothera,Syowa,Troll,Vostok|AU:Macquarie;Arctic=SJ:Longyearbyen;Asia=AE:Dubai|AF:Kabul|AM:Yerevan|AZ:Baku|BD:Dhaka|BH:Bahrain|BN:Brunei|BT:Thimphu|CN:Shanghai,Urumqi|CY:Famagusta,Nicosia|GE:Tbilisi|HK:Hong_Kong|ID:Jakarta,Jayapura,Makassar,Pontianak|IL:Jerusalem|IN:Calcutta,Kolkata|IQ:Baghdad|IR:Tehran|JO:Amman|JP:Tokyo|KG:Bishkek|KH:Phnom_Penh|KP:Pyongyang|KR:Seoul|KW:Kuwait|KZ:Almaty,Aqtau,Aqtobe,Atyrau,Oral,Qostanay,Qyzylorda|LA:Vientiane|LB:Beirut|LK:Colombo|MM:Rangoon,Yangon|MN:Hovd,Ulaanbaatar|MO:Macau|MY:Kuala_Lumpur,Kuching|NP:Kathmandu,Katmandu|OM:Muscat|PH:Manila|PK:Karachi|PS:Gaza,Hebron|QA:Qatar|RU:Anadyr,Barnaul,Chita,Irkutsk,Kamchatka,Khandyga,Krasnoyarsk,Magadan,Novokuznetsk,Novosibirsk,Omsk,Sakhalin,Srednekolymsk,Tomsk,Ust-Nera,Vladivostok,Yakutsk,Yekaterinburg|SA:Riyadh|SG:Singapore|SY:Damascus|TH:Bangkok|TJ:Dushanbe|TL:Dili|TM:Ashgabat|TW:Taipei|UZ:Samarkand,Tashkent|VN:Ho_Chi_Minh,Saigon|YE:Aden;Atlantic=BM:Bermuda|CV:Cape_Verde|ES:Canary|FK:Stanley|FO:Faeroe,Faroe|GS:South_Georgia|IS:Reykjavik|PT:Azores,Madeira|SH:St_Helena;Australia=AU:Adelaide,Brisbane,Broken_Hill,Darwin,Eucla,Hobart,Lindeman,Lord_Howe,Melbourne,Perth,Sydney;Europe=AD:Andorra|AL:Tirane|AT:Vienna|AX:Mariehamn|BA:Sarajevo|BE:Brussels|BG:Sofia|BY:Minsk|CH:Zurich|CZ:Prague|DE:Berlin,Busingen|DK:Copenhagen|EE:Tallinn|ES:Madrid|FI:Helsinki|FR:Paris|GB:London|GG:Guernsey|GI:Gibraltar|GR:Athens|HR:Zagreb|HU:Budapest|IE:Dublin|IM:Isle_of_Man|IT:Rome|JE:Jersey|LI:Vaduz|LT:Vilnius|LU:Luxembourg|LV:Riga|MC:Monaco|MD:Chisinau|ME:Podgorica|MK:Skopje|MT:Malta|NL:Amsterdam|NO:Oslo|PL:Warsaw|PT:Lisbon|RO:Bucharest|RS:Belgrade|RU:Astrakhan,Kaliningrad,Kirov,Moscow,Samara,Saratov,Ulyanovsk,Volgograd|SE:Stockholm|SI:Ljubljana|SK:Bratislava|SM:San_Marino|TR:Istanbul|UA:Kiev,Kyiv,Simferopol|VA:Vatican;Indian=CC:Cocos|CX:Christmas|IO:Chagos|KM:Comoro|MG:Antananarivo|MU:Mauritius|MV:Maldives|RE:Reunion|SC:Mahe|TF:Kerguelen|YT:Mayotte;Pacific=AS:Pago_Pago|CK:Rarotonga|CL:Easter|EC:Galapagos|FJ:Fiji|FM:Chuuk,Kosrae,Pohnpei,Ponape,Truk|GU:Guam|KI:Enderbury,Kanton,Kiritimati,Tarawa|MH:Kwajalein,Majuro|MP:Saipan|NC:Noumea|NF:Norfolk|NR:Nauru|NU:Niue|NZ:Auckland,Chatham|PF:Gambier,Marquesas,Tahiti|PG:Bougainville,Port_Moresby|PN:Pitcairn|PW:Palau|SB:Guadalcanal|TK:Fakaofo|TO:Tongatapu|TV:Funafuti|UM:Midway,Wake|US:Honolulu|VU:Efate|WF:Wallis|WS:Apia";
+  // Abbreviations people type. The engine gives them for a few zones per language only (CET in en-GB, EST in en-US),
+  // so they are taken from its English long name ("Central European Summer Time"): name without its ending:standard/daylight.
+  const ZONE_ABBREVIATIONS = "Central European:CET/CEST|Eastern European:EET/EEST|Western European:WET/WEST|Greenwich Mean:GMT|British:/BST|Irish:IST|Moscow:MSK|East Africa:EAT|Central Africa:CAT|West Africa:WAT|South Africa:SAST|Eastern:EST/EDT|Central:CST/CDT|Mountain:MST/MDT|Pacific:PST/PDT|Alaska:AKST/AKDT|Hawaii-Aleutian:HST/HDT|Atlantic:AST/ADT|Newfoundland:NST/NDT|Cuba:CST/CDT|India:IST|Pakistan:PKT|Israel:IST/IDT|Japan:JST|Korean:KST|China:CST|Hong Kong:HKT|Singapore:SGT|Indochina:ICT|Western Indonesia:WIB|Central Indonesia:WITA|Eastern Indonesia:WIT|Australian Eastern:AEST/AEDT|Australian Central:ACST/ACDT|Australian Western:AWST|New Zealand:NZST/NZDT|Chamorro:ChST|Brasilia:BRT|Argentina:ART|Gulf:GST|Coordinated Universal:UTC";
+  // The fixed offsets the picker lists: every whole hour from -12 to +14 and the half and three-quarter hours in use.
+  const FIXED_ZONE_CHOICES = Object.freeze([-720, -660, -600, -570, -540, -480, -420, -360, -300, -240, -210, -180, -120, -60, 0, 60, 120, 180, 210, 240, 270, 300, 330, 345, 360, 390, 420, 480, 525, 540, 570, 600, 630, 660, 720, 765, 780, 840]);
+  // Cities the tz database renamed: both spellings are found, the newer one is shown whichever the engine lists.
+  const ZONE_CITY_NAMES = "Calcutta=Kolkata|Kiev=Kyiv|Saigon=Ho Chi Minh|Katmandu=Kathmandu|Rangoon=Yangon|Godthab=Nuuk|Faeroe=Faroe|Asmera=Asmara";
+  const ZONE_RECENT_MAX = 6;
+  let zoneCountryIndex = null, zoneAbbreviationIndex = null, zoneCityIndex = null, zoneChoiceMemo = null;
+  function zoneCountryCode(id) {
+    if (!zoneCountryIndex) {
+      zoneCountryIndex = new Map();
+      for (const part of ZONE_COUNTRIES.split(";")) {
+        const cut = part.indexOf("="), area = part.slice(0, cut);
+        for (const entry of part.slice(cut + 1).split("|")) for (const city of entry.slice(3).split(",")) zoneCountryIndex.set(area + "/" + city, entry.slice(0, 2));
+      }
+    }
+    return zoneCountryIndex.get(String(id)) || "";
+  }
+  function zoneAbbreviation(longName) {
+    if (!zoneAbbreviationIndex) {
+      zoneAbbreviationIndex = new Map();
+      for (const entry of ZONE_ABBREVIATIONS.split("|")) { const [name, pair] = entry.split(":"), [standard, daylight = ""] = pair.split("/"); zoneAbbreviationIndex.set(name, [standard, daylight]); }
+    }
+    const text = String(longName || ""), daylight = /(?:Summer|Daylight) Time$/.test(text);
+    const found = zoneAbbreviationIndex.get(text.replace(/ (?:Standard|Summer|Daylight) Time$| Time$/, ""));
+    // [the one in force, the one of the other half of the year] ("cest" finds Berlin in winter too).
+    return found ? [found[daylight ? 1 : 0] || "", found[daylight ? 0 : 1] || ""] : ["", ""];
+  }
+  // [name shown, other spelling] of a city as the zone id writes it.
+  function zoneCityName(city) {
+    if (!zoneCityIndex) {
+      zoneCityIndex = new Map();
+      for (const entry of ZONE_CITY_NAMES.split("|")) { const [old, current] = entry.split("="); zoneCityIndex.set(old, [current, old]); zoneCityIndex.set(current, [current, old]); }
+    }
+    return zoneCityIndex.get(city) || [city, ""];
+  }
+  // "UTC+01:00" for minutes east of UTC (any whole minutes; this is text for people, not a zone id).
+  function zoneOffsetText(minutes) {
+    if (!Number.isFinite(minutes)) return "";
+    const abs = Math.abs(Math.round(minutes));
+    return "UTC" + (minutes < 0 ? "-" : "+") + p2(Math.floor(abs / 60)) + ":" + p2(abs % 60);
+  }
+  // Minutes east of UTC that a zone is at an instant ("" = the computer's zone), NaN for an unknown zone.
+  function zoneOffsetAt(zone, at) {
+    const ms = Number(at);
+    if (!Number.isFinite(ms)) return NaN;
+    if (!zone) return -new Date(ms).getTimezoneOffset();
+    const valid = cleanZone(zone);
+    if (!valid) return NaN;
+    const fixed = zoneFixedOffset(valid);
+    if (fixed !== null) return fixed;
+    const parts = zoneParts(ms, valid);
+    if (!parts) return NaN;
+    return Math.round((Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - Math.floor(ms / 1000) * 1000) / MIN);
+  }
+  // Lower case, no accents, no punctuation: what is typed is compared with this form of every name.
+  function zoneSearchText(text) {
+    return String(text ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\u0142/g, "l").replace(/\u0141/g, "L").toLowerCase()
+      .replace(/\u2212|\u2013/g, "-").replace(/[_/,;()]+/g, " ").replace(/\s+/g, " ").trim();
+  }
+  // The offset and the English long name of an IANA zone at an instant, from ONE formatter (building a formatter
+  // is what costs: about a tenth of a millisecond, and the picker asks for some 420 zones). null = unknown zone.
+  function zoneFacts(id, at) {
+    try {
+      const parts = Object.create(null);
+      for (const part of new Intl.DateTimeFormat("en-US", { timeZone: id, calendar: "gregory", numberingSystem: "latn", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZoneName: "long" }).formatToParts(new Date(at))) {
+        if (part.type === "timeZoneName") parts.long = part.value;
+        else if (part.type !== "literal") parts[part.type] = Number(part.value);
+      }
+      if (![parts.year, parts.month, parts.day, parts.hour, parts.minute, parts.second].every(Number.isFinite)) return null;
+      const long = /^(?:GMT|UTC)[+\-\u2212]/.test(parts.long || "") ? "" : parts.long || "";
+      return { long, offsetMin: Math.round((Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - Math.floor(at / 1000) * 1000) / MIN) };
+    } catch (_) { return null; }
+  }
+  const zoneOffsetShort = (offset) => offset.replace(/^UTC([+-])0?(\d+):(\d\d)$/, (_, sign, hours, minutes) => sign + hours + (minutes === "00" ? "" : ":" + minutes));
+  function fixedZoneChoice(id) {
+    const utc = id === "UTC", offsetMin = utc ? 0 : zoneFixedOffset(id), offset = zoneOffsetText(offsetMin), short = zoneOffsetShort(offset);
+    return Object.freeze({ id, kind: "offset", city: "", area: "", sub: "", countryCode: "", country: "", offsetMin, offset, abbr: utc ? "UTC" : "", name: utc ? "Coordinated Universal Time" : "Fixed offset, no daylight-saving time",
+      label: utc ? "UTC" : offset, detail: utc ? "UTC+00:00 · Coordinated Universal Time" : "Fixed offset, no daylight-saving time", cityKey: "", countryKey: "", abbrKey: utc ? "utc" : "",
+      search: zoneSearchText([id, offset, "utc" + short, "gmt" + short, short, utc ? "gmt z zulu coordinated universal greenwich" : "", "fixed offset"].join(" ")) });
+  }
+  function namedZoneChoice(id, facts, names) {
+    const cut = id.indexOf("/"), area = cut > 0 ? id.slice(0, cut) : "", rest = (cut > 0 ? id.slice(cut + 1) : id).split("/");
+    const [city, otherCity] = zoneCityName(rest.pop().replace(/_/g, " ")), sub = rest.join(" ").replace(/_/g, " ");
+    const countryCode = zoneCountryCode(id), country = String(names?.country || ""), countryLocal = String(names?.countryLocal || "");
+    const [abbr, otherAbbr] = zoneAbbreviation(facts.long), offset = zoneOffsetText(facts.offsetMin), short = zoneOffsetShort(offset);
+    return Object.freeze({ id, kind: "zone", city, area, sub, countryCode, country, offsetMin: facts.offsetMin, offset, abbr, name: facts.long,
+      label: city + (country ? ", " + country : sub ? ", " + sub : ""), detail: [offset, abbr, facts.long].filter(Boolean).join(" · "),
+      cityKey: zoneSearchText(city), countryKey: zoneSearchText(country), abbrKey: zoneSearchText(abbr),
+      search: zoneSearchText([city, otherCity, country, countryLocal, countryCode, sub, area, abbr, otherAbbr, facts.long, id, offset, "utc" + short, "gmt" + short, short].join(" ")) });
+  }
+  // One entry of the picker for any zone cleanZone accepts (null otherwise), also one the list does not hold
+  // (a stored "Asia/Kolkata" where the engine lists Asia/Calcutta, "UTC+08:15").
+  function zoneChoice(zone, now) {
+    const id = cleanZone(zone), at = Number(now);
+    if (!id || !Number.isFinite(at)) return null;
+    if (id === "UTC" || zoneFixedOffset(id) !== null) return fixedZoneChoice(id);
+    const facts = zoneFacts(id, at);
+    if (!facts) return null;
+    const code = zoneCountryCode(id);
+    let country = code;
+    try { country = new Intl.DisplayNames(["en"], { type: "region" }).of(code) || code; } catch (_) {}
+    return namedZoneChoice(id, facts, { country: code ? country : "" });
+  }
+  // Every zone the picker offers at `now`: the IANA zones the engine lists (city, country, the offset in force at
+  // that instant, abbreviation) sorted by city, then the fixed offsets from UTC-12:00 to UTC+14:00.
+  // opts: { zones: ids instead of the engine's list, locale: a second language for country names (search only) }.
+  function zoneChoices(now, opts = {}) {
+    const at = Number(now);
+    if (!Number.isFinite(at)) return [];
+    const custom = Array.isArray(opts.zones), locale = typeof opts.locale === "string" ? opts.locale : "";
+    // Offsets and names change on quarter hours only, so one list serves until the next one.
+    const stamp = Math.floor(at / (15 * MIN)) + "|" + locale;
+    if (!custom && zoneChoiceMemo?.stamp === stamp) return zoneChoiceMemo.list.slice();
+    let ids = custom ? opts.zones : null;
+    if (!ids) { try { ids = Intl.supportedValuesOf("timeZone"); } catch (_) { ids = null; } }
+    if (!ids || !ids.length) { zoneCountryCode(""); ids = [...zoneCountryIndex.keys()]; }
+    const regionNames = (language) => { try { return new Intl.DisplayNames([language], { type: "region" }); } catch (_) { return null; } };
+    const english = regionNames("en"), local = locale && !/^en\b/i.test(locale) ? regionNames(locale) : null;
+    const nameOf = (names, code) => { try { const name = names && code ? names.of(code) : ""; return name && name !== code ? name : ""; } catch (_) { return ""; } };
+    const seen = new Set(), zones = [];
+    for (const raw of ids) {
+      const id = String(raw || "");
+      // Names without an area (UTC, GMT, EST, CET) and the Etc/ zones are offered as fixed offsets instead.
+      if (!id.includes("/") || /^Etc\//i.test(id) || seen.has(id)) continue;
+      seen.add(id);
+      const facts = zoneFacts(id, at);
+      if (!facts) continue;
+      const code = zoneCountryCode(id);
+      zones.push(namedZoneChoice(id, facts, { country: nameOf(english, code) || code, countryLocal: nameOf(local, code) }));
+    }
+    zones.sort((a, b) => (a.cityKey < b.cityKey ? -1 : a.cityKey > b.cityKey ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const list = zones.concat(FIXED_ZONE_CHOICES.map((minutes) => fixedZoneChoice(fixedZoneId(minutes))));
+    if (!custom) zoneChoiceMemo = { stamp, list };
+    return list.slice();
+  }
+  // The choices that match what was typed, best first: an offset ("+3", "utc+3", "gmt-5:30") gives that fixed offset
+  // and then the zones at it now; words are looked for in city, country, abbreviation, zone name and id, and every
+  // word must be found ("new york", "poland", "cet", "america los"). Nothing typed = no result (the picker shows its groups).
+  function searchZones(choices, query, limit = 40) {
+    const list = Array.isArray(choices) ? choices.filter((choice) => choice && typeof choice.id === "string" && typeof choice.search === "string") : [];
+    const text = zoneSearchText(query), max = Number.isInteger(limit) && limit > 0 ? limit : 40;
+    if (!text) return [];
+    const typedOffset = parseZoneOffset(text);
+    if (typedOffset !== null) {
+      const id = fixedZoneId(typedOffset), exact = list.find((choice) => choice.id === id) || fixedZoneChoice(id);
+      return [exact].concat(list.filter((choice) => choice.kind === "zone" && choice.offsetMin === typedOffset)).slice(0, max);
+    }
+    const words = text.split(" ");
+    const scoreWord = (choice, word) => {
+      if (choice.abbrKey && choice.abbrKey === word) return 100;
+      if (choice.cityKey === word) return 96;
+      if (choice.cityKey.startsWith(word)) return 90;
+      if (choice.cityKey.includes(" " + word)) return 82;
+      if (choice.countryKey === word) return 76;
+      if (choice.countryKey.startsWith(word)) return 70;
+      if (choice.countryKey.includes(" " + word)) return 62;
+      const at = choice.search.indexOf(word);
+      if (at < 0) return 0;
+      for (let i = at; i >= 0; i = choice.search.indexOf(word, i + 1)) {
+        if (i && choice.search[i - 1] !== " ") continue;
+        const end = i + word.length;
+        return end === choice.search.length || choice.search[end] === " " ? 50 : 40;
+      }
+      return word.length >= 3 ? 10 : 0;
+    };
+    const found = [];
+    for (const choice of list) {
+      let total = 0, ok = true;
+      for (const word of words) { const score = scoreWord(choice, word); if (!score) { ok = false; break; } total += score; }
+      if (ok) found.push({ choice, total });
+    }
+    found.sort((a, b) => b.total - a.total || (a.choice.label < b.choice.label ? -1 : a.choice.label > b.choice.label ? 1 : 0));
+    return found.slice(0, max).map((entry) => entry.choice);
+  }
+  // The zone a typed text stands for: "" for nothing typed (the computer's zone); the id of an offset, of a zone
+  // named by its id, or of the one zone the text clearly means (a city, a country with one zone); null when the text
+  // is no zone or fits several ("cet", "united states"), so nothing is stored that the person did not choose.
+  function resolveZoneText(choices, text) {
+    const raw = String(text ?? "").trim();
+    if (!raw) return "";
+    const offset = parseZoneOffset(raw);
+    if (offset !== null) return fixedZoneId(offset);
+    const list = Array.isArray(choices) ? choices : [], lower = raw.toLowerCase();
+    const named = list.find((choice) => choice && typeof choice.id === "string" && choice.id.toLowerCase() === lower);
+    if (named) return named.id;
+    // An id the list does not hold: another spelling ("Asia/Kolkata"), "Etc/GMT-3", "US/Pacific". Kept as written.
+    if (raw.includes("/") && cleanZone(raw)) return zoneIdCase(raw);
+    const word = zoneSearchText(raw), found = searchZones(list, raw, list.length || 1);
+    const exact = found.filter((choice) => choice.cityKey === word || zoneSearchText(choice.label) === word);
+    if (exact.length === 1) return exact[0].id;
+    // "india" is also the beginning of Indiana and of the Indian Ocean; the country of that name has one zone.
+    const land = exact.length ? [] : found.filter((choice) => choice.countryKey === word);
+    if (land.length === 1) return land[0].id;
+    return found.length === 1 ? found[0].id : null;
+  }
+  // A zone id in the letter case of the tz database ("asia/kolkata" -> "Asia/Kolkata") where the engine or the
+  // country table knows it, otherwise as written. The engine takes any case, and what is stored is shown.
+  function zoneIdCase(id) {
+    const lower = id.toLowerCase();
+    try {
+      // Newer engines answer with the id they were given, older ones with the main id of the zone (Asia/Calcutta).
+      const resolved = new Intl.DateTimeFormat("en", { timeZone: id }).resolvedOptions().timeZone;
+      if (typeof resolved === "string" && resolved.toLowerCase() === lower) return resolved;
+    } catch (_) {}
+    zoneCountryCode("");
+    for (const known of zoneCountryIndex.keys()) if (known.toLowerCase() === lower) return known;
+    return id;
+  }
+  // The zones chosen lately, newest first, as stored: valid ids only, each once, at most six.
+  function cleanRecentZones(value, add = "") {
+    const out = [];
+    for (const raw of [add].concat(Array.isArray(value) ? value : [])) {
+      const id = cleanZone(raw);
+      if (id && !out.includes(id)) out.push(id);
+      if (out.length >= ZONE_RECENT_MAX) break;
+    }
+    return out;
+  }
+  // What the picker lists while nothing is typed: the computer's zone, the zones chosen lately, the fixed offsets,
+  // then every zone by part of the world. opts: { system: zone id of the computer, recent: ids, now }.
+  function zoneGroups(choices, opts = {}) {
+    const list = Array.isArray(choices) ? choices.filter((choice) => choice && typeof choice.id === "string") : [];
+    const byId = new Map(list.map((choice) => [choice.id, choice]));
+    const at = Number.isFinite(Number(opts.now)) ? Number(opts.now) : 0;
+    const pick = (id) => { const clean = cleanZone(id); return clean ? byId.get(clean) || zoneChoice(clean, at) : null; };
+    const groups = [], system = pick(opts.system);
+    if (system) groups.push({ id: "system", title: "This computer", items: [system] });
+    const recent = cleanRecentZones(opts.recent).map(pick).filter((choice) => choice && choice.id !== system?.id);
+    if (recent.length) groups.push({ id: "recent", title: "Chosen lately", items: recent });
+    const fixed = list.filter((choice) => choice.kind === "offset");
+    if (fixed.length) groups.push({ id: "offsets", title: "Fixed offset from UTC (no daylight-saving time)", items: fixed });
+    const areas = new Map();
+    for (const choice of list) if (choice.kind === "zone") { const key = choice.area || "Other"; if (!areas.has(key)) areas.set(key, []); areas.get(key).push(choice); }
+    for (const key of [...areas.keys()].sort()) groups.push({ id: "area-" + key, title: key, items: areas.get(key) });
+    return groups;
   }
 
   // ---------- text of a week (print / export) ----------
@@ -3392,7 +3687,7 @@
 
   // Snooze helper: whole local days later, keeping the wall-clock time (DST-safe). Returns ms.
   const snoozeDays = (ms, n) => addDays(ms, Math.round(Number(n) || 0));
-  // Convert a wall-clock date/time in an IANA zone to an instant. During a fall-back overlap the earlier
+  // Convert a wall-clock date/time in a zone to an instant. During a fall-back overlap the earlier
   // instant wins; during a spring-forward gap the first valid wall minute after the requested time wins.
   function zonedDateTimeToMs(dateKey, timeText, zone = "") {
     const day = parseYmd(dateKey), clock = /^(\d{1,2}):(\d{2})$/.exec(String(timeText || "").trim());
@@ -3403,18 +3698,35 @@
     const validZone = cleanZone(zone);
     if (!validZone) return null;
     const targetWall = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate(), hour, minute);
+    const fixed = zoneFixedOffset(validZone);
+    if (fixed !== null) return targetWall - fixed * MIN;
     const targetEnd = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate() + 1);
-    let formatter;
-    try {
-      formatter = new Intl.DateTimeFormat("en-US", { timeZone: validZone, calendar: "gregory", numberingSystem: "latn", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-    } catch (_) { return null; }
+    const formatter = zoneFormatter(validZone);
+    if (!formatter) return null;
+    // The clock of the zone at an instant, written as if it were UTC (whole minutes), or NaN.
+    const wallAt = (at) => {
+      const parts = Object.create(null);
+      for (const part of formatter.formatToParts(new Date(at))) if (part.type !== "literal") parts[part.type] = Number(part.value);
+      return [parts.year, parts.month, parts.day, parts.hour, parts.minute].every(Number.isFinite) ? Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute) : NaN;
+    };
+    // The instant is the wall time minus the offset in force, and an offset is between -12 and +14 hours, so the
+    // instant lies between 14 hours before and 12 hours after the wall time read as UTC. The offsets at those two
+    // ends are the only candidates while the zone changes its clock at most once in between; the earlier instant
+    // (the larger offset) is tried first, which is the first pass of a repeated hour. Each candidate is checked, so
+    // a wrong guess costs time, never a wrong answer: what is left (a skipped time, or a zone that changed twice in
+    // a day) is searched minute by minute as before OW-23, when every call paid for that search (1 to 6 ms).
+    const before = targetWall - 14 * 60 * MIN, after = targetWall + 12 * 60 * MIN;
+    const offsetBefore = wallAt(before) - before, offsetAfter = wallAt(after) - after;
+    if (Number.isFinite(offsetBefore) && Number.isFinite(offsetAfter)) {
+      const first = targetWall - Math.max(offsetBefore, offsetAfter), second = targetWall - Math.min(offsetBefore, offsetAfter);
+      if (wallAt(first) === targetWall) return first;
+      if (second !== first && wallAt(second) === targetWall) return second;
+    }
     let exact = null, next = null, nextWall = Infinity;
     const from = targetWall - 16 * 60 * MIN, to = targetWall + 16 * 60 * MIN;
     for (let at = from; at <= to; at += MIN) {
-      const parts = Object.create(null);
-      for (const part of formatter.formatToParts(new Date(at))) if (part.type !== "literal") parts[part.type] = Number(part.value);
-      if (![parts.year, parts.month, parts.day, parts.hour, parts.minute].every(Number.isFinite)) continue;
-      const wall = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+      const wall = wallAt(at);
+      if (!Number.isFinite(wall)) continue;
       if (wall === targetWall) { exact = at; break; }
       if (wall > targetWall && wall < targetEnd && (wall < nextWall || (wall === nextWall && (next === null || at < next)))) { nextWall = wall; next = at; }
     }
@@ -3605,7 +3917,7 @@
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

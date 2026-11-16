@@ -5905,7 +5905,7 @@
       const backedUp = new Set();
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, cardDock: "", cardW: 0,
         calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarTab: "tree",
-        calendarView: "month", calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "",
+        calendarView: "month", calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
         // The hours Week and Day show ({ on, startMin, endMin }; off = the whole day). Replaced as a whole, never changed in place.
         calendarHours: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHours(null) : { on: false, startMin: 480, endMin: 1200 },
         // The size of each calendar view ("auto" = fitted to the pane, or px; OW-03). Replaced as a whole, never changed in place.
@@ -6152,6 +6152,7 @@
             meta.calendarFilterCategory = typeof raw.calendarFilterCategory === "string" ? raw.calendarFilterCategory.slice(0, 80) : "";
             meta.calendarCursor = CALENDAR_PART.parseYmd(raw.calendarCursor) ? raw.calendarCursor : "";
             meta.calendarDisplayZone = CALENDAR_PART.cleanZone(raw.calendarDisplayZone) || "";
+            meta.calendarRecentZones = CALENDAR_PART.cleanRecentZones(raw.calendarRecentZones);
             meta.calendarAlertSettings = CALENDAR_PART.cleanAlertSettings(raw.calendarAlertSettings);
             meta.calendarNoteAlertOverrides = CALENDAR_PART.cleanNoteAlertOverrides(raw.calendarNoteAlertOverrides);
             meta.calendarAgendaDefaults = CALENDAR_PART.cleanAgendaWindow(raw.calendarAgendaDefaults);
@@ -12951,7 +12952,7 @@
         const calNote = h("textarea", { class: "zn-field zn-calendar-note-field", rows: "3", "aria-label": "Calendar note", placeholder: "Additional context kept with this calendar item" });
         calNote.value = original?.x?.calNote || options.calNote || "";
         const calNoteRow = h("label", { class: "zn-field-row" }, h("span", {}, "Calendar note"), calNote);
-        const zoneField = field("Time zone (IANA; blank = local)", zone, "e.g. Europe/Warsaw");
+        const zoneField = buildZonePicker({ label: "Time zone", value: zone, blank: "Empty: the times are on the clock of this computer." });
 
         const currentRule = (original?.recurrence || []).map((r) => C.parseRule(r)).find(Boolean) || null;
         const frequency = h("select", { class: "zn-select", "aria-label": "Repeat frequency" });
@@ -13111,8 +13112,7 @@
 
         const submit = () => {
           const date = C.parseYmd(startDate.input.value);
-          const zoneText = zoneField.input.value.trim();
-          const zoneValue = zoneText ? C.cleanZone(zoneText) : "";
+          const zoneValue = zoneField.read();
           const recurrence = (original?.recurrence || []).filter((r) => !C.parseRule(r));
           if (frequency.value !== "NONE") {
             const every = Number(interval.value);
@@ -13139,7 +13139,7 @@
             const target = title.input.value.trim() ? startDate.input : title.input;
             target.dataset.bad = "true"; target.focus(); status.textContent = "Enter a title and a valid start date."; return;
           }
-          if (zoneText && !zoneValue) { zoneField.input.dataset.bad = "true"; zoneField.input.focus(); status.textContent = "Enter a valid IANA time zone."; return; }
+          if (zoneValue === null) { zoneField.input.dataset.bad = "true"; zoneField.input.focus(); status.textContent = "Choose a time zone from the list, or type a zone name such as Europe/Warsaw or an offset such as UTC+3."; return; }
           const notify = {};
           if (kind.value === "reminder") {
             const sounds = alertSoundEditor.read();
@@ -13154,7 +13154,7 @@
             noteId: noteSelect.value, category: selectedCategory(),
             ...(original?.x?.src === "list" ? { categoryOverride: categorySelect.value === inheritCategory ? null : selectedCategory() } : {}),
             description: description.value, calNote: calNote.value,
-            heading: original?.x?.heading || options.heading || "", tz: zoneText,
+            heading: original?.x?.heading || options.heading || "", tz: zoneValue,
             recurrence, notify, agendaWindow: agendaWindowEditor.read(),
           }, nowMs());
           if (!item) {
@@ -13169,6 +13169,7 @@
           if (noteSync?.error) { status.textContent = noteSync.error; return; }
           const saved = store.items.upsert(item);
           if (!saved) { status.textContent = "Could not save the calendar item. Check calendar storage."; return; }
+          if (zoneValue !== zone) rememberCalendarZone(zoneValue);
           if (!original && !saved.x?.noteId) { try { store.mirrorItemToAgendaNote(saved.id, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
           else if (saved.x?.src === "list") { try { store.syncItemCategoryToNote(saved, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
           const startMs = item.start.date ? C.parseYmd(item.start.date).getTime() : Date.parse(item.start.dateTime);
@@ -13239,22 +13240,23 @@
         askCalendarComposer({ kind, allDay, date: startDate, endDate, linkCurrent: false });
       }
       function askCalendarDisplayZone() {
-        const C = CALENDAR_PART, current = calendarDisplayZone();
-        const zone = field("IANA display time zone", current, "e.g. Europe/Warsaw; leave blank for system local time");
+        const current = calendarDisplayZone();
+        const zone = buildZonePicker({ label: "Display time zone", value: current, blank: "Empty: the time zone of this computer." });
         const status = h("p", { class: "zn-empty", role: "status" }, "The display zone controls Week/Day wall-clock geometry, working-hours shading, busy ranges and the Now line. Stored UTC instants and item-specific time zones are not changed.");
         const save = chip("Apply time zone", true), reset = chip("Use system local time"), cancel = chip("Cancel");
-        const submit = (raw) => {
-          const value = String(raw || "").trim(), valid = value ? C.cleanZone(value) : "";
-          if (value && !valid) { zone.input.dataset.bad = "true"; zone.input.focus(); status.textContent = "Enter a valid IANA time zone, such as Europe/Warsaw."; return; }
+        const submit = (valid) => {
+          if (valid === null) { zone.input.dataset.bad = "true"; zone.input.focus(); status.textContent = "Choose a time zone from the list, or type a zone name such as Europe/Warsaw or an offset such as UTC+3."; return; }
           store.setMeta({ calendarDisplayZone: valid });
+          rememberCalendarZone(valid);
           closeDialog();
           renderCalendar();
           flash("Calendar display time zone: " + (valid || "system local"));
         };
-        save.addEventListener("click", () => submit(zone.input.value));
+        save.addEventListener("click", () => submit(zone.read()));
         reset.addEventListener("click", () => submit(""));
         cancel.addEventListener("click", closeDialog);
-        zone.input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); submit(zone.input.value); } });
+        // Enter with the list open takes a match (the picker has used the key up by then); otherwise it applies.
+        zone.input.addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.defaultPrevented) { event.preventDefault(); submit(zone.read()); } });
         openCalendarCard("Calendar display time zone", zone.row, status, h("div", { class: "zn-dialog-actions" }, cancel, reset, save));
         zone.input.focus({ preventScroll: true });
       }
@@ -15807,6 +15809,150 @@
         input.value = value;
         return { input, row: h("label", { class: "zn-field-row" }, h("span", {}, label), input) };
       };
+      // OW-23: one way to choose a time zone, for the calendar's display zone and for an item's own zone. Type a city,
+      // a country, an abbreviation or an offset ("berlin", "poland", "cet", "utc+3") and take a match with Enter or a
+      // click; "Browse…" lists every zone in groups, the computer's zone and the zones chosen lately on top. The field
+      // holds what is stored ("Europe/Warsaw", "UTC+03:00"); the line under it says what that is.
+      // -> { row, input, read }. read(): "" for an empty field, the zone, or null when the text is not one zone.
+      let zonePickerSeq = 0;
+      function buildZonePicker({ label, value = "", blank = "" }) {
+        const C = CALENDAR_PART, at = nowMs(), listId = "zn-zone-list-" + ++zonePickerSeq;
+        let choices = null, shown = [], nodes = [], active = -1, picked = C.cleanZone(value), host = null;
+        // Made at the first use only: the engine is asked about some 420 zones (about a tenth of a second).
+        const all = () => {
+          if (choices) return choices;
+          let locale = "";
+          try { locale = String(window.navigator?.language || ""); } catch (_) {}
+          return (choices = C.zoneChoices(at, { locale }));
+        };
+        const input = h("input", { type: "text", class: "zn-field zn-zone-input", spellcheck: "false", autocomplete: "off", role: "combobox", "aria-label": label, "aria-autocomplete": "list", "aria-expanded": "false", "aria-controls": listId, placeholder: "City, country, CET, UTC+3…" });
+        input.value = picked || String(value || "").trim();
+        const browse = chip("Browse…");
+        browse.title = "Show every time zone";
+        browse.setAttribute("aria-pressed", "false");
+        const hint = h("p", { class: "zn-empty zn-zone-hint", "aria-live": "polite" });
+        const list = h("div", { class: "zn-zone-list", id: listId, role: "listbox", "aria-label": label + ": matches" });
+        list.hidden = true;
+        const row = h("div", { class: "zn-zone-picker" }, h("div", { class: "zn-zone-row" }, h("label", { class: "zn-field-row" }, h("span", {}, label), input), browse), hint, list);
+        const read = () => {
+          const text = input.value.trim();
+          if (!text) return "";
+          return text === picked ? picked : C.resolveZoneText(all(), text);
+        };
+        const paintHint = () => {
+          const text = input.value.trim();
+          if (!text) { hint.textContent = blank; return; }
+          // While nothing was typed yet the list is not made: the stored zone is described on its own.
+          const zone = text === picked ? picked : choices ? C.resolveZoneText(choices, text) : C.cleanZone(text) || null;
+          const choice = zone ? choices?.find((entry) => entry.id === zone) || C.zoneChoice(zone, at) : null;
+          if (choice) hint.textContent = choice.label + " · " + choice.detail;
+          else if (!list.hidden && browse.classList.contains("is-on")) hint.textContent = "Choose a time zone from the list.";
+          else if (!choices || !C.searchZones(choices, text, 1).length) hint.textContent = "No time zone matches this text.";
+          else hint.textContent = list.hidden ? "Several time zones match this text. Press the down arrow to choose one." : "Several time zones match: choose one from the list.";
+        };
+        const setActive = (index) => {
+          if (nodes[active]) nodes[active].setAttribute("aria-selected", "false");
+          active = index >= 0 && index < nodes.length ? index : -1;
+          if (active < 0) { input.removeAttribute("aria-activedescendant"); return; }
+          nodes[active].setAttribute("aria-selected", "true");
+          input.setAttribute("aria-activedescendant", nodes[active].id);
+          nodes[active].scrollIntoView?.({ block: "nearest" });
+        };
+        const outside = (event) => { if (!row.contains(event.target)) closeList(); };
+        function closeList() {
+          if (list.hidden) return;
+          list.hidden = true; list.replaceChildren();
+          shown = []; nodes = []; active = -1;
+          input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant");
+          browse.classList.remove("is-on"); browse.setAttribute("aria-pressed", "false");
+          host?.removeEventListener("pointerdown", outside); host = null;
+          paintHint();
+          // A card that was made larger than the sheet has a height of its own: it does not follow what it holds.
+          if (dialog) scheduleFit();
+        }
+        // `browsing` = every zone in groups; otherwise what the typed text finds, best match first.
+        function openList(browsing) {
+          const kids = [];
+          shown = []; nodes = []; active = -1;
+          const add = (choice) => {
+            const node = h("div", { class: "zn-zone-option", id: listId + "-" + shown.length, role: "option", "aria-selected": "false" }, h("span", { class: "zn-zone-name" }, choice.label), h("span", { class: "zn-zone-detail" }, choice.detail));
+            node.dataset.zone = choice.id;
+            shown.push(choice); nodes.push(node); kids.push(node);
+          };
+          if (browsing) {
+            let system = "";
+            try { system = new Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (_) {}
+            for (const group of C.zoneGroups(all(), { system, recent: store.meta.calendarRecentZones, now: at })) {
+              kids.push(h("div", { class: "zn-zone-group", role: "presentation" }, group.title));
+              for (const choice of group.items) add(choice);
+            }
+          } else {
+            for (const choice of C.searchZones(all(), input.value, 40)) add(choice);
+            if (!shown.length) kids.push(h("div", { class: "zn-zone-none", role: "presentation" }, "No time zone matches. Try a city, a country or an offset such as UTC+3."));
+          }
+          list.replaceChildren(...kids);
+          if (list.hidden) {
+            list.hidden = false;
+            host = row.closest?.(".zn-dialog-card") || null;
+            host?.addEventListener("pointerdown", outside);
+          }
+          input.setAttribute("aria-expanded", "true");
+          browse.classList.toggle("is-on", browsing); browse.setAttribute("aria-pressed", String(browsing));
+          const current = browsing ? read() : null;
+          setActive(browsing ? (current ? shown.findIndex((choice) => choice.id === current) : -1) : shown.length ? 0 : -1);
+          paintHint();
+          if (dialog) scheduleFit();
+        }
+        const choose = (zone) => {
+          picked = C.cleanZone(zone);
+          input.value = picked;
+          delete input.dataset.bad;
+          closeList();
+          input.focus({ preventScroll: true });
+        };
+        input.addEventListener("input", () => {
+          picked = "";
+          delete input.dataset.bad;
+          if (input.value.trim()) openList(false);
+          else if (!list.hidden) closeList();
+          else paintHint();
+        });
+        input.addEventListener("keydown", (event) => {
+          if (event.isComposing) return;
+          const open = !list.hidden;
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault(); event.stopPropagation();
+            if (!open) openList(!input.value.trim());
+            else if (shown.length) setActive(event.key === "ArrowDown" ? Math.min(shown.length - 1, active + 1) : Math.max(0, active - 1));
+          } else if (event.key === "Enter" && open && shown[active]) {
+            // Takes the match. With the list closed Enter belongs to the dialog.
+            event.preventDefault(); event.stopPropagation();
+            choose(shown[active].id);
+          } else if (event.key === "Escape" && open) {
+            // Closes the list only; the next Escape closes the dialog.
+            event.preventDefault(); event.stopPropagation();
+            closeList();
+          }
+        });
+        browse.addEventListener("click", () => {
+          if (!list.hidden && browse.classList.contains("is-on")) closeList();
+          else openList(true);
+          input.focus({ preventScroll: true });
+        });
+        // A press on a match must not take the focus out of the field (that would close the list before the click).
+        list.addEventListener("mousedown", (event) => { if (event.target?.closest?.(".zn-zone-option, .zn-zone-group, .zn-zone-none")) event.preventDefault(); });
+        list.addEventListener("click", (event) => {
+          const node = event.target?.closest?.(".zn-zone-option");
+          if (node?.dataset.zone) choose(node.dataset.zone);
+        });
+        row.addEventListener("focusout", (event) => { if (event.relatedTarget && !row.contains(event.relatedTarget)) closeList(); });
+        paintHint();
+        return { row, input, read };
+      }
+      // A zone that was chosen goes to the top of "Chosen lately" in the picker (at most six are kept).
+      function rememberCalendarZone(zone) {
+        if (zone && CALENDAR_PART) store.setMeta({ calendarRecentZones: CALENDAR_PART.cleanRecentZones(store.meta.calendarRecentZones, zone) });
+      }
       // Fills an empty address field from the clipboard when it holds one address `accept` approves.
       // Asynchronous and best effort: a refused or empty clipboard changes nothing.
       function prefillFromClipboard(input, accept, onFill) {
@@ -16092,12 +16238,7 @@
         if (!value) return "";
         const ms = Date.parse(value);
         if (!Number.isFinite(ms)) return "";
-        const zone = CALENDAR_PART?.cleanZone?.(item.x?.tz) || "";
-        try {
-          const parts = new Intl.DateTimeFormat("en-CA", { timeZone: zone || undefined, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(ms));
-          const part = (type) => parts.find((p) => p.type === type)?.value || "";
-          return part("year") + "-" + part("month") + "-" + part("day");
-        } catch (_) { return CALENDAR_PART.ymd(new Date(ms)); }
+        return CALENDAR_PART.zonedDateKey(ms, CALENDAR_PART.cleanZone(item.x?.tz)) || CALENDAR_PART.ymd(new Date(ms));
       }
       function calendarItemMenuLabel(item) {
         const day = calendarItemDate(item);
@@ -16111,7 +16252,7 @@
         const noteField = h("textarea", { class: "zn-field zn-calendar-note-field", rows: "5", "aria-label": "Calendar note", placeholder: "Additional details shown on the calendar, not in the note tree" });
         noteField.value = current.x.calNote || "";
         const headingField = field("Heading jump target", current.x.heading || "", "e.g. Project milestones");
-        const zoneField = field("Time zone (IANA; blank = local)", current.x.tz || "", "e.g. Europe/Warsaw");
+        const zoneField = buildZonePicker({ label: "Time zone", value: current.x.tz || "", blank: "Empty: the times are on the clock of this computer." });
 
         // T2.3d: edit the RRULE on this exact item only. Other reminders/events on the same note remain independent.
         const currentRule = (current.recurrence || []).map((r) => CALENDAR_PART.parseRule(r)).find(Boolean) || null;
@@ -16168,9 +16309,8 @@
           h("p", { class: "zn-empty" }, "Calendar notes are stored with this item and never appear as separate notes in the sidebar. Recurrence applies only to this item."),
           h("div", { class: "zn-dialog-actions" }, cancel, ok));
         const submit = () => {
-          const rawZone = zoneField.input.value.trim();
-          const zone = rawZone ? CALENDAR_PART.cleanZone(rawZone) : "";
-          if (rawZone && !zone) { zoneField.input.dataset.bad = "true"; zoneField.input.focus(); return; }
+          const zone = zoneField.read();
+          if (zone === null) { zoneField.input.dataset.bad = "true"; zoneField.input.focus(); return; }
           let recurrence = (current.recurrence || []).filter((r) => !CALENDAR_PART.parseRule(r));
           if (frequency.value !== "NONE") {
             const every = Number(interval.value);
@@ -16197,6 +16337,7 @@
           }
           const saved = store.items.upsert({ ...current, recurrence, x: { ...current.x, calNote: noteField.value, heading: headingField.input.value.trim(), tz: zone } });
           if (!saved) return flash("This calendar item changed while you were editing. Reopen its details and try again.");
+          if (zone !== (current.x.tz || "")) rememberCalendarZone(zone);
           closeDialog();
           flash("Calendar item details saved");
         };
