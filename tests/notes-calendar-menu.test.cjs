@@ -168,6 +168,44 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   store.items.remove(listItem.id);
   root.all().find((el) => el.title === "All notes").click(); await flush();
 
+  // OW-05: the All notes row menu shares the same note-to-composer entry used by future drag/drop.
+  store.setMeta({ calendarCursor: tomorrowKey });
+  await flush();
+  const noteRow = root.querySelectorAll(".zn-item").find((node) => node.dataset.id === note.id);
+  assert.ok(noteRow, "All notes renders the source note row");
+  const noteContext = new Ev("contextmenu", { bubbles: true, clientX: 90, clientY: 94 });
+  noteRow.dispatchEvent(noteContext);
+  assert.equal(noteContext.defaultPrevented, true, "the native note context menu is prevented");
+  const addToCalendar = menuItem(root, "Add to Calendar…");
+  assert.ok(addToCalendar && !addToCalendar.disabled, "live notes offer Add to Calendar…");
+  const noteItemCount = store.items.list().length;
+  addToCalendar.click(); await flush();
+  const noteComposer = q(root, ".zn-cal-compose-card");
+  assert.ok(noteComposer, "the note menu opens the calendar composer");
+  assert.equal(noteComposer.querySelector('[aria-label="Title"]').value, "Source note", "the note title is the composer title");
+  assert.equal(noteComposer.querySelector('[aria-label="Linked note"]').value, note.id, "the source note is linked");
+  assert.equal(noteComposer.querySelector('[aria-label="Start date"]').value, tomorrowKey, "the selected calendar day is the default date");
+  assert.equal(noteComposer.querySelector('[aria-label="Item type"]').value, "reminder", "Add to Calendar defaults to a reminder");
+  noteComposer.querySelectorAll("button").find((button) => button.textContent.trim() === "Cancel").click(); await flush();
+  assert.equal(store.items.list().length, noteItemCount, "opening and cancelling the composer does not create a calendar item");
+
+  const deletedNote = store.create("# Deleted source note");
+  store.trash(deletedNote.id);
+  await store.flush(); await flush();
+  const trashChip = root.querySelectorAll(".zn-chips .zn-chip").find((button) => button.textContent.startsWith("Trash"));
+  assert.ok(trashChip);
+  trashChip.click(); await flush();
+  const deletedRow = root.querySelectorAll(".zn-item").find((node) => node.dataset.id === deletedNote.id);
+  assert.ok(deletedRow, "Trash lists the deleted note");
+  const deletedContext = new Ev("contextmenu", { bubbles: true, clientX: 90, clientY: 94 });
+  deletedRow.dispatchEvent(deletedContext);
+  const disabledCalendar = menuItem(root, "Add to Calendar…");
+  assert.ok(disabledCalendar?.disabled, "trashed notes show the calendar action disabled");
+  assert.equal(disabledCalendar.getAttribute("aria-disabled"), "true");
+  assert.match(disabledCalendar.textContent, /Restore the note before adding it to Calendar/);
+  assert.equal(q(root, ".zn-cal-compose-card"), null, "a trashed note cannot open the calendar composer");
+  root.querySelectorAll(".zn-chips .zn-chip").find((button) => button.textContent.trim() === "Notes").click(); await flush();
+
   // Month marks share the exact item menu model and keyboard contract, for events as well as reminders.
   const monthMark = root.querySelectorAll(".zn-cal-month-mark").find((node) => node.textContent.trim() === "Standalone review");
   assert.ok(monthMark, "month grid renders the standalone event mark");
