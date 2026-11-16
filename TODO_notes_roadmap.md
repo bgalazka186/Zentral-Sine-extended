@@ -2,24 +2,25 @@
 
 > **Read this first.** This file contains ONLY work that is still to do, in the order it should be done. Every finished (`DONE`) row lives in `docs/LEGACY_done_rows.md` and `docs/LEGACY_notes_roadmap.md`; never look there for work. Rebuilt 2026-11-14 from the old roadmap, two source-code audits (2026-11-13) and the owner's 2026-11-14 list.
 >
-> 1. **Do tasks in the order of the Master Order table.** Inside a phase go top to bottom; a task's `Depends on` must be `DONE` (removed from this file) first.
+> 1. **Do tasks in the order of the Master Order table**, top to bottom; a task's `Depends on` must be `DONE` (removed from this file) first. The blocks below follow the same order.
 > 2. **Each task is a block** (`####`) with Problem, Plan (ordered sub-steps), Tests. Carried-over tasks keep their original wording under 'Current state' / 'Full specification'.
 > 3. **When a task is finished: delete its block and its table row, renumber nothing (IDs are stable), append the finished row to `docs/LEGACY_done_rows.md`, and report it in the NEXT SESSION HANDOFF.** Partial work: keep the block, change `Status` to `PARTIAL` and write `DONE:` / `LEFT:`.
 > 4. Owner decisions are binding (see 'Ground rules' and 'Track 2 design rules').
 
 ### ID prefixes
 
-| Prefix | Meaning |
-| :-- | :-- |
-| `F0.x` | Test/measurement foundation |
-| `H1.x` | Hardening: loops, data loss, alert storms |
-| `PF2.x` | Performance |
-| `TM3.x` | Time correctness (wake, DST, overdue, missed) |
-| `UI4.x` | Interaction safety (click, drag, keyboard, re-render) |
-| `OW-xx` | Owner request or bug report (stable IDs) |
-| `SB6.x` | Zen sidebar polish |
-| `ST7.x` | Structural changes |
-| `T1.x`..`T4.x`, `B3.3.x` | Carried over from the previous roadmap |
+| Prefix                   | Meaning                                               |
+| :----------------------- | :---------------------------------------------------- |
+| `F0.x`                   | Test/measurement foundation                           |
+| `H1.x`                   | Hardening: loops, data loss, alert storms             |
+| `PF2.x`                  | Performance                                           |
+| `TM3.x`                  | Time correctness (wake, DST, overdue, missed)         |
+| `UI4.x`                  | Interaction safety (click, drag, keyboard, re-render) |
+| `OW-xx`                  | Owner request or bug report (stable IDs)              |
+| `SB6.x`                  | Zen sidebar polish                                    |
+| `ST7.x`                  | Structural changes                                    |
+| `T1.x`..`T4.x`, `B3.3.x` | Carried over from the previous roadmap                |
+| `DOC-x`                  | Documentation that disagrees with the code            |
 
 ## Ground rules
 
@@ -30,6 +31,7 @@ Finished work and the long history live in `docs/LEGACY_notes_roadmap.md` and `d
 - Effort: S = under one session slice, M = one session, L = several sessions or a new subsystem.
 - Never build: cloud sync inside the mod (owner: NO until the whole mod is finished); a sandboxed iframe with user JS (unsafe in chrome context); the Zen-native "Notes" folder as a Sync-excluded object (blocked, `docs/NOTES-ZEN-FOLDER-BLOCKER.md`).
 - Never build (added 2026-11-07, security): raw HTML from a note reaching the chrome document (`<script>`, `<style>`, `<iframe>`, `<object>`, `<embed>`, `<video src>` or any attribute copied from the note: K12, B23); embeds from any host other than YouTube (and only through the player in row 22); code that runs inside a note (Templater-style `<% %>`, N10); text-expander words such as `;date` (N11); opening a dropped file from inside Notes (show it in the folder instead).
+- Dropped on 2026-11-16, do not re-add: `T3.11` (live checks and low-value polish), `T4.4` (its premise was wrong: `stretched()` and `SLOT.quad` are live code), `AU-B2` (folded into `T3.4a`).
 - Dropped on 2026-11-07, do not re-add without the owner: "panel-like options for standalone Notes: push page, reveal on hover over the top edge" (the card already has them since 3.1.28); "Open in new container on the Notes folder" (edge case, our tabs already hide the native items); "footer-counter debounce knob" (breaks the rule that a setting exists only where a person can notice a difference).
 - Effort and impact columns: S = under one session slice, M = one session, L = several sessions or a new subsystem.
 
@@ -69,180 +71,193 @@ These apply to every row. They come from past regressions; each rule was checked
 
 ## Master Order (all remaining work)
 
-Impact and effort: S = under one session slice, M = one session, L = several sessions.
+Order = impact first (High to Low); inside the same impact the cheapest effort first (S to L); a row never comes before a row it depends on. Impact and effort: S = under one session slice, M = one session, L = several sessions.
 
-| Order | ID | Status | Impact | Effort | Depends on | Task |
-| --: | :-- | :-- | :-- | :-- | :-- | :-- |
-| 27 | `AU-B4b` | `OPEN` | Med-High | L | AU-B4a | [new] Notes language: interface strings (English/Polish) |
-| 28 | `T2.4c1` | `PARTIAL` | High | M | — | Week/day 24-hour grid, lanes and time shading |
-| 29 | `T2.4c4` | `PARTIAL` | Med-High | M | — | Time-zone and DST correctness in time grid |
-| 30 | `T2.5` | `PARTIAL` | Med-High | M | — | Drag, resize and create items in the calendar |
-| 31 | `T2.6` | `OPEN` | Med | S-M | — | Big Picture popup for the calendar |
-| 32 | `OW-18` | `PARTIAL` | High | L | ST7.1, UI4.7 | Choose shared or separate Notes and Agenda per space |
-| 33 | `OW-27` | `OPEN` | High | S-M | none | [new] Opening reminders in Zen sidebar takes 2 clicks vs 1 click for NOTES (and slow cooldown) |
-| 35 | `T3.4` | `PARTIAL` | Med-High | S-M | — | Context menu on Notes & Agenda folders/pseudo-tabs in Zen tab bar |
-| 36 | `SB6.2` | `OPEN` | Med | S | T3.4 | Agenda root folder right-click menu |
-| 37 | `SB6.3` | `OPEN` | High | M | T3.4 | Run Agenda quick actions headlessly (no Notes sheet) |
-| 38 | `T3.4a` | `OPEN` | High | M | T3.4 | RSS-style floating hover preview cards for Notes & Agenda tabs in Zen sidebar |
-| 39 | `AU-B2` | `OPEN` | Med | S | none | Agenda hover card must not watch the whole chrome document |
-| 40 | `T2.18` | `PARTIAL` | High | M | — | Right-click menus everywhere (consistent engine) |
-| 41 | `T2.19` | `PARTIAL` | Med | S | — | Quick snooze on a reminder (+1 day / +3 days / next week) |
-| 42 | `SB6.7` | `OPEN` | Med | S | UI4.7 | Items whose source note is in Trash |
-| 43 | `SB6.4` | `OPEN` | Med | S | TM3.3 | Cap the number of Agenda tabs ('+N more') |
-| 44 | `SB6.6` | `OPEN` | Low-Med | S | SB6.3 | Setting: what the X (close) button does on an Agenda tab |
-| 45 | `SB6.5` | `OPEN` | Med | S-M | F0.1 | Agenda Doctor (diagnostics and repair) |
-| 46 | `SB6.9` | `OPEN` | Low | S | TM3.1 | Agenda sidebar quiet hours and 'left' counts |
-| 47 | `SB6.10` | `OPEN` | Med | M | PF2.3 | Incremental Agenda projection |
-| 48 | `B3.3.50-6` | `PARTIAL` | — | — | — | Harden ZenSync & SessionStore isolation for Agenda and Notes pseudo-tabs |
-| 49 | `ST7.3` | `OPEN` | Low-Med | S | none | Move calendar UI state out of notes metadata |
-| 50 | `ST7.2` | `OPEN` | Med | M | H1.2, H1.3, PF2.1 | Reminder history compaction (or append-only segments) |
-| 51 | `ST7.5` | `OPEN` | Low-Med | S-M | ST7.2 | Reminder history export, prune and inspect UI |
-| 52 | `B3.3.32-7` | `PARTIAL` | Med-High | S | — | Protect Daily Notes and connect note-less reminders to an Agenda note |
-| 53 | `T2.9` | `OPEN` | Med-High | M | none | Daily-note lifecycle and archive policy inside Agenda |
-| 54 | `T2.10` | `OPEN` | Med | M | none | Work-free-day tint + selectable holiday calendars |
-| 55 | `T2.11` | `OPEN` | Med | S-M | T3.4 | Exclude folders from the Zen NOTES sidebar |
-| 56 | `T2.11a` | `OPEN` | High | S-M | T2.11 | Calendar-only notes (e.g. Birthdays) hidden from Zen NOTES |
-| 57 | `T2.11b1` | `OPEN` | High | M | Track 1-2 UI done | Audit UI discoverability of all Notes functions |
-| 58 | `T2.11b2` | `OPEN` | Med | M | T2.11b1 | Rebuild the Notes DEMO notes |
-| 59 | `ST7.4` | `OPEN` | Low-Med (long term) | L | ST7.1 | Render Agenda rows without real tabs (research) |
-| 60 | `T2.13` | `OPEN` | Med | M | all other Track 2 | ICS export/import and Google-sync groundwork (always last in Track 2) |
-| 61 | `T1.18` | `PARTIAL` | Med-High | S | — | Export syntax-mismatch warning dialog |
-| 62 | `T1.19a` | `OPEN` | High | M | T1.18 | Full ZIP backup of notes + assets |
-| 63 | `T1.19b` | `OPEN` | Med-High | M | T1.19a | Obsidian vault export |
-| 64 | `T1.19c` | `OPEN` | Med-High | M | T1.19b | Obsidian vault import |
-| 65 | `T3.2` | `OPEN` | Med-High | M | — | Multi-select notes & folders in tree view |
-| 66 | `T3.11` | `OPEN` | Med | S | — | Colorful Folders live checks and polish |
-| 67 | `T3.3` | `OPEN` | Med | M | — | Drag-and-drop note tabs within Zen sidebar |
-| 68 | `T3.5` | `OPEN` | Med | S | — | Split Callout toolbar button (quick insert + type/fold picker) |
-| 69 | `T3.8` | `OPEN` | Med | M | — | Split View as an equal-sized companion window/pane |
-| 70 | `T3.9a` | `OPEN` | Med | S-M | none | Widgets module shell, free-area measurement, video-player avoidance |
-| 71 | `T3.9b` | `OPEN` | Med | S | T3.9a | Widgets: clock and date |
-| 72 | `T3.9c` | `OPEN` | Med | M | T3.9a | Widgets: weather (cached, user refresh interval) |
-| 73 | `T3.9d` | `OPEN` | Med | M | T3.9a | Widgets: timer, quick note, RSS headline |
-| 74 | `T3.9e` | `OPEN` | Low-Med | S | T3.9a | Widgets: battery/system load + settings section |
-| 75 | `T3.10` | `OPEN` | Med | S-M | — | Custom keyboard shortcut for opening a particular Zentral app or panel |
-| 76 | `T4.1` | `OPEN` | High | S | — | Owner's comprehensive verification note (`Markdown & Extended Syntax Feature Showcase`) |
-| 77 | `T4.2` | `OPEN` | Med-High | M | — | Performance audit & active timer/listener registry table |
-| 78 | `T4.3a` | `OPEN` | Med | M | none | Extract calendar UI from `ZentralNotes.uc.js` |
-| 79 | `T4.3b` | `OPEN` | Med | M | T4.3a | Extract parser/wiki graph and import/export |
-| 80 | `T4.3c` | `OPEN` | Med | M | T4.3b | Extract Zen sidebar UI; single build entry |
-| 81 | `OW-21` | `OPEN` | Med | M | — | [new, lower priority] Find and replace within Notes |
-| 82 | `OW-22` | `OPEN` | Med | M | — | [new, lower priority] Find next/previous match outside the visible viewport |
-| 83 | `T4.4` | `OPEN` | Low | S | — | Dead code removal (`stretched()`, legacy `quad` helpers) |
-
----
-
-## Phase 0 — Safety net: tests and measurement first
-
-_Nothing below can be proven without these. They change no behaviour._
-
+| Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
+| ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
+|     1 | `T4.1`      | `OPEN`    | High                | S      | —                 | Owner's comprehensive verification note (`Markdown & Extended Syntax Feature Showcase`)                  |
+|     2 | `H1.6`      | `OPEN`    | High                | S-M    | —                 | Write unsaved note text when a window closes                                                             |
+|     3 | `OW-30`     | `OPEN`    | High                | M      | —                 | Triple View start-up without the Startup mod; Notes height remembered                                    |
+|     4 | `SB6.3`     | `OPEN`    | High                | M      | none              | Run Agenda quick actions headlessly (no Notes sheet)                                                     |
+|     5 | `T3.4a`     | `PARTIAL` | High                | M      | none              | RSS-style floating hover preview cards for Notes & Agenda tabs in Zen sidebar (includes the old `AU-B2`) |
+|     6 | `OW-18`     | `PARTIAL` | High                | L      | ST7.1, UI4.7      | Choose shared or separate Notes and Agenda per space                                                     |
+|     7 | `T1.18`     | `PARTIAL` | Med-High            | S      | —                 | Export syntax-mismatch warning dialog                                                                    |
+|     8 | `T1.19a`    | `OPEN`    | High                | M      | T1.18             | Full ZIP backup of notes + assets                                                                        |
+|     9 | `T3.4`      | `PARTIAL` | Med-High            | S-M    | —                 | Context menu on Notes & Agenda folders/pseudo-tabs in Zen tab bar                                        |
+|    10 | `T2.4c4`    | `PARTIAL` | Med-High            | M      | —                 | Time-zone and DST correctness in time grid                                                               |
+|    11 | `T2.5`      | `PARTIAL` | Med-High            | M      | —                 | Drag, resize and create items in the calendar                                                            |
+|    12 | `T2.9`      | `PARTIAL` | Med-High            | M      | none              | Daily-note lifecycle and archive policy inside Agenda                                                    |
+|    13 | `T1.19b`    | `OPEN`    | Med-High            | M      | T1.19a            | Obsidian vault export                                                                                    |
+|    14 | `T1.19c`    | `OPEN`    | Med-High            | M      | T1.19b            | Obsidian vault import                                                                                    |
+|    15 | `T3.2`      | `OPEN`    | Med-High            | M      | —                 | Multi-select notes & folders in tree view                                                                |
+|    16 | `T4.2`      | `OPEN`    | Med-High            | M      | —                 | Performance audit & active timer/listener registry table                                                 |
+|    17 | `OW-29`     | `OPEN`    | Med-High            | M      | —                 | Retyping a date or time in a calendar line moves the stored item                                         |
+|    18 | `AU-B4b`    | `OPEN`    | Med-High            | L      | AU-B4a            | [new] Notes language: interface strings (English/Polish)                                                 |
+|    19 | `SB6.2`     | `OPEN`    | Med                 | S      | none              | Agenda root folder right-click menu                                                                      |
+|    20 | `T2.19`     | `PARTIAL` | Med                 | S      | —                 | Quick snooze on a reminder (+1 day / +3 days / next week)                                                |
+|    21 | `SB6.7`     | `OPEN`    | Med                 | S      | UI4.7             | Items whose source note is in Trash                                                                      |
+|    22 | `SB6.4`     | `PARTIAL` | Med                 | S      | TM3.3             | Cap the number of Agenda tabs ('+N more')                                                                |
+|    23 | `T2.6`      | `OPEN`    | Med                 | S-M    | —                 | Big Picture popup for the calendar                                                                       |
+|    24 | `SB6.5`     | `OPEN`    | Med                 | S-M    | F0.1              | Agenda Doctor (diagnostics and repair)                                                                   |
+|    25 | `T2.11`     | `OPEN`    | Med                 | S-M    | none              | Exclude folders from the Zen NOTES sidebar                                                               |
+|    26 | `T2.11a`    | `OPEN`    | High                | S-M    | T2.11             | Calendar-only notes (e.g. Birthdays) hidden from Zen NOTES                                               |
+|    27 | `T3.9a`     | `OPEN`    | Med                 | S-M    | none              | Widgets module shell, free-area measurement, video-player avoidance                                      |
+|    28 | `T3.9b`     | `OPEN`    | Med                 | S      | T3.9a             | Widgets: clock and date                                                                                  |
+|    29 | `T3.10`     | `OPEN`    | Med                 | S-M    | —                 | Custom keyboard shortcut for opening a particular Zentral app or panel                                   |
+|    30 | `SB6.10`    | `OPEN`    | Med                 | M      | PF2.3             | Incremental Agenda projection                                                                            |
+|    31 | `B3.3.50-6` | `PARTIAL` | Med                 | M      | —                 | Harden ZenSync & SessionStore isolation for Agenda and Notes pseudo-tabs                                 |
+|    32 | `ST7.2`     | `OPEN`    | Med                 | M      | H1.2, H1.3, PF2.1 | Reminder history compaction (or append-only segments)                                                    |
+|    33 | `T2.10`     | `OPEN`    | Med                 | M      | none              | Work-free-day tint + selectable holiday calendars                                                        |
+|    34 | `T2.11b1`   | `OPEN`    | High                | M      | Track 1-2 UI done | Audit UI discoverability of all Notes functions                                                          |
+|    35 | `T2.11b2`   | `OPEN`    | Med                 | M      | T2.11b1           | Rebuild the Notes DEMO notes                                                                             |
+|    36 | `T2.13`     | `OPEN`    | Med                 | M      | all other Track 2 | ICS export/import and Google-sync groundwork (always last in Track 2)                                    |
+|    37 | `T3.3`      | `OPEN`    | Med                 | M      | —                 | Drag-and-drop note tabs within Zen sidebar                                                               |
+|    38 | `T3.8`      | `OPEN`    | Med                 | M      | —                 | Split View as an equal-sized companion window/pane                                                       |
+|    39 | `T3.9c`     | `OPEN`    | Med                 | M      | T3.9a             | Widgets: weather (cached, user refresh interval)                                                         |
+|    40 | `T3.9d`     | `OPEN`    | Med                 | M      | T3.9a             | Widgets: timer, quick note, RSS headline                                                                 |
+|    41 | `T4.3a`     | `OPEN`    | Med                 | M      | none              | Extract calendar UI from `ZentralNotes.uc.js`                                                            |
+|    42 | `T4.3b`     | `OPEN`    | Med                 | M      | T4.3a             | Extract parser/wiki graph and import/export                                                              |
+|    43 | `T4.3c`     | `OPEN`    | Med                 | M      | T4.3b             | Extract Zen sidebar UI; single build entry                                                               |
+|    44 | `OW-21`     | `OPEN`    | Med                 | M      | —                 | [new, lower priority] Find and replace within Notes                                                      |
+|    45 | `OW-22`     | `OPEN`    | Med                 | M      | —                 | [new, lower priority] Find next/previous match outside the visible viewport                              |
+|    46 | `SB6.6`     | `OPEN`    | Low-Med             | S      | SB6.3             | Setting: what the X (close) button does on an Agenda tab                                                 |
+|    47 | `ST7.3`     | `OPEN`    | Low-Med             | S      | none              | Move calendar UI state out of notes metadata                                                             |
+|    48 | `T3.5`      | `PARTIAL` | Low-Med             | S      | —                 | Callout toolbar button: last-used on click, more kinds                                                   |
+|    49 | `T3.9e`     | `OPEN`    | Low-Med             | S      | T3.9a             | Widgets: battery/system load + settings section                                                          |
+|    50 | `UI4.9`     | `OPEN`    | Low-Med             | S      | —                 | Space before the unit in slider values                                                                   |
+|    51 | `UI4.11`    | `OPEN`    | Low-Med             | S      | —                 | Escape returns the focus to the button that opened a menu                                                |
+|    52 | `ST7.5`     | `OPEN`    | Low-Med             | S-M    | ST7.2             | Reminder history export, prune and inspect UI                                                            |
+|    53 | `UI4.10`    | `OPEN`    | Low-Med             | S-M    | —                 | Settings dialog follows the text size                                                                    |
+|    54 | `ST7.4`     | `OPEN`    | Low-Med (long term) | L      | ST7.1             | Render Agenda rows without real tabs (research)                                                          |
+|    55 | `SB6.9`     | `OPEN`    | Low                 | S      | TM3.1             | Agenda sidebar quiet hours and 'left' counts                                                             |
+|    56 | `F0.15`     | `OPEN`    | Low                 | S      | —                 | Isolate the time-budget test of the Agenda projection                                                    |
+|    57 | `DOC-1`     | `OPEN`    | Low                 | S      | —                 | README documents a split view that does not exist                                                        |
+|    58 | `TM3.7`     | `OPEN`    | Low                 | S      | —                 | Day range keeps the wall clock on the day the clocks go forward at midnight                              |
+|    59 | `F0.16`     | `OPEN`    | Low                 | S-M    | —                 | Sweep tests that build fixtures around the real clock                                                    |
 
 ---
 
-## Phase 1 — Stop loops and data loss
+## Task blocks (same order as the Master Order)
 
-_Defects that can churn the sidebar forever, lose Done/Dismiss state or spam alerts. Highest risk per line of code._
+#### `T4.1` — Owner's comprehensive verification note (`Markdown & Extended Syntax Feature Showcase`)
 
+**Status:** `OPEN` · **Impact:** High · **Effort:** S · **Source:** carried over from the previous roadmap (unchanged requirement)
 
----
+**Current state and what is LEFT:** Bundle/update the 12-section verification showcase note after Tracks 1–3 are feature-complete.
 
-## Phase 2 — Remove the big freezes (performance)
+**Full specification (original row):** **OPEN.** Bundle/update the built-in showcase note covering all 12 verification sections: (1) Inline styles, `==highlight==`, `<kbd>`, `~sub~`/`^sup^`, dividers; (2) H1–H6 hierarchy & auto-updated `## Table of Contents`; (3) Multi-paragraph & nested blockquotes; (4) Obsidian callouts including foldable `[!faq]-`; (5) Unordered, ordered & interactive task lists (`[x]`, `[?]`, `[ ]`); (6) Aligned GFM tables with escaped pipes `\|`; (7) Highlighted code blocks (JS, Python, Rust, JSON); (8) Inline `$...$` & block `$$...$$` LaTeX matrices/equations; (9) Wikilinks (`[[Note\|Alias]]`, `#Heading`, `^block-id`), nested `#tags`, and `![[embeds\|450]]`; (10) Standard `[^1]` & inline `^[...]` footnotes; (11) Native HTML `<details>` accordions; (12) Mermaid diagrams (`flowchart`, `gitGraph`).
 
-_Scheduler, projection and recurrence costs measured in `F0.2`. `PF2.1` before `PF2.2`; `PF2.4` before `PF2.5`._
+#### `H1.6` — Write unsaved note text when a window closes
 
+**Status:** `OPEN` · **Impact:** High · **Effort:** S-M · **Source:** handoff 3.3.168 review, accepted 2026-11-16
 
----
+**Problem:** The save on closing a window first reads the note file (to notice a foreign change) and Firefox runs no further promise step of a closed window, so text typed in the last ~0.8 s (autosave delay), a calendar change from the last 0.6 s and a folder made in the last 0.6 s (`meta.json`) are probably lost.
+**Plan (do in this order):**
 
-## Phase 3 — Time correctness
+1. On `unload` write what is dirty with calls issued at once (the I/O thread finishes them without the window): copy the current file to the recovery area first, then the unsaved text.
+2. Same for `calendar.json` and `meta.json`; keep the order note text before `calendar.json` (`UI4.7`).
+3. Never overwrite a foreign change: when the file changed outside, keep only the recovery copy.
 
-_Stale 'Today', late alerts after sleep, overdue and missed reminders. Builds one shared tick service first._
+**Tests / done when:** Fake window closed between a key and the autosave: the text is on disk or in recovery; foreign-change case; two windows.
 
+#### `OW-30` — Triple View start-up works without the Startup mod; Notes height remembered
 
----
+**Status:** `OPEN` · **Impact:** High · **Effort:** M · **Source:** owner 2026-11-14, accepted 2026-11-16
 
-## Phase 4 — Interaction safety and owner bugs
+**Problem:** Restoring a Triple View pair and opening Notes in it at launch must not depend on the optional `ZentralStartup` mod ("Load at Startup" sites); the owner expects the fix in `loader/`. Also the height of the Notes app is not remembered on launch.
+**Plan (do in this order):**
 
-_Click/drag/keyboard behaviour in the Zen sidebar and Month view, plus the owner's bug reports._
+1. Find which part of the restore (`ctx.openStartupSinglePanel`, `recreateLoadedPanels`, auto-open of Notes) only works when `ZentralStartup` is installed; move it to the loader or make `ZentralSecondaryViews` self-sufficient.
+2. Save the Notes band height (px and share) and restore it at launch, for Triple View and for the standalone card.
+3. Test every install shape: with and without the Startup mod, standalone Notes only, full pack.
 
-#### `AU-B2` — Agenda hover card must not watch the whole chrome document
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Depends on:** none · **Source:** Audit 2026-11-14 (`ZentralNotes.uc.js` ~19774)
+**Tests / done when:** `tests/helpers/fake-triple-view.cjs` start-up scenarios without the Startup mod; height survives a restart.
 
-**Problem:** A `MutationObserver` on `document.documentElement` (childList, subtree) is created on the first hover and stays connected while the card is hidden; it fires on every chrome DOM change and breaks the AGENTS.md rule.
-**Plan:** Connect on show, disconnect on hide, observe only the tab's parent. Replaced anyway by `T3.4a`; do it only if `T3.4a` is not next.
+#### `SB6.3` — Run Agenda quick actions headlessly (no Notes sheet)
 
-#### `AU-B4b` — [new] Notes language: interface strings
-**Status:** `OPEN` · **Impact:** Med-High · **Effort:** L · **Depends on:** AU-B4a · **Source:** Owner 2026-11-14
+**Status:** `OPEN` · **Impact:** High · **Effort:** M · **Depends on:** none (the `T3.4` menu infrastructure is done; its last item is unrelated) · **Source:** Audit R1 B9
 
-**Problem:** All buttons, menus, dialogs, alerts and settings text of Notes and the calendar are hard-coded English literals in `ZentralNotes.uc.js` and the calendar module.
-**Plan:** 1. One `t(key, params)` helper with the language table from `AU-B4a` and English fallback per key. 2. Convert area by area, one chunk each: calendar toolbar/views, composer, context menus, reminder alerts, Agenda/sidebar menus, All notes tree, settings. 3. A test that fails on a new hard-coded user-visible literal in converted areas and on a key missing from a language. 4. Polish translation for every converted area.
-**Tests / done when:** Per converted area: renders in Polish and English, no `undefined` keys.
+**Problem:** Every Agenda item action (Done, Dismiss, Snooze, Change time) goes through `showNotes("")` then `runAgendaItemAction`, opening the Notes UI for a one-click triage.
 
-#### `T2.11b1` / `T2.11b2` — Discoverability audit, then demo rebuild
-**Status:** `OPEN` · **Impact:** High / Med · **Effort:** M each · **Depends on:** Track 1-2 UI done / T2.11b1 · **Source:** split of T2.11b
+**Plan (do in this order):**
 
-`T2.11b1`: list every implemented Notes function and where a person finds it; group related controls into menus; write the findings list. `T2.11b2`: rebuild the built-in DEMO notes to show every implemented function (after `T2.11b1`).
+1. Expose the lifecycle/snooze commands from the item and history stores without the sheet; show a small toast with Undo.
+2. Keep the sheet only for 'Edit details…' and 'Change time…'.
+
+**Tests / done when:** Done/Snooze from the sidebar menu write history and leave no sheet open.
+
+#### `T3.4a` — RSS-style floating hover preview cards for Notes & Agenda tabs in Zen sidebar
+
+**Status:** `PARTIAL` · **Impact:** High · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
+
+**Current state and what is LEFT:** DONE (`OW-17`): `createAgendaTitleCard` shows the full title of an Agenda item in a `popover="manual"` card positioned with `runtime.sidebarSafeBounds()`, with show/hide delays, focus/Escape handling and native-tooltip suppression (`tests/notes-agenda-hover.test.cjs`). LEFT: everything richer and the Notes side: no Notes-tab card, no quick actions, no body/tags/reminder content, no shared engine; the card also holds the `AU-B2` observer. Port the `#bgalazka-rss-card` top-layer (`popover="manual"`) hover card pattern (`additional/rss/ZentralRssDisplay.uc.js`) to Zen sidebar Notes pseudo-tabs (title, folder, tags, snippet, due reminder, quick actions: _Open_, _New note_, _Trash_) and Agenda pseudo-tabs (item time, category, source note, calendar note, quick actions: _Open_, _Done_, _Snooze_, _Dismiss_) with hover/hide delays and pointer retargeting.
+
+**Full specification (original row):** **OPEN.** Depends on `T2.8` (`DONE`). Port the `#bgalazka-rss-card` top-layer (`popover="manual"`) hover card pattern (`additional/rss/ZentralRssDisplay.uc.js`) to Zen sidebar Notes pseudo-tabs and Agenda event/reminder pseudo-tabs, replacing the plain browser tooltip (`#tabbrowser-tab-tooltip`). Show note title, folder, tags, snippet, due reminder, and quick actions (_Open_, _New note_, _Trash_) for Notes tabs; show item time, category, source note, calendar note, and quick actions (_Open_, _Done_, _Snooze_, _Dismiss_) for Agenda tabs, with configurable hover/hide delays and pointer retargeting on dismiss/done.
+
+**Detailed proposal (owner-approved 2026-11-13, owner notes included):**
+
+### 1. Unified RSS-Style Top-Layer Hover Card Engine (`T3.4a`) for Notes & Agenda Sidebar Tabs
+
+Your earlier request to mirror `additional/rss/ZentralRssDisplay.uc.js` (`#bgalazka-rss-card`) for Notes and Agenda pseudo-tabs was preserved only as an internal in-sheet tooltip (`T2.4c2`), leaving Zen sidebar hover interactions as plain native `title` tooltips. Rather than duplicating popover positioning, pointer-retarget, and hover/hide timers, extract a small shared helper (or mirror the exact `#bgalazka-rss-card` contract):
+
+- **Top-Layer Popover (`popover="manual"`):** Re-call `showPopover()` on every target switch so the card always sits above Big Preview and Zentral panels without z-index wars, positioned to the left or right of `#navigator-toolbox` via `runtime.sidebarSafeBounds()`.
+- **Notes Pseudo-Tab Card:** Displays note title, folder breadcrumb, tags/label pills, first 3–4 lines of body preview, and active reminder badge, with one-click buttons: **Open**, **New note in folder**, and **Trash** (routed through the `T2.3e` reminder-aware confirmation gate).
+- **Agenda Pseudo-Tab Card:** Displays event/reminder title, formatted date + time range, category badge, source note link, calendar note text, and one-click buttons: **Open note**, **Done**, **Snooze (+1h / +1d)**, and **Dismiss** — using `nextAgendaItem` pointer-retargeting (just like RSS `dismiss(tab, true)`) so rapid triage in the sidebar moves smoothly to the next item without closing the card.
+
+#### NOTE FROM OWNER: all standalone mods should still have all their standalone funcionality and work with eachother even without core mod but with rss and notes installed, obviusly haveing one engine that renders both would be great
+
+**Folded in from `AU-B2` (2026-11-16):** the existing title card creates a `MutationObserver` on `document.documentElement` (childList, subtree) at the first hover and keeps it connected while the card is hidden. The new engine must connect on show, disconnect on hide and observe only the tab's parent (AGENTS.md rule: no document-wide observers).
+
+#### `OW-18` — Shared versus independent Notes and Agenda per space
+
+**Status:** `PARTIAL` · **Impact:** High · **Effort:** L · **Depends on:** ST7.1, UI4.7 · **Source:** Owner request
+
+**Problem:** The owner wants a setting to choose whether Notes and Agenda use one shared dataset across all Zen spaces or separate space-local datasets, while allowing only explicitly selected notes and calendar items to be shared across spaces.
+
+**Current baseline:** ST7.1 implements the shared-all mode: there is one Notes/Agenda data set per browser window, and its managed sidebar projections follow that window's active Zen workspace. It does **not** create independent per-space stores or selective-sharing membership. Keep this existing shared behavior as the default. The November 14, 2026 ST7.1 implementation is being hardened rather than disabled; its workspace-sync crash and regression-test gap are documented below.
+
+**Goal:** Offer two explicit modes: (1) shared — all Notes and Agenda data remains available in every space, preserving today's behavior; (2) space-local — each space owns its own Notes and Agenda data, with explicit per-note/per-calendar-item sharing across spaces. Sharing is opt-in at item level, not an all-or-nothing duplication of every space. No cloud sync.
+
+**Plan (design before storage migration):**
+
+1. Specify the user-facing mode and per-item sharing controls. Define what sharing a note means for its linked calendar items, note-linked reminders, categories, attachments and metadata; define whether a calendar item can be shared without its source note.
+2. Define stable workspace identities that survive restart, rename and session restore. Do not use transient DOM IDs or the active workspace pointer as persistent storage identity. Specify removed/recreated-space behavior.
+3. Partition local note files, calendar records, reminder history, snoozes/dismissals/claims, alert scheduling, note-category overrides and attachment ownership by stable workspace identity. Specify the canonical record and history semantics for an explicitly shared item so two spaces cannot independently fire or overwrite the same reminder without a deliberate rule.
+4. Define multi-window coordination, conflict handling, backups and safe reversible transitions between shared and space-local modes. Preserve existing shared data; never silently merge, overwrite, delete or leak one space's data into another.
+5. Coordinate SessionStore and pseudo-tab behavior with `B3.3.50-6`, ST7.1 projection ownership and UI4.7 multi-window/data-integrity tests. Keep storage ownership separate from moving sidebar projection DOM.
+
+**Regression lessons for future AI work (must retain):**
+
+- Browser `querySelectorAll()` returns a `NodeList`, not an Array. Materialize it with `[...nodeList]` or `Array.from(nodeList)` before calling Array-only methods such as `.filter()`, `.map()` or `.some()`. Never polyfill `NodeList.prototype` to conceal a production bug. The old fake DOM returned Arrays and masked the November 14 crash, `TypeError: (intermediate value).filter is not a function`, in `syncSharedWorkspace()`. The shared-workspace regression test now injects an iterable, indexable NodeList-shaped collection with no Array helpers.
+- Attach NOTES/Agenda click and select handlers before attempting fallible workspace projection synchronization. Store reset/structural subscribers must also bind handlers before scheduling projection work; a projection error must never leave pseudo-tabs as selectable `about:blank` tabs.
+- Keep shared-workspace projection (where the sidebar roots appear) separate from the future OW-18 data-sharing model (which records are shared and who owns history/alerts).
+- The normal-tab middle-click unload flow must never choose either a Notes or Agenda pseudo-tab as its successor. Both types bounce native `TabSelect` back to the tab they came from; choosing one can cancel unloading of an ordinary tab and create repeated selection handoffs. Filter by explicit Notes/Agenda markers and exact current pseudo-URLs, not by tab labels or historical SessionStore entries.
+- Pseudo-tab ownership is live state, not a permanent tab identity: a nonblank `currentURI.spec` wins; when blank/discarded, use only the current SessionStore entry (never an older history entry, cached positive result, tab label or stale expando). Clear NOTES/Agenda markers, remembered URLs and internal pseudo-tab exemptions when the current page is ordinary content. Use the same validated predicate in click/select, drag, folder evacuation, active-tab return, restored-session cleanup and normal-tab unload safeguards.
+- A drag that starts with an ordinary web tab inside a managed Notes/Agenda folder must be allowed to leave that folder. Protect the pseudo-tab itself or a folder being dragged by itself; treat only the drop destination as a protected folder target. Do not infer that a tab is protected merely because its source ancestor is a managed folder.
+- Agenda pseudo-tab activation should occur on a stationary, unmodified left-button `mouseup` after the drag threshold is known, not depend on the synthesized `click` arriving in the same task. A later click must not activate twice. Keep a bounded cleanup for canceled/modified releases.
+- Gecko/Zen can deliver the follow-up `click` in a later native input task. Test the delayed-click ordering explicitly.
+
+**Tests / done when:** Two or more spaces and windows cover shared and isolated notes, calendar items, history, alerts, selected-item sharing, sidebar projections and linked records; switching modes and restarting retain both datasets without data loss or cross-space leakage; removed/recreated spaces and teardown are safe. Add storage migration/conflict/failure-injection tests before enabling space-local mode. Live-check native workspace identity if needed.
+
+#### `T1.18` — Export syntax-mismatch warning dialog
+
+**Status:** `PARTIAL` · **Impact:** Med-High · **Effort:** S · **Source:** carried over from the previous roadmap (unchanged requirement)
+
+**Current state and what is LEFT:** DONE: code-aware scan, portable conversion and raw/convert/cancel dialog for single, folder and ZIP Markdown exports covering ToC, blockquote and known closed `:::` container callouts (ambiguous or oversized recognized containers warn and stay raw), transclusions, hidden/calendar markers, extended tasks, highlights/underline, spoilers, subscript/superscript, inline footnotes and math-as-literal-code; warning and export use the same note snapshots; exported files retain note IDs, reminder metadata and foreign front matter; exact-length inline code spans, including spans across paragraph lines, link destinations and HTML attributes are protected from conversion; backtick runs are indexed to avoid quadratic lookahead. LEFT: audit other Zentral-only syntax and per-note flavor/ignore semantics in the converter (live export checks are not tasks).
+
+**Full specification (original row):** **PARTIAL.** DONE: code-aware scan, conservative portable conversion (including extended tasks, highlights, spoilers, subscript/superscript, inline footnotes and math-as-literal-code), snapshot-consistent raw/convert/cancel export dialogs, metadata-preserving Markdown files indexed exact-length multiline inline-code protection and safe link/attribute handling. LEFT: remaining Zentral syntax and conversion fidelity audit, per-note flavor/ignore semantics, live export/asset validation.
 
 #### `T1.19a` / `T1.19b` / `T1.19c` — ZIP backup, Obsidian export, Obsidian import
+
 **Status:** `OPEN` · **Impact:** High · **Effort:** M each · **Depends on:** T1.18 (a), then a to b to c · **Source:** split of T1.19 (must run last in Track 1)
 
 `a`: bundle notes + `assets/` into a ZIP and restore it. `b`: export a vault folder mapping YAML front matter, `[[Note#Heading|alias]]`, `![[embeds]]`, callouts, tags. `c`: import such a vault, with a re-import that does not duplicate notes.
 
-#### `T3.9a`..`T3.9e` — Sidebar widgets (split of T3.9)
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S-M each · **Source:** owner 2026-11-10
-
-Standalone module `additional/widgets` (also in the full pack). Rules for all: study how new-tab-page widgets work and mimic them; never interact with the sidebar video player (free area about 179x426, about 179x301 while a 16:9 player shows; no fixed ratio); always leave room for tabs, folders and Essentials (setting: max share of free height, hide below a minimum); no permanent polling, per-widget refresh interval, pause when window or sidebar is hidden, cache last value. `a`: shell, free-area measurement, player avoidance, per-widget on/off. `b`: clock, date. `c`: weather. `d`: timer, quick note, RSS headline. `e`: battery/system load and the settings section.
-
-#### `T4.3a`..`T4.3c` — Modularize `ZentralNotes.uc.js` (split of T4.3)
-**Status:** `OPEN` · **Impact:** Med · **Effort:** M each · **Source:** previous roadmap
-
-`a`: calendar UI out of the monolith (module `api`, test seam unchanged). `b`: parser/wiki graph and import/export. `c`: Zen sidebar UI and one build entry. After each step all tests and the standalone build must pass unchanged.
-
-
----
-
-## Phase 5 — Calendar UX (owner requests 2026-11-14 and unfinished calendar work)
-
-_Sizing is done (the visible hours, `OW-04`, and the size of the views, `OW-03`: both change geometry every later feature uses). Now entry points, composer, alerts, then unfinished drag/resize and Big Picture._
-
-#### `T2.4c1` — Week/day 24-hour grid, lanes and time shading
-**Status:** `PARTIAL` · **Impact:** High · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
-
-**Full specification (original row):** **PARTIAL.** Week view shows seven Monday-first day columns; Day view shows one day. Timed events are clipped into the visible day and laid out in side-by-side overlap lanes (no event hidden); all-day events and reminders have a separate strip; timed reminders are independent markers; configured work hours shade off-hours and merged busy ranges shade occupied time. Recurrences expand into the visible range. The saved IANA display zone drives day columns, labels and positioning; DST days use zoned elapsed bounds but the display still has 24 fixed wall-clock labels; skipped/repeated hours require further work in `T2.4c4`. UTC instants are unchanged and all-day items remain civil dates.
-
-#### `T2.4c4` — Time-zone and DST correctness in time grid
-**Status:** `PARTIAL` · **Impact:** Med-High · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
-
-**Current state and what is LEFT:** DONE: display-zone selection and zoned day bounds. LEFT: real 23/25-hour timeline labels and ambiguous/skipped-hour rendering; live verification. Earlier claims about repeated/skipped labels were incorrect.
-
-**Full specification (original row):** **PARTIAL.** Saved IANA display-zone selector drives Week/Day day columns, event clipping/positioning, grid labels, free-slot calculations and week export without changing stored UTC instants. Zoned day bounds handle 23-hour spring and 25-hour fall days; the UI currently draws 24 fixed wall-clock labels, so skipped/repeated hour display remains to be addressed; overnight and midnight-crossing events clip correctly; all-day items remain civil dates; recurring items retain their wall-clock time through DST. Core and view tests cover zone selection and cross-midnight behavior, but do not establish repeated/skipped labels in the UI. Live Firefox/Zen timezone UI verification remains manual.
-
-#### `T2.5` — Drag, resize and create items in the calendar
-**Status:** `PARTIAL` · **Impact:** Med-High · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
-
-**LEFT (only this):** pointer drag of recurring occurrences with a scope choice (this / this and following / all, as in `T2.5e`). Everything else (timed move/resize, reminder move, drag-create, undo, snap) is DONE; `T2.5a`-`T2.5d` are merged here.
-
-#### `T2.6` — Big Picture popup for the calendar
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S-M · **Source:** carried over from the previous roadmap (unchanged requirement)
-
-**Current state and what is LEFT:** **OPEN.** Source audit found no Big Picture popup or dedicated tests. LEFT: temporarily move the live calendar pane to a large viewport card, persist 70/80/90/95% sizes, and restore host, view, scroll and focus with Escape/outside/teardown cleanup.
-
----
-
-## Phase 6 — Zen sidebar polish
-
-_Labels, menus, quick actions, hover cards, caps and diagnostics for Agenda and Notes pseudo-tabs._
-
-#### `OW-27` — [new] Opening reminders in Zen sidebar takes 2 clicks vs 1 click for NOTES
-**Status:** `OPEN` · **Impact:** High · **Effort:** S-M · **Depends on:** none · **Source:** Owner 2026-11-14
-
-**Problem:** Clicking a reminder in the Zen sidebar Agenda requires 2 clicks to open, whereas clicking a note in NOTES opens on 1 click. With long loading times between clicks this makes Agenda reminders feel unresponsive.
-**Plan:** Audit `onAgendaMouse` / `onAgendaSelect` / `activateAgendaTab` vs `onZenMouse` / `onZenSelect` (`agendaPress`, pointer-down/up vs `TabSelect` suppression, bounce/cooldown timers, and `ensureStore()` gating) so a single unmodified click reliably activates the reminder and opens its target immediately without requiring a second click or waiting through an unnecessary cooldown.
-**Tests / done when:** Fake Zen harness proves a single pointerdown+mouseup+click (with and without `TabSelect`, and back-to-back clicks) activates the Agenda reminder on click 1.
-
 #### `T3.4` — Context menu on Notes & Agenda folders/pseudo-tabs in Zen tab bar
+
 **Status:** `PARTIAL` · **Impact:** Med-High · **Effort:** S-M · **Source:** carried over from the previous roadmap (unchanged requirement)
 
-**Current state and what is LEFT:** DONE: _New note in this folder_, _New subfolder_, _Change color and icon_, _Export folder_ and guarded _Delete folder_ on Notes folders (dialogs check stable parent identity). DONE also: Agenda day folders expose _Create reminder_, _Create event_ and _Open Day view_; scoped native-folder filtering and teardown are in place. DONE also: Agenda pseudo-tab menus reuse the calendar action model, revalidate record/occurrence identity and respect disabled actions. LEFT: live-check all native menus, pseudo-tab actions and native-menu filtering; recurring snooze remains disabled until exception scopes are wired.
+**Current state and what is LEFT:** DONE: _New note in this folder_, _New subfolder_, _Change color and icon_, _Export folder_ and guarded _Delete folder_ on Notes folders (dialogs check stable parent identity). DONE also: Agenda day folders expose _Create reminder_, _Create event_ and _Open Day view_; scoped native-folder filtering and teardown are in place. DONE also: Agenda pseudo-tab menus reuse the calendar action model, revalidate record/occurrence identity and respect disabled actions. LEFT (only this): _Create reminder in this folder…_ on Notes folders (listed in the owner-approved proposal below, not built: `onFolderMenuShowing` has New note, New subfolder, Change color and icon, Export folder, Delete folder). Recurring snooze is tracked in `T2.19`; live checks are not tasks.
 
 **Full specification (original row):** **PARTIAL.** Needs the folder uid and colour/icon fields that now exist (`store.folderUid`, `store.setFolderStyle`). DONE: _New note in this folder_ (Notes controller, `onFolderMenuShowing`) and colors/icon through the Colorful Folders menu. **LEFT:** (1) Notes folders: _Change Folder Color/Icon_ for a Notes-only install, _New subfolder_, _Export Folder_, _Delete_; (2) Agenda day folders (`bgalazka-notes-agenda-day`): _Create reminder for this day…_, _Create event for this day…_, _Open Day view_; (3) Agenda item pseudo-tabs (`bgalazka-notes-agenda-item`): hide irrelevant native tab items and expose _Open source note_, _Mark done_, _Dismiss_, _Snooze_, _Change time…_, _Edit details…_.
 
@@ -258,126 +273,178 @@ Right-clicking an Agenda item tab or Agenda day folder currently exposes Firefox
 
 #### NOTE FROM OWNER:yes exacly what i meant but make sure it has safeguards so it wont affect normal folers and tabs
 
+#### `T2.4c4` — Time-zone and DST correctness in time grid
+
+**Status:** `PARTIAL` · **Impact:** Med-High · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
+
+**Current state and what is LEFT:** DONE: display-zone selection and zoned day bounds. LEFT: real 23/25-hour timeline labels and ambiguous/skipped-hour rendering (a clock grid has one place for 02:30, so on the day the clocks go back an event that begins in the first pass of the repeated hour and ends in the second at an earlier clock time is drawn 20 px high). `T2.4c1` is closed; this row owns the rest of the grid. Earlier claims about repeated/skipped labels were incorrect.
+
+**Full specification (original row):** **PARTIAL.** Saved IANA display-zone selector drives Week/Day day columns, event clipping/positioning, grid labels, free-slot calculations and week export without changing stored UTC instants. Zoned day bounds handle 23-hour spring and 25-hour fall days; the UI currently draws 24 fixed wall-clock labels, so skipped/repeated hour display remains to be addressed; overnight and midnight-crossing events clip correctly; all-day items remain civil dates; recurring items retain their wall-clock time through DST. Core and view tests cover zone selection and cross-midnight behavior, but do not establish repeated/skipped labels in the UI. Live Firefox/Zen timezone UI verification remains manual.
+
+#### `T2.5` — Drag, resize and create items in the calendar
+
+**Status:** `PARTIAL` · **Impact:** Med-High · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
+
+**LEFT (only this):** pointer drag of recurring occurrences with a scope choice (this / this and following / all). The scope chooser and the pure move exist now (`askCalendarItemReschedule`, `moveOccurrence`, `recurrenceExceptions`); `calendarMoveTimedItem` still returns null for a series, so build the drag on `moveOccurrence`. Everything else (timed move/resize, reminder move, drag-create, undo, snap) is DONE; `T2.5a`-`T2.5d` are merged here.
+
+#### `T2.9` — Daily-note lifecycle and archive policy inside Agenda
+
+**Status:** `PARTIAL` · **Impact:** Med-High · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
+
+**Current state and what is LEFT:** DONE (from the closed `B3.3.32-7`): the purge moves a past, blank, unreferenced date note to Trash (never today/future, never a date that holds a stored item, never a note with metadata, links, tags or files), the 30-day Trash retention exists (`trash_auto_empty_days`), the date-note folder is labelled **Agenda**, note-less non-recurring items are mirrored into `## Agenda` and backfilled at start-up. LEFT: the _always archive, never trash_ setting and archive folder, the migration of the old Daily folder and links, and the rule for past date notes that are not blank. Depends on `T2.2c` (`DONE`), `T2.8` (`DONE`). Migrate existing Daily notes/folder and preserve links. Past daily notes move to Trash the next day and stay 30 days, then live only in the 48-hour rolling backup; optional _always archive, never trash_ setting.
+
+**Full specification (original row):** **OPEN.** Depends on `T2.2c`, `T2.8`. Migrate existing Daily notes/folder and preserve links. Past daily notes move to Trash the next day and stay 30 days, then live only in the 48-hour rolling backup. Setting _always archive, never trash_ keeps compressed copies in a separate archive folder. No duplicate Daily pseudo-folder beside Agenda.
+
+**Owner decision needed first (2026-11-16):** past date notes that are not blank are never cleaned up today. Decide whether they may ever go to Trash automatically (the safe default is never; only the archive setting moves them).
+
+#### `T3.2` — Multi-select notes & folders in tree view
+
+**Status:** `OPEN` · **Impact:** Med-High · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
+
+**Current state and what is LEFT:** Support `Shift+Click` (range) and `Ctrl/Cmd+Click` (toggle) in the note tree for batch move, batch category/tag assignment, batch export, and batch Trash.
+
+**Full specification (original row):** **OPEN.** Support `Shift+Click` (range) and `Ctrl/Cmd+Click` (toggle) in the note tree for batch move, batch category/tag assignment, batch export, and batch move to Trash.
+
+#### `T4.2` — Performance audit & active timer/listener registry table
+
+**Status:** `OPEN` · **Impact:** Med-High · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
+
+**Current state and what is LEFT:** Profile parser, reminder scheduler, and DOM observers; document all active timers/listeners and verify rapid date-note switching returns listener count to baseline.
+
+**Full specification (original row):** **OPEN.** Profile parser, reminder scheduler, and DOM observers; document all active `setInterval`/`setTimeout`/event listeners in a central registry to guarantee zero memory leaks on panel close. Include the rapid-switch case from the owner's second roadmap: open several date/day notes quickly and assert the listener count returns to its baseline (this mod has no `BroadcastChannel`/`WebSocket`; the leak risk is `addEventListener` and timers).
+
+#### `OW-29` — Retyping a date or time in a calendar line moves the stored item
+
+**Status:** `OPEN` · **Impact:** Med-High · **Effort:** M · **Source:** handoff finding, accepted 2026-11-16
+
+**Problem:** Once a calendar line has its hidden `%%zn-item-id%%`, retyping its date or time in the note text does not move the stored item (`syncNote` always keeps `old.start`); only the calendar UI moves it.
+**Plan (do in this order):**
+
+1. Remember the schedule parsed from each line.
+2. In `syncNote` let the text win only when the parsed schedule changed in this edit; an unrelated edit keeps a time moved in the calendar.
+3. Conflicts between text and a calendar move: `lwwPick`. Keep every hidden marker (rule 3a); recurring items and DST days keep working.
+
+**Tests / done when:** Text edit moves the item; calendar move survives an unrelated text edit; recurring, DST, two windows.
+
+#### `AU-B4b` — [new] Notes language: interface strings
+
+**Status:** `OPEN` · **Impact:** Med-High · **Effort:** L · **Depends on:** AU-B4a · **Source:** Owner 2026-11-14
+
+**Problem:** All buttons, menus, dialogs, alerts and settings text of Notes and the calendar are hard-coded English literals in `ZentralNotes.uc.js` and the calendar module.
+**Plan:** 1. One `t(key, params)` helper with the language table from `AU-B4a` and English fallback per key. 2. Convert area by area, one chunk each: calendar toolbar/views, composer, context menus, reminder alerts, Agenda/sidebar menus, All notes tree, settings. 3. A test that fails on a new hard-coded user-visible literal in converted areas and on a key missing from a language. 4. Polish translation for every converted area.
+**Tests / done when:** Per converted area: renders in Polish and English, no `undefined` keys.
+
 #### `SB6.2` — Agenda root folder right-click menu
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Depends on:** T3.4 · **Source:** Audit R1 B8
+
+**Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Depends on:** none (the `T3.4` menu infrastructure is done; its last item is unrelated) · **Source:** Audit R1 B8
 
 **Problem:** CSS hides the native rename/delete/unpack items for the Agenda root and `onAgendaFolderMenuShowing` returns early for the root, so the menu is nearly empty.
 
 **Plan (do in this order):**
+
 1. Add 'Open calendar', 'Hide Agenda', 'Agenda settings', 'Refresh Agenda'; keep foreign items from other mods visible.
 
 **Tests / done when:** Menu handler test with a fake menupopup.
 
-#### `SB6.3` — Run Agenda quick actions headlessly (no Notes sheet)
-**Status:** `OPEN` · **Impact:** High · **Effort:** M · **Depends on:** T3.4 · **Source:** Audit R1 B9
-
-**Problem:** Every Agenda item action (Done, Dismiss, Snooze, Change time) goes through `showNotes("")` then `runAgendaItemAction`, opening the Notes UI for a one-click triage.
-
-**Plan (do in this order):**
-1. Expose the lifecycle/snooze commands from the item and history stores without the sheet; show a small toast with Undo.
-2. Keep the sheet only for 'Edit details…' and 'Change time…'.
-
-**Tests / done when:** Done/Snooze from the sidebar menu write history and leave no sheet open.
-
-#### `T3.4a` — RSS-style floating hover preview cards for Notes & Agenda tabs in Zen sidebar
-**Status:** `OPEN` · **Impact:** High · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
-
-**Current state and what is LEFT:** Depends on `T2.8`, `T3.4`. Port the `#bgalazka-rss-card` top-layer (`popover="manual"`) hover card pattern (`additional/rss/ZentralRssDisplay.uc.js`) to Zen sidebar Notes pseudo-tabs (title, folder, tags, snippet, due reminder, quick actions: _Open_, _New note_, _Trash_) and Agenda pseudo-tabs (item time, category, source note, calendar note, quick actions: _Open_, _Done_, _Snooze_, _Dismiss_) with hover/hide delays and pointer retargeting.
-
-**Full specification (original row):** **OPEN.** Depends on `T2.8` (`DONE`), `T3.4`. Port the `#bgalazka-rss-card` top-layer (`popover="manual"`) hover card pattern (`additional/rss/ZentralRssDisplay.uc.js`) to Zen sidebar Notes pseudo-tabs and Agenda event/reminder pseudo-tabs, replacing the plain browser tooltip (`#tabbrowser-tab-tooltip`). Show note title, folder, tags, snippet, due reminder, and quick actions (_Open_, _New note_, _Trash_) for Notes tabs; show item time, category, source note, calendar note, and quick actions (_Open_, _Done_, _Snooze_, _Dismiss_) for Agenda tabs, with configurable hover/hide delays and pointer retargeting on dismiss/done.
-
-**Detailed proposal (owner-approved 2026-11-13, owner notes included):**
-
-### 1. Unified RSS-Style Top-Layer Hover Card Engine (`T3.4a`) for Notes & Agenda Sidebar Tabs
-
-Your earlier request to mirror `additional/rss/ZentralRssDisplay.uc.js` (`#bgalazka-rss-card`) for Notes and Agenda pseudo-tabs was preserved only as an internal in-sheet tooltip (`T2.4c2`), leaving Zen sidebar hover interactions as plain native `title` tooltips. Rather than duplicating popover positioning, pointer-retarget, and hover/hide timers, extract a small shared helper (or mirror the exact `#bgalazka-rss-card` contract):
-
-- **Top-Layer Popover (`popover="manual"`):** Re-call `showPopover()` on every target switch so the card always sits above Big Preview and Zentral panels without z-index wars, positioned to the left or right of `#navigator-toolbox` via `runtime.sidebarSafeBounds()`.
-- **Notes Pseudo-Tab Card:** Displays note title, folder breadcrumb, tags/label pills, first 3–4 lines of body preview, and active reminder badge, with one-click buttons: **Open**, **New note in folder**, and **Trash** (routed through the `T2.3e` reminder-aware confirmation gate).
-- **Agenda Pseudo-Tab Card:** Displays event/reminder title, formatted date + time range, category badge, source note link, calendar note text, and one-click buttons: **Open note**, **Done**, **Snooze (+1h / +1d)**, and **Dismiss** — using `nextAgendaItem` pointer-retargeting (just like RSS `dismiss(tab, true)`) so rapid triage in the sidebar moves smoothly to the next item without closing the card.
-
-#### NOTE FROM OWNER: all standalone mods should still have all their standalone funcionality and work with eachother even without core mod but with rss and notes installed, obviusly haveing one engine that renders both would be great
-
-#### `T2.18` — Right-click menus everywhere (consistent engine)
-**Status:** `PARTIAL` · **Impact:** High · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
-
-**Current state and what is LEFT:** DONE: shared menu engine on note/folder rows and calendar item controls. LEFT: attach to Zen Agenda day nodes (`T3.4`) and add the `T3.8` split-view action when implemented.
-
-**Full specification (original row):** **PARTIAL in 3.3.28.** DONE: the shared menu engine normalizes legacy and `{ id, label, enabled, run }` actions, preserves disabled reasons, supports arrows/Enter/Escape/Home/End and submenu entry, and reliably dismisses on focus/anchor/window/sheet lifecycle changes. Note/folder rows and all calendar item controls (including Month marks) use one menu controller and `calendarItemMenuModel`; guarded actions include source-note/details, full `T2.3f` composer edit, reschedule, manual-only conversion/deletion, duplication, reminder lifecycle and quick snooze. ContextMenu/Shift+F10 parity and stale detached-row rejection are tested. **LEFT:** attach to Zen Agenda day nodes (`T3.4`), and add the `T3.8` split-view action when that feature exists.
-
 #### `T2.19` — Quick snooze on a reminder (+1 day / +3 days / next week)
+
 **Status:** `PARTIAL` · **Impact:** Med · **Effort:** S · **Source:** carried over from the previous roadmap (unchanged requirement)
 
-**Current state and what is LEFT:** DONE: calendar reminder buttons/marks and in-app calendar item context menus. LEFT: expose quick snooze on Zen Agenda sidebar item menus (`T3.4`) and wire recurring snooze to `T2.5e` exception scopes with occurrence-scoped history.
+**Current state and what is LEFT:** DONE: calendar reminder buttons/marks, in-app calendar item context menus, and the Zen Agenda sidebar item menu (it reuses `calendarItemMenuModel`, so the same Snooze group is there for non-recurring items). LEFT (only this): recurring snooze. The exception scopes it waited for exist now (`recurrenceExceptions`, `moveOccurrence`, the scope chooser of `Change time…`); wire Snooze to them with occurrence-scoped history and remove the disabled reason in `calendarItemMenuModel` (`Recurring occurrences need exception support…`).
 
 **Full specification (original row):** **PARTIAL in 3.3.31.** DONE: calendar reminder buttons/marks and all rendered calendar item context menus expose Snooze +1 day, +3 days, next Monday, and a custom date/time picker. Timed reminders preserve wall-clock time across DST; IANA item zones are honored for custom times; fall-back overlap chooses the earlier instant and spring-forward gaps advance to the first valid wall minute. All-day reminders remain date-only. Snooze appends a schedule-only history record and leaves source Markdown unchanged. **LEFT:** expose the same actions on Zen Agenda sidebar surfaces (`T3.4`), and wire recurring snooze to the new exception scopes with occurrence-scoped history; recurring Snooze remains visibly disabled meanwhile.
 
 #### `SB6.7` — Items whose source note is in Trash
+
 **Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Depends on:** UI4.7 · **Source:** Audit R1 B13
 
 **Problem:** `getItems` blanks the source title for a trashed note but still projects the item; clicking silently falls back to Day view.
 
 **Plan (do in this order):**
+
 1. Show 'source note in Trash' in the tooltip/card with a Restore action, or hide those items (setting).
 
 **Tests / done when:** Projection + click tests.
 
 #### `SB6.4` — Cap the number of Agenda tabs ('+N more')
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Depends on:** TM3.3 · **Source:** Audit R2 P6
 
+**Status:** `PARTIAL` · **Impact:** Med · **Effort:** S · **Depends on:** TM3.3 · **Source:** Audit R2 P6
+
+**Done:** the Overdue group is capped (`agendaOverdueProjection`, default 10, `+N more` node `more:overdue` that opens the day of the first hidden item). **Left:** the day folders have no cap.
 **Problem:** A 31-day window can create hundreds of real pinned `about:blank` tabs (each `addTab`/`pinTab` fires events and session work).
 
 **Plan (do in this order):**
+
 1. Setting 'Max items in sidebar' (default 40); beyond it show a single '+N more…' node that opens Day/Agenda view.
 2. Distribute the cap by day, earliest first.
 
 **Tests / done when:** Projection test for the cap and the extra node.
 
-#### `SB6.6` — Setting: what the X (close) button does on an Agenda tab
-**Status:** `OPEN` · **Impact:** Low-Med · **Effort:** S · **Depends on:** SB6.3 · **Source:** Proposal D5
+#### `T2.6` — Big Picture popup for the calendar
 
-**Problem:** Closing an Agenda tab makes it reappear (`TabClose` -> `schedule(400)`).
+**Status:** `OPEN` · **Impact:** Med · **Effort:** S-M · **Source:** carried over from the previous roadmap (unchanged requirement)
 
-**Plan (do in this order):**
-1. Options: hide this item today / dismiss / do nothing (default hide today).
-
-**Tests / done when:** Harness test for each option.
+**Current state and what is LEFT:** **OPEN.** Source audit found no Big Picture popup or dedicated tests. LEFT: temporarily move the live calendar pane to a large viewport card, persist 70/80/90/95% sizes, and restore host, view, scroll and focus with Escape/outside/teardown cleanup.
 
 #### `SB6.5` — Agenda Doctor (diagnostics and repair)
+
 **Status:** `OPEN` · **Impact:** Med · **Effort:** S-M · **Depends on:** F0.1 · **Source:** Proposal S1
 
 **Problem:** Orphan seed tabs, duplicate keys, tabs outside the root, released folders and history state are only discoverable by reading the DOM.
 
 **Plan (do in this order):**
+
 1. Settings button 'Check Agenda': counts and lists orphan seeds, duplicate keys, foreign tabs, released folders, history size/write state; one-click repair for safe cases.
 
 **Tests / done when:** Harness-based repair tests.
 
-#### `SB6.9` — Agenda sidebar quiet hours and 'left' counts
-**Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Depends on:** TM3.1 · **Source:** Proposals S5/D3
+#### `T2.11` — Exclude folders from the Zen NOTES sidebar
 
-**Problem:** Ideas from the audit.
+**Status:** `OPEN` · **Impact:** Med · **Effort:** S-M · **Source:** carried over from the previous roadmap (unchanged requirement)
 
-**Plan (do in this order):**
-1. Optional: collapse the Agenda folder outside work hours or when nothing is due within N hours.
-2. Day pill and label show items 'left' (excludes ended and done).
+**Current state and what is LEFT:** Depends on `T2.8` (`DONE`). Per-folder switch _Hide this folder from the Zen sidebar_ stored in `meta.json`; notes remain in All notes, search, calendar, and wiki links.
 
-**Tests / done when:** Projection tests.
+**Full specification (original row):** **OPEN.** Depends on shared Zen folder code in `T2.8`. Per-folder switch _Hide this folder from the Zen sidebar_ in tree and Zen folder menus, stored in `meta.json`. Notes remain in All notes, search, calendar and wiki links; only tabs and folder disappear from Zen NOTES. Children inherit parent exclusion unless explicitly overridden.
+
+#### `T2.11a` — Calendar-only notes (e.g. Birthdays) hidden from Zen NOTES
+
+**Status:** `OPEN` · **Impact:** High · **Effort:** S-M · **Source:** carried over from the previous roadmap (unchanged requirement)
+
+**Current state and what is LEFT:** Depends on `T2.11`. Per-note _Calendar-only / Hide from Zen NOTES_ flag + Birthday note preset/category so birthday notes never clutter Zen NOTES tabs while remaining searchable and active on the calendar.
+
+**Full specification (original row):** **OPEN.** Extend `T2.11` to a per-note _Calendar-only / Hide from Zen NOTES_ flag, available during note creation and later in note/folder menus. Such notes never become ordinary Zen NOTES tabs, but remain in All notes, search, backlinks, calendar and reminder navigation. Provide a practical Birthday note preset/category and allow any number of independent birthday reminders. Per-note exclusion must coexist with inherited folder exclusion and must not hide the note from the calendar.
+
+#### `T3.9a`..`T3.9e` — Sidebar widgets (split of T3.9)
+
+**Status:** `OPEN` · **Impact:** Med · **Effort:** S-M each · **Source:** owner 2026-11-10
+
+Standalone module `additional/widgets` (also in the full pack). Rules for all: study how new-tab-page widgets work and mimic them; never interact with the sidebar video player (free area about 179x426, about 179x301 while a 16:9 player shows; no fixed ratio); always leave room for tabs, folders and Essentials (setting: max share of free height, hide below a minimum); no permanent polling, per-widget refresh interval, pause when window or sidebar is hidden, cache last value. `a`: shell, free-area measurement, player avoidance, per-widget on/off. `b`: clock, date. `c`: weather. `d`: timer, quick note, RSS headline. `e`: battery/system load and the settings section.
+
+#### `T3.10` — Custom keyboard shortcut for opening a particular Zentral app or panel
+
+**Status:** `OPEN` · **Impact:** Med · **Effort:** S-M · **Source:** carried over from the previous roadmap (unchanged requirement)
+
+**Current state and what is LEFT:** Right-click an app/panel > "Add custom keyboard shortcut" (at least 2 keys, collision-checked, toggles visibility).
+
+**Full specification (original row):** **OPEN.** Right-click an app/panel (for example an Instagram panel) > "Add custom keyboard shortcut"; prompt records the combination (at least 2 keys, no single key, refuse combinations that collide with Zen/Firefox or another Zentral shortcut) and stores it per app. The shortcut reveals the app if hidden and hides it if shown. Show and remove the shortcut in the same context menu and in settings. Reuse the Notes assignable-keys code where possible.
 
 #### `SB6.10` — Incremental Agenda projection
+
 **Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Depends on:** PF2.3 · **Source:** Proposal S3
 
 **Problem:** Every run rebuilds all days.
 
 **Plan (do in this order):**
+
 1. Diff items by version and re-project only changed ids and affected days.
 
 **Tests / done when:** Equality test with full projection on random edits.
 
 #### `B3.3.50-6` — Harden ZenSync & SessionStore isolation for Agenda and Notes pseudo-tabs
-**Status:** `PARTIAL` · **Impact:** — · **Effort:** — · **Source:** carried over from the previous roadmap (unchanged requirement)
 
-**Current state and what is LEFT:** DONE: stale restore cleanup and, when Zen’s `saveState` hook is available, non-mutating pseudo-tab/empty managed-folder and corresponding native-group filtering before sidebar/session and Sync projection, preserving foreign content across windows. LEFT: Firefox’s separate SessionStore snapshots, split-view metadata, previously synced records, and live Zen validation.
+**Status:** `PARTIAL` · **Impact:** Med · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
+
+**Current state and what is LEFT:** DONE: stale restore cleanup and, when Zen’s `saveState` hook is available, non-mutating pseudo-tab/empty managed-folder and corresponding native-group filtering before sidebar/session and Sync projection, preserving foreign content across windows. LEFT: Firefox’s separate SessionStore snapshots, split-view metadata, and previously synced records.
 
 **Detailed proposal (owner-approved 2026-11-13, owner notes included):**
 
@@ -388,126 +455,65 @@ Zen's `gZenPinnedTabManager` and Firefox's `SessionStore` treat pinned tabs insi
 - Mark every Notes and Agenda pseudo-tab with `skipSessionStore` (and `zen-empty-tab` / custom `bgalazka-ephemeral-tab` where safe) and intercept `gZenPinnedTabManager` / `SessionStore` tab-data hooks if exposed.
 - Run an unconditional startup + `SSTabRestored` sweep for both `about:blank#zn-note:`/`#zn-new:` AND `about:blank#zn-agenda-` URLs/folders regardless of whether the corresponding preference is currently enabled or disabled.
 
----
-
-## Phase 7 — Structural changes and the rest of Track 2
-
-_Larger changes; do them with the Phase 0 harness in place. `T2.13` (ICS) is always last in Track 2._
-
-#### `ST7.3` — Move calendar UI state out of notes metadata
-**Status:** `OPEN` · **Impact:** Low-Med · **Effort:** S · **Depends on:** none · **Source:** Audit R2 P5
-
-**Problem:** `setMeta` rewrites the whole meta file (folders, up to 5000 note agenda overrides) 600 ms after every view/cursor/size/filter change (one write 600 ms after the last change: a drag of the Size slider is one write).
-
-**Plan (do in this order):**
-1. Store `calendarView`, `calendarCursor`, scale/range, filters in a small separate file or prefs; migrate once.
-
-**Tests / done when:** Migration test; no meta write on Prev/Next.
-
-#### `OW-18` — Shared versus independent Notes and Agenda per space
-**Status:** `PARTIAL` · **Impact:** High · **Effort:** L · **Depends on:** ST7.1, UI4.7 · **Source:** Owner request
-
-**Problem:** The owner wants a setting to choose whether Notes and Agenda use one shared dataset across all Zen spaces or separate space-local datasets, while allowing only explicitly selected notes and calendar items to be shared across spaces.
-
-**Current baseline:** ST7.1 implements the shared-all mode: there is one Notes/Agenda data set per browser window, and its managed sidebar projections follow that window's active Zen workspace. It does **not** create independent per-space stores or selective-sharing membership. Keep this existing shared behavior as the default. The November 14, 2026 ST7.1 implementation is being hardened rather than disabled; its workspace-sync crash and regression-test gap are documented below.
-
-**Goal:** Offer two explicit modes: (1) shared — all Notes and Agenda data remains available in every space, preserving today's behavior; (2) space-local — each space owns its own Notes and Agenda data, with explicit per-note/per-calendar-item sharing across spaces. Sharing is opt-in at item level, not an all-or-nothing duplication of every space. No cloud sync.
-
-**Plan (design before storage migration):**
-1. Specify the user-facing mode and per-item sharing controls. Define what sharing a note means for its linked calendar items, note-linked reminders, categories, attachments and metadata; define whether a calendar item can be shared without its source note.
-2. Define stable workspace identities that survive restart, rename and session restore. Do not use transient DOM IDs or the active workspace pointer as persistent storage identity. Specify removed/recreated-space behavior.
-3. Partition local note files, calendar records, reminder history, snoozes/dismissals/claims, alert scheduling, note-category overrides and attachment ownership by stable workspace identity. Specify the canonical record and history semantics for an explicitly shared item so two spaces cannot independently fire or overwrite the same reminder without a deliberate rule.
-4. Define multi-window coordination, conflict handling, backups and safe reversible transitions between shared and space-local modes. Preserve existing shared data; never silently merge, overwrite, delete or leak one space's data into another.
-5. Coordinate SessionStore and pseudo-tab behavior with `B3.3.50-6`, ST7.1 projection ownership and UI4.7 multi-window/data-integrity tests. Keep storage ownership separate from moving sidebar projection DOM.
-
-**Regression lessons for future AI work (must retain):**
-- Browser `querySelectorAll()` returns a `NodeList`, not an Array. Materialize it with `[...nodeList]` or `Array.from(nodeList)` before calling Array-only methods such as `.filter()`, `.map()` or `.some()`. Never polyfill `NodeList.prototype` to conceal a production bug. The old fake DOM returned Arrays and masked the November 14 crash, `TypeError: (intermediate value).filter is not a function`, in `syncSharedWorkspace()`. The shared-workspace regression test now injects an iterable, indexable NodeList-shaped collection with no Array helpers.
-- Attach NOTES/Agenda click and select handlers before attempting fallible workspace projection synchronization. Store reset/structural subscribers must also bind handlers before scheduling projection work; a projection error must never leave pseudo-tabs as selectable `about:blank` tabs.
-- Keep shared-workspace projection (where the sidebar roots appear) separate from the future OW-18 data-sharing model (which records are shared and who owns history/alerts).
-- The normal-tab middle-click unload flow must never choose either a Notes or Agenda pseudo-tab as its successor. Both types bounce native `TabSelect` back to the tab they came from; choosing one can cancel unloading of an ordinary tab and create repeated selection handoffs. Filter by explicit Notes/Agenda markers and exact current pseudo-URLs, not by tab labels or historical SessionStore entries.
-- Pseudo-tab ownership is live state, not a permanent tab identity: a nonblank `currentURI.spec` wins; when blank/discarded, use only the current SessionStore entry (never an older history entry, cached positive result, tab label or stale expando). Clear NOTES/Agenda markers, remembered URLs and internal pseudo-tab exemptions when the current page is ordinary content. Use the same validated predicate in click/select, drag, folder evacuation, active-tab return, restored-session cleanup and normal-tab unload safeguards.
-- A drag that starts with an ordinary web tab inside a managed Notes/Agenda folder must be allowed to leave that folder. Protect the pseudo-tab itself or a folder being dragged by itself; treat only the drop destination as a protected folder target. Do not infer that a tab is protected merely because its source ancestor is a managed folder.
-- Agenda pseudo-tab activation should occur on a stationary, unmodified left-button `mouseup` after the drag threshold is known, not depend on the synthesized `click` arriving in the same task. A later click must not activate twice. Keep a bounded cleanup for canceled/modified releases.
-- Gecko/Zen can deliver the follow-up `click` in a later native input task. Test the delayed-click ordering explicitly.
-
-**Tests / done when:** Two or more spaces and windows cover shared and isolated notes, calendar items, history, alerts, selected-item sharing, sidebar projections and linked records; switching modes and restarting retain both datasets without data loss or cross-space leakage; removed/recreated spaces and teardown are safe. Add storage migration/conflict/failure-injection tests before enabling space-local mode. Live-check native workspace identity if needed.
-
 #### `ST7.2` — Reminder history compaction (or append-only segments)
+
 **Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Depends on:** H1.2, H1.3, PF2.1 · **Source:** Audit R2 P4
 
 **Problem:** `writeNow` rewrites every record on every change; each reminder adds up to 3 `alerted` records plus snooze/done/dismiss and nothing is pruned. 5000 records = about 1 MB per write, 20000 = about 4 MB; `claimAlert` re-reads and parses the whole file before each alert.
 
 **Plan (do in this order):**
+
 1. On load keep the latest transition per occurrence and `alerted` records only for the last 30 days (setting); archive the rest to `reminder-history.archive.jsonl`.
 2. Or switch to monthly append-only JSONL segments; `claimAlert` reads only the current segment.
 
 **Tests / done when:** Compaction preserves `stateFor` results; size test.
 
-#### `ST7.5` — Reminder history export, prune and inspect UI
-**Status:** `OPEN` · **Impact:** Low-Med · **Effort:** S-M · **Depends on:** ST7.2 · **Source:** Audit R1 S6
-
-**Problem:** History is hard to inspect and trim.
-
-**Plan (do in this order):**
-1. List/filter/export/prune in the Notes settings next to ICS groundwork.
-
-**Tests / done when:** UI test for prune with confirmation.
-
-#### `B3.3.32-7` — Protect Daily Notes and connect note-less reminders to an Agenda note
-**Status:** `PARTIAL` · **Impact:** Med-High · **Effort:** S · **Source:** carried over from the previous roadmap (unchanged requirement)
-
-**Current state and what is LEFT:** DONE: purge protects today/future Daily Notes and dates occupied by stored calendar items; `store.mirrorItemToAgendaNote` mirrors note-less non-recurring items into `## Agenda` `%%calendar%%` lines; `store.backfillAgendaLinks` mirrors at startup; date-note folder is labelled **Agenda**. LEFT: Date-Note archive lifecycle (`T2.9`).
-
-#### `T2.9` — Daily-note lifecycle and archive policy inside Agenda
-**Status:** `OPEN` · **Impact:** Med-High · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
-
-**Current state and what is LEFT:** Depends on `T2.2c` (`DONE`), `T2.8` (`DONE`). Migrate existing Daily notes/folder and preserve links. Past daily notes move to Trash the next day and stay 30 days, then live only in the 48-hour rolling backup; optional _always archive, never trash_ setting.
-
-**Full specification (original row):** **OPEN.** Depends on `T2.2c`, `T2.8`. Migrate existing Daily notes/folder and preserve links. Past daily notes move to Trash the next day and stay 30 days, then live only in the 48-hour rolling backup. Setting _always archive, never trash_ keeps compressed copies in a separate archive folder. No duplicate Daily pseudo-folder beside Agenda.
-
 #### `T2.10` — Work-free-day tint + selectable holiday calendars
+
 **Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
 
 **Current state and what is LEFT:** Depends on `T2.1` (`DONE`), `T2.4b` (`DONE`). Greenish tint for weekends, public holidays and personal days off in month/week/list views with offline region rules (`holidaysFor(region, year)` / `isWorkFree(day, prefs)`).
 
 **Full specification (original row):** **OPEN.** Depends on `T2.1`, `T2.4b`. Greenish tint for weekends, public holidays and personal days off in month/week/list views. Region selector (Polish, German, English, American, more later); offline fixed/Easter/weekday rules; pure `holidaysFor(region, year)` / `isWorkFree(day, prefs)` tested per year, tooltip names holiday, own extra days off. Decide weekend days per region (Sat/Sun or Fri/Sat).
 
-#### `T2.11` — Exclude folders from the Zen NOTES sidebar
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S-M · **Source:** carried over from the previous roadmap (unchanged requirement)
+#### `T2.11b1` / `T2.11b2` — Discoverability audit, then demo rebuild
 
-**Current state and what is LEFT:** Depends on `T2.8` (`DONE`) and `T3.4`. Per-folder switch _Hide this folder from the Zen sidebar_ stored in `meta.json`; notes remain in All notes, search, calendar, and wiki links.
+**Status:** `OPEN` · **Impact:** High / Med · **Effort:** M each · **Depends on:** Track 1-2 UI done / T2.11b1 · **Source:** split of T2.11b
 
-**Full specification (original row):** **OPEN.** Depends on shared Zen folder code in `T2.8` and `T3.4`. Per-folder switch _Hide this folder from the Zen sidebar_ in tree and Zen folder menus, stored in `meta.json`. Notes remain in All notes, search, calendar and wiki links; only tabs and folder disappear from Zen NOTES. Children inherit parent exclusion unless explicitly overridden.
-
-#### `T2.11a` — Calendar-only notes (e.g. Birthdays) hidden from Zen NOTES
-**Status:** `OPEN` · **Impact:** High · **Effort:** S-M · **Source:** carried over from the previous roadmap (unchanged requirement)
-
-**Current state and what is LEFT:** Depends on `T2.11`. Per-note _Calendar-only / Hide from Zen NOTES_ flag + Birthday note preset/category so birthday notes never clutter Zen NOTES tabs while remaining searchable and active on the calendar.
-
-**Full specification (original row):** **OPEN.** Extend `T2.11` to a per-note _Calendar-only / Hide from Zen NOTES_ flag, available during note creation and later in note/folder menus. Such notes never become ordinary Zen NOTES tabs, but remain in All notes, search, backlinks, calendar and reminder navigation. Provide a practical Birthday note preset/category and allow any number of independent birthday reminders. Per-note exclusion must coexist with inherited folder exclusion and must not hide the note from the calendar.
-
-#### `ST7.4` — Render Agenda rows without real tabs (research)
-**Status:** `OPEN` · **Impact:** Low-Med (long term) · **Effort:** L · **Depends on:** ST7.1 · **Source:** Audit R1 D6
-
-**Problem:** Every item is a real pinned `about:blank` tab, which is the root of the session/sync/tab-cycling edge cases.
-
-**Plan (do in this order):**
-1. Investigate whether Zen's folder DOM can host non-tab rows with the same hover/drag behaviour; prototype behind a flag; abandon if Zen internals fight it.
-
-**Tests / done when:** Prototype report.
+`T2.11b1`: list every implemented Notes function and where a person finds it; group related controls into menus; write the findings list. `T2.11b2`: rebuild the built-in DEMO notes to show every implemented function (after `T2.11b1`).
 
 #### `T2.13` — ICS export/import and Google-sync groundwork (always last in Track 2)
+
 **Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
 
 **Current state and what is LEFT:** **DO NOT BEGIN UNTIL EVERY OTHER TRACK 2 ROW IS `DONE`.** Local `.ics` export/import with stable `uid` / `etag` / `updated`, `syncState`, and RRULE serialization.
 
 **Full specification (original row):** **OPEN — DO NOT BEGIN UNTIL EVERY OTHER T2 TASK IS COMPLETE.** Depends on all Track 2 item model, recurrence, reminder and calendar UI work. Export/import `.ics` locally (no network); stable `uid` / `etag` / `updated`, `syncState` per item, RRULE serialization and fixture coverage.
 
----
+#### `T3.3` — Drag-and-drop note tabs within Zen sidebar
 
-## Phase 8 — Independent tracks (may be interleaved from Phase 4 on, by impact)
+**Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
+
+**Current state and what is LEFT:** Hook into Zen sidebar drag events so reordering or dropping a note tab into a folder updates the underlying Notes tree order/parent folder smoothly.
+
+**Full specification (original row):** **OPEN.** Hook into Zen sidebar drag events so reordering or dropping a note tab into a folder updates the underlying Notes tree order/parent folder smoothly.
+
+#### `T3.8` — Split View as an equal-sized companion window/pane
+
+**Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
+
+**Current state and what is LEFT:** Allow opening a second note side-by-side in an equal-dimension split pane (or synchronized companion panel) for reference reading and cross-note editing. Audit 2026-11-16: nothing of this exists; `Split view` today is only editor + preview (`mode === "split"`). When this is built, also add the _open in split view_ action to the shared note/folder menu engine (moved here from the closed `T2.18`).
+
+**Full specification (original row):** **OPEN.** Allow opening a second note side-by-side in an equal-dimension split pane (or synchronized companion panel) for reference reading and cross-note editing.
+
+#### `T4.3a`..`T4.3c` — Modularize `ZentralNotes.uc.js` (split of T4.3)
+
+**Status:** `OPEN` · **Impact:** Med · **Effort:** M each · **Source:** previous roadmap
+
+`a`: calendar UI out of the monolith (module `api`, test seam unchanged). `b`: parser/wiki graph and import/export. `c`: Zen sidebar UI and one build entry. After each step all tests and the standalone build must pass unchanged.
 
 #### `OW-21` — Find and replace within Notes (lower priority)
+
 **Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Depends on:** none · **Source:** Owner request
 
 **Plan:** Add discoverable find-and-replace to Notes with explicit single/all replacement, preview/count and safe editable-note behavior; preserve undo, read-only/trash protections, literal matching semantics, selections and existing find behavior. Define behavior for case/accent options and zero/overlapping matches; never silently replace across unrelated notes.
@@ -515,84 +521,144 @@ _Larger changes; do them with the Phase 0 harness in place. `T2.13` (ICS) is alw
 **Tests / done when:** Unit and real-sheet tests cover replace one/all, matching options, no matches, undo, read-only/trash and non-target notes; document keyboard/accessibility behavior.
 
 #### `OW-22` — Find next or previous match outside the visible viewport (lower priority)
+
 **Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Depends on:** none · **Source:** Owner request
 
 **Plan:** Extend Ctrl+F with next/previous actions that skip all matches currently visible in the note viewport and move to the next not-displayed match, letting the user read all visible matches at once. Preserve existing single-match navigation, wrap behavior, selection and scroll; handle partially visible matches, no offscreen match, both directions, editable/read/split layouts and resizing.
 
 **Tests / done when:** Geometry and real-sheet tests include several visible matches, offscreen matches in both directions, wrap/no-offscreen cases and accessible controls; verify live layout where possible.
 
-
 _Not blocked by the calendar work._
 
-#### `T1.18` — Export syntax-mismatch warning dialog
-**Status:** `PARTIAL` · **Impact:** Med-High · **Effort:** S · **Source:** carried over from the previous roadmap (unchanged requirement)
+#### `SB6.6` — Setting: what the X (close) button does on an Agenda tab
 
-**Current state and what is LEFT:** DONE: code-aware scan, portable conversion and raw/convert/cancel dialog for single, folder and ZIP Markdown exports covering ToC, blockquote and known closed `:::` container callouts (ambiguous or oversized recognized containers warn and stay raw), transclusions, hidden/calendar markers, extended tasks, highlights/underline, spoilers, subscript/superscript, inline footnotes and math-as-literal-code; warning and export use the same note snapshots; exported files retain note IDs, reminder metadata and foreign front matter; exact-length inline code spans, including spans across paragraph lines, link destinations and HTML attributes are protected from conversion; backtick runs are indexed to avoid quadratic lookahead. LEFT: audit other Zentral-only syntax and conversion fidelity; validate live exports and assets.
+**Status:** `OPEN` · **Impact:** Low-Med · **Effort:** S · **Depends on:** SB6.3 · **Source:** Proposal D5
 
-**Full specification (original row):** **PARTIAL.** DONE: code-aware scan, conservative portable conversion (including extended tasks, highlights, spoilers, subscript/superscript, inline footnotes and math-as-literal-code), snapshot-consistent raw/convert/cancel export dialogs, metadata-preserving Markdown files indexed exact-length multiline inline-code protection and safe link/attribute handling. LEFT: remaining Zentral syntax and conversion fidelity audit, per-note flavor/ignore semantics, live export/asset validation.
+**Problem:** Closing an Agenda tab makes it reappear (`TabClose` -> `schedule(400)`).
 
-#### `T3.2` — Multi-select notes & folders in tree view
-**Status:** `OPEN` · **Impact:** Med-High · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
+**Plan (do in this order):**
 
-**Current state and what is LEFT:** Support `Shift+Click` (range) and `Ctrl/Cmd+Click` (toggle) in the note tree for batch move, batch category/tag assignment, batch export, and batch Trash.
+1. Options: hide this item today / dismiss / do nothing (default hide today).
 
-**Full specification (original row):** **OPEN.** Support `Shift+Click` (range) and `Ctrl/Cmd+Click` (toggle) in the note tree for batch move, batch category/tag assignment, batch export, and batch move to Trash.
+**Tests / done when:** Harness test for each option.
 
-#### `T3.11` — Colorful Folders live checks and polish
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Source:** carried over from the previous roadmap (unchanged requirement)
+#### `ST7.3` — Move calendar UI state out of notes metadata
 
-**Current state and what is LEFT:** Live Zen checks for accent line, soft tint, hover rules, draggable editor at both sidebar edges, live preview in editor, drag-reorder saved quick themes, export/import quick themes, per-folder Simple/Detailed.
+**Status:** `OPEN` · **Impact:** Low-Med · **Effort:** S · **Depends on:** none · **Source:** Audit R2 P5
 
-**Full specification (original row):** **OPEN.** Not run in a real Zen: accent line, soft tint and hover rules (written against `zen-folder > .tab-group-label-container / .tab-group-container`; if one still does nothing, take a DOM dump of a folder), draggable editor at both sidebar edges, Notes-first and Colorful-first startup, per-level defaults in Zen and All notes, collection spread. Polish: show a live preview in the editor, drag-reorder saved quick themes, export/import of quick themes, per-folder (not global) Simple/Detailed.
+**Problem:** `setMeta` rewrites the whole meta file (folders, up to 5000 note agenda overrides) 600 ms after every view/cursor/size/filter change (one write 600 ms after the last change: a drag of the Size slider is one write).
 
-#### `T3.3` — Drag-and-drop note tabs within Zen sidebar
-**Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
+**Plan (do in this order):**
 
-**Current state and what is LEFT:** Hook into Zen sidebar drag events so reordering or dropping a note tab into a folder updates the underlying Notes tree order/parent folder smoothly.
+1. Store `calendarView`, `calendarCursor`, scale/range, filters in a small separate file or prefs; migrate once.
 
-**Full specification (original row):** **OPEN.** Hook into Zen sidebar drag events so reordering or dropping a note tab into a folder updates the underlying Notes tree order/parent folder smoothly.
+**Tests / done when:** Migration test; no meta write on Prev/Next.
 
-#### `T3.5` — Split Callout toolbar button (quick insert + type/fold picker)
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Source:** carried over from the previous roadmap (unchanged requirement)
+#### `T3.5` — Callout toolbar button: last-used on click, more kinds
 
-**Current state and what is LEFT:** Replace single callout button with a split button: primary click inserts default/last-used callout; dropdown chevron opens a picker for `[!note]`, `[!tip]`, `[!warning]`, `[!danger]`, `[!faq]-`, `[!bingo]`, `[!poll]`.
+**Status:** `PARTIAL` · **Impact:** Low-Med · **Effort:** S · **Source:** audit 2026-11-16
 
-**Full specification (original row):** **OPEN.** Replace single callout button with a split button: primary click inserts the default/last-used callout; dropdown chevron opens a picker for `[!note]`, `[!tip]`, `[!warning]`, `[!danger]`, `[!faq]-`, `[!bingo]`, `[!poll]`.
+**Current state and what is LEFT:** DONE: a `Callout…` entry in the More menu (`showCalloutMenu`), 15 kinds (`CALLOUT_KINDS`), and holding Quote or the More caret lists them. LEFT (only this): a primary click that inserts the last-used callout (remembered per window) and the extended kinds of the old spec (`[!faq]-` foldable, `[!bingo]`, `[!poll]`) in the picker.
 
-#### `T3.8` — Split View as an equal-sized companion window/pane
-**Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
+#### `UI4.9` — Space before the unit in slider values
 
-**Current state and what is LEFT:** Allow opening a second note side-by-side in an equal-dimension split pane (or synchronized companion panel) for reference reading and cross-note editing.
+**Status:** `OPEN` · **Impact:** Low-Med · **Effort:** S · **Source:** handoff finding, accepted 2026-11-16
 
-**Full specification (original row):** **OPEN.** Allow opening a second note side-by-side in an equal-dimension split pane (or synchronized companion panel) for reference reading and cross-note editing.
+**Problem:** A slider value has no space before its unit (`7days`, `100000chars`).
+**Plan:** One formatter for the value + unit of every settings slider; no space only for `%` and `px`.
 
-#### `T3.10` — Custom keyboard shortcut for opening a particular Zentral app or panel
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S-M · **Source:** carried over from the previous roadmap (unchanged requirement)
+**Tests / done when:** The settings layout test asserts the text of every slider value.
 
-**Current state and what is LEFT:** Right-click an app/panel > "Add custom keyboard shortcut" (at least 2 keys, collision-checked, toggles visibility).
+#### `UI4.11` — Escape returns the focus to the button that opened a menu
 
-**Full specification (original row):** **OPEN.** Right-click an app/panel (for example an Instagram panel) > "Add custom keyboard shortcut"; prompt records the combination (at least 2 keys, no single key, refuse combinations that collide with Zen/Firefox or another Zentral shortcut) and stores it per app. The shortcut reveals the app if hidden and hides it if shown. Show and remove the shortcut in the same context menu and in settings. Reuse the Notes assignable-keys code where possible.
+**Status:** `OPEN` · **Impact:** Low-Med · **Effort:** S · **Source:** handoff finding, accepted 2026-11-16
 
-#### `T4.1` — Owner's comprehensive verification note (`Markdown & Extended Syntax Feature Showcase`)
-**Status:** `OPEN` · **Impact:** High · **Effort:** S · **Source:** carried over from the previous roadmap (unchanged requirement)
+**Problem:** Escape closes a menu of the sheet (`closeMenu`) without giving the focus back to the button that opened it. Every menu is affected; keyboard users lose their place.
+**Plan:** Remember the opener in `closeMenu` and focus it on Escape and on an action chosen by keyboard; do nothing when the opener is gone or the close came from an outside click.
 
-**Current state and what is LEFT:** Bundle/update the 12-section verification showcase note after Tracks 1–3 are feature-complete.
+**Tests / done when:** One test over every menu opener; focus returns on Escape, not on outside click.
 
-**Full specification (original row):** **OPEN.** Bundle/update the built-in showcase note covering all 12 verification sections: (1) Inline styles, `==highlight==`, `<kbd>`, `~sub~`/`^sup^`, dividers; (2) H1–H6 hierarchy & auto-updated `## Table of Contents`; (3) Multi-paragraph & nested blockquotes; (4) Obsidian callouts including foldable `[!faq]-`; (5) Unordered, ordered & interactive task lists (`[x]`, `[?]`, `[ ]`); (6) Aligned GFM tables with escaped pipes `\|`; (7) Highlighted code blocks (JS, Python, Rust, JSON); (8) Inline `$...$` & block `$$...$$` LaTeX matrices/equations; (9) Wikilinks (`[[Note\|Alias]]`, `#Heading`, `^block-id`), nested `#tags`, and `![[embeds\|450]]`; (10) Standard `[^1]` & inline `^[...]` footnotes; (11) Native HTML `<details>` accordions; (12) Mermaid diagrams (`flowchart`, `gitGraph`).
+#### `ST7.5` — Reminder history export, prune and inspect UI
 
-#### `T4.2` — Performance audit & active timer/listener registry table
-**Status:** `OPEN` · **Impact:** Med-High · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
+**Status:** `OPEN` · **Impact:** Low-Med · **Effort:** S-M · **Depends on:** ST7.2 · **Source:** Audit R1 S6
 
-**Current state and what is LEFT:** Profile parser, reminder scheduler, and DOM observers; document all active timers/listeners and verify rapid date-note switching returns listener count to baseline.
+**Problem:** History is hard to inspect and trim.
 
-**Full specification (original row):** **OPEN.** Profile parser, reminder scheduler, and DOM observers; document all active `setInterval`/`setTimeout`/event listeners in a central registry to guarantee zero memory leaks on panel close. Include the rapid-switch case from the owner's second roadmap: open several date/day notes quickly and assert the listener count returns to its baseline (this mod has no `BroadcastChannel`/`WebSocket`; the leak risk is `addEventListener` and timers).
+**Plan (do in this order):**
 
-#### `T4.4` — Dead code removal (`stretched()`, legacy `quad` helpers)
-**Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Source:** carried over from the previous roadmap (unchanged requirement)
+1. List/filter/export/prune in the Notes settings next to ICS groundwork.
 
-**Current state and what is LEFT:** Remove unused legacy layout helpers confirmed dead after `T4.1` verification.
+**Tests / done when:** UI test for prune with confirmation.
 
-**Full specification (original row):** **OPEN.** Remove unused legacy layout functions (`stretched()`, obsolete `quad` math/positioning helpers) confirmed dead after `T4.1` verification.
+#### `UI4.10` — Settings dialog follows the text size
+
+**Status:** `OPEN` · **Impact:** Low-Med · **Effort:** S-M · **Source:** handoff finding, accepted 2026-11-16
+
+**Problem:** The Settings card takes its size once, when it opens (from the Writing tab); a later change of text size or sheet size does not resize it and its body scrolls instead. Chips, tabs and dialog buttons keep 12 px (`.zn-chip { font-size: 12px }`), so at 28 px text the labels are large and the On / Off chips small. The Table creator shows both scrollbars where the card must be wider than the sheet (classic scrollbars): its number fields do not shrink and its size grid grows with the width.
+**Plan (do in this order):**
+
+1. Size chips, tabs and buttons from the text size.
+2. Fit the card again when the text size or the sheet changes; in `fitCard` measure the height again once the natural width is known.
+3. Table creator: let the number fields shrink and cap the size grid.
+
+**Tests / done when:** `tests/notes-settings-layout.test.cjs` cases for a text-size change while open; run `tools/audit-notes-settings-layout.cjs` (0 findings).
+
+#### `ST7.4` — Render Agenda rows without real tabs (research)
+
+**Status:** `OPEN` · **Impact:** Low-Med (long term) · **Effort:** L · **Depends on:** ST7.1 · **Source:** Audit R1 D6
+
+**Problem:** Every item is a real pinned `about:blank` tab, which is the root of the session/sync/tab-cycling edge cases.
+
+**Plan (do in this order):**
+
+1. Investigate whether Zen's folder DOM can host non-tab rows with the same hover/drag behaviour; prototype behind a flag; abandon if Zen internals fight it.
+
+**Tests / done when:** Prototype report.
+
+#### `SB6.9` — Agenda sidebar quiet hours and 'left' counts
+
+**Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Depends on:** TM3.1 · **Source:** Proposals S5/D3
+
+**Problem:** Ideas from the audit.
+
+**Plan (do in this order):**
+
+1. Optional: collapse the Agenda folder outside work hours or when nothing is due within N hours.
+2. Day pill and label show items 'left' (excludes ended and done).
+
+**Tests / done when:** Projection tests.
+
+#### `F0.15` — Isolate the time-budget test of the Agenda projection
+
+**Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Source:** handoff debt, accepted 2026-11-16
+
+**Problem:** `tests/notes-agenda-projection.test.cjs` measures a time budget inside the parallel batch (75.6 ms against a ceiling of 55.7 ms, once in five full runs) because its name has no `perf`, so `run-all.cjs` does not isolate it.
+**Plan:** Move the timing assertion to `tests/notes-agenda-projection-perf.test.cjs`; keep the behaviour assertions where they are.
+
+#### `DOC-1` — README documents a split view that does not exist
+
+**Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Source:** audit 2026-11-16, accepted
+
+**Problem:** `additional/notes/README.md` ("Split view as a second window (setting, off by default)") describes a setting with no code; only an orphan comment remains above `syncAllNewButton` in `ZentralNotes.uc.js` (~11129).
+**Plan:** Remove the README line and the comment (rebuild standalone, keep the README test green), or build it as part of `T3.8`.
+
+#### `TM3.7` — Day range on the day the clocks go forward at midnight
+
+**Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Source:** `F0.13` observation, accepted 2026-11-16
+
+**Problem:** `addDays(dayStart, 1)` keeps the wall clock, so in a zone whose clocks go forward at midnight (Chile, Egypt, Lebanon, Cuba) the day of the change ends at 01:00 of the next day wherever a day range is built that way (views not checked). One day a year; only items between 00:00 and 00:59.
+**Plan:** Build day ranges with `zonedDayBounds`/`dayStart` of the next day instead of adding 24 h or keeping the clock; check Week, Day, Month and Agenda.
+
+**Tests / done when:** A golden case for such a zone in the time-zone matrix.
+
+#### `F0.16` — Sweep tests that build fixtures around the real clock
+
+**Status:** `OPEN` · **Impact:** Low · **Effort:** S-M · **Source:** handoff test noise, accepted 2026-11-16
+
+**Problem:** `F0.14` fixed one test that failed at some hours of the day because it used the real "now". Others may fail at hours nobody has run them at.
+**Plan:** List every test that reads `Date.now()` or `new Date()` for fixtures, fix the clock in each (pattern of `tests/notes-calendar-views.test.cjs`), then run the suite under the four-zone matrix at three different hours.
+
+**Tests / done when:** A check that fails on a test using the real clock without fixing it.
 
 ---
 
@@ -652,16 +718,17 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 2. Pure function first, exported through `__zentralNotesTestSeam`, fixture test red, then implement. Parser changes go in `parseBlocks` / the inline parser; keep `exportHtml` and `exportText` in step.
 3. Release loop: `node tools/build-standalone.cjs --bump`, `node tools/sync-version.cjs`, `node tools/build-standalone.cjs`, `node tools/build-preferences.cjs`, `node tools/build-z-map.cjs`, `node tools/build-standalone.cjs --check`, then `node tests/run-all.cjs`. The second and third commands keep the main mod and every standalone module on one version.
 
-
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.189, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.195, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.195.** `F0.1`–`F0.14`, `H1.1`–`H1.5`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B5`, `SB6.1`, `SB6.8`, `T2.8b`, `T3.1`, `T3.6a`, `T4.5`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c` and `OW-25` and `AU-B4a` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`155/155` test files) and the timezone matrix (`232/232` across `UTC`, `Europe/Warsaw`, `America/Los_Angeles`, `Pacific/Auckland`) pass in Node/fake-Zen at 3.3.195. Live Zen is not available in the sandbox. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.195.** `F0.1`–`F0.14`, `H1.1`–`H1.5`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B5`, `SB6.1`, `SB6.8`, `T2.8b`, `T3.1`, `T3.6a`, `T4.5`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c` and `OW-25`, `AU-B4a`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`155/155` test files) and the timezone matrix (`232/232` across `UTC`, `Europe/Warsaw`, `America/Los_Angeles`, `Pacific/Auckland`) pass in Node/fake-Zen at 3.3.195. Live Zen is not available in the sandbox. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
 Completed this session (3.3.163–3.3.193), every finished item archived in `docs/LEGACY_done_rows.md`:
+
+- Roadmap audit 2026-11-16 (no code changed, version stays 3.3.195): every open row was checked against the code and the tests. Closed and archived because the code and a passing test already exist: `OW-27` (an Agenda entry opens on the first stationary release, `tests/notes-agenda-click.test.cjs`, `tests/notes-agenda-bounce.test.cjs`), `T2.4c1` (nothing left that `T2.4c4` does not own), `B3.3.32-7` (its only LEFT was `T2.9`) and `T2.18` (the Zen Agenda day and item menus exist; its last bullet, the split-view menu action, moved to `T3.8`). Narrowed: `T2.19` (only recurring snooze left), `T3.4` (only _Create reminder in this folder…_ left), `T3.4a` (Agenda title card exists, now `PARTIAL`), `SB6.4` (Overdue is capped, now `PARTIAL`), `T2.9` (blank-note purge exists, now `PARTIAL`). Live-check wording removed from `T1.18`, `B3.3.50-6`, `T2.4c4`. `T4.4` carries a warning: `stretched()` and `SLOT.quad` are live code. Second pass 2026-11-16 (owner accepted all proposals): new rows `H1.6`, `OW-30`, `OW-29`, `UI4.9`, `F0.15`, `DOC-1`; dropped `T3.11`, `T4.4`, `AU-B2` (folded into `T3.4a`); `T3.5` trimmed; the phase headings are gone, the blocks follow the Master Order, and the Master Order is sorted by impact (High first), then effort (S first), never ahead of a dependency (59 rows after the third pass: new `UI4.10`, `UI4.11`, `F0.16`, `TM3.7`; `T2.5` reworded; `SB6.2`, `SB6.3`, `T3.4a`, `T2.11` no longer wait for `T3.4`; `T2.9` needs an owner decision first). The root `TODO_handoff.md` is a byte copy of `docs/LEGACY_handoff_3.1.3.md` and should be deleted from the repository.
 - `UI4.7` DONE — multi-window and data-integrity edge tests closed: blocked stale write keeps later edits until its recovery copy exists; writers without a lock are detected by snapshot; note text is always written before `calendar.json` (`createItemStore({ beforeWrite })`); after a crash between the two writes the manual record and its mirror line become one reminder again (`mirrorItemToAgendaNote` twin re-key). `F0.5` and `F0.6` (finished earlier) were moved out of the roadmap.
 - `T4.5` DONE — one version everywhere: `tools/sync-version.cjs` (+ `--check`, `--set`), `tests/version-sync.test.cjs`, CI workflow and release-loop documentation.
 - `F0.8` + `AU-B1` DONE — readable recurrence golden table (`tests/notes-recurrence-golden.test.cjs`, 3 zones x 4 system zones). Fixed what it exposed: `UNTIL` now ends a series with its last day in the item's zone (`recurrenceUntilMs`), and both recurrence editors show the stored last date (`parseRule().untilKey`) instead of the day before on a 23-hour day.
@@ -701,4 +768,4 @@ Standing owner rules for chunks: commit to Git, no ZIPs; no conversational fille
 
 Known debts / owner requirements: `OW-18` (space-local Notes/Agenda) and `B3.3.50-6` (`SessionFile.write` snapshot isolation) remain `PARTIAL`. LIMITS of `OW-04`: the pointer is held to the hours shown, so a new range or an edge cannot be dragged beyond them (show all 24 hours, or type the time); the layout was measured in Chromium, not in Gecko. LIMITS of `OW-03`: where the hours fit was measured in Chromium, not in Gecko (the fit itself is arithmetic on the measured height of the timeline; what differs between the engines is the height of a line of text, which moves the border between "fits" and "scrolls" by a px or two). At the default text size and with the panes side by side, 24 hours fit from a sheet about 710 px high; in a lower one they scroll at 18 px an hour (fewer hours fit earlier: `08–20` from about 500 px). In a pane too low for two and a half of the smallest hours the timeline scrolls inside a pane content that scrolls too. FOUND with it, not changed: Escape closes a menu of the sheet without giving the focus back to the button that opened it (`closeMenu`; every menu, not only `Size`). On the day the clocks go back an event that begins in the first pass of the repeated hour and ends in the second at an earlier clock time is drawn 20 px high (a clock grid has one place for 02:30). `OW-26` is shown in a fake layout only: remote browsers, native hit testing, pointer capture and real timing are not covered, and the owner's pair and settings are not known, so the owner checks the edge drag in Zen. `OW-28` likewise (fake layout only). Test noise: other test files that build fixtures around the real "now" may fail at hours nobody has run them at (`F0.14` fixed the one that did; the whole matrix passed at 23:10 UTC with that one exception). Not changed: `tests/notes-agenda-projection.test.cjs` measures a time budget inside the parallel batch (its name has no `perf`, so `run-all.cjs` does not isolate it); it failed once in five full runs of this session (75.6 ms against a ceiling of 55.7 ms, two cores and four workers) and passed alone three times. Accepted limits of `UI4.7` (not tasks): a foreign program writing between our compare and our write cannot be locked out; note file and `calendar.json` are ordered and repaired on start, not one transaction (details of a reminder that never reached `calendar.json` are lost if the browser dies between the two writes; date, time and title survive in the note line). FOUND while testing, needs an owner decision (nothing changed): once a calendar line has its hidden `%%zn-item-id%%`, retyping its date or time in the note text does not move the stored item (`syncNote` always keeps `old.start`); only the calendar UI moves it. Safe fix idea: remember the schedule parsed from each line and let the text win only when that parsed schedule changed in an edit. FOUND, not changed: for a skipped hour (clocks forward) an item with its own zone moves to 03:00, an item in the system zone to 03:30; both are pinned in the golden table. LIMITS of `OW-23`: the picker was looked at in Chromium, not in Gecko, and with a throwaway script (no audit tool was added for it). Its labels are English; the language of the browser is used for the names of countries in the search only. Abbreviations exist for the zones whose English long name is in `ZONE_ABBREVIATIONS` (Europe, Africa, North America, Australia, much of Asia); the others show their offset alone. Zone names without an area (`EST5EDT`, the zone `CET`) are not offered and cannot be typed: `cet` typed is the abbreviation and fits several zones (a stored one is kept as it is). An id with an area that the engine knows (`Etc/GMT-3`, `US/Pacific`) is not offered but is taken when typed in full. The zones chosen lately are kept per window. `UTC+3` is a fixed offset: an item in it does not follow a clock change (the list says so beside every offset). LIMITS of `OW-24`: a day and a month without a year are the next such day from today on, as in a note (`14.11` typed on 16 November is next year's; the line under the field shows the year); a day alone is a day of the month the field shows and may be past. The date parser supports English and Polish language tables; future interface-string translation remains `AU-B4b`. `24:00` and seconds are no times; quiet hours (the browser's own time fields) and Visible hours (whole hours) are as they were. Looked at in Chromium, not in Gecko: that a click leaves the text of a field selected rests on `focus`, `mousedown` and `mouseup` coming as the specification says. FOUND with it in Chromium only, nothing changed: the menu of a calendar item closes when its `Snooze` group is opened. The menu is filled anew, the button that had the focus is removed, and Chromium reports that as focus leaving the menu (`focusout`, then `closeMenu`). Gecko does not report a removed element that way and neither does the fake DOM, so Zen should not be affected; if the Snooze choices ever vanish in Zen, this is the place. FOUND while answering the review, nothing changed, ONE check in Zen asked of the owner (it cannot be reasoned out here): the Firefox source says a closed window runs no further promise step, and the save on closing a window first reads the note file (to notice a foreign change) before it writes, so the text typed since the last automatic save (0.8 s after the last key, at most the autosave interval while typing) is probably not written when the window is closed. Check: type a word in a note and close the window within half a second (not the last window: quitting may differ), open Notes in another window; if the word is missing, the fix is a row of its own: on `unload` copy the file to the recovery area and write the unsaved text in calls issued at once, which the I/O thread finishes without the window. The same applies to a calendar change made in the last 0.6 s (the note line then restores date, time and title, not the details). Since 3.3.170 the same applies to the settings file (it is read before it is written): a folder made in the last 0.6 s before a window is closed. OBSERVED with the `F0.13` fix, not changed: `addDays(dayStart, 1)` keeps the wall clock, so on a computer in a zone whose clocks go forward at midnight the day of the change ends at 01:00 of the next day wherever a day range is built that way (views not checked); one day a year, items between 00:00 and 00:59 only. LIMIT of the `T3.1` measurement of the settings dialogs: it ran in Chromium (Blink); Zen draws with Gecko, and no Gecko build can be fetched in the sandbox. The causes that were fixed (grid rows with a `min-height` in a grid that must scroll, a later rule with the same selector, loose items of a wrapping row) are behaviour both engines share by specification; the widths of text and form controls differ a little, which moves where a line wraps. If a settings row still looks wrong in Zen, the text size, the sheet width and the tab are enough to reproduce it. FOUND while measuring, nothing changed, each needs an owner decision before it becomes a row: (1) Chips, tabs and dialog buttons keep 12 px at every text size (`.zn-chip { font-size: 12px }`), so at 28 px the labels are large and the On / Off chips small. (2) The Settings card takes its size once, when it opens (from the Writing tab); it does not follow a later change of the text size or of the sheet, its body scrolls instead. (3) A slider value has no space before its unit (`7days`, `100000chars`). (4) Table creator: its two number fields do not shrink and its size grid grows with the width, so where the card has to be wider than the sheet it shows both scrollbars on systems with classic scrollbars (82 of the 120 measured cells with classic scrollbars; none with scrollbars that take no room; before 3.3.171, 171 of 240 cells). Fix idea: in `fitCard` measure the height again once the natural width is known.
 
-Next action: continue the Master Order: `AU-B4b`, `T2.4c1`. Work on the Week / Day grid starts from `tests/notes-calendar-hours.test.cjs`; a time in the grid is a clock time, never minutes since midnight (run it under `TZ=Europe/Warsaw ZN_HOURS_WARSAW_RUN=1` to see a failure of the clock-change cases). Work on Notes inside Triple View starts from `tests/helpers/fake-triple-view.cjs` (its header says what it does and does not prove); a new case there must fail on the code before the change. After a change to the style of a Notes dialog run `tools/audit-notes-settings-layout.cjs` (setup in its header). Work on the size of the calendar starts from `tests/notes-calendar-scale.test.cjs` (the fake DOM has no layout: the test gives the timeline and the Month grid the heights the sheet measures; its header says how); after a change to the layout or the style of the calendar run `tools/audit-notes-calendar-fit.cjs` (same setup). Work on time zones starts from `tests/notes-calendar-zones.test.cjs` (its last part opens the real sheet and types into a dialog: the pattern for a test of a calendar dialog). Work on a field in which a time or a date is typed starts from `tests/notes-calendar-typing.test.cjs` and `bindEntry`; the text of a note is not read by those readers. Edit this file by hand or with a throwaway script; no helper script is kept in the repository.
+Next action: continue the Master Order from row 1. Work on the Week / Day grid starts from `tests/notes-calendar-hours.test.cjs`; a time in the grid is a clock time, never minutes since midnight (run it under `TZ=Europe/Warsaw ZN_HOURS_WARSAW_RUN=1` to see a failure of the clock-change cases). Work on Notes inside Triple View starts from `tests/helpers/fake-triple-view.cjs` (its header says what it does and does not prove); a new case there must fail on the code before the change. After a change to the style of a Notes dialog run `tools/audit-notes-settings-layout.cjs` (setup in its header). Work on the size of the calendar starts from `tests/notes-calendar-scale.test.cjs` (the fake DOM has no layout: the test gives the timeline and the Month grid the heights the sheet measures; its header says how); after a change to the layout or the style of the calendar run `tools/audit-notes-calendar-fit.cjs` (same setup). Work on time zones starts from `tests/notes-calendar-zones.test.cjs` (its last part opens the real sheet and types into a dialog: the pattern for a test of a calendar dialog). Work on a field in which a time or a date is typed starts from `tests/notes-calendar-typing.test.cjs` and `bindEntry`; the text of a note is not read by those readers. Edit this file by hand or with a throwaway script; no helper script is kept in the repository.
