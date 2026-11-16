@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.182
+// @version 3.3.183
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.182, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.183, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.182";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.183";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -5349,12 +5349,120 @@ const __zentralEmbeddedLoader = (function () {
     return "New note (Ctrl+N)";
   }
 
+  // OW-10: analog + digital Clock modes, locale 12h/24h detection, angle<->time math, snapping, and hand stepping.
+  const CLOCK_MODES = Object.freeze(["both", "analog", "digital"]);
+  function cleanClockMode(value) {
+    const mode = typeof value === "string" ? value.trim().toLowerCase() : "";
+    return CLOCK_MODES.includes(mode) ? mode : "both";
+  }
+  function clockUses12Hour(locale) {
+    try {
+      const opts = new Intl.DateTimeFormat(locale || undefined, { hour: "numeric" }).resolvedOptions();
+      if (typeof opts.hour12 === "boolean") return opts.hour12;
+      return opts.hourCycle === "h11" || opts.hourCycle === "h12";
+    } catch (_) {
+      return false;
+    }
+  }
+  function clockPointerAngle(dx, dy) {
+    const x = Number(dx) || 0, y = Number(dy) || 0;
+    const radius = Math.hypot(x, y);
+    if (radius === 0) return { angleDeg: 0, radius: 0 };
+    const angleDeg = ((Math.atan2(x, -y) * 180 / Math.PI) % 360 + 360) % 360;
+    return { angleDeg, radius };
+  }
+  function clockAngleOfHour(hour24, { hour12 = false } = {}) {
+    const h = ((Math.floor(Number(hour24) || 0) % 24) + 24) % 24;
+    const slot = h % 12;
+    return {
+      hour: h,
+      slot,
+      angleDeg: slot * 30,
+      inner: !hour12 && h >= 12,
+      period: h >= 12 ? "PM" : "AM",
+    };
+  }
+  function clockHourFromAngle(angleDeg, { hour12 = false, period = "AM", inner = false } = {}) {
+    const deg = ((Number(angleDeg) || 0) % 360 + 360) % 360;
+    const slot = Math.round(deg / 30) % 12;
+    if (hour12) return String(period).toUpperCase() === "PM" ? slot + 12 : slot;
+    return inner ? slot + 12 : slot;
+  }
+  function clockAngleOfMinute(minute) {
+    const m = ((Math.floor(Number(minute) || 0) % 60) + 60) % 60;
+    return m * 6;
+  }
+  function clockMinuteFromAngle(angleDeg, snap = 15) {
+    const deg = ((Number(angleDeg) || 0) % 360 + 360) % 360;
+    const step = snap === 1 ? 1 : cleanCalendarSnap(snap);
+    return (Math.round((deg / 6) / step) * step) % 60;
+  }
+  function stepClockHand(minutesOfDay, hand, deltaSteps = 1, { snap = 15 } = {}) {
+    const total = ((Math.floor(Number(minutesOfDay) || 0) % 1440) + 1440) % 1440;
+    const h = Math.floor(total / 60), m = total % 60;
+    const delta = Math.trunc(Number(deltaSteps) || 0);
+    if (hand === "hour") {
+      const nextH = ((h + delta) % 24 + 24) % 24;
+      return clockOfMinutes(nextH * 60 + m);
+    }
+    const step = snap === 1 ? 1 : cleanCalendarSnap(snap);
+    if (delta === 0) return clockOfMinutes(h * 60 + m);
+    let nextM;
+    if (m % step === 0) nextM = ((m + delta * step) % 60 + 60) % 60;
+    else if (delta > 0) nextM = (((Math.floor(m / step) + delta) * step) % 60 + 60) % 60;
+    else nextM = (((Math.ceil(m / step) + delta) * step) % 60 + 60) % 60;
+    return clockOfMinutes(h * 60 + nextM);
+  }
+  function clockDialPoints({ hour12 = false } = {}) {
+    const pt = (angleDeg, rPct) => {
+      const rad = (angleDeg * Math.PI) / 180;
+      return {
+        xPct: Math.round((50 + rPct * Math.sin(rad)) * 100) / 100,
+        yPct: Math.round((50 - rPct * Math.cos(rad)) * 100) / 100,
+      };
+    };
+    const hours = [];
+    for (let slot = 0; slot < 12; slot++) {
+      const angleDeg = slot * 30;
+      const disp = hour12 ? (slot === 0 ? 12 : slot) : slot;
+      hours.push({
+        value: slot,
+        label: hour12 ? String(disp) : p2(disp),
+        angleDeg,
+        ring: "outer",
+        ...pt(angleDeg, 39),
+      });
+      if (!hour12) {
+        const innerVal = slot + 12;
+        hours.push({
+          value: innerVal,
+          label: p2(innerVal),
+          angleDeg,
+          ring: "inner",
+          ...pt(angleDeg, 24),
+        });
+      }
+    }
+    const minutes = [];
+    for (let m = 0; m < 60; m += 5) {
+      const angleDeg = m * 6;
+      minutes.push({
+        value: m,
+        label: p2(m),
+        angleDeg,
+        ring: "outer",
+        ...pt(angleDeg, 39),
+      });
+    }
+    return { hours, minutes };
+  }
+
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, clockMinuteFromAngle, stepClockHand, clockDialPoints, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -11815,7 +11923,7 @@ __zentralShim.register = function (def) {
       const listeners = new Set();
       const backedUp = new Set();
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, cardDock: "", cardW: 0,
-        allNewChoice: "note",
+        allNewChoice: "note", calendarClockMode: "both",
         calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarTab: "tree",
         calendarView: "month", calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
         // The hours Week and Day show ({ on, startMin, endMin }; off = the whole day). Replaced as a whole, never changed in place.
@@ -12048,6 +12156,7 @@ __zentralShim.register = function (def) {
           }
           if (CALENDAR_PART) {
             meta.allNewChoice = CALENDAR_PART.cleanAllNotesNewChoice(raw.allNewChoice);
+            meta.calendarClockMode = CALENDAR_PART.cleanClockMode(raw.calendarClockMode);
             meta.calendarLayout = CALENDAR_PART.cleanCalendarLayout(raw.calendarLayout);
             meta.calendarSplitLR = CALENDAR_PART.cleanCalendarShare(raw.calendarSplitLR, DEFAULT_META.calendarSplitLR);
             meta.calendarSplitTB = CALENDAR_PART.cleanCalendarShare(raw.calendarSplitTB, DEFAULT_META.calendarSplitTB);
@@ -17587,20 +17696,20 @@ __zentralShim.register = function (def) {
       }
       // Shared date picker (T2.2a): every date surface uses this same Monday-first, keyboard-accessible month grid.
       // `selected` / return values are local-midnight ms. Optional clock controls are composed separately below.
-      function buildDatePicker({ selected, items = [], onPick }) {
+      function buildDatePicker({ selected, items = [], onPick, compact = false, topBar = null }) {
         const C = CALENDAR_PART;
         if (!C) return null;
         const weekStart = 1;
-        let cursor = selected || C.dayStart(nowMs());
+        let cursor = selected ? C.dayStart(selected) : C.dayStart(nowMs());
         let view = { year: new Date(cursor).getFullYear(), month: new Date(cursor).getMonth() };
         const title = h("div", { class: "zn-cal-title", "aria-live": "polite" });
         const prev = iconButton("chevronLeft", "Previous month", "zn-cal-nav"), next = iconButton("chevronRight", "Next month", "zn-cal-nav");
         const todayBtn = chip("Today");
         const grid = h("div", { class: "zn-cal-grid", role: "grid", tabindex: "0", "aria-label": "Choose a day" });
-        const root = h("div", { class: "zn-cal" }, h("div", { class: "zn-cal-head" }, prev, title, next, todayBtn), grid);
+        const root = h("div", { class: "zn-cal" + (compact ? " is-compact" : "") }, ...(topBar ? [topBar] : []), h("div", { class: "zn-cal-head" }, prev, title, next, todayBtn), grid);
         const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
         const draw = () => {
-          const monthName = new Date(view.year, view.month, 1).toLocaleString(undefined, { month: "long", year: "numeric" });
+          const monthName = new Date(view.year, view.month, 1).toLocaleString(undefined, { month: compact ? "short" : "long", year: "numeric" });
           title.textContent = monthName;
           const rows = C.pickerMonth(view.year, view.month, { weekStart, now: nowMs(), selected: cursor, items });
           grid.replaceChildren(
@@ -17635,6 +17744,13 @@ __zentralShim.register = function (def) {
           e.preventDefault(); e.stopPropagation();
           cursor = moved; view = { year: new Date(cursor).getFullYear(), month: new Date(cursor).getMonth() }; draw();
         });
+        root.setSelected = (dayMs, { jumpView = true } = {}) => {
+          const nextMs = dayMs ? C.dayStart(dayMs) : C.dayStart(nowMs());
+          selected = nextMs;
+          cursor = nextMs;
+          if (jumpView) view = { year: new Date(nextMs).getFullYear(), month: new Date(nextMs).getMonth() };
+          draw();
+        };
         draw();
         return root;
       }
@@ -17833,8 +17949,11 @@ __zentralShim.register = function (def) {
         const clock = buildClockPicker({ value, onPick: (picked) => { time = picked; entry.set(picked); } });
         const entry = bindEntry(part, { kind: "time", onChange: (typed) => {
           time = typed;
-          const hour = clock.querySelector(".zn-cal-clock-hour"), minute = clock.querySelector(".zn-cal-clock-minute");
-          if (hour && minute) { hour.value = typed.slice(0, 2); minute.value = typed.slice(3, 5); }
+          if (clock.setValue) clock.setValue(typed);
+          else {
+            const hour = clock.querySelector(".zn-cal-clock-hour"), minute = clock.querySelector(".zn-cal-clock-minute");
+            if (hour && minute) { hour.value = typed.slice(0, 2); minute.value = typed.slice(3, 5); }
+          }
         } });
         return { nodes: [part.row, clock], entry, read: () => entry.read() || time };
       }
@@ -19094,23 +19213,90 @@ __zentralShim.register = function (def) {
         const endTime = field("End time", endTimeDefault, "16, 830 or 9am");
         // OW-24: the four fields take a time or a date typed fast (bindEntry). The start time of an event also takes
         // both times at once ("8-16").
-        const startDateEntry = bindEntry(startDate, { kind: "date", onChange: () => {
-          // A new event whose end date nobody touched follows its start date.
+        let datePickerTarget = "start";
+        const dateTargetStartBtn = chip("Start"), dateTargetEndBtn = chip("End");
+        dateTargetStartBtn.classList.add("zn-cal-date-target");
+        dateTargetEndBtn.classList.add("zn-cal-date-target");
+        const dateTargetBar = h("div", { class: "zn-cal-date-targets" }, dateTargetStartBtn, dateTargetEndBtn);
+        let inlineDatePicker = null, inlineClock = null;
+        const syncDateTargetUI = () => {
+          dateTargetBar.hidden = kind.value === "reminder";
+          if (kind.value === "reminder") datePickerTarget = "start";
+          dateTargetStartBtn.classList.toggle("is-on", datePickerTarget === "start");
+          dateTargetEndBtn.classList.toggle("is-on", datePickerTarget === "end");
+          dateTargetStartBtn.setAttribute("aria-pressed", datePickerTarget === "start" ? "true" : "false");
+          dateTargetEndBtn.setAttribute("aria-pressed", datePickerTarget === "end" ? "true" : "false");
+        };
+        const followUntouchedEndDate = (nextStartKey) => {
           if (!original && kind.value === "event" && endDate.input.value === startDateDefault) {
-            const startDay = C.parseYmd(startDate.input.value);
-            endDateEntry.set(startDay && allDay.checked ? C.ymd(new Date(C.addDays(startDay.getTime(), 1))) : startDate.input.value);
+            const startDay = C.parseYmd(nextStartKey);
+            endDateEntry.set(startDay && allDay.checked ? C.ymd(new Date(C.addDays(startDay.getTime(), 1))) : nextStartKey);
+          }
+        };
+        const startDateEntry = bindEntry(startDate, { kind: "date", onChange: (next) => {
+          // A new event whose end date nobody touched follows its start date.
+          followUntouchedEndDate(next || startDate.input.value);
+          if (datePickerTarget === "start") {
+            const d = C.parseYmd(next || startDate.input.value);
+            if (d) inlineDatePicker?.setSelected?.(d.getTime());
           }
           paintPreview();
         } });
-        const endDateEntry = bindEntry(endDate, { kind: "date", base: () => startDateEntry.read(), onChange: () => paintPreview() });
-        const startTimeEntry = bindEntry(startTime, { kind: "time", range: () => kind.value === "event" && !allDay.checked, onRange: (end) => endTimeEntry.set(end), onChange: () => paintPreview() });
-        const endTimeEntry = bindEntry(endTime, { kind: "time", onChange: () => paintPreview() });
+        const endDateEntry = bindEntry(endDate, { kind: "date", base: () => startDateEntry.read(), onChange: (next) => {
+          if (datePickerTarget === "end") {
+            const d = C.parseYmd(next || endDate.input.value);
+            if (d) inlineDatePicker?.setSelected?.(d.getTime());
+          }
+          paintPreview();
+        } });
+        const startTimeEntry = bindEntry(startTime, { kind: "time", range: () => kind.value === "event" && !allDay.checked, onRange: (end) => {
+          endTimeEntry.set(end);
+          inlineClock?.setEndValue?.(end);
+        }, onChange: (next) => {
+          inlineClock?.setValue?.(next);
+          paintPreview();
+        } });
+        const endTimeEntry = bindEntry(endTime, { kind: "time", onChange: (next) => {
+          inlineClock?.setEndValue?.(next);
+          paintPreview();
+        } });
         const startDatePick = chip("Pick date…"), endDatePick = chip("Pick end…"), clockPick = chip("Clock…");
         const startDateHost = h("div", { class: "zn-cal-compose-date-row zn-entry-row" }, startDate.row, startDatePick);
         const endDateHost = h("div", { class: "zn-cal-compose-date-row zn-entry-row" }, endDate.row, endDatePick);
-        const startTimeHost = h("div", { class: "zn-cal-compose-date-row" }, startTime.row, h("span", { class: "zn-cal-compose-clock-anchor" }));
+        const startTimeHost = h("div", { class: "zn-cal-compose-date-row zn-entry-row" }, startTime.row, clockPick);
         const endTimeHost = h("div", { class: "zn-cal-compose-date-row" }, endTime.row);
-        const clockHost = h("div", { class: "zn-cal-compose-clock-host" });
+        inlineDatePicker = buildDatePicker({
+          selected: C.parseYmd(startDateDefault)?.getTime() || C.dayStart(nowMs()),
+          items: calendarPickerItems(),
+          compact: true,
+          topBar: dateTargetBar,
+          onPick: (day) => {
+            const key = C.ymd(new Date(day));
+            if (kind.value === "event" && datePickerTarget === "end") endDateEntry.set(key);
+            else {
+              const wasUntouched = !original && kind.value === "event" && endDate.input.value === startDateDefault;
+              startDateEntry.set(key);
+              if (wasUntouched) endDateEntry.set(allDay.checked ? C.ymd(new Date(C.addDays(day, 1))) : key);
+            }
+            paintPreview();
+          },
+        });
+        inlineClock = buildClockPicker({
+          value: startTimeDefault,
+          onPick: (value) => { startTimeEntry.set(value); paintPreview(); },
+          endValue: endTimeDefault,
+          onEndPick: (value) => { endTimeEntry.set(value); paintPreview(); },
+        });
+        const scheduleBoard = h("div", { class: "zn-cal-compose-schedule-board" }, ...(inlineDatePicker ? [inlineDatePicker] : []), inlineClock);
+        const selectDateTarget = (target) => {
+          datePickerTarget = target === "end" && kind.value === "event" ? "end" : "start";
+          syncDateTargetUI();
+          const activeEntry = datePickerTarget === "end" ? endDateEntry : startDateEntry;
+          const parsed = C.parseYmd(activeEntry.read());
+          if (parsed) inlineDatePicker?.setSelected?.(parsed.getTime());
+        };
+        dateTargetStartBtn.addEventListener("click", () => selectDateTarget("start"));
+        dateTargetEndBtn.addEventListener("click", () => selectDateTarget("end"));
 
         const noteSelect = h("select", { class: "zn-select", "aria-label": "Linked note" });
         noteSelect.append(h("option", { value: "" }, "No linked note"));
@@ -19233,7 +19419,7 @@ __zentralShim.register = function (def) {
         const actions = h("div", { class: "zn-dialog-actions" }, cancel, save);
         const intro = h("p", { class: "zn-empty" }, "The title is independent from the linked note. Calendar notes stay with this item; a full-day reminder has no end time.");
         const card = openCalendarCard(original ? "Edit calendar item" : "Create calendar item", intro, title.row, kindRow, allDayRow,
-          startDateHost, endDateHost, startTimeHost, endTimeHost, clockPick, clockHost,
+          startDateHost, endDateHost, startTimeHost, endTimeHost, scheduleBoard,
           noteRow, noteAlertRow, agendaWindowSection, categoryRow, colorRow, descriptionRow, calNoteRow, zoneField.row,
           recurrenceBox, notifySection, preview, status, actions);
         card.classList.add("zn-cal-compose-card");
@@ -19248,6 +19434,11 @@ __zentralShim.register = function (def) {
           notifySection.hidden = !reminder;
           if (!fullDay && !startTime.input.value.trim()) startTimeEntry.set("09:00");
           if (!fullDay && !reminder && !endTime.input.value.trim()) endTimeEntry.set("10:00");
+          syncDateTargetUI();
+          inlineClock.hidden = fullDay;
+          inlineClock.setRangeEnabled?.(!reminder, endTimeEntry.read() || endTime.input.value);
+          inlineClock.setValue?.(startTimeEntry.read() || startTime.input.value);
+          scheduleBoard.dataset.allDay = fullDay ? "true" : "false";
           save.textContent = original ? "Save calendar item" : (reminder ? "Create reminder" : "Create event");
           paintPreview();
         };
@@ -19272,25 +19463,26 @@ __zentralShim.register = function (def) {
           preview.textContent = parts.join(" · ");
           paintColor();
         }
-        let clockOpen = false;
         clockPick.addEventListener("click", () => {
-          if (clockOpen) { clockHost.replaceChildren(); clockOpen = false; clockPick.focus({ preventScroll: true }); return; }
-          closeDatePicker({ restoreFocus: false });
-          const clock = buildClockPicker({ value: startTimeEntry.read() || startTime.input.value, onPick: (value) => { startTimeEntry.set(value); paintPreview(); }, ...(kind.value === "event" ? { endValue: endTimeEntry.read() || endTime.input.value, onEndPick: (value) => { endTimeEntry.set(value); paintPreview(); } } : {}) });
-          clockHost.replaceChildren(clock); clockOpen = true;
-          clock.querySelector("select")?.focus({ preventScroll: true });
+          inlineClock.hidden = false;
+          inlineClock.setValue?.(startTimeEntry.read() || startTime.input.value);
+          if (kind.value === "event") inlineClock.setEndValue?.(endTimeEntry.read() || endTime.input.value);
+          inlineClock.focusPrimary?.();
         });
-        const bindDatePicker = (button, host, entry) => button.addEventListener("click", () => {
-          if (clockOpen) { clockHost.replaceChildren(); clockOpen = false; }
-          const selected = C.parseYmd(entry.read());
-          toggleDatePicker(button, host, { selected: selected?.getTime() || 0, items: calendarPickerItems(), onPick: (day) => { entry.set(C.ymd(new Date(day))); paintPreview(); } });
+        startDatePick.addEventListener("click", () => {
+          selectDateTarget("start");
+          inlineDatePicker?.querySelector(".zn-cal-grid")?.focus({ preventScroll: true });
         });
-        bindDatePicker(startDatePick, startDateHost, startDateEntry);
-        bindDatePicker(endDatePick, endDateHost, endDateEntry);
-        bindDatePicker(untilPick, untilHost, untilEntry);
+        endDatePick.addEventListener("click", () => {
+          selectDateTarget("end");
+          inlineDatePicker?.querySelector(".zn-cal-grid")?.focus({ preventScroll: true });
+        });
+        untilPick.addEventListener("click", () => {
+          const selected = C.parseYmd(untilEntry.read());
+          toggleDatePicker(untilPick, untilHost, { selected: selected?.getTime() || 0, items: calendarPickerItems(), onPick: (day) => { untilEntry.set(C.ymd(new Date(day))); paintPreview(); } });
+        });
         for (const input of [startDate.input, endDate.input, startTime.input, endTime.input, zoneField.input]) input.addEventListener("input", paintPreview);
         for (const control of [kind, allDay]) control.addEventListener("change", () => {
-          if (clockOpen) { clockHost.replaceChildren(); clockOpen = false; }
           if (kind.value === "event" && allDay.checked && (!C.parseYmd(endDate.input.value) || endDate.input.value <= startDate.input.value)) {
             const startDay = C.parseYmd(startDate.input.value);
             if (startDay) endDateEntry.set(C.ymd(new Date(C.addDays(startDay.getTime(), 1))));
@@ -19966,25 +20158,309 @@ __zentralShim.register = function (def) {
         { icon: "download", label: "Save this week as Markdown…", action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.exportCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((saved) => { if (saved) flash("Week exported"); }).catch((error) => flash("Week export failed: " + String(error?.message || error))); } },
         { icon: "printer", label: "Print this week…", action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.printCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((printed) => { if (printed) flash("Week opened for printing"); }).catch((error) => flash("Week print failed: " + String(error?.message || error))); } },
       ]));
-      // Accessible hour/minute selectors are easier to use than free-form typing and work with keyboards.
-      // Supplying `endValue` + `onEndPick` adds a second clock for event ranges; reminder-only callers omit it.
-      function buildClockPicker({ value = "09:00", onPick, endValue, onEndPick } = {}) {
-        const makeTime = (label, raw, onChange) => {
-          const typed = CALENDAR_PART ? CALENDAR_PART.parseClock(raw) : -1; // "830" in the field opens the Clock at 08:30
-          const match = typed >= 0 ? [null, Math.floor(typed / 60), typed % 60] : /^(\d{1,2}):(\d{2})$/.exec(String(raw || ""));
+      // OW-10: shared Clock with analog face (draggable/clickable hour then minute hand, locale 12h/24h, snap step,
+      // wheel & keyboard role=slider), digital hour/minute selectors, Analog/Digital/Both toggle, and Start/End range reuse.
+      function buildClockPicker({ value = "09:00", onPick, endValue, onEndPick, snap, locale, mode } = {}) {
+        const C = CALENDAR_PART;
+        const parseMins = (raw, fallback = 9 * 60) => {
+          if (C) {
+            const parsed = C.parseClock(raw);
+            if (parsed >= 0) return parsed;
+          }
+          const m = /^(\d{1,2}):(\d{2})$/.exec(String(raw || ""));
+          return m ? Math.min(23, Number(m[1])) * 60 + Math.min(59, Number(m[2])) : fallback;
+        };
+        const fmtMins = (mins) => {
+          const clean = ((Math.floor(Number(mins) || 0) % 1440) + 1440) % 1440;
+          return C ? C.clockOfMinutes(clean) : String(Math.floor(clean / 60)).padStart(2, "0") + ":" + String(clean % 60).padStart(2, "0");
+        };
+        let startMins = parseMins(value, 9 * 60);
+        let endMins = parseMins(endValue ?? "10:00", 10 * 60);
+        let hasEnd = endValue !== undefined && typeof onEndPick === "function";
+        let activeTarget = "start";
+        let activeHand = "hour";
+        const effLocale = locale ?? (env.locale?.() || (typeof navigator === "object" && navigator?.language) || undefined);
+        const hour12 = C ? C.clockUses12Hour(effLocale) : false;
+        const currentSnap = () => (snap !== undefined ? (snap === 1 ? 1 : (C ? C.cleanCalendarSnap(snap) : 15)) : (C ? C.cleanCalendarSnap(store.meta.calendarSnap) : 15));
+        let currentMode = C ? C.cleanClockMode(mode ?? store.meta.calendarClockMode) : "digital";
+
+        const makeDigitalSet = (label, initialMins, onChange) => {
           const hour = h("select", { class: "zn-select zn-cal-clock-hour", "aria-label": label + " hour" });
           const minute = h("select", { class: "zn-select zn-cal-clock-minute", "aria-label": label + " minute" });
           for (let i = 0; i < 24; i++) hour.append(h("option", { value: String(i).padStart(2, "0") }, String(i).padStart(2, "0")));
           for (let i = 0; i < 60; i++) minute.append(h("option", { value: String(i).padStart(2, "0") }, String(i).padStart(2, "0")));
-          hour.value = match ? String(Math.min(23, Number(match[1]))).padStart(2, "0") : "09";
-          minute.value = match ? String(Math.min(59, Number(match[2]))).padStart(2, "0") : "00";
-          const emit = () => onChange?.(hour.value + ":" + minute.value);
+          const write = (mins) => {
+            hour.value = String(Math.floor(mins / 60)).padStart(2, "0");
+            minute.value = String(mins % 60).padStart(2, "0");
+          };
+          write(initialMins);
+          const emit = () => onChange(Number(hour.value) * 60 + Number(minute.value));
           hour.addEventListener("change", emit);
           minute.addEventListener("change", emit);
-          return h("label", { class: "zn-cal-clock-set" }, h("span", {}, label), hour, h("span", { "aria-hidden": "true" }, ":"), minute);
+          const node = h("label", { class: "zn-cal-clock-set" }, h("span", {}, label), hour, h("span", { "aria-hidden": "true" }, ":"), minute);
+          return { node, hour, minute, write };
         };
-        const root = h("div", { class: "zn-cal-clock", "aria-label": "Choose time" }, makeTime("Time", value, onPick));
-        if (endValue !== undefined && onEndPick) root.append(makeTime("End", endValue, onEndPick));
+
+        const activeMins = () => (hasEnd && activeTarget === "end" ? endMins : startMins);
+        const commitTargetMins = (target, nextMins) => {
+          const clean = ((Math.floor(Number(nextMins) || 0) % 1440) + 1440) % 1440;
+          if (target === "end" && hasEnd) {
+            endMins = clean;
+            syncClockUI();
+            onEndPick?.(fmtMins(clean));
+          } else {
+            startMins = clean;
+            syncClockUI();
+            onPick?.(fmtMins(clean));
+          }
+        };
+        const commitActiveMins = (nextMins) => commitTargetMins(hasEnd && activeTarget === "end" ? "end" : "start", nextMins);
+
+        const startSet = makeDigitalSet("Time", startMins, (mins) => { activeTarget = "start"; commitTargetMins("start", mins); });
+        const endSet = makeDigitalSet("End", endMins, (mins) => { activeTarget = "end"; commitTargetMins("end", mins); });
+        const digitalWrap = h("div", { class: "zn-cal-clock-digital" }, startSet.node);
+
+        const targetStartBtn = chip("Start"), targetEndBtn = chip("End");
+        targetStartBtn.classList.add("zn-cal-clock-target"); targetStartBtn.dataset.target = "start";
+        targetEndBtn.classList.add("zn-cal-clock-target"); targetEndBtn.dataset.target = "end";
+        const targetBar = h("div", { class: "zn-cal-clock-targets" }, targetStartBtn, targetEndBtn);
+
+        const modeDefs = [["both", "Both"], ["analog", "Analog"], ["digital", "Digital"]];
+        const modeButtons = modeDefs.map(([m, label]) => {
+          const b = chip(label);
+          b.classList.add("zn-cal-clock-mode");
+          b.dataset.mode = m;
+          b.addEventListener("click", () => {
+            currentMode = m;
+            store.setMeta({ calendarClockMode: m });
+            syncClockUI();
+          });
+          return b;
+        });
+        const modeBar = h("div", { class: "zn-cal-clock-modes", role: "group", "aria-label": "Clock display" }, ...modeButtons);
+        const headBar = h("div", { class: "zn-cal-clock-head" }, targetBar, modeBar);
+
+        const hourSlider = h("button", {
+          type: "button",
+          class: "zn-cal-clock-slider zn-cal-clock-slider-hour",
+          role: "slider",
+          tabindex: "0",
+          "aria-label": "Analog hour",
+          "aria-valuemin": "0",
+          "aria-valuemax": "23",
+          "aria-valuenow": "9",
+        });
+        const minSlider = h("button", {
+          type: "button",
+          class: "zn-cal-clock-slider zn-cal-clock-slider-minute",
+          role: "slider",
+          tabindex: "0",
+          "aria-label": "Analog minute",
+          "aria-valuemin": "0",
+          "aria-valuemax": "59",
+          "aria-valuenow": "0",
+        });
+        const amBtn = chip("AM"), pmBtn = chip("PM");
+        amBtn.classList.add("zn-cal-clock-period"); amBtn.dataset.period = "AM";
+        pmBtn.classList.add("zn-cal-clock-period"); pmBtn.dataset.period = "PM";
+        const periodWrap = h("span", { class: "zn-cal-clock-periods" }, amBtn, pmBtn);
+        periodWrap.hidden = !hour12;
+        const readout = h("div", { class: "zn-cal-clock-readout" }, hourSlider, h("span", { "aria-hidden": "true" }, ":"), minSlider, periodWrap);
+
+        const hourHand = h("div", { class: "zn-cal-clock-hand is-hour", "aria-hidden": "true" });
+        const minHand = h("div", { class: "zn-cal-clock-hand is-minute", "aria-hidden": "true" });
+        const numsLayer = h("div", { class: "zn-cal-clock-nums" });
+        const dial = h("div", { class: "zn-cal-clock-dial" }, numsLayer, hourHand, minHand, h("div", { class: "zn-cal-clock-pin", "aria-hidden": "true" }));
+        const analogWrap = h("div", { class: "zn-cal-clock-analog" }, readout, dial);
+
+        const root = h("div", { class: "zn-cal-clock", "aria-label": "Choose time" }, ...(C ? [headBar, analogWrap] : []), digitalWrap);
+
+        const stepActive = (hand, delta) => {
+          activeHand = hand;
+          if (!C) return;
+          const next = C.stepClockHand(activeMins(), hand, delta, { snap: currentSnap() });
+          commitActiveMins(C.parseClock(next));
+        };
+
+        targetStartBtn.addEventListener("click", () => { activeTarget = "start"; activeHand = "hour"; syncClockUI(); });
+        targetEndBtn.addEventListener("click", () => { if (!hasEnd) return; activeTarget = "end"; activeHand = "hour"; syncClockUI(); });
+        amBtn.addEventListener("click", () => {
+          const cur = activeMins();
+          commitActiveMins((Math.floor(cur / 60) % 12) * 60 + (cur % 60));
+        });
+        pmBtn.addEventListener("click", () => {
+          const cur = activeMins();
+          commitActiveMins(((Math.floor(cur / 60) % 12) + 12) * 60 + (cur % 60));
+        });
+        hourSlider.addEventListener("click", () => { activeHand = "hour"; syncClockUI(); });
+        minSlider.addEventListener("click", () => { activeHand = "minute"; syncClockUI(); });
+        hourSlider.addEventListener("keydown", (e) => {
+          if (e.key === "ArrowUp" || e.key === "ArrowRight") { e.preventDefault(); stepActive("hour", 1); }
+          else if (e.key === "ArrowDown" || e.key === "ArrowLeft") { e.preventDefault(); stepActive("hour", -1); }
+          else if (e.key === "Home") { e.preventDefault(); activeHand = "hour"; commitActiveMins(activeMins() % 60); }
+          else if (e.key === "End") { e.preventDefault(); activeHand = "hour"; commitActiveMins(23 * 60 + (activeMins() % 60)); }
+          else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activeHand = "minute"; syncClockUI(); minSlider.focus?.({ preventScroll: true }); }
+        });
+        minSlider.addEventListener("keydown", (e) => {
+          if (e.key === "ArrowUp" || e.key === "ArrowRight") { e.preventDefault(); stepActive("minute", 1); }
+          else if (e.key === "ArrowDown" || e.key === "ArrowLeft") { e.preventDefault(); stepActive("minute", -1); }
+          else if (e.key === "PageUp") { e.preventDefault(); stepActive("minute", 3); }
+          else if (e.key === "PageDown") { e.preventDefault(); stepActive("minute", -3); }
+          else if (e.key === "Home") { e.preventDefault(); activeHand = "minute"; commitActiveMins(Math.floor(activeMins() / 60) * 60); }
+          else if (e.key === "End") { e.preventDefault(); activeHand = "minute"; commitActiveMins(Math.floor(activeMins() / 60) * 60 + (60 - currentSnap())); }
+        });
+        const onWheel = (handOf) => (e) => {
+          e.preventDefault();
+          stepActive(handOf(), (e.deltaY || 0) < 0 ? 1 : -1);
+        };
+        hourSlider.addEventListener("wheel", onWheel(() => "hour"));
+        minSlider.addEventListener("wheel", onWheel(() => "minute"));
+        dial.addEventListener("wheel", onWheel(() => activeHand));
+
+        let draggingDial = false;
+        const applyDialPointer = (e, advanceHand) => {
+          if (!C) return;
+          const rect = dial.getBoundingClientRect?.() || { left: 0, top: 0, width: 0, height: 0 };
+          if (!rect.width || !rect.height) return;
+          const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+          const rMax = Math.min(rect.width, rect.height) / 2;
+          const { angleDeg, radius } = C.clockPointerAngle((e.clientX || 0) - cx, (e.clientY || 0) - cy);
+          const cur = activeMins(), curH = Math.floor(cur / 60), curM = cur % 60;
+          if (activeHand === "hour") {
+            const inner = !hour12 && radius > 0 && radius < rMax * 0.64;
+            const period = curH >= 12 ? "PM" : "AM";
+            const nextH = C.clockHourFromAngle(angleDeg, { hour12, period, inner });
+            commitActiveMins(nextH * 60 + curM);
+            if (advanceHand) {
+              activeHand = "minute";
+              syncClockUI();
+              minSlider.focus?.({ preventScroll: true });
+            }
+          } else {
+            const nextM = C.clockMinuteFromAngle(angleDeg, currentSnap());
+            commitActiveMins(curH * 60 + nextM);
+          }
+        };
+        dial.addEventListener("pointerdown", (e) => {
+          if (e.button && e.button !== 0) return;
+          e.preventDefault();
+          draggingDial = true;
+          dial.setPointerCapture?.(e.pointerId);
+          applyDialPointer(e, false);
+        });
+        dial.addEventListener("pointermove", (e) => {
+          if (!draggingDial) return;
+          applyDialPointer(e, false);
+        });
+        dial.addEventListener("pointerup", (e) => {
+          if (!draggingDial) return;
+          draggingDial = false;
+          dial.releasePointerCapture?.(e.pointerId);
+          applyDialPointer(e, true);
+        });
+        dial.addEventListener("pointercancel", () => { draggingDial = false; });
+
+        const dialPoints = C ? C.clockDialPoints({ hour12 }) : { hours: [], minutes: [] };
+        let renderedDialHand = "";
+        function renderDialNumbers(curH, curM) {
+          if (!C) return;
+          if (renderedDialHand !== activeHand) {
+            renderedDialHand = activeHand;
+            const list = activeHand === "hour" ? dialPoints.hours : dialPoints.minutes;
+            numsLayer.replaceChildren(...list.map((pt) => {
+              const btn = h("button", {
+                type: "button",
+                class: "zn-cal-clock-num" + (pt.ring === "inner" ? " is-inner" : ""),
+                tabindex: "-1",
+                "data-val": String(pt.value),
+              }, pt.label);
+              btn.style.setProperty("left", pt.xPct + "%");
+              btn.style.setProperty("top", pt.yPct + "%");
+              btn.addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                const now = activeMins(), nowH = Math.floor(now / 60), nowM = now % 60;
+                if (activeHand === "hour") {
+                  const chosenH = hour12 ? (nowH >= 12 ? pt.value + 12 : pt.value) : pt.value;
+                  commitActiveMins(chosenH * 60 + nowM);
+                  activeHand = "minute";
+                  syncClockUI();
+                  minSlider.focus?.({ preventScroll: true });
+                } else {
+                  commitActiveMins(nowH * 60 + pt.value);
+                }
+              });
+              return btn;
+            }));
+          }
+          for (const node of numsLayer.querySelectorAll(".zn-cal-clock-num")) {
+            const val = Number(node.getAttribute("data-val"));
+            const selected = activeHand === "hour" ? (hour12 ? curH % 12 === val : curH === val) : curM === val;
+            node.classList.toggle("is-on", selected);
+          }
+        }
+
+        function syncClockUI() {
+          startSet.write(startMins);
+          endSet.write(endMins);
+          if (hasEnd && !endSet.node.parentNode) digitalWrap.append(endSet.node);
+          else if (!hasEnd && endSet.node.parentNode) endSet.node.remove();
+          root.dataset.clockMode = currentMode;
+          root.dataset.hand = activeHand;
+          root.dataset.target = hasEnd ? activeTarget : "start";
+          targetBar.hidden = !hasEnd;
+          targetStartBtn.classList.toggle("is-on", activeTarget === "start");
+          targetEndBtn.classList.toggle("is-on", activeTarget === "end");
+          targetStartBtn.setAttribute("aria-pressed", activeTarget === "start" ? "true" : "false");
+          targetEndBtn.setAttribute("aria-pressed", activeTarget === "end" ? "true" : "false");
+          for (const b of modeButtons) {
+            const on = b.dataset.mode === currentMode;
+            b.classList.toggle("is-on", on);
+            b.setAttribute("aria-pressed", on ? "true" : "false");
+          }
+          analogWrap.hidden = !C || currentMode === "digital";
+          digitalWrap.hidden = Boolean(C && currentMode === "analog");
+          if (!C) return;
+          const cur = activeMins(), curH = Math.floor(cur / 60), curM = cur % 60;
+          const dispH = hour12 ? String(curH % 12 || 12) : String(curH).padStart(2, "0");
+          const dispM = String(curM).padStart(2, "0");
+          const prefix = hasEnd ? (activeTarget === "end" ? "End " : "Start ") : "";
+          hourSlider.textContent = dispH;
+          hourSlider.setAttribute("aria-label", prefix + "analog hour");
+          hourSlider.setAttribute("aria-valuenow", String(curH));
+          hourSlider.setAttribute("aria-valuetext", hour12 ? `${dispH} ${curH >= 12 ? "PM" : "AM"}` : `${dispH} hours`);
+          hourSlider.classList.toggle("is-active", activeHand === "hour");
+          minSlider.textContent = dispM;
+          minSlider.setAttribute("aria-label", prefix + "analog minute");
+          minSlider.setAttribute("aria-valuenow", String(curM));
+          minSlider.setAttribute("aria-valuetext", `${dispM} minutes`);
+          minSlider.classList.toggle("is-active", activeHand === "minute");
+          amBtn.classList.toggle("is-on", curH < 12);
+          pmBtn.classList.toggle("is-on", curH >= 12);
+          amBtn.setAttribute("aria-pressed", curH < 12 ? "true" : "false");
+          pmBtn.setAttribute("aria-pressed", curH >= 12 ? "true" : "false");
+          const hInfo = C.clockAngleOfHour(curH, { hour12 });
+          const mAngle = C.clockAngleOfMinute(curM);
+          hourHand.style.setProperty("--zn-clock-angle", hInfo.angleDeg + "deg");
+          hourHand.classList.toggle("is-inner", !!hInfo.inner);
+          hourHand.classList.toggle("is-active", activeHand === "hour");
+          minHand.style.setProperty("--zn-clock-angle", mAngle + "deg");
+          minHand.classList.toggle("is-active", activeHand === "minute");
+          renderDialNumbers(curH, curM);
+        }
+
+        root.setValue = (raw) => { startMins = parseMins(raw, startMins); syncClockUI(); };
+        root.setEndValue = (raw) => { endMins = parseMins(raw, endMins); syncClockUI(); };
+        root.setRangeEnabled = (on, rawEnd) => {
+          hasEnd = !!on && typeof onEndPick === "function";
+          if (rawEnd !== undefined) endMins = parseMins(rawEnd, endMins);
+          if (!hasEnd) activeTarget = "start";
+          syncClockUI();
+        };
+        root.focusPrimary = () => {
+          if (!C || currentMode === "digital") startSet.hour.focus?.({ preventScroll: true });
+          else hourSlider.focus?.({ preventScroll: true });
+        };
+        syncClockUI();
         return root;
       }
       function askReminder() {

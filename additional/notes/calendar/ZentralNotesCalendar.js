@@ -4138,12 +4138,120 @@
     return "New note (Ctrl+N)";
   }
 
+  // OW-10: analog + digital Clock modes, locale 12h/24h detection, angle<->time math, snapping, and hand stepping.
+  const CLOCK_MODES = Object.freeze(["both", "analog", "digital"]);
+  function cleanClockMode(value) {
+    const mode = typeof value === "string" ? value.trim().toLowerCase() : "";
+    return CLOCK_MODES.includes(mode) ? mode : "both";
+  }
+  function clockUses12Hour(locale) {
+    try {
+      const opts = new Intl.DateTimeFormat(locale || undefined, { hour: "numeric" }).resolvedOptions();
+      if (typeof opts.hour12 === "boolean") return opts.hour12;
+      return opts.hourCycle === "h11" || opts.hourCycle === "h12";
+    } catch (_) {
+      return false;
+    }
+  }
+  function clockPointerAngle(dx, dy) {
+    const x = Number(dx) || 0, y = Number(dy) || 0;
+    const radius = Math.hypot(x, y);
+    if (radius === 0) return { angleDeg: 0, radius: 0 };
+    const angleDeg = ((Math.atan2(x, -y) * 180 / Math.PI) % 360 + 360) % 360;
+    return { angleDeg, radius };
+  }
+  function clockAngleOfHour(hour24, { hour12 = false } = {}) {
+    const h = ((Math.floor(Number(hour24) || 0) % 24) + 24) % 24;
+    const slot = h % 12;
+    return {
+      hour: h,
+      slot,
+      angleDeg: slot * 30,
+      inner: !hour12 && h >= 12,
+      period: h >= 12 ? "PM" : "AM",
+    };
+  }
+  function clockHourFromAngle(angleDeg, { hour12 = false, period = "AM", inner = false } = {}) {
+    const deg = ((Number(angleDeg) || 0) % 360 + 360) % 360;
+    const slot = Math.round(deg / 30) % 12;
+    if (hour12) return String(period).toUpperCase() === "PM" ? slot + 12 : slot;
+    return inner ? slot + 12 : slot;
+  }
+  function clockAngleOfMinute(minute) {
+    const m = ((Math.floor(Number(minute) || 0) % 60) + 60) % 60;
+    return m * 6;
+  }
+  function clockMinuteFromAngle(angleDeg, snap = 15) {
+    const deg = ((Number(angleDeg) || 0) % 360 + 360) % 360;
+    const step = snap === 1 ? 1 : cleanCalendarSnap(snap);
+    return (Math.round((deg / 6) / step) * step) % 60;
+  }
+  function stepClockHand(minutesOfDay, hand, deltaSteps = 1, { snap = 15 } = {}) {
+    const total = ((Math.floor(Number(minutesOfDay) || 0) % 1440) + 1440) % 1440;
+    const h = Math.floor(total / 60), m = total % 60;
+    const delta = Math.trunc(Number(deltaSteps) || 0);
+    if (hand === "hour") {
+      const nextH = ((h + delta) % 24 + 24) % 24;
+      return clockOfMinutes(nextH * 60 + m);
+    }
+    const step = snap === 1 ? 1 : cleanCalendarSnap(snap);
+    if (delta === 0) return clockOfMinutes(h * 60 + m);
+    let nextM;
+    if (m % step === 0) nextM = ((m + delta * step) % 60 + 60) % 60;
+    else if (delta > 0) nextM = (((Math.floor(m / step) + delta) * step) % 60 + 60) % 60;
+    else nextM = (((Math.ceil(m / step) + delta) * step) % 60 + 60) % 60;
+    return clockOfMinutes(h * 60 + nextM);
+  }
+  function clockDialPoints({ hour12 = false } = {}) {
+    const pt = (angleDeg, rPct) => {
+      const rad = (angleDeg * Math.PI) / 180;
+      return {
+        xPct: Math.round((50 + rPct * Math.sin(rad)) * 100) / 100,
+        yPct: Math.round((50 - rPct * Math.cos(rad)) * 100) / 100,
+      };
+    };
+    const hours = [];
+    for (let slot = 0; slot < 12; slot++) {
+      const angleDeg = slot * 30;
+      const disp = hour12 ? (slot === 0 ? 12 : slot) : slot;
+      hours.push({
+        value: slot,
+        label: hour12 ? String(disp) : p2(disp),
+        angleDeg,
+        ring: "outer",
+        ...pt(angleDeg, 39),
+      });
+      if (!hour12) {
+        const innerVal = slot + 12;
+        hours.push({
+          value: innerVal,
+          label: p2(innerVal),
+          angleDeg,
+          ring: "inner",
+          ...pt(angleDeg, 24),
+        });
+      }
+    }
+    const minutes = [];
+    for (let m = 0; m < 60; m += 5) {
+      const angleDeg = m * 6;
+      minutes.push({
+        value: m,
+        label: p2(m),
+        angleDeg,
+        ring: "outer",
+        ...pt(angleDeg, 39),
+      });
+    }
+    return { hours, minutes };
+  }
+
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, clockMinuteFromAngle, stepClockHand, clockDialPoints, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);
