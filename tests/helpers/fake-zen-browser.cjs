@@ -5,6 +5,24 @@
 const fs = require("node:fs"), path = require("node:path"), vm = require("node:vm");
 const Calendar = require("../../additional/notes/calendar/ZentralNotesCalendar.js");
 const source = fs.readFileSync(path.join(__dirname, "../../additional/notes/ZentralNotes.uc.js"), "utf8");
+const runtimeSource = fs.readFileSync(path.join(__dirname, "../../loader/ZentralRuntime.js"), "utf8");
+
+function loadRuntimeHoverCard(ctx) {
+  const marker = "function createSidebarHoverCard(";
+  const start = runtimeSource.indexOf(marker);
+  if (start < 0) return null;
+  let i = runtimeSource.indexOf("{", runtimeSource.indexOf(")", start)), depth = 0;
+  for (; i < runtimeSource.length; i++) {
+    const c = runtimeSource[i], n = runtimeSource[i + 1];
+    if (c === "/" && n === "/") i = runtimeSource.indexOf("\n", i);
+    else if (c === "/" && n === "*") i = runtimeSource.indexOf("*/", i) + 1;
+    else if (c === '"' || c === "'" || c === "`") { for (i++; runtimeSource[i] !== c; i++) if (runtimeSource[i] === "\\") i++; }
+    else if (c === "{") depth++;
+    else if (c === "}" && --depth === 0) break;
+  }
+  if (depth !== 0) return null;
+  return vm.runInNewContext("(" + runtimeSource.slice(start, i + 1) + ")", ctx);
+}
 
 function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyFolders = false, calendar = Calendar, hiddenDOMWindow = null } = {}) {
   const dom = require("./fake-dom.cjs")(), { El, Ev, document } = dom;
@@ -107,17 +125,22 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   const PathUtils = { profileDir: "/profile", tempDir: "/tmp", join: (...parts) => parts.join("/"), filename: (p) => p.split("/").pop() };
   const mutationObservers = new Set();
   class MutationObserver {
-    constructor(callback) { this.callback = callback; }
-    observe() { mutationObservers.add(this); }
-    disconnect() { mutationObservers.delete(this); }
+    constructor(callback) { this.callback = callback; this.target = null; this.options = null; }
+    observe(target, options) { this.target = target; this.options = options || null; mutationObservers.add(this); }
+    disconnect() { this.target = null; this.options = null; mutationObservers.delete(this); }
   }
   class ResizeObserver { observe() {} unobserve() {} disconnect() {} }
-  vm.runInNewContext(source, { window: win, document, globalThis: { Services }, ChromeUtils: { importESModule: () => ({}) }, PathUtils, IOUtils, MutationObserver, ResizeObserver, Event: Ev,
-    navigator: { platform: "Linux" }, console, URL, Date: FakeDate, JSON, Math, Promise, RegExp, Number, Map, Set, WeakMap, setTimeout, clearTimeout, queueMicrotask });
+  const vmGlobals = { window: win, document, globalThis: { Services }, ChromeUtils: { importESModule: () => ({}) }, PathUtils, IOUtils, MutationObserver, ResizeObserver, Event: Ev,
+    navigator: { platform: "Linux" }, console, URL, Date: FakeDate, JSON, Math, Promise, RegExp, Number, Map, Set, WeakMap, setTimeout, clearTimeout, queueMicrotask };
+  const ctx = vm.createContext(vmGlobals);
+  const sharedHoverCard = loadRuntimeHoverCard(ctx);
+  if (sharedHoverCard) win.ZentralRuntime.createSidebarHoverCard = sharedHoverCard;
+  vm.runInContext(source, ctx);
   if (!definition?.init) throw new Error("Notes registration missing");
   const destroy = definition.init();
   return { ...dom, window: win, sidebar, operations, events, timers, values, files, observers, obs, emit, destroy,
     addWorkspace, workspaceListenerCount: () => workspaceListeners.size,
+    activeObservers: () => [...mutationObservers].map((o) => ({ target: o.target, options: o.options })),
     listenerCount: (type) => listeners.get(type)?.size || 0, // window listeners of one event type (idle-cost checks)
     async switchWorkspace(id) { if (!workspaces.has(id)) throw new Error("missing workspace"); win.gZenWorkspaces.activeWorkspace = id; for (const listener of [...workspaceListeners]) await listener({ workspace: { uuid: id }, onInit: false }); },
     advanceClock(ms) { clockOffset += Number(ms) || 0; },

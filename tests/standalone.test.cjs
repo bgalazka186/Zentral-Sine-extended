@@ -603,7 +603,7 @@ const baseline = (env) => {
   });
 
   await test("sidebar helpers and lifecycle scope are verbatim runtime copies", () => {
-    const names = ["nativeSidebarElement", "nativeSidebarRect", "nativeSidebarSide", "createFeatureScope"];
+    const names = ["nativeSidebarElement", "nativeSidebarRect", "nativeSidebarSide", "createSidebarHoverCard", "createFeatureScope"];
     const src = bundleOf(manifests[0]);
     for (const name of names) {
       const start = runtimeSource.indexOf("function " + name + "(");

@@ -4575,6 +4575,7 @@
         action("dismiss", "Dismiss", writable && lifecycle !== "dismissed", !writable ? "Reminder history storage is protected or unavailable" : "Already dismissed"),
         action("reopen", "Reopen", writable && lifecycle !== "pending", !writable ? "Reminder history storage is protected or unavailable" : "Already pending"),
         { id: "snooze", command: "snooze", label: "Snooze", group: [
+          action("snooze-1h", "Snooze +1 hour", writable && !recurring && !item.start?.date, !writable ? "Reminder history storage is protected or unavailable" : recurring ? "Recurring occurrences need exception support before they can be snoozed" : "All-day reminders snooze by day"),
           action("snooze-1d", "Snooze +1 day", writable && !recurring, !writable ? "Reminder history storage is protected or unavailable" : "Recurring occurrences need exception support before they can be snoozed"),
           action("snooze-3d", "Snooze +3 days", writable && !recurring, !writable ? "Reminder history storage is protected or unavailable" : "Recurring occurrences need exception support before they can be snoozed"),
           action("snooze-monday", "Snooze until next Monday", writable && !recurring, !writable ? "Reminder history storage is protected or unavailable" : "Recurring occurrences need exception support before they can be snoozed"),
@@ -4592,6 +4593,7 @@
     "mark-done",
     "dismiss",
     "reopen",
+    "snooze-1h",
     "snooze-1d",
     "snooze-3d",
     "snooze-monday",
@@ -4620,6 +4622,7 @@
       case "mark-done": return "Reminder marked done";
       case "dismiss": return "Reminder dismissed";
       case "reopen": return "Reminder reopened";
+      case "snooze-1h": return "Reminder snoozed +1 hour";
       case "snooze-1d": return "Reminder snoozed +1 day";
       case "snooze-3d": return "Reminder snoozed +3 days";
       case "snooze-monday": return "Reminder snoozed until next Monday";
@@ -4628,6 +4631,49 @@
       case "duplicate": return "Independent copy created";
       default: return "";
     }
+  }
+  // T3.4a: formatted date + time range label for Agenda sidebar hover cards.
+  function formatAgendaHoverTime(item, { dateFormat = DEFAULT_DATE_FORMAT } = {}) {
+    if (!item || typeof item !== "object") return "";
+    const [start, end] = itemRange(item);
+    if (!Number.isFinite(start)) return "";
+    const fmt = cleanDateFormat(dateFormat);
+    const zone = cleanZone(item.x?.tz);
+    const localClock = (ms) => {
+      if (zone) {
+        const c = clockIn(ms, zone);
+        if (c) return c;
+      }
+      const d = new Date(ms);
+      return p2(d.getHours()) + ":" + p2(d.getMinutes());
+    };
+    const keyOf = (ms) => (zone ? zonedDateKey(ms, zone) : ymd(new Date(ms))) || ymd(new Date(ms));
+    if (isAllDay(item)) {
+      const startKey = item.start?.date ? String(item.start.date).slice(0, 10) : ymd(new Date(start));
+      const endExclusive = item.end?.date ? String(item.end.date).slice(0, 10) : "";
+      const endDate = endExclusive ? parseYmd(endExclusive) : null;
+      const lastKey = endDate ? ymd(new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate() - 1)) : startKey;
+      const sLabel = formatDateKey(startKey, fmt) || startKey;
+      if (lastKey && lastKey > startKey) {
+        const eLabel = formatDateKey(lastKey, fmt) || lastKey;
+        return sLabel + " \u2013 " + eLabel + " \u00b7 All day";
+      }
+      return sLabel + " \u00b7 All day";
+    }
+    const startKey = keyOf(start);
+    const sLabel = formatDateKey(startKey, fmt) || startKey;
+    const sClock = localClock(start);
+    const tzTag = zone ? " (" + zone + ")" : "";
+    if (!isReminder(item) && Number.isFinite(end) && end > start) {
+      const endKey = keyOf(end);
+      const eClock = localClock(end);
+      if (endKey && endKey !== startKey) {
+        const eLabel = formatDateKey(endKey, fmt) || endKey;
+        return sLabel + " " + sClock + " \u2013 " + eLabel + " " + eClock + tzTag;
+      }
+      return sLabel + " \u00b7 " + sClock + "\u2013" + eClock + tzTag;
+    }
+    return sLabel + " \u00b7 " + sClock + tzTag;
   }
 
   // Snooze helper: whole local days later, keeping the wall-clock time (DST-safe). Returns ms.
@@ -5571,7 +5617,7 @@
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

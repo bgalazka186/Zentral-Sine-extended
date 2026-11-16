@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.199
+// @version 3.3.200
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.199, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.200, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.199";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.200";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -227,6 +227,439 @@ function nativeSidebarSide() {
         ? "right"
         : "left";
     }
+  function createSidebarHoverCard(options) {
+    options = options || {};
+    const win = options.window || window;
+    const doc = options.document || win.document;
+    const id = String(options.id || "bgalazka-sidebar-hover-card");
+    const className = String(options.className || "");
+    const role = options.role ?? "";
+    const ariaLabel = String(options.ariaLabel || "");
+    const describeTarget = options.describeTarget !== false;
+    const defaultWidth = Number(options.defaultWidth) > 0 ? Number(options.defaultWidth) : 320;
+    const defaultHeight = Number(options.defaultHeight) > 0 ? Number(options.defaultHeight) : 80;
+    const isEnabled = typeof options.isEnabled === "function" ? options.isEnabled : () => true;
+    const matchTarget = typeof options.matchTarget === "function" ? options.matchTarget : () => null;
+    const isValid = typeof options.isValid === "function" ? options.isValid : (t) => !!t && t.isConnected !== false;
+    const getShowDelay = typeof options.getShowDelay === "function" ? options.getShowDelay : () => 350;
+    const getHideDelay = typeof options.getHideDelay === "function" ? options.getHideDelay : () => 150;
+    const getSide = typeof options.getSide === "function" ? options.getSide : () => "auto";
+    const getGap = typeof options.getGap === "function" ? options.getGap : () => 6;
+    const getBounds = typeof options.getBounds === "function"
+      ? options.getBounds
+      : () => {
+          const rt = win.ZentralRuntime || win.__zentralStandaloneRuntime;
+          try { return rt?.sidebarSafeBounds?.() || null; } catch (_) { return null; }
+        };
+    const render = typeof options.render === "function" ? options.render : () => {};
+    const onCreate = typeof options.onCreate === "function" ? options.onCreate : null;
+    const onShow = typeof options.onShow === "function" ? options.onShow : null;
+    const onHide = typeof options.onHide === "function" ? options.onHide : null;
+    const suppressTooltipWhenClosed = !!options.suppressTooltipWhenClosed;
+    const shouldSuppressTooltip = typeof options.shouldSuppressTooltip === "function" ? options.shouldSuppressTooltip : () => true;
+    const setTimer = typeof options.setTimer === "function" ? options.setTimer : (fn, ms) => win.setTimeout(fn, ms);
+    const clearTimer = typeof options.clearTimer === "function" ? options.clearTimer : (t) => win.clearTimeout(t);
+    const raf = typeof options.raf === "function"
+      ? options.raf
+      : (fn) => (typeof win.requestAnimationFrame === "function" ? win.requestAnimationFrame(fn) : setTimer(fn, 16));
+    const cancelRaf = typeof options.cancelRaf === "function"
+      ? options.cancelRaf
+      : (t) => (typeof win.cancelAnimationFrame === "function" ? win.cancelAnimationFrame(t) : clearTimer(t));
+
+    let node = null;
+    let target = null;
+    let pending = null;
+    let showTimer = null;
+    let hideTimer = null;
+    let retargetFrame = null;
+    let observer = null;
+    let observedParent = null;
+    let lastXY = null;
+    let destroyed = false;
+
+    const getHost = () => {
+      let host = win.__zentralSidebarCardHost;
+      if (!host || typeof host.activate !== "function") {
+        const members = new Set();
+        host = {
+          active: null,
+          members,
+          register(ctrl) { members.add(ctrl); },
+          unregister(ctrl) {
+            members.delete(ctrl);
+            if (host.active === ctrl) host.active = null;
+            if (!members.size && win.__zentralSidebarCardHost === host) {
+              try { delete win.__zentralSidebarCardHost; } catch (_) { win.__zentralSidebarCardHost = undefined; }
+            }
+          },
+          activate(ctrl) {
+            if (host.active && host.active !== ctrl) {
+              try { host.active.hide(); } catch (_) {}
+            }
+            host.active = ctrl;
+          },
+          deactivate(ctrl) {
+            if (host.active === ctrl) host.active = null;
+          },
+        };
+        win.__zentralSidebarCardHost = host;
+      }
+      return host;
+    };
+
+    const clearShow = () => {
+      if (showTimer !== null) { clearTimer(showTimer); showTimer = null; }
+      pending = null;
+    };
+    const clearHide = () => {
+      if (hideTimer !== null) { clearTimer(hideTimer); hideTimer = null; }
+    };
+    const clearRetarget = () => {
+      if (retargetFrame !== null) { cancelRaf(retargetFrame); retargetFrame = null; }
+    };
+    const cancelTimers = () => { clearShow(); clearHide(); clearRetarget(); };
+
+    const disconnectObserver = () => {
+      if (observer) {
+        try { observer.disconnect(); } catch (_) {}
+      }
+      observedParent = null;
+    };
+    const connectObserver = (t) => {
+      const parent = t?.parentNode || t?.parentElement || null;
+      if (!parent) { disconnectObserver(); return; }
+      if (observer && observedParent === parent) return;
+      disconnectObserver();
+      if (typeof MutationObserver !== "function") return;
+      try {
+        if (!observer) {
+          observer = new MutationObserver(() => {
+            if (target && !isValid(target)) hide();
+          });
+        }
+        observer.observe(parent, { childList: true });
+        observedParent = parent;
+      } catch (_) {}
+    };
+
+    const detachDescription = () => {
+      if (!describeTarget || !target) return;
+      try {
+        const words = (target.getAttribute("aria-describedby") || "").split(/\s+/).filter((w) => w && w !== id);
+        if (words.length) target.setAttribute("aria-describedby", words.join(" "));
+        else target.removeAttribute("aria-describedby");
+      } catch (_) {}
+    };
+    const attachDescription = (t) => {
+      if (!describeTarget || !t) return;
+      try {
+        const words = (t.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean);
+        if (!words.includes(id)) {
+          words.push(id);
+          t.setAttribute("aria-describedby", words.join(" "));
+        }
+      } catch (_) {}
+    };
+
+    // Re-enter the browser top layer on every show so this card sits above
+    // earlier popovers (Big Preview, Zentral panels). Without popover support
+    // (or if showPopover throws), drop the attribute so fixed z-index applies.
+    function raiseCard(c) {
+      if (!c || typeof c.showPopover !== "function") return;
+      try {
+        let open = false;
+        try { open = !!c.matches?.(":popover-open"); } catch (_) {}
+        if (open) c.hidePopover?.();
+        else { try { c.hidePopover?.(); } catch (_) {} }
+        c.showPopover();
+      } catch (_) {
+        try { c.removeAttribute("popover"); } catch (_) {}
+      }
+    }
+    function dropCard(c) {
+      if (!c) return;
+      try {
+        let open = true;
+        try { if (typeof c.matches === "function") open = !!c.matches(":popover-open"); } catch (_) {}
+        if (open) c.hidePopover?.();
+      } catch (_) {}
+    }
+
+    function ensureNode() {
+      if (node) return node;
+      node = typeof doc.createElementNS === "function"
+        ? doc.createElementNS("http://www.w3.org/1999/xhtml", "div")
+        : doc.createElement("div");
+      node.id = id;
+      if (className) node.setAttribute("class", className);
+      if (role) node.setAttribute("role", role);
+      if (ariaLabel) node.setAttribute("aria-label", ariaLabel);
+      node.setAttribute("popover", "manual");
+      node.hidden = true;
+      node.addEventListener("mouseenter", clearHide);
+      node.addEventListener("mouseleave", () => {
+        if (!target || node?.contains?.(doc.activeElement) || target?.contains?.(doc.activeElement)) return;
+        scheduleHide();
+      });
+      if (onCreate) onCreate(node, api);
+      doc.documentElement.append(node);
+      return node;
+    }
+
+    function position() {
+      if (!node || node.hidden || !target || !isValid(target)) {
+        if (target) hide();
+        return;
+      }
+      const tr = target.getBoundingClientRect();
+      const r = typeof node.getBoundingClientRect === "function" ? node.getBoundingClientRect() : null;
+      const vw = Number(win.innerWidth) || 1200;
+      const vh = Number(win.innerHeight) || 800;
+      const width = Math.min(vw - 8, (r && r.width) || node.offsetWidth || defaultWidth);
+      const height = Math.min(vh - 8, (r && r.height) || node.offsetHeight || defaultHeight);
+      const rawGap = Number(getGap());
+      const gap = Number.isFinite(rawGap) ? Math.max(0, Math.min(32, rawGap)) : 6;
+      const sidePref = getSide();
+      const sideEl = doc.getElementById?.("navigator-toolbox");
+      const sr = sideEl?.getBoundingClientRect?.();
+      const autoRight = sr && sr.width > 0
+        ? sr.left > vw / 2
+        : (tr.left + tr.right) / 2 > vw / 2;
+      const placeLeft = sidePref === "left" ? true : sidePref === "right" ? false : autoRight;
+      let left = placeLeft ? tr.left - width - gap : tr.right + gap;
+      const bounds = getBounds();
+      if (bounds && Number.isFinite(bounds.left) && Number.isFinite(bounds.right)) {
+        left = placeLeft ? Math.min(left, bounds.right - width) : Math.max(left, bounds.left);
+      }
+      if (left < 4 && tr.right + gap + width <= vw - 4) left = tr.right + gap;
+      if (left + width > vw - 4 && tr.left - gap - width >= 4) left = tr.left - gap - width;
+      node.style.left = Math.max(4, Math.min(left, vw - width - 4)) + "px";
+      node.style.top = Math.max(4, Math.min(tr.top, vh - height - 4)) + "px";
+    }
+
+    function hide() {
+      cancelTimers();
+      disconnectObserver();
+      detachDescription();
+      const prevTarget = target;
+      target = null;
+      if (node) {
+        dropCard(node);
+        node.hidden = true;
+      }
+      host.deactivate(api);
+      if (prevTarget && onHide) onHide(prevTarget, node);
+    }
+
+    function scheduleHide(delay) {
+      clearShow();
+      clearHide();
+      const raw = delay === undefined ? Number(getHideDelay()) : Number(delay);
+      const ms = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 0;
+      if (ms <= 0) {
+        hide();
+        return;
+      }
+      hideTimer = setTimer(() => {
+        hideTimer = null;
+        hide();
+      }, ms);
+    }
+
+    function show(tab) {
+      if (destroyed) return false;
+      cancelTimers();
+      if (!isEnabled() || !tab || !isValid(tab)) {
+        hide();
+        return false;
+      }
+      const c = ensureNode();
+      host.activate(api);
+      if (target !== tab) {
+        detachDescription();
+        target = tab;
+      }
+      attachDescription(tab);
+      connectObserver(tab);
+      render(c, tab, api);
+      c.hidden = false;
+      raiseCard(c);
+      position();
+      if (onShow) onShow(tab, c);
+      return true;
+    }
+
+    function scheduleShow(tab) {
+      if (destroyed || !isEnabled() || !tab || !isValid(tab)) return;
+      const raw = Number(getShowDelay());
+      const delay = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 0;
+      if (delay <= 0) {
+        clearShow();
+        show(tab);
+        return;
+      }
+      if (showTimer !== null && pending === tab) return;
+      clearShow();
+      pending = tab;
+      showTimer = setTimer(() => {
+        const next = pending;
+        showTimer = null;
+        pending = null;
+        if (!destroyed && isEnabled() && next && isValid(next)) show(next);
+      }, delay);
+    }
+
+    function retarget(tab, { viaPointer = false, nextTarget = null, allowPointer = true } = {}) {
+      if (destroyed) return;
+      clearHide();
+      clearShow();
+      clearRetarget();
+      const resolveNext = () => (typeof nextTarget === "function" ? nextTarget() : nextTarget);
+      if (viaPointer && allowPointer && lastXY && typeof doc.elementFromPoint === "function") {
+        const [x, y] = lastXY;
+        retargetFrame = raf(() => {
+          retargetFrame = null;
+          if (destroyed || !isEnabled()) { hide(); return; }
+          let under = null;
+          try { under = matchTarget(doc.elementFromPoint(x, y)); } catch (_) {}
+          if (under && isValid(under)) { show(under); return; }
+          const next = resolveNext();
+          if (next && isValid(next)) show(next);
+          else hide();
+        });
+        return;
+      }
+      const next = resolveNext();
+      if (next && isValid(next)) show(next);
+      else hide();
+    }
+
+    const over = (event) => {
+      if (destroyed || !isEnabled()) return;
+      if (Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
+        lastXY = [event.clientX, event.clientY];
+      }
+      if (node?.contains?.(event?.target)) {
+        clearHide();
+        return;
+      }
+      const tab = matchTarget(event?.target);
+      if (tab && isValid(tab)) {
+        if (target === tab && node && !node.hidden) {
+          clearHide();
+          return;
+        }
+        clearHide();
+        scheduleShow(tab);
+        return;
+      }
+      if (node && !node.hidden && !node.contains?.(event?.target) && (!target || !target.contains?.(event?.target))) {
+        scheduleHide();
+      }
+    };
+
+    const out = (event) => {
+      if (destroyed) return;
+      const related = event?.relatedTarget;
+      if (node?.contains?.(event?.target)) {
+        if (related && (node.contains?.(related) || target?.contains?.(related))) return;
+        if (node.contains?.(doc.activeElement) || target?.contains?.(doc.activeElement)) return;
+        scheduleHide();
+        return;
+      }
+      const tab = matchTarget(event?.target);
+      if (!tab) return;
+      if (related && (tab.contains?.(related) || node?.contains?.(related))) return;
+      if (pending === tab) clearShow();
+      if (target !== tab) return;
+      if (tab.contains?.(doc.activeElement) || node?.contains?.(doc.activeElement)) return;
+      scheduleHide();
+    };
+
+    const move = (event) => {
+      if (Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
+        lastXY = [event.clientX, event.clientY];
+      }
+    };
+
+    const focus = (event) => {
+      if (destroyed || !isEnabled()) return;
+      const tab = matchTarget(event?.target);
+      if (tab && isValid(tab)) show(tab);
+    };
+
+    const blur = (event) => {
+      if (destroyed || !target) return;
+      const related = event?.relatedTarget;
+      if (related && (target.contains?.(related) || node?.contains?.(related))) return;
+      const fromTarget = matchTarget(event?.target) === target;
+      const fromNode = !!node?.contains?.(event?.target);
+      if (fromTarget || fromNode) hide();
+    };
+
+    const key = (event) => {
+      if (destroyed || event?.key !== "Escape" || !isEnabled()) return;
+      if (!node || node.hidden || !target) return;
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      hide();
+    };
+
+    const popup = (event) => {
+      if (destroyed || !isEnabled() || event?.target?.id !== "tabbrowser-tab-tooltip") return;
+      if (!shouldSuppressTooltip()) return;
+      const tab = matchTarget(event?.target?.triggerNode);
+      if (!tab || !isValid(tab)) return;
+      if (suppressTooltipWhenClosed || (tab === target && node && !node.hidden)) {
+        event.preventDefault();
+      }
+    };
+
+    const api = {
+      ensureNode,
+      getNode: () => node,
+      getTarget: () => target,
+      isOpen: () => !!(node && !node.hidden && target),
+      show,
+      scheduleShow,
+      hide,
+      scheduleHide,
+      cancelTimers,
+      position,
+      retarget,
+      over,
+      out,
+      move,
+      focus,
+      blur,
+      key,
+      popup,
+      removed(tab) {
+        if (tab && (tab === target || tab === pending)) hide();
+      },
+      updated(tab) {
+        if (tab && tab === target && node && !node.hidden) show(tab);
+      },
+      refresh() {
+        if (target && node && !node.hidden) show(target);
+      },
+      destroy() {
+        if (destroyed) return;
+        destroyed = true;
+        hide();
+        host.unregister(api);
+        observer = null;
+        if (node) {
+          try { node.remove(); } catch (_) {}
+          node = null;
+        }
+        lastXY = null;
+      },
+    };
+    const host = getHost();
+    host.register(api);
+    return api;
+  }
   function createFeatureScope(owner) {
     let active = true;
     const cleanups = new Set(),
@@ -571,6 +1004,7 @@ function nativeSidebarSide() {
     nativeSidebarElement,
     nativeSidebarRect,
     nativeSidebarSide,
+    createSidebarHoverCard,
     sidebarLayoutRepair: null,
     compactHoverStatus: null,
     registerSettingsHook: () => () => {},
@@ -6092,6 +6526,7 @@ const __zentralEmbeddedLoader = (function () {
         action("dismiss", "Dismiss", writable && lifecycle !== "dismissed", !writable ? "Reminder history storage is protected or unavailable" : "Already dismissed"),
         action("reopen", "Reopen", writable && lifecycle !== "pending", !writable ? "Reminder history storage is protected or unavailable" : "Already pending"),
         { id: "snooze", command: "snooze", label: "Snooze", group: [
+          action("snooze-1h", "Snooze +1 hour", writable && !recurring && !item.start?.date, !writable ? "Reminder history storage is protected or unavailable" : recurring ? "Recurring occurrences need exception support before they can be snoozed" : "All-day reminders snooze by day"),
           action("snooze-1d", "Snooze +1 day", writable && !recurring, !writable ? "Reminder history storage is protected or unavailable" : "Recurring occurrences need exception support before they can be snoozed"),
           action("snooze-3d", "Snooze +3 days", writable && !recurring, !writable ? "Reminder history storage is protected or unavailable" : "Recurring occurrences need exception support before they can be snoozed"),
           action("snooze-monday", "Snooze until next Monday", writable && !recurring, !writable ? "Reminder history storage is protected or unavailable" : "Recurring occurrences need exception support before they can be snoozed"),
@@ -6109,6 +6544,7 @@ const __zentralEmbeddedLoader = (function () {
     "mark-done",
     "dismiss",
     "reopen",
+    "snooze-1h",
     "snooze-1d",
     "snooze-3d",
     "snooze-monday",
@@ -6137,6 +6573,7 @@ const __zentralEmbeddedLoader = (function () {
       case "mark-done": return "Reminder marked done";
       case "dismiss": return "Reminder dismissed";
       case "reopen": return "Reminder reopened";
+      case "snooze-1h": return "Reminder snoozed +1 hour";
       case "snooze-1d": return "Reminder snoozed +1 day";
       case "snooze-3d": return "Reminder snoozed +3 days";
       case "snooze-monday": return "Reminder snoozed until next Monday";
@@ -6145,6 +6582,49 @@ const __zentralEmbeddedLoader = (function () {
       case "duplicate": return "Independent copy created";
       default: return "";
     }
+  }
+  // T3.4a: formatted date + time range label for Agenda sidebar hover cards.
+  function formatAgendaHoverTime(item, { dateFormat = DEFAULT_DATE_FORMAT } = {}) {
+    if (!item || typeof item !== "object") return "";
+    const [start, end] = itemRange(item);
+    if (!Number.isFinite(start)) return "";
+    const fmt = cleanDateFormat(dateFormat);
+    const zone = cleanZone(item.x?.tz);
+    const localClock = (ms) => {
+      if (zone) {
+        const c = clockIn(ms, zone);
+        if (c) return c;
+      }
+      const d = new Date(ms);
+      return p2(d.getHours()) + ":" + p2(d.getMinutes());
+    };
+    const keyOf = (ms) => (zone ? zonedDateKey(ms, zone) : ymd(new Date(ms))) || ymd(new Date(ms));
+    if (isAllDay(item)) {
+      const startKey = item.start?.date ? String(item.start.date).slice(0, 10) : ymd(new Date(start));
+      const endExclusive = item.end?.date ? String(item.end.date).slice(0, 10) : "";
+      const endDate = endExclusive ? parseYmd(endExclusive) : null;
+      const lastKey = endDate ? ymd(new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate() - 1)) : startKey;
+      const sLabel = formatDateKey(startKey, fmt) || startKey;
+      if (lastKey && lastKey > startKey) {
+        const eLabel = formatDateKey(lastKey, fmt) || lastKey;
+        return sLabel + " \u2013 " + eLabel + " \u00b7 All day";
+      }
+      return sLabel + " \u00b7 All day";
+    }
+    const startKey = keyOf(start);
+    const sLabel = formatDateKey(startKey, fmt) || startKey;
+    const sClock = localClock(start);
+    const tzTag = zone ? " (" + zone + ")" : "";
+    if (!isReminder(item) && Number.isFinite(end) && end > start) {
+      const endKey = keyOf(end);
+      const eClock = localClock(end);
+      if (endKey && endKey !== startKey) {
+        const eLabel = formatDateKey(endKey, fmt) || endKey;
+        return sLabel + " " + sClock + " \u2013 " + eLabel + " " + eClock + tzTag;
+      }
+      return sLabel + " \u00b7 " + sClock + "\u2013" + eClock + tzTag;
+    }
+    return sLabel + " \u00b7 " + sClock + tzTag;
   }
 
   // Snooze helper: whole local days later, keeping the wall-clock time (DST-safe). Returns ms.
@@ -7088,7 +7568,7 @@ const __zentralEmbeddedLoader = (function () {
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -13220,6 +13700,152 @@ __zentralShim.register = function (def) {
         },
       };
     }
+
+    // T3.4a: pure preview models for Notes & Agenda sidebar hover cards.
+    const HOVER_COMMENT_RE = /%%[^%\n]*%%/g;
+    const localYmd = (d) =>
+      d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    function notePreviewLines(body, title = "", maxLines = 4) {
+      const limit = Math.max(1, Math.min(8, Number(maxLines) || 4));
+      const cleanTitle = String(title || "").trim().toLowerCase();
+      const lines = [];
+      let skippedTitle = false;
+      for (const raw of String(hideFrontMatter(body || "")).split(/\r?\n/)) {
+        const cleaned = String(raw || "").replace(HOVER_COMMENT_RE, "").replace(MARKERS_RE, "").replace(/^\s*(?:#{1,6}\s+|>\s+)/, "").trim();
+        if (!cleaned) continue;
+        if (!skippedTitle && cleanTitle && cleanLine(raw).toLowerCase() === cleanTitle) {
+          skippedTitle = true;
+          continue;
+        }
+        skippedTitle = true;
+        lines.push(cleaned.length > 140 ? cleaned.slice(0, 139) + "\u2026" : cleaned);
+        if (lines.length >= limit) break;
+      }
+      return lines;
+    }
+    function buildNoteHoverModel(note, { folders = [], items = null, history = null, now = Date.now(), defaultFolder = "", dateFormat = "iso", calendar = null } = {}) {
+      if (!note || typeof note !== "object") return null;
+      const title = titleOf(note.body) || "Untitled";
+      const labels = folderLabels(folders, note.folder);
+      const folder = labels.length ? labels.join(" / ") : "Notes";
+      const folderId = cleanFolder(note.folder) || cleanFolder(defaultFolder) || "";
+      const allTags = noteTags(note);
+      const tags = allTags.slice(0, 6);
+      const overflowTags = Math.max(0, allTags.length - tags.length);
+      const snippet = notePreviewLines(note.body, title, 4);
+      const C = calendar || CALENDAR_PART;
+      const activeDue = [];
+      const stored = items?.list?.({ noteId: note.id, kind: "reminder", includeHidden: true }) || [];
+      for (const item of stored) {
+        const identity = C?.reminderIdentity?.(item);
+        const state = identity && history ? history.stateFor(identity.itemId, identity.occurrenceId) : "pending";
+        if (state === "done" || state === "dismissed") continue;
+        const [start] = C?.itemRange ? C.itemRange(item) : [Date.parse(item?.start?.dateTime || item?.start?.date || "")];
+        if (Number.isFinite(start)) activeDue.push({ at: start, item });
+      }
+      if (Number(note.remind) > 0) {
+        activeDue.push({ at: Number(note.remind), item: null });
+      }
+      activeDue.sort((a, b) => a.at - b.at);
+      let reminder = null;
+      if (activeDue.length) {
+        const soonest = activeDue[0];
+        const overdue = soonest.at <= now;
+        const d = new Date(soonest.at);
+        const when = soonest.item && C?.formatAgendaHoverTime
+          ? C.formatAgendaHoverTime(soonest.item, { dateFormat })
+          : (C?.formatDateKey ? C.formatDateKey(C.ymd(d), dateFormat) : localYmd(d)) +
+            " \u00b7 " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+        const extra = activeDue.length > 1 ? " (+" + (activeDue.length - 1) + " more)" : "";
+        reminder = {
+          text: (overdue ? "Overdue \u00b7 " : "Reminder \u00b7 ") + when + extra,
+          overdue,
+          count: activeDue.length,
+        };
+      }
+      return {
+        id: note.id,
+        title,
+        folder,
+        folderId,
+        tags,
+        overflowTags,
+        snippet,
+        reminder,
+        hasReminders: activeDue.length > 0 || (Number(note.remind) > 0) || stored.length > 0,
+      };
+    }
+    function buildAgendaHoverModel(item, { tab = null, store = null, calendar = null, history = null, now = Date.now(), dateFormat = "iso", agendaVisible } = {}) {
+      const C = calendar || CALENDAR_PART;
+      const fallbackTitle = String(tab?.getAttribute?.("bgalazka-notes-agenda-summary") || tab?.getAttribute?.("label") || "Untitled").trim();
+      const title = String(item?.summary || fallbackTitle || "Untitled").replace(/[\r\n]+/g, " ").trim();
+      const kind = item ? (C?.isReminder?.(item) ? "reminder" : "event")
+        : (tab?.getAttribute?.("bgalazka-notes-agenda-kind") === "reminder" ? "reminder" : "event");
+      let timeText = "";
+      if (item && C?.formatAgendaHoverTime) {
+        timeText = C.formatAgendaHoverTime(item, { dateFormat });
+      } else {
+        const startMs = Number(tab?.getAttribute?.("bgalazka-notes-agenda-start") || 0);
+        const day = String(tab?.getAttribute?.("bgalazka-notes-agenda-day") || "");
+        if (Number.isFinite(startMs) && startMs > 0) {
+          const d = new Date(startMs);
+          timeText = (day || localYmd(d)) + " \u00b7 " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+        } else if (day) {
+          timeText = day;
+        }
+      }
+      const hist = history || store?.items?.history || null;
+      const identity = item && C?.reminderIdentity ? C.reminderIdentity(item) : null;
+      const state = identity && hist ? hist.stateFor(identity.itemId, identity.occurrenceId) : "pending";
+      let status = "";
+      if (kind === "reminder") {
+        if (state === "done") status = "done";
+        else if (state === "dismissed") status = "dismissed";
+        else if (item && C?.itemRange) {
+          const [start] = C.itemRange(item);
+          if (Number.isFinite(start) && start <= now) status = "overdue";
+        }
+      } else if (tab?.hasAttribute?.("bgalazka-notes-agenda-ended")) {
+        status = "ended";
+      } else if (item && C?.itemRange) {
+        const [start, end] = C.itemRange(item);
+        if (Number.isFinite(end) && end > start && end <= now) status = "ended";
+      }
+      const catName = String(item?.x?.category || "").trim();
+      const catColor = catName
+        ? String(item?.x?.categoryColor || store?.items?.category?.(catName)?.color || item?.x?.color || "").trim()
+        : "";
+      const category = catName ? { name: catName, color: catColor } : null;
+      const noteId = String(item?.x?.noteId || identity?.noteId || tab?.getAttribute?.("bgalazka-notes-agenda-note-id") || "").trim();
+      const heading = String(item?.x?.heading || tab?.getAttribute?.("bgalazka-notes-agenda-heading") || "").trim();
+      const linkedNote = noteId && store?.get ? store.get(noteId) : null;
+      const sourceTitle = (linkedNote && !linkedNote.trashed)
+        ? (titleOf(linkedNote.body) || "Untitled")
+        : String(item?.x?.sourceNoteTitle || "").trim();
+      const sourceNote = (noteId && sourceTitle) ? { id: noteId, title: sourceTitle, heading } : null;
+      const rawNotes = [];
+      for (const text of [item?.x?.calNote, item?.description]) {
+        const cleaned = String(text || "").replace(HOVER_COMMENT_RE, "").replace(MARKERS_RE, "").trim();
+        if (cleaned && !rawNotes.includes(cleaned)) rawNotes.push(cleaned);
+      }
+      const descLines = rawNotes.join("\n").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 4);
+      const description = descLines.map((l) => (l.length > 140 ? l.slice(0, 139) + "\u2026" : l)).join("\n");
+      const actions = [{ id: "open", label: sourceNote ? "Open note" : "Open", primary: true }];
+      if (item && C?.calendarItemMenuModel) {
+        const historyWritable = !!hist && !hist.storageState?.()?.writeBlocked;
+        const currentId = String(item.x?.series || item.id || "");
+        const agendaWritable = !!(currentId && store?.items?.get?.(currentId));
+        const model = C.calendarItemMenuModel(item, { state, historyWritable, agendaVisible, agendaWritable });
+        const flat = model.flatMap((r) => (Array.isArray(r?.group) ? [r, ...r.group] : [r]));
+        const can = (cmd) => !!flat.find((r) => r?.command === cmd && r.enabled);
+        if (can("mark-done")) actions.push({ id: "mark-done", label: "Done" });
+        else if (can("reopen")) actions.push({ id: "reopen", label: "Reopen" });
+        if (can("snooze-1h")) actions.push({ id: "snooze-1h", label: "Snooze +1h" });
+        if (can("snooze-1d")) actions.push({ id: "snooze-1d", label: "Snooze +1d" });
+        if (can("dismiss")) actions.push({ id: "dismiss", label: "Dismiss" });
+      }
+      return { title, kind, timeText, status, category, sourceNote, description, actions };
+    }
     // One timer, armed for the next future reminder. `onDue(notes)` receives every overdue, unannounced
     // reminder as one batch AFTER the store has recorded them as announced (claim), so nothing repeats.
     // One native timer drives all calendar deadlines and a low-cost clock
@@ -15428,12 +16054,20 @@ __zentralShim.register = function (def) {
             };
           }
 
-          if (cmd === "snooze-1d" || cmd === "snooze-3d" || cmd === "snooze-monday") {
+          if (cmd === "snooze-1h" || cmd === "snooze-1d" || cmd === "snooze-3d" || cmd === "snooze-monday") {
             if (item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length)) {
               return { ok: false, command: cmd, reason: "Recurring occurrences need exception support before they can be snoozed" };
             }
-            const days = cmd === "snooze-1d" ? 1 : cmd === "snooze-3d" ? 3 : C.snoozeMondayDays(item);
-            const nextStart = C.snoozedItemStart(item, days);
+            let nextStart = null;
+            if (cmd === "snooze-1h") {
+              if (item.start?.date) return { ok: false, command: cmd, reason: "All-day reminders snooze by day" };
+              const [baseStart] = C.itemRange(item);
+              const baseMs = Number.isFinite(baseStart) && baseStart > at ? baseStart : at;
+              nextStart = C.snoozedItemStart(item, 0, baseMs + 3600000);
+            } else {
+              const days = cmd === "snooze-1d" ? 1 : cmd === "snooze-3d" ? 3 : C.snoozeMondayDays(item);
+              nextStart = C.snoozedItemStart(item, days);
+            }
             if (!nextStart) return { ok: false, command: cmd, reason: "That reminder time could not be changed" };
             const message = C.agendaActionMessage(cmd);
             if (item.x?.src === "note" && item.x?.noteId) {
@@ -15462,7 +16096,17 @@ __zentralShim.register = function (def) {
             const current = items?.get?.(item.id);
             if (!current) return { ok: false, command: cmd, reason: "That reminder is no longer available" };
             const prevStart = current.start ? { ...current.start } : null;
-            const saved = items.upsert({ ...current, start: nextStart, historyAction: "snoozed" });
+            const prevEnd = current.end ? { ...current.end } : null;
+            let nextEnd = current.end;
+            if (nextStart.dateTime && current.start?.dateTime && current.end?.dateTime) {
+              const oldStartMs = Date.parse(current.start.dateTime);
+              const oldEndMs = Date.parse(current.end.dateTime);
+              const newStartMs = Date.parse(nextStart.dateTime);
+              if (Number.isFinite(oldStartMs) && Number.isFinite(oldEndMs) && oldEndMs > oldStartMs && Number.isFinite(newStartMs)) {
+                nextEnd = { dateTime: new Date(newStartMs + (oldEndMs - oldStartMs)).toISOString() };
+              }
+            }
+            const saved = items.upsert({ ...current, start: nextStart, ...(nextEnd ? { end: nextEnd } : {}), historyAction: "snoozed" });
             if (!saved) return { ok: false, command: cmd, reason: "The reminder could not be snoozed" };
             history?.flush?.().catch?.(warn);
             const afterRev = saved.rev, afterEtag = saved.etag, afterHead = headId();
@@ -15473,7 +16117,7 @@ __zentralShim.register = function (def) {
                 if (!latest || latest.rev !== afterRev || latest.etag !== afterEtag || headId() !== afterHead) {
                   return { ok: false, message: "Cannot undo: reminder changed" };
                 }
-                const restored = items.upsert({ ...latest, start: prevStart, historyAction: "rescheduled" });
+                const restored = items.upsert({ ...latest, start: prevStart, ...(prevEnd ? { end: prevEnd } : {}), historyAction: "rescheduled" });
                 if (restored) history?.flush?.().catch?.(warn);
                 return { ok: !!restored, message: restored ? "Snooze undone" : "Could not undo snooze" };
               },
@@ -18482,7 +19126,7 @@ __zentralShim.register = function (def) {
         FIND_MAX_MATCHES, FIND_MAX_QUERY, sniffImageMime, checkAssetBytes, assetFileName, parseAssetLink, buildAssetLink, buildAssetImage,
         insertAssetImage, assetImageAt, restyleAssetImage, assetRefs, assetIntegrityReport, isAssetNoteId, ASSET_MAX_BYTES, ASSET_VIDEO_MAX_BYTES, ASSET_FILE_MAX_BYTES, ASSET_MAX_PER_NOTE, ASSET_MIME, VIDEO_EXT_MIME, cleanAssetFileName, uniqueAssetFileName, parseFileAssetLink, droppedAssetMarkup, insertDroppedAssetLinks, droppedFiles,
         cleanRemind, ceilStep, dueReminders, nextReminderAt, reminderDelay, reminderPresets, parseRemindInput, remindPreview, remindDateText, remindTimeText,
-        createTimeTickService, createReminderScheduler, createReminderAlertActions, createReminderAlertStack, createAgendaActionToast, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
+        createTimeTickService, createReminderScheduler, createReminderAlertActions, createReminderAlertStack, createAgendaActionToast, notePreviewLines, buildNoteHoverModel, buildAgendaHoverModel, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
         headingSlug, headingsOf, cleanAnchor, noteLinkParts, headingOffset, tocBlock, tocList, findToc, updateToc, insertToc, insertFootnote, nextFootnoteLabel, mentionRe, hasMention, linkFirstMention, collectRefs, attachTrailingBlockId, nextMarkdownFence, TASK_BOX_CHARS, TASK_BOX_TOKEN,
         hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_FOLDER_LABEL, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
         DATE_TITLE_RE, dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
@@ -30152,9 +30796,10 @@ __zentralShim.register = function (def) {
           : IOUtils.setPermissions(p, 0o600, false),
     };
 
-    function start({ lifecycle } = {}) {
+    function start({ lifecycle, runtime: hostRuntime } = {}) {
       const cleanups = [];
       const onCleanup = (fn) => cleanups.push(fn);
+      const getHostRuntime = () => hostRuntime || window.ZentralRuntime || window.__zentralStandaloneRuntime || null;
       let disposed = false;
       const warn = (error) => console.warn("[ZentralNotes]", error);
       // Zen's public session manager builds both its sidebar file and the Sync
@@ -31161,7 +31806,7 @@ __zentralShim.register = function (def) {
         remove(key, dup) {
           const root = zenRootEl();
           const tabs = zenByKey(root, key);
-          for (const t of dup ? tabs.slice(1) : tabs) zenRemoveTab(t);
+          for (const t of dup ? tabs.slice(1) : tabs) { notesHoverCard.removed(t); zenRemoveTab(t); }
           const f = dup ? null : zenFolderByKey(root, key);
           if (f) {
             // A retired subfolder may still contain user tabs or even empty
@@ -31175,7 +31820,7 @@ __zentralShim.register = function (def) {
         },
         relabel(key, label) {
           const root = zenRootEl();
-          for (const t of zenByKey(root, key)) { t.setAttribute("bgalazka-notes-label", label); t.setAttribute("label", label); }
+          for (const t of zenByKey(root, key)) { t.setAttribute("bgalazka-notes-label", label); t.setAttribute("label", label); notesHoverCard.updated(t); }
           const f = zenFolderByKey(root, key);
           if (f) { f.setAttribute("bgalazka-notes-label", label); try { f.label = label; } catch (_) {} }
         },
@@ -31419,89 +32064,330 @@ __zentralShim.register = function (def) {
         const root = agendaRootEl(), parent = parentKey ? agendaDayEl(parentKey) : null;
         return [...(root?.querySelectorAll?.("tab") || [])].find((tab) => agendaTabKey(tab) === key && (!parentKey || (parent && tab.closest?.("zen-folder") === parent))) || null;
       }
-      // Minimal, reusable sidebar-card lifecycle. OW-17 deliberately renders
-      // only the full Agenda title; richer cards/actions remain a future layer.
-      function createAgendaTitleCard() {
-        const id = "bgalazka-notes-agenda-card";
-        let node = null, target = null, pending = null, showTimer = 0, hideTimer = 0, observer = null;
-        const clear = () => { window.clearTimeout(showTimer); window.clearTimeout(hideTimer); showTimer = hideTimer = 0; pending = null; };
-        const valid = (tab) => !disposed && agendaEnabled() && tab?.isConnected !== false &&
-          agendaTabKey(tab).startsWith("item:") && !!agendaRootEl()?.contains?.(tab);
-        const detachDescription = () => {
-          if (!target) return;
-          const words = (target.getAttribute("aria-describedby") || "").split(/\s+/).filter(word => word && word !== id);
-          if (words.length) target.setAttribute("aria-describedby", words.join(" ")); else target.removeAttribute("aria-describedby");
-        };
-        const hide = () => {
-          clear(); detachDescription(); target = null;
-          if (node) { try { node.hidePopover?.(); } catch (_) {} node.hidden = true; }
-        };
-        const position = () => {
-          if (!node || !valid(target) || node.hidden) { if (target) hide(); return; }
-          const tr = target.getBoundingClientRect(), r = node.getBoundingClientRect();
-          const width = Math.min(window.innerWidth - 8, r.width || node.offsetWidth || 320);
-          const height = Math.min(window.innerHeight - 8, r.height || node.offsetHeight || 80);
-          const runtime = window.ZentralRuntime || window.__zentralStandaloneRuntime;
-          let bounds = null; try { bounds = runtime?.sidebarSafeBounds?.(); } catch (_) {}
-          const onRight = (tr.left + tr.right) / 2 > window.innerWidth / 2;
-          let left = onRight ? tr.left - width - 6 : tr.right + 6;
-          if (bounds && Number.isFinite(bounds.left) && Number.isFinite(bounds.right))
-            left = onRight ? Math.min(left, bounds.right - width) : Math.max(left, bounds.left);
-          if (left < 4 && tr.right + 6 + width <= window.innerWidth - 4) left = tr.right + 6;
-          if (left + width > window.innerWidth - 4 && tr.left - 6 - width >= 4) left = tr.left - 6 - width;
-          node.style.left = Math.max(4, Math.min(left, window.innerWidth - width - 4)) + "px";
-          node.style.top = Math.max(4, Math.min(tr.top, window.innerHeight - height - 4)) + "px";
-        };
-        const show = (tab) => {
-          clear(); if (!valid(tab)) { hide(); return; }
-          if (!node) {
-            node = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
-            node.id = id; node.setAttribute("class", "zn-agenda-title-card");
-            node.setAttribute("role", "tooltip"); node.setAttribute("popover", "manual");
-            node.hidden = true; document.documentElement.append(node);
-            try { observer = new MutationObserver(() => { if (target && !valid(target)) hide(); }); observer.observe(document.documentElement, { childList: true, subtree: true }); } catch (_) {}
-          }
-          if (target !== tab) { detachDescription(); target = tab; }
-          const described = (tab.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean);
-          if (!described.includes(id)) { described.push(id); tab.setAttribute("aria-describedby", described.join(" ")); }
-          node.textContent = tab.getAttribute("bgalazka-notes-agenda-summary") || tab.getAttribute("label") || "Untitled";
-          node.hidden = false;
-          try { node.hidePopover?.(); } catch (_) {}
-          try { node.showPopover?.(); } catch (_) { node.removeAttribute("popover"); }
-          position();
-        };
-        const tabOf = (event) => { try { return event.target?.closest?.("tab[" + AGENDA_ATTR + "]"); } catch (_) { return null; } };
-        const over = (event) => {
-          if (node?.contains?.(event.target)) { window.clearTimeout(hideTimer); hideTimer = 0; return; }
-          const tab = tabOf(event); if (!valid(tab)) return;
-          if (target === tab && !node?.hidden) { window.clearTimeout(hideTimer); hideTimer = 0; return; }
-          clear(); pending = tab; showTimer = window.setTimeout(() => { const next = pending; pending = null; showTimer = 0; show(next); }, 350);
-        };
-        const out = (event) => {
-          if (node?.contains?.(event.target)) {
-            if (node.contains?.(event.relatedTarget) || target?.contains?.(event.relatedTarget) || target?.contains?.(document.activeElement)) return;
-            window.clearTimeout(hideTimer); hideTimer = window.setTimeout(hide, 150); return;
-          }
-          const tab = tabOf(event); if (!tab || (event.relatedTarget && (tab.contains?.(event.relatedTarget) || node?.contains?.(event.relatedTarget)))) return;
-          if (pending === tab) { window.clearTimeout(showTimer); showTimer = 0; pending = null; }
-          if (target !== tab || tab.contains?.(document.activeElement)) return;
-          window.clearTimeout(hideTimer); hideTimer = window.setTimeout(hide, 150);
-        };
-        const focus = (event) => { const tab = tabOf(event); if (valid(tab)) show(tab); };
-        const blur = (event) => { const tab = tabOf(event); if (tab === target && !tab?.contains?.(event.relatedTarget)) hide(); };
-        const key = (event) => { if (event.key === "Escape" && target) hide(); };
-        const popup = (event) => {
-          const tab = event.target?.triggerNode?.closest?.("tab[" + AGENDA_ATTR + "]");
-          if (event.target?.id === "tabbrowser-tab-tooltip" && tab === target && valid(tab) && node && !node.hidden) event.preventDefault();
-        };
-        return { over, out, focus, blur, key, popup, position, hide,
-          removed(tab) { if (tab === target || tab === pending) hide(); },
-          updated(tab) { if (tab === target) show(tab); },
-          destroy() { hide(); observer?.disconnect(); observer = null; node?.remove(); node = null; },
+      // T3.4a + AU-B2: shared top-layer hover preview cards for Agenda and Notes
+      // pseudo-tabs, powered by runtime.createSidebarHoverCard (same engine as RSS,
+      // both full pack and standalone). Zero document-wide or idle MutationObservers.
+      const hoverDateFormat = () =>
+        CALENDAR_PART?.cleanDateFormat?.(prefStr(PREF.DATE_DISPLAY, CALENDAR_PART?.DEFAULT_DATE_FORMAT || "DD-MM-YYYY")) || "DD-MM-YYYY";
+      const hoverEl = (tag, cls, text) => {
+        const el = typeof document.createElementNS === "function"
+          ? document.createElementNS("http://www.w3.org/1999/xhtml", tag)
+          : document.createElement(tag);
+        if (cls) el.className = cls;
+        if (text !== undefined && text !== null) el.textContent = String(text);
+        return el;
+      };
+      const hoverClear = (el) => {
+        while (el.firstChild) el.firstChild.remove();
+      };
+      function nextAgendaItem(tab) {
+        const root = agendaRootEl();
+        if (!root) return null;
+        const items = [...(root.querySelectorAll?.("tab[" + AGENDA_ATTR + "]") || [])].filter(
+          (t) => t.isConnected !== false && agendaTabKey(t).startsWith("item:"),
+        );
+        if (!items.length) return null;
+        if (!tab) return items[0] || null;
+        const idx = items.indexOf(tab);
+        if (idx < 0) return items[0] || null;
+        return items[idx + 1] || items[idx - 1] || null;
+      }
+      function nextNotesItem(tab) {
+        const root = zenRootEl();
+        if (!root) return null;
+        const items = [...(root.querySelectorAll?.("tab[" + NOTES_ATTR + "]") || [])].filter(
+          (t) => t.isConnected !== false && notesTabKey(t).startsWith("n:"),
+        );
+        if (!items.length) return null;
+        if (!tab) return items[0] || null;
+        const idx = items.indexOf(tab);
+        if (idx < 0) return items[0] || null;
+        return items[idx + 1] || items[idx - 1] || null;
+      }
+      const noopHoverCard = () => ({
+        ensureNode: () => null, getNode: () => null, getTarget: () => null, isOpen: () => false,
+        show: () => false, scheduleShow() {}, hide() {}, scheduleHide() {}, cancelTimers() {},
+        position() {}, retarget() {}, over() {}, out() {}, move() {}, focus() {}, blur() {},
+        key() {}, popup() {}, removed() {}, updated() {}, refresh() {}, destroy() {},
+      });
+      function createSidebarCard(opts) {
+        const factory = getHostRuntime()?.createSidebarHoverCard;
+        return typeof factory === "function" ? factory(opts) : noopHoverCard();
+      }
+      const agendaTabFromNode = (node) => {
+        try { return node?.closest?.("tab[" + AGENDA_ATTR + "]") || null; } catch (_) { return null; }
+      };
+      const agendaValidTab = (tab) => !disposed && agendaEnabled() && tab?.isConnected !== false &&
+        agendaTabKey(tab).startsWith("item:") && !!agendaRootEl()?.contains?.(tab);
+      function agendaTabIdentity(tab) {
+        const key = agendaTabKey(tab);
+        const projected = key ? agendaEntryForKey(key) : null;
+        return {
+          itemId: tab?.getAttribute?.("bgalazka-notes-agenda-item-id") || projected?.itemId || "",
+          occurrenceId: tab?.getAttribute?.("bgalazka-notes-agenda-occurrence-id") || projected?.occurrenceId || "",
+          recordId: tab?.getAttribute?.("bgalazka-notes-agenda-record-id") || projected?.recordId || projected?.id || "",
+          start: Number(tab?.getAttribute?.("bgalazka-notes-agenda-start")) || Number(projected?.start) || 0,
+          end: Number(tab?.getAttribute?.("bgalazka-notes-agenda-end")) || Number(projected?.end) || 0,
         };
       }
-      const agendaTitleCard = createAgendaTitleCard();
-      onCleanup(() => agendaTitleCard.destroy());
+      function renderAgendaCard(node, tab) {
+        hoverClear(node);
+        const identity = agendaTabIdentity(tab);
+        const item = CALENDAR_PART?.resolveAgendaOccurrence && store.items
+          ? CALENDAR_PART.resolveAgendaOccurrence(agendaItems(), identity)
+          : null;
+        const model = buildAgendaHoverModel(item, {
+          tab,
+          store,
+          calendar: CALENDAR_PART,
+          history: store.items?.history || null,
+          now: Date.now(),
+          dateFormat: hoverDateFormat(),
+          agendaVisible: item ? agendaWindowForItem(item, store).enabled : undefined,
+        });
+        const head = hoverEl("div", "zn-hc-head");
+        const titleEl = hoverEl("div", "zn-hc-title", model.title);
+        head.append(titleEl);
+        if (model.status) {
+          const st = hoverEl("span", "zn-hc-status", model.status);
+          st.setAttribute("data-status", model.status);
+          st.dataset.status = model.status;
+          head.append(st);
+        }
+        node.append(head);
+        if (model.timeText || model.category) {
+          const meta = hoverEl("div", "zn-hc-meta");
+          if (model.timeText) meta.append(hoverEl("span", "zn-hc-time", model.timeText));
+          if (model.category) {
+            const cat = hoverEl("span", "zn-hc-cat");
+            if (model.category.color) {
+              const dot = hoverEl("span", "zn-hc-cat-dot");
+              dot.style.backgroundColor = model.category.color;
+              cat.append(dot);
+            }
+            cat.append(hoverEl("span", "zn-hc-cat-name", model.category.name));
+            meta.append(cat);
+          }
+          node.append(meta);
+        }
+        if (model.sourceNote) {
+          const srcLabel = model.sourceNote.heading
+            ? model.sourceNote.title + " \u00b7 " + model.sourceNote.heading
+            : model.sourceNote.title;
+          const srcBtn = hoverEl("button", "zn-hc-source", srcLabel);
+          srcBtn.type = "button";
+          srcBtn.setAttribute("data-action", "open-source");
+          srcBtn.dataset.action = "open-source";
+          node.append(srcBtn);
+        }
+        if (model.description) {
+          node.append(hoverEl("div", "zn-hc-body", model.description));
+        }
+        if (model.actions.length) {
+          const bar = hoverEl("div", "zn-hc-actions");
+          for (const act of model.actions) {
+            const btn = hoverEl("button", act.primary ? "zn-hc-btn zn-hc-btn-primary" : "zn-hc-btn", act.label);
+            btn.type = "button";
+            btn.setAttribute("data-action", act.id);
+            btn.dataset.action = act.id;
+            bar.append(btn);
+          }
+          node.append(bar);
+        }
+      }
+      function handleAgendaCardAction(tab, action, { viaPointer = false } = {}) {
+        if (!tab || !action) return;
+        if (action === "open" || action === "open-source") {
+          agendaHoverCard.hide();
+          activateAgendaTab(tab);
+          return;
+        }
+        if (!CALENDAR_PART?.isHeadlessAgendaCommand?.(action)) return;
+        const identity = agendaTabIdentity(tab);
+        const prevDay = tab.getAttribute("bgalazka-notes-agenda-day") || "";
+        const next = nextAgendaItem(tab);
+        const nextKey = next ? agendaTabKey(next) : "";
+        const result = runHeadlessAgendaAction(identity, action);
+        if (!result?.ok) return;
+        // Run projection synchronously so the sidebar DOM reflects the triage
+        // before retargeting, keeping the hover card smoothly open.
+        try { agendaController.runNow(); } catch (_) {}
+        const resolveNext = () =>
+          (next && agendaValidTab(next) ? next : null) ||
+          (nextKey ? agendaTabFor(nextKey) : null) ||
+          nextAgendaItem(null);
+        if (action === "mark-done" || action === "dismiss") {
+          agendaHoverCard.retarget(tab, { viaPointer, nextTarget: resolveNext });
+          return;
+        }
+        // Snooze / Reopen: if the item stayed in the same day folder (e.g. +1h today),
+        // refresh it in-place so the user sees the new time; otherwise glide to nextAgendaItem.
+        const sameDayTab = [...(agendaRootEl()?.querySelectorAll?.("tab[" + AGENDA_ATTR + "]") || [])].find(
+          (t) => t.isConnected !== false &&
+            t.getAttribute("bgalazka-notes-agenda-record-id") === identity.recordId &&
+            (t.getAttribute("bgalazka-notes-agenda-day") || "") === prevDay,
+        );
+        if (sameDayTab && agendaValidTab(sameDayTab)) {
+          agendaHoverCard.show(sameDayTab);
+          return;
+        }
+        agendaHoverCard.retarget(tab, { viaPointer, nextTarget: resolveNext });
+      }
+      const agendaHoverCard = createSidebarCard({
+        id: "bgalazka-notes-agenda-card",
+        className: "zn-sidebar-hover-card zn-agenda-hover-card",
+        role: "dialog",
+        ariaLabel: "Agenda preview",
+        defaultWidth: 340,
+        defaultHeight: 110,
+        isEnabled: () => !disposed && agendaEnabled(),
+        matchTarget: agendaTabFromNode,
+        isValid: agendaValidTab,
+        getShowDelay: () => 350,
+        getHideDelay: () => 150,
+        onCreate(node, ctrl) {
+          node.addEventListener("click", (ev) => {
+            const btn = ev.target?.closest?.("button[data-action]");
+            const action = btn?.getAttribute?.("data-action") || btn?.dataset?.action;
+            const tab = ctrl.getTarget();
+            if (!action || !tab) return;
+            ev.preventDefault?.();
+            ev.stopPropagation?.();
+            handleAgendaCardAction(tab, action, { viaPointer: false });
+          });
+        },
+        render: renderAgendaCard,
+      });
+      const agendaTitleCard = agendaHoverCard;
+      onCleanup(() => agendaHoverCard.destroy());
+
+      const notesTabFromNode = (node) => {
+        try {
+          const tab = node?.closest?.("tab[" + NOTES_ATTR + "]") || null;
+          return tab && notesTabKey(tab).startsWith("n:") ? tab : null;
+        } catch (_) { return null; }
+      };
+      const notesValidTab = (tab) => !disposed && zenMode() !== "off" && tab?.isConnected !== false &&
+        notesTabKey(tab).startsWith("n:") && !!zenRootEl()?.contains?.(tab);
+      function renderNotesCard(node, tab) {
+        hoverClear(node);
+        const id = zenNoteIdFromTab(tab);
+        const note = id ? store.get(id) : null;
+        const defaultFolder = zenMode() === "selected" ? TABBAR_FOLDER : "";
+        const model = note && !note.trashed
+          ? buildNoteHoverModel(note, {
+              folders: store.meta?.folders || [],
+              items: store.items || null,
+              history: store.items?.history || null,
+              now: Date.now(),
+              defaultFolder,
+              dateFormat: hoverDateFormat(),
+              calendar: CALENDAR_PART,
+            })
+          : {
+              id,
+              title: tab.getAttribute("bgalazka-notes-label") || tab.getAttribute("label") || "Untitled",
+              folder: "Notes",
+              folderId: defaultFolder,
+              tags: [],
+              overflowTags: 0,
+              snippet: [],
+              reminder: null,
+              hasReminders: false,
+            };
+        node.append(hoverEl("div", "zn-hc-folder", model.folder));
+        node.append(hoverEl("div", "zn-hc-title", model.title));
+        if (model.tags.length) {
+          const tagsRow = hoverEl("div", "zn-hc-tags");
+          for (const tag of model.tags) tagsRow.append(hoverEl("span", "zn-hc-pill", "#" + tag));
+          if (model.overflowTags > 0) tagsRow.append(hoverEl("span", "zn-hc-pill zn-hc-pill-more", "+" + model.overflowTags));
+          node.append(tagsRow);
+        }
+        if (model.snippet.length) {
+          node.append(hoverEl("div", "zn-hc-body", model.snippet.join("\n")));
+        }
+        if (model.reminder) {
+          const remEl = hoverEl("div", "zn-hc-reminder", model.reminder.text);
+          if (model.reminder.overdue) { remEl.setAttribute("data-overdue", "true"); remEl.dataset.overdue = "true"; }
+          node.append(remEl);
+        }
+        const bar = hoverEl("div", "zn-hc-actions");
+        for (const [action, label, primary] of [
+          ["open", "Open", true],
+          ["new-in-folder", "New note in folder", false],
+          ["trash", "Trash", false],
+        ]) {
+          const btn = hoverEl("button", primary ? "zn-hc-btn zn-hc-btn-primary" : "zn-hc-btn", label);
+          btn.type = "button";
+          btn.setAttribute("data-action", action);
+          btn.dataset.action = action;
+          bar.append(btn);
+        }
+        node.append(bar);
+      }
+      const notesHoverCard = createSidebarCard({
+        id: "bgalazka-notes-sidebar-card",
+        className: "zn-sidebar-hover-card zn-notes-hover-card",
+        role: "dialog",
+        ariaLabel: "Note preview",
+        defaultWidth: 340,
+        defaultHeight: 120,
+        isEnabled: () => !disposed && zenMode() !== "off",
+        matchTarget: notesTabFromNode,
+        isValid: notesValidTab,
+        getShowDelay: () => 350,
+        getHideDelay: () => 150,
+        onCreate(node, ctrl) {
+          node.addEventListener("click", (ev) => {
+            const btn = ev.target?.closest?.("button[data-action]");
+            const action = btn?.getAttribute?.("data-action") || btn?.dataset?.action;
+            const tab = ctrl.getTarget();
+            if (!action || !tab) return;
+            ev.preventDefault?.();
+            ev.stopPropagation?.();
+            if (action === "open") {
+              ctrl.hide();
+              activateZenTab(tab);
+              return;
+            }
+            const id = zenNoteIdFromTab(tab);
+            if (action === "new-in-folder") {
+              const note = id ? store.get(id) : null;
+              const folderId = cleanFolder(note?.folder) || (zenMode() === "selected" ? TABBAR_FOLDER : "");
+              ctrl.hide();
+              withStore(() => {
+                const created = store.create("", folderId);
+                zen.schedule(0);
+                if (created) openReminderNote(created.id, { zenTab: true });
+              });
+              return;
+            }
+            if (action === "trash" && id) {
+              const note = store.get(id);
+              const reminders = note ? reminderCountOfNote(store, note) : 0;
+              const held = [...bindings.values(), floating].find((binding) => binding?.held());
+              const next = nextNotesItem(tab);
+              const nextKey = next ? notesTabKey(next) : "";
+              if (reminders > 0 || held) {
+                ctrl.hide();
+                trashNoteFromSidebar(id);
+                return;
+              }
+              trashNoteFromSidebar(id).then(() => {
+                if (disposed) return;
+                zen.schedule(0);
+                const resolveNext = () =>
+                  (next && notesValidTab(next) ? next : null) ||
+                  (nextKey ? zenByKey(zenRootEl(), nextKey)[0] : null) ||
+                  nextNotesItem(null);
+                ctrl.retarget(tab, { viaPointer: false, nextTarget: resolveNext });
+              });
+            }
+          });
+        },
+        render: renderNotesCard,
+      });
+      onCleanup(() => notesHoverCard.destroy());
       const agendaActionToast = createAgendaActionToast({
         document,
         escapeTarget: window,
@@ -31950,13 +32836,7 @@ __zentralShim.register = function (def) {
         document.documentElement.setAttribute("zentral-agenda-ctx", "item");
         const key = agendaTabKey(tab);
         const projected = agendaEntryForKey(key);
-        const snapshot = () => ({
-          itemId: tab.getAttribute("bgalazka-notes-agenda-item-id") || projected?.itemId || "",
-          occurrenceId: tab.getAttribute("bgalazka-notes-agenda-occurrence-id") || projected?.occurrenceId || "",
-          recordId: tab.getAttribute("bgalazka-notes-agenda-record-id") || projected?.recordId || projected?.id || "",
-          start: Number(tab.getAttribute("bgalazka-notes-agenda-start")) || Number(projected?.start) || 0,
-          end: Number(tab.getAttribute("bgalazka-notes-agenda-end")) || Number(projected?.end) || 0,
-        });
+        const snapshot = () => agendaTabIdentity(tab);
         const identity = snapshot();
         const item = key.startsWith("item:") && CALENDAR_PART?.resolveAgendaOccurrence?.(agendaItems(), identity) || projected;
         const history = store.items?.history, historyId = item && CALENDAR_PART.reminderIdentity(item);
@@ -32317,6 +33197,7 @@ __zentralShim.register = function (def) {
       onCleanup(clearAgendaPress);
       function onAgendaMouse(ev) {
         if (disposed || !agendaEnabled()) { clearAgendaPress(); return; }
+        if (ev.type === "mousemove") agendaHoverCard.move(ev);
         let candidate = pseudoEventClosest(ev, "tab");
         if (candidate && routePseudoTab(candidate)) { clearAgendaPress(); ev.preventDefault?.(); ev.stopImmediatePropagation?.(); return; }
         // Recover a lost marker from the private pseudo-URL, and keep ownership
@@ -32680,7 +33561,7 @@ __zentralShim.register = function (def) {
       });
       const zenUnsub = store.on((ev) => {
         if (ev.type === "change" || ev.type === "tree" || ev.type === "remove" || ev.type === "reset") {
-          if (zenMode() !== "off" && !zen.dead) { bindZen(true); zen.schedule(); }
+          if (zenMode() !== "off" && !zen.dead) { bindZen(true); zen.schedule(); notesHoverCard.refresh(); }
           // Color/style edits also redraw every open Notes folder tree and the
           // Colorful Folders settings list. This is deliberately a notification
           // only; Notes remains the sole writer for its projected folders.
@@ -32803,6 +33684,7 @@ __zentralShim.register = function (def) {
         } catch (_) {}
       }
       const onZenTabEvent = (ev) => {
+        if (ev.type === "TabClose") notesHoverCard.removed(ev.target);
         if (disposed || zen.dead || zenMode() === "off" || zenEventsIgnored()) return;
         const tab = ev.target;
         if (!tab || tab.localName !== "tab") return;
@@ -33030,6 +33912,13 @@ __zentralShim.register = function (def) {
         if (on === zenBound) return;
         zenBound = on;
         const act = on ? "addEventListener" : "removeEventListener";
+        window[act]("mouseover", notesHoverCard.over, true);
+        window[act]("mouseout", notesHoverCard.out, true);
+        window[act]("focusin", notesHoverCard.focus, true);
+        window[act]("focusout", notesHoverCard.blur, true);
+        window[act]("keydown", notesHoverCard.key, true);
+        window[act]("popupshowing", notesHoverCard.popup, true);
+        window[act]("resize", notesHoverCard.position, true);
         for (const ty of ["mousedown", "click", "mouseup", "auxclick"]) window[act](ty, onZenMouse, true);
         for (const ty of ZEN_TAB_EVENTS) window[act](ty, onZenTabEvent, true);
         for (const ty of ["FolderGrouped", "FolderUngrouped"]) window[act](ty, onZenFolderEvent, true);
@@ -33040,6 +33929,7 @@ __zentralShim.register = function (def) {
         window[act]("popupshowing", onFolderMenuShowing, true);
         window[act]("popuphidden", onTabMenuHidden, true);
         if (!on) {
+          notesHoverCard.hide();
           document.documentElement.removeAttribute("zentral-notes-ctx");
           document.documentElement.removeAttribute("zentral-notes-folder-ctx");
           document.querySelectorAll?.("[zentral-notes-own],[zentral-notes-folder-own]").forEach((n) => n.remove());
@@ -33991,7 +34881,8 @@ __zentralShim.register = function (def) {
       if (window.__zentralNotesTestSeam) {
         const sidebar = { store, ensureStore, storeWhenReady, withStore, zenApi, zen, agendaApi, agendaController, tick, reminders,
           onAgendaMouse, onAgendaSelect, onAgendaTabEvent, onAgendaAttr, agendaEnsureVisuals, onAgendaFolderMenuShowing,
-          onAgendaFolderMenuHidden, onAgendaTabMenuShowing, runAgendaAction: runHeadlessAgendaAction, agendaToast: agendaActionToast };
+          onAgendaFolderMenuHidden, onAgendaTabMenuShowing, runAgendaAction: runHeadlessAgendaAction, agendaToast: agendaActionToast,
+          agendaHoverCard, notesHoverCard, nextAgendaItem, nextNotesItem };
         window.__zentralNotesTestSeam.sidebar = sidebar;
         onCleanup(() => {
           if (window.__zentralNotesTestSeam?.sidebar === sidebar) delete window.__zentralNotesTestSeam.sidebar;

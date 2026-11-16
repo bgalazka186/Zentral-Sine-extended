@@ -36,6 +36,7 @@ const PROVIDED = new Set([
   "nativeSidebarElement",
   "nativeSidebarRect",
   "nativeSidebarSide",
+  "createSidebarHoverCard",
   "getPref",
   "standalone",
   "sidebarLayoutRepair",
@@ -196,6 +197,8 @@ function build(manifestFile) {
   let shim = fs.readFileSync(SHIM, "utf8");
   if (!shim.includes("/*__SIDEBAR_FUNCTIONS__*/"))
     throw new Error("Shim is missing the sidebar marker");
+  if (!shim.includes("/*__HOVER_CARD_FUNCTIONS__*/"))
+    throw new Error("Shim is missing the hover-card marker");
   if (!shim.includes("/*__SCOPE_FUNCTIONS__*/"))
     throw new Error("Shim is missing the scope marker");
   if (!shim.includes("/*__NUMERIC_FUNCTIONS__*/"))
@@ -204,6 +207,9 @@ function build(manifestFile) {
     extractFunction(runtimeSource, "createNumericPrefSync"),
   );
   shim = shim.replace("/*__SIDEBAR_FUNCTIONS__*/", () => sidebar);
+  shim = shim.replace("/*__HOVER_CARD_FUNCTIONS__*/", () =>
+    extractFunction(runtimeSource, "createSidebarHoverCard"),
+  );
   shim = shim.replace("/*__SCOPE_FUNCTIONS__*/", () => scopeFns);
   // Version comes from the manifest at build time; the shim only reports it.
 

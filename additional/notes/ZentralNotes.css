@@ -2522,29 +2522,169 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
 .zentral-notes-sheet[data-loading] > .zn-tools,
 .zentral-notes-sheet[data-loading] > .zn-body { opacity: 0.55; }
 
-/* Full-title tooltip for owned Agenda pseudo-tabs; also works without the core runtime. */
-.zn-agenda-title-card {
+/* T3.4a: RSS-style top-layer hover preview cards for Notes & Agenda Zen sidebar pseudo-tabs.
+ * Works both inside the full pack and standalone (without the core runtime). */
+.zn-sidebar-hover-card {
   position: fixed;
   inset: auto;
+  right: auto;
+  bottom: auto;
   margin: 0;
+  height: auto;
   box-sizing: border-box;
-  width: max-content;
-  max-width: min(420px, calc(100vw - 8px));
-  max-height: calc(100vh - 8px);
-  overflow: auto;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-  border-radius: 8px;
+  width: var(--bgalazka-look-rss-card-width, 340px);
+  min-width: 240px;
+  max-width: min(400px, calc(100vw - 12px));
+  max-height: min(65vh, calc(100vh - 12px));
+  overflow-y: auto;
+  padding: 11px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 10px;
   background: var(--zen-colors-primary, #25252e);
   color: var(--zen-colors-text, #f7f7fc);
-  box-shadow: 0 6px 24px rgb(0 0 0 / 35%);
+  box-shadow: 0 8px 26px rgb(0 0 0 / 38%);
   font: menu;
+  font-size: 12.5px;
+  line-height: 1.4;
   pointer-events: auto;
   z-index: 2147483646;
 }
-.zn-agenda-title-card[hidden] { display: none !important; }
+.zn-sidebar-hover-card[hidden],
+.zn-sidebar-hover-card [hidden] { display: none !important; }
+.zn-sidebar-hover-card .zn-hc-folder {
+  font-size: 11px;
+  opacity: 0.72;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.zn-sidebar-hover-card .zn-hc-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.zn-sidebar-hover-card .zn-hc-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  flex: 1 1 auto;
+}
+.zn-sidebar-hover-card .zn-hc-status {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+.zn-sidebar-hover-card .zn-hc-status[data-status="overdue"] {
+  background: color-mix(in srgb, #e5534b 28%, transparent);
+  color: #ff9c96;
+}
+.zn-sidebar-hover-card .zn-hc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 11.5px;
+  opacity: 0.88;
+}
+.zn-sidebar-hover-card .zn-hc-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 11%, transparent);
+  font-size: 11px;
+}
+.zn-sidebar-hover-card .zn-hc-cat-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.zn-sidebar-hover-card .zn-hc-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.zn-sidebar-hover-card .zn-hc-pill {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  opacity: 0.9;
+}
+.zn-sidebar-hover-card .zn-hc-source {
+  align-self: flex-start;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--zen-primary-color, #8fb8ff);
+  font: inherit;
+  font-size: 11.5px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.zn-sidebar-hover-card .zn-hc-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  opacity: 0.86;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+.zn-sidebar-hover-card .zn-hc-reminder {
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--zen-primary-color, #6ca0ff) 18%, transparent);
+}
+.zn-sidebar-hover-card .zn-hc-reminder[data-overdue="true"] {
+  background: color-mix(in srgb, #e5534b 24%, transparent);
+  color: #ffb1ac;
+}
+.zn-sidebar-hover-card .zn-hc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+.zn-sidebar-hover-card .zn-hc-btn {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 11.5px;
+  padding: 4px 9px;
+  cursor: pointer;
+}
+.zn-sidebar-hover-card .zn-hc-btn:hover,
+.zn-sidebar-hover-card .zn-hc-btn:focus-visible {
+  background: color-mix(in srgb, currentColor 18%, transparent);
+}
+.zn-sidebar-hover-card .zn-hc-btn-primary {
+  background: color-mix(in srgb, var(--zen-primary-color, #6ca0ff) 28%, transparent);
+  border-color: color-mix(in srgb, var(--zen-primary-color, #6ca0ff) 48%, transparent);
+  font-weight: 600;
+}
 
 /* SB6.3: compact top-layer Undo toast for headless Zen Agenda quick actions. */
 .zn-agenda-toast {

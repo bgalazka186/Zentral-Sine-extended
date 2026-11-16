@@ -10,9 +10,9 @@ when the ordering rules below are broken.
    painted above everything that is not also in the top layer, whatever its z-index. Among top-layer
    elements the one added **later** is on top. Top-layer users in this mod:
 
-   - `additional/notes/ZentralNotes.uc.js`: Notes standalone card: popover="manual" only WHILE Notes has the focus (raise on focus / press inside, drop and remove the attribute on any outside press), so it is above Big Preview unless Big Preview was pressed
-   - `additional/rss/ZentralRssDisplay.uc.js`: RSS reader card: popover="manual", re-shown on every showCard so it sits above Big Preview
+   - `additional/notes/ZentralNotes.uc.js`: Notes standalone card & Agenda action toast: popover="manual" (Notes card only WHILE Notes has focus; toast shown on headless Agenda actions)
    - `additional/video/controllers/ZentralVideoEnlarge.js`: Big Preview: popover="manual", shown with showPopover() while enlarged
+   - `loader/ZentralRuntime.js`: Shared sidebar hover card engine (createSidebarHoverCard, copied verbatim to ZentralStandaloneShim.js): used by RSS, Notes, and Agenda cards; popover="manual", re-shown on every show so it sits above Big Preview
 
    To put something above Big Preview, make it a popover and show it after Big Preview (the RSS card
    does this on every show). Raising a z-index does nothing against the top layer.
@@ -46,8 +46,8 @@ when the ordering rules below are broken.
 | 2147483646 | RSS reader card (fallback only; see Top layer) | `.zentral-notes-toast` | additional/notes/ZentralNotes.css:1145 |
 | 2147483646 | RSS reader card (fallback only; see Top layer) | `.zentral-notes-pill` | additional/notes/ZentralNotes.css:1633 |
 | 2147483646 | RSS reader card (fallback only; see Top layer) | `.zn-reminder-stack` | additional/notes/ZentralNotes.css:2356 |
-| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zn-agenda-title-card` | additional/notes/ZentralNotes.css:2545 |
-| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zn-agenda-toast` | additional/notes/ZentralNotes.css:2566 |
+| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zn-sidebar-hover-card` | additional/notes/ZentralNotes.css:2553 |
+| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zn-agenda-toast` | additional/notes/ZentralNotes.css:2706 |
 | 2147483646 | RSS reader card (fallback only; see Top layer) | `#bgalazka-rss-card` | additional/rss/ZentralRssDisplay.css:110 |
 | 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-sheet[data-host="float"], .zentral-notes-sheet[data-host="dock"]` | additional/notes/ZentralNotes.css:99 |
 | 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-reveal` | additional/notes/ZentralNotes.css:1074 |

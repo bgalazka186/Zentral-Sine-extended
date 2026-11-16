@@ -196,7 +196,7 @@ async function dragGapEdge(t, world, edge, dy) {
       const ctx = { window: win, document: win.document, Services, Components, console, Promise, JSON, Map, Set, Object, Array, String, Number, Math, Date, URL, setTimeout: win.setTimeout, clearTimeout: win.clearTimeout };
       ctx.globalThis = ctx;
       const wrapped = isShim
-        ? `const nativeSidebarElement=()=>null,nativeSidebarRect=()=>null,nativeSidebarSide=()=>"left",createFeatureScope=()=>({});\n${src}\nwindow.ZentralRuntime = __zentralShim;`
+        ? `const nativeSidebarElement=()=>null,nativeSidebarRect=()=>null,nativeSidebarSide=()=>"left",createSidebarHoverCard=()=>({}),createFeatureScope=()=>({});\n${src}\nwindow.ZentralRuntime = __zentralShim;`
         : src;
       vm.runInNewContext(wrapped, ctx, { filename: label });
       return { rt: win.ZentralRuntime, prefMap, resolveInit };

@@ -45,6 +45,7 @@ const __zentralShim = (function () {
   /*__NUMERIC_FUNCTIONS__*/
   const numericItems = /*__NUMERIC_ITEMS__*/ [];
   /*__SIDEBAR_FUNCTIONS__*/
+  /*__HOVER_CARD_FUNCTIONS__*/
   /*__SCOPE_FUNCTIONS__*/
   const unloadHandlers = new Set();
   const runUnload = () => {
@@ -145,6 +146,7 @@ const __zentralShim = (function () {
     nativeSidebarElement,
     nativeSidebarRect,
     nativeSidebarSide,
+    createSidebarHoverCard,
     sidebarLayoutRepair: null,
     compactHoverStatus: null,
     registerSettingsHook: () => () => {},
