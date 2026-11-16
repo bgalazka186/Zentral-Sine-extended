@@ -1147,6 +1147,72 @@
       }
       return { folders: cleanFolders(moved), changes, id: newId };
     }
+    // ---- the settings file with several windows (T3.1) ----
+    // Every window holds the whole settings file (meta.json) in memory. Written back whole, the window that saved last
+    // undid what the others had saved: a folder made in window A was gone as soon as window B saved anything. So a save
+    // reads the file first and merges three ways: `base` = this window at its last look at the file, `mine` = this
+    // window now, `theirs` = the file now. What one side changed is that side's; where both changed the same thing the
+    // side that saves now wins; what either side deleted stays deleted.
+    const stableJson = (v) => JSON.stringify(v, (_, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.keys(x).sort().reduce((o, k) => { o[k] = x[k]; return o; }, {}) : x));
+    const sameJson = (a, b) => a === b || stableJson(a) === stableJson(b);
+    // Folders are matched by their permanent uid (a moved folder changes its id, never its uid), older entries without
+    // one by id; then field by field, so a colour set in one window and a rename made in the other are both kept.
+    function mergeFolders(base, mine, theirs) {
+      const B = cleanFolders(base), M = cleanFolders(mine), T = cleanFolders(theirs);
+      if (sameJson(M, B)) return T;
+      if (sameJson(T, B) || sameJson(T, M)) return M;
+      const keyOf = (f) => f.uid || "id:" + f.id;
+      const index = (list) => new Map(list.map((f) => [keyOf(f), f]));
+      const b = index(B), m = index(M), t = index(T);
+      const merged = [];
+      for (const f of M) {
+        const was = b.get(keyOf(f)), other = t.get(keyOf(f));
+        if (was && !other) continue; // deleted in the file
+        if (!was || !other) { merged.push(f); continue; } // made here
+        const entry = {};
+        for (const field of new Set([...Object.keys(was), ...Object.keys(f), ...Object.keys(other)])) {
+          const value = sameJson(f[field], was[field]) ? other[field] : f[field];
+          if (value !== undefined) entry[field] = value;
+        }
+        merged.push(entry);
+      }
+      for (const f of T) if (!b.has(keyOf(f)) && !m.has(keyOf(f))) merged.push(f); // made in the file
+      // One entry per folder id. Two windows can make the same folder independently (the date folder of a first
+      // reminder): the entry that is in the file is the folder, so every window ends with the same uid for it.
+      const out = [], at = new Map();
+      for (const f of merged) {
+        const i = at.get(f.id);
+        if (i === undefined) { at.set(f.id, out.length); out.push(f); }
+        else if (!t.has(keyOf(out[i])) && t.has(keyOf(f))) out[i] = f;
+      }
+      return cleanFolders(out);
+    }
+    // Folders and the alert / Agenda rules are the same in every window: a window takes them over (`taken`). All other
+    // settings (layout, view, the note opened last) are each window's own, and the file gets a value from the window
+    // that changed it last; a window that did not change a value never writes its older copy over the file's.
+    const META_SHARED_KEYS = Object.freeze(["folders", "calendarAlertSettings", "calendarNoteAlertOverrides", "calendarAgendaDefaults", "calendarNoteAgendaOverrides"]);
+    const META_PER_NOTE_KEYS = Object.freeze(["calendarNoteAlertOverrides", "calendarNoteAgendaOverrides"]);
+    function mergeMetaMap(base, mine, theirs) {
+      const b = base || {}, m = mine || {}, t = theirs || {}, out = {};
+      for (const k of Object.keys(t)) {
+        if (Object.hasOwn(m, k)) out[k] = sameJson(m[k], b[k]) ? t[k] : m[k];
+        else if (!Object.hasOwn(b, k)) out[k] = t[k]; // made in the file (in `b` too: removed here)
+      }
+      for (const k of Object.keys(m)) if (!Object.hasOwn(t, k) && !Object.hasOwn(b, k)) out[k] = m[k]; // made here
+      return out;
+    }
+    // -> { file: what to write, taken: the shared values that differ from this window's }. `theirs` null = no file.
+    function mergeMeta(base, mine, theirs) {
+      if (!theirs) return { file: { ...mine }, taken: {} };
+      const was = base || {}, file = {}, taken = {};
+      for (const key of Object.keys(mine)) {
+        if (key === "folders") file[key] = mergeFolders(was[key], mine[key], theirs[key]);
+        else if (META_PER_NOTE_KEYS.includes(key)) file[key] = mergeMetaMap(was[key], mine[key], theirs[key]);
+        else file[key] = Object.hasOwn(theirs, key) && sameJson(mine[key], was[key]) ? theirs[key] : mine[key];
+        if (META_SHARED_KEYS.includes(key) && !sameJson(file[key], mine[key])) taken[key] = file[key];
+      }
+      return { file, taken };
+    }
     // The tree as visible rows (a collapsed folder hides what is inside). `pinned` is the virtual first row.
     const TREE_ORDERS = Object.freeze(["folders-first", "notes-first", "mixed-by-name"]);
     const cleanTreeOrder = (v) => (TREE_ORDERS.includes(v) ? v : "folders-first");
@@ -5592,13 +5658,26 @@
       if (!(base > 200) || !(share > 0)) return 0;
       return clampSlotPx(base, base * share);
     }
+    // Between Triple View's web panels each page keeps a floor: GAP_PANEL_MIN_PX, or a quarter of what the two pages
+    // share without Notes (`room` = both pages + the gap) when that is less. The panel suite applies the same floor
+    // (tripleFloor in extension/panels/secondary-views/ZentralSecondaryViews.uc.js). The floor depends on `room`
+    // only, never on the gap, so a page resting on it stays put while the other edge of the sheet is dragged.
+    const gapPageFloor = (room) => Math.max(0, Math.min(GAP_PANEL_MIN_PX, (Number(room) || 0) / 4));
+    // The tallest gap that leaves both pages their floor (0 = the pages were not measured: no limit from here).
+    const gapMaxPx = (room) => Math.max(0, Math.floor((Number(room) || 0) - 2 * gapPageFloor(room)));
+    // A gap is never taller than that, whatever share or size asked for it. Asking for more used to leave two pages
+    // of a few px (the "Larger" size took 80% of a panel under ~1300 px), which the suite then had to overrule.
+    function clampGapPx(px, room) {
+      const max = gapMaxPx(room);
+      return max > 0 && px > max ? max : px;
+    }
     // Between Triple View's web panels the Notes sheet has TWO independent edges. Its top edge moves the upper
     // panel's boundary (only `up` changes, `down` stays), its bottom edge moves the lower panel's boundary
     // (only `down` changes). Pure and clamped so a drag can never drift or leave either panel unusable.
     // `dy` is the pointer travel since the gesture began; every call restarts from the gesture's START values,
     // so repeated moves do not accumulate.
-    // `roomUp` / `roomDown` = how much more the upper / lower web panel can give before it falls below a usable
-    // height (a panel under ~40px is no longer counted as a page at all, which collapsed the slot mid-drag).
+    // `roomUp` / `roomDown` = how much more the upper / lower web panel can give before it reaches its floor
+    // (gapPageFloor above; the caller measures them from the heights the panel suite publishes).
     function gapEdgeDrag({ edge = "n", startUp = 0, startDown = 0, dy = 0, base = 0, roomUp = Infinity, roomDown = Infinity } = {}) {
       const su = Math.max(0, Number(startUp) || 0), sd = Math.max(0, Number(startDown) || 0);
       if (!(base > 200)) return { up: su, down: sd, px: su + sd };
@@ -5755,9 +5834,23 @@
       } catch (_) {}
       return null;
     }
-    // How long a save or a reminder claim waits for the same step in another window. Only reached when that window was
-    // closed in the middle of the step; a normal step takes milliseconds.
+    // How long a save or a reminder claim waits for the same step in another window. Only reached when that window
+    // stopped answering in the middle of the step; a normal step takes milliseconds, and a window that was closed is
+    // noticed within a second (`windowGone` below).
     const SHARED_TURN_WAIT_MS = 8000;
+    // Reading the whole folder at start-up is one long step: a cold disk or thousands of notes take longer than 8 s,
+    // and a second window that stopped waiting would read the folder side by side with the first (two sets of folder
+    // ids, every older reminder mirrored twice), which is what the start-up turn exists to prevent.
+    const STARTUP_TURN_WAIT_MS = 120000;
+    // After `unload` the browser runs no further promise step of this window: a step that is still waiting for the
+    // disk is never finished and its gate is never released. The other windows ask (the answer travels on the gate)
+    // and stop waiting for it. Not `window.closed`: that turns true a moment earlier, while steps still complete.
+    let windowGone = false, windowGoneWatched = false;
+    function watchWindowGone() {
+      if (windowGoneWatched) return;
+      windowGoneWatched = true;
+      try { window.addEventListener("unload", () => { windowGone = true; }, { once: true }); } catch (_) {}
+    }
     function sharedReminderHistoryCoordinator() {
       if (!CALENDAR_PART?.createHistoryCoordinator) return undefined;
       try {
@@ -5773,8 +5866,10 @@
         }
         if (typeof registry.get !== "function" || typeof registry.set !== "function" || typeof registry.delete !== "function") return undefined;
         let told = false;
+        watchWindowGone();
         return CALENDAR_PART.createHistoryCoordinator(registry, {
           waitMs: SHARED_TURN_WAIT_MS,
+          isAlive: () => !windowGone,
           setTimer: (fn, ms) => window.setTimeout(fn, ms),
           clearTimer: (id) => window.clearTimeout(id),
           onTimeout: () => {
@@ -5810,7 +5905,11 @@
       const backedUp = new Set();
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, cardDock: "", cardW: 0,
         calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarTab: "tree",
-        calendarView: "month", calendarDensity: "comfortable", calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "",
+        calendarView: "month", calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "",
+        // The hours Week and Day show ({ on, startMin, endMin }; off = the whole day). Replaced as a whole, never changed in place.
+        calendarHours: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHours(null) : { on: false, startMin: 480, endMin: 1200 },
+        // The size of each calendar view ("auto" = fitted to the pane, or px; OW-03). Replaced as a whole, never changed in place.
+        calendarScale: CALENDAR_PART ? CALENDAR_PART.cleanCalendarScale(null) : { month: "auto", week: "auto", day: "auto", upcoming: "auto", agenda: "auto" },
         calendarAlertSettings: CALENDAR_PART ? CALENDAR_PART.cleanAlertSettings(null) : {}, calendarNoteAlertOverrides: {},
         calendarAgendaDefaults: {}, calendarNoteAgendaOverrides: {} };
       let meta = { ...DEFAULT_META };
@@ -5820,6 +5919,10 @@
       let metaTimer = null;
       let metaDirty = false;
       let metaReady = false; // true once meta.json has been read (or is known to be absent); nothing is written before
+      let metaBase = null; // this window's settings at its last look at the file; a value that differs is its own change (mergeMeta)
+      let metaRetry = 0; // saves of the settings that failed in a row
+      let keptDamagedMeta = ""; // the damaged text already copied to meta.json.corrupt
+      let missedMeta = false; // another window saved the settings while this one was reading the folder
       let closed = false;
       let opening = false; // the folder is being read; messages from other windows wait in missedRemote
       const missedRemote = new Map(); // note id -> conflict copy path named by the message
@@ -5834,6 +5937,10 @@
         // The two files are not one transaction, so the order is fixed: note text first, then the calendar record that
         // refers to it. A crash in between leaves a line the next start rebuilds, never a record without its line.
         beforeWrite: () => notesFlush || (dirty.size ? flushDirty() : chain),
+        // The flush above only tries. Until a note is in its file (the write failed, or it was edited again meanwhile)
+        // the calendar file gets its new records in the form that does not need the note; see `withheld` in the
+        // calendar module.
+        noteFileState: (id) => { const note = notes.get(id); return !note ? "saved" : !note._onDisk ? "absent" : dirty.has(id) ? "stale" : "saved"; },
         onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); } }) : null;
       function syncItems(id, stabilize = false, sourceEdit = false) {
         if (!items) return;
@@ -5963,31 +6070,43 @@
         }
         return absent ? { state: "missing" } : { state: "unreadable", error: failure };
       }
-      async function loadMeta() {
-        metaReady = false;
-        meta = { ...DEFAULT_META, geo: {}, recent: [], folders: [] };
+      // The file as a settings object: { state: "ok", value } | "missing" (none, empty or damaged) | "unreadable".
+      async function readMeta(whenDamaged) {
         const read = await readMetaFile();
-        if (read.state === "unreadable")
-          throw new Error("The Notes settings file (meta.json) is there but could not be read: " + String(read.error?.message || read.error));
-        if (read.state === "ok") {
-          let raw = null;
+        if (read.state !== "ok") return read;
+        let raw = null;
+        try {
+          raw = JSON.parse(read.text);
+        } catch (_) {}
+        if (raw && typeof raw === "object" && !Array.isArray(raw)) return { state: "ok", value: metaFromRaw(raw) };
+        if (typeof read.text === "string" && read.text.trim() && read.text !== keptDamagedMeta) {
+          // Damaged: keep what was there (one copy, replaced by a newer damaged file).
+          warn("The Notes settings file (meta.json) is damaged; a copy is kept as meta.json.corrupt and " + whenDamaged);
           try {
-            raw = JSON.parse(read.text);
-          } catch (_) {}
-          if (raw && typeof raw === "object" && !Array.isArray(raw)) applyMetaRaw(raw);
-          else if (typeof read.text === "string" && read.text.trim()) {
-            // Damaged: keep what was there (one copy, replaced by a newer damaged file) and start from defaults.
-            warn("The Notes settings file (meta.json) is damaged; a copy is kept as meta.json.corrupt and the settings start fresh");
-            try {
-              await io.writeUTF8(io.join(dir, "meta.json.corrupt"), read.text, {});
-            } catch (error) {
-              warn(error);
-            }
+            await io.writeUTF8(io.join(dir, "meta.json.corrupt"), read.text, {});
+            keptDamagedMeta = read.text;
+          } catch (error) {
+            warn(error);
           }
         }
+        return { state: "missing" };
+      }
+      async function loadMeta() {
+        metaReady = false;
+        keptDamagedMeta = "";
+        meta = metaFromRaw(null);
+        const read = await readMeta("the settings start fresh");
+        if (read.state === "unreadable")
+          throw new Error("The Notes settings file (meta.json) is there but could not be read: " + String(read.error?.message || read.error));
+        if (read.state === "ok") meta = read.value;
+        metaBase = cloneJson(meta);
+        metaRetry = 0;
         metaReady = true;
       }
-      function applyMetaRaw(raw) {
+      // A complete settings object: the defaults, with every valid value of `raw` (what a file holds).
+      function metaFromRaw(raw) {
+        const meta = { ...DEFAULT_META, geo: {}, recent: [], folders: [] }; // a new object, not the store's
+        if (!raw || typeof raw !== "object") return meta;
         try {
           if (typeof raw.lastNoteId === "string") meta.lastNoteId = raw.lastNoteId;
           if (raw.size === "full" || raw.size === "peek" || raw.size === "span") meta.size = raw.size;
@@ -6023,8 +6142,10 @@
             if (meta.calendarTreeCollapsed && meta.calendarPaneCollapsed) meta.calendarTreeCollapsed = meta.calendarPaneCollapsed = false;
             meta.calendarTab = raw.calendarTab === "calendar" ? "calendar" : "tree";
             meta.calendarView = ["month", "upcoming", "agenda", "week", "day"].includes(raw.calendarView) ? raw.calendarView : "month";
-            meta.calendarDensity = CALENDAR_PART.cleanCalendarDensity(raw.calendarDensity);
+            // `calendarDensity` (one of three steps for all views, until 3.3.175) is read only where no size is stored yet.
+            meta.calendarScale = CALENDAR_PART.cleanCalendarScale(raw.calendarScale, raw.calendarDensity);
             meta.calendarSnap = CALENDAR_PART.cleanCalendarSnap(raw.calendarSnap);
+            meta.calendarHours = CALENDAR_PART.cleanCalendarHours(raw.calendarHours);
             const daysForward = Number(raw.calendarDaysForward);
             meta.calendarDaysForward = [3, 7, 14, 30].includes(daysForward) ? daysForward : 7;
             meta.calendarFilterKind = ["all", "event", "reminder"].includes(raw.calendarFilterKind) ? raw.calendarFilterKind : "all";
@@ -6037,25 +6158,70 @@
             meta.calendarNoteAgendaOverrides = CALENDAR_PART.cleanNoteAgendaOverrides(raw.calendarNoteAgendaOverrides);
           }
         } catch (_) {}
+        return meta;
       }
 
       function queue(task) {
-        chain = chain.then(task).catch((error) => warn(error));
+        // A step that failed, even one whose report failed too, never stops or skips the steps queued after it.
+        chain = chain.then(task, task).catch((error) => { try { warn(error); } catch (_) {} });
         return chain;
       }
 
+      const cloneJson = (v) => JSON.parse(JSON.stringify(v));
+      // The windows of the application save the settings one after another (the coordinator they share).
+      const metaTurn = (task) => (typeof withHistoryLock === "function" ? withHistoryLock("meta:" + io.join(dir, "meta.json"), task) : task());
+      const META_RETRY_MS = [2000, 5000, 15000, 60000];
+      // Shared settings that another window changed become this window's, and what is drawn from them is drawn again
+      // (folder trees, the Zen sidebar folders, the Zen Agenda folder).
+      function takeMeta(taken) {
+        const keys = Object.keys(taken);
+        if (!keys.length) return;
+        for (const key of keys) meta[key] = cloneJson(taken[key]);
+        emit("tree", "", { remote: true });
+      }
+      // Read, merge, write (see mergeMeta). Never writes over a file it could not read: that file holds what the other
+      // windows saved. A failed save stays pending and is tried again.
+      async function saveMeta() {
+        try {
+          const read = await readMeta("this window's settings are written");
+          if (read.state === "unreadable")
+            throw new Error("The Notes settings file (meta.json) could not be read, so it was not written over; the change is saved later: " + String(read.error?.message || read.error));
+          const mine = cloneJson(meta);
+          const { file, taken } = mergeMeta(metaBase, mine, read.state === "ok" ? read.value : null);
+          takeMeta(taken);
+          if (read.state !== "ok" || !sameJson(file, read.value)) {
+            await io.writeUTF8(io.join(dir, "meta.json"), JSON.stringify(file), { tmpPath: io.join(dir, "meta.json.tmp") });
+            // The other windows look at the file only when something they share changed (not for every note opened here).
+            if (!closed && (read.state !== "ok" || META_SHARED_KEYS.some((key) => !sameJson(file[key], read.value[key])))) notify({ origin: windowId, kind: "meta", dir });
+          }
+          metaBase = { ...mine, ...cloneJson(taken) };
+          metaRetry = 0;
+        } catch (error) {
+          metaDirty = true;
+          if (!metaRetry) warn(error);
+          if (!closed && metaTimer === null) metaTimer = setTimer(writeMetaNow, META_RETRY_MS[Math.min(metaRetry, META_RETRY_MS.length - 1)]);
+          metaRetry++;
+        }
+      }
       function writeMetaNow() {
         if (metaTimer !== null) clearTimer(metaTimer);
         metaTimer = null;
         // Never before the file has been read: what is in memory then are the defaults, not the person's settings.
         if (!metaDirty || !dir || !metaReady) return Promise.resolve();
         metaDirty = false;
-        const text = JSON.stringify(meta);
-        return queue(() =>
-          io.writeUTF8(io.join(dir, "meta.json"), text, {
-            tmpPath: io.join(dir, "meta.json.tmp"),
-          }),
-        );
+        return queue(() => metaTurn(saveMeta));
+      }
+      // Another window saved the settings: take over what is the same in every window. Nothing is written, and what
+      // this window changed itself and has not saved yet stays its own change.
+      function refreshMeta(again = true) {
+        if (!dir || !metaReady || closed) return Promise.resolve();
+        return queue(async () => {
+          const read = await readMeta("the settings of the open windows are kept");
+          if (read.state === "unreadable" && again && !closed) setTimer(() => refreshMeta(false), 1500);
+          if (read.state !== "ok" || !metaBase) return;
+          takeMeta(mergeMeta(metaBase, cloneJson(meta), read.value).taken);
+          for (const key of META_SHARED_KEYS) metaBase[key] = cloneJson(read.value[key]);
+        });
       }
       function setMeta(patch) {
         let changed = false;
@@ -6152,7 +6318,10 @@
       function flushDirty() {
         const run = flushDirtyNow();
         notesFlush = run;
-        run.then(() => { if (notesFlush === run) notesFlush = null; });
+        // Cleared however the flush ends: a rejected one that stayed here would be handed to every later calendar
+        // write, and no note would be flushed before the calendar again.
+        const clear = () => { if (notesFlush === run) notesFlush = null; };
+        run.then(clear, clear);
         return run;
       }
       function flushDirtyNow() {
@@ -6164,7 +6333,7 @@
           }
           state.save = "saving";
           emit("status");
-          let failed = "";
+          let failed = "", landed = false;
           for (const id of [...dirty]) {
             const note = notes.get(id);
             if (!note) {
@@ -6175,7 +6344,7 @@
             try {
               await writeNoteFile(note, snapshot);
               await snapHistory(note, snapshot).catch(warn); // history never makes a save fail
-              if (serializeNote(note) === snapshot) dirty.delete(id);
+              if (serializeNote(note) === snapshot) { dirty.delete(id); landed = true; }
               else autosaver.touch();
             } catch (error) {
               failed = String(error?.message || error);
@@ -6186,6 +6355,8 @@
           state.save = failed ? "error" : dirty.size ? "dirty" : "saved";
           if (failed) retryTimer = setTimer(() => autosaver.touch(), 10000);
           emit("status");
+          // Calendar records that waited for the text of a note (noteFileState) can be written now.
+          if (landed) { try { items?.noteTextSaved?.(); } catch (error) { warn(error); } }
         });
       }
 
@@ -6405,6 +6576,7 @@
           opening = true;
           missedRemote.clear();
           missedHistory = false;
+          missedMeta = false;
           const load = async () => {
             await loadAll();
             await loadMeta();
@@ -6429,12 +6601,18 @@
               await withHistoryLock("startup:" + dir, async () => {
                 await load();
                 await api.flush().catch(warn); // nothing to write on an ordinary start
-              });
+              }, { waitMs: STARTUP_TURN_WAIT_MS });
             } else await load();
-            // What another window saved while this one was reading the folder.
-            const missed = [...missedRemote];
-            missedRemote.clear();
-            for (const [id, backup] of missed) await reloadFromDisk(id, backup).catch(warn);
+            // What another window saved while this one was reading the folder, and while this catching up runs.
+            while (missedRemote.size || missedMeta) {
+              const missed = [...missedRemote];
+              missedRemote.clear();
+              for (const [id, backup] of missed) await reloadFromDisk(id, backup).catch(warn);
+              if (missedMeta) {
+                missedMeta = false;
+                await refreshMeta();
+              }
+            }
             if (missedHistory) items?.history?.refresh?.().catch(warn);
           } finally {
             opening = false;
@@ -7300,6 +7478,12 @@
             else items?.history?.refresh?.().catch(warn);
             return;
           }
+          if (msg.kind === "meta") {
+            if (msg.dir !== dir) return;
+            if (opening) missedMeta = true;
+            else refreshMeta();
+            return;
+          }
           if (typeof msg.id !== "string" || !/^[\w.-]+$/.test(msg.id)) return;
           // While the folder is being read the file may already have been read in its older state: look again afterwards.
           if (opening) {
@@ -7372,6 +7556,7 @@
         if (!raw || typeof raw !== "object") return null;
         if (raw.sep) return { id: `${namespace}-separator-${index + 1}`, sep: true };
         if (Array.isArray(raw.swatches)) return { ...raw, id: raw.id || `${namespace}-swatches-${index + 1}` };
+        if (raw.slider && typeof raw.slider === "object") return { ...raw, id: raw.id || `${namespace}-slider-${index + 1}` };
         // Preserve deliberate leading Unicode indentation (for example outline depth in headings)
         // while removing line breaks and trailing whitespace from labels.
         const rawLabel = String(raw.label ?? "").replace(/[\r\n\t]+/g, " ").replace(/\s+$/g, "");
@@ -9443,7 +9628,7 @@
     if (window.__zentralNotesTestSeam) {
       window.__zentralNotesTestSeam.core = {
         flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART,
-        DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS, SHARED_TURN_WAIT_MS,
+        DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS, SHARED_TURN_WAIT_MS, STARTUP_TURN_WAIT_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
         makeFolderUid, ensureFolderUids, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
@@ -9459,9 +9644,9 @@
         normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, clearOfRect, sideOf, createHoldAction,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
-        clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
+        clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, gapPageFloor, gapMaxPx, clampGapPx, GAP_PANEL_MIN_PX, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
-        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
+        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, mergeFolders, mergeMeta, META_SHARED_KEYS, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,
@@ -10364,8 +10549,12 @@
       // Zen can close a panel when a native <select> opens its platform popup. Calendar controls therefore use
       // the same accessible in-sheet menu as the rest of Notes; the selectors remain buttons, never native selects.
       const calendarViewSelect = h("button", { type: "button", class: "zn-chip zn-calendar-view-select", "aria-label": "Calendar view", "aria-haspopup": "menu" }, "Month");
-      const calendarDensitySelect = h("button", { type: "button", class: "zn-chip zn-calendar-density-select", "aria-label": "Calendar density", "aria-haspopup": "menu" }, "Comfortable");
+      // The size of the view that is shown (OW-03): in Week, Day and Month a slider and "Fit to the pane", in the two
+      // lists the three spacings.
+      const calendarSizeSelect = h("button", { type: "button", class: "zn-chip zn-calendar-size-select", "aria-label": "Calendar size", "aria-haspopup": "menu" }, "Size: Fit");
       const calendarSnapSelect = h("button", { type: "button", class: "zn-chip zn-calendar-snap-select", "aria-label": "Calendar drag snap", "aria-haspopup": "menu" }, "Snap 15 min");
+      // Week and Day only: one press switches between the chosen hours and all 24 (the hours themselves: Tools).
+      const calendarHoursToggle = h("button", { type: "button", class: "zn-chip zn-calendar-hours-toggle", "aria-pressed": "false", "aria-label": "Show only 08:00–20:00" }, "08–20");
       const calendarPrev = h("button", { type: "button", class: "zn-chip zn-calendar-nav", "aria-label": "Previous period", title: "Previous period" }, "‹");
       const calendarToday = h("button", { type: "button", class: "zn-chip zn-calendar-today", title: "Go to today" }, "Go to today");
       const calendarNext = h("button", { type: "button", class: "zn-chip zn-calendar-nav", "aria-label": "Next period", title: "Next period" }, "›");
@@ -10374,7 +10563,7 @@
       const calendarCategorySelect = h("button", { type: "button", class: "zn-chip zn-calendar-category-filter", "aria-label": "Filter category", "aria-haspopup": "menu" }, "All categories");
       const calendarUndoMove = h("button", { type: "button", class: "zn-chip zn-calendar-undo-move", "aria-label": "Undo last calendar change", hidden: "true" }, "Undo change");
       const calendarToolsSelect = h("button", { type: "button", class: "zn-chip zn-calendar-tools", "aria-label": "Calendar tools", "aria-haspopup": "menu" }, "Tools");
-      const calendarControls = h("div", { class: "zn-calendar-controls" }, calendarPrev, calendarToday, calendarNext, calendarViewSelect, calendarDensitySelect, calendarSnapSelect, calendarDaysSelect, calendarKindSelect, calendarCategorySelect, calendarUndoMove, calendarToolsSelect);
+      const calendarControls = h("div", { class: "zn-calendar-controls" }, calendarPrev, calendarToday, calendarNext, calendarViewSelect, calendarSizeSelect, calendarSnapSelect, calendarHoursToggle, calendarDaysSelect, calendarKindSelect, calendarCategorySelect, calendarUndoMove, calendarToolsSelect);
       const calendarContent = h("div", { class: "zn-calendar-pane-content zn-calendar-view", role: "region", "aria-label": "Calendar items" });
       const calendarPane = h("section", { class: "zn-calendar-pane", "aria-label": "Calendar" }, calendarHeader, calendarControls, calendarContent);
       const allSplitter = h("div", { class: "zn-calendar-splitter", role: "separator", tabindex: "0", "aria-label": "Resize folder tree and calendar panes", "aria-orientation": "vertical", "aria-valuemin": "20", "aria-valuemax": "80", "aria-valuenow": "36" });
@@ -10435,8 +10624,10 @@
           height: Math.max(0, Number(allLayout.clientHeight) || Number(rect?.height) || Number(area?.height) || Number(window.innerHeight) || 0),
         };
       }
-      function updateAllLayout() {
+      // `resized`: nothing was asked for, only the size of the window or of the sheet changed.
+      function updateAllLayout(resized = false) {
         const active = view === "list" && filter === "all" && !!CALENDAR_PART;
+        const calendarWasHidden = calendarPane.hidden;
         allLayout.hidden = view !== "list";
         allToolbar.hidden = !active;
         root.dataset.allNotesActive = active ? "true" : "false";
@@ -10485,11 +10676,13 @@
         calendarDaysSelect.dataset.value = String([3, 7, 14, 30].includes(Number(store.meta.calendarDaysForward)) ? Number(store.meta.calendarDaysForward) : 7);
         calendarDaysSelect.textContent = calendarDaysSelect.dataset.value + " days";
         calendarDaysSelect.hidden = calendarViewName !== "upcoming";
-        if (active && !calendarPane.hidden) requestCalendarBackground();
+        // A change of size alone draws the calendar again only when it would come out differently (OW-03); before,
+        // every px of a resize drew it again.
+        if (active && !calendarPane.hidden) { if (resized && !calendarWasHidden) refitCalendar(); else requestCalendarBackground(); }
       }
       function scheduleAllLayout() {
         if (rafAllLayout) return;
-        rafAllLayout = window.requestAnimationFrame(() => { rafAllLayout = 0; updateAllLayout(); });
+        rafAllLayout = window.requestAnimationFrame(() => { rafAllLayout = 0; updateAllLayout(true); });
       }
       function changeCalendarShare(share) {
         if (!calendarSplitDrag) return;
@@ -12020,6 +12213,41 @@
         if (!dayItems.length) section.append(h("p", { class: "zn-cal-empty-day" }, "No items"));
         return section;
       }
+      // The Month grid as it is drawn now (OW-03): { wrap, cells, draws }; `draws` has one function per cell, which
+      // draws the items of that cell into a number of lines. And how many lines the cells of the Month drawn last
+      // hold (null: not measured); the next Month starts from it.
+      let calendarMonth = null, calendarMonthLines = null;
+      // The height a week of the Month grid has: six weeks and five gaps of 3px (the style sheet) share the grid.
+      function calendarMonthRowPx(grid) {
+        const height = Number(grid?.clientHeight);
+        return height > 0 ? (height - 15) / 6 : NaN;
+      }
+      // Fits what the Month grid shows to the height its weeks have (the chosen px, or what the pane gives them): the
+      // look of the cells (paddings, text sizes) and how many lines of items a cell holds. Run when the grid is drawn
+      // and whenever the pane changes. Nothing is built again but the items of the cells whose lines change.
+      // Only the grid takes the look of its weeks. The list of the selected day below it keeps the look of the
+      // setting: its height decides how much the grid gets, so it must not depend on what the grid got.
+      function fitCalendarMonth() {
+        const month = calendarMonth, fit = calendarFit, C = CALENDAR_PART;
+        if (!month || !fit) return;
+        const rowPx = fit.size === "auto" ? calendarMonthRowPx(month.cells) : fit.size;
+        // The three looks are made for the usual text size (13px). With a larger text a fitted week has to be
+        // higher by as much to get the roomier look: at 28px a week of 66px holds the date and one line only in
+        // the tightest one.
+        const fontPx = calendarFontPx();
+        const density = C.calendarScaleDensity("month", fit.size, fit.size === "auto" && fontPx > 0 ? rowPx * 13 / fontPx : rowPx);
+        month.wrap.dataset.density = density;
+        // An item that is not shown is measured too, so the height of a line is known in a month without items.
+        const probe = h("button", { type: "button", class: "zn-cal-month-mark", tabindex: "-1", "aria-hidden": "true", style: "visibility:hidden" }, "0");
+        const date = month.cells.querySelector(".zn-cal-month-date");
+        month.cells.querySelector(".zn-cal-month-items")?.append(probe);
+        const sizes = { pad: Number(date?.offsetTop), datePx: Number(date?.offsetHeight), markPx: Number(probe.offsetHeight), gap: 2 };
+        probe.remove();
+        const lines = C.monthCellLines(rowPx, sizes);
+        calendarMonthLines = lines;
+        for (const draw of month.draws) draw(lines);
+        Object.assign(fit, { rowPx: rowPx > 0 ? rowPx : null, lines });
+      }
       function calendarMonthView(items, cursor, compact) {
         const date = new Date(cursor), year = date.getFullYear(), month = date.getMonth();
         const grid = CALENDAR_PART.monthGrid(year, month, 1);
@@ -12038,11 +12266,13 @@
         }
         calendarContent.dataset.compact = "false";
         const monthWrap = h("div", { class: "zn-cal-month-wrap" });
+        monthWrap.dataset.density = "comfortable"; // the look of the cells; fitCalendarMonth sets the one of their height
         const dows = h("div", { class: "zn-cal-month-dows" }, ...["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((name) => h("span", {}, name)));
         const cells = h("div", { class: "zn-cal-month-grid", role: "grid", "aria-label": date.toLocaleDateString(undefined, { month: "long", year: "numeric" }) });
         const selected = CALENDAR_PART.parseYmd(store.meta.calendarCursor) ? CALENDAR_PART.parseYmd(store.meta.calendarCursor).getTime() : calendarTodayDay();
         const today = calendarTodayDay();
         const selection = h("div", { class: "zn-cal-month-selection" });
+        const drawCells = [];
         const selectDay = (day) => {
           const key = CALENDAR_PART.localDateKey(day);
           store.setMeta({ calendarCursor: key });
@@ -12066,7 +12296,7 @@
           const allDay = dayItems.filter((item) => CALENDAR_PART.isAllDay(item));
           const timed = dayItems.filter((item) => !CALENDAR_PART.isAllDay(item));
           const mini = h("div", { class: "zn-cal-month-items" });
-          for (const item of [...allDay, ...timed].slice(0, 2)) {
+          const markOf = (item) => {
             const reminder = CALENDAR_PART.isReminder(item), lifecycle = reminder ? reminderLifecycleState(item) : "";
             const mark = h("button", { type: "button", class: "zn-cal-month-mark" + (reminder ? " is-reminder is-" + lifecycle : " is-event"), title: [item.summary, reminder ? "Reminder: " + lifecycle : "", item.x?.calNote].filter(Boolean).join(" — "), "aria-haspopup": "menu" }, item.summary || "Untitled");
             const color = calendarItemColor(item); if (color) mark.style.setProperty("--zn-cal-item-color", color);
@@ -12078,11 +12308,23 @@
               event.stopPropagation();
               showCalendarItemMenu(null, item, mark);
             });
-            mini.append(mark);
-          }
-          if (dayItems.length > 2) mini.append(h("span", { class: "zn-cal-month-more" }, `+${dayItems.length - 2} more`));
-          if (allDay.length) cell.append(h("span", { class: "zn-cal-month-allday", "aria-label": `${allDay.length} all-day item${allDay.length === 1 ? "" : "s"}` }, "All day"));
+            return mark;
+          };
+          const allDayLabel = allDay.length ? h("span", { class: "zn-cal-month-allday", "aria-label": `${allDay.length} all-day item${allDay.length === 1 ? "" : "s"}` }, "All day") : null;
           if (timed.some((item) => CALENDAR_PART.isReminder(item))) cell.append(h("span", { class: "zn-cal-month-reminder-dot", "aria-label": "Reminder" }, "●"));
+          // What the cell shows in `lines` lines (OW-03): its items one per line, or one line less and how many more
+          // there are. Drawn first for the lines of the Month drawn last, and again if this one measures differently.
+          const shown = [...allDay, ...timed];
+          let plan = null;
+          const draw = (lines) => {
+            const next = CALENDAR_PART.monthCellPlan(shown.length, lines, allDay.length > 0);
+            if (plan && plan.marks === next.marks && plan.more === next.more && plan.label === next.label) return;
+            plan = next;
+            mini.replaceChildren(...shown.slice(0, plan.marks).map(markOf));
+            if (plan.more) mini.append(h("span", { class: "zn-cal-month-more" }, plan.marks ? `+${plan.more} more` : `${plan.more} items`));
+            if (allDayLabel) { if (plan.label) cell.insertBefore(allDayLabel, mini); else allDayLabel.remove(); }
+          };
+          drawCells.push(draw);
           cell.addEventListener("click", (event) => { if (!event.target?.closest?.("button, a, input, select, textarea")) selectDay(day); });
           cell.addEventListener("dblclick", (event) => { if (!event.target?.closest?.("button, a, input, select, textarea")) openDayView(); });
           bindCalendarDayContext(cell, day);
@@ -12093,12 +12335,17 @@
             }
           });
           cell.append(mini); cells.append(cell);
+          draw(calendarMonthLines);
         }
         monthWrap.append(dows, cells);
         calendarContent.append(monthWrap);
         const selectedItems = CALENDAR_PART.itemsInRange(expanded, selected, CALENDAR_PART.addDays(selected, 1));
         selection.append(calendarDayGroup(selected, selectedItems, { selected: true }));
         calendarContent.append(selection);
+        // Now that the grid is in the document, what it shows is fitted to the height of its weeks (OW-03).
+        calendarMonth = { wrap: monthWrap, cells, draws: drawCells };
+        watchCalendarFit(cells);
+        fitCalendarMonth();
       }
       function calendarUpcomingView(items, cursor, days) {
         const end = CALENDAR_PART.addDays(cursor, days);
@@ -12152,6 +12399,46 @@
       // One captured pointer gesture per sheet. A calendar re-render, view change,
       // Escape, pointer cancellation, panel close or teardown discards the preview.
       let calendarDrag = null, calendarMoveUndo = null, calendarDragClickTimer = 0, calendarSuppressedClick = null;
+      // The Week / Day grid as it is drawn now (OW-04, OW-03): { startMin, endMin } the hours it shows, `hourPx` the
+      // height of an hour, `fit` whether that height is fitted to the timeline, `openMin` the minute a timeline that
+      // scrolls opens at. And per day what was laid out in it ({ startMin, endMin, item }), kept so that an update of
+      // one day can tell whether the hours still hold.
+      let calendarGridHours = null, calendarGridEntries = new Map();
+      // What the calendar as it is drawn was sized for (OW-03): { view, compact (Month as a list in a narrow pane),
+      // size ("auto" or px), hourPx (Week, Day), rowPx and lines (Month) }.
+      let calendarFit = null;
+      // The box the calendar is fitted to: the timeline of Week and Day, the grid of Month. It is watched, so that a
+      // change that does not come through this code is followed too (the text size, the toolbar taking another row,
+      // the splitter). One box at a time; `calendarFitWatch` is set where the sheet's observers are set up.
+      let calendarFitWatch = null, calendarFitWatched = null;
+      function watchCalendarFit(node) {
+        if (calendarFitWatched === node) return;
+        if (calendarFitWatched) { try { calendarFitWatch?.unobserve(calendarFitWatched); } catch (_) {} }
+        calendarFitWatched = node || null;
+        if (node) { try { calendarFitWatch?.observe(node); } catch (_) {} }
+      }
+      // Where a size in px applies: Week, Day and the Month grid (Month in a narrow pane is a list).
+      const calendarSizedView = (name, compact) => name === "week" || name === "day" || (name === "month" && !compact);
+      // The height the hours can fill: that of the timeline without the 2px above the first hour label, and without
+      // one px more, because the height is reported as a whole number and may be half a px over the real one (a
+      // zoomed window). NaN where nothing is laid out (a hidden pane).
+      function calendarTimelineRoom(scroll) {
+        const height = Number(scroll?.clientHeight);
+        return height > 0 ? Math.max(1, height - 3) : NaN;
+      }
+      const calendarMonthNarrow = () => calendarPaneWidth() > 0 && calendarPaneWidth() < 470;
+      // The text size of the calendar in px (NaN where it cannot be read).
+      function calendarFontPx() {
+        let fontPx = NaN;
+        try { fontPx = parseFloat(window.getComputedStyle?.(calendarContent)?.fontSize); } catch (_) {}
+        return fontPx > 0 ? fontPx : NaN;
+      }
+      // The smallest hour a fit may produce: it follows the text size of the calendar.
+      const calendarMinHourPx = () => CALENDAR_PART.fitMinHourPx(calendarFontPx());
+      function calendarPaneWidth() {
+        const rect = calendarPane.getBoundingClientRect?.();
+        return Math.max(0, Number(calendarPane.clientWidth) || Number(rect?.width) || 0);
+      }
       let calendarBackgroundPending = false, calendarFlushQueued = false;
       const calendarInteracting = () => !!(calendarDrag || dialog || menu?.calendar);
       function queueCalendarBackgroundFlush() {
@@ -12196,7 +12483,7 @@
         for (const track of g.columns.querySelectorAll(g.allDay ? ".zn-cal-time-allday-cell" : ".zn-cal-time-track")) {
           const rect = track.getBoundingClientRect();
           if (event.clientX < rect.left || event.clientX >= rect.right || event.clientY < rect.top || event.clientY >= rect.bottom) continue;
-          const minute = g.allDay ? 0 : Math.max(0, Math.min(1440, (event.clientY - rect.top) * 60 / g.hourHeight));
+          const minute = g.allDay ? 0 : CALENDAR_PART.gridMinuteAt(event.clientY - rect.top, g.hourHeight, g.grid);
           return { track, day: track.getAttribute("data-day"), minute };
         }
         return null;
@@ -12213,7 +12500,7 @@
         if (!placement) { g.preview?.remove(); g.preview = null; return; }
         if (!g.preview) g.preview = h("div", { class: "zn-cal-drag-preview", "aria-hidden": "true" });
         if (g.preview.parentElement !== point.track) point.track.append(g.preview);
-        g.preview.style.top = g.allDay ? "0px" : Math.max(0, point.minute / 60 * g.hourHeight) + "px";
+        g.preview.style.top = g.allDay ? "0px" : Math.max(0, CALENDAR_PART.gridOffsetOf(point.minute, g.hourHeight, g.grid)) + "px";
         const shownMinute = Math.min(1440, Math.round((placement.minute || 0) / g.snap) * g.snap);
         g.preview.textContent = g.allDay ? placement.date + " · all day" : placement.date + " " + String(Math.floor(shownMinute / 60)).padStart(2, "0") + ":" + String(shownMinute % 60).padStart(2, "0");
         event.preventDefault();
@@ -12273,7 +12560,9 @@
       listen(window, "pointerup", releaseCalendarSuppressedClick, true);
       listen(root, "pointercancel", (event) => { if (calendarDrag && (event.pointerId === undefined || event.pointerId === calendarDrag.pointerId)) cancelCalendarDrag(); releaseCalendarSuppressedClick(event); });
       cleanups.push(() => { cancelCalendarDrag(); window.clearTimeout(calendarDragClickTimer); calendarDragClickTimer = 0; calendarSuppressedClick = null; });
-      function bindCalendarDrag(button, item, { track, columns, scroll, dayKey, hourHeight, zone, allDay = false, edge = "" }) {
+      // `grid` = the hours the timeline shows ({ startMin, endMin }); a position in a track is a time counted from its
+      // first hour, not from midnight (OW-04). The all-day row has no hours and passes none.
+      function bindCalendarDrag(button, item, { track, columns, scroll, dayKey, hourHeight, zone, grid = null, allDay = false, edge = "" }) {
         const reminder = CALENDAR_PART.isReminder(item);
         const writable = !reminder || (!!store.items.history && !store.items.history.storageState().writeBlocked);
         if (!writable || item.x?.series || (item.recurrence || []).length || item.x?.src === "note") return;
@@ -12286,8 +12575,8 @@
           if (!current || current.rev !== item.rev || current.etag !== item.etag) return;
           const rect = track.getBoundingClientRect();
           calendarDrag = { button, pointerId: event.pointerId, x: event.clientX, y: event.clientY, before: current, originDay: dayKey,
-            originMinute: allDay ? 0 : Math.max(0, Math.min(1440, (event.clientY - rect.top) * 60 / hourHeight)),
-            hourHeight, snap: CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap), columns, scroll, zone, allDay, edge, active: false, placement: null, preview: null };
+            originMinute: allDay ? 0 : CALENDAR_PART.gridMinuteAt(event.clientY - rect.top, hourHeight, grid),
+            hourHeight, grid, snap: CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap), columns, scroll, zone, allDay, edge, active: false, placement: null, preview: null };
           try {
             if (typeof button.setPointerCapture !== "function") { cancelCalendarDrag(); return; }
             button.setPointerCapture(event.pointerId);
@@ -12295,13 +12584,13 @@
         });
         button.addEventListener("lostpointercapture", (event) => { if (calendarDrag?.button === button && calendarDrag.pointerId === event.pointerId) cancelCalendarDrag(); });
       }
-      function bindCalendarCreate(track, columns, scroll, dayKey, hourHeight, zone) {
+      function bindCalendarCreate(track, columns, scroll, dayKey, hourHeight, zone, grid = null) {
         track.addEventListener("pointerdown", (event) => {
           if (event.target !== track || (event.button !== undefined && event.button !== 0) || calendarDrag || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
           const rect = track.getBoundingClientRect();
           calendarDrag = { button: track, pointerId: event.pointerId, x: event.clientX, y: event.clientY, create: true,
-            originDay: dayKey, originMinute: Math.max(0, Math.min(1440, (event.clientY - rect.top) * 60 / hourHeight)),
-            hourHeight, snap: CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap), columns, scroll, zone, active: false, placement: null, preview: null };
+            originDay: dayKey, originMinute: CALENDAR_PART.gridMinuteAt(event.clientY - rect.top, hourHeight, grid),
+            hourHeight, grid, snap: CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap), columns, scroll, zone, active: false, placement: null, preview: null };
           try {
             if (typeof track.setPointerCapture !== "function") { cancelCalendarDrag(); return; }
             track.setPointerCapture(event.pointerId);
@@ -12310,18 +12599,49 @@
         track.addEventListener("lostpointercapture", (event) => { if (calendarDrag?.button === track && calendarDrag.pointerId === event.pointerId) cancelCalendarDrag(); });
       }
       function calendarTimeGridView(items, cursor, mode, patch = null) {
-        const CALENDAR_HOUR_PX = CALENDAR_PART.calendarDensityHourHeight(store.meta.calendarDensity);
         const C = CALENDAR_PART, zone = calendarDisplayZone(), days = mode === "week" ? C.weekDays(cursor, 1) : [C.dayStart(cursor)];
         const workDays = patch ? days.filter((day) => patch.days.has(C.localDateKey(day))) : days;
         const firstDay = workDays[0], firstBounds = C.zonedDayBounds(C.localDateKey(firstDay), zone) || [firstDay, C.addDays(firstDay, 1)];
         const lastDay = workDays[workDays.length - 1], lastBounds = C.zonedDayBounds(C.localDateKey(lastDay), zone) || [lastDay, C.addDays(lastDay, 1)];
-        const from = firstBounds[0], until = lastBounds[1];
+        // Timed items belong to the days of the display zone, all-day items to the dates as written: the range holds
+        // both. With the zone's days alone an all-day reminder of the first day shown was left out wherever the
+        // display zone is behind the computer's (the reminder begins at the computer's midnight, hours before that
+        // day begins in the zone); in Day view that is every all-day reminder.
+        const from = Math.min(firstBounds[0], firstDay), until = Math.max(lastBounds[1], C.addDays(lastDay, 1));
         const expanded = C.expandRange(items, from, until);
+        // OW-04, OW-03. Four steps, in this order: (1) the times of the timed items of every day that is drawn, (2) the
+        // hours of the grid from those times, (3) the height of an hour, (4) the lanes of each day inside those hours.
+        // (1) Minutes on the clock of the day, cut off at its ends. A reminder has no length: it counts as one minute,
+        // so that one at 20:00 sharp lies after a grid that ends at 20:00.
+        const timed = new Map();
+        for (const day of workDays) {
+          const dayKey = C.localDateKey(day), bounds = C.zonedDayBounds(dayKey, zone) || [day, C.addDays(day, 1)];
+          const spans = C.itemsInRange(expanded, bounds[0], bounds[1]).filter((it) => !C.isAllDay(it)).map((item) => {
+            const [start, end] = C.itemRange(item), reminder = C.isReminder(item);
+            const startMin = Math.round(C.zonedMinuteOfDay(Math.max(start, bounds[0]), dayKey, zone));
+            const endMin = reminder ? startMin : Math.round(C.zonedMinuteOfDay(Math.min(end, bounds[1]), dayKey, zone));
+            return { item, reminder, start: Math.max(start, bounds[0]), startMin, endMin };
+          });
+          timed.set(dayKey, { bounds, spans });
+        }
+        if (!patch) calendarGridEntries = new Map();
+        for (const [dayKey, data] of timed) calendarGridEntries.set(dayKey, data.spans.map((span) => ({ startMin: span.startMin, endMin: Math.max(span.endMin, span.startMin + 1), item: span.item })));
+        // (2) The hours follow the times of the items, not the size of their boxes: a reminder at 19:50 lies inside
+        // 08:00-20:00 although its box is 20px high.
+        const hoursSet = C.cleanCalendarHours(store.meta.calendarHours);
+        const grid = C.visibleHourRange(hoursSet, days.map((day) => ({ day, entries: calendarGridEntries.get(C.localDateKey(day)) || [] })), zone);
+        // An update of single days keeps the other columns and the scroll element, so it is only possible while the
+        // hours stay the ones that are drawn. Otherwise the caller draws the whole grid again.
+        if (patch && (!calendarGridHours || calendarGridHours.startMin !== grid.startMin || calendarGridHours.endMin !== grid.endMin)) return false;
+        const gridHours = (grid.endMin - grid.startMin) / 60;
+        const gridClock = (minute) => { const m = Math.floor(minute); return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
         const fmt = (day) => calendarDayLabel(day, { weekday: mode === "week" ? "short" : "long", year: true });
         calendarPeriod.textContent = mode === "week" ? `${fmt(days[0])} – ${fmt(days[6])}` : fmt(days[0]);
         const cols = `42px repeat(${days.length}, minmax(0, 1fr))`;
         const todayKey = C.zonedDateKey(nowMs(), zone);
         const root = h("div", { class: "zn-cal-time-view is-" + mode, "aria-label": mode === "week" ? "Week calendar" : "Day calendar" });
+        root.dataset.hours = hoursSet.on ? "limited" : "all";
+        root.style.setProperty("--zn-cal-hours", String(gridHours));
         const header = h("div", { class: "zn-cal-time-head" });
         header.style.gridTemplateColumns = cols;
         header.append(h("span", { class: "zn-cal-time-corner", "aria-hidden": "true" }));
@@ -12342,17 +12662,90 @@
           bindCalendarDayContext(cell, day);
           for (const item of C.allDayOf(expanded, day)) {
             const button = calendarItemButton(item, true);
-            if (C.isReminder(item)) bindCalendarDrag(button, item, { track: cell, columns: dragAllDayRow, scroll: dragAllDayRow, dayKey: C.localDateKey(day), hourHeight: CALENDAR_HOUR_PX, zone, allDay: true });
+            // A drag in the all-day row moves a reminder by days and never reads the height of an hour (which is not
+            // known yet: it is measured below, once this row is in the document).
+            if (C.isReminder(item)) bindCalendarDrag(button, item, { track: cell, columns: dragAllDayRow, scroll: dragAllDayRow, dayKey: C.localDateKey(day), hourHeight: 0, zone, allDay: true });
             cell.append(button);
           }
           allDayRow.append(cell);
         }
-        const scroll = h("div", { class: "zn-cal-time-scroll", tabindex: "0", "aria-label": "24-hour timeline" });
+        const scroll = h("div", { class: "zn-cal-time-scroll", tabindex: "0", "aria-label": hoursSet.on ? `Timeline ${gridClock(grid.startMin)} to ${gridClock(grid.endMin)}` : "24-hour timeline" });
+        // Why the grid shows more than the chosen hours: one line above the timeline, only while it does.
+        let hint = null;
+        if (grid.extendedTop || grid.extendedBottom) {
+          const name = (cause) => String(cause.item?.summary || "").trim() || "item";
+          const parts = grid.top && grid.bottom && grid.top.item === grid.bottom.item
+            ? [`${gridClock(grid.top.startMin)}–${gridClock(grid.bottom.endMin)} ${name(grid.top)}`]
+            : [grid.top ? `${gridClock(grid.top.startMin)} ${name(grid.top)}` : "",
+               grid.bottom ? `${C.isReminder(grid.bottom.item) ? gridClock(grid.bottom.startMin) : "until " + gridClock(grid.bottom.endMin)} ${name(grid.bottom)}` : ""].filter(Boolean);
+          const text = "Extended: " + parts.join(" · ");
+          hint = h("div", { class: "zn-cal-hours-hint", role: "status", title: `${text}. Week and Day show ${gridClock(hoursSet.startMin)}–${gridClock(hoursSet.endMin)} and more hours while a day in view has something outside them.` }, text);
+        }
+        root.append(header, allDayRow, ...(hint ? [hint] : []), scroll);
+        calendarContent.dataset.compact = "false";
+        // (3) The height of an hour (OW-03). A fixed size, or fitted: the hours of the grid fill the timeline. How high
+        // the timeline is is known only once everything above it (the header, the all-day row, the line that says
+        // why the grid is widened) is in the document, so the view goes in now, with an empty timeline, and is
+        // measured. An update of single days keeps the hour that is drawn; whether it still fits is checked at the end.
+        // Measured with it, on a box that is not shown: the height an event needs for its time above its title. It
+        // follows the text size and the view (22px where nothing can be measured: the usual text size in Week).
+        const size = C.cleanCalendarScale(store.meta.calendarScale)[mode];
+        const probe = patch ? null : h("button", { type: "button", class: "zn-cal-item is-event is-compact zn-cal-time-event", tabindex: "-1", "aria-hidden": "true", style: "visibility:hidden;top:0;left:0;height:auto" },
+          h("span", { class: "zn-cal-item-time" }, "00:00"), h("span", { class: "zn-cal-item-title" }, "Ag"));
+        if (probe) scroll.append(probe);
+        if (!patch) calendarContent.append(root);
+        const room = patch ? NaN : calendarTimelineRoom(scroll);
+        const linesPx = patch ? calendarGridHours.linesPx : Number(probe.offsetHeight) > 0 ? Number(probe.offsetHeight) : 22;
+        if (probe) probe.remove();
+        const hourPx = patch ? calendarGridHours.hourPx : size !== "auto" ? size : C.fitHourHeight(room, gridHours, { minPx: calendarMinHourPx() });
+        if (!patch) {
+          const firstMin = Math.min(...[...timed.values()].flatMap((data) => data.spans.map((span) => span.startMin)));
+          const nowMin = days.some((day) => C.localDateKey(day) === todayKey) ? C.zonedMinuteOfDay(nowMs(), todayKey, zone) : NaN;
+          const openMin = C.gridOpenMinute(grid, { nowMin, workStartMin: C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK).startMin, firstMin });
+          calendarGridHours = { startMin: grid.startMin, endMin: grid.endMin, hourPx, linesPx, fontPx: calendarFontPx(), fit: size === "auto", openMin };
+          calendarContent.style.setProperty("--zn-cal-hour-height", hourPx + "px");
+          if (calendarFit) calendarFit.hourPx = hourPx;
+          // The hours fit: the timeline has nothing to scroll and shows no scrollbar, also not for the one frame in
+          // which the pane is already lower and the hours are not drawn again yet.
+          scroll.dataset.fitted = size === "auto" && gridHours * hourPx <= room ? "true" : "false";
+          watchCalendarFit(scroll);
+        }
+        const gridY = (minute) => C.gridOffsetOf(minute, hourPx, grid);
+        // (4) Events and timed reminders share one overlap layout. No box is lower than `minBoxPx` (20px; less in a
+        // dense grid, see calendarMinBoxPx), so a reminder and an event shorter than that take the lane of a box of
+        // that height: they cannot cover an event or each other. Such a box which would begin too late to end inside
+        // the grid (a reminder at 19:50 in a grid that ends at 20:00, or at 23:50 in the whole day) is moved up until
+        // it ends with the grid, and takes its lane there. The box of a short event may reach over the item that
+        // follows it by a fifth of its height (4px of 20: its lower padding): half-hour events one after another at
+        // 36px an hour are 18px apart and stay in one lane. More than that and the two stand side by side. A
+        // reminder keeps the whole box, as it always had.
+        const minBoxPx = C.calendarMinBoxPx(hourPx);
+        const minBoxMin = Math.max(1, Math.ceil((minBoxPx / hourPx) * 60));
+        const overlapMin = Math.floor((minBoxPx / 5 / hourPx) * 60);
+        const lastBoxStart = grid.endMin - minBoxMin;
+        const laidOut = new Map();
+        for (const day of workDays) {
+          const dayKey = C.localDateKey(day), { bounds, spans } = timed.get(dayKey);
+          const spanById = new Map(spans.map((span) => [String(span.item.id), span]));
+          const layoutItems = spans.map((span) => {
+            if (!span.reminder && span.endMin - span.startMin >= minBoxMin) return span.item;
+            const start = span.start - Math.max(0, span.startMin - lastBoxStart) * 60000;
+            const length = span.reminder ? minBoxMin : Math.max(1, span.endMin - span.startMin, minBoxMin - overlapMin);
+            return { ...span.item, x: { ...(span.item.x || {}), kind: "event" }, start: { dateTime: new Date(start).toISOString() }, end: { dateTime: new Date(start + length * 60000).toISOString() } };
+          });
+          const entries = C.layoutDay(layoutItems, day, zone);
+          for (const entry of entries) { entry.span = spanById.get(String(entry.item.id)) || null; entry.original = entry.span ? entry.span.item : entry.item; }
+          laidOut.set(dayKey, { bounds, entries });
+        }
         const gridRow = h("div", { class: "zn-cal-time-grid-row" });
         // Only the gutter and the columns wrapper are direct children; the wrapper owns all day tracks.
         gridRow.style.gridTemplateColumns = "42px minmax(0, 1fr)";
         const hours = h("div", { class: "zn-cal-hour-gutter" });
-        for (let hour = 0; hour < 24; hour++) hours.append(h("span", { class: "zn-cal-hour-label" }, String(hour).padStart(2, "0") + ":00"));
+        for (let hour = grid.startMin / 60; hour < grid.endMin / 60; hour++) {
+          // An hour outside the chosen ones: it is shown only because something in view lies in it.
+          const extra = hoursSet.on && (hour * 60 < hoursSet.startMin || hour * 60 >= hoursSet.endMin);
+          hours.append(h("span", { class: "zn-cal-hour-label" + (extra ? " is-extended" : "") }, String(hour).padStart(2, "0") + ":00"));
+        }
         gridRow.append(hours);
         const columns = h("div", { class: "zn-cal-time-columns" });
         const dragColumns = patch?.columns || columns, dragScroll = patch?.scroll || scroll;
@@ -12360,54 +12753,59 @@
         const work = C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK);
         for (const day of workDays) {
           const dayKey = C.localDateKey(day);
-          const bounds = C.zonedDayBounds(dayKey, zone) || [day, C.addDays(day, 1)];
+          const { bounds, entries } = laidOut.get(dayKey);
           const isToday = dayKey === todayKey;
           const track = h("div", { class: "zn-cal-time-track", tabindex: "0", "aria-label": "Timeline for " + fmt(day), "data-day": C.ymd(new Date(day)) });
           bindCalendarDayContext(track, day);
-          bindCalendarCreate(track, dragColumns, dragScroll, dayKey, CALENDAR_HOUR_PX, zone);
-          track.style.height = (24 * CALENDAR_HOUR_PX) + "px";
-          for (let hour = 0; hour < 24; hour++) {
-            track.append(h("span", { class: "zn-cal-time-hour-line", style: `top:${hour * CALENDAR_HOUR_PX}px` }));
+          bindCalendarCreate(track, dragColumns, dragScroll, dayKey, hourPx, zone, grid);
+          track.style.height = (gridHours * hourPx) + "px";
+          for (let hour = 0; hour < gridHours; hour++) {
+            track.append(h("span", { class: "zn-cal-time-hour-line", style: `top:${hour * hourPx}px` }));
           }
+          // The part of the grid beyond the chosen hours, there because something in view lies in it.
+          if (grid.extendedTop) track.append(h("span", { class: "zn-cal-hours-extra is-top", style: `top:0;height:${gridY(hoursSet.startMin)}px`, "aria-hidden": "true" }));
+          if (grid.extendedBottom) track.append(h("span", { class: "zn-cal-hours-extra is-bottom", style: `top:${gridY(hoursSet.endMin)}px;bottom:0`, "aria-hidden": "true" }));
           const workRange = C.workRange(day, work, zone);
           const workStart = workRange ? Math.max(0, Math.round(C.zonedMinuteOfDay(workRange[0], dayKey, zone))) : 0;
           const workEnd = workRange ? Math.min(1440, Math.round(C.zonedMinuteOfDay(workRange[1], dayKey, zone))) : 0;
           if (!workRange) {
             track.append(h("span", { class: "zn-cal-off-hours is-all-day", "aria-hidden": "true" }));
           } else {
-            if (workStart > 0) track.append(h("span", { class: "zn-cal-off-hours", style: `top:0;height:${workStart / 60 * CALENDAR_HOUR_PX}px`, "aria-hidden": "true" }));
-            if (workEnd < 1440) track.append(h("span", { class: "zn-cal-off-hours", style: `top:${workEnd / 60 * CALENDAR_HOUR_PX}px;bottom:0`, "aria-hidden": "true" }));
+            if (workStart > grid.startMin) track.append(h("span", { class: "zn-cal-off-hours", style: `top:0;height:${gridY(Math.min(workStart, grid.endMin))}px`, "aria-hidden": "true" }));
+            if (workEnd < grid.endMin) track.append(h("span", { class: "zn-cal-off-hours", style: `top:${gridY(Math.max(workEnd, grid.startMin))}px;bottom:0`, "aria-hidden": "true" }));
           }
           const busy = C.busyRanges(expanded.filter((it) => !C.isAllDay(it)), bounds[0], bounds[1]);
           for (const [start, end] of busy) {
-            const top = Math.max(0, C.zonedMinuteOfDay(start, dayKey, zone) / 60 * CALENDAR_HOUR_PX);
-            const bottom = Math.min(1440, C.zonedMinuteOfDay(end, dayKey, zone));
-            const height = Math.max(1, (bottom - C.zonedMinuteOfDay(start, dayKey, zone)) / 60 * CALENDAR_HOUR_PX);
+            const startMinute = C.zonedMinuteOfDay(start, dayKey, zone);
+            const top = Math.max(0, gridY(startMinute));
+            const bottom = Math.min(grid.endMin, C.zonedMinuteOfDay(end, dayKey, zone));
+            const height = Math.max(1, (bottom - Math.max(grid.startMin, startMinute)) / 60 * hourPx);
             track.append(h("span", { class: "zn-cal-busy-range", style: `top:${top}px;height:${height}px`, "aria-hidden": "true" }));
           }
           if (isToday) {
             const nowMinutes = C.zonedMinuteOfDay(nowMs(), dayKey, zone);
-            track.append(h("div", { class: "zn-cal-now-line", style: `top:${nowMinutes / 60 * CALENDAR_HOUR_PX}px`, "aria-label": "Current time" }, h("span", { class: "zn-cal-now-dot" })));
+            if (!hoursSet.on || (nowMinutes >= grid.startMin && nowMinutes <= grid.endMin)) {
+              track.append(h("div", { class: "zn-cal-now-line", style: `top:${gridY(nowMinutes)}px`, "aria-label": "Current time" }, h("span", { class: "zn-cal-now-dot" })));
+            } else if (Number.isFinite(nowMinutes)) {
+              // The current time is not among the hours shown: a line in the grid would lie about it. The edge it
+              // is beyond carries a mark instead; the time of day does not widen the grid, only items do.
+              const before = nowMinutes < grid.startMin, clock = C.clockIn(nowMs(), zone);
+              const label = `Current time ${clock}, ${before ? "before" : "after"} the hours shown`;
+              track.append(h("div", { class: "zn-cal-now-edge " + (before ? "is-before" : "is-after"), role: "img", "aria-label": label, title: label }));
+            }
           }
-          // Events and timed reminders share one overlap layout. A reminder occupies a short
-          // visual interval (20px) so it cannot cover an event or another reminder at the same time.
-          const timedItems = C.itemsInRange(expanded, bounds[0], bounds[1]).filter((it) => !C.isAllDay(it));
-          const originalById = new Map(timedItems.map((item) => [String(item.id), item]));
-          const layoutItems = timedItems.map((item) => {
-            if (!C.isReminder(item)) return item;
-            const [start] = C.itemRange(item);
-            const displayDuration = Math.max(1, Math.ceil((20 / CALENDAR_HOUR_PX) * 60));
-            return { ...item, x: { ...(item.x || {}), kind: "event" }, end: { dateTime: new Date(start + displayDuration * 60000).toISOString() } };
-          });
-          for (const entry of C.layoutDay(layoutItems, day, zone)) {
-            const original = originalById.get(String(entry.item.id)) || entry.item;
+          for (const entry of entries) {
+            const original = entry.original;
             const reminder = C.isReminder(original);
             const button = calendarItemButton(original, true);
             button.classList.add(reminder ? "zn-cal-time-reminder" : "zn-cal-time-event");
-            const top = entry.startMin / 60 * CALENDAR_HOUR_PX;
-            const height = reminder ? 20 : Math.max(20, (entry.endMin - entry.startMin) / 60 * CALENDAR_HOUR_PX);
+            const top = gridY(entry.startMin);
+            const height = reminder ? minBoxPx : Math.max(minBoxPx, ((entry.span ? entry.span.endMin - entry.span.startMin : entry.endMin - entry.startMin)) / 60 * hourPx);
             button.style.top = top + "px";
             button.style.height = height + "px";
+            // An event too low for its two lines shows the title alone (the style sheet leaves the time out; it is
+            // in the tooltip and the hover card). The lower padding of 2px may be used by the text, hence the 2.
+            if (!reminder && height < linesPx - 2) button.classList.add("is-short");
             button.style.left = (entry.lane * 100 / entry.lanes) + "%";
             button.style.width = (100 / entry.lanes) + "%";
             button.style.zIndex = reminder ? "3" : "2";
@@ -12415,7 +12813,7 @@
             const startLabel = C.clockIn(Math.max(itemStart, bounds[0]), zone);
             const endLabel = reminder ? "reminder" : C.clockIn(Math.min(itemEnd, bounds[1]), zone);
             button.setAttribute("aria-label", `${original.summary}, ${startLabel}${reminder ? " reminder" : " to " + endLabel}, lane ${entry.lane + 1} of ${entry.lanes}`);
-            bindCalendarDrag(button, original, { track, columns: dragColumns, scroll: dragScroll, dayKey, hourHeight: CALENDAR_HOUR_PX, zone });
+            bindCalendarDrag(button, original, { track, columns: dragColumns, scroll: dragScroll, dayKey, hourHeight: hourPx, zone, grid });
             track.append(button);
             if (!reminder && !original.x?.series && !(original.recurrence || []).length && original.x?.src !== "note") {
               for (const edge of ["start", "end"]) {
@@ -12423,9 +12821,11 @@
                 const handle = h("button", { type: "button", class: "zn-cal-resize-handle is-" + edge,
                   "aria-label": "Resize " + edge + " of " + (original.summary || "event") + "; use up and down arrows",
                   "data-item-id": original.id, "data-edge": edge, title: "Drag or use Up/Down to resize " + edge });
-                handle.style.top = (top + (edge === "end" ? height : 0) - 4) + "px";
+                // The handle is 8px high and sits astride the edge it moves. At the end of the grid it stays inside:
+                // hanging out, it gave the timeline a few px to scroll (an event that ends at 20:00 in 08:00-20:00).
+                handle.style.top = (edge === "end" ? Math.min(top + height - 4, gridHours * hourPx - 8) : top - 4) + "px";
                 handle.style.left = button.style.left; handle.style.width = button.style.width;
-                bindCalendarDrag(handle, original, { track, columns: dragColumns, scroll: dragScroll, dayKey, hourHeight: CALENDAR_HOUR_PX, zone, edge });
+                bindCalendarDrag(handle, original, { track, columns: dragColumns, scroll: dragScroll, dayKey, hourHeight: hourPx, zone, grid, edge });
                 handle.addEventListener("keydown", (event) => {
                   if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
                   event.preventDefault(); event.stopPropagation();
@@ -12445,9 +12845,11 @@
         }
         gridRow.append(columns);
         scroll.append(gridRow);
-        root.append(header, allDayRow, scroll);
-        calendarContent.dataset.compact = "false";
         if (patch) {
+          // The hours are the ones already drawn (checked above), so the line is there exactly when it was: only
+          // what it names can have changed.
+          const shownHint = calendarContent.querySelector(".zn-cal-hours-hint");
+          if (shownHint && hint) { shownHint.textContent = hint.textContent; shownHint.title = hint.title; }
           const oldCells = patch.allDayRow.querySelectorAll(".zn-cal-time-allday-cell"), newCells = allDayRow.querySelectorAll(".zn-cal-time-allday-cell");
           const oldColumns = patch.columns.querySelectorAll(".zn-cal-time-column"), newColumns = columns.querySelectorAll(".zn-cal-time-column");
           for (let i = 0; i < days.length; i++) if (patch.days.has(C.localDateKey(days[i]))) {
@@ -12463,7 +12865,10 @@
             if (!calendarReminderNodes.has(key)) calendarReminderNodes.set(key, []);
             calendarReminderNodes.get(key).push({ button, item });
           }
-        } else calendarContent.append(root);
+          // The all-day row may have grown or shrunk with this update, and with it the room of the timeline. A fitted
+          // hour that no longer fits: the caller draws the whole grid again.
+          if (calendarHourStale()) return "refit";
+        }
       }
       function askCalendarComposer(options = {}) {
         const C = CALENDAR_PART;
@@ -12853,6 +13258,51 @@
         openCalendarCard("Calendar display time zone", zone.row, status, h("div", { class: "zn-dialog-actions" }, cancel, reset, save));
         zone.input.focus({ preventScroll: true });
       }
+      // "08–20" for the toolbar, "08:00–20:00" for sentences.
+      function calendarHoursText(value) {
+        const hours = CALENDAR_PART.cleanCalendarHours(value), two = (minute) => String(minute / 60).padStart(2, "0");
+        return { short: two(hours.startMin) + "–" + two(hours.endMin), long: two(hours.startMin) + ":00–" + two(hours.endMin) + ":00" };
+      }
+      // The hours Week and Day show (OW-04). Working hours are a separate thing (they shade the grid); they are
+      // offered here as a starting point only.
+      function askCalendarHours() {
+        const C = CALENDAR_PART, current = C.cleanCalendarHours(store.meta.calendarHours);
+        const limit = h("input", { type: "checkbox", "aria-label": "Show only these hours in Week and Day" });
+        limit.checked = current.on;
+        const hourField = (label, value, min, max) => {
+          const input = h("input", { type: "number", class: "zn-field", min: String(min), max: String(max), step: "1", "aria-label": label });
+          input.value = String(value);
+          return input;
+        };
+        const from = hourField("First hour shown (0 to 23)", current.startMin / 60, 0, 23), to = hourField("Hour the grid ends at (1 to 24)", current.endMin / 60, 1, 24);
+        const status = h("p", { class: "zn-empty", role: "status" }, "A day in view that has an event or a reminder outside these hours widens the grid by whole hours, for as long as it is in view. All-day items never do.");
+        const work = C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK);
+        const workFrom = Math.floor(work.startMin / 60), workTo = Math.ceil(work.endMin / 60);
+        const preset = chip(`Use working hours (${calendarHoursText({ startMin: workFrom * 60, endMin: workTo * 60 }).long})`);
+        const save = chip("Apply", true), cancel = chip("Cancel");
+        const whole = (input) => (/^\d{1,2}$/.test(String(input.value).trim()) ? Number(input.value) : NaN);
+        const submit = () => {
+          const a = whole(from), b = whole(to);
+          delete from.dataset.bad; delete to.dataset.bad;
+          if (!(a >= 0 && a <= 23)) { from.dataset.bad = "true"; from.focus(); status.textContent = "The first hour is a whole number from 0 to 23."; return; }
+          if (!(b > a && b <= 24)) { to.dataset.bad = "true"; to.focus(); status.textContent = "The grid ends at a whole hour after the first one, 24 at the latest."; return; }
+          const next = { on: limit.checked, startMin: a * 60, endMin: b * 60 };
+          store.setMeta({ calendarHours: next });
+          closeDialog();
+          renderCalendar();
+          flash(next.on ? "Week and Day show " + calendarHoursText(next).long : "Week and Day show all 24 hours");
+        };
+        preset.addEventListener("click", () => { from.value = String(workFrom); to.value = String(workTo); limit.checked = true; });
+        save.addEventListener("click", submit);
+        cancel.addEventListener("click", closeDialog);
+        for (const input of [from, to]) input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); submit(); } });
+        openCalendarCard("Visible hours",
+          h("label", { class: "zn-field-row zn-cal-free-check" }, limit, h("span", {}, "Show only these hours in Week and Day")),
+          h("label", { class: "zn-field-row" }, h("span", {}, "From (hour)"), from),
+          h("label", { class: "zn-field-row" }, h("span", {}, "To (hour)"), to),
+          h("div", { class: "zn-cal-hours-presets" }, preset), status, h("div", { class: "zn-dialog-actions" }, cancel, save));
+        from.focus({ preventScroll: true });
+      }
       function askCalendarFreeSlots() {
         const C = CALENDAR_PART, start = calendarWeekStart(), end = C.addDays(start, 6);
         const from = field("From date (YYYY-MM-DD)", C.ymd(new Date(start)), "2026-11-12");
@@ -12863,11 +13313,17 @@
         workOnly.checked = true;
         const allDayBusy = h("input", { type: "checkbox", "aria-label": "Count all-day events as busy" });
         allDayBusy.checked = false;
+        // While Week and Day are held to a part of the day, free time is looked for in that part (a slot at 03:00
+        // would lie outside the grid). Offered only then; it can be switched off for one search.
+        const shownHours = C.cleanCalendarHours(store.meta.calendarHours);
+        const hoursOnly = h("input", { type: "checkbox", "aria-label": "Only within the visible hours" });
+        hoursOnly.checked = shownHours.on;
         const results = h("div", { class: "zn-cal-free-results", "aria-live": "polite" });
         const find = chip("Find free times", true), cancel = chip("Close");
         const options = h("div", { class: "zn-cal-free-options" },
           h("label", { class: "zn-field-row" }, h("span", {}, "Minimum duration (minutes)"), duration),
           h("label", { class: "zn-field-row zn-cal-free-check" }, workOnly, h("span", {}, "Only within working hours")),
+          ...(shownHours.on ? [h("label", { class: "zn-field-row zn-cal-free-check" }, hoursOnly, h("span", {}, `Only within the visible hours (${calendarHoursText(shownHours).long})`))] : []),
           h("label", { class: "zn-field-row zn-cal-free-check" }, allDayBusy, h("span", {}, "Treat all-day events as busy")));
         openCalendarCard("When am I free?", from.row, through.row, options, results, h("div", { class: "zn-dialog-actions" }, cancel, find));
         const run = () => {
@@ -12882,7 +13338,7 @@
           }
           if (!Number.isInteger(min) || min < 15 || min > 1440) { duration.dataset.bad = "true"; duration.focus(); return; }
           const work = workOnly.checked ? C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK) : null;
-          const slots = C.freeSlots(calendarBaseItems(), fromDay, C.addDays(throughDay, 1), min, { work, blockAllDay: allDayBusy.checked, zone: calendarDisplayZone() });
+          const slots = C.freeSlots(calendarBaseItems(), fromDay, C.addDays(throughDay, 1), min, { work, hours: shownHours.on && hoursOnly.checked ? shownHours : null, blockAllDay: allDayBusy.checked, zone: calendarDisplayZone() });
           results.replaceChildren();
           if (!slots.length) { results.append(h("p", { class: "zn-empty" }, "No matching free time was found in this range.")); return; }
           results.append(h("p", { class: "zn-empty" }, `${slots.length} free slot${slots.length === 1 ? "" : "s"} found · showing up to 20`));
@@ -12906,11 +13362,37 @@
         const focused = document.activeElement?.closest?.("[data-item-key]");
         const savedNode = (node) => node && calendarContent.contains(node) ? { key: node.getAttribute("data-item-key"), day: node.closest?.("[data-day]")?.getAttribute("data-day") || "" } : null;
         const scroll = calendarContent.querySelector(".zn-cal-time-scroll");
-        return { scrollTop: scroll ? scroll.scrollTop : null, focused: savedNode(focused), hover: savedNode(calendarHoverAnchor) };
+        // gridStart, hourPx: the first hour of the timeline as it is drawn now and the height of its hours. scrolls:
+        // whether it was drawn as one that scrolls (not with its hours fitted: that one has no position to keep).
+        const scrolls = !!scroll && scroll.dataset.fitted !== "true";
+        return { scrollTop: scroll ? scroll.scrollTop : null, scrolls, gridStart: scroll && calendarGridHours ? calendarGridHours.startMin : null, hourPx: scroll && calendarGridHours ? calendarGridHours.hourPx : null,
+          focused: savedNode(focused), hover: savedNode(calendarHoverAnchor) };
       }
       function restoreCalendarViewState(state) {
         const scroll = calendarContent.querySelector(".zn-cal-time-scroll");
-        if (scroll && state.scrollTop !== null) scroll.scrollTop = state.scrollTop;
+        if (scroll && scroll.dataset.fitted === "true") {
+          // The hours are fitted: there is nothing to scroll and no position to bring back.
+        } else if (scroll && state.scrollTop !== null && state.scrolls) {
+          // The grid may now begin at another hour, and its hours may have another height (the Size slider): keep
+          // the same time at the top, not the same number of px. One exception: a timeline held to some hours that
+          // was at its very top stays at its top, so hours that were added above (for an item, or by choosing an
+          // earlier first hour) are in sight. All 24 hours keep the time: they would jump to midnight.
+          const held = CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours).on;
+          if (held && state.scrollTop <= 0) scroll.scrollTop = 0;
+          else if (state.gridStart === null || !calendarGridHours) scroll.scrollTop = Math.max(0, state.scrollTop);
+          else {
+            // In px of the new grid: what was scrolled, stretched by the change of the hour (exactly 1 when the hour
+            // is the same: the position comes back to the px), and the hours the grid gained or lost above.
+            const hourPx = calendarGridHours.hourPx, stretch = state.hourPx > 0 ? hourPx / state.hourPx : 1;
+            scroll.scrollTop = Math.max(0, state.scrollTop * stretch + (state.gridStart - calendarGridHours.startMin) / 60 * hourPx);
+          }
+        } else if (scroll && calendarGridHours && Number(scroll.scrollHeight) > Number(scroll.clientHeight)) {
+          // This timeline scrolls (a fixed size, or a pane too low for the smallest hour) and there was none before
+          // it, or one that had nothing to scroll (the view was another, the sheet was just opened, the hours were
+          // fitted until now): it opens an hour before the current time when today is in view, else where the
+          // working day or the first item begins (gridOpenMinute), not at midnight.
+          scroll.scrollTop = Math.max(0, CALENDAR_PART.gridOffsetOf(calendarGridHours.openMin, calendarGridHours.hourPx, calendarGridHours));
+        }
         const find = (ref) => {
           if (!ref?.key) return null;
           const candidates = [...calendarContent.querySelectorAll("[data-item-key]")].filter((node) => node.getAttribute("data-item-key") === ref.key);
@@ -12932,7 +13414,8 @@
         const bounds = days.map((day) => C.zonedDayBounds(C.localDateKey(day), zone) || [day, C.addDays(day, 1)]);
         const changed = new Set();
         for (const master of [oldItem, newItem]) if (master) {
-          for (const occurrence of C.expandRange([master], bounds[0][0], bounds[bounds.length - 1][1])) {
+          // As in calendarTimeGridView: the days of the display zone and the dates as written.
+          for (const occurrence of C.expandRange([master], Math.min(bounds[0][0], days[0]), Math.max(bounds[bounds.length - 1][1], C.addDays(days[days.length - 1], 1)))) {
             const [start, end] = C.itemRange(occurrence);
             for (let i = 0; i < days.length; i++) if (C.isAllDay(occurrence) ? C.allDayOf([occurrence], days[i]).length : C.isReminder(occurrence) ? start >= bounds[i][0] && start < bounds[i][1] : start < bounds[i][1] && end > bounds[i][0]) changed.add(C.localDateKey(days[i]));
           }
@@ -12944,15 +13427,22 @@
         // day columns, keeping other columns and the scroll element intact.
         if (changed.size) {
           const state = captureCalendarViewState();
-          calendarTimeGridView(current, cursor, mode, { allDayRow, columns, scroll, days: changed });
+          const done = calendarTimeGridView(current, cursor, mode, { allDayRow, columns, scroll, days: changed });
+          // false: the change moves the hours the grid has to show (OW-04); nothing was touched, the caller draws the
+          // whole grid again.
+          if (done === false) return false;
+          // The days are drawn, but the fitted hour no longer fits (OW-03): the whole grid again, from what was
+          // focused and where the timeline stood before the days were replaced.
+          if (done === "refit") { renderCalendar(state); return true; }
           restoreCalendarViewState(state);
         }
         calendarRenderedItems = new Map(current.map((item) => [item.id, item]));
         return true;
       }
-      function renderCalendar() {
+      // `kept`: the view state to return to, when the caller took it before it changed the grid.
+      function renderCalendar(kept = null) {
         if (!CALENDAR_PART || !calendarContent) return;
-        const prior = captureCalendarViewState();
+        const prior = kept && typeof kept === "object" && "scrollTop" in kept && "scrolls" in kept ? kept : captureCalendarViewState();
         calendarBackgroundPending = false;
         if (menu?.calendar && menu.calendarView !== (store.meta.calendarView || "month")) closeMenu();
         cancelCalendarDrag();
@@ -12967,22 +13457,88 @@
         calendarRenderedItems = new Map(items.map((item) => [item.id, item]));
         calendarContent.replaceChildren();
         calendarContent.dataset.view = view;
-        const density = CALENDAR_PART.cleanCalendarDensity(store.meta.calendarDensity);
-        calendarContent.dataset.density = density;
-        calendarContent.style.setProperty("--zn-cal-hour-height", CALENDAR_PART.calendarDensityHourHeight(density) + "px");
-        calendarDensitySelect.textContent = ({ comfortable: "Comfortable", compact: "Compact", "extra-compact": "Extra compact" })[density];
+        const compact = view === "month" && calendarMonthNarrow();
+        // OW-03. The size of this view: "auto" (Week and Day: the hours fill the timeline; Month: the weeks fill the
+        // pane) or px. The look (paddings, text sizes) follows the setting; the fitted hour, and the look of the
+        // Month grid, are set by the view once it is measured.
+        const size = CALENDAR_PART.cleanCalendarScale(store.meta.calendarScale)[view];
+        const sized = calendarSizedView(view, compact);
+        calendarFit = { view, compact, size, hourPx: null, rowPx: null, lines: null };
+        calendarMonth = null;
+        calendarContent.dataset.fit = sized && size === "auto" ? "true" : "false";
+        calendarContent.dataset.density = CALENDAR_PART.calendarScaleDensity(view, size);
+        if (view === "month" && sized && size !== "auto") calendarContent.style.setProperty("--zn-cal-month-row", size + "px");
+        else calendarContent.style.removeProperty("--zn-cal-month-row");
+        if (view !== "week" && view !== "day" && !(view === "month" && !compact)) watchCalendarFit(null);
         calendarSnapSelect.textContent = "Snap " + CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap) + " min";
         calendarSnapSelect.hidden = view !== "week" && view !== "day";
-        const rect = calendarPane.getBoundingClientRect?.();
-        const width = Math.max(0, Number(calendarPane.clientWidth) || Number(rect?.width) || 0);
-        const compact = view === "month" && width > 0 && width < 470;
+        const hoursSet = CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours), hoursText = calendarHoursText(hoursSet);
+        calendarHoursToggle.textContent = hoursText.short;
+        calendarHoursToggle.hidden = view !== "week" && view !== "day";
+        calendarHoursToggle.setAttribute("aria-pressed", hoursSet.on ? "true" : "false");
+        calendarHoursToggle.setAttribute("aria-label", "Show only " + hoursText.long);
+        calendarHoursToggle.classList.toggle("is-on", hoursSet.on);
+        calendarHoursToggle.title = hoursSet.on
+          ? `Showing ${hoursText.long}, and more while a day in view has something outside. Press for all 24 hours. Other hours: Tools → Visible hours…`
+          : `Show only ${hoursText.long} in Week and Day. Other hours: Tools → Visible hours…`;
+        if (view !== "week" && view !== "day") { calendarGridHours = null; calendarGridEntries = new Map(); }
         calendarPrev.title = view === "month" ? "Previous month" : view === "upcoming" ? "Previous range" : view === "week" ? "Previous week" : view === "day" ? "Previous day" : "Previous 30 days";
         calendarNext.title = view === "month" ? "Next month" : view === "upcoming" ? "Next range" : view === "week" ? "Next week" : view === "day" ? "Next day" : "Next 30 days";
         if (view === "month") calendarMonthView(items, cursor, compact);
         else if (view === "upcoming") calendarUpcomingView(items, cursor, Number(store.meta.calendarDaysForward) || 7);
         else if (view === "agenda") calendarAgendaView(items, cursor);
         else calendarTimeGridView(items, cursor, view);
+        paintCalendarSize();
         restoreCalendarViewState(prior);
+      }
+      // The Size button says what is set for the view that is shown.
+      function paintCalendarSize() {
+        const fit = calendarFit;
+        if (!fit) return;
+        const month = fit.view === "month", unit = month ? "a week" : "an hour";
+        if (!calendarSizedView(fit.view, fit.compact)) {
+          calendarSizeSelect.textContent = ({ comfortable: "Comfortable", compact: "Compact", "extra-compact": "Extra compact" })[CALENDAR_PART.calendarScaleDensity(fit.view, fit.size)];
+          calendarSizeSelect.title = "Spacing of this list";
+        } else if (fit.size === "auto") {
+          calendarSizeSelect.textContent = "Size: Fit";
+          calendarSizeSelect.title = (month ? "The six weeks fill the pane." : "The hours shown fill the pane: no scrollbar while an hour stays readable.") + ` Press to set the height of ${unit} yourself.`;
+        } else {
+          calendarSizeSelect.textContent = `Size: ${fit.size} px`;
+          calendarSizeSelect.title = `The height of ${unit} is set to ${fit.size} px. Press to change it, or to fit ${month ? "the weeks" : "the hours"} to the pane again.`;
+        }
+      }
+      // Would Week or Day with fitted hours come out differently if the grid were drawn now: another height of an
+      // hour, or the same one (the smallest) while the hours stopped or began to fit? Without the second half a
+      // timeline that just stopped fitting kept "nothing to scroll" and cut its last hours off.
+      // Also with a size that is set: another text size, against which the boxes of the items were measured.
+      function calendarHourStale() {
+        const scroll = calendarContent.querySelector(".zn-cal-time-scroll");
+        if (!scroll || !calendarGridHours) return false;
+        const fontPx = calendarFontPx();
+        if (fontPx > 0 && calendarGridHours.fontPx > 0 && fontPx !== calendarGridHours.fontPx) return true;
+        if (!calendarGridHours.fit) return false;
+        const room = calendarTimelineRoom(scroll);
+        if (!(room > 0)) return false;
+        const hours = (calendarGridHours.endMin - calendarGridHours.startMin) / 60;
+        const hourPx = CALENDAR_PART.fitHourHeight(room, hours, { minPx: calendarMinHourPx() });
+        return hourPx !== calendarGridHours.hourPx || (hours * hourPx <= room) !== (scroll.dataset.fitted === "true");
+      }
+      // The pane changed (the window, the sheet, the splitter, the toolbar taking another row, the text size).
+      // Nothing is drawn again that would come out the same: Month fits its cells in place, Week and Day are drawn
+      // again when the fitted hour changes, the lists and a view with a fixed size are left as they are.
+      let rafCalendarFit = 0;
+      function refitCalendar() {
+        if (!isOpen || destroyed || view !== "list" || filter !== "all" || calendarPane.hidden || !CALENDAR_PART) return;
+        const fit = calendarFit;
+        if (!fit) return requestCalendarBackground();
+        // Month is a list in a narrow pane and a grid in a wide one.
+        if (fit.view === "month" && fit.compact !== calendarMonthNarrow()) return requestCalendarBackground();
+        if (fit.view === "month" && !fit.compact) return fitCalendarMonth();
+        if ((fit.view === "week" || fit.view === "day") && calendarHourStale()) requestCalendarBackground();
+      }
+      function scheduleCalendarFit() {
+        if (rafCalendarFit) return;
+        rafCalendarFit = window.requestAnimationFrame(() => { rafCalendarFit = 0; refitCalendar(); });
       }
       function changeCalendarCursor(delta) {
         const C = CALENDAR_PART, stored = C.parseYmd(store.meta.calendarCursor), base = stored ? stored.getTime() : C.dayStart(nowMs());
@@ -12998,12 +13554,39 @@
       listen(calendarViewSelect, "click", () => calendarChoiceMenu(calendarViewSelect,
         [{ value: "month", label: "Month" }, { value: "upcoming", label: "Next days" }, { value: "agenda", label: "Agenda" }, { value: "week", label: "Week" }, { value: "day", label: "Day" }],
         store.meta.calendarView || "month", (value) => { store.setMeta({ calendarView: value }); renderCalendar(); }));
-      listen(calendarDensitySelect, "click", () => calendarChoiceMenu(calendarDensitySelect,
-        [{ value: "comfortable", label: "Comfortable" }, { value: "compact", label: "Compact" }, { value: "extra-compact", label: "Extra compact" }],
-        CALENDAR_PART.cleanCalendarDensity(store.meta.calendarDensity), (value) => { store.setMeta({ calendarDensity: value }); renderCalendar(); }));
+      listen(calendarSizeSelect, "click", () => {
+        const C = CALENDAR_PART, name = calendarFit?.view || "month", compact = !!calendarFit?.compact;
+        const sizeNow = () => C.cleanCalendarScale(store.meta.calendarScale)[name];
+        const setSize = (value) => {
+          store.setMeta({ calendarScale: { ...C.cleanCalendarScale(store.meta.calendarScale), [name]: C.cleanCalendarScaleValue(name, value) } });
+          renderCalendar();
+        };
+        // The two lists, and Month drawn as a list in a narrow pane, have nothing to fit: the three spacings.
+        if (!calendarSizedView(name, compact))
+          return calendarChoiceMenu(calendarSizeSelect,
+            [{ value: "comfortable", label: "Comfortable" }, { value: "compact", label: "Compact" }, { value: "extra-compact", label: "Extra compact" }],
+            C.calendarScaleDensity(name, sizeNow()), (value) => setSize(C.calendarScaleStep(name, value)));
+        const limits = C.CALENDAR_SCALE_LIMITS[name], month = name === "month", what = month ? "Height of a week" : "Height of an hour";
+        // While the size is fitted the slider stands at what is drawn, so the first move starts from there.
+        const drawn = () => {
+          const px = month ? calendarFit?.rowPx : calendarFit?.hourPx;
+          return Math.max(limits.min, Math.min(limits.max, Math.round(Number.isFinite(px) && px > 0 ? px : limits.comfortable)));
+        };
+        showMenu(calendarSizeSelect, [
+          { heading: true, label: what },
+          { slider: { min: limits.min, max: limits.max, label: what + " in px", fitLabel: "Fit to the pane",
+              state: () => (sizeNow() === "auto" ? { auto: true, value: drawn(), text: "Fit · " + drawn() + " px" } : { auto: false, value: sizeNow(), text: sizeNow() + " px" }),
+              input: (value) => setSize(value), fit: () => setSize("auto") } },
+        ]);
+      });
       listen(calendarSnapSelect, "click", () => calendarChoiceMenu(calendarSnapSelect,
         CALENDAR_PART.CALENDAR_SNAP_STEPS.map((step) => ({ value: String(step), label: step + " minutes" })),
         String(CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap)), (value) => { store.setMeta({ calendarSnap: CALENDAR_PART.cleanCalendarSnap(value) }); renderCalendar(); }));
+      listen(calendarHoursToggle, "click", () => {
+        const hours = CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours);
+        store.setMeta({ calendarHours: { ...hours, on: !hours.on } });
+        renderCalendar();
+      });
       listen(calendarPrev, "click", () => changeCalendarCursor(-1));
       listen(calendarNext, "click", () => changeCalendarCursor(1));
       listen(calendarToday, "click", () => { store.setMeta({ calendarCursor: calendarTodayKey() }); renderCalendar(); });
@@ -13082,6 +13665,7 @@
         { id: "reminder-alert-settings", label: "Reminder sounds & quiet hours…", icon: "volume-2", run: askCalendarAlertSettings },
         { id: "agenda-visibility-defaults", label: "Zen Agenda visibility defaults…", icon: "calendar-check", run: askAgendaVisibilityDefaults },
         { sep: true },
+        { icon: "clock", label: "Visible hours: " + (CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours).on ? calendarHoursText(store.meta.calendarHours).long : "all 24") + "…", action: () => queueMicrotask(askCalendarHours) },
         { icon: "globe", label: "Display time zone: " + (calendarDisplayZone() || "Local"), action: () => queueMicrotask(askCalendarDisplayZone) },
         { icon: "clock", label: "When am I free?…", action: () => queueMicrotask(askCalendarFreeSlots) },
         { sep: true },
@@ -13703,7 +14287,7 @@
         native.value = cur;
         const hexField = h("input", { type: "text", class: "zn-field zn-hex-field", spellcheck: "false", maxlength: "7", placeholder: "#rrggbb", "aria-label": "Color as #rrggbb" });
         hexField.value = cur;
-        const quick = h("div", { class: "zn-quick" });
+        const quick = h("div", { class: "zn-quick zn-flow" });
         const set = (hex) => {
           cur = hex;
           native.value = hex;
@@ -14614,7 +15198,7 @@
         const m = h("div", { class: "zn-menu", role: "menu" });
         const menuItems = normalizeContextMenuItems(items);
         const focusFirstEnabled = () => {
-          const first = [...m.querySelectorAll("button")].find((button) => !button.disabled && button.getAttribute("aria-disabled") !== "true");
+          const first = [...m.querySelectorAll("button, input")].find((button) => !button.disabled && button.getAttribute("aria-disabled") !== "true");
           first?.focus({ preventScroll: true });
         };
         // One entry list per level: an item with `group` opens its entries in place (with a Back row) so a long
@@ -14673,6 +15257,24 @@
                 crow.append(add);
                 m.append(crow);
               }
+            } else if (it.slider) {
+              // A value chosen with a slider, shown while the menu stays open (the calendar size, OW-03). `state()`
+              // says what is set now: { auto, value, text }. `input(value)` sets a value, `fit()` goes back to automatic.
+              const sl = it.slider;
+              const input = h("input", { type: "range", class: "zn-range", min: String(sl.min), max: String(sl.max), step: "1", "aria-label": sl.label });
+              const out = h("span", { class: "zn-quick-value", "aria-live": "polite" });
+              const fit = h("button", { type: "button", class: "zn-chip zn-menu-slider-fit" }, sl.fitLabel);
+              const show = () => {
+                const now = sl.state();
+                input.value = String(now.value);
+                out.textContent = now.text;
+                fit.classList.toggle("is-on", !!now.auto);
+                fit.setAttribute("aria-pressed", now.auto ? "true" : "false");
+              };
+              input.addEventListener("input", () => { sl.input(Number(input.value)); show(); });
+              fit.addEventListener("click", () => { sl.fit(); show(); });
+              show();
+              m.append(h("div", { class: "zn-menu-slider" }, h("div", { class: "zn-menu-slider-row" }, input, out), fit));
             } else if (it.heading) {
               // Informational rows are not actions and never enter the keyboard focus order.
               m.append(h("div", { class: "zn-menu-item zn-menu-head", role: "presentation", "aria-disabled": "true" }, it.label));
@@ -14723,6 +15325,8 @@
             return;
           }
           if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(ev.key)) return;
+          // On a slider these keys change its value.
+          if (ev.target?.localName === "input") return;
           const btns = [...m.querySelectorAll("button")].filter((button) => !button.disabled && button.getAttribute("aria-disabled") !== "true");
           if (!btns.length) return;
           const at = btns.indexOf(ev.target?.closest?.("button"));
@@ -14800,7 +15404,10 @@
       let cardRO = null;
       let rafFit = 0;
       let fitting = false;
-      const FIT_PROPS = ["position", "left", "top", "width", "height", "maxWidth", "maxHeight"];
+      const FIT_PROPS = ["position", "left", "top", "width", "height", "minWidth", "maxWidth", "maxHeight"];
+      // The size a card would have with nothing holding it back. scrollWidth / scrollHeight leave out the card's
+      // border, so a card set to exactly that size was two pixels short and scrolled.
+      const naturalSide = (outer, inner, scroll) => Math.max(outer || 0, (scroll || 0) + (inner > 0 && outer > inner ? outer - inner : 0));
       function fitCard() {
         if (!dialog) return null;
         const card = dialog.querySelector(".zn-dialog-card");
@@ -14824,7 +15431,12 @@
           return { spill: false, left: 0, top: 0, width: 0, height: 0, scroll: true };
         if (viewport.width > 0)
           card.style.maxWidth = "min(34em, " + Math.max(120, viewport.width - 12) + "px)";
-        const size = { width: Math.max(card.offsetWidth || 0, card.scrollWidth || 0), height: Math.max(card.offsetHeight || 0, card.scrollHeight || 0) };
+        // Measured without scrollbars: one that is only there because the card is still held at the sheet's height
+        // takes width, and what was measured beside it no longer fits once it is gone (the table grid grows taller
+        // with every pixel of width, so the scrollbar came back and with it a sideways one).
+        card.style.overflow = "hidden";
+        const size = { width: naturalSide(card.offsetWidth, card.clientWidth, card.scrollWidth), height: naturalSide(card.offsetHeight, card.clientHeight, card.scrollHeight) };
+        card.style.overflow = "";
         const sheet = { left: sr.left, top: sr.top, width: sr.width, height: sr.height };
         // If the platform cannot raise the dialog, keep it within the panel
         // rather than allowing an invisible spill behind a browser surface.
@@ -14838,6 +15450,10 @@
           card.style.top = fit.top + "px";
           card.style.width = fit.width + "px";
           card.style.height = fit.height + "px";
+          // The style sheet's min-width is a share of the overlay. Once the card is positioned that share is taken
+          // from the overlay with its padding, 24px more than was measured: the card came out wider than planned,
+          // off centre, and past the window edge when the sheet stands at that edge.
+          card.style.minWidth = "0";
           card.style.maxWidth = "none";
           card.style.maxHeight = "none";
         }
@@ -15172,6 +15788,10 @@
         return card;
       }
       const chip = (label, on = false) => h("button", { type: "button", class: "zn-chip" + (on ? " is-on" : "") }, label);
+      // The controls of one setting (minus, value, plus; slider, value, reset) are one unit: beside the label when there
+      // is room, below it as a whole when not (a larger text size, a narrow sheet). Loose in the row they broke apart:
+      // the minus at the end of the label's line, the value and the plus on the next.
+      const controlGroup = (...controls) => h("span", { class: "zn-ctl" }, ...controls);
       // A choice row with more than three options, or with long option names, is a dropdown: a row of chips for those wraps
       // and overflows at larger text sizes. Short sets (On/Off, Plain/Filled/Outlined) stay chips.
       const choiceIsDropdown = (choices) => choices.length > 3 || choices.some(([, text]) => String(text).length > 16);
@@ -15986,7 +16606,7 @@
         // A list of buttons inside the sheet, not a native <select>: its popup is a separate window, so
         // clicking an option counts as a click outside the sheet and closes it.
         let chosen = lastCodeLang;
-        const list = h("div", { class: "zn-quick zn-aligns", role: "listbox", "aria-label": "Highlight as" });
+        const list = h("div", { class: "zn-quick zn-aligns zn-flow", role: "listbox", "aria-label": "Highlight as" });
         const drawLangs = () => {
           list.replaceChildren();
           for (const [v, label] of CODE_LANGS) {
@@ -16035,7 +16655,8 @@
         const drawAligns = () => {
           alignBox.replaceChildren();
           for (let i = 0; i < colCount(); i++) {
-            const row = h("div", { class: "zn-quick-row" }, h("span", { class: "zn-quick-label" }, "Column " + (i + 1)));
+            const choices = h("div", { class: "zn-set-chips" });
+            const row = h("div", { class: "zn-quick-row" }, h("span", { class: "zn-quick-label" }, "Column " + (i + 1)), choices);
             for (const [v, text] of [["left", "Left"], ["center", "Centre"], ["right", "Right"]]) {
               const b = chip(text, aligns[i] === v);
               b.setAttribute("aria-pressed", aligns[i] === v ? "true" : "false");
@@ -16043,7 +16664,7 @@
                 aligns[i] = aligns[i] === v ? "" : v;
                 drawAligns();
               });
-              row.append(b);
+              choices.append(b);
             }
             alignBox.append(row);
           }
@@ -16153,17 +16774,19 @@
               const plus = iconButton("plus", "Larger");
               minus.addEventListener("click", () => write(o, stepOption(o, value, -1)));
               plus.addEventListener("click", () => write(o, stepOption(o, value, 1)));
-              row.append(minus, h("span", { class: "zn-quick-value" }, `${value}${o.unit}`), plus);
+              row.append(controlGroup(minus, h("span", { class: "zn-quick-value" }, `${value}${o.unit}`), plus));
             } else {
               if (choiceIsDropdown(o.choices)) {
                 row.dataset.dropdown = "true";
                 row.append(choiceDropdown(o, value, (v) => write(o, v)));
               } else {
+                const choices = h("div", { class: "zn-set-chips" });
                 for (const [v, text] of o.choices) {
                   const b = chip(text, value === v);
                   b.addEventListener("click", () => write(o, v));
-                  row.append(b);
+                  choices.append(b);
                 }
+                row.append(choices);
               }
             }
             body.append(row);
@@ -16227,7 +16850,9 @@
             show();
           });
           show();
-          return h("div", { class: "zn-set-row" }, h("span", { class: "zn-quick-label" }, o.label), input, out, theme);
+          const controls = controlGroup(input, out, theme);
+          controls.classList.add("zn-ctl-fill");
+          return h("div", { class: "zn-set-row" }, h("span", { class: "zn-quick-label" }, o.label), controls);
         }
         function colorRow(o) {
           const stored = () => (LOOK_HEX.test(getPref(o.pref, "").trim()) ? getPref(o.pref, "").trim().toLowerCase() : "");
@@ -16281,7 +16906,7 @@
           });
           panel.append(h("label", { class: "zn-set-sub" }, h("span", {}, "Hue"), sh), h("label", { class: "zn-set-sub" }, h("span", {}, "Saturation"), ss), h("label", { class: "zn-set-sub" }, h("span", {}, "Lightness"), sl), hexIn);
           paint();
-          return h("div", { class: "zn-set-item" }, h("div", { class: "zn-set-row" }, h("span", { class: "zn-quick-label" }, o.label), swatch, theme), panel);
+          return h("div", { class: "zn-set-item" }, h("div", { class: "zn-set-row" }, h("span", { class: "zn-quick-label" }, o.label), controlGroup(swatch, theme)), panel);
         }
         function simpleRow(o) {
           const value = readValue(o);
@@ -16310,7 +16935,7 @@
               writeValue(o, stepOption(o, value, 1));
               redraw();
             });
-            row.append(minus, h("span", { class: "zn-quick-value" }, `${value}${o.unit}`), plus);
+            row.append(controlGroup(minus, h("span", { class: "zn-quick-value" }, `${value}${o.unit}`), plus));
           } else if (o.kind === "text") {
             const input = h("input", { type: "text", class: "zn-field", spellcheck: "false", "aria-label": o.label });
             input.value = String(value ?? "");
@@ -16442,7 +17067,7 @@
               draw();
               applyState();
             });
-            body.append(h("div", { class: "zn-quick-row" }, h("span", { class: "zn-quick-label" }, r.label), btn, reset));
+            body.append(h("div", { class: "zn-quick-row" }, h("span", { class: "zn-quick-label" }, r.label), controlGroup(btn, reset)));
           }
         }
         draw();
@@ -16997,6 +17622,14 @@
           const splitRO = new RO(scheduleAllLayout);
           splitRO.observe(allLayout);
           cleanups.push(() => splitRO.disconnect());
+          // The box the calendar is drawn in changes without the sheet changing: the splitter is dragged, the toolbar
+          // above it takes another row, the text size is changed. What is fitted to it follows (OW-03). Only the fit
+          // is checked here: the layout pass would put the splitter back to the stored share in the middle of a drag.
+          const fitRO = new RO(scheduleCalendarFit);
+          fitRO.observe(calendarContent);
+          calendarFitWatch = fitRO;
+          if (calendarFitWatched) fitRO.observe(calendarFitWatched);
+          cleanups.push(() => { calendarFitWatch = null; fitRO.disconnect(); });
         }
       } catch (_) {}
       listen(chipAll, "contextmenu", (e) => {
@@ -18289,7 +18922,7 @@
         window.clearTimeout(findTimer);
         window.clearTimeout(graceTimer);
         window.clearTimeout(openTimer);
-        for (const id of [rafChrome, rafList, rafLayout, rafSync, rafAllLayout]) if (id) window.cancelAnimationFrame(id);
+        for (const id of [rafChrome, rafList, rafLayout, rafSync, rafAllLayout, rafCalendarFit]) if (id) window.cancelAnimationFrame(id);
         window.removeEventListener("mousedown", onOutsidePress, true);
         window.removeEventListener("mousedown", onPress, true);
         window.removeEventListener("mouseup", onRelease, true);
@@ -18429,15 +19062,19 @@
     // shared by every bar (main panel, Triple View bottom bar, Super Pin). So the state lives here, not in
     // each adapter, and only the owner may change or release it. (Per-adapter copies went stale when another
     // bar released the variable, which put the sheet below the panel and overcounted the free height.)
-    const SLOT = { owner: null, px: 0, gap: false, quad: false, pseudo: false, up: -1, suspended: null };
+    // `strip` / `frac` / `fracUp`: the gap is only the thin strip of a folded sheet, the split of the band that
+    // folded (its upper part as a fraction), and the strip's own upper part that goes with it (see gapFrac).
+    // `moved`: an edge of the gap was dragged, so how it is divided between the two panels is the user's. Until then
+    // (and again after a size or reset action) the gap is centred on the divider every time it is asked for.
+    const SLOT = { owner: null, px: 0, gap: false, quad: false, pseudo: false, up: -1, suspended: null, strip: false, frac: -1, fracUp: -1, moved: false };
     function releaseSlot() {
       SLOT.suspended = null;
       if (!SLOT.owner && !SLOT.px) return;
       const r = document.documentElement;
       SLOT.owner = null;
       SLOT.px = 0;
-      SLOT.gap = SLOT.quad = SLOT.pseudo = false;
-      SLOT.up = -1;
+      SLOT.gap = SLOT.quad = SLOT.pseudo = SLOT.strip = SLOT.moved = false;
+      SLOT.up = SLOT.frac = SLOT.fracUp = -1;
       r.style.removeProperty("--zentral-notes-panel-reserve");
       r.style.removeProperty("--zentral-notes-gap");
       r.style.removeProperty("--zentral-notes-gap-up");
@@ -18472,19 +19109,36 @@
         const v = parseFloat(document.documentElement.style.getPropertyValue("--zentral-notes-gap-up"));
         return Number.isFinite(v) && v >= 0 ? v : -1;
       }
-      // No explicit edge position: an open gap keeps the ratio it has (so a resize or a swap never moves Notes
-      // relative to the panels); a fresh gap is split EVENLY, the divider sits in the middle of Notes and both
-      // panels give (and, on close, take back) the same room.
-      function keptGapUp(px) {
-        const cur = SLOT.owner === api && SLOT.gap && SLOT.px > 0 ? liveGapUp() : -1;
-        return cur >= 0 ? Math.round(px * Math.min(1, cur / SLOT.px)) : Math.round(px / 2);
+      // The upper part of the gap this bar holds, as a fraction of the gap; -1 when it holds none. A sheet folded to
+      // its thin strip keeps the gap, but the strip is too low to carry the split of the band (10 px hold it to one
+      // tenth: 213 of 385 came back as 231, and a sheet whose top edge had been dragged reopened 18 px higher). The
+      // band's own fraction is therefore kept beside the strip and used for as long as the strip still has the split
+      // it was given with it; a swap of the panels mirrors both (see watch). Anything else falls back to the strip.
+      function gapFrac() {
+        if (SLOT.owner !== api || !SLOT.gap || !(SLOT.px > 0)) return -1;
+        const cur = liveGapUp();
+        if (cur < 0) return -1;
+        return SLOT.strip && SLOT.frac >= 0 && cur === SLOT.fracUp ? SLOT.frac : Math.min(1, cur / SLOT.px);
       }
-      // Union of every visible page of the panel (one in a normal panel, two in Triple View).
+      // No explicit edge position. A gap whose edge was dragged keeps the ratio it has (so a resize or a swap never
+      // moves Notes relative to the panels). Any other gap is split EVENLY: the divider sits in the middle of Notes
+      // and both panels give (and, on close, take back) the same room. The suite answers with what a panel on its
+      // floor could really give, and that answer is not a ratio to keep: kept, a pair divided 30 / 70 whose panel
+      // grew by 100 px had its band 18 px off the place a new band takes, the suite took it for a dragged one and
+      // replaced the saved split when Notes closed.
+      function keptGapUp(px) {
+        const frac = SLOT.moved ? gapFrac() : -1;
+        return frac >= 0 ? Math.round(px * frac) : Math.round(px / 2);
+      }
+      const visiblePages = () => [...(slider()?.querySelectorAll(":scope > browser") || [])].filter((x) => !x.hidden && x.getClientRects().length);
+      // Union of every visible page of the panel (one in a normal panel, two in Triple View). A page of Triple View
+      // stays a page however low it is: dropping one under 40 px made the union jump to the other page alone (or to
+      // nothing), and the slot that had squeezed it was then given up, taken again and laid out in the wrong place.
       function pageSpan() {
-        const rects = [...(slider()?.querySelectorAll(":scope > browser") || [])]
-          .filter((x) => !x.hidden && x.getClientRects().length)
-          .map((x) => x.getBoundingClientRect())
-          .filter((r) => r.width > 40 && r.height > 40);
+        const rects = visiblePages()
+          .map((x) => ({ r: x.getBoundingClientRect(), slot: x.hasAttribute("data-bgalazka-triple-slot") }))
+          .filter(({ r, slot }) => r.width > 40 && (r.height > 40 || slot))
+          .map(({ r }) => r);
         if (!rects.length) return { left: 0, top: 0, width: 0, height: 0, bottom: 0 };
         const left = Math.min(...rects.map((r) => r.left)), top = Math.min(...rects.map((r) => r.top));
         const right = Math.max(...rects.map((r) => r.right)), bottom = Math.max(...rects.map((r) => r.bottom));
@@ -18499,6 +19153,13 @@
         // second time or each layout pass would progressively collapse the Notes band. A dock/quad reserve,
         // in contrast, is outside the browser union and must be added back.
         return pagesWithoutSlotHeight({ pageHeight: h2, slotPx: SLOT.px, slotKind: SLOT.gap ? "gap" : "dock" });
+      }
+      // What the pages share while nothing lies between them: their heights now plus the gap they gave up
+      // (the bars and the divider are not part of it).
+      function pagesRoom() {
+        let sum = 0;
+        for (const page of visiblePages()) sum += page.getBoundingClientRect().height || 0;
+        return sum + (SLOT.gap ? SLOT.px : 0);
       }
       const api = {
         position: "absolute",
@@ -18540,8 +19201,9 @@
           if (SLOT.gap) {
             const cs = slider()?.style;
             const t = parseFloat(cs?.getPropertyValue?.("--bgalazka-top-share")), b = parseFloat(cs?.getPropertyValue?.("--bgalazka-bottom-share"));
-            if (Number.isFinite(t)) roomUp = Math.max(0, t - GAP_PANEL_MIN_PX);
-            if (Number.isFinite(b)) roomDown = Math.max(0, b - GAP_PANEL_MIN_PX);
+            const floor = gapPageFloor(pagesRoom());
+            if (Number.isFinite(t)) roomUp = Math.max(0, t - floor);
+            if (Number.isFinite(b)) roomDown = Math.max(0, b - floor);
           }
           return { px: SLOT.px, base: pagesWithoutSlot(), gap: SLOT.gap, up: SLOT.gap ? up : 0, down: SLOT.gap ? SLOT.px - up : 0, roomUp, roomDown };
         },
@@ -18576,12 +19238,21 @@
           // Only the owner may give the reserve back; a bar that holds nothing leaves another bar's slot alone.
           if (!wants && SLOT.owner !== api) return false;
           const base = pagesWithoutSlot();
-          const px = !wants ? 0 : wantPx > 0 ? clampSlotPx(base, wantPx) : strip > 0 && base > 200 ? Math.round(strip) : slotPx(base, fraction);
+          // Between the pages the height also has to leave each page its floor (gapMaxPx); the thin hover strip never reaches it.
+          const fit = between ? (v) => (v > 0 ? clampGapPx(v, pagesRoom()) : v) : (v) => v;
+          const asStrip = wants && !(wantPx > 0) && strip > 0 && base > 200;
+          const px = !wants ? 0 : wantPx > 0 ? fit(clampSlotPx(base, wantPx)) : asStrip ? Math.round(strip) : fit(slotPx(base, fraction));
           const up = !between || px <= 0 ? -1 : wantUp >= 0 ? Math.min(Math.round(wantUp), px) : upFrac >= 0 ? Math.round(px * Math.min(1, upFrac)) : keptGapUp(px);
+          // The split is the user's from the first drag of an edge that changes what is on screen (a press that moves
+          // nothing does not count) until a size or reset action centres the gap again.
+          const held = SLOT.owner === api && SLOT.gap && SLOT.px > 0;
+          const moved = !between || px <= 0 || upFrac >= 0 ? false : wantUp >= 0 ? (held && SLOT.moved) || px !== SLOT.px || up !== liveGapUp() : held && SLOT.moved;
+          // Read before the slot is rewritten below: what the strip has to remember of the band it replaces.
+          const keep = between && asStrip && px > 0 ? (upFrac >= 0 ? Math.min(1, upFrac) : gapFrac()) : -1;
           const pseudo = !between && px > 0 && pseudoOk;
           const quad = !between && px > 0 && (pseudo || rootEl.hasAttribute("bgalazka-triple-view"));
           const hasQuad = rootEl.hasAttribute("bgalazka-quad-view");
-          if (SLOT.owner === api && px === SLOT.px && between === SLOT.gap && quad === SLOT.quad && pseudo === SLOT.pseudo && quad === hasQuad && up === SLOT.up)
+          if (SLOT.owner === api && px === SLOT.px && between === SLOT.gap && quad === SLOT.quad && pseudo === SLOT.pseudo && quad === hasQuad && up === SLOT.up && moved === SLOT.moved)
             return quad || (between && px > 0);
           if (px <= 0) {
             const stay = SLOT.suspended === api;
@@ -18595,6 +19266,10 @@
           SLOT.quad = quad;
           SLOT.pseudo = pseudo;
           SLOT.up = up;
+          SLOT.moved = moved;
+          SLOT.strip = between && asStrip;
+          SLOT.frac = SLOT.strip ? keep : -1;
+          SLOT.fracUp = SLOT.strip ? up : -1;
           if (between && up >= 0) rootEl.style.setProperty("--zentral-notes-gap-up", up + "px");
           else rootEl.style.removeProperty("--zentral-notes-gap-up");
           if (between) rootEl.setAttribute("bgalazka-notes-gap", "true");
@@ -18716,16 +19391,29 @@
             if (own) ro.observe(own);
           };
           observeAll();
+          // The suite has just mirrored --zentral-notes-gap-up (the panels traded places): the split a folded sheet
+          // keeps beside its strip is mirrored with it, or the sheet would reopen on the wrong side of the divider.
+          const swapped = (event) => {
+            if (SLOT.owner === api && SLOT.strip && SLOT.frac >= 0) {
+              SLOT.frac = 1 - SLOT.frac;
+              SLOT.fracUp = SLOT.px - SLOT.fracUp;
+            }
+            cb(event);
+          };
           window.addEventListener("resize", cb);
-          document.addEventListener("zentral-triple-swapped", cb);
+          document.addEventListener("zentral-triple-swapped", swapped);
           return () => {
             ro.disconnect();
             observeAll = () => {};
             window.removeEventListener("resize", cb);
-            document.removeEventListener("zentral-triple-swapped", cb);
+            document.removeEventListener("zentral-triple-swapped", swapped);
           };
         },
         rewatch: () => observeAll(),
+        // The panel suite rebuilt this bar in place (see syncBars): the same sheet goes on with the new element.
+        rebind(next) {
+          barEl = next;
+        },
         // True while the Zentral panel is slid away by its own "hide when not hovered" (its bars stay in the DOM).
         panelHidden() {
           const r = document.documentElement;
@@ -19223,9 +19911,11 @@
       });
       // The sidebar guards are bound at startup, so a placeholder can be used before the notes are loaded. Anything
       // that writes waits for the store: opening it reads the folder afresh and would drop a note created earlier.
+      // A folder that cannot be reached is tried again (storeWhenReady): the action runs when the notes are there,
+      // it is not dropped after one failed attempt.
       const withStore = (run) => {
         if (storeReady) return run();
-        ensureStore().then(() => { if (!disposed) run(); }).catch(warn);
+        storeWhenReady().then(() => { if (!disposed) run(); }).catch(warn);
       };
       const quitObserver = {
         observe() {
@@ -21977,9 +22667,14 @@
           // Includes a sheet folded to its own reveal strip. A folded sheet still owns the
           // window-wide Notes instance and must be closed before another host can open one.
           held: () => !!sheet?.held(),
-          visible: () => el.isConnected && !panelsHidden() && el.getClientRects().length > 0,
+          visible: () => binding.el.isConnected && !panelsHidden() && binding.el.getClientRects().length > 0,
           // The bar exists on screen or slid away with an autohidden panel (a hidden panel keeps its bars).
-          present: () => el.isConnected && el.getClientRects().length > 0,
+          present: () => binding.el.isConnected && binding.el.getClientRects().length > 0,
+          // The suite replaced the bar element (same place, same kind): keep the sheet, its note, caret and folded state.
+          rebind(next) {
+            binding.el = next;
+            adapter.rebind(next);
+          },
           // A request from this bar: it lands on the host chooseHost picks (Triple View: the bar between the
           // cards for both bars), brings an autohidden panel out first, and moves Notes away from any other
           // bar or the card. Resolves to the binding (or the card) that now shows the sheet.
@@ -22179,11 +22874,20 @@
         attachObservers(); // a slider or panel root built (or rebuilt) since the last look is watched from now on
         const found = discoverBars();
         for (const [el, b] of [...bindings]) {
-          if (!el.isConnected || !found.some((f) => f.el === el)) {
-            b.destroy();
-            bindings.delete(el);
-            if (lastUsed === b) lastUsed = null;
+          if (el.isConnected && found.some((f) => f.el === el)) continue;
+          // "Swap top and bottom panels" (and a second panel that is recreated) builds a NEW bar for the second panel
+          // in the same place. Closing the sheet with the old bar and opening another on the new one lost the caret,
+          // an open dialog and the list position, and brought a sheet that was folded away back fully open (OW-26).
+          // The sheet lives in the slider, which is not rebuilt, so it simply continues on the new bar.
+          const heir = b.kind === "triple" && b.held() ? found.find((f) => f.kind === "triple" && !bindings.has(f.el)) : null;
+          bindings.delete(el);
+          if (heir) {
+            b.rebind(heir.el);
+            bindings.set(heir.el, b);
+            continue;
           }
+          b.destroy();
+          if (lastUsed === b) lastUsed = null;
         }
         const show = prefBool(PREF.SHOW_BUTTON, true);
         for (const f of found) {
@@ -22805,7 +23509,7 @@
       // Opt-in test seam: the real per-window coordinator and native adapters,
       // without opening a Notes sheet or publishing privileged objects normally.
       if (window.__zentralNotesTestSeam) {
-        const sidebar = { store, ensureStore, zenApi, zen, agendaApi, agendaController, tick, reminders,
+        const sidebar = { store, ensureStore, storeWhenReady, withStore, zenApi, zen, agendaApi, agendaController, tick, reminders,
           onAgendaMouse, onAgendaSelect, onAgendaTabEvent, onAgendaAttr, agendaEnsureVisuals, onAgendaFolderMenuShowing,
           onAgendaFolderMenuHidden, onAgendaTabMenuShowing };
         window.__zentralNotesTestSeam.sidebar = sidebar;

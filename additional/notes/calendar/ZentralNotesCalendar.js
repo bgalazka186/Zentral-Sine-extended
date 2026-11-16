@@ -558,6 +558,7 @@
   }
   // Side-by-side columns for the TIMED events of one day, so overlapping events never hide each other.
   // Returns [{ item, lane, lanes, startMin, endMin }]: `lanes` = columns in the item's overlap cluster (width = 1/lanes).
+  // startMin / endMin are minutes on the clock of that day (in `zone`, or the computer's zone), cut off at its ends.
   function layoutDay(items, day, zone = "") {
     const dateKey = localDateKey(day), bounds = zone ? zonedDayBounds(dateKey, zone) : [day, addDays(day, 1)];
     const d0 = bounds[0], d1 = bounds[1];
@@ -575,8 +576,7 @@
         r.lane = lane;
       }
       for (const r of cluster) out.push({ item: r.item, lane: r.lane, lanes: laneEnds.length,
-        startMin: zone ? Math.round(zonedMinuteOfDay(r.s, dateKey, zone)) : Math.round((r.s - d0) / MIN),
-        endMin: zone ? Math.round(zonedMinuteOfDay(r.e, dateKey, zone)) : Math.round((r.e - d0) / MIN) });
+        startMin: Math.round(zonedMinuteOfDay(r.s, dateKey, zone)), endMin: Math.round(zonedMinuteOfDay(r.e, dateKey, zone)) });
       cluster = []; clusterEnd = -Infinity;
     };
     for (const r of rows) {
@@ -1040,6 +1040,12 @@
     const x = item?.x || {}, id = String(x.historyId || ""), key = String(x.key || "");
     return x.src === "list" && !!id && !!x.noteId && key === agendaMirrorLineId(id) && item.id === noteLineItemId(x.noteId, key);
   }
+  // The reverse of mirroredItem: the reminder a mirrored line stands for, as it was before a note carried its line
+  // (same id, same details, no note). null for anything that is not a mirrored reminder.
+  function unmirroredItem(item) {
+    if (!isMirroredAgendaItem(item)) return null;
+    return cleanItem({ ...item, id: item.x.historyId, etag: "", x: { ...item.x, src: "manual", noteId: "", heading: "", key: "", legacyKey: "", historyId: "" } }, 0);
+  }
   function removeMirroredAgendaLine(body, item) {
     const text = String(body || "");
     if (!isMirroredAgendaItem(item)) return { body: text, changed: false };
@@ -1250,29 +1256,61 @@
   // `waitMs` (with the caller's timers) limits how long a turn waits for the one before it: a window that was closed in
   // the middle of its turn never finishes it, and without a limit every later turn for that key would wait for ever.
   // After the limit the turn runs on its own (what every turn did before the registry was shared) and `onTimeout(key)`
-  // is told once. 0 = no limit.
+  // is told once. 0 = no limit. One call can name its own limit (third argument `{ waitMs }`): reading a whole folder
+  // takes longer than one save.
+  // A turn whose window was closed is never finished: the browser stops running the promise steps of a closed window,
+  // so its gate stays pending for ever (the gate itself can still be touched; browser windows and system modules share
+  // one compartment, nothing turns into a dead object). `isAlive` is how the others find out: the owner's own answer
+  // travels on the gate, and a gate whose owner says "gone" counts as released at once. A turn that is already waiting
+  // asks once a second, so a window closed in the middle of a long turn costs the others a second, not the whole limit.
+  // A gate that cannot even be touched (a dead object after all) is treated the same way and never fails the waiter.
   const localHistoryLocks = new Map();
-  function createHistoryCoordinator(registry = localHistoryLocks, { waitMs = 0, setTimer = null, clearTimer = null, onTimeout = null } = {}) {
-    const limited = waitMs > 0 && typeof setTimer === "function";
-    const waitFor = (previous, key) => !limited ? previous : new Promise((resolve) => {
-      let timer = null, over = false;
-      const end = (late) => {
-        if (over) return;
-        over = true;
-        if (late) { try { onTimeout?.(key); } catch (_) {} }
-        else if (timer !== null) { try { clearTimer?.(timer); } catch (_) {} }
-        resolve();
-      };
-      timer = setTimer(() => end(true), waitMs);
-      Promise.resolve(previous).then(() => end(false), () => end(false));
-    });
-    return async (key, work) => {
+  const HISTORY_GATE_PROBE_MS = 1000;
+  const HISTORY_GATE_OWNER = "zentralTurnOwnerAlive";
+  const historyGateGone = (gate) => {
+    try {
+      const alive = gate[HISTORY_GATE_OWNER];
+      return typeof alive === "function" ? alive() === false : (void gate.then, false);
+    } catch (_) { return true; }
+  };
+  function createHistoryCoordinator(registry = localHistoryLocks, { waitMs = 0, setTimer = null, clearTimer = null, onTimeout = null, isAlive = null } = {}) {
+    const timed = typeof setTimer === "function";
+    const waitFor = (previous, key, limit) => {
+      if (historyGateGone(previous)) return undefined;
+      if (!timed) return previous;
+      return new Promise((resolve) => {
+        let timer = null, probe = null, over = false;
+        const end = (late) => {
+          if (over) return;
+          over = true;
+          for (const id of [timer, probe]) if (id !== null) { try { clearTimer?.(id); } catch (_) {} }
+          timer = probe = null;
+          if (late) { try { onTimeout?.(key); } catch (_) {} }
+          resolve();
+        };
+        try { Promise.resolve(previous).then(() => end(false), () => end(false)); } catch (_) { return end(false); }
+        if (limit > 0) timer = setTimer(() => { timer = null; end(true); }, limit);
+        if (limit > 0 && limit <= HISTORY_GATE_PROBE_MS) return;
+        const look = () => {
+          probe = null;
+          if (over) return;
+          if (historyGateGone(previous)) end(false);
+          else probe = setTimer(look, HISTORY_GATE_PROBE_MS);
+        };
+        probe = setTimer(look, HISTORY_GATE_PROBE_MS);
+      });
+    };
+    return async (key, work, { waitMs: ownWaitMs } = {}) => {
       const previous = registry.get(key);
       let release;
       const gate = new Promise((resolve) => { release = resolve; });
+      if (typeof isAlive === "function") { try { Object.defineProperty(gate, HISTORY_GATE_OWNER, { value: isAlive }); } catch (_) {} }
       registry.set(key, gate);
-      try { if (previous) await waitFor(previous, key); return await work(); }
-      finally {
+      try {
+        // A throw here means the gate could not even be looked at: the same as released.
+        if (previous) { try { await waitFor(previous, key, Number.isFinite(ownWaitMs) && ownWaitMs >= 0 ? ownWaitMs : waitMs); } catch (_) {} }
+        return await work();
+      } finally {
         try { if (registry.get(key) === gate) registry.delete(key); } catch (_) {}
         release();
       }
@@ -1606,7 +1644,7 @@
 
   // `beforeWrite` (optional, async) runs before every calendar write, outside the calendar lock. The note store uses it to
   // put pending note text on disk first, so `calendar.json` never refers to a note line that was not saved (UI4.7).
-  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null, beforeWrite = null }) {
+  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null, beforeWrite = null, noteFileState = null }) {
     const items = new Map();
     const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite, perf, withHistoryLock });
     const categoryDefs = new Map();
@@ -1615,6 +1653,7 @@
     let dirty = false, timer = null, chain = Promise.resolve(), retryCount = 0, pendingWrites = 0;
     let storage = { state: "unopened", error: "", backupPath: "" }, writeBlocked = false, protectedText = null;
     let baseline = { items: [], categories: [] };
+    let heldBack = false; // the last write left out records whose note text was not in its file
     const withCalendarLock = withHistoryLock || createHistoryCoordinator();
     const shown = (it) => !it.x.noteId || (!hidden.has(it.x.noteId) && (!isNoteVisible || isNoteVisible(it.x.noteId)));
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
@@ -1703,6 +1742,61 @@
       patch(items, captured.items, merged.items, (v) => v.id, "item");
       patch(categoryDefs, captured.categories, merged.categories, (v) => categoryKey(v.name), "category");
     }
+    // The note file and the calendar file are not one transaction, and the hook only TRIES to save the notes. A record
+    // must not start pointing at a note before that note is in its file: after a restart a record without its line is
+    // dropped by the note sync, and a record of a note that was never created stays hidden for good. `noteFileState(id)`
+    // says where the note stands: "saved" (the file has the text), "stale" (the file has older text), "absent" (no file).
+    // Until the note is saved, a write presents such a record in the form that does not need the note:
+    //   - a reminder that became a note line: the reminder itself (`unmirroredItem`), with its details of today;
+    //   - a record that is only linked to the note: without the link, and only while the note has no file at all;
+    //   - a line somebody typed: nothing, the text is all there is to it.
+    // `noteTextSaved()` brings the real records along once the note is saved. A record that already points at its note
+    // in the file is written as usual: a moved time or an edited detail never waits for the note.
+    // Returns id -> the version to present (null = none).
+    function withheld(captured) {
+      const held = new Map();
+      if (typeof noteFileState !== "function") return held;
+      const before = new Map(baseline.items.map((record) => [record.id, record])), asked = new Map();
+      const stateOf = (noteId) => {
+        if (!asked.has(noteId)) {
+          let fileState = "saved";
+          try { fileState = noteFileState(noteId); } catch (error) { safeWarn(error); }
+          asked.set(noteId, fileState === "stale" || fileState === "absent" ? fileState : "saved");
+        }
+        return asked.get(noteId);
+      };
+      const identity = (record) => String(record.x?.historyId || record.id);
+      const mine = new Set(), waiting = new Map(); // identity -> the held record
+      for (const record of captured.items) {
+        mine.add(record.id);
+        const noteId = record.x?.noteId, old = before.get(record.id) || null;
+        if (!noteId || old?.x?.noteId === noteId) continue;
+        const fileState = stateOf(noteId);
+        if (fileState === "saved") continue;
+        if (record.x.src === "manual") {
+          // Only linked to the note. Behind a note without a file it would be hidden after a restart: written with
+          // the link it had before (usually none).
+          if (fileState === "absent") held.set(record.id, cleanItem({ ...record, etag: "", x: { ...record.x, noteId: old?.x?.noteId || "", heading: old?.x?.heading || "" } }, 0));
+          continue;
+        }
+        held.set(record.id, old);
+        waiting.set(identity(record), record);
+      }
+      if (!waiting.size) return held;
+      const replaced = new Map(); // identity -> the record of the file that the held one took the place of
+      for (const old of baseline.items) if (!mine.has(old.id) && waiting.has(identity(old))) replaced.set(identity(old), old);
+      for (const [key, record] of waiting) {
+        const old = replaced.get(key) || null;
+        // The line was moved here from another note whose file still has it: that record stands as it is.
+        if (old && old.x.src !== "manual" && old.x.noteId && stateOf(old.x.noteId) !== "saved") { held.set(old.id, old); continue; }
+        // Otherwise the reminder itself, with its details of today (no note file has its line: a moved line whose
+        // old note was saved without it would be dropped there); failing that, the reminder as the file has it.
+        const reminder = unmirroredItem(record);
+        if (reminder && !mine.has(reminder.id) && !held.has(reminder.id)) held.set(reminder.id, reminder);
+        else if (old && old.x.src === "manual") held.set(old.id, old);
+      }
+      return held;
+    }
     function writeNow() {
       if (timer !== null) { clearTimer(timer); timer = null; }
       const dir = getDir();
@@ -1717,8 +1811,12 @@
       const task = chain.catch(() => {}).then(prepare).then(() => withCalendarLock(io.join(dir, ITEMS_FILE), async () => {
         try {
           if (writeBlocked) throw new Error("Calendar storage is protected because its existing file could not be read safely.");
-          const captured = snapshot(), remote = await readCalendarForWrite(dir, captured);
-          const merged = remote ? mergeCalendarSnapshots(baseline, captured, remote) : { ...captured, conflicts: [], safe: true };
+          const captured = snapshot(), held = withheld(captured);
+          // What this window presents to the file: its records, the held ones in the form that needs no note.
+          const local = !held.size ? captured : { categories: captured.categories,
+            items: [...captured.items.filter((record) => !held.has(record.id)), ...[...held.values()].filter(Boolean)] };
+          const remote = await readCalendarForWrite(dir, captured);
+          const merged = remote ? mergeCalendarSnapshots(baseline, local, remote) : { ...local, conflicts: [], safe: true };
           if (!merged.safe) {
             const backupPath = await backupLocalCalendar(dir, captured, remote);
             writeBlocked = true; storage = { state: "conflict", error: "Calendar edits conflict with changes from another window.", backupPath };
@@ -1729,10 +1827,14 @@
           perf?.recordBytes?.("calendar.bytes", text);
           await io.writeUTF8(io.join(dir, ITEMS_FILE), text, { tmpPath: io.join(dir, ITEMS_FILE + ".tmp") });
           baseline = JSON.parse(JSON.stringify({ items: merged.items, categories: merged.categories }));
-          applyMerged(captured, merged);
+          applyMerged(local, merged);
           for (const conflict of merged.conflicts) if (conflict.winner === "remote") emit("conflict", conflict.id, conflict);
           retryCount = 0; protectedText = null; storage = { state: "ready", error: "", backupPath: "" };
           if (dirty && timer === null && !writeBlocked) scheduleTimer(delayMs);
+          // Held records keep the store unsaved, without a timer of their own: they wait for `noteTextSaved()` or for
+          // the next change, so a note that cannot be saved is not tried again faster than its own retry.
+          heldBack = held.size > 0;
+          if (heldBack) dirty = true;
           return true;
         } catch (error) {
           dirty = true; retryCount++; safeWarn(error);
@@ -1774,7 +1876,7 @@
           }
           if (!exists || missingError) {
             if (dirty || pendingWrites) return state();
-            items.clear(); categoryDefs.clear(); hidden.clear(); dirty = false; writeBlocked = false;
+            items.clear(); categoryDefs.clear(); hidden.clear(); dirty = false; writeBlocked = false; heldBack = false;
             baseline = { items: [], categories: [] }; protectedText = null;
             storage = { state: "missing", error: "", backupPath: "" };
           } else {
@@ -1817,7 +1919,7 @@
           return state();
         }
         if (dirty || pendingWrites) return state();
-        items.clear(); categoryDefs.clear(); hidden.clear(); dirty = false; writeBlocked = false; retryCount = 0;
+        items.clear(); categoryDefs.clear(); hidden.clear(); dirty = false; writeBlocked = false; retryCount = 0; heldBack = false;
         for (const it of parsedItems) if (!items.has(it.id)) items.set(it.id, it);
         for (const category of parsedCategories) categoryDefs.set(categoryKey(category.name), category);
         baseline = snapshot(); protectedText = null;
@@ -1988,15 +2090,19 @@
       on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
       history,
       flush() { return Promise.all([writeNow(), history.flush()]); },
+      // The owner of the note files saved text: records that waited for it (see `withheld`) are written now, straight
+      // after the note as in every other save (no debounce: another window is about to read that note).
+      noteTextSaved() { if (heldBack && dirty && !writeBlocked && getDir()) writeNow().catch(() => {}); },
     };
   }
 
   // ---------- calendar view layout (roadmap T2.4a) ----------
   // Keep the orientation decision pure so the sheet can react to its actual available rectangle (not the
   // browser window alone), and the threshold behavior can be regression-tested without Gecko layout.
+  // The three looks of the style sheet (paddings and text sizes). Until 3.3.175 this was also the setting
+  // `meta.calendarDensity`, one for all views; the setting is now `calendarScale` (see "the size of the calendar").
   const CALENDAR_DENSITIES = Object.freeze(["comfortable", "compact", "extra-compact"]);
   function cleanCalendarDensity(value) { return CALENDAR_DENSITIES.includes(value) ? value : "comfortable"; }
-  function calendarDensityHourHeight(value) { return ({ comfortable: 54, compact: 44, "extra-compact": 36 })[cleanCalendarDensity(value)]; }
   const CALENDAR_LAYOUT_MODES = Object.freeze(["auto", "lr", "tb"]);
   function cleanCalendarLayout(value) { return CALENDAR_LAYOUT_MODES.includes(value) ? value : "auto"; }
   function calendarLayoutFor(mode, width, height) {
@@ -2046,10 +2152,13 @@
     // UNTIL is the last civil day of the series. `untilKey` is that day (YYYY-MM-DD, the value editors show);
     // `until` is its end in the system zone. Never derive the day from `until` by subtracting 24 hours: a 23-hour
     // day would give the day before.
+    // The end is the first instant of the NEXT day, asked for directly. Not "the start of the last day plus one day":
+    // where clocks go forward at midnight (Cuba, Lebanon, Egypt, Chile) such a day starts at 01:00, one day later is
+    // 01:00 again, and the first hour after the last day was still let through (for an all-day item: one more day).
     let until = 0, untilKey = "";
     if (o.UNTIL) {
       const u = /^(\d{4})(\d{2})(\d{2})/.exec(o.UNTIL);
-      if (u) { const last = new Date(+u[1], +u[2] - 1, +u[3]); until = addDays(last.getTime(), 1); untilKey = ymd(last); }
+      if (u) { const last = new Date(+u[1], +u[2] - 1, +u[3]); until = new Date(+u[1], +u[2] - 1, +u[3] + 1).getTime(); untilKey = ymd(last); }
     }
     const byday = o.BYDAY ? [...new Set(o.BYDAY.split(",").map((d) => DAY_CODES.indexOf(d.slice(-2))).filter((n) => n >= 0))].sort((a, b) => a - b) : [];
     return { freq: o.FREQ, interval, count, until, untilKey, byday };
@@ -2396,7 +2505,13 @@
   function workRange(day, work, zone = "") {
     const w = cleanWork(work), dateKey = localDateKey(day), date = parseYmd(dateKey);
     if (!date || !w.days.includes(date.getDay())) return null;
-    if (!zone) return [dayStart(day) + w.startMin * MIN, dayStart(day) + w.endMin * MIN];
+    if (!zone) {
+      // Clock times of that day in the computer's zone (09:00 is 09:00). Not midnight plus so many minutes: on a day
+      // the clocks change that is an hour off.
+      const at = (minute) => new Date(date.getFullYear(), date.getMonth(), date.getDate(), Math.floor(minute / 60), minute % 60).getTime();
+      const start = at(w.startMin), end = at(w.endMin);
+      return end > start ? [start, end] : null;
+    }
     const valid = cleanZone(zone);
     if (!valid) return null;
     const startText = p2(Math.floor(w.startMin / 60)) + ":" + p2(w.startMin % 60);
@@ -2419,8 +2534,16 @@
     }
     const busy = busyRanges(items.filter((it) => opts.blockAllDay || !isAllDay(it)), rangeFrom, rangeTo);
     const windows = [];
-    if (opts.work) {
-      for (let d = dayStart(from); d < to; d = addDays(d, 1)) { const r = workRange(d, opts.work, zone); if (r) windows.push([Math.max(r[0], rangeFrom), Math.min(r[1], rangeTo)]); }
+    // opts.hours = { startMin, endMin }: only inside these hours of every day (the hours the Week / Day grid is held
+    // to, OW-04). With opts.work as well, only what lies in both.
+    const hours = opts.hours ? cleanCalendarHours({ ...opts.hours, on: true }) : null;
+    const hoursOf = (d) => workRange(d, { days: [0, 1, 2, 3, 4, 5, 6], startMin: hours.startMin, endMin: hours.endMin }, zone);
+    if (opts.work || hours) {
+      for (let d = dayStart(from); d < to; d = addDays(d, 1)) {
+        let r = opts.work ? workRange(d, opts.work, zone) : hoursOf(d);
+        if (r && opts.work && hours) { const h = hoursOf(d); r = h ? [Math.max(r[0], h[0]), Math.min(r[1], h[1])] : null; }
+        if (r) windows.push([Math.max(r[0], rangeFrom), Math.min(r[1], rangeTo)]);
+      }
     } else windows.push([rangeFrom, rangeTo]);
     const need = Math.max(1, Math.round(minMin)) * MIN, out = [];
     for (const [ws, we] of windows) {
@@ -2433,6 +2556,187 @@
       if (we - cur >= need) out.push([cur, we]);
     }
     return out.filter((r) => r[1] > r[0]);
+  }
+
+  // ---------- the hours the Week / Day grid shows (OW-04) ----------
+  // Stored in meta.calendarHours as { on, startMin, endMin }, whole hours; off = the whole day. What is stored and
+  // makes no sense falls back to 08:00-20:00, and only `on: true` switches it on.
+  const DEFAULT_CALENDAR_HOURS = Object.freeze({ on: false, startMin: 480, endMin: 1200 });
+  function cleanCalendarHours(value) {
+    const o = value && typeof value === "object" ? value : {};
+    const hour = (v) => (typeof v === "number" || (typeof v === "string" && v.trim() !== "") ? Math.round(Number(v) / 60) * 60 : NaN);
+    let a = hour(o.startMin), b = hour(o.endMin);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || a < 0 || b > 1440 || b <= a) { a = DEFAULT_CALENDAR_HOURS.startMin; b = DEFAULT_CALENDAR_HOURS.endMin; }
+    return { on: o.on === true, startMin: a, endMin: b };
+  }
+  // The hours the grid has to show: the chosen ones, widened by whole hours until every timed item of the days in
+  // view lies inside. Off = 0..1440. The hours follow the times of the items, not the size of their boxes: a reminder
+  // at 19:50 lies inside 08:00-20:00 (the grid keeps its box inside), one at 20:00 sharp lies after it.
+  //   itemsInView  one entry per visible day. { day, entries }: [{ startMin, endMin, item }] in minutes on the clock
+  //                of that day, already cut off at its ends (the grid hands over what it draws from). Or
+  //                { day, items }: calendar items, laid out here for `day` in `zone`; a timed reminder counts as one
+  //                minute from its start. All-day and cancelled items never count.
+  //   opts.draft   { day, startMin, endMin } of a range that is being dragged out; it counts like an item.
+  // Returns { startMin, endMin, extendedTop, extendedBottom, top, bottom }. `top` / `bottom` say why the grid begins
+  // earlier / ends later than chosen: { item, day, startMin, endMin } of the entry that reaches furthest (item null
+  // for the draft), null where it was not widened.
+  function visibleHourRange(settingRange, itemsInView, zone = "", opts = {}) {
+    const set = cleanCalendarHours(settingRange);
+    if (!set.on) return { startMin: 0, endMin: 1440, extendedTop: false, extendedBottom: false, top: null, bottom: null };
+    let first = null, last = null;
+    const take = (startMin, endMin, item, day) => {
+      const a = Number(startMin), b = Number(endMin);
+      if (!Number.isFinite(a) || !Number.isFinite(b)) return;
+      const lo = Math.max(0, Math.min(1440, a)), hi = Math.max(lo, Math.min(1440, b));
+      if (!first || lo < first.startMin) first = { item, day, startMin: lo, endMin: hi };
+      if (!last || hi > last.endMin) last = { item, day, startMin: lo, endMin: hi };
+    };
+    for (const d of Array.isArray(itemsInView) ? itemsInView : []) {
+      if (!d || typeof d !== "object") continue;
+      if (Array.isArray(d.entries)) { for (const e of d.entries) if (e) take(e.startMin, e.endMin, e.item === undefined ? null : e.item, d.day); continue; }
+      if (!Array.isArray(d.items) || !Number.isFinite(d.day)) continue;
+      // layoutDay lays out events only: a timed reminder goes in as one minute from its start, and the original is
+      // handed back as the reason.
+      const originals = new Map();
+      const spans = d.items.filter((it) => it && it.start && !isAllDay(it)).map((it) => {
+        if (!isReminder(it)) return it;
+        const copy = { ...it, x: { ...(it.x || {}), kind: "event" }, end: { dateTime: iso(itemRange(it)[0] + MIN) } };
+        originals.set(copy, it);
+        return copy;
+      });
+      for (const e of layoutDay(spans, d.day, zone)) take(e.startMin, Math.max(e.endMin, e.startMin + 1), originals.get(e.item) || e.item, d.day);
+    }
+    if (opts?.draft) take(opts.draft.startMin, opts.draft.endMin, null, opts.draft.day);
+    const startMin = first ? Math.min(set.startMin, Math.floor(first.startMin / 60) * 60) : set.startMin;
+    const endMin = last ? Math.max(set.endMin, Math.ceil(last.endMin / 60) * 60) : set.endMin;
+    const extendedTop = startMin < set.startMin, extendedBottom = endMin > set.endMin;
+    return { startMin, endMin, extendedTop, extendedBottom, top: extendedTop ? first : null, bottom: extendedBottom ? last : null };
+  }
+  // A position in the grid <-> a minute of the day, for a grid that shows `range` ({ startMin, endMin }; none = the
+  // whole day) at `hourPx` px an hour. Everything the grid draws and every pointer position it reads goes through
+  // these two, so it cannot be drawn from one hour and measured from another.
+  const gridStartMin = (range) => (Number.isFinite(range?.startMin) ? range.startMin : 0);
+  const gridEndMin = (range) => (Number.isFinite(range?.endMin) ? range.endMin : 1440);
+  function gridOffsetOf(minute, hourPx, range) { return (Number(minute) - gridStartMin(range)) / 60 * hourPx; }
+  function gridMinuteAt(offsetPx, hourPx, range) {
+    const a = gridStartMin(range), b = gridEndMin(range), minute = a + Number(offsetPx) * 60 / hourPx;
+    return Number.isFinite(minute) ? Math.max(a, Math.min(b, minute)) : a;
+  }
+
+  // ---------- the size of the calendar (OW-03) ----------
+  // Stored in meta.calendarScale as { month, week, day, upcoming, agenda }; each is "auto" or a whole number of px.
+  //   week, day          the height of an hour. "auto": the hours the grid shows fill the timeline (fitHourHeight).
+  //   month              the height of a week. "auto": the six weeks fill the pane (the style sheet does that).
+  //   upcoming, agenda   lists have nothing to fit: "auto" is Comfortable, 44 Compact, 36 Extra compact.
+  // Per view: `comfortable` / `compact` / `extraCompact` are the px the three old steps stood for. A size at or over
+  // `comfortable` is drawn with the Comfortable look, at or over `compact` with Compact, under it with Extra compact.
+  const CALENDAR_SCALE_VIEWS = Object.freeze(["month", "week", "day", "upcoming", "agenda"]);
+  const HOUR_SCALE = Object.freeze({ min: 16, max: 120, comfortable: 54, compact: 44, extraCompact: 36 });
+  const LIST_SCALE = Object.freeze({ min: 36, max: 54, comfortable: 54, compact: 44, extraCompact: 36, steps: true });
+  const CALENDAR_SCALE_LIMITS = Object.freeze({ month: Object.freeze({ min: 44, max: 160, comfortable: 58, compact: 52, extraCompact: 44 }), week: HOUR_SCALE, day: HOUR_SCALE, upcoming: LIST_SCALE, agenda: LIST_SCALE });
+  const scaleDensityOf = (limits, px) => (px >= limits.comfortable ? "comfortable" : px >= limits.compact ? "compact" : "extra-compact");
+  // One view's size: "auto", or whole px inside the limits of that view. A number or digits (a slider hands over
+  // text) are a size; everything else fits.
+  function cleanCalendarScaleValue(view, value) {
+    const limits = Object.hasOwn(CALENDAR_SCALE_LIMITS, view) ? CALENDAR_SCALE_LIMITS[view] : null;
+    if (!limits) return "auto";
+    const n = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+    if (!Number.isFinite(n)) return "auto";
+    if (limits.steps) {
+      // A list has the three steps only; the comfortable one is the default and is stored as such.
+      const density = n >= (limits.comfortable + limits.compact) / 2 ? "comfortable" : n >= (limits.compact + limits.extraCompact) / 2 ? "compact" : "extra-compact";
+      return density === "comfortable" ? "auto" : density === "compact" ? limits.compact : limits.extraCompact;
+    }
+    return Math.max(limits.min, Math.min(limits.max, Math.round(n)));
+  }
+  // The px a named step stands for in a view ("auto" for Comfortable: the default).
+  function calendarScaleStep(view, density) {
+    const limits = Object.hasOwn(CALENDAR_SCALE_LIMITS, view) ? CALENDAR_SCALE_LIMITS[view] : null;
+    if (!limits || density === "comfortable" || !CALENDAR_DENSITIES.includes(density)) return "auto";
+    return density === "compact" ? limits.compact : limits.extraCompact;
+  }
+  // The whole setting. `legacyDensity` is the value of the old `calendarDensity` and is read only while no
+  // `calendarScale` is stored: Compact and Extra compact keep their sizes in every view; Comfortable, the default
+  // nobody chose, becomes the new default (as 54 px nobody would ever get it).
+  function cleanCalendarScale(value, legacyDensity) {
+    const out = {};
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      for (const view of CALENDAR_SCALE_VIEWS) out[view] = cleanCalendarScaleValue(view, value[view]);
+      return out;
+    }
+    const density = cleanCalendarDensity(legacyDensity);
+    for (const view of CALENDAR_SCALE_VIEWS) out[view] = calendarScaleStep(view, density);
+    return out;
+  }
+  // Which of the three looks a size is drawn with. A fitted Week or Day is always Comfortable (its header must not
+  // change its height with the hour that is fitted to what the header leaves). A fitted Month follows the height
+  // its weeks got, `measuredPx`; nothing measured = Comfortable.
+  function calendarScaleDensity(view, value, measuredPx) {
+    const limits = Object.hasOwn(CALENDAR_SCALE_LIMITS, view) ? CALENDAR_SCALE_LIMITS[view] : null;
+    if (!limits) return "comfortable";
+    const size = cleanCalendarScaleValue(view, value);
+    if (size !== "auto") return scaleDensityOf(limits, size);
+    const measured = Number(measuredPx);
+    return view === "month" && typeof measuredPx === "number" && measured > 0 ? scaleDensityOf(limits, measured) : "comfortable";
+  }
+  // The fitted hour: `hours` hours fill `availablePx` (the height of the timeline without the 2 px above the first
+  // label), in quarter px, so that under 24 hours no more than 6 px stay empty. Not under `opts.minPx` (an hour
+  // that can still be read, fitMinHourPx): then the timeline scrolls. Where nothing can be measured (a hidden pane,
+  // a test without a layout) an hour is 54 px, the comfortable hour of before.
+  const FIT_FALLBACK_HOUR_PX = 54, FIT_MIN_HOUR_PX = 18, FIT_MAX_HOUR_PX = 240;
+  function fitHourHeight(availablePx, hours, opts = {}) {
+    const room = typeof availablePx === "number" ? availablePx : NaN, n = typeof hours === "number" ? hours : NaN;
+    if (!(room > 0) || !(n > 0) || !Number.isFinite(room) || !Number.isFinite(n)) return FIT_FALLBACK_HOUR_PX;
+    const min = typeof opts?.minPx === "number" && opts.minPx > 0 && Number.isFinite(opts.minPx) ? opts.minPx : FIT_MIN_HOUR_PX;
+    return Math.min(FIT_MAX_HOUR_PX, Math.max(min, Math.floor(room / n * 4) / 4));
+  }
+  // The smallest hour the fit may produce at a text size of `fontPx`: the hour labels are .62 of that size and one
+  // line of an item about half of it, so 1.4 of it holds a label and a half-hour item. 18 px at the usual 13 px.
+  function fitMinHourPx(fontPx) {
+    return typeof fontPx === "number" && fontPx > 0 && Number.isFinite(fontPx) ? Math.max(HOUR_SCALE.min, Math.round(fontPx * 1.4)) : FIT_MIN_HOUR_PX;
+  }
+  // The smallest box of an item in Week and Day (a reminder, a short event) at `hourPx` px an hour. 20 px, which
+  // holds the time and the title, down to 36 px an hour (the old Extra compact). Under that it shrinks with the hour
+  // (5/9 of it), never under 11 px: one line, the title. So in a dense grid half-hour events one after another are
+  // not pushed side by side by their boxes (the grid lets a box reach over the next item by a fifth of its height).
+  function calendarMinBoxPx(hourPx) {
+    return typeof hourPx === "number" && hourPx > 0 && Number.isFinite(hourPx) ? Math.max(11, Math.min(20, hourPx * 5 / 9)) : 20;
+  }
+  // The minute a timeline that scrolls has at its top when it is drawn fresh (no timeline before it whose position
+  // could be kept). `range`: the hours of the grid. opts.nowMin: the current time, given only when today is in view;
+  // opts.workStartMin: where the working day begins; opts.firstMin: the earliest timed item in view. With the
+  // current time in the grid: the hour before it. Else where the working day begins, or the first item when that is
+  // earlier. Always a whole hour inside the grid.
+  function gridOpenMinute(range, opts = {}) {
+    const a = gridStartMin(range), b = gridEndMin(range);
+    const inGrid = (minute) => typeof minute === "number" && Number.isFinite(minute) && minute >= a && minute <= b;
+    let minute = a;
+    if (inGrid(opts?.nowMin)) minute = opts.nowMin - 60;
+    else {
+      const starts = [opts?.workStartMin, opts?.firstMin].filter((m) => typeof m === "number" && Number.isFinite(m) && m <= b);
+      if (starts.length) minute = Math.min(...starts);
+    }
+    return Math.max(a, Math.min(b, Math.floor(minute / 60) * 60));
+  }
+  // How many lines of one item each a Month cell holds when a week is `rowPx` high. sizes: { pad, datePx, markPx,
+  // gap } as measured in the drawn grid (the padding of a cell, the height of the date and of an item, the gap
+  // between lines); a cell also has 2 px of border. At least one line. null where nothing is measured.
+  function monthCellLines(rowPx, sizes) {
+    const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : NaN);
+    const row = num(rowPx), date = num(sizes?.datePx), mark = num(sizes?.markPx);
+    if (!(row > 0) || !(date > 0) || !(mark > 0)) return null;
+    const pad = num(sizes.pad) >= 0 ? num(sizes.pad) : 3, gap = num(sizes.gap) >= 0 ? num(sizes.gap) : 2;
+    return Math.max(1, Math.floor((row - 2 - 2 * pad - date) / (mark + gap)));
+  }
+  // What a Month cell with `count` items shows in `lines` lines: all of them when they fit, else one line less and
+  // "+N more" in the last one. `label`: whether the line "All day" is shown too (only where a line is left over).
+  // Without `lines` (nothing measured): two items and the number of the others, as before the cells were measured.
+  function monthCellPlan(count, lines, hasAllDay) {
+    const n = typeof count === "number" && count > 0 && Number.isFinite(count) ? Math.floor(count) : 0;
+    if (!(typeof lines === "number" && lines >= 1 && Number.isFinite(lines))) return { marks: Math.min(n, 2), more: Math.max(0, n - 2), label: !!hasAllDay };
+    const room = Math.floor(lines);
+    if (n <= room) return { marks: n, more: 0, label: !!hasAllDay && n < room };
+    return { marks: room - 1, more: n - (room - 1), label: false };
   }
 
   // ---------- time zones ----------
@@ -2470,7 +2774,16 @@
   function zonedMinuteOfDay(ms, dateKey, zone = "") {
     const date = parseYmd(dateKey);
     if (!date || !Number.isFinite(Number(ms))) return NaN;
-    if (!zone) return Math.max(0, Math.min(1440, (Number(ms) - date.getTime()) / MIN));
+    if (!zone) {
+      // The computer's own zone. The minute on the clock, not the minutes since midnight: the two differ on the days
+      // the clocks change (23 or 25 hours long), and counting from midnight put everything after the change one hour
+      // too early or too late in a grid whose labels, drags and working hours are all clock times.
+      const t = Number(ms), first = date.getTime();
+      if (t < first) return 0;
+      if (t >= addDays(first, 1)) return 1440;
+      const d = new Date(t);
+      return d.getHours() * 60 + d.getMinutes() + (d.getSeconds() * 1000 + d.getMilliseconds()) / MIN;
+    }
     const bounds = zonedDayBounds(dateKey, zone);
     if (!bounds) return NaN;
     if (ms <= bounds[0]) return 0;
@@ -3290,7 +3603,9 @@
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, visibleHourRange, gridOffsetOf, gridMinuteAt,
+    CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
+    cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

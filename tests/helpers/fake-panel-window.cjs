@@ -69,7 +69,9 @@ function createPanelWorld({ sharedGlobal = null, hiddenWindow = null, freezeCui 
   };
   if (freezeCui) Object.freeze(cui);
 
-  function openWindow({ id = "w" + (windows.length + 1), components = !!sharedGlobal, hidden = hiddenWindow, calendar = true } = {}) {
+  // `globals` replaces names the Notes script sees as globals (e.g. observers that are really told about changes,
+  // tests/helpers/fake-triple-view.cjs); everything else keeps the stand-ins below.
+  function openWindow({ id = "w" + (windows.length + 1), components = !!sharedGlobal, hidden = hiddenWindow, calendar = true, globals = {} } = {}) {
     const dom = require("./fake-dom.cjs")(), { El, Ev, document, raf } = dom;
     const prefObservers = [], listeners = [], mutationObservers = [], own = new Set();
     let registered = null;
@@ -112,6 +114,7 @@ function createPanelWorld({ sharedGlobal = null, hiddenWindow = null, freezeCui 
       PathUtils: { profileDir: "/profile", join: (...p) => p.join("/"), filename: (p) => p.split("/").pop() }, IOUtils: ioFor(id),
       // What privileged scripts see: Components.utils.getGlobalForObject(module) is the one global all system modules share.
       ...(components ? { Components: { utils: { getGlobalForObject: () => sharedGlobal } } } : {}),
+      ...globals,
     };
     vm.createContext(context);
     if (calendar) {
@@ -169,7 +172,9 @@ function createPanelWorld({ sharedGlobal = null, hiddenWindow = null, freezeCui 
   }
   const meta = () => (disk.has(DIR + "/meta.json") ? JSON.parse(disk.get(DIR + "/meta.json")) : null);
   const noteFiles = () => [...disk.keys()].filter((k) => k.startsWith(DIR + "/") && k.endsWith(".md") && !k.slice(DIR.length + 1).includes("/"));
-  return { DIR, disk, prefs, windows, writes, warnings, widgets, cui, cuiLog, timers, openWindow, advance, flush, settle, hold, failNext, meta, noteFiles, get now() { return now; } };
+  // The topics a window listens to through Services.obs (one entry per registration).
+  const observerTopics = (id) => [...observers].filter((e) => e.id === id).map((e) => e.topic);
+  return { DIR, disk, prefs, windows, writes, warnings, widgets, cui, cuiLog, timers, openWindow, advance, flush, settle, hold, failNext, meta, noteFiles, observerTopics, get now() { return now; } };
 }
 // A note file as Notes writes it.
 const noteText = (title, { folder = "", body = "", updated = "2026-11-01T10:00:00.000Z" } = {}) =>

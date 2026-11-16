@@ -304,6 +304,23 @@ const REAL_FOLDERS = ["Home/fhome00001/", "Work projects/fwork00001/blue"];
   // =====================================================================================================================
   // 3. The panel suite is built, or rebuilt, later
   // =====================================================================================================================
+  await test("an action asked for while the folder is away is carried out once when the folder is there, not dropped", async () => {
+    const w = world({ mode: "" }), win = w.openWindow();
+    w.failNext((op, p) => op === "read" && p === META, 8); // two whole attempts fail
+    win.start(); await w.settle();
+    // What the sidebar menus do ("New note" in a folder, a link dropped on NOTES): a write that waits for the notes.
+    win.seam.withStore(() => win.seam.store.create("# Asked for while the folder was away\n", "work"));
+    const made = () => plain(win.seam.store.list().map((n) => n.body)).filter((body) => /Asked for while/.test(body)).length;
+    await w.advance(1000);
+    assert.equal(made(), 0, "nothing is created before the folder is read (the read would drop it)");
+    await w.advance(8000);
+    assert.equal(made(), 1, "carried out once the folder could be read");
+    await win.seam.store.flush();
+    assert.equal(w.noteFiles().filter((p) => /Asked for while/.test(w.disk.get(p))).length, 1, "and saved");
+    assert.equal(w.warnings.length, 1, "the unreadable folder is reported once, not per attempt or per action");
+    await win.close();
+  });
+
   await test("a panel root built two minutes after Notes started gets its button, and so does its Triple View bar", async () => {
     const w = world({ mode: "" }), win = w.openWindow();
     win.start(); await w.advance(120000);
@@ -382,6 +399,63 @@ const REAL_FOLDERS = ["Home/fhome00001/", "Work projects/fwork00001/blue"];
     await a.close(); await b.close();
   });
 
+  await test("two windows on a slow disk: the second waits for the first well beyond the wait of a save, and still loads the result", async () => {
+    const w = world({ mode: "", meta: { folders: [{ id: "work", label: "Work projects", order: 0 }, { id: "home", label: "Home", order: 1 }] } });
+    const a = w.openWindow({ id: "a" }), b = w.openWindow({ id: "b" });
+    assert.ok(a.core.STARTUP_TURN_WAIT_MS >= 60000, "reading a folder may take much longer than one save");
+    const release = w.hold((op, p, id) => id === "a" && op === "read" && p === META); // window a is in the middle of reading
+    a.start(); await w.settle();
+    const first = a.seam.ensureStore(); await w.settle();
+    b.start();
+    let second = false; b.seam.ensureStore().then(() => { second = true; });
+    await w.advance(a.core.SHARED_TURN_WAIT_MS * 3); // 24 s: a save would have stopped waiting long ago
+    assert.equal(second, false, "window b has not read the folder side by side with window a");
+    assert.deepEqual(w.warnings, [], "and has not given up");
+    release(); await first; await w.advance(2000);
+    assert.equal(second, true);
+    const ids = (win) => plain(win.seam.store.meta.folders.map((f) => f.id + "=" + f.uid)).sort();
+    assert.ok(ids(a).every((x) => /=\w{4,}$/.test(x)));
+    assert.deepEqual(ids(a), ids(b), "one set of permanent folder ids, although the first window took 24 s");
+    await a.close(); await b.close();
+  });
+
+  await test("two windows, the first is closed while it reads the folder: the second starts within a second, not after the long wait", async () => {
+    const w = world({ mode: "" });
+    const a = w.openWindow({ id: "a" }), b = w.openWindow({ id: "b" });
+    w.hold((op, p, id) => id === "a" && op === "read" && p === META); // never released: the browser stops a closed window's steps
+    a.start(); await w.settle();
+    a.seam.ensureStore(); await w.settle();
+    b.start();
+    let second = false; b.seam.ensureStore().then(() => { second = true; });
+    await w.advance(3000);
+    assert.equal(second, false, "window a is open: window b waits for it");
+    for (const l of a.listeners.filter((x) => x.type === "unload")) l.fn(); // window a is closed
+    await w.advance(1100);
+    assert.equal(second, true, "window b reads the folder itself as soon as it finds window a gone");
+    assert.deepEqual(plain(b.seam.store.list().map((n) => n.id)).sort(), ["n1", "n2"], "with every note of the folder");
+    assert.deepEqual(w.warnings, [], "this is not reported as a window that stopped answering");
+  });
+
+  await test("the folder cannot be read twice, then it can: Notes starts once (one listener for other windows; one event and one write per change)", async () => {
+    const w = world({ mode: "single" }), win = w.openWindow();
+    win.buildPanel({ open: true });
+    w.failNext((op, p) => op === "read" && p === META, 8); // two whole attempts fail (four tries each)
+    win.start();
+    await w.advance(1000);
+    assert.equal(seen(win).length, 0, "not started yet");
+    await w.advance(8000); // the retries at 1.5 s and 4 s
+    assert.equal(seen(win).length, 1, "Notes is restored once the folder can be read");
+    assert.equal(w.observerTopics(win.id).filter((topic) => topic === "zentral-notes-changed").length, 1, "one listener for the saves of other windows, not one per attempt");
+    // One change is one event and one write.
+    const events = []; win.seam.store.on((e) => { if (e.type === "change" || e.type === "saved") events.push(e.type + ":" + e.id); });
+    const before = w.writes.filter((x) => x.path === DIR + "/n1.md").length;
+    win.seam.store.update("n1", "# One\nedited after the late start\n");
+    await win.seam.store.flush(); await w.advance(2000);
+    assert.equal(w.writes.filter((x) => x.path === DIR + "/n1.md").length - before, 1, "the note is written once");
+    assert.equal(events.filter((x) => x === "change:n1").length, 1, "and reported once");
+    await win.close();
+  });
+
   await test("a save in one window while the other is still reading the folder is not missed", async () => {
     const w = world({ mode: "" });
     const a = w.openWindow({ id: "a" }), b = w.openWindow({ id: "b" });
@@ -402,6 +476,27 @@ const REAL_FOLDERS = ["Home/fhome00001/", "Work projects/fwork00001/blue"];
     await b.seam.store.flush();
     assert.equal(conflicts.length, 0);
     assert.match(w.disk.get(DIR + "/n1.md"), /changed in window a[\s\S]*more from b/);
+    await a.close(); await b.close();
+  });
+
+  await test("...and neither is a save made while that window catches up on what it missed", async () => {
+    const w = world({ mode: "" });
+    const a = w.openWindow({ id: "a" }), b = w.openWindow({ id: "b" });
+    a.start(); b.start();
+    await a.seam.ensureStore();
+    const release = w.hold((op, p, id) => id === "b" && op === "read" && p === META);
+    const loading = b.seam.ensureStore();
+    await w.settle();
+    a.seam.store.update("n1", "# One\nfirst change\n");
+    await a.seam.store.flush();
+    // Window b reads n1.md once more when it has loaded. That read takes a moment, and window a saves n2.md meanwhile.
+    const again = w.hold((op, p, id) => id === "b" && op === "read" && p === DIR + "/n1.md");
+    release(); await w.settle();
+    a.seam.store.update("n2", "# Two\nsecond change\n");
+    await a.seam.store.flush();
+    again(); await loading; await w.settle();
+    assert.match(b.seam.store.get("n1").body, /first change/);
+    assert.match(b.seam.store.get("n2").body, /second change/, "window b shows the second save too");
     await a.close(); await b.close();
   });
 
