@@ -346,7 +346,7 @@ const span = (r) => [r.startMin, r.endMin, r.extendedTop, r.extendedBottom];
   await sheet.open(); await flushRaf();
   root.all().find((el) => el.title === "All notes").click(); await flushRaf();
 
-  const PX = 54; // "Comfortable": one hour is 54 px high
+  const PX = 54; // nothing can be measured in the fake DOM, so a fitted hour is 54 px high (OW-03)
   const menuItems = () => root.querySelectorAll(".zn-menu-item");
   const pick = async (trigger, label) => {
     q(root, trigger).click();
@@ -356,6 +356,16 @@ const span = (r) => [r.startMin, r.endMin, r.extendedTop, r.extendedBottom];
     await flushRaf();
   };
   const showView = (name) => pick(".zn-calendar-view-select", name);
+  // The Size button: the slider in its menu set to `px`, or "Fit to the pane" for "auto".
+  const setSize = async (px) => {
+    const chip = q(root, ".zn-calendar-size-select");
+    chip.click();
+    const menu = q(root, ".zn-menu");
+    if (px === "auto") menu.querySelector(".zn-menu-slider-fit").click();
+    else { const input = menu.querySelector("input"); input.value = String(px); input.dispatchEvent(new Ev("input", { bubbles: true })); }
+    chip.click(); // a second press closes the menu
+    await flushRaf();
+  };
   const toggle = () => q(root, ".zn-calendar-hours-toggle");
   const press = async () => { toggle().click(); await flushRaf(); };
   const labels = () => root.querySelectorAll(".zn-cal-hour-label").map((el) => el.textContent);
@@ -607,7 +617,7 @@ const span = (r) => [r.startMin, r.endMin, r.extendedTop, r.extendedBottom];
     // One after another with nothing between them: a box may reach 4 px over the next one, not more. At 36 px an hour
     // half an hour is 18 px, so three half-hour events keep one lane and the whole width (in 3.3.173 they stood side
     // by side); three quarter-hour events, 9 px apart, cannot.
-    await pick(".zn-calendar-density-select", "Extra compact");
+    await setSize(36);
     put("half1", "Half one", local(WED, 9), local(WED, 9, 30));
     put("half2", "Half two", local(WED, 9, 30), local(WED, 10));
     put("half3", "Half three", local(WED, 10), local(WED, 10, 30));
@@ -617,7 +627,7 @@ const span = (r) => [r.startMin, r.endMin, r.extendedTop, r.extendedBottom];
     const halves = ["Half one", "Half two", "Half three"].map(box);
     assert.deepEqual(halves.map((b) => [b.top, b.bottom - b.top, b.left, b.width]), [[36, 20, "0%", "100%"], [54, 20, "0%", "100%"], [72, 20, "0%", "100%"]], "half-hour events in a row: one lane, each 2 px over the next");
     assert.ok(box("Quarter one").left !== box("Quarter two").left && box("Quarter one").width === "50%", "quarter-hour events in a row: side by side");
-    await pick(".zn-calendar-density-select", "Comfortable");
+    await setSize("auto");
     const wide = ["Half one", "Half two", "Half three"].map(box);
     assert.deepEqual(wide.map((b) => [b.top, b.bottom - b.top, b.width]), [[54, 27, "100%"], [81, 27, "100%"], [108, 27, "100%"]], "at 54 px an hour they are simply as long as they are");
     drop("half1"); drop("half2"); drop("half3"); drop("quarter1"); drop("quarter2");

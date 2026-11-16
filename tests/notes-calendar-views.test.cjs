@@ -35,7 +35,7 @@ const dom = require("./helpers/fake-dom.cjs")();
 const { El, Ev, document, raf } = dom;
 const cal = require("../additional/notes/calendar/ZentralNotesCalendar.js");
 assert.equal(cal.cleanCalendarDensity("invalid"), "comfortable");
-assert.deepEqual(["comfortable", "compact", "extra-compact"].map(cal.calendarDensityHourHeight), [54, 44, 36]);
+assert.deepEqual(["comfortable", "compact", "extra-compact"].map((name) => cal.calendarScaleStep("week", name)), ["auto", 44, 36], "what the three old steps stand for in Week");
 assert.match(css, /data-density="compact"/);
 assert.match(css, /data-density="extra-compact"/);
 assert.match(css, /height:\s*var\(--zn-cal-hour-height/);
@@ -67,6 +67,20 @@ const chooseMenu = async (root, triggerSelector, label) => {
   const entry = root.querySelectorAll(".zn-menu-item").find((el) => el.textContent.trim() === label);
   assert.ok(entry, `menu option exists: ${label}`);
   entry.click();
+  await flushRaf();
+};
+// The store lives in another realm (vm): its objects are compared as plain data.
+const plain = (value) => JSON.parse(JSON.stringify(value));
+// The Size button of Week, Day and Month: the slider in its menu set to `px`, or "Fit to the pane" for "auto".
+const setSize = async (root, px) => {
+  const chip = q(root, ".zn-calendar-size-select");
+  chip.click();
+  const menu = q(root, ".zn-menu");
+  assert.ok(menu?.querySelector(".zn-menu-slider"), "the Size menu of this view has a slider");
+  if (px === "auto") menu.querySelector(".zn-menu-slider-fit").click();
+  else { const input = menu.querySelector("input"); input.value = String(px); input.dispatchEvent(new Ev("input", { bubbles: true })); }
+  chip.click(); // a second press closes the menu
+  assert.equal(q(root, ".zn-menu"), null);
   await flushRaf();
 };
 
@@ -205,24 +219,68 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(store.meta.calendarView, "day", "date badge still opens Day");
   await chooseMenu(root, ".zn-calendar-view-select", "Month");
 
+  // The size (OW-03): every view fits by default and has its own size. Nothing can be measured in this fake DOM, so
+  // a fitted hour is 54 px here; tests/notes-calendar-scale.test.cjs gives the timeline a height.
+  const AUTO = { month: "auto", week: "auto", day: "auto", upcoming: "auto", agenda: "auto" };
+  const sizeChip = q(root, ".zn-calendar-size-select");
+  assert.equal(q(root, ".zn-calendar-density-select"), null, "the three-step selector is gone");
+  assert.deepEqual(plain(store.meta.calendarScale), AUTO);
   assert.equal(content.dataset.density, "comfortable");
+  assert.equal(content.dataset.fit, "true", "Month fits the pane");
+  assert.equal(sizeChip.textContent, "Size: Fit");
   assert.equal(q(root, ".zn-calendar-snap-select").hidden, true, "snap is offered only for time-grid views");
-  await chooseMenu(root, ".zn-calendar-density-select", "Compact");
-  assert.equal(store.meta.calendarDensity, "compact");
+  await setSize(root, 52);
+  assert.deepEqual(plain(store.meta.calendarScale), { ...AUTO, month: 52 });
   assert.equal(content.dataset.density, "compact");
+  assert.equal(content.dataset.fit, "false");
+  assert.equal(content.style.getPropertyValue("--zn-cal-month-row"), "52px", "weeks of 52 px");
+  assert.equal(q(root, ".zn-cal-month-wrap").dataset.density, "compact", "the cells take the look of that height");
+  assert.equal(sizeChip.textContent, "Size: 52 px");
   await chooseMenu(root, ".zn-calendar-view-select", "Week");
+  assert.equal(content.dataset.density, "comfortable", "Week has its own size and still fits");
+  assert.equal(content.dataset.fit, "true");
+  assert.equal(content.style.getPropertyValue("--zn-cal-month-row"), "", "the height of a Month week is not left behind");
+  assert.equal(q(root, ".zn-cal-time-track").style.height, `${24 * 54}px`);
+  await setSize(root, 44);
   assert.equal(q(root, ".zn-cal-time-track").style.height, `${24 * 44}px`);
   assert.equal(content.style.getPropertyValue("--zn-cal-hour-height"), "44px");
-  await chooseMenu(root, ".zn-calendar-density-select", "Extra compact");
+  assert.equal(content.dataset.density, "compact");
+  assert.equal(sizeChip.textContent, "Size: 44 px");
+  await setSize(root, 36);
   assert.equal(q(root, ".zn-cal-time-track").style.height, `${24 * 36}px`);
+  assert.equal(content.dataset.density, "extra-compact");
   await chooseMenu(root, ".zn-calendar-view-select", "Day");
+  assert.equal(q(root, ".zn-cal-time-track").style.height, `${24 * 54}px`, "Day has its own size");
+  await setSize(root, 36);
   assert.equal(q(root, ".zn-cal-time-track").style.height, `${24 * 36}px`);
+  assert.deepEqual(plain(store.meta.calendarScale), { ...AUTO, month: 52, week: 36, day: 36 });
+  // The two lists have nothing to fit: the three spacings, each list its own.
   await chooseMenu(root, ".zn-calendar-view-select", "Next days");
+  assert.equal(content.dataset.density, "comfortable");
+  assert.equal(content.dataset.fit, "false");
+  assert.equal(sizeChip.textContent, "Comfortable");
+  await chooseMenu(root, ".zn-calendar-size-select", "Extra compact");
   assert.equal(content.dataset.density, "extra-compact");
+  assert.equal(sizeChip.textContent, "Extra compact");
   await chooseMenu(root, ".zn-calendar-view-select", "Agenda");
-  assert.equal(content.dataset.density, "extra-compact");
-  await chooseMenu(root, ".zn-calendar-density-select", "Comfortable");
+  assert.equal(content.dataset.density, "comfortable");
+  await chooseMenu(root, ".zn-calendar-size-select", "Compact");
+  assert.equal(content.dataset.density, "compact");
+  assert.deepEqual(plain(store.meta.calendarScale), { month: 52, week: 36, day: 36, upcoming: 36, agenda: 44 });
+  // Back to the default everywhere.
+  await chooseMenu(root, ".zn-calendar-size-select", "Comfortable");
+  await chooseMenu(root, ".zn-calendar-view-select", "Next days");
+  await chooseMenu(root, ".zn-calendar-size-select", "Comfortable");
+  await chooseMenu(root, ".zn-calendar-view-select", "Day");
+  await setSize(root, "auto");
+  await chooseMenu(root, ".zn-calendar-view-select", "Week");
+  await setSize(root, "auto");
+  assert.equal(q(root, ".zn-cal-time-track").style.height, `${24 * 54}px`);
   await chooseMenu(root, ".zn-calendar-view-select", "Month");
+  await setSize(root, "auto");
+  assert.deepEqual(plain(store.meta.calendarScale), AUTO);
+  assert.equal(content.dataset.fit, "true");
+  assert.equal(sizeChip.textContent, "Size: Fit");
   assert.equal(q(root, ".zn-calendar-view-select").dataset.value, "month");
   assert.equal(content.dataset.view, "month");
   assert.equal(root.querySelectorAll(".zn-cal-month-cell").length, 42, "month view renders six Monday-first weeks");
@@ -312,10 +370,13 @@ const chooseMenu = async (root, triggerSelector, label) => {
   await chooseMenu(root, ".zn-calendar-view-select", "Month");
   assert.equal(content.dataset.compact, "true", "narrow calendar uses compact list fallback");
   assert.ok(q(root, ".zn-cal-compact-list"), "compact month list is rendered instead of a squeezed 7-column grid");
-  await chooseMenu(root, ".zn-calendar-density-select", "Extra compact");
-  assert.ok(q(root, ".zn-cal-compact-list"), "density selection preserves the narrow-pane fallback");
+  assert.equal(content.dataset.fit, "false", "a list has nothing to fit");
+  assert.equal(q(root, ".zn-calendar-size-select").textContent, "Comfortable", "Month as a list offers the three spacings");
+  await chooseMenu(root, ".zn-calendar-size-select", "Extra compact");
+  assert.ok(q(root, ".zn-cal-compact-list"), "the spacing preserves the narrow-pane fallback");
   assert.equal(content.dataset.density, "extra-compact");
-  await chooseMenu(root, ".zn-calendar-density-select", "Comfortable");
+  await chooseMenu(root, ".zn-calendar-size-select", "Comfortable");
+  assert.equal(store.meta.calendarScale.month, "auto");
 
   // The calendar display zone is selected by the user and controls work/busy/Now wall-clock geometry.
   await chooseMenu(root, ".zn-calendar-tools", "Display time zone: Local");
@@ -373,14 +434,14 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.match(zoneTrack.querySelector(".zn-cal-off-hours")?.getAttribute("style") || "", /height:540px/, "10:00 work-hour start is positioned in Europe/Warsaw wall time");
   const zoneBusy = zoneTrack.querySelectorAll(".zn-cal-busy-range").find((span) => Math.abs(parseFloat(/top:([^;]+)/.exec(span.getAttribute("style") || "")?.[1]) - 11.5 * 54) < 1);
   assert.ok(zoneBusy, "busy-range shading starts at 11:30 in the selected display zone");
-  await chooseMenu(root, ".zn-calendar-density-select", "Extra compact");
+  await setSize(root, 36);
   const compactTrack = root.querySelectorAll(".zn-cal-time-track").find((track) => track.getAttribute("data-day") === zoneKey);
   assert.equal(compactTrack.style.height, `${24 * 36}px`);
   const compactBusy = compactTrack.querySelectorAll(".zn-cal-busy-range").find((span) => Math.abs(parseFloat(/top:([^;]+)/.exec(span.getAttribute("style") || "")?.[1]) - 11.5 * 36) < 1);
   assert.ok(compactBusy, "busy shading stays aligned with the resized hour scale");
   const compactEvent = compactTrack.querySelectorAll(".zn-cal-time-event").find((el) => el.textContent.includes("Display-zone busy"));
-  assert.equal(parseFloat(compactEvent.style.top), 11.5 * 36, "event and hour positions share the density scale");
-  await chooseMenu(root, ".zn-calendar-density-select", "Comfortable");
+  assert.equal(parseFloat(compactEvent.style.top), 11.5 * 36, "event and hour positions share the height of an hour");
+  await setSize(root, "auto");
   const overlapButtons = root.querySelectorAll(".zn-cal-time-event").filter((el) => /Project review|Design review/.test(el.textContent));
   assert.equal(overlapButtons.length, 2, "both overlapping events render");
   assert.ok(overlapButtons.every((el) => el.style.width === "50%"), "overlapping events get side-by-side 50% lanes");
@@ -774,12 +835,13 @@ const chooseMenu = async (root, triggerSelector, label) => {
   await chooseMenu(root, ".zn-calendar-view-select", "Agenda");
 
   // Reopen a new sheet with the same store to verify view, filters and N-day setting are durable.
-  await chooseMenu(root, ".zn-calendar-density-select", "Extra compact");
+  await chooseMenu(root, ".zn-calendar-size-select", "Extra compact");
   await store.flush();
   const restored = c.createStore({ io, notify() {}, windowId: "cal-views-reopen", getDir: async () => "/views", getMaxSaveMs: () => 1000, setTimer: setTimeout, clearTimer: clearTimeout });
   await restored.open();
   assert.equal(restored.meta.calendarView, "agenda");
-  assert.equal(restored.meta.calendarDensity, "extra-compact", "density survives store reopening");
+  assert.deepEqual(plain(restored.meta.calendarScale), { month: "auto", week: "auto", day: "auto", upcoming: "auto", agenda: 36 }, "the size of each view survives store reopening");
+  assert.equal("calendarDensity" in restored.meta, false, "the old three-step setting is no longer kept");
   assert.equal(restored.meta.calendarSnap, 30, "calendar snap survives store reopening");
   assert.equal(restored.meta.calendarDaysForward, 14);
   assert.equal(restored.meta.calendarFilterKind, "all");
@@ -788,7 +850,7 @@ const chooseMenu = async (root, triggerSelector, label) => {
   files.set("/bad-density/meta.json", { text: JSON.stringify({ calendarDensity: "gigantic" }), mtime: Date.now() });
   const invalid = c.createStore({ io, notify() {}, windowId: "invalid-density", getDir: async () => "/bad-density", getMaxSaveMs: () => 1000, setTimer: setTimeout, clearTimer: clearTimeout });
   await invalid.open();
-  assert.equal(invalid.meta.calendarDensity, "comfortable", "invalid stored density falls back safely");
+  assert.deepEqual(plain(invalid.meta.calendarScale), { month: "auto", week: "auto", day: "auto", upcoming: "auto", agenda: "auto" }, "an invalid stored density of before falls back safely");
   assert.equal(invalid.meta.calendarSnap, 15, "missing stored snap defaults to fifteen minutes");
   await invalid.close();
   console.log("calendar views UI tests passed");

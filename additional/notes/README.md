@@ -58,6 +58,30 @@ The grid does not change under a drag, or behind the dialog opened by dragging o
 
 On the two days a year when the clocks change, the grid follows the clock: an event at 08:00 is drawn at 08:00. Before 3.3.173, without a display time zone, everything after the change was drawn one hour too early (spring) or too late (autumn), and working hours were shaded and searched an hour off on those days.
 
+### Calendar: size
+
+The **Size** button in the calendar toolbar sets how high the calendar is drawn. It replaces the three steps Comfortable, Compact and Extra compact. Every view has its own size, saved with the other calendar view settings.
+
+**Fit** is the default. Week and Day make the hours they show as high as the pane allows, so all of them are in sight and there is no scrollbar. Fewer hours get more height each: with **08–20** on, twelve hours share what 24 shared. The height follows everything that takes room above the timeline (all-day items, the line that names why the grid is widened, a toolbar that needs a second row) and every change of the window, the panel or the splitter. Month makes its six weeks fill the pane in the same way.
+
+An hour is never fitted lower than can be read: 1.4 times the text size, which is 18 px at the default 13 px. In a pane too low for that the hours get this height and the timeline scrolls. A timeline that scrolls opens one hour before the current time when today is in view, and otherwise where the working day begins, or at the first item if that is earlier. It no longer opens at midnight.
+
+Pressing **Size** in Week, Day or Month opens a slider: the height of an hour from 16 to 120 px, or of a week from 44 to 160 px. The calendar follows while the slider moves and the menu stays open; the arrow keys, Home and End work on the slider. **Fit to the pane** goes back to the automatic size. With a height set by hand the view scrolls when it has to, and the time at the top of the timeline stays the same when the height changes.
+
+What changes with the size:
+
+- **The look.** The paddings and text sizes of the three former steps are still there and follow the size: 54 px an hour (58 px a week) and more are drawn as Comfortable was, 44 px (52 px) and more as Compact, less as Extra compact. Fitted hours always have the comfortable look; a fitted Month takes the look that goes with the height its weeks get.
+- **Short events.** An event whose box is too low for its time above its title shows the title alone; the time is in the tooltip and the hover card. The smallest box is 20 px down to 36 px an hour and gets lower with the hour below that, to 11 px, so that half-hour events one after another keep the whole width of the day at 18 px an hour.
+- **Month cells.** A cell shows as many items as its height holds: all of them, or one fewer and `+3 more`. A cell with one line shows its item, or `5 items` when there are several. The line `All day` is only shown where a line is left over. Weeks are never fitted lower than 44 px (more at a large text size, so that the date and one line fit); below that the pane scrolls. The list of the selected day under the grid takes at most 40% of the pane (110 px where that is more), gives way to the grid in a low pane, and scrolls by itself.
+
+**Next days** and **Agenda** are lists and have nothing to fit: there **Size** offers Comfortable, Compact and Extra compact as before, for each list separately. The same holds for Month in a pane under 470 px wide, where it is a list of days.
+
+A setting from before 3.3.176 is converted once: Comfortable becomes Fit, Compact becomes 44 px an hour and 52 px a week, Extra compact 36 px and 44 px, and the lists keep their spacing.
+
+Resizing no longer draws the calendar again with every px. Month fits its cells where they are, and Week and Day are drawn again only when the fitted height of an hour changes (it moves in quarter px).
+
+Where the hours and the weeks fit, nothing scrolls and no room is left empty; where they cannot fit, they have their smallest height. Both were measured in a headless Chromium (`tools/audit-notes-calendar-fit.cjs`: text sizes 8 to 28 px, sheets 330 to 1000 px high, panes side by side and one above the other, both kinds of scrollbar). At the default text size, with the panes side by side and nothing in the all-day row, 24 hours fit from a sheet about 710 px high and 08–20 from about 500 px. Zen draws with Gecko; live behaviour in Zen is not verified.
+
 ### Markdown supported
 
 Headings (`#` to `######`; seven `#` or `#tag` stay text), paragraphs, **bold** (`**x**` or `__x__`), *italic* (`*x*` or `_x_`), ***bold italic***, ~~strikethrough~~, any of these nested in each other, `code` and fenced code blocks (with colors for a handful of languages, see below), `[text](https://link)` and bare links, bullet / numbered lists, task lists (`- [ ]`, `- [x]`), ordered lists that number themselves (`1.` `2.` `1.` shows 1, 2, 3; a start such as `42.` is kept), list items with more paragraphs (blank line, then indented text), nested block quotes (`> > text`), callouts (`> [!NOTE] Title`, also tip, important, warning, caution, info), horizontal rules (`---`), **tables** and **images**. Backslash escapes work (`\\*` shows a star), `<https://...>` is a link and an image can be a link (`[![alt](img)](url)`). **Collapsible blocks** use `<details>` with an optional `<summary>` line and a closing `</details>` (add `open` to start expanded); the inside is normal Markdown, and no other HTML tag is understood. **Math** is a small offline LaTeX subset written as `$x^2$` inline or `$$ ... $$` as a block: Greek letters, operators and arrows, `^` / `_`, `\frac`, `\sqrt`, `\text`, `\mathbb{R}`, accents; it becomes plain text with superscripts and subscripts, and anything unknown stays visible as typed. `$5 and $10` is not math (no space just inside the dollar signs). This is a small GitHub-style subset; footnotes, matrices, other raw HTML and nested tables are not supported on purpose.

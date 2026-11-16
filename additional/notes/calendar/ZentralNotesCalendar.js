@@ -2099,9 +2099,10 @@
   // ---------- calendar view layout (roadmap T2.4a) ----------
   // Keep the orientation decision pure so the sheet can react to its actual available rectangle (not the
   // browser window alone), and the threshold behavior can be regression-tested without Gecko layout.
+  // The three looks of the style sheet (paddings and text sizes). Until 3.3.175 this was also the setting
+  // `meta.calendarDensity`, one for all views; the setting is now `calendarScale` (see "the size of the calendar").
   const CALENDAR_DENSITIES = Object.freeze(["comfortable", "compact", "extra-compact"]);
   function cleanCalendarDensity(value) { return CALENDAR_DENSITIES.includes(value) ? value : "comfortable"; }
-  function calendarDensityHourHeight(value) { return ({ comfortable: 54, compact: 44, "extra-compact": 36 })[cleanCalendarDensity(value)]; }
   const CALENDAR_LAYOUT_MODES = Object.freeze(["auto", "lr", "tb"]);
   function cleanCalendarLayout(value) { return CALENDAR_LAYOUT_MODES.includes(value) ? value : "auto"; }
   function calendarLayoutFor(mode, width, height) {
@@ -2620,6 +2621,122 @@
   function gridMinuteAt(offsetPx, hourPx, range) {
     const a = gridStartMin(range), b = gridEndMin(range), minute = a + Number(offsetPx) * 60 / hourPx;
     return Number.isFinite(minute) ? Math.max(a, Math.min(b, minute)) : a;
+  }
+
+  // ---------- the size of the calendar (OW-03) ----------
+  // Stored in meta.calendarScale as { month, week, day, upcoming, agenda }; each is "auto" or a whole number of px.
+  //   week, day          the height of an hour. "auto": the hours the grid shows fill the timeline (fitHourHeight).
+  //   month              the height of a week. "auto": the six weeks fill the pane (the style sheet does that).
+  //   upcoming, agenda   lists have nothing to fit: "auto" is Comfortable, 44 Compact, 36 Extra compact.
+  // Per view: `comfortable` / `compact` / `extraCompact` are the px the three old steps stood for. A size at or over
+  // `comfortable` is drawn with the Comfortable look, at or over `compact` with Compact, under it with Extra compact.
+  const CALENDAR_SCALE_VIEWS = Object.freeze(["month", "week", "day", "upcoming", "agenda"]);
+  const HOUR_SCALE = Object.freeze({ min: 16, max: 120, comfortable: 54, compact: 44, extraCompact: 36 });
+  const LIST_SCALE = Object.freeze({ min: 36, max: 54, comfortable: 54, compact: 44, extraCompact: 36, steps: true });
+  const CALENDAR_SCALE_LIMITS = Object.freeze({ month: Object.freeze({ min: 44, max: 160, comfortable: 58, compact: 52, extraCompact: 44 }), week: HOUR_SCALE, day: HOUR_SCALE, upcoming: LIST_SCALE, agenda: LIST_SCALE });
+  const scaleDensityOf = (limits, px) => (px >= limits.comfortable ? "comfortable" : px >= limits.compact ? "compact" : "extra-compact");
+  // One view's size: "auto", or whole px inside the limits of that view. A number or digits (a slider hands over
+  // text) are a size; everything else fits.
+  function cleanCalendarScaleValue(view, value) {
+    const limits = Object.hasOwn(CALENDAR_SCALE_LIMITS, view) ? CALENDAR_SCALE_LIMITS[view] : null;
+    if (!limits) return "auto";
+    const n = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+    if (!Number.isFinite(n)) return "auto";
+    if (limits.steps) {
+      // A list has the three steps only; the comfortable one is the default and is stored as such.
+      const density = n >= (limits.comfortable + limits.compact) / 2 ? "comfortable" : n >= (limits.compact + limits.extraCompact) / 2 ? "compact" : "extra-compact";
+      return density === "comfortable" ? "auto" : density === "compact" ? limits.compact : limits.extraCompact;
+    }
+    return Math.max(limits.min, Math.min(limits.max, Math.round(n)));
+  }
+  // The px a named step stands for in a view ("auto" for Comfortable: the default).
+  function calendarScaleStep(view, density) {
+    const limits = Object.hasOwn(CALENDAR_SCALE_LIMITS, view) ? CALENDAR_SCALE_LIMITS[view] : null;
+    if (!limits || density === "comfortable" || !CALENDAR_DENSITIES.includes(density)) return "auto";
+    return density === "compact" ? limits.compact : limits.extraCompact;
+  }
+  // The whole setting. `legacyDensity` is the value of the old `calendarDensity` and is read only while no
+  // `calendarScale` is stored: Compact and Extra compact keep their sizes in every view; Comfortable, the default
+  // nobody chose, becomes the new default (as 54 px nobody would ever get it).
+  function cleanCalendarScale(value, legacyDensity) {
+    const out = {};
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      for (const view of CALENDAR_SCALE_VIEWS) out[view] = cleanCalendarScaleValue(view, value[view]);
+      return out;
+    }
+    const density = cleanCalendarDensity(legacyDensity);
+    for (const view of CALENDAR_SCALE_VIEWS) out[view] = calendarScaleStep(view, density);
+    return out;
+  }
+  // Which of the three looks a size is drawn with. A fitted Week or Day is always Comfortable (its header must not
+  // change its height with the hour that is fitted to what the header leaves). A fitted Month follows the height
+  // its weeks got, `measuredPx`; nothing measured = Comfortable.
+  function calendarScaleDensity(view, value, measuredPx) {
+    const limits = Object.hasOwn(CALENDAR_SCALE_LIMITS, view) ? CALENDAR_SCALE_LIMITS[view] : null;
+    if (!limits) return "comfortable";
+    const size = cleanCalendarScaleValue(view, value);
+    if (size !== "auto") return scaleDensityOf(limits, size);
+    const measured = Number(measuredPx);
+    return view === "month" && typeof measuredPx === "number" && measured > 0 ? scaleDensityOf(limits, measured) : "comfortable";
+  }
+  // The fitted hour: `hours` hours fill `availablePx` (the height of the timeline without the 2 px above the first
+  // label), in quarter px, so that under 24 hours no more than 6 px stay empty. Not under `opts.minPx` (an hour
+  // that can still be read, fitMinHourPx): then the timeline scrolls. Where nothing can be measured (a hidden pane,
+  // a test without a layout) an hour is 54 px, the comfortable hour of before.
+  const FIT_FALLBACK_HOUR_PX = 54, FIT_MIN_HOUR_PX = 18, FIT_MAX_HOUR_PX = 240;
+  function fitHourHeight(availablePx, hours, opts = {}) {
+    const room = typeof availablePx === "number" ? availablePx : NaN, n = typeof hours === "number" ? hours : NaN;
+    if (!(room > 0) || !(n > 0) || !Number.isFinite(room) || !Number.isFinite(n)) return FIT_FALLBACK_HOUR_PX;
+    const min = typeof opts?.minPx === "number" && opts.minPx > 0 && Number.isFinite(opts.minPx) ? opts.minPx : FIT_MIN_HOUR_PX;
+    return Math.min(FIT_MAX_HOUR_PX, Math.max(min, Math.floor(room / n * 4) / 4));
+  }
+  // The smallest hour the fit may produce at a text size of `fontPx`: the hour labels are .62 of that size and one
+  // line of an item about half of it, so 1.4 of it holds a label and a half-hour item. 18 px at the usual 13 px.
+  function fitMinHourPx(fontPx) {
+    return typeof fontPx === "number" && fontPx > 0 && Number.isFinite(fontPx) ? Math.max(HOUR_SCALE.min, Math.round(fontPx * 1.4)) : FIT_MIN_HOUR_PX;
+  }
+  // The smallest box of an item in Week and Day (a reminder, a short event) at `hourPx` px an hour. 20 px, which
+  // holds the time and the title, down to 36 px an hour (the old Extra compact). Under that it shrinks with the hour
+  // (5/9 of it), never under 11 px: one line, the title. So in a dense grid half-hour events one after another are
+  // not pushed side by side by their boxes (the grid lets a box reach over the next item by a fifth of its height).
+  function calendarMinBoxPx(hourPx) {
+    return typeof hourPx === "number" && hourPx > 0 && Number.isFinite(hourPx) ? Math.max(11, Math.min(20, hourPx * 5 / 9)) : 20;
+  }
+  // The minute a timeline that scrolls has at its top when it is drawn fresh (no timeline before it whose position
+  // could be kept). `range`: the hours of the grid. opts.nowMin: the current time, given only when today is in view;
+  // opts.workStartMin: where the working day begins; opts.firstMin: the earliest timed item in view. With the
+  // current time in the grid: the hour before it. Else where the working day begins, or the first item when that is
+  // earlier. Always a whole hour inside the grid.
+  function gridOpenMinute(range, opts = {}) {
+    const a = gridStartMin(range), b = gridEndMin(range);
+    const inGrid = (minute) => typeof minute === "number" && Number.isFinite(minute) && minute >= a && minute <= b;
+    let minute = a;
+    if (inGrid(opts?.nowMin)) minute = opts.nowMin - 60;
+    else {
+      const starts = [opts?.workStartMin, opts?.firstMin].filter((m) => typeof m === "number" && Number.isFinite(m) && m <= b);
+      if (starts.length) minute = Math.min(...starts);
+    }
+    return Math.max(a, Math.min(b, Math.floor(minute / 60) * 60));
+  }
+  // How many lines of one item each a Month cell holds when a week is `rowPx` high. sizes: { pad, datePx, markPx,
+  // gap } as measured in the drawn grid (the padding of a cell, the height of the date and of an item, the gap
+  // between lines); a cell also has 2 px of border. At least one line. null where nothing is measured.
+  function monthCellLines(rowPx, sizes) {
+    const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : NaN);
+    const row = num(rowPx), date = num(sizes?.datePx), mark = num(sizes?.markPx);
+    if (!(row > 0) || !(date > 0) || !(mark > 0)) return null;
+    const pad = num(sizes.pad) >= 0 ? num(sizes.pad) : 3, gap = num(sizes.gap) >= 0 ? num(sizes.gap) : 2;
+    return Math.max(1, Math.floor((row - 2 - 2 * pad - date) / (mark + gap)));
+  }
+  // What a Month cell with `count` items shows in `lines` lines: all of them when they fit, else one line less and
+  // "+N more" in the last one. `label`: whether the line "All day" is shown too (only where a line is left over).
+  // Without `lines` (nothing measured): two items and the number of the others, as before the cells were measured.
+  function monthCellPlan(count, lines, hasAllDay) {
+    const n = typeof count === "number" && count > 0 && Number.isFinite(count) ? Math.floor(count) : 0;
+    if (!(typeof lines === "number" && lines >= 1 && Number.isFinite(lines))) return { marks: Math.min(n, 2), more: Math.max(0, n - 2), label: !!hasAllDay };
+    const room = Math.floor(lines);
+    if (n <= room) return { marks: n, more: 0, label: !!hasAllDay && n < room };
+    return { marks: room - 1, more: n - (room - 1), label: false };
   }
 
   // ---------- time zones ----------
@@ -3486,7 +3603,9 @@
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, visibleHourRange, gridOffsetOf, gridMinuteAt, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, visibleHourRange, gridOffsetOf, gridMinuteAt,
+    CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
+    cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

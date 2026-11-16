@@ -1315,6 +1315,13 @@
 .zentral-notes-sheet .zn-noteset { display: flex; flex-direction: column; gap: 1px; max-height: 240px; overflow-y: auto; margin: 6px 0; }
 .zentral-notes-sheet .zn-noteset .zn-menu-item { width: 100%; text-align: left; }
 .zentral-notes-sheet .zn-menu-head { opacity: 0.6; cursor: default; font-weight: 600; }
+/* A slider inside a menu (the calendar size, OW-03): the slider and its value in one row, the button for the
+   automatic value below. The value has a fixed width, so the menu does not change its width while the slider moves. */
+.zentral-notes-sheet .zn-menu-slider { display: flex; flex-direction: column; gap: 6px; padding: 2px 8px 6px; }
+.zentral-notes-sheet .zn-menu-slider-row { display: flex; align-items: center; gap: 8px; }
+.zentral-notes-sheet .zn-menu-slider-row .zn-range { flex: 1 1 130px; min-width: 110px; height: 12px; }
+.zentral-notes-sheet .zn-menu-slider-row .zn-quick-value { flex: 0 0 auto; width: 6.2em; text-align: right; font-size: .9em; }
+.zentral-notes-sheet .zn-menu-slider-fit { align-self: flex-start; }
 .zentral-notes-sheet .zn-menu-group > span { flex: 1 1 auto; }
 .zentral-notes-sheet .zn-menu-group > svg:last-child { opacity: 0.6; }
 .zentral-notes-sheet .zn-menu-back { opacity: 0.8; }
@@ -1875,8 +1882,24 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
 .zentral-notes-sheet .zn-cal-month-dows { flex: 0 0 auto; margin-bottom: 3px; }
 .zentral-notes-sheet .zn-cal-month-dows > span { padding: 3px 2px; text-align: center; color: var(--zn-muted); font-size: .76em; font-weight: 650; }
-.zentral-notes-sheet .zn-cal-month-grid { grid-template-rows: repeat(6, minmax(58px, 1fr)); }
-.zentral-notes-sheet .zn-cal-month-cell { position: relative; display: flex; min-width: 0; min-height: 58px; flex-direction: column; gap: 2px; overflow: hidden; padding: 3px; border: 1px solid var(--zn-line); border-radius: 6px; background: color-mix(in srgb, var(--zn-hover) 12%, transparent); }
+/* OW-03: the height of the six weeks. A cell never grows with what is in it; it shows as many items as it holds
+   (monthCellLines in the calendar module), so the weeks are as high as the rules below say and no higher.
+   Fitted (data-fit="true" on the pane content): the content is a column in which the weeks share what the day names
+   and the list of the selected day leave. A week is never under 44px (279px = six weeks and five gaps), and never
+   under what the date and one line of an item need at a large text size (12em + 84px for the six); then the content
+   scrolls. The grid has a basis of 0, not of its content: with its content as the basis it could not get lower than
+   what was drawn into it for a higher pane. The list of the selected day takes 40% at most (110px in a pane so low
+   that this is less), gives way before the content has to scroll (down to 4.6em: its heading and one item) and
+   scrolls by itself. The column starts at the top and its items are as wide as it is: the pane content centres what
+   it holds while it is empty (the rule near the panes), and what is centred and too high cannot be scrolled to its
+   top.
+   A chosen size (--zn-cal-month-row): weeks of that many px, and the content scrolls as it always did. */
+.zentral-notes-sheet .zn-cal-month-grid { grid-template-rows: repeat(6, var(--zn-cal-month-row, 58px)); }
+.zentral-notes-sheet .zn-calendar-view[data-view="month"][data-fit="true"] { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 0; }
+.zentral-notes-sheet .zn-calendar-view[data-view="month"][data-fit="true"] > .zn-cal-month-wrap { flex: 1 1 0; min-height: auto; }
+.zentral-notes-sheet .zn-calendar-view[data-view="month"][data-fit="true"] .zn-cal-month-grid { flex: 1 1 0; min-height: max(279px, calc(12em + 84px)); grid-template-rows: repeat(6, minmax(0, 1fr)); }
+.zentral-notes-sheet .zn-calendar-view[data-view="month"][data-fit="true"] > .zn-cal-month-selection { flex: 0 1 auto; min-height: 4.6em; max-height: max(40%, 110px); overflow: auto; scrollbar-width: thin; }
+.zentral-notes-sheet .zn-cal-month-cell { position: relative; display: flex; min-width: 0; min-height: 0; flex-direction: column; gap: 2px; overflow: hidden; padding: 3px; border: 1px solid var(--zn-line); border-radius: 6px; background: color-mix(in srgb, var(--zn-hover) 12%, transparent); }
 .zentral-notes-sheet .zn-cal-month-cell.is-out { opacity: .48; }
 .zentral-notes-sheet .zn-cal-month-cell.is-selected { border-color: var(--zn-accent); background: color-mix(in srgb, var(--zn-accent) 10%, transparent); }
 .zentral-notes-sheet .zn-cal-month-date { align-self: flex-start; min-width: 23px; padding: 1px 4px; border: 0; border-radius: 5px; background: transparent; color: var(--zn-text); font: inherit; font-size: .82em; text-align: center; cursor: pointer; }
@@ -1924,7 +1947,13 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-time-allday-cell { display: flex; min-width: 0; min-height: 22px; flex-direction: column; gap: 2px; padding: 2px; border-left: 1px solid var(--zn-line); }
 .zentral-notes-sheet .zn-cal-time-allday-cell.is-today { background: color-mix(in srgb, var(--zn-accent) 7%, transparent); }
 .zentral-notes-sheet .zn-cal-time-allday-cell .zn-cal-item { padding: 2px 3px; font-size: .66em; }
-.zentral-notes-sheet .zn-cal-time-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-gutter: stable; scrollbar-width: thin; }
+/* The timeline takes what the header and the all-day row leave, and never less than two and a half of the smallest
+   hours (3.5em; fitMinHourPx is 1.4 of the text size). In a pane too low for that (a large text, a full all-day row)
+   it used to be 0 px high and the hours could not be reached; now the pane content scrolls to it. */
+.zentral-notes-sheet .zn-cal-time-scroll { flex: 1 1 auto; min-height: 3.5em; overflow: auto; scrollbar-gutter: stable; scrollbar-width: thin; }
+/* OW-03: the hours are fitted to the timeline and there is nothing to scroll. No scrollbar can show, also not for the
+   one frame in which the pane is already lower and the hours are not drawn again yet. */
+.zentral-notes-sheet .zn-cal-time-scroll[data-fitted="true"] { overflow-y: hidden; }
 /* --zn-cal-hours: how many hours the grid shows (24, or the chosen hours widened for what is in view; set on .zn-cal-time-view). */
 .zentral-notes-sheet .zn-cal-time-grid-row { min-height: calc(var(--zn-cal-hours, 24) * var(--zn-cal-hour-height, 54px)); align-items: stretch; grid-template-columns: 42px minmax(0, 1fr); }
 .zentral-notes-sheet .zn-cal-hour-gutter { display: flex; flex-direction: column; padding-top: 2px; }
@@ -1970,6 +1999,12 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-time-reminder .zn-cal-item-category,
 .zentral-notes-sheet .zn-cal-time-reminder .zn-cal-item-note { display: none; }
 .zentral-notes-sheet .zn-cal-time-view.is-day .zn-cal-time-event { font-size: .76em; }
+/* OW-03: an event too low for its time above its title (the script measures what the two lines need and sets
+   .is-short) shows the title alone, in the middle of the box. With the hours fitted to the pane an hour is often
+   under 22px, and the box showed the time and the upper half of the title. */
+.zentral-notes-sheet .zn-cal-time-event.is-short { justify-content: center; padding-top: 0; padding-bottom: 0; }
+.zentral-notes-sheet .zn-cal-time-event.is-short .zn-cal-item-time { display: none; }
+.zentral-notes-sheet .zn-cal-time-event.is-short .zn-cal-item-title { flex: 0 0 auto; }
 @media (max-width: 600px) {
   .zentral-notes-sheet .zn-cal-time-view.is-week .zn-cal-time-day-head strong { font-size: .68em; }
   .zentral-notes-sheet .zn-cal-time-view.is-week .zn-cal-time-day-head > span { font-size: .62em; }
@@ -2002,27 +2037,27 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 @media (max-width: 560px) {
   .zentral-notes-sheet .zn-calendar-controls .zn-chip { font-size: .78em; }
   .zentral-notes-sheet .zn-calendar-controls .zn-calendar-category-filter { max-width: 130px; }
-  .zentral-notes-sheet .zn-cal-month-grid { grid-template-rows: repeat(6, minmax(44px, 1fr)); }
-  .zentral-notes-sheet .zn-cal-month-cell { min-height: 44px; padding: 2px; }
+  .zentral-notes-sheet .zn-cal-month-cell { padding: 2px; }
   .zentral-notes-sheet .zn-cal-month-mark { font-size: .58em; }
   .zentral-notes-sheet .zn-cal-agenda-row { grid-template-columns: minmax(0, 1fr); gap: 1px; }
 }
 
-/* Density is independent from the narrow-month list fallback. Keep labels readable and
-   timed geometry in sync with the same hour-height variable used by the renderer. */
-.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-month-grid { grid-template-rows: repeat(6, minmax(52px, 1fr)); }
-.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-month-cell { min-height: 52px; padding: 2px; }
-.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-month-mark { font-size: .63em; }
-.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-month-date { font-size: .8em; }
+/* The three looks (paddings and text sizes): comfortable, compact, extra-compact. Which one is drawn follows the size
+   of the view (OW-03; calendarScaleDensity in the calendar module): data-density on the pane content for the lists,
+   the list of a selected day and the header of Week and Day; on .zn-cal-month-wrap for the cells of the Month grid,
+   which take the look of the height their weeks have. The heights themselves are not set here: an hour is
+   --zn-cal-hour-height, a week of Month is fitted or --zn-cal-month-row. */
+.zentral-notes-sheet .zn-cal-month-wrap[data-density="compact"] .zn-cal-month-cell { padding: 2px; }
+.zentral-notes-sheet .zn-cal-month-wrap[data-density="compact"] .zn-cal-month-mark { font-size: .63em; }
+.zentral-notes-sheet .zn-cal-month-wrap[data-density="compact"] .zn-cal-month-date { font-size: .8em; }
 .zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-day-head strong { font-size: .88em; }
 .zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-day-group { margin-bottom: 5px; padding: 5px; }
 .zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-day-items { gap: 2px; }
 .zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-item:not(.zn-cal-time-event):not(.zn-cal-time-reminder) { padding: 3px 5px; }
 .zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-agenda-row { margin-bottom: 2px; }
-.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-month-grid { grid-template-rows: repeat(6, minmax(44px, 1fr)); gap: 2px; }
-.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-month-cell { min-height: 44px; gap: 1px; padding: 2px; }
-.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-month-mark { font-size: .61em; }
-.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-month-date { font-size: .78em; }
+.zentral-notes-sheet .zn-cal-month-wrap[data-density="extra-compact"] .zn-cal-month-cell { gap: 1px; padding: 2px; }
+.zentral-notes-sheet .zn-cal-month-wrap[data-density="extra-compact"] .zn-cal-month-mark { font-size: .61em; }
+.zentral-notes-sheet .zn-cal-month-wrap[data-density="extra-compact"] .zn-cal-month-date { font-size: .78em; }
 .zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-day-head strong { font-size: .84em; }
 .zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-day-group { margin-bottom: 3px; padding: 3px 4px; }
 .zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-day-head { margin-bottom: 2px; }
