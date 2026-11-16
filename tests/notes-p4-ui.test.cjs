@@ -414,15 +414,15 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
     click(sheet.root.all().find((e) => e._classes?.has("zn-chip") && e.textContent === "Close")); await tick();
   });
 
-  await test("demo notes (#3): More > Install demo notes creates six notes in the Help folder, opens the tour, and a second run adds nothing", async () => {
+  await test("demo notes (#3, T4.1): More > Install demo notes creates seven notes in the Help folder, opens the tour, and a second run adds nothing", async () => {
     const helpCount = () => store.list().filter((n) => n.folder === "help").length;
     const before = helpCount();
     openMore(); click(menuItem("Settings & help")); click(menuItem("Install demo notes")); await flushRaf();
-    assert.equal(helpCount(), before + 6);
+    assert.equal(helpCount(), before + 7);
     assert.equal(store.meta.folders.find((f) => f.id === "help")?.label, "Help");
     assert.equal(q(".zn-title").textContent, "Notes syntax tour", "the tour opens");
     openMore(); click(menuItem("Settings & help")); click(menuItem("Install demo notes")); await flushRaf();
-    assert.equal(helpCount(), before + 6, "second run adds nothing");
+    assert.equal(helpCount(), before + 7, "second run adds nothing");
     assert.match(q(".zn-flash")?.textContent ?? sheet.root.textContent, /already installed/);
   });
 
