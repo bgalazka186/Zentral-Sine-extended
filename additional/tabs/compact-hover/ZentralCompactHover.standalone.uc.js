@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Compact Sidebar Hover
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.197
+// @version 3.3.198
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.197, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.198, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.197";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.198";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -526,6 +526,47 @@ function nativeSidebarSide() {
   const shim = {
     standalone: true,
     getPref,
+    readStartupPanel() {
+      try {
+        const raw = getPref("zen.workspace.bgalazka.open_at_startup", "null");
+        if (typeof raw !== "string") return null;
+        const value = JSON.parse(raw);
+        return value &&
+          typeof value.id === "string" &&
+          value.id.length > 0 &&
+          ["single", "triple"].includes(value.mode)
+          ? { id: value.id, mode: value.mode }
+          : null;
+      } catch (_) {
+        return null;
+      }
+    },
+    whenNativeReady(fn) {
+      if (typeof fn !== "function") return () => {};
+      let cancelled = false;
+      const dispose = () => {
+        cancelled = true;
+      };
+      unloadHandlers.add(dispose);
+      Promise.resolve(nativeReady()).then(
+        () => {
+          unloadHandlers.delete(dispose);
+          if (cancelled || stopped) return;
+          try {
+            fn();
+          } catch (error) {
+            console.warn("[Zentral standalone] native-ready callback failed", error);
+          }
+        },
+        () => {
+          unloadHandlers.delete(dispose);
+        },
+      );
+      return () => {
+        cancelled = true;
+        unloadHandlers.delete(dispose);
+      };
+    },
     nativeSidebarElement,
     nativeSidebarRect,
     nativeSidebarSide,

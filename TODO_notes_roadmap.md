@@ -75,7 +75,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
-|     3 | `OW-30`     | `OPEN`    | High                | M      | —                 | Triple View start-up without the Startup mod; Notes height remembered                                    |
 |     4 | `SB6.3`     | `OPEN`    | High                | M      | none              | Run Agenda quick actions headlessly (no Notes sheet)                                                     |
 |     5 | `T3.4a`     | `PARTIAL` | High                | M      | none              | RSS-style floating hover preview cards for Notes & Agenda tabs in Zen sidebar (includes the old `AU-B2`) |
 |     6 | `OW-18`     | `PARTIAL` | High                | L      | ST7.1, UI4.7      | Choose shared or separate Notes and Agenda per space                                                     |
@@ -136,19 +135,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 ---
 
 ## Task blocks (same order as the Master Order)
-
-#### `OW-30` — Triple View start-up works without the Startup mod; Notes height remembered
-
-**Status:** `OPEN` · **Impact:** High · **Effort:** M · **Source:** owner 2026-11-14, accepted 2026-11-16
-
-**Problem:** Restoring a Triple View pair and opening Notes in it at launch must not depend on the optional `ZentralStartup` mod ("Load at Startup" sites); the owner expects the fix in `loader/`. Also the height of the Notes app is not remembered on launch.
-**Plan (do in this order):**
-
-1. Find which part of the restore (`ctx.openStartupSinglePanel`, `recreateLoadedPanels`, auto-open of Notes) only works when `ZentralStartup` is installed; move it to the loader or make `ZentralSecondaryViews` self-sufficient.
-2. Save the Notes band height (px and share) and restore it at launch, for Triple View and for the standalone card.
-3. Test every install shape: with and without the Startup mod, standalone Notes only, full pack.
-
-**Tests / done when:** `tests/helpers/fake-triple-view.cjs` start-up scenarios without the Startup mod; height survives a restart.
 
 #### `SB6.3` — Run Agenda quick actions headlessly (no Notes sheet)
 
@@ -697,13 +683,15 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.197, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.198, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.197.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B5`, `SB6.1`, `SB6.8`, `T2.8b`, `T3.1`, `T3.6a`, `T4.1`, `T4.5`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c` and `OW-25`, `AU-B4a`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`157/157` test files) passes in Node/fake-Zen at 3.3.197. Live Zen is not available in the sandbox. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.198.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B5`, `SB6.1`, `SB6.8`, `T2.8b`, `T3.1`, `T3.6a`, `T4.1`, `T4.5`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-30`, `AU-B4a`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`158/158` test files) passes in Node/fake-Zen at 3.3.198. Live Zen is not available in the sandbox. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
-Completed this session (3.3.163–3.3.197), every finished item archived in `docs/LEGACY_done_rows.md`:
+Completed this session (3.3.163–3.3.198), every finished item archived in `docs/LEGACY_done_rows.md`:
+
+- `OW-30` DONE (3.3.198) — moved panel start-up readiness and `open_at_startup` parsing into `loader/ZentralRuntime.js` and `loader/standalone/ZentralStandaloneShim.js` (`readStartupPanel`, `whenNativeReady`) so Triple View and single-panel startup restore never depend on the optional `ZentralStartup` mod; fixed sleeping Essential tab URL recovery in `ZentralCornerPanels.uc.js` (`syncCornerTiles` fallback to `linkedPairFor`), `ZentralPanels.uc.js` (`startupPanelCoordinator`, `startupApp`/`recreateLoadedPanels` fallbacks, `syncCornerTiles` before `onRestore`), and `ZentralSecondaryViews.uc.js` (`resolvePairApp` without duplicating Essential tabs, `ctx.openStartupTriplePair`, self-sufficient `whenNativeReady` restore when no panel coordinator is present); and persisted + restored exact pixel and proportional share heights (`gapPx`/`shareGap`, `dockPx`/`shareDock`, `cardH`/`cardHShare`, pure `resolveSlotHeight`/`resolveCardHeight`/`hasStartupPanelPref`, no-op drag guard, `finishOpen` post-load `applyState`/`applyPush`/`layout` pass, and detached card height restore) for Triple View, docked primary panels, and the standalone Notes card. Added `tests/notes-triple-view-ow30.test.cjs` (`158/158` suite).
 
 - `H1.6` DONE (3.3.197) — added synchronous unload write staging (`UNLOAD_RECOVERY_DIR`, `unloadEntryStem`, `parseUnloadEntryName`, `planUnloadWrites`, `decideNoteRecovery`, `store.flushOnUnload`, `store.reconcileUnloadRecovery`, `items.unloadSnapshot`/`reconcileRecoveryEntry`/`refresh`, `history.unloadSnapshot`/`reconcileRecoveryEntry`, `realIO.copy`) wired to `window` `unload` so unsaved notes, `calendar.json`, reminder history and `meta.json` are copied and staged synchronously on Gecko's I/O thread in strict note-before-calendar order (`UI4.7`) without awaiting promise steps in the closed window, then automatically reconciled on next open or live sibling window without ever overwriting a foreign change (keeping only the recovery copy on conflict). Added `tests/notes-unload-save.test.cjs` + Gecko `unload()` dead-promise simulation in `tests/helpers/fake-panel-window.cjs` (`157/157` suite).
 - `T4.1` DONE (3.3.196) — added pure `SHOWCASE_NOTE_ID` (`zn-demo-showcase`) and `buildShowcaseNote()` bundled into `DEMO_NOTES` (`Markdown & Extended Syntax Feature Showcase`, 12 sections: inline styles/dividers, H1–H6 + auto-updated `## Table of Contents`, multi-paragraph/nested blockquotes, Obsidian callouts including foldable `[!faq]-`, unordered/ordered/interactive task lists, aligned GFM table with escaped pipes `\|`, JS/Python/Rust/JSON highlighted code blocks, inline/block LaTeX equations & matrices, wikilinks with alias/`#Heading`/`^block-id`/nested `#tags`/`![[embeds|450]]`, standard & inline footnotes, native `<details>` accordions, and Mermaid `flowchart`/`gitGraph` blocks). Added `tests/notes-showcase.test.cjs` and updated `tests/notes-cycle-f.test.cjs` & `tests/notes-p4-ui.test.cjs` (`156/156` suite).

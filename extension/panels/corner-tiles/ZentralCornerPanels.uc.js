@@ -801,10 +801,16 @@
         for (const tab of targets) {
           let record = essentialTabRecords.get(tab);
           if (!record) {
-            const source = getRestoredEssentialSource(tab);
-            if (!source) continue; // wait until SessionStore has supplied its URL
             const settings = readEssentialSettings(tab);
             const savedId = settings.panelId;
+            // Sleeping Essential tabs do not need ZentralStartup to wake them: when SessionStore has
+            // not populated tab entries yet, recover the URL from the saved Triple View pair snapshot.
+            const source =
+              getRestoredEssentialSource(tab) ||
+              (typeof savedId === "string" &&
+                linkedPairFor(savedId)?.apps?.[savedId]?.url) ||
+              null;
+            if (!source) continue; // wait until SessionStore has supplied its URL
             const stableId =
               typeof savedId === "string" &&
               /^bgalazka-essential-[\w-]+$/.test(savedId) &&

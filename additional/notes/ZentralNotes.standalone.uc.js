@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.197
+// @version 3.3.198
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.197, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.198, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.197";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.198";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -527,6 +527,47 @@ function nativeSidebarSide() {
   const shim = {
     standalone: true,
     getPref,
+    readStartupPanel() {
+      try {
+        const raw = getPref("zen.workspace.bgalazka.open_at_startup", "null");
+        if (typeof raw !== "string") return null;
+        const value = JSON.parse(raw);
+        return value &&
+          typeof value.id === "string" &&
+          value.id.length > 0 &&
+          ["single", "triple"].includes(value.mode)
+          ? { id: value.id, mode: value.mode }
+          : null;
+      } catch (_) {
+        return null;
+      }
+    },
+    whenNativeReady(fn) {
+      if (typeof fn !== "function") return () => {};
+      let cancelled = false;
+      const dispose = () => {
+        cancelled = true;
+      };
+      unloadHandlers.add(dispose);
+      Promise.resolve(nativeReady()).then(
+        () => {
+          unloadHandlers.delete(dispose);
+          if (cancelled || stopped) return;
+          try {
+            fn();
+          } catch (error) {
+            console.warn("[Zentral standalone] native-ready callback failed", error);
+          }
+        },
+        () => {
+          unloadHandlers.delete(dispose);
+        },
+      );
+      return () => {
+        cancelled = true;
+        unloadHandlers.delete(dispose);
+      };
+    },
     nativeSidebarElement,
     nativeSidebarRect,
     nativeSidebarSide,
@@ -13498,6 +13539,64 @@ __zentralShim.register = function (def) {
       const max = gapMaxPx(room);
       return max > 0 && px > max ? max : px;
     }
+    // OW-30: remembered height (both exact px and proportional share) for panel slots and the standalone card.
+    const cleanSlotPx = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) && n >= SLOT_MIN_PX && n <= 4000 ? Math.round(n) : 0;
+    };
+    const cleanCardPx = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) && n >= GEO_MIN.h && n <= 4000 ? Math.round(n) : 0;
+    };
+    const cleanCardShare = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) && n >= 0.15 && n <= 1 ? Math.round(n * 1000) / 1000 : 0;
+    };
+    // Exact px wins when the panel height matches the session that saved it (no rounding or chrome-settle drift);
+    // proportional share takes over when the window/monitor size changed substantially.
+    function resolveSlotHeight({ size = "peek", pref = 45, share = 0, px = 0, base = 0, room = 0, between = false } = {}) {
+      if (size === "span" || !(base > 200)) return 0;
+      const fit = (v) => (between && room > 0 ? clampGapPx(v, room) : v);
+      const s = slotShare({ size, pref, custom: share });
+      if (size !== "peek") return fit(slotPx(base, s));
+      const savedPx = cleanSlotPx(px);
+      const savedShare = Number(share) > 0 ? clampShare(Number(share)) : 0;
+      if (savedPx > 0 && savedShare > 0) {
+        const impliedBase = savedPx / savedShare;
+        if (impliedBase > 0 && Math.abs(base - impliedBase) / impliedBase <= 0.03) return fit(clampSlotPx(base, savedPx));
+        return fit(slotPx(base, savedShare));
+      }
+      if (savedPx > 0) return fit(clampSlotPx(base, savedPx));
+      return fit(slotPx(base, s));
+    }
+    function resolveCardHeight({ px = 0, share = 0, areaH = 0, fallbackH = 0, minH = GEO_MIN.h } = {}) {
+      const lo = Math.max(1, Math.round(minH || GEO_MIN.h));
+      const fb = Math.max(lo, Math.round(Number(fallbackH) || lo));
+      if (!(areaH > 0)) return fb;
+      const hi = Math.max(lo, Math.round(areaH));
+      const savedPx = cleanCardPx(px);
+      const savedShare = cleanCardShare(share);
+      if (savedPx > 0 && savedShare > 0) {
+        const impliedArea = savedPx / savedShare;
+        if (impliedArea > 0 && Math.abs(areaH - impliedArea) / impliedArea <= 0.03) return Math.max(lo, Math.min(hi, savedPx));
+        return Math.max(lo, Math.min(hi, Math.round(areaH * savedShare)));
+      }
+      if (savedPx > 0) return Math.max(lo, Math.min(hi, savedPx));
+      if (savedShare > 0) return Math.max(lo, Math.min(hi, Math.round(areaH * savedShare)));
+      return Math.max(lo, Math.min(hi, fb));
+    }
+    // Parse zen.workspace.bgalazka.open_at_startup independently of ZentralStartup.
+    function hasStartupPanelPref(raw) {
+      const s = String(raw ?? "").trim();
+      if (!s || s === "null" || s === "false") return false;
+      if (s === "true") return true;
+      try {
+        const v = JSON.parse(s);
+        return !!(v && typeof v === "object" && typeof v.id === "string" && v.id.length > 0 && ["single", "triple"].includes(v.mode));
+      } catch (_) {
+        return false;
+      }
+    }
     // Between Triple View's web panels the Notes sheet has TWO independent edges. Its top edge moves the upper
     // panel's boundary (only `up` changes, `down` stays), its bottom edge moves the lower panel's boundary
     // (only `down` changes). Pure and clamped so a drag can never drift or leave either panel unusable.
@@ -13731,7 +13830,7 @@ __zentralShim.register = function (def) {
       const dirty = new Set();
       const listeners = new Set();
       const backedUp = new Set();
-      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, cardDock: "", cardW: 0,
+      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, dockPx: 0, gapPx: 0, cardDock: "", cardW: 0, cardH: 0, cardHShare: 0,
         allNewChoice: "note", calendarClockMode: "both",
         calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarTab: "tree",
         calendarView: "month", calendarWeekStart: 1, calendarWeekNumbers: false, calendarWeekSpan: { days: 7, anchor: "weekStart" }, calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
@@ -13960,10 +14059,14 @@ __zentralShim.register = function (def) {
           meta.cardDock = cleanCardDock(raw.cardDock);
           const cardW = Number(raw.cardW);
           if (Number.isFinite(cardW) && cardW >= GEO_MIN.w && cardW <= 4000) meta.cardW = Math.round(cardW);
+          meta.cardH = cleanCardPx(raw.cardH);
+          meta.cardHShare = cleanCardShare(raw.cardHShare);
           for (const k of ["shareDock", "shareGap"]) {
             const v = Number(raw[k]);
             meta[k] = Number.isFinite(v) && v > 0 ? clampShare(v) : 0;
           }
+          meta.dockPx = cleanSlotPx(raw.dockPx);
+          meta.gapPx = cleanSlotPx(raw.gapPx);
           if (CALENDAR_PART) {
             meta.allNewChoice = CALENDAR_PART.cleanAllNotesNewChoice(raw.allNewChoice);
             meta.calendarClockMode = CALENDAR_PART.cleanClockMode(raw.calendarClockMode);
@@ -18001,7 +18104,7 @@ __zentralShim.register = function (def) {
         normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, clearOfRect, sideOf, createHoldAction,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
-        clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, gapPageFloor, gapMaxPx, clampGapPx, GAP_PANEL_MIN_PX, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
+        clampShare, slotShare, slotPx, clampSlotPx, cleanSlotPx, cleanCardPx, cleanCardShare, resolveSlotHeight, resolveCardHeight, hasStartupPanelPref, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, gapPageFloor, gapMaxPx, clampGapPx, GAP_PANEL_MIN_PX, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
         indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, mergeFolders, mergeMeta, META_SHARED_KEYS, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
@@ -27059,7 +27162,7 @@ __zentralShim.register = function (def) {
         if (adapter.pushPanel) {
           // A slot sheet has no box to reset: it goes back to the preferred height, centred on the divider.
           recenterGap = true;
-          store.setMeta({ shareDock: 0, shareGap: 0, size: "peek" });
+          store.setMeta({ shareDock: 0, shareGap: 0, dockPx: 0, gapPx: 0, size: "peek" });
           applyState();
           if (isOpen && !collapsed) applyPush(0, 0);
           layout();
@@ -27068,7 +27171,7 @@ __zentralShim.register = function (def) {
         }
         const g = { ...(store.meta.geo || {}) };
         delete g[key];
-        store.setMeta({ geo: g, size: "peek" });
+        store.setMeta({ geo: g, cardH: 0, cardHShare: 0, size: "peek" });
         applyState();
         layout();
         flash("Position and size reset", 2500);
@@ -27260,6 +27363,7 @@ __zentralShim.register = function (def) {
             return;
           }
           g.share = slotDragShare({ startPx: g.startPx, base: g.base, dy, dir: g.edge === "n" ? -1 : 1 });
+          g.px = g.share > 0 ? slotPx(g.base, g.share) : 0;
           if (g.share > 0) {
             adapter.pushPanel(g.share);
             layout();
@@ -27354,8 +27458,14 @@ __zentralShim.register = function (def) {
         readAnchY = null;
         if (g.slot) {
           if (g.share > 0) {
-            // Remembered per kind of slot, as a share of the pages (so it survives a window resize).
-            const patch = { [g.slot === "gap" ? "shareGap" : "shareDock"]: Math.round(g.share * 1000) / 1000, size: "peek" };
+            const changed = g.slot === "gap"
+              ? (g.px > 0 && g.px !== g.startPx) || (g.up >= 0 && g.up !== g.startUp)
+              : g.px > 0 ? g.px !== g.startPx : Math.abs(g.share - (g.base > 0 ? g.startPx / g.base : 0)) > 1e-4;
+            if (!changed) return;
+            // Remembered per kind of slot, as both exact px and share of the pages (survives restarts and window resizes).
+            const px = cleanSlotPx(g.px > 0 ? g.px : slotPx(g.base, g.share));
+            const share = Math.round(g.share * 1000) / 1000;
+            const patch = g.slot === "gap" ? { shareGap: share, gapPx: px, size: "peek" } : { shareDock: share, dockPx: px, size: "peek" };
             store.setMeta(patch);
             Promise.resolve(store.flush?.()).catch((error) => console.warn("[ZentralNotes]", error));
             applyState();
@@ -27367,10 +27477,14 @@ __zentralShim.register = function (def) {
         if (g.rect) {
           // A rect read while split view widened the card goes back to the base size (no growing on every switch).
           const base = cardBaseRect(g.rect, mode === "split" ? widePct() : 1, g.area.w);
+          const cardHeightPatch = adapter.cardMode
+            ? { cardH: cleanCardPx(base.h), cardHShare: g.area.h > 0 ? cleanCardShare(base.h / g.area.h) : 0 }
+            : {};
           if (cardFree() && g.kind === "move" && g.snap) store.setMeta({ cardDock: g.snap, cardW: Math.max(GEO_MIN.w, base.w), size: "peek" });
-          else if (cardFree() && g.kind === "move" && g.fromDock) store.setMeta({ cardDock: "", geo: { ...(store.meta.geo || {}), [g.key]: base }, size: "peek" });
+          else if (cardFree() && g.kind === "move" && g.fromDock) store.setMeta({ cardDock: "", geo: { ...(store.meta.geo || {}), [g.key]: base }, ...cardHeightPatch, size: "peek" });
           else if (cardFree() && dockedSide()) store.setMeta({ cardW: Math.max(GEO_MIN.w, base.w), size: "peek" });
-          else store.setMeta({ geo: { ...(store.meta.geo || {}), [g.key]: base }, size: "peek" });
+          else store.setMeta({ geo: { ...(store.meta.geo || {}), [g.key]: base }, ...cardHeightPatch, size: "peek" });
+          if (g.kind !== "move") Promise.resolve(store.flush?.()).catch((error) => console.warn("[ZentralNotes]", error));
           applyState();
           layout();
         }
@@ -27969,7 +28083,10 @@ __zentralShim.register = function (def) {
           w = a.width;
           hgt = a.height;
         } else if (geo && size === "peek" && b.height >= 320 && !a.wideFill) {
-          const g = clampGeo(geo, { w: b.width, h: b.height });
+          const targetH = adapter.cardMode
+            ? resolveCardHeight({ px: store.meta.cardH || geo.h, share: store.meta.cardHShare, areaH: b.height, fallbackH: geo.h })
+            : geo.h;
+          const g = clampGeo({ ...geo, h: targetH }, { w: b.width, h: b.height });
           left = b.left + g.x;
           top = b.top + g.y;
           w = g.w;
@@ -27984,9 +28101,14 @@ __zentralShim.register = function (def) {
         } else {
           const r = placeSheet({ area: a, size });
           left = a.left + r.x;
-          top = a.top + r.y;
           w = r.w;
-          hgt = r.h;
+          if (adapter.cardMode && size === "peek" && !a.wideFill && b.height >= 320 && (store.meta.cardH > 0 || store.meta.cardHShare > 0)) {
+            hgt = resolveCardHeight({ px: store.meta.cardH, share: store.meta.cardHShare, areaH: b.height, fallbackH: r.h });
+            top = a.anchor === "bottom" ? Math.max(a.top + 6, a.top + a.height - 6 - hgt) : a.top + r.y;
+          } else {
+            top = a.top + r.y;
+            hgt = r.h;
+          }
         }
         root.style.left = Math.round(left - off.ox) + "px";
         root.style.top = Math.round(top - off.oy) + "px";
@@ -28034,15 +28156,23 @@ __zentralShim.register = function (def) {
           const strip = on && isOpen && collapsed && !foldedByParentPanel ? hoverStripPx(getPref(PREF.REVEAL_HEIGHT, 10)) : 0;
           // While the edge is being dragged the live share wins over the remembered one.
           const dragShare = gesture && gesture.slot && gesture.active && gesture.share > 0 ? gesture.share : 0;
+          const prefPct = getPref(PREF.PUSH_PANEL_PERCENT, 45);
+          const savedShare = between ? store.meta.shareGap : store.meta.shareDock;
+          const savedPx = !dragShare && store.meta.size === "peek" ? (between ? store.meta.gapPx : store.meta.dockPx) : 0;
           const share =
             on && !collapsed && isOpen
-              ? dragShare || slotShare({ size: store.meta.size, pref: getPref(PREF.PUSH_PANEL_PERCENT, 45), custom: between ? store.meta.shareGap : store.meta.shareDock })
+              ? dragShare || slotShare({ size: store.meta.size, pref: prefPct, custom: savedShare })
               : 0;
           const gdrag = between && isOpen && !collapsed && gesture && gesture.slot === "gap" && gesture.active && gesture.px > 0 ? gesture : null;
           // A size/reset action re-centres the band on the divider; ordinary resizes preserve its live split.
           const upFrac = between && recenterGap ? 0.5 : -1;
           recenterGap = false;
-          const quad = adapter.pushPanel(gdrag ? 0 : share, gdrag ? { strip, px: gdrag.px, up: gdrag.up } : { strip, upFrac });
+          const quad = adapter.pushPanel(
+            gdrag ? 0 : share,
+            gdrag
+              ? { strip, px: gdrag.px, up: gdrag.up }
+              : { strip, upFrac, savedPx, savedShare, size: store.meta.size, pref: prefPct },
+          );
           root.dataset.slot = adapter.slotKind?.() || "";
           if (quad) root.dataset.bgalazkaTripleSlot = "notes";
           else delete root.dataset.bgalazkaTripleSlot;
@@ -28071,8 +28201,8 @@ __zentralShim.register = function (def) {
         const r = root.getBoundingClientRect();
         const base = cardBaseRect({ x: r.left - v.left, y: r.top - v.top, w: r.width, h: r.height }, mode === "split" ? widePct() : 1, v.width);
         if (dockedSide()) {
-          // Detach: the width it had at the edge, 80% of the height, centered (a detach never resizes it sideways).
-          const h2 = Math.max(GEO_MIN.h, Math.round(v.height * 0.8));
+          // Detach: the width it had at the edge, remembered card height (or 80% fallback), centered.
+          const h2 = resolveCardHeight({ px: store.meta.cardH, share: store.meta.cardHShare, areaH: v.height, fallbackH: Math.round(v.height * 0.8) });
           const rect = clampGeo({ x: base.x, y: Math.round((v.height - h2) / 2), w: base.w, h: h2 }, { w: v.width, h: v.height });
           store.setMeta({ cardDock: "", geo: { ...(store.meta.geo || {}), [key]: rect }, size: "peek" });
         } else {
@@ -28724,6 +28854,10 @@ __zentralShim.register = function (def) {
         const id = store.latestId();
         if (id) openNote(id, { focus: openFocus });
         else newNote("", { focus: openFocus });
+        // Apply persisted meta (slot height, dock mode, standalone card height) now that meta.json is loaded.
+        applyState();
+        syncParentPanelHidden();
+        if (!foldedByParentPanel && adapter.pushPanel) applyPush(0, 0);
         layout();
         if (adapter.cardMode && hoverMode()) armGrace();
         showHistoryRecovery();
@@ -29124,7 +29258,7 @@ __zentralShim.register = function (def) {
         // the geometry module reads --zentral-notes-panel-reserve and shortens the panel. Between: the
         // secondary-views module reads --zentral-notes-gap and opens a gap at the divider (both panels
         // shrink by their share). Returns true while the sheet is a layout slot of Triple View.
-        pushPanel(fraction, { strip = 0, px: wantPx = 0, up: wantUp = -1, upFrac = -1 } = {}) {
+        pushPanel(fraction, { strip = 0, px: wantPx = 0, up: wantUp = -1, upFrac = -1, savedPx = 0, savedShare = 0, size = "peek", pref = 45 } = {}) {
           const rootEl = document.documentElement;
           let wants = strip > 0 || fraction > 0 || wantPx > 0;
           const between = api.placement() === "between";
@@ -29142,7 +29276,15 @@ __zentralShim.register = function (def) {
           // Between the pages the height also has to leave each page its floor (gapMaxPx); the thin hover strip never reaches it.
           const fit = between ? (v) => (v > 0 ? clampGapPx(v, pagesRoom()) : v) : (v) => v;
           const asStrip = wants && !(wantPx > 0) && strip > 0 && base > 200;
-          const px = !wants ? 0 : wantPx > 0 ? fit(clampSlotPx(base, wantPx)) : asStrip ? Math.round(strip) : fit(slotPx(base, fraction));
+          const px = !wants
+            ? 0
+            : wantPx > 0
+              ? fit(clampSlotPx(base, wantPx))
+              : asStrip
+                ? Math.round(strip)
+                : savedPx > 0
+                  ? resolveSlotHeight({ size, pref, share: savedShare, px: savedPx, base, room: pagesRoom(), between })
+                  : fit(slotPx(base, fraction));
           const up = !between || px <= 0 ? -1 : wantUp >= 0 ? Math.min(Math.round(wantUp), px) : upFrac >= 0 ? Math.round(px * Math.min(1, upFrac)) : keptGapUp(px);
           // The split is the user's from the first drag of an edge that changes what is on screen (a press that moves
           // nothing does not count) until a size or reset action centres the gap again.
@@ -32875,7 +33017,7 @@ __zentralShim.register = function (def) {
       //    does not make Notes appear by itself);
       //  - anything the person does with Notes in the meantime ends it (endRestore).
       const RESTORE_RETRY_MS = 250, RESTORE_RETRIES = 8, RESTORE_WINDOW_MS = 60000;
-      let restoreState = prefStr("zen.workspace.bgalazka.open_at_startup", "null") !== "null" ? "pending" : "off";
+      let restoreState = hasStartupPanelPref(prefStr("zen.workspace.bgalazka.open_at_startup", "null")) ? "pending" : "off";
       let restoreTries = 0, restoreRetryTimer = 0, restoreWindowTimer = 0;
       function endRestore() {
         if (restoreState !== "off") restoreState = "done";

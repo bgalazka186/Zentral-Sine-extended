@@ -157,7 +157,7 @@ function patchDom(El, record) {
  *   hideMs                        how long the autohide slide takes (the style sheet says 0.2 s);
  *   coldMs                        a page of a newly made panel has no browsing context for this long (cold start-up).
  */
-function openTripleWindow(world, { id, width = 420, height = 800, right = 12, top = 40, viewport = { width: 1280, height: 900 }, toolbarHeight = 36, headHeight = 30, rootAttrs = { "bgalazka-webtoolbar": "true" }, hideMs = 200, coldMs = 0 } = {}) {
+function openTripleWindow(world, { id, width = 420, height = 800, right = 12, top = 40, viewport = { width: 1280, height: 900 }, toolbarHeight = 36, headHeight = 30, rootAttrs = { "bgalazka-webtoolbar": "true" }, hideMs = 200, coldMs = 0, onRuntime = null } = {}) {
   const observers = createObservers();
   const w = world.openWindow({ id, globals: { MutationObserver: observers.MutationObserver, ResizeObserver: observers.ResizeObserver } });
   const { El, Ev, document, html, win } = w;
@@ -419,6 +419,7 @@ function openTripleWindow(world, { id, width = 420, height = 800, right = 12, to
   const ctx = {
     registerCleanup: (fn) => void cleanups.push(fn),
     getPref: (key, fallback) => (world.prefs.has(key) ? world.prefs.get(key) : fallback),
+    setPref: (key, value) => world.prefs.set(key, value),
     setTimeout: (fn, ms) => win.setTimeout(fn, ms), clearTimeout: (timer) => win.clearTimeout(timer),
     essentialPanels: new Map(), linkedTriplePairs: [],
     linkedPairFor: (appId) => ctx.linkedTriplePairs.find((p) => p.top === appId || p.bottom === appId) || null,
@@ -443,8 +444,12 @@ function openTripleWindow(world, { id, width = 420, height = 800, right = 12, to
   };
   let part = null;
   Object.assign(win.ZentralRuntime, { registerPart: (_name, generator) => { part = generator; }, sidebarSafeBounds: () => ({ left: 0, right: viewport.width }) });
+  if (typeof onRuntime === "function") onRuntime(win.ZentralRuntime, ctx);
   const Services = {
-    prefs: { setStringPref: (key, value) => world.prefs.set(key, value) },
+    prefs: {
+      setStringPref: (key, value) => world.prefs.set(key, value),
+      setBoolPref: (key, value) => world.prefs.set(key, !!value),
+    },
     obs: { addObserver() {}, removeObserver() {} },
     io: { newURI: (spec) => ({ spec }) },
     scriptSecurityManager: { createContentPrincipal: () => ({}) },

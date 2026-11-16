@@ -104,17 +104,39 @@
           return [];
         }
       }
-      function resolvePairApp(pair, id) {
+      function hasStoredEssentialTab(id) {
+        if (!id || !id.startsWith("bgalazka-essential-")) return false;
+        const tabs =
+          window.gZenWorkspaces?.allStoredTabs ?? window.gBrowser?.tabs ?? [];
+        const ss = window.SessionStore;
+        for (const tab of tabs) {
+          if (!tab?.isConnected || tab.closing) continue;
+          try {
+            const raw = ss?.getCustomTabValue?.(tab, "bgalazka-panel-settings");
+            if (raw && JSON.parse(raw)?.panelId === id) return true;
+          } catch (_) {}
+        }
+        return false;
+      }
+      function resolvePairApp(pair, id, { promoteMissing = true } = {}) {
         const tabRecord = ctx.essentialPanels.get(id);
         if (tabRecord?.tab.isConnected) return tabRecord.app;
         const normal = savedNormalApps().find((app) => app.id === id);
         if (normal) return normal;
-        // A tab may have closed while this window was shut down. Create its
-        // dedicated launcher from the saved metadata without creating a browser.
-        const snapshot = pair.apps[id];
-        if (!id.startsWith("bgalazka-essential-") || !snapshot?.url)
-          return null;
+        const snapshot = pair.apps?.[id];
+        if (!snapshot?.url) return null;
         const app = { ...snapshot, id, workspaceId: "all" };
+        // During cold startup (without ZentralStartup waking sleeping Essential tabs) or while
+        // the tab still exists in session restore, use the saved snapshot directly without
+        // duplicating it into the normal Apps grid.
+        if (
+          !promoteMissing ||
+          !id.startsWith("bgalazka-essential-") ||
+          hasStoredEssentialTab(id)
+        )
+          return app;
+        // A tab closed while this window was shut down: create its dedicated launcher from the
+        // saved metadata without creating a browser.
         Services.prefs.setStringPref(
           "zen.workspace.apps.sidebar.apps",
           JSON.stringify([...savedNormalApps(), app]),
@@ -174,9 +196,9 @@
         ctx.attachZenInternetPanelBrowser(browser);
         ctx.updateZenCssBrowser(browser);
       }
-      function showPair(pair) {
-        const top = resolvePairApp(pair, pair.top);
-        const bottom = resolvePairApp(pair, pair.bottom);
+      function showPair(pair, opts = {}) {
+        const top = resolvePairApp(pair, pair.top, opts);
+        const bottom = resolvePairApp(pair, pair.bottom, opts);
         if (!top || !bottom) return false;
         if (state.mode) leaveMode();
         origOpen.call(apps, top);
@@ -1144,7 +1166,9 @@
           const old = loaded.get(id);
           const source =
             ctx.essentialPanels.get(id)?.app ||
-            savedNormalApps().find((a) => a.id === id);
+            savedNormalApps().find((a) => a.id === id) ||
+            state.pair?.apps?.[id] ||
+            ctx.linkedPairFor?.(id)?.apps?.[id];
           if (!old || !source) continue;
           const app = {
             ...source,
@@ -1201,6 +1225,76 @@
         delete ctx.syncSecondaryToolbarPreferences;
       });
       ctx.openStartupSinglePanel = (app) => origOpen.call(apps, app);
+      ctx.openStartupTriplePair = (id) => {
+        const pair = id && ctx.linkedPairFor?.(id);
+        return pair ? showPair(pair, { promoteMissing: false }) : false;
+      };
+      // Self-sufficient Triple View startup restore (OW-30): works without ZentralStartup
+      // and even when no outer coordinator runs the startup loop (uses loader/ZentralRuntime).
+      let cancelSelfStartup = null;
+      if (
+        !ctx.startupPanelCoordinator &&
+        typeof window.ZentralRuntime?.whenNativeReady === "function"
+      ) {
+        const readStartup = () => {
+          if (typeof window.ZentralRuntime?.readStartupPanel === "function")
+            return window.ZentralRuntime.readStartupPanel();
+          try {
+            const value = JSON.parse(
+              ctx.getPref("zen.workspace.bgalazka.open_at_startup", "null"),
+            );
+            return value &&
+              typeof value.id === "string" &&
+              value.id.length > 0 &&
+              ["single", "triple"].includes(value.mode)
+              ? value
+              : null;
+          } catch (_) {
+            return null;
+          }
+        };
+        const initialSelection = readStartup();
+        if (initialSelection?.mode === "triple") {
+          const hoverPref =
+            ctx.BGALAZKA_EXT_PREFS?.HOVER_REVEAL_PANEL ||
+            "zen.workspace.bgalazka.hover_reveal_panel";
+          if (typeof ctx.setPref === "function") ctx.setPref(hoverPref, true);
+          else {
+            try {
+              Services.prefs.setBoolPref(hoverPref, true);
+            } catch (_) {}
+          }
+          let attempted = false;
+          const trySelfRestore = () => {
+            const sel = readStartup();
+            if (
+              !sel ||
+              sel.mode !== "triple" ||
+              !ctx.getPref("zen.workspace.apps.sidebar.enabled", true)
+            )
+              return true;
+            if (!attempted && root()?.hasAttribute("open")) return true;
+            const pair = ctx.linkedPairFor?.(sel.id);
+            if (!pair) return true;
+            attempted = true;
+            const already =
+              root()?.hasAttribute("open") &&
+              ui.getAttribute("bgalazka-triple-view") === "true" &&
+              ctx
+                .getAllAppBrowsers()
+                .some((b) => b.isConnected && b._bgalazkaAppId === sel.id);
+            if (!already && !ctx.openStartupTriplePair(sel.id)) return false;
+            const opened =
+              root()?.hasAttribute("open") &&
+              ui.getAttribute("bgalazka-triple-view") === "true";
+            if (opened) ctx.onStartupPanelOpened?.();
+            return opened;
+          };
+          cancelSelfStartup = window.ZentralRuntime.whenNativeReady(() => {
+            ctx.retryPanelTask?.("secondary-startup-triple", trySelfRestore);
+          });
+        }
+      }
       apps.openPanel = function (app) {
         const pair = app?.id && ctx.linkedPairFor(app.id);
         if (pair) {
@@ -1343,7 +1437,10 @@
         window.removeEventListener("pointercancel", cancelPending, true);
         window.removeEventListener("blur", cancelPending);
         window.removeEventListener("click", onClick, true);
+        cancelSelfStartup?.();
+        ctx.cancelPanelRetry?.("secondary-startup-triple");
         delete ctx.openStartupSinglePanel;
+        delete ctx.openStartupTriplePair;
         apps.openPanel = origOpen;
         apps.closePanel = origClose;
         apps.closeApp = origCloseApp;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Zentral Core and Settings
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.197
+// @version 3.3.198
 // ==/UserScript==
 /*
  * ZENTRAL FILE GUIDE - loader/ZentralRuntime.js
@@ -38,7 +38,7 @@
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
-  const VERSION = "3.3.197";
+  const VERSION = "3.3.198";
   // Sine installs this package under theme.json's id. Resolve from the
   // executing script so local folders and installed copies use their own files.
   // Keep this universal: never hard-code a mod id, folder name, or profile path.
@@ -736,6 +736,46 @@
     // window uses it so its exact-number boxes accept what the Sine text fields accept.
     numericRange(key) {
       return numericRanges.get(key) || null;
+    },
+    // Shared panel start-up contract (OW-30): lives in the loader so restoring a saved
+    // panel or Triple View pair at launch never depends on the optional ZentralStartup mod.
+    readStartupPanel() {
+      try {
+        const raw = getPref("zen.workspace.bgalazka.open_at_startup", "null");
+        if (typeof raw !== "string") return null;
+        const value = JSON.parse(raw);
+        return value &&
+          typeof value.id === "string" &&
+          value.id.length > 0 &&
+          ["single", "triple"].includes(value.mode)
+          ? { id: value.id, mode: value.mode }
+          : null;
+      } catch (_) {
+        return null;
+      }
+    },
+    whenNativeReady(fn) {
+      if (typeof fn !== "function") return () => {};
+      let cancelled = false;
+      const dispose = () => {
+        cancelled = true;
+      };
+      disposers.push(dispose);
+      Promise.resolve(runtime.nativeReady).then(
+        () => {
+          if (cancelled || stopped) return;
+          try {
+            fn();
+          } catch (error) {
+            console.warn("[Zentral] Native-ready callback failed", error);
+          }
+        },
+        (error) => {
+          if (!cancelled && !stopped)
+            console.warn("[Zentral] Native readiness failed", error);
+        },
+      );
+      return dispose;
     },
     snapshot() {
       return {

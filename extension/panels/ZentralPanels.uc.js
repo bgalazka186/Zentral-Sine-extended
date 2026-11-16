@@ -3266,7 +3266,9 @@
             .getAllAppBrowsers()
             .find((b) => b._bgalazkaAppId === id);
           const app =
-            ctx.essentialPanels.get(id)?.app || saved.find((a) => a.id === id);
+            ctx.essentialPanels.get(id)?.app ||
+            saved.find((a) => a.id === id) ||
+            ctx.linkedPairFor?.(id)?.apps?.[id];
           if (!old || !app) continue;
           const next = {
             ...app,
@@ -3298,6 +3300,12 @@
         }
         ctx.syncAppPanelBrowserActivity?.();
       };
+      // Mark ownership before resuming secondary-views so its self-sufficient startup
+      // fallback does not double-open when ZentralPanels coordinates startup itself.
+      ctx.startupPanelCoordinator = true;
+      registerCleanup(() => {
+        delete ctx.startupPanelCoordinator;
+      });
       window.ZentralRuntime.runPart("secondary-views");
       let featureSyncTimer = null;
       let lastBridgeState = getPref(
@@ -3423,13 +3431,17 @@
         delete ctx.syncSidebarLayout;
       });
 
-      // Startup opening is independent of each app's background preload flag.
+      // Startup opening is independent of each app's background preload flag
+      // and independent of the optional ZentralStartup mod (OW-30).
       const startupPanelPref = "zen.workspace.bgalazka.open_at_startup";
       const readStartupPanel = () => {
+        if (typeof ZentralRuntime?.readStartupPanel === "function")
+          return ZentralRuntime.readStartupPanel();
         try {
           const value = JSON.parse(getPref(startupPanelPref, "null"));
           return value &&
             typeof value.id === "string" &&
+            value.id.length > 0 &&
             ["single", "triple"].includes(value.mode)
             ? value
             : null;
@@ -3444,12 +3456,15 @@
           const saved = JSON.parse(
             getPref("zen.workspace.apps.sidebar.apps", "[]"),
           );
-          return Array.isArray(saved)
+          const normal = Array.isArray(saved)
             ? saved.find((app) => app.id === id)
             : null;
-        } catch (_) {
-          return null;
-        }
+          if (normal) return normal;
+        } catch (_) {}
+        // Sleeping Essential tabs do not need ZentralStartup to wake them: recover the
+        // saved snapshot from the linked Triple View pair so launch works immediately.
+        const snapshot = ctx.linkedPairFor?.(id)?.apps?.[id];
+        return snapshot?.url ? { ...snapshot, id, workspaceId: "all" } : null;
       };
       const onStartupMenu = (event) => {
         const popup = event.target;
@@ -3519,7 +3534,8 @@
           const unavailable =
             mode !== "off" &&
             mode === "triple" &&
-            (!ctx.linkedPairFor(id) || !ctx.openStartupSinglePanel);
+            (!ctx.linkedPairFor(id) ||
+              (!ctx.openStartupTriplePair && !ctx.openStartupSinglePanel));
           item.disabled = !!unavailable;
           if (unavailable) item.setAttribute("disabled", "true");
           else item.removeAttribute("disabled");
@@ -3563,12 +3579,17 @@
           if (!app) return false;
           if (selection.mode === "triple" && !ctx.linkedPairFor(selection.id))
             return true;
-          if (selection.mode === "triple" && !ctx.openStartupSinglePanel)
+          if (
+            selection.mode === "triple" &&
+            !ctx.openStartupTriplePair &&
+            !ctx.openStartupSinglePanel
+          )
             return false;
           try {
             if (selection.mode === "triple") {
-              // Use the panel API rather than a toggle-only tile click:
-              // a retry must not close a partially opened startup panel.
+              // Use the secondary-views startup opener rather than a toggle-only tile click:
+              // a retry must not close a partially opened startup panel and sleeping Essential
+              // tabs must not be duplicated into sidebar.apps.
               const alreadyOpened =
                 root.hasAttribute("open") &&
                 document.documentElement.getAttribute(
@@ -3582,7 +3603,11 @@
                       browser._bgalazkaAppId === selection.id,
                   );
               startupAttempted = true;
-              if (!alreadyOpened) apps.openPanel(app);
+              if (!alreadyOpened) {
+                if (typeof ctx.openStartupTriplePair === "function")
+                  ctx.openStartupTriplePair(selection.id);
+                else apps.openPanel(app);
+              }
               if (
                 document.documentElement.getAttribute(
                   "bgalazka-triple-view",
@@ -3658,18 +3683,31 @@
         // fixed delay. Opening host tabs before that point races SessionStore
         // and the native tab switcher's viewport/activity changes. Wait once
         // for actual readiness, independently of optional repair settings.
-        (async () => {
+        const onNativeReady = () => {
+          if (startupCancelled || extensionDisposed) return;
+          startupReady = true;
+          // Sync once synchronously so sleeping Essential tabs linked in a Triple View pair
+          // are visible on the very first attempt even without ZentralStartup.
           try {
-            await ZentralRuntime.nativeReady;
-            if (startupCancelled || extensionDisposed) return;
-            startupReady = true;
-            ctx.requestTileSync(0);
-            onRestore();
-          } catch (error) {
-            stopWatchingStartup();
-            console.warn("[Zentral] Startup panel readiness failed", error);
-          }
-        })();
+            ctx.syncCornerTiles?.();
+          } catch (_) {}
+          ctx.requestTileSync(0);
+          onRestore();
+        };
+        if (typeof ZentralRuntime?.whenNativeReady === "function") {
+          const cancelWait = ZentralRuntime.whenNativeReady(onNativeReady);
+          registerCleanup(cancelWait);
+        } else {
+          (async () => {
+            try {
+              await ZentralRuntime?.nativeReady;
+              onNativeReady();
+            } catch (error) {
+              stopWatchingStartup();
+              console.warn("[Zentral] Startup panel readiness failed", error);
+            }
+          })();
+        }
       }
 
       /* ==========================================================================
