@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.198
+// @version 3.3.199
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.198, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.199, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.198";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.199";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -6102,6 +6102,51 @@ const __zentralEmbeddedLoader = (function () {
     return rows;
   }
 
+  // SB6.3: partition calendarItemMenuModel commands into headless one-click actions (run directly
+  // against the item/history stores with an Undo toast, without opening the Notes sheet) vs commands
+  // that legitimately need the Notes sheet UI (note view, composer, reschedule/snooze/delete dialogs).
+  const HEADLESS_AGENDA_COMMANDS = Object.freeze([
+    "mark-done",
+    "dismiss",
+    "reopen",
+    "snooze-1d",
+    "snooze-3d",
+    "snooze-monday",
+    "agenda-visibility",
+    "convert",
+    "duplicate",
+  ]);
+  const SHEET_AGENDA_COMMANDS = Object.freeze(["open", "edit", "change-time", "snooze-custom", "delete"]);
+  const isHeadlessAgendaCommand = (command) => HEADLESS_AGENDA_COMMANDS.includes(String(command || ""));
+  function snoozeMondayDays(item) {
+    if (!item || typeof item !== "object") return 0;
+    let dayKey = "";
+    if (item.start?.date) dayKey = String(item.start.date).slice(0, 10);
+    else if (item.start?.dateTime) {
+      const ms = Date.parse(item.start.dateTime);
+      if (Number.isFinite(ms)) dayKey = zonedDateKey(ms, cleanZone(item.x?.tz)) || ymd(new Date(ms));
+    }
+    const date = parseYmd(dayKey) || new Date(itemRange(item)[0]);
+    if (!date || Number.isNaN(date.getTime())) return 0;
+    return (8 - date.getDay()) % 7 || 7;
+  }
+  const undoLifecycleAction = (previousState) =>
+    previousState === "done" ? "done" : previousState === "dismissed" ? "dismissed" : "reopened";
+  function agendaActionMessage(command, { enabled = false, wasReminder = false } = {}) {
+    switch (String(command || "")) {
+      case "mark-done": return "Reminder marked done";
+      case "dismiss": return "Reminder dismissed";
+      case "reopen": return "Reminder reopened";
+      case "snooze-1d": return "Reminder snoozed +1 day";
+      case "snooze-3d": return "Reminder snoozed +3 days";
+      case "snooze-monday": return "Reminder snoozed until next Monday";
+      case "agenda-visibility": return enabled ? "Shown in Zen Agenda" : "Hidden from Zen Agenda";
+      case "convert": return wasReminder ? "Reminder converted to an event" : "Event converted to a reminder";
+      case "duplicate": return "Independent copy created";
+      default: return "";
+    }
+  }
+
   // Snooze helper: whole local days later, keeping the wall-clock time (DST-safe). Returns ms.
   const snoozeDays = (ms, n) => addDays(ms, Math.round(Number(n) || 0));
   // Convert a wall-clock date/time in a zone to an instant. During a fall-back overlap the earlier
@@ -7043,7 +7088,7 @@ const __zentralEmbeddedLoader = (function () {
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -13068,6 +13113,113 @@ __zentralShim.register = function (def) {
         },
       };
     }
+    // SB6.3: compact top-layer toast with one-click Undo for headless Zen Agenda quick actions.
+    // Lazily mounted on first show; attaches Escape listener only while visible; zero idle timers/observers.
+    function createAgendaActionToast({
+      document,
+      escapeTarget = null,
+      setTimer = (fn, ms) => window.setTimeout(fn, ms),
+      clearTimer = (id) => window.clearTimeout(id),
+      listen = (target, type, fn) => { target.addEventListener(type, fn, true); return () => target.removeEventListener(type, fn, true); },
+      warn = () => {},
+    }) {
+      const XHTML = "http://www.w3.org/1999/xhtml";
+      const make = (tag, attrs = {}, text = "") => {
+        const el = document.createElementNS ? document.createElementNS(XHTML, tag) : document.createElement(tag);
+        for (const [k, v] of Object.entries(attrs)) if (v !== undefined && v !== null) el.setAttribute(k, String(v));
+        if (text) el.textContent = text;
+        return el;
+      };
+      let node = null, msgEl = null, undoBtn = null, closeBtn = null;
+      let timer = null, stopEsc = null, stopEnter = null, stopLeave = null, stopFocusIn = null, stopFocusOut = null;
+      let stopped = false, activeUndo = null, undoUsed = false, remainingMs = 6000, paused = false;
+      const clearAuto = () => { if (timer !== null) { clearTimer(timer); timer = null; } };
+      const armAuto = (ms) => {
+        clearAuto();
+        remainingMs = Math.max(800, Number(ms) || 6000);
+        if (stopped || paused || !node || node.hidden) return;
+        timer = setTimer(() => { timer = null; hide(); }, remainingMs);
+      };
+      const teardownEsc = () => { stopEsc?.(); stopEsc = null; };
+      function hide() {
+        clearAuto();
+        teardownEsc();
+        activeUndo = null;
+        undoUsed = false;
+        paused = false;
+        if (node) {
+          try { node.hidePopover?.(); } catch (_) {}
+          node.hidden = true;
+        }
+      }
+      function ensureNode() {
+        if (node) return node;
+        node = make("div", { id: "bgalazka-notes-agenda-toast", class: "zn-agenda-toast", role: "status", "aria-live": "polite", popover: "manual" });
+        node.hidden = true;
+        msgEl = make("span", { class: "zn-agenda-toast-msg" });
+        undoBtn = make("button", { type: "button", class: "zn-agenda-toast-undo" }, "Undo");
+        undoBtn.hidden = true;
+        closeBtn = make("button", { type: "button", class: "zn-agenda-toast-close", "aria-label": "Dismiss notification" }, "×");
+        undoBtn.addEventListener("click", () => {
+          if (stopped || undoUsed || typeof activeUndo !== "function") return;
+          undoUsed = true;
+          const fn = activeUndo;
+          activeUndo = null;
+          undoBtn.hidden = true;
+          let res = null;
+          try { res = fn(); } catch (error) { warn(error); res = { ok: false, message: "Could not undo action" }; }
+          const feedback = res?.message || (res?.ok ? "Action undone" : "Could not undo action");
+          msgEl.textContent = feedback;
+          paused = false;
+          armAuto(res?.ok ? 2500 : 3500);
+        });
+        closeBtn.addEventListener("click", () => hide());
+        stopEnter = listen(node, "mouseenter", () => { paused = true; clearAuto(); });
+        stopLeave = listen(node, "mouseleave", () => { paused = false; armAuto(Math.min(remainingMs, 3000)); });
+        stopFocusIn = listen(node, "focusin", () => { paused = true; clearAuto(); });
+        stopFocusOut = listen(node, "focusout", () => { paused = false; armAuto(Math.min(remainingMs, 3000)); });
+        node.append(msgEl, undoBtn, closeBtn);
+        (document.documentElement || document.body).append(node);
+        return node;
+      }
+      function show({ message = "", undo = null, undoLabel = "Undo", durationMs = 6000 } = {}) {
+        if (stopped || !message) return;
+        ensureNode();
+        clearAuto();
+        teardownEsc();
+        paused = false;
+        undoUsed = false;
+        activeUndo = typeof undo === "function" ? undo : null;
+        msgEl.textContent = String(message);
+        if (activeUndo) {
+          undoBtn.textContent = String(undoLabel || "Undo");
+          undoBtn.hidden = false;
+        } else {
+          undoBtn.hidden = true;
+        }
+        node.hidden = false;
+        try { node.hidePopover?.(); } catch (_) {}
+        try { node.showPopover?.(); } catch (_) {}
+        stopEsc = listen(escapeTarget || document.defaultView || document.documentElement || document, "keydown", (event) => {
+          if (event?.key === "Escape" && node && !node.hidden) hide();
+        });
+        armAuto(durationMs);
+      }
+      return {
+        show,
+        hide,
+        visible: () => !!node && !node.hidden,
+        destroy() {
+          if (stopped) return;
+          stopped = true;
+          hide();
+          stopEnter?.(); stopLeave?.(); stopFocusIn?.(); stopFocusOut?.();
+          stopEnter = stopLeave = stopFocusIn = stopFocusOut = null;
+          node?.remove();
+          node = msgEl = undoBtn = closeBtn = null;
+        },
+      };
+    }
     // One timer, armed for the next future reminder. `onDue(notes)` receives every overdue, unannounced
     // reminder as one batch AFTER the store has recorded them as announced (claim), so nothing repeats.
     // One native timer drives all calendar deadlines and a low-cost clock
@@ -15192,6 +15344,223 @@ __zentralShim.register = function (def) {
           const m = Number(minutes);
           if (!note || !(m > 0 && m <= 60 * 24 * 365)) return false;
           return api.setReminder(id, ceilStep(now() + m * 60000), "snoozed");
+        },
+        // SB6.3: run headless Agenda quick actions (Done, Dismiss, Reopen, Snooze +1d/+3d/Monday,
+        // Zen Agenda visibility, Convert, Duplicate) directly against the item and history stores
+        // without opening a Notes sheet. Returns { ok, command, message, undoLabel, undo } or { ok: false, reason }.
+        runAgendaCommand(item, command, { agendaVisible, now: nowOverride } = {}) {
+          const C = CALENDAR_PART, cmd = String(command || "");
+          if (!C || !item || typeof item !== "object" || !C.isHeadlessAgendaCommand(cmd)) {
+            return { ok: false, command: cmd, reason: "Command requires the Notes sheet" };
+          }
+          const history = items?.history;
+          const identity = C.reminderIdentity(item);
+          const state = identity ? history?.stateFor?.(identity.itemId, identity.occurrenceId) || "pending" : "pending";
+          const historyWritable = !!history && !history.storageState().writeBlocked;
+          const currentId = String(item.x?.series || item.id || "");
+          const currentItem = currentId ? items?.get?.(currentId) || null : null;
+          const agendaWritable = !!currentItem;
+          const vis = typeof agendaVisible === "boolean" ? agendaVisible : agendaWindowForItem(item, api).enabled;
+          const model = C.calendarItemMenuModel(item, { state, historyWritable, agendaVisible: vis, agendaWritable });
+          const findRow = (rows) => {
+            for (const r of rows) {
+              if (r?.command === cmd) return r;
+              if (Array.isArray(r?.group)) { const nested = findRow(r.group); if (nested) return nested; }
+            }
+            return null;
+          };
+          const row = findRow(model);
+          if (!row || !row.enabled) return { ok: false, command: cmd, reason: row?.reason || "Action unavailable" };
+          const at = Number.isFinite(nowOverride) ? nowOverride : now();
+          const headId = () => (identity && history ? history.list({ itemId: identity.itemId, occurrenceId: identity.occurrenceId, limit: 1 })[0]?.id || "" : "");
+
+          if (cmd === "mark-done" || cmd === "dismiss" || cmd === "reopen") {
+            const action = cmd === "mark-done" ? "done" : cmd === "dismiss" ? "dismissed" : "reopened";
+            const message = C.agendaActionMessage(cmd);
+            if (item.x?.src === "note" && identity?.noteId) {
+              const note = notes.get(identity.noteId);
+              if (!note) return { ok: false, command: cmd, reason: "That note reminder is no longer available" };
+              const prevRemind = Number(note.remind) || 0, prevState = state;
+              const rangeStart = C.itemRange(item)[0];
+              const targetRemind = action === "reopened" ? Math.max(rangeStart, at + 5 * 60000) : 0;
+              if (!api.setReminder(identity.noteId, targetRemind, action)) return { ok: false, command: cmd, reason: "Could not update reminder" };
+              history?.flush?.().catch?.(warn);
+              const afterRemind = Number(notes.get(identity.noteId)?.remind) || 0, afterHead = headId();
+              return {
+                ok: true, command: cmd, message, undoLabel: "Undo",
+                undo() {
+                  const latestNote = notes.get(identity.noteId);
+                  if (!latestNote || (Number(latestNote.remind) || 0) !== afterRemind || headId() !== afterHead) {
+                    return { ok: false, message: "Cannot undo: reminder changed" };
+                  }
+                  const restoreAction = C.undoLifecycleAction(prevState);
+                  let restored = false;
+                  if (prevRemind === afterRemind && history) {
+                    restored = !!history.append({ itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: item.summary, start: item.start, action: restoreAction, at: now() });
+                  } else {
+                    restored = api.setReminder(identity.noteId, prevRemind, restoreAction);
+                  }
+                  if (restored) history?.flush?.().catch?.(warn);
+                  return { ok: !!restored, message: restored ? "Action undone" : "Could not undo action" };
+                },
+              };
+            }
+            const prevState = state;
+            const lineId = api._checkboxLineId(item), noteId = lineId ? item.x?.noteId : "";
+            const prevNoteBody = noteId ? notes.get(noteId)?.body ?? null : null;
+            const rec = api.applyReminderLifecycle(item, action, at);
+            if (!rec) return { ok: false, command: cmd, reason: "Could not update reminder" };
+            const afterHead = rec.id, afterNoteBody = noteId ? notes.get(noteId)?.body ?? null : null;
+            return {
+              ok: true, command: cmd, message, undoLabel: "Undo",
+              undo() {
+                if (headId() !== afterHead || (noteId && (notes.get(noteId)?.body ?? null) !== afterNoteBody)) {
+                  return { ok: false, message: "Cannot undo: reminder changed" };
+                }
+                const restoreAction = C.undoLifecycleAction(prevState);
+                const undone = api.applyReminderLifecycle(item, restoreAction, now());
+                if (!undone) return { ok: false, message: "Could not undo action" };
+                if (action === "done" && prevState === "dismissed" && noteId && (notes.get(noteId)?.body ?? null) !== prevNoteBody) {
+                  api.syncItemCheckbox(item, false);
+                }
+                return { ok: true, message: "Action undone" };
+              },
+            };
+          }
+
+          if (cmd === "snooze-1d" || cmd === "snooze-3d" || cmd === "snooze-monday") {
+            if (item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length)) {
+              return { ok: false, command: cmd, reason: "Recurring occurrences need exception support before they can be snoozed" };
+            }
+            const days = cmd === "snooze-1d" ? 1 : cmd === "snooze-3d" ? 3 : C.snoozeMondayDays(item);
+            const nextStart = C.snoozedItemStart(item, days);
+            if (!nextStart) return { ok: false, command: cmd, reason: "That reminder time could not be changed" };
+            const message = C.agendaActionMessage(cmd);
+            if (item.x?.src === "note" && item.x?.noteId) {
+              const note = notes.get(item.x.noteId);
+              if (!note) return { ok: false, command: cmd, reason: "That note reminder is no longer available" };
+              const prevRemind = Number(note.remind) || 0;
+              const targetMs = nextStart.date ? C.parseYmd(nextStart.date)?.getTime() : Date.parse(nextStart.dateTime || "");
+              if (!(Number.isFinite(targetMs) && targetMs > 0) || !api.setReminder(item.x.noteId, targetMs, "snoozed")) {
+                return { ok: false, command: cmd, reason: "Could not snooze reminder" };
+              }
+              history?.flush?.().catch?.(warn);
+              const afterRemind = Number(notes.get(item.x.noteId)?.remind) || 0, afterHead = headId();
+              return {
+                ok: true, command: cmd, message, undoLabel: "Undo",
+                undo() {
+                  const latestNote = notes.get(item.x.noteId);
+                  if (!latestNote || (Number(latestNote.remind) || 0) !== afterRemind || headId() !== afterHead) {
+                    return { ok: false, message: "Cannot undo: reminder changed" };
+                  }
+                  const restored = api.setReminder(item.x.noteId, prevRemind, "rescheduled");
+                  if (restored) history?.flush?.().catch?.(warn);
+                  return { ok: !!restored, message: restored ? "Snooze undone" : "Could not undo snooze" };
+                },
+              };
+            }
+            const current = items?.get?.(item.id);
+            if (!current) return { ok: false, command: cmd, reason: "That reminder is no longer available" };
+            const prevStart = current.start ? { ...current.start } : null;
+            const saved = items.upsert({ ...current, start: nextStart, historyAction: "snoozed" });
+            if (!saved) return { ok: false, command: cmd, reason: "The reminder could not be snoozed" };
+            history?.flush?.().catch?.(warn);
+            const afterRev = saved.rev, afterEtag = saved.etag, afterHead = headId();
+            return {
+              ok: true, command: cmd, message, undoLabel: "Undo",
+              undo() {
+                const latest = items?.get?.(saved.id);
+                if (!latest || latest.rev !== afterRev || latest.etag !== afterEtag || headId() !== afterHead) {
+                  return { ok: false, message: "Cannot undo: reminder changed" };
+                }
+                const restored = items.upsert({ ...latest, start: prevStart, historyAction: "rescheduled" });
+                if (restored) history?.flush?.().catch?.(warn);
+                return { ok: !!restored, message: restored ? "Snooze undone" : "Could not undo snooze" };
+              },
+            };
+          }
+
+          if (cmd === "agenda-visibility") {
+            if (!currentItem) return { ok: false, command: cmd, reason: "That calendar item is no longer available" };
+            const enabled = !vis;
+            const prevPolicy = currentItem.x?.agendaWindow ? { ...currentItem.x.agendaWindow } : undefined;
+            const policy = { ...C.cleanAgendaWindow(currentItem.x?.agendaWindow), enabled };
+            const saved = items.upsert({ ...currentItem, x: { ...currentItem.x, agendaWindow: policy } });
+            if (!saved) return { ok: false, command: cmd, reason: "Could not update Agenda visibility" };
+            const afterRev = saved.rev, afterEtag = saved.etag;
+            return {
+              ok: true, command: cmd, message: C.agendaActionMessage(cmd, { enabled }), undoLabel: "Undo",
+              undo() {
+                const latest = items?.get?.(saved.id);
+                if (!latest || latest.rev !== afterRev || latest.etag !== afterEtag) {
+                  return { ok: false, message: "Cannot undo: calendar item changed" };
+                }
+                const nextX = { ...latest.x };
+                if (prevPolicy) nextX.agendaWindow = prevPolicy;
+                else delete nextX.agendaWindow;
+                const restored = items.upsert({ ...latest, x: nextX });
+                return { ok: !!restored, message: restored ? "Agenda visibility restored" : "Could not undo change" };
+              },
+            };
+          }
+
+          if (cmd === "convert") {
+            if (!currentItem || currentItem.x?.src !== "manual") {
+              return { ok: false, command: cmd, reason: "Only independent calendar items can be converted" };
+            }
+            const wasReminder = C.isReminder(currentItem);
+            const prevKind = currentItem.x?.kind, prevEnd = currentItem.end ? { ...currentItem.end } : undefined;
+            const next = { ...currentItem, x: { ...currentItem.x, kind: wasReminder ? "event" : "reminder" } };
+            if (wasReminder) {
+              const [start] = C.itemRange(currentItem);
+              next.end = currentItem.start?.date
+                ? { date: C.ymd(new Date(C.addDays(start, 1))) }
+                : { dateTime: new Date(start + 60 * 60000).toISOString() };
+            } else delete next.end;
+            const saved = items.upsert(next);
+            if (!saved) return { ok: false, command: cmd, reason: "Could not convert the calendar item" };
+            const afterRev = saved.rev, afterEtag = saved.etag;
+            return {
+              ok: true, command: cmd, message: C.agendaActionMessage(cmd, { wasReminder }), undoLabel: "Undo",
+              undo() {
+                const latest = items?.get?.(saved.id);
+                if (!latest || latest.rev !== afterRev || latest.etag !== afterEtag) {
+                  return { ok: false, message: "Cannot undo: calendar item changed" };
+                }
+                const restoredItem = { ...latest, x: { ...latest.x, kind: prevKind } };
+                if (prevEnd) restoredItem.end = prevEnd;
+                else delete restoredItem.end;
+                const restored = items.upsert(restoredItem);
+                return { ok: !!restored, message: restored ? "Conversion undone" : "Could not undo change" };
+              },
+            };
+          }
+
+          if (cmd === "duplicate") {
+            if (!currentItem) return { ok: false, command: cmd, reason: "That calendar item is no longer available" };
+            const copy = C.makeItem({
+              ...currentItem,
+              id: undefined,
+              summary: (currentItem.summary || "Untitled item").slice(0, 490) + " (copy)",
+              x: { ...currentItem.x, src: "manual", noteId: "", heading: "", key: "", legacyKey: "", historyId: "", moved: false },
+            }, at);
+            const saved = copy && items.upsert(copy);
+            if (!saved) return { ok: false, command: cmd, reason: "Could not duplicate the calendar item" };
+            const afterRev = saved.rev, afterEtag = saved.etag;
+            return {
+              ok: true, command: cmd, message: C.agendaActionMessage(cmd), undoLabel: "Undo",
+              undo() {
+                const latest = items?.get?.(saved.id);
+                if (!latest || latest.rev !== afterRev || latest.etag !== afterEtag) {
+                  return { ok: false, message: "Cannot undo: copied item changed" };
+                }
+                const removed = items.remove(saved.id);
+                return { ok: !!removed, message: removed ? "Duplicate removed" : "Could not undo duplicate" };
+              },
+            };
+          }
+
+          return { ok: false, command: cmd, reason: "Action unavailable" };
         },
         // Records that the reminder was announced. Re-reads the file first, so a second window that already
         // announced it (and saved that) wins and this one stays silent. Resolves true only when THIS call
@@ -18113,7 +18482,7 @@ __zentralShim.register = function (def) {
         FIND_MAX_MATCHES, FIND_MAX_QUERY, sniffImageMime, checkAssetBytes, assetFileName, parseAssetLink, buildAssetLink, buildAssetImage,
         insertAssetImage, assetImageAt, restyleAssetImage, assetRefs, assetIntegrityReport, isAssetNoteId, ASSET_MAX_BYTES, ASSET_VIDEO_MAX_BYTES, ASSET_FILE_MAX_BYTES, ASSET_MAX_PER_NOTE, ASSET_MIME, VIDEO_EXT_MIME, cleanAssetFileName, uniqueAssetFileName, parseFileAssetLink, droppedAssetMarkup, insertDroppedAssetLinks, droppedFiles,
         cleanRemind, ceilStep, dueReminders, nextReminderAt, reminderDelay, reminderPresets, parseRemindInput, remindPreview, remindDateText, remindTimeText,
-        createTimeTickService, createReminderScheduler, createReminderAlertActions, createReminderAlertStack, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
+        createTimeTickService, createReminderScheduler, createReminderAlertActions, createReminderAlertStack, createAgendaActionToast, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
         headingSlug, headingsOf, cleanAnchor, noteLinkParts, headingOffset, tocBlock, tocList, findToc, updateToc, insertToc, insertFootnote, nextFootnoteLabel, mentionRe, hasMention, linkFirstMention, collectRefs, attachTrailingBlockId, nextMarkdownFence, TASK_BOX_CHARS, TASK_BOX_TOKEN,
         hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_FOLDER_LABEL, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
         DATE_TITLE_RE, dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
@@ -20804,8 +21173,7 @@ __zentralShim.register = function (def) {
         const historyWritable = !!history && !history.storageState().writeBlocked;
         const agendaVisible = agendaWindowForItem(item, store).enabled;
         const model = CALENDAR_PART.calendarItemMenuModel(item, { state: lifecycle, historyWritable, agendaVisible, agendaWritable: !!currentCalendarItem(item) });
-        const date = CALENDAR_PART.parseYmd(calendarItemDate(item)) || new Date(CALENDAR_PART.itemRange(item)[0]);
-        const nextMonday = (8 - date.getDay()) % 7 || 7;
+        const nextMonday = CALENDAR_PART.snoozeMondayDays(item) || 7;
         const commands = {
           open: () => { const latest = currentCalendarItem(item); if (latest) openCalendarItem(latest); },
           edit: () => { const latest = currentCalendarItem(item); if (latest) askCalendarComposer({ item: latest }); },
@@ -31134,6 +31502,44 @@ __zentralShim.register = function (def) {
       }
       const agendaTitleCard = createAgendaTitleCard();
       onCleanup(() => agendaTitleCard.destroy());
+      const agendaActionToast = createAgendaActionToast({
+        document,
+        escapeTarget: window,
+        setTimer: (fn, ms) => window.setTimeout(fn, ms),
+        clearTimer: (id) => window.clearTimeout(id),
+        listen(target, type, fn) {
+          if (lifecycle?.listen) return lifecycle.listen(target, type, fn, true);
+          target.addEventListener(type, fn, true);
+          return () => target.removeEventListener(type, fn, true);
+        },
+        warn,
+      });
+      onCleanup(() => agendaActionToast.destroy());
+      function runHeadlessAgendaAction(identity, command) {
+        if (disposed || !CALENDAR_PART?.resolveAgendaOccurrence || !store.items) return { ok: false, command, reason: "Agenda store unavailable" };
+        if (!CALENDAR_PART.isHeadlessAgendaCommand?.(command)) return { ok: false, command, reason: "Command requires the Notes sheet" };
+        const item = CALENDAR_PART.resolveAgendaOccurrence(agendaItems(), identity);
+        if (!item) {
+          agendaActionToast.show({ message: "That calendar item is no longer available", durationMs: 3000 });
+          return { ok: false, command, reason: "That calendar item is no longer available" };
+        }
+        const result = store.runAgendaCommand(item, command, { agendaVisible: agendaWindowForItem(item, store).enabled });
+        if (!result.ok) {
+          if (result.message || result.reason) agendaActionToast.show({ message: result.message || result.reason, durationMs: 3500 });
+          return result;
+        }
+        agendaSoon(0);
+        agendaActionToast.show({
+          message: result.message,
+          undoLabel: result.undoLabel || "Undo",
+          undo: typeof result.undo === "function" ? () => {
+            const undone = result.undo();
+            if (undone?.ok) agendaSoon(0);
+            return undone;
+          } : null,
+        });
+        return result;
+      }
       // Shared-data mode keeps one owned projection per window. When a Zen
       // space changes, move only our root and its owned descendants, after
       // evacuating any foreign content to the original pinned section.
@@ -31572,6 +31978,10 @@ __zentralShim.register = function (def) {
             if (row.reason) action.setAttribute("tooltiptext", row.reason);
             if (!row.heading && row.enabled) action.addEventListener("command", () => {
               if (disposed || !agendaEnabled() || tab.isConnected === false || !agendaOwnTab(tab) || agendaTabKey(tab) !== key || JSON.stringify(snapshot()) !== JSON.stringify(identity)) return;
+              if (CALENDAR_PART.isHeadlessAgendaCommand?.(row.command)) {
+                runHeadlessAgendaAction(identity, row.command);
+                return;
+              }
               showNotes("").then((handle) => {
                 if (disposed || !agendaEnabled() || tab.isConnected === false || !agendaOwnTab(tab) || agendaTabKey(tab) !== key || JSON.stringify(snapshot()) !== JSON.stringify(identity)) return;
                 sheetOf(handle)?.runAgendaItemAction?.(identity, row.command);
@@ -31610,6 +32020,7 @@ __zentralShim.register = function (def) {
         window[act]("popuphidden", onAgendaFolderMenuHidden, true);
         if (!on) {
           agendaTitleCard.hide();
+          agendaActionToast.hide();
           clearAgendaPress();
           window.clearTimeout(agendaSelectTimer); agendaSelectTimer = 0; agendaLastContent.clear();
           for (const id of agendaIconTimers) window.clearTimeout(id);
@@ -33580,7 +33991,7 @@ __zentralShim.register = function (def) {
       if (window.__zentralNotesTestSeam) {
         const sidebar = { store, ensureStore, storeWhenReady, withStore, zenApi, zen, agendaApi, agendaController, tick, reminders,
           onAgendaMouse, onAgendaSelect, onAgendaTabEvent, onAgendaAttr, agendaEnsureVisuals, onAgendaFolderMenuShowing,
-          onAgendaFolderMenuHidden, onAgendaTabMenuShowing };
+          onAgendaFolderMenuHidden, onAgendaTabMenuShowing, runAgendaAction: runHeadlessAgendaAction, agendaToast: agendaActionToast };
         window.__zentralNotesTestSeam.sidebar = sidebar;
         onCleanup(() => {
           if (window.__zentralNotesTestSeam?.sidebar === sidebar) delete window.__zentralNotesTestSeam.sidebar;

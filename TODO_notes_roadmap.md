@@ -75,7 +75,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
-|     4 | `SB6.3`     | `OPEN`    | High                | M      | none              | Run Agenda quick actions headlessly (no Notes sheet)                                                     |
 |     5 | `T3.4a`     | `PARTIAL` | High                | M      | none              | RSS-style floating hover preview cards for Notes & Agenda tabs in Zen sidebar (includes the old `AU-B2`) |
 |     6 | `OW-18`     | `PARTIAL` | High                | L      | ST7.1, UI4.7      | Choose shared or separate Notes and Agenda per space                                                     |
 |     7 | `T1.18`     | `PARTIAL` | Med-High            | S      | —                 | Export syntax-mismatch warning dialog                                                                    |
@@ -135,19 +134,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 ---
 
 ## Task blocks (same order as the Master Order)
-
-#### `SB6.3` — Run Agenda quick actions headlessly (no Notes sheet)
-
-**Status:** `OPEN` · **Impact:** High · **Effort:** M · **Depends on:** none (the `T3.4` menu infrastructure is done; its last item is unrelated) · **Source:** Audit R1 B9
-
-**Problem:** Every Agenda item action (Done, Dismiss, Snooze, Change time) goes through `showNotes("")` then `runAgendaItemAction`, opening the Notes UI for a one-click triage.
-
-**Plan (do in this order):**
-
-1. Expose the lifecycle/snooze commands from the item and history stores without the sheet; show a small toast with Undo.
-2. Keep the sheet only for 'Edit details…' and 'Change time…'.
-
-**Tests / done when:** Done/Snooze from the sidebar menu write history and leave no sheet open.
 
 #### `T3.4a` — RSS-style floating hover preview cards for Notes & Agenda tabs in Zen sidebar
 
@@ -683,13 +669,15 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.198, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.199, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.198.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B5`, `SB6.1`, `SB6.8`, `T2.8b`, `T3.1`, `T3.6a`, `T4.1`, `T4.5`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-30`, `AU-B4a`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`158/158` test files) passes in Node/fake-Zen at 3.3.198. Live Zen is not available in the sandbox. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.199.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B5`, `SB6.1`, `SB6.3`, `SB6.8`, `T2.8b`, `T3.1`, `T3.6a`, `T4.1`, `T4.5`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-30`, `AU-B4a`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`159/159` test files) passes in Node/fake-Zen at 3.3.199. Live Zen is not available in the sandbox. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
-Completed this session (3.3.163–3.3.198), every finished item archived in `docs/LEGACY_done_rows.md`:
+Completed this session (3.3.163–3.3.199), every finished item archived in `docs/LEGACY_done_rows.md`:
+
+- `SB6.3` DONE (3.3.199) — added pure command partitioning and Undo/Monday helpers in `ZentralNotesCalendar.js` (`HEADLESS_AGENDA_COMMANDS`, `SHEET_AGENDA_COMMANDS`, `isHeadlessAgendaCommand`, `snoozeMondayDays`, `undoLifecycleAction`, `agendaActionMessage`), exposed headless `store.runAgendaCommand(item, command)` directly on the item/history stores with conflict-guarded Undo (supporting stored items, mirrored list checkboxes, and legacy front-matter note reminders), built compact top-layer `createAgendaActionToast` (`#bgalazka-notes-agenda-toast`, `popover="manual"`, `role="status"`, one-shot Undo, Escape dismissal with zero leaked listeners, hover/focus auto-hide pause), and wired `onAgendaTabMenuShowing` so Done, Dismiss, Reopen, Snooze (+1d/+3d/Monday), Zen Agenda visibility, Convert, and Duplicate run headlessly with zero Notes sheet opened while keeping the sheet for `Edit details…`, `Change time…`, `Open source note`, `Custom date and time…`, and `Delete…`. Added `tests/notes-agenda-headless-actions.test.cjs` (`159/159` suite).
 
 - `OW-30` DONE (3.3.198) — moved panel start-up readiness and `open_at_startup` parsing into `loader/ZentralRuntime.js` and `loader/standalone/ZentralStandaloneShim.js` (`readStartupPanel`, `whenNativeReady`) so Triple View and single-panel startup restore never depend on the optional `ZentralStartup` mod; fixed sleeping Essential tab URL recovery in `ZentralCornerPanels.uc.js` (`syncCornerTiles` fallback to `linkedPairFor`), `ZentralPanels.uc.js` (`startupPanelCoordinator`, `startupApp`/`recreateLoadedPanels` fallbacks, `syncCornerTiles` before `onRestore`), and `ZentralSecondaryViews.uc.js` (`resolvePairApp` without duplicating Essential tabs, `ctx.openStartupTriplePair`, self-sufficient `whenNativeReady` restore when no panel coordinator is present); and persisted + restored exact pixel and proportional share heights (`gapPx`/`shareGap`, `dockPx`/`shareDock`, `cardH`/`cardHShare`, pure `resolveSlotHeight`/`resolveCardHeight`/`hasStartupPanelPref`, no-op drag guard, `finishOpen` post-load `applyState`/`applyPush`/`layout` pass, and detached card height restore) for Triple View, docked primary panels, and the standalone Notes card. Added `tests/notes-triple-view-ow30.test.cjs` (`158/158` suite).
 

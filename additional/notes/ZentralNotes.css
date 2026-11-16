@@ -2545,3 +2545,43 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
   z-index: 2147483646;
 }
 .zn-agenda-title-card[hidden] { display: none !important; }
+
+/* SB6.3: compact top-layer Undo toast for headless Zen Agenda quick actions. */
+.zn-agenda-toast {
+  position: fixed;
+  inset: auto 16px 16px auto;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 9px 12px;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: 9px;
+  background: var(--zen-colors-primary, #222531);
+  color: var(--zen-colors-text, #f7f7fc);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 38%);
+  font: menu;
+  z-index: 2147483646;
+}
+.zn-agenda-toast[hidden] { display: none !important; }
+.zn-agenda-toast-msg { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.zn-agenda-toast-undo,
+.zn-agenda-toast-close {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.zn-agenda-toast-undo[hidden] { display: none !important; }
+.zn-agenda-toast-close { padding: 3px 8px; font-weight: 500; border-color: transparent; background: transparent; }
+.zn-agenda-toast-undo:hover,
+.zn-agenda-toast-close:hover { background: color-mix(in srgb, currentColor 20%, transparent); }
+.zn-agenda-toast-undo:focus-visible,
+.zn-agenda-toast-close:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
