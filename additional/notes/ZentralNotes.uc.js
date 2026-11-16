@@ -13333,6 +13333,39 @@
         title.input.focus({ preventScroll: true });
         return card;
       }
+      // OW-05 / OW-02 share one note-to-composer path. when may be a local date key or a target
+      // { date, startTime, endDate, endTime, allDay, kind, tz } supplied by a calendar drop.
+      function composeFromNote(noteId, when = null) {
+        const C = CALENDAR_PART;
+        if (!C || !store.items) return flash("Calendar item storage is unavailable");
+        const source = typeof noteId === "string" ? store.get(noteId) : null;
+        if (!source || source.trashed) return flash("Restore the note before adding it to Calendar");
+        const target = when && typeof when === "object" ? when : null;
+        let requestedDate = typeof when === "string" ? when : "";
+        if (Number.isFinite(when)) requestedDate = C.localDateKey(when);
+        else if (target) {
+          requestedDate = String(target.date || target.startDate || "");
+          if (!requestedDate && typeof target.getTime === "function") {
+            const stamp = target.getTime();
+            if (Number.isFinite(stamp)) requestedDate = C.localDateKey(stamp);
+          }
+        }
+        const selected = C.parseYmd(store.meta.calendarCursor);
+        const parsed = C.parseYmd(requestedDate);
+        const date = C.ymd(parsed || selected || new Date(nowMs()));
+        const options = {
+          date, noteId: source.id, summary: titleOf(source.body) || "Reminder", linkCurrent: false,
+        };
+        if (target) {
+          if (C.KINDS.includes(target.kind)) options.kind = target.kind;
+          if (typeof target.allDay === "boolean") options.allDay = target.allDay;
+          for (const key of ["startTime", "endDate", "endTime", "tz"]) {
+            if (typeof target[key] === "string" && target[key].trim()) options[key] = target[key].trim();
+          }
+        }
+        return askCalendarComposer(options);
+      }
+
       function askNotesReminderShortcut() {
         const C = CALENDAR_PART;
         if (!C || !store.items) return flash("Calendar item storage is unavailable");
@@ -15012,6 +15045,7 @@
         if (n.trashed)
           return [
             { icon: "restore", label: "Restore", action: () => { store.restore(n.id); scheduleList(); } },
+            { icon: "calendar-plus", label: "Add to Calendar…", enabled: false, reason: "Restore the note before adding it to Calendar" },
             { sep: true },
             { icon: "trash", label: "Delete forever", danger: true, action: () => askNoteDeleteForever(n.id, scheduleList) },
           ];
@@ -15020,6 +15054,7 @@
           { icon: "pin", label: n.pinned ? "Unpin" : "Pin", action: () => { store.setPinned(n.id, !n.pinned); scheduleList(); } },
           { icon: "plus", label: "Quick capture here\u2026", action: () => queueMicrotask(() => askQuickCapture(n.id)) },
           { icon: "plus", label: "Quick capture to today\u2019s note\u2026", action: () => queueMicrotask(() => askQuickCapture("")) },
+          { icon: "calendar-plus", label: "Add to Calendar…", action: () => queueMicrotask(() => composeFromNote(n.id)) },
           { sep: true },
           { icon: "folder", label: "Move to folder\u2026", action: () => queueMicrotask(() => askMoveNote(n)) },
           { icon: "duplicate", label: "Duplicate", action: () => { const c = store.create(n.body, n.folder); store.setColor(c.id, n.color); store.setLabel(c.id, n.label); scheduleList(); } },
