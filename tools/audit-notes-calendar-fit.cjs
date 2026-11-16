@@ -67,6 +67,7 @@ const path = require("node:path");
 const ROOT = path.resolve(__dirname, "..");
 const args = process.argv.slice(2);
 const flag = (name) => args.includes("--" + name);
+const PICKER = flag("picker");
 const option = (name, fallback) => { const at = args.indexOf("--" + name); return at >= 0 && args[at + 1] !== undefined ? args[at + 1] : fallback; };
 const numbers = (name, fallback) => String(option(name, fallback)).split(",").map(Number).filter((n) => Number.isFinite(n));
 const FONTS = numbers("fonts", "8,13,20,28");
@@ -103,10 +104,10 @@ var module = { exports: {} };
 let built = null;
 window.local = (key, h, m = 0) => { const d = C.parseYmd(key); d.setHours(h, m, 0, 0); return d.getTime(); };
 // Wednesday 18 November 2026, 10:30; the week in view is Monday 16 to Sunday 22.
-window.build = async function ({ font, width, height }) {
+window.build = async function ({ font, width, height, picker = false }) {
   const c = window.__zentralNotesTestSeam.core;
   if (built) { built.sheet.destroy(); await built.store.close(); built.host.remove(); built = null; }
-  const files = new Map([["/notes/meta.json", { text: JSON.stringify({ calendarTab: "calendar" }), mtime: 1 }]]);
+  const files = new Map([["/notes/meta.json", { text: JSON.stringify({ calendarTab: "calendar", calendarPicker: picker ? { mode: "picker" } : undefined }), mtime: 1 }]]);
   const io = {
     join: (...parts) => parts.join("/"), filename: (p) => p.split("/").pop(),
     async readUTF8(p) { if (!files.has(p)) throw new Error("NotFound " + p); return files.get(p).text; },
@@ -278,7 +279,7 @@ function measure(font) {
       const cell = { font, width, height, scrollbar, layout: "", steps: [], issues: [] };
       results.push(cell);
       try {
-        const made = await page.evaluate((o) => window.build(o), { font, width, height });
+        const made = await page.evaluate((o) => window.build(o), { font, width, height, picker: PICKER });
         cell.layout = made.layout;
         if (!made.shown) { cell.issues.push({ kind: "page-error", step: "start", what: "the calendar pane is not shown" }); continue; }
         const look = async (step) => {

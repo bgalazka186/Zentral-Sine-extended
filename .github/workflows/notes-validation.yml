@@ -36,7 +36,7 @@ jobs:
           mkdir -p /tmp/ch
           cd /tmp/ch && npm install @sparticuz/chromium puppeteer-core
           cd "$GITHUB_WORKSPACE"
-          AWS_EXECUTION_ENV=AWS_Lambda_nodejs22.x NODE_PATH=/tmp/ch/node_modules node tools/audit-notes-calendar-fit.cjs --fonts 13,28 --widths 620 --heights 330,420,720 --scrollbars 0,17
+          AWS_EXECUTION_ENV=AWS_Lambda_nodejs22.x NODE_PATH=/tmp/ch/node_modules node tools/audit-notes-calendar-fit.cjs --picker --fonts 13,28 --widths 620 --heights 330,420,720 --scrollbars 0,17
       - name: Check patch formatting
         run: git diff --check
       - name: Commit generated standalone files
