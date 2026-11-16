@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.180
+// @version 3.3.181
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.180, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.181, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.180";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.181";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1955,6 +1955,64 @@ const __zentralEmbeddedLoader = (function () {
   function calendarMoveTimedEvent(item, placement, zone = "", now = Date.now()) {
     return !item?.x || isReminder(item) ? null : calendarMoveTimedItem(item, placement, zone, now);
   }
+  const NOTE_DRAG_MIME = "application/x-zentral-note-id";
+
+  // OW-02: map a calendar drop surface and pointer position to composer prefill fields without mutating any store.
+  // Month, narrow Month picker (OW-09) and Week/Day all-day cells resolve to all-day reminders (with an exclusive
+  // next-day endDate ready if the user switches Type to Event); Week/Day time tracks snap to `snapMin` inside the
+  // visible grid hours and resolve against `zone` (advancing across spring-forward gaps via zonedDateTimeToMs).
+  function calendarNoteDropSlot(surface, dateKey, { offsetPx = 0, hourPx = 54, grid = null, snapMin = 15, zone = "", durationMin = 60 } = {}) {
+    if (!["month", "picker", "allday", "time"].includes(surface)) return null;
+    const day = parseYmd(dateKey);
+    if (!day) return null;
+    const rawZone = String(zone || "").trim();
+    const validZone = rawZone ? cleanZone(rawZone) : "";
+    if (rawZone && !validZone) return null;
+    if (surface !== "time") {
+      return {
+        surface,
+        kind: "reminder",
+        allDay: true,
+        date: dateKey,
+        endDate: ymd(new Date(addDays(day.getTime(), 1))),
+        tz: validZone,
+        minute: null,
+      };
+    }
+    const px = Number(hourPx);
+    if (!Number.isFinite(px) || !(px > 0)) return null;
+    const step = cleanCalendarSnap(snapMin);
+    const minMinute = Math.max(0, gridStartMin(grid));
+    const maxMinute = Math.max(minMinute, Math.min(1440 - step, gridEndMin(grid)));
+    const rawMinute = gridMinuteAt(offsetPx, px, grid);
+    const snapped = Math.max(minMinute, Math.min(maxMinute, Math.round(rawMinute / step) * step));
+    const startMs = zonedDateTimeToMs(dateKey, clockOfMinutes(snapped), validZone);
+    if (!Number.isFinite(startMs)) return null;
+    const resolvedDate = zonedDateKey(startMs, validZone);
+    const startTime = clockIn(startMs, validZone);
+    const dur = Math.max(step, Math.round(Number(durationMin) || 60));
+    const endMs = startMs + dur * MIN;
+    const resolvedMin = parseClock(startTime);
+    return {
+      surface: "time",
+      kind: "reminder",
+      allDay: false,
+      date: resolvedDate,
+      startTime,
+      endDate: zonedDateKey(endMs, validZone),
+      endTime: clockIn(endMs, validZone),
+      tz: validZone,
+      minute: resolvedMin >= 0 ? resolvedMin : snapped,
+    };
+  }
+
+  function calendarNoteDropLabel(target, fmt = DEFAULT_DATE_FORMAT) {
+    if (!target || typeof target !== "object" || !parseYmd(target.date)) return "";
+    const dayText = formatDateKey(target.date, fmt);
+    if (target.allDay) return `${dayText} · all day`;
+    return target.startTime ? `${dayText} · ${target.startTime}` : dayText;
+  }
+
   // The drag-create range is civil-time based and direction independent. Only
   // produce composer fields after both endpoints resolve to real instants.
   function calendarDraftRange(originKey, originMinute, targetKey, targetMinute, zone = "", snapMin = 15) {
@@ -5264,7 +5322,7 @@ const __zentralEmbeddedLoader = (function () {
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -18346,6 +18404,7 @@ __zentralShim.register = function (def) {
       // One captured pointer gesture per sheet. A calendar re-render, view change,
       // Escape, pointer cancellation, panel close or teardown discards the preview.
       let calendarDrag = null, calendarMoveUndo = null, calendarDragClickTimer = 0, calendarSuppressedClick = null;
+      let calendarNoteDrop = null, calendarDragNoteId = "", noteDragCanceled = false;
       // The Week / Day grid as it is drawn now (OW-04, OW-03): { startMin, endMin } the hours it shows, `hourPx` the
       // height of an hour, `fit` whether that height is fitted to the timeline, `openMin` the minute a timeline that
       // scrolls opens at. And per day what was laid out in it ({ startMin, endMin, item }), kept so that an update of
@@ -18397,7 +18456,7 @@ __zentralShim.register = function (def) {
         return Math.max(0, Number(calendarPane.clientWidth) || Number(rect?.width) || 0);
       }
       let calendarBackgroundPending = false, calendarFlushQueued = false;
-      const calendarInteracting = () => !!(calendarDrag || dialog || menu?.calendar);
+      const calendarInteracting = () => !!(calendarDrag || calendarNoteDrop || dialog || menu?.calendar);
       function queueCalendarBackgroundFlush() {
         if (!calendarBackgroundPending || calendarFlushQueued) return;
         calendarFlushQueued = true;
@@ -18516,7 +18575,138 @@ __zentralShim.register = function (def) {
       listen(root, "pointerup", (event) => { commitCalendarDrag(event); releaseCalendarSuppressedClick(event); });
       listen(window, "pointerup", releaseCalendarSuppressedClick, true);
       listen(root, "pointercancel", (event) => { if (calendarDrag && (event.pointerId === undefined || event.pointerId === calendarDrag.pointerId)) cancelCalendarDrag(); releaseCalendarSuppressedClick(event); });
-      cleanups.push(() => { cancelCalendarDrag(); window.clearTimeout(calendarDragClickTimer); calendarDragClickTimer = 0; calendarSuppressedClick = null; });
+      function clearCalendarNoteDrop() {
+        const active = calendarNoteDrop;
+        calendarNoteDrop = null;
+        if (!active) return;
+        active.node?.classList.remove("is-note-drop");
+        active.preview?.remove();
+        queueCalendarBackgroundFlush();
+      }
+      function cancelNoteDrag() {
+        noteDragCanceled = true;
+        dragNoteId = "";
+        calendarDragNoteId = "";
+        for (const row of listItems.querySelectorAll(".zn-frow.is-drop")) row.classList.remove("is-drop");
+        clearCalendarNoteDrop();
+      }
+      function hasNoteDragPayload(event) {
+        if (noteDragCanceled || !CALENDAR_PART || !store.items) return false;
+        const mime = CALENDAR_PART.NOTE_DRAG_MIME;
+        const dt = event?.dataTransfer;
+        if (dt?.types) {
+          const types = typeof dt.types.includes === "function" ? dt.types : Array.from(dt.types);
+          if (types.includes(mime) || dt.types.contains?.(mime)) return true;
+          if (types.length) return false;
+        }
+        try { if (dt?.getData?.(mime)) return true; } catch (_) {}
+        const source = calendarDragNoteId ? store.get(calendarDragNoteId) : null;
+        return !!(source && !source.trashed);
+      }
+      function readNoteDragId(event) {
+        if (noteDragCanceled || !CALENDAR_PART) return "";
+        const mime = CALENDAR_PART.NOTE_DRAG_MIME;
+        let id = "";
+        try { id = String(event?.dataTransfer?.getData?.(mime) || "").trim(); } catch (_) {}
+        if (!id && calendarDragNoteId) {
+          const dt = event?.dataTransfer;
+          const types = dt?.types ? Array.from(dt.types) : [];
+          if (!types.length || types.includes(mime) || dt?.types?.contains?.(mime)) id = calendarDragNoteId;
+        }
+        const source = id ? store.get(id) : null;
+        return source && !source.trashed ? source.id : "";
+      }
+      function resolveCalendarNoteDrop(event) {
+        const C = CALENDAR_PART;
+        const el = event?.target?.closest ? event.target : event?.target?.parentElement;
+        if (!C || !el) return null;
+        const pickerDay = el.closest?.(".zn-cal-picker-day");
+        if (pickerDay) {
+          const slot = C.calendarNoteDropSlot("picker", pickerDay.getAttribute("data-day"), { zone: calendarDisplayZone() });
+          return slot ? { node: pickerDay, host: pickerDay.closest(".zn-cal-picker-wrap") || pickerDay, slot } : null;
+        }
+        const monthCell = el.closest?.(".zn-cal-month-cell");
+        if (monthCell) {
+          const slot = C.calendarNoteDropSlot("month", monthCell.getAttribute("data-day"), { zone: calendarDisplayZone() });
+          return slot ? { node: monthCell, host: monthCell, slot } : null;
+        }
+        const allDayCell = el.closest?.(".zn-cal-time-allday-cell");
+        if (allDayCell) {
+          const slot = C.calendarNoteDropSlot("allday", allDayCell.getAttribute("data-day"), { zone: calendarDisplayZone() });
+          return slot ? { node: allDayCell, host: allDayCell, slot } : null;
+        }
+        const timeTrack = el.closest?.(".zn-cal-time-track");
+        if (timeTrack) {
+          const rect = timeTrack.getBoundingClientRect?.();
+          const offsetPx = Number.isFinite(event.clientY) && rect ? event.clientY - rect.top : 0;
+          const hourPx = calendarGridHours?.hourPx || 54;
+          const slot = C.calendarNoteDropSlot("time", timeTrack.getAttribute("data-day"), {
+            offsetPx, hourPx, grid: calendarGridHours, snapMin: C.cleanCalendarSnap(store.meta.calendarSnap), zone: calendarDisplayZone(),
+          });
+          return slot ? { node: timeTrack, host: timeTrack, slot, hourPx, grid: calendarGridHours } : null;
+        }
+        return null;
+      }
+      listen(calendarContent, "dragover", (event) => {
+        if (!hasNoteDragPayload(event)) return;
+        const hit = resolveCalendarNoteDrop(event);
+        if (!hit) { clearCalendarNoteDrop(); return; }
+        event.preventDefault();
+        try { if (event.dataTransfer) event.dataTransfer.dropEffect = "copy"; } catch (_) {}
+        if (calendarNoteDrop && calendarNoteDrop.node !== hit.node) calendarNoteDrop.node.classList.remove("is-note-drop");
+        const preview = calendarNoteDrop?.preview || h("div", { class: "zn-cal-drag-preview is-note-drop", "aria-hidden": "true" });
+        hit.node.classList.add("is-note-drop");
+        if (preview.parentElement !== hit.host) hit.host.append(preview);
+        if (hit.slot.surface === "time") {
+          const topPx = Math.max(0, CALENDAR_PART.gridOffsetOf(hit.slot.minute, hit.hourPx, hit.grid)) + "px";
+          preview.style.removeProperty("bottom");
+          preview.style.setProperty("top", topPx);
+          preview.style.top = topPx;
+        } else if (hit.slot.surface === "allday") {
+          preview.style.removeProperty("bottom");
+          preview.style.setProperty("top", "0px");
+          preview.style.top = "0px";
+        } else {
+          preview.style.removeProperty("top");
+          preview.style.setProperty("bottom", "0px");
+          preview.style.bottom = "0px";
+        }
+        preview.textContent = CALENDAR_PART.calendarNoteDropLabel(hit.slot, dateDisplayFormat());
+        calendarNoteDrop = { node: hit.node, host: hit.host, preview, slot: hit.slot };
+      }, true);
+      listen(calendarContent, "dragleave", (event) => {
+        if (!calendarNoteDrop) return;
+        if (event.relatedTarget && calendarNoteDrop.node.contains?.(event.relatedTarget)) return;
+        clearCalendarNoteDrop();
+      }, true);
+      listen(calendarContent, "drop", (event) => {
+        if (noteDragCanceled) {
+          noteDragCanceled = false;
+          dragNoteId = "";
+          calendarDragNoteId = "";
+          clearCalendarNoteDrop();
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        if (!hasNoteDragPayload(event)) return;
+        const hit = resolveCalendarNoteDrop(event) || (calendarNoteDrop ? { slot: calendarNoteDrop.slot } : null);
+        const id = readNoteDragId(event);
+        dragNoteId = "";
+        calendarDragNoteId = "";
+        clearCalendarNoteDrop();
+        if (!hit) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (id && isOpen && !destroyed) composeFromNote(id, hit.slot);
+      }, true);
+      listen(window, "keydown", (event) => {
+        if (event.key === "Escape" && (calendarNoteDrop || calendarDragNoteId)) {
+          cancelNoteDrag();
+          event.preventDefault();
+        }
+      }, true);
+      cleanups.push(() => { cancelCalendarDrag(); clearCalendarNoteDrop(); calendarDragNoteId = ""; noteDragCanceled = false; window.clearTimeout(calendarDragClickTimer); calendarDragClickTimer = 0; calendarSuppressedClick = null; });
       // `grid` = the hours the timeline shows ({ startMin, endMin }); a position in a track is a time counted from its
       // first hour, not from midnight (OW-04). The all-day row has no hours and passes none.
       function bindCalendarDrag(button, item, { track, columns, scroll, dayKey, hourHeight, zone, grid = null, allDay = false, edge = "" }) {
@@ -19411,7 +19601,7 @@ __zentralShim.register = function (def) {
       }
       function patchCalendarItem(kind, id) {
         const C = CALENDAR_PART, mode = store.meta.calendarView;
-        if (!id || !["change", "remove"].includes(kind) || !["day", "week"].includes(mode) || calendarDrag) return false;
+        if (!id || !["change", "remove"].includes(kind) || !["day", "week"].includes(mode) || calendarDrag || calendarNoteDrop) return false;
         const oldItem = calendarRenderedItems.get(id), current = calendarFilteredItems();
         const newItem = current.find((item) => item.id === id);
         // A note-id removal may refer to several hidden items, not a master id.
@@ -19453,6 +19643,7 @@ __zentralShim.register = function (def) {
         calendarBackgroundPending = false;
         if (menu?.calendar && menu.calendarView !== (store.meta.calendarView || "month")) closeMenu();
         cancelCalendarDrag();
+        clearCalendarNoteDrop();
         calendarUndoMove.hidden = !calendarMoveUndo;
         syncCalendarFilterOptions();
         hideCalendarHoverCard();
@@ -19857,14 +20048,25 @@ __zentralShim.register = function (def) {
       if (opts.tree) {
         item.style.setProperty("--d", String(opts.depth || 0));
         item.setAttribute("aria-level", String((opts.depth || 0) + 1));
+      }
+      if (!trashed) {
         item.setAttribute("draggable", "true");
         item.addEventListener("dragstart", (e) => {
-          dragNoteId = n.id;
+          noteDragCanceled = false;
+          dragNoteId = opts.tree ? n.id : "";
+          calendarDragNoteId = n.id;
           try {
+            if (CALENDAR_PART?.NOTE_DRAG_MIME) e.dataTransfer?.setData(CALENDAR_PART.NOTE_DRAG_MIME, n.id);
             e.dataTransfer?.setData("text/plain", n.id);
+            if (e.dataTransfer) e.dataTransfer.effectAllowed = "copyMove";
           } catch (_) {}
         });
-        item.addEventListener("dragend", () => (dragNoteId = ""));
+        item.addEventListener("dragend", () => {
+          dragNoteId = "";
+          calendarDragNoteId = "";
+          noteDragCanceled = false;
+          clearCalendarNoteDrop();
+        });
       }
       setColorData(item, n.color);
       item.addEventListener("contextmenu", (e) => {
@@ -20070,7 +20272,7 @@ __zentralShim.register = function (def) {
           }
         });
         row.addEventListener("dragover", (e) => {
-          if (!dragNoteId) return;
+          if (!dragNoteId || noteDragCanceled) return;
           e.preventDefault();
           row.classList.add("is-drop");
         });
@@ -20079,11 +20281,13 @@ __zentralShim.register = function (def) {
           e.preventDefault();
           e.stopPropagation();
           row.classList.remove("is-drop");
+          if (noteDragCanceled) { noteDragCanceled = false; dragNoteId = ""; calendarDragNoteId = ""; return; }
           let id = dragNoteId;
           try {
             id = id || e.dataTransfer?.getData("text/plain") || "";
           } catch (_) {}
           dragNoteId = "";
+          calendarDragNoteId = "";
           if (id && store.get(id) && store.setFolder(id, node.id)) scheduleList();
         });
         return row;
@@ -24273,6 +24477,7 @@ __zentralShim.register = function (def) {
         const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
         if (key === "Escape") {
           if (calendarDrag) { cancelCalendarDrag(); e.preventDefault(); return; }
+          if (calendarNoteDrop || calendarDragNoteId || dragNoteId) { cancelNoteDrag(); e.preventDefault(); return; }
           if (armed.length && !dialog && !menu) disarm();
           else if (dialog) closeDialog();
           else if (menu) closeMenu();
@@ -25202,6 +25407,10 @@ __zentralShim.register = function (def) {
         if (!isOpen) return;
         isOpen = false;
         cancelCalendarDrag();
+        clearCalendarNoteDrop();
+        calendarDragNoteId = "";
+        noteDragCanceled = false;
+        dragNoteId = "";
         window.clearTimeout(calendarDragClickTimer); calendarDragClickTimer = 0; calendarSuppressedClick = null;
         calendarMoveUndo = null;
         collapsed = false;

@@ -744,6 +744,64 @@
   function calendarMoveTimedEvent(item, placement, zone = "", now = Date.now()) {
     return !item?.x || isReminder(item) ? null : calendarMoveTimedItem(item, placement, zone, now);
   }
+  const NOTE_DRAG_MIME = "application/x-zentral-note-id";
+
+  // OW-02: map a calendar drop surface and pointer position to composer prefill fields without mutating any store.
+  // Month, narrow Month picker (OW-09) and Week/Day all-day cells resolve to all-day reminders (with an exclusive
+  // next-day endDate ready if the user switches Type to Event); Week/Day time tracks snap to `snapMin` inside the
+  // visible grid hours and resolve against `zone` (advancing across spring-forward gaps via zonedDateTimeToMs).
+  function calendarNoteDropSlot(surface, dateKey, { offsetPx = 0, hourPx = 54, grid = null, snapMin = 15, zone = "", durationMin = 60 } = {}) {
+    if (!["month", "picker", "allday", "time"].includes(surface)) return null;
+    const day = parseYmd(dateKey);
+    if (!day) return null;
+    const rawZone = String(zone || "").trim();
+    const validZone = rawZone ? cleanZone(rawZone) : "";
+    if (rawZone && !validZone) return null;
+    if (surface !== "time") {
+      return {
+        surface,
+        kind: "reminder",
+        allDay: true,
+        date: dateKey,
+        endDate: ymd(new Date(addDays(day.getTime(), 1))),
+        tz: validZone,
+        minute: null,
+      };
+    }
+    const px = Number(hourPx);
+    if (!Number.isFinite(px) || !(px > 0)) return null;
+    const step = cleanCalendarSnap(snapMin);
+    const minMinute = Math.max(0, gridStartMin(grid));
+    const maxMinute = Math.max(minMinute, Math.min(1440 - step, gridEndMin(grid)));
+    const rawMinute = gridMinuteAt(offsetPx, px, grid);
+    const snapped = Math.max(minMinute, Math.min(maxMinute, Math.round(rawMinute / step) * step));
+    const startMs = zonedDateTimeToMs(dateKey, clockOfMinutes(snapped), validZone);
+    if (!Number.isFinite(startMs)) return null;
+    const resolvedDate = zonedDateKey(startMs, validZone);
+    const startTime = clockIn(startMs, validZone);
+    const dur = Math.max(step, Math.round(Number(durationMin) || 60));
+    const endMs = startMs + dur * MIN;
+    const resolvedMin = parseClock(startTime);
+    return {
+      surface: "time",
+      kind: "reminder",
+      allDay: false,
+      date: resolvedDate,
+      startTime,
+      endDate: zonedDateKey(endMs, validZone),
+      endTime: clockIn(endMs, validZone),
+      tz: validZone,
+      minute: resolvedMin >= 0 ? resolvedMin : snapped,
+    };
+  }
+
+  function calendarNoteDropLabel(target, fmt = DEFAULT_DATE_FORMAT) {
+    if (!target || typeof target !== "object" || !parseYmd(target.date)) return "";
+    const dayText = formatDateKey(target.date, fmt);
+    if (target.allDay) return `${dayText} · all day`;
+    return target.startTime ? `${dayText} · ${target.startTime}` : dayText;
+  }
+
   // The drag-create range is civil-time based and direction independent. Only
   // produce composer fields after both endpoints resolve to real instants.
   function calendarDraftRange(originKey, originMinute, targetKey, targetMinute, zone = "", snapMin = 15) {
@@ -4053,7 +4111,7 @@
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

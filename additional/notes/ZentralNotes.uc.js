@@ -12525,6 +12525,7 @@
       // One captured pointer gesture per sheet. A calendar re-render, view change,
       // Escape, pointer cancellation, panel close or teardown discards the preview.
       let calendarDrag = null, calendarMoveUndo = null, calendarDragClickTimer = 0, calendarSuppressedClick = null;
+      let calendarNoteDrop = null, calendarDragNoteId = "", noteDragCanceled = false;
       // The Week / Day grid as it is drawn now (OW-04, OW-03): { startMin, endMin } the hours it shows, `hourPx` the
       // height of an hour, `fit` whether that height is fitted to the timeline, `openMin` the minute a timeline that
       // scrolls opens at. And per day what was laid out in it ({ startMin, endMin, item }), kept so that an update of
@@ -12576,7 +12577,7 @@
         return Math.max(0, Number(calendarPane.clientWidth) || Number(rect?.width) || 0);
       }
       let calendarBackgroundPending = false, calendarFlushQueued = false;
-      const calendarInteracting = () => !!(calendarDrag || dialog || menu?.calendar);
+      const calendarInteracting = () => !!(calendarDrag || calendarNoteDrop || dialog || menu?.calendar);
       function queueCalendarBackgroundFlush() {
         if (!calendarBackgroundPending || calendarFlushQueued) return;
         calendarFlushQueued = true;
@@ -12695,7 +12696,138 @@
       listen(root, "pointerup", (event) => { commitCalendarDrag(event); releaseCalendarSuppressedClick(event); });
       listen(window, "pointerup", releaseCalendarSuppressedClick, true);
       listen(root, "pointercancel", (event) => { if (calendarDrag && (event.pointerId === undefined || event.pointerId === calendarDrag.pointerId)) cancelCalendarDrag(); releaseCalendarSuppressedClick(event); });
-      cleanups.push(() => { cancelCalendarDrag(); window.clearTimeout(calendarDragClickTimer); calendarDragClickTimer = 0; calendarSuppressedClick = null; });
+      function clearCalendarNoteDrop() {
+        const active = calendarNoteDrop;
+        calendarNoteDrop = null;
+        if (!active) return;
+        active.node?.classList.remove("is-note-drop");
+        active.preview?.remove();
+        queueCalendarBackgroundFlush();
+      }
+      function cancelNoteDrag() {
+        noteDragCanceled = true;
+        dragNoteId = "";
+        calendarDragNoteId = "";
+        for (const row of listItems.querySelectorAll(".zn-frow.is-drop")) row.classList.remove("is-drop");
+        clearCalendarNoteDrop();
+      }
+      function hasNoteDragPayload(event) {
+        if (noteDragCanceled || !CALENDAR_PART || !store.items) return false;
+        const mime = CALENDAR_PART.NOTE_DRAG_MIME;
+        const dt = event?.dataTransfer;
+        if (dt?.types) {
+          const types = typeof dt.types.includes === "function" ? dt.types : Array.from(dt.types);
+          if (types.includes(mime) || dt.types.contains?.(mime)) return true;
+          if (types.length) return false;
+        }
+        try { if (dt?.getData?.(mime)) return true; } catch (_) {}
+        const source = calendarDragNoteId ? store.get(calendarDragNoteId) : null;
+        return !!(source && !source.trashed);
+      }
+      function readNoteDragId(event) {
+        if (noteDragCanceled || !CALENDAR_PART) return "";
+        const mime = CALENDAR_PART.NOTE_DRAG_MIME;
+        let id = "";
+        try { id = String(event?.dataTransfer?.getData?.(mime) || "").trim(); } catch (_) {}
+        if (!id && calendarDragNoteId) {
+          const dt = event?.dataTransfer;
+          const types = dt?.types ? Array.from(dt.types) : [];
+          if (!types.length || types.includes(mime) || dt?.types?.contains?.(mime)) id = calendarDragNoteId;
+        }
+        const source = id ? store.get(id) : null;
+        return source && !source.trashed ? source.id : "";
+      }
+      function resolveCalendarNoteDrop(event) {
+        const C = CALENDAR_PART;
+        const el = event?.target?.closest ? event.target : event?.target?.parentElement;
+        if (!C || !el) return null;
+        const pickerDay = el.closest?.(".zn-cal-picker-day");
+        if (pickerDay) {
+          const slot = C.calendarNoteDropSlot("picker", pickerDay.getAttribute("data-day"), { zone: calendarDisplayZone() });
+          return slot ? { node: pickerDay, host: pickerDay.closest(".zn-cal-picker-wrap") || pickerDay, slot } : null;
+        }
+        const monthCell = el.closest?.(".zn-cal-month-cell");
+        if (monthCell) {
+          const slot = C.calendarNoteDropSlot("month", monthCell.getAttribute("data-day"), { zone: calendarDisplayZone() });
+          return slot ? { node: monthCell, host: monthCell, slot } : null;
+        }
+        const allDayCell = el.closest?.(".zn-cal-time-allday-cell");
+        if (allDayCell) {
+          const slot = C.calendarNoteDropSlot("allday", allDayCell.getAttribute("data-day"), { zone: calendarDisplayZone() });
+          return slot ? { node: allDayCell, host: allDayCell, slot } : null;
+        }
+        const timeTrack = el.closest?.(".zn-cal-time-track");
+        if (timeTrack) {
+          const rect = timeTrack.getBoundingClientRect?.();
+          const offsetPx = Number.isFinite(event.clientY) && rect ? event.clientY - rect.top : 0;
+          const hourPx = calendarGridHours?.hourPx || 54;
+          const slot = C.calendarNoteDropSlot("time", timeTrack.getAttribute("data-day"), {
+            offsetPx, hourPx, grid: calendarGridHours, snapMin: C.cleanCalendarSnap(store.meta.calendarSnap), zone: calendarDisplayZone(),
+          });
+          return slot ? { node: timeTrack, host: timeTrack, slot, hourPx, grid: calendarGridHours } : null;
+        }
+        return null;
+      }
+      listen(calendarContent, "dragover", (event) => {
+        if (!hasNoteDragPayload(event)) return;
+        const hit = resolveCalendarNoteDrop(event);
+        if (!hit) { clearCalendarNoteDrop(); return; }
+        event.preventDefault();
+        try { if (event.dataTransfer) event.dataTransfer.dropEffect = "copy"; } catch (_) {}
+        if (calendarNoteDrop && calendarNoteDrop.node !== hit.node) calendarNoteDrop.node.classList.remove("is-note-drop");
+        const preview = calendarNoteDrop?.preview || h("div", { class: "zn-cal-drag-preview is-note-drop", "aria-hidden": "true" });
+        hit.node.classList.add("is-note-drop");
+        if (preview.parentElement !== hit.host) hit.host.append(preview);
+        if (hit.slot.surface === "time") {
+          const topPx = Math.max(0, CALENDAR_PART.gridOffsetOf(hit.slot.minute, hit.hourPx, hit.grid)) + "px";
+          preview.style.removeProperty("bottom");
+          preview.style.setProperty("top", topPx);
+          preview.style.top = topPx;
+        } else if (hit.slot.surface === "allday") {
+          preview.style.removeProperty("bottom");
+          preview.style.setProperty("top", "0px");
+          preview.style.top = "0px";
+        } else {
+          preview.style.removeProperty("top");
+          preview.style.setProperty("bottom", "0px");
+          preview.style.bottom = "0px";
+        }
+        preview.textContent = CALENDAR_PART.calendarNoteDropLabel(hit.slot, dateDisplayFormat());
+        calendarNoteDrop = { node: hit.node, host: hit.host, preview, slot: hit.slot };
+      }, true);
+      listen(calendarContent, "dragleave", (event) => {
+        if (!calendarNoteDrop) return;
+        if (event.relatedTarget && calendarNoteDrop.node.contains?.(event.relatedTarget)) return;
+        clearCalendarNoteDrop();
+      }, true);
+      listen(calendarContent, "drop", (event) => {
+        if (noteDragCanceled) {
+          noteDragCanceled = false;
+          dragNoteId = "";
+          calendarDragNoteId = "";
+          clearCalendarNoteDrop();
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        if (!hasNoteDragPayload(event)) return;
+        const hit = resolveCalendarNoteDrop(event) || (calendarNoteDrop ? { slot: calendarNoteDrop.slot } : null);
+        const id = readNoteDragId(event);
+        dragNoteId = "";
+        calendarDragNoteId = "";
+        clearCalendarNoteDrop();
+        if (!hit) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (id && isOpen && !destroyed) composeFromNote(id, hit.slot);
+      }, true);
+      listen(window, "keydown", (event) => {
+        if (event.key === "Escape" && (calendarNoteDrop || calendarDragNoteId)) {
+          cancelNoteDrag();
+          event.preventDefault();
+        }
+      }, true);
+      cleanups.push(() => { cancelCalendarDrag(); clearCalendarNoteDrop(); calendarDragNoteId = ""; noteDragCanceled = false; window.clearTimeout(calendarDragClickTimer); calendarDragClickTimer = 0; calendarSuppressedClick = null; });
       // `grid` = the hours the timeline shows ({ startMin, endMin }); a position in a track is a time counted from its
       // first hour, not from midnight (OW-04). The all-day row has no hours and passes none.
       function bindCalendarDrag(button, item, { track, columns, scroll, dayKey, hourHeight, zone, grid = null, allDay = false, edge = "" }) {
@@ -13590,7 +13722,7 @@
       }
       function patchCalendarItem(kind, id) {
         const C = CALENDAR_PART, mode = store.meta.calendarView;
-        if (!id || !["change", "remove"].includes(kind) || !["day", "week"].includes(mode) || calendarDrag) return false;
+        if (!id || !["change", "remove"].includes(kind) || !["day", "week"].includes(mode) || calendarDrag || calendarNoteDrop) return false;
         const oldItem = calendarRenderedItems.get(id), current = calendarFilteredItems();
         const newItem = current.find((item) => item.id === id);
         // A note-id removal may refer to several hidden items, not a master id.
@@ -13632,6 +13764,7 @@
         calendarBackgroundPending = false;
         if (menu?.calendar && menu.calendarView !== (store.meta.calendarView || "month")) closeMenu();
         cancelCalendarDrag();
+        clearCalendarNoteDrop();
         calendarUndoMove.hidden = !calendarMoveUndo;
         syncCalendarFilterOptions();
         hideCalendarHoverCard();
@@ -14036,14 +14169,25 @@
       if (opts.tree) {
         item.style.setProperty("--d", String(opts.depth || 0));
         item.setAttribute("aria-level", String((opts.depth || 0) + 1));
+      }
+      if (!trashed) {
         item.setAttribute("draggable", "true");
         item.addEventListener("dragstart", (e) => {
-          dragNoteId = n.id;
+          noteDragCanceled = false;
+          dragNoteId = opts.tree ? n.id : "";
+          calendarDragNoteId = n.id;
           try {
+            if (CALENDAR_PART?.NOTE_DRAG_MIME) e.dataTransfer?.setData(CALENDAR_PART.NOTE_DRAG_MIME, n.id);
             e.dataTransfer?.setData("text/plain", n.id);
+            if (e.dataTransfer) e.dataTransfer.effectAllowed = "copyMove";
           } catch (_) {}
         });
-        item.addEventListener("dragend", () => (dragNoteId = ""));
+        item.addEventListener("dragend", () => {
+          dragNoteId = "";
+          calendarDragNoteId = "";
+          noteDragCanceled = false;
+          clearCalendarNoteDrop();
+        });
       }
       setColorData(item, n.color);
       item.addEventListener("contextmenu", (e) => {
@@ -14249,7 +14393,7 @@
           }
         });
         row.addEventListener("dragover", (e) => {
-          if (!dragNoteId) return;
+          if (!dragNoteId || noteDragCanceled) return;
           e.preventDefault();
           row.classList.add("is-drop");
         });
@@ -14258,11 +14402,13 @@
           e.preventDefault();
           e.stopPropagation();
           row.classList.remove("is-drop");
+          if (noteDragCanceled) { noteDragCanceled = false; dragNoteId = ""; calendarDragNoteId = ""; return; }
           let id = dragNoteId;
           try {
             id = id || e.dataTransfer?.getData("text/plain") || "";
           } catch (_) {}
           dragNoteId = "";
+          calendarDragNoteId = "";
           if (id && store.get(id) && store.setFolder(id, node.id)) scheduleList();
         });
         return row;
@@ -18452,6 +18598,7 @@
         const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
         if (key === "Escape") {
           if (calendarDrag) { cancelCalendarDrag(); e.preventDefault(); return; }
+          if (calendarNoteDrop || calendarDragNoteId || dragNoteId) { cancelNoteDrag(); e.preventDefault(); return; }
           if (armed.length && !dialog && !menu) disarm();
           else if (dialog) closeDialog();
           else if (menu) closeMenu();
@@ -19381,6 +19528,10 @@
         if (!isOpen) return;
         isOpen = false;
         cancelCalendarDrag();
+        clearCalendarNoteDrop();
+        calendarDragNoteId = "";
+        noteDragCanceled = false;
+        dragNoteId = "";
         window.clearTimeout(calendarDragClickTimer); calendarDragClickTimer = 0; calendarSuppressedClick = null;
         calendarMoveUndo = null;
         collapsed = false;
