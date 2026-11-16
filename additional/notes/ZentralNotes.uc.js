@@ -205,6 +205,7 @@
       AGENDA_OVERDUE: "zen.workspace.zentral.notes.agenda_overdue",
       AGENDA_OVERDUE_DAYS: "zen.workspace.zentral.notes.agenda_overdue_days",
       AGENDA_OVERDUE_CAP: "zen.workspace.zentral.notes.agenda_overdue_cap",
+      SPACE_MODE: "zen.workspace.zentral.notes.space_mode",
       MISSED_DAYS: "zen.workspace.zentral.notes.missed_reminder_days",
       CAPTURE_FORMAT: "zen.workspace.zentral.notes.quick_capture_format",
       DEBUG_PERF: "zen.workspace.zentral.notes.debug_perf",
@@ -1932,6 +1933,242 @@
     function sharedProjectionPlan({ active = "", targetReady = false, alreadyThere = false } = {}) {
       if (typeof active !== "string" || !active || !targetReady) return "wait";
       return alreadyThere ? "stay" : "move";
+    }
+    // ======================================================================
+    // Pure core: Zen spaces storage mode & selective sharing (OW-18)
+    // ======================================================================
+    const SPACE_MODES = Object.freeze(["shared", "space"]);
+    const cleanSpaceMode = (v) => (v === "space" ? "space" : "shared");
+    const SPACES_DIR = "spaces";
+    const SPACE_REGISTRY_FILE = "registry.json";
+    const SPACE_SHARES_FILE = "shares.json";
+    function cleanWorkspaceId(raw) {
+      const value = typeof raw === "string"
+        ? raw
+        : raw && typeof raw === "object"
+          ? String(raw.uuid || raw.id || raw.workspaceId || "")
+          : "";
+      const s = value.trim();
+      if (!s || s.length > 128) return "";
+      if (s.includes("..") || /[\\/\r\n\0]/.test(s)) return "";
+      return s;
+    }
+    function stableWorkspaceHash8(text) {
+      let h = 0x811c9dc5;
+      for (let i = 0; i < text.length; i++) {
+        h ^= text.charCodeAt(i);
+        h = Math.imul(h, 0x01000193) >>> 0;
+      }
+      return h.toString(16).padStart(8, "0");
+    }
+    // Deterministic, collision-resistant, filesystem-safe directory key derived strictly
+    // from the persistent workspace UUID (never from a mutable display label or DOM index).
+    function workspaceDirKey(rawUuid) {
+      const uuid = cleanWorkspaceId(rawUuid);
+      if (!uuid) return "";
+      const slug = uuid.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32);
+      const hash = stableWorkspaceHash8(uuid);
+      return "ws-" + (slug ? slug + "-" : "") + hash;
+    }
+    function readZenWorkspaces(win = window) {
+      const out = [];
+      const seen = new Set();
+      const push = (rawUuid, rawName = "", rawIcon = "") => {
+        const uuid = cleanWorkspaceId(rawUuid);
+        if (!uuid || seen.has(uuid)) return;
+        seen.add(uuid);
+        const name = String(rawName || "").trim().slice(0, 80) || uuid;
+        const icon = String(rawIcon || "").trim().slice(0, 24);
+        out.push({ uuid, name, icon, dirKey: workspaceDirKey(uuid) });
+      };
+      try {
+        const spaces = win?.gZenWorkspaces;
+        if (!spaces) return out;
+        const rawList =
+          typeof spaces.getWorkspaces === "function" ? spaces.getWorkspaces()
+            : Array.isArray(spaces._workspaceCache?.workspaces) ? spaces._workspaceCache.workspaces
+              : Array.isArray(spaces._workspaceCache) ? spaces._workspaceCache
+                : Array.isArray(spaces.workspaces) ? spaces.workspaces
+                  : null;
+        if (Array.isArray(rawList)) {
+          for (const ws of rawList) push(ws?.uuid || ws?.id, ws?.name || ws?.label, ws?.icon);
+        }
+        const active = typeof spaces.getActiveWorkspace === "function" ? spaces.getActiveWorkspace() : null;
+        if (active) push(active.uuid || active.id, active.name || active.label, active.icon);
+        const activeId = cleanWorkspaceId(spaces.activeWorkspace);
+        if (activeId) push(activeId, activeId, "");
+      } catch (_) {}
+      return out;
+    }
+    function resolveActiveWorkspaceIdentity(win = window) {
+      try {
+        const spaces = win?.gZenWorkspaces;
+        if (!spaces) return { uuid: "", name: "", icon: "", dirKey: "", ready: false };
+        const activeObj = typeof spaces.getActiveWorkspace === "function" ? spaces.getActiveWorkspace() : null;
+        const uuid = cleanWorkspaceId(activeObj?.uuid || activeObj?.id || spaces.activeWorkspace);
+        if (!uuid) return { uuid: "", name: "", icon: "", dirKey: "", ready: false };
+        const known = readZenWorkspaces(win).find((w) => w.uuid === uuid);
+        const name = String(activeObj?.name || activeObj?.label || known?.name || uuid).trim().slice(0, 80) || uuid;
+        const icon = String(activeObj?.icon || known?.icon || "").trim().slice(0, 24);
+        return { uuid, name, icon, dirKey: workspaceDirKey(uuid), ready: true };
+      } catch (_) {
+        return { uuid: "", name: "", icon: "", dirKey: "", ready: false };
+      }
+    }
+    function cleanSpaceRegistry(raw) {
+      const spaces = {};
+      const src = raw && typeof raw === "object" && !Array.isArray(raw) && raw.spaces && typeof raw.spaces === "object" ? raw.spaces : {};
+      for (const [k, entry] of Object.entries(src)) {
+        const uuid = cleanWorkspaceId(entry?.uuid || k);
+        if (!uuid) continue;
+        const rawKey = typeof entry?.dirKey === "string" && /^ws-[a-z0-9_-]{4,64}$/.test(entry.dirKey) ? entry.dirKey : workspaceDirKey(uuid);
+        const createdAt = Number.isFinite(Number(entry?.createdAt)) && Number(entry.createdAt) > 0 ? Math.floor(Number(entry.createdAt)) : 0;
+        const lastSeenAt = Number.isFinite(Number(entry?.lastSeenAt)) && Number(entry.lastSeenAt) > 0 ? Math.floor(Number(entry.lastSeenAt)) : createdAt;
+        const removedAt = Number.isFinite(Number(entry?.removedAt)) && Number(entry.removedAt) > 0 ? Math.floor(Number(entry.removedAt)) : 0;
+        const lastLabel = String(entry?.lastLabel || "").trim().slice(0, 80) || uuid;
+        spaces[uuid] = { uuid, dirKey: rawKey, lastLabel, createdAt, lastSeenAt, removedAt };
+      }
+      return { version: 1, spaces };
+    }
+    function reconcileSpaceRegistry(prevRegistry, liveWorkspaces = [], activeIdentity = null, nowMs = Date.now()) {
+      const next = cleanSpaceRegistry(prevRegistry);
+      const stamp = Number.isFinite(Number(nowMs)) && Number(nowMs) > 0 ? Math.floor(Number(nowMs)) : Date.now();
+      let changed = false;
+      const liveSet = new Set();
+      const ingest = (uuid, label, dirKey) => {
+        const cleanId = cleanWorkspaceId(uuid);
+        if (!cleanId) return;
+        liveSet.add(cleanId);
+        const existing = next.spaces[cleanId];
+        const cleanLabel = String(label || "").trim().slice(0, 80) || existing?.lastLabel || cleanId;
+        if (!existing) {
+          next.spaces[cleanId] = {
+            uuid: cleanId,
+            dirKey: dirKey && /^ws-[a-z0-9_-]{4,64}$/.test(dirKey) ? dirKey : workspaceDirKey(cleanId),
+            lastLabel: cleanLabel,
+            createdAt: stamp,
+            lastSeenAt: stamp,
+            removedAt: 0,
+          };
+          changed = true;
+          return;
+        }
+        if (existing.lastLabel !== cleanLabel || existing.removedAt !== 0) {
+          next.spaces[cleanId] = { ...existing, lastLabel: cleanLabel, lastSeenAt: stamp, removedAt: 0 };
+          changed = true;
+        }
+      };
+      for (const ws of Array.isArray(liveWorkspaces) ? liveWorkspaces : []) ingest(ws?.uuid || ws?.id, ws?.name || ws?.label, ws?.dirKey);
+      if (activeIdentity?.ready && activeIdentity.uuid) ingest(activeIdentity.uuid, activeIdentity.name, activeIdentity.dirKey);
+      if (liveSet.size > 0) {
+        for (const [uuid, entry] of Object.entries(next.spaces)) {
+          if (!liveSet.has(uuid) && !entry.removedAt) {
+            next.spaces[uuid] = { ...entry, removedAt: stamp };
+            changed = true;
+          }
+        }
+      }
+      return { registry: next, changed };
+    }
+    function cleanShareTargets(targets, ownerSpaceId = "") {
+      const owner = cleanWorkspaceId(ownerSpaceId);
+      const list = Array.isArray(targets) ? targets : [];
+      if (list.some((t) => t === "*")) return ["*"];
+      const set = new Set();
+      for (const raw of list) {
+        const id = cleanWorkspaceId(raw);
+        if (id && id !== owner) set.add(id);
+      }
+      return [...set].sort();
+    }
+    function cleanShareRecord(raw, kind = "note") {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+      const id = String(raw.id || "").trim();
+      if (!id || id.length > 160 || /[\\/\r\n\0]/.test(id)) return null;
+      const ownerSpaceId = cleanWorkspaceId(raw.ownerSpaceId);
+      if (!ownerSpaceId) return null;
+      const ownerDirKey = typeof raw.ownerDirKey === "string" && /^ws-[a-z0-9_-]{4,64}$/.test(raw.ownerDirKey) ? raw.ownerDirKey : workspaceDirKey(ownerSpaceId);
+      const spaces = cleanShareTargets(raw.spaces, ownerSpaceId);
+      const deleted = raw.deleted === true || spaces.length === 0;
+      const updated = Number.isFinite(Number(raw.updated)) && Number(raw.updated) >= 0 ? Math.floor(Number(raw.updated)) : 0;
+      const rev = Number.isFinite(Number(raw.rev)) && Number(raw.rev) >= 0 ? Math.floor(Number(raw.rev)) : 1;
+      const out = { id, ownerSpaceId, ownerDirKey, spaces: deleted ? [] : spaces, deleted, updated, rev };
+      if (kind === "item") out.noteId = typeof raw.noteId === "string" ? raw.noteId.trim() : "";
+      return out;
+    }
+    function cleanSpaceShares(raw) {
+      const notes = {}, items = {};
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+        if (raw.notes && typeof raw.notes === "object" && !Array.isArray(raw.notes)) {
+          for (const [k, v] of Object.entries(raw.notes)) {
+            const rec = cleanShareRecord({ id: k, ...v }, "note");
+            if (rec) notes[rec.id] = rec;
+          }
+        }
+        if (raw.items && typeof raw.items === "object" && !Array.isArray(raw.items)) {
+          for (const [k, v] of Object.entries(raw.items)) {
+            const rec = cleanShareRecord({ id: k, ...v }, "item");
+            if (rec) items[rec.id] = rec;
+          }
+        }
+      }
+      return { version: 1, notes, items };
+    }
+    function pickNewerShare(a, b) {
+      if (!a) return b;
+      if (!b) return a;
+      if (a.updated !== b.updated) return a.updated > b.updated ? a : b;
+      if (a.rev !== b.rev) return a.rev > b.rev ? a : b;
+      return JSON.stringify(b) >= JSON.stringify(a) ? b : a;
+    }
+    function mergeSpaceShares(local, remote) {
+      const a = cleanSpaceShares(local), b = cleanSpaceShares(remote);
+      const mergeMap = (ma, mb) => {
+        const out = {};
+        for (const id of new Set([...Object.keys(ma), ...Object.keys(mb)])) {
+          const winner = pickNewerShare(ma[id] || null, mb[id] || null);
+          if (winner) out[id] = { ...winner, spaces: [...winner.spaces] };
+        }
+        return out;
+      };
+      return { version: 1, notes: mergeMap(a.notes, b.notes), items: mergeMap(a.items, b.items) };
+    }
+    function isSharedWithSpace(record, spaceId) {
+      const target = cleanWorkspaceId(spaceId);
+      if (!record || record.deleted || !target || record.ownerSpaceId === target) return false;
+      return Array.isArray(record.spaces) && (record.spaces.includes("*") || record.spaces.includes(target));
+    }
+    function planSpaceSharesForSpace(shares, spaceId) {
+      const clean = cleanSpaceShares(shares);
+      const target = cleanWorkspaceId(spaceId);
+      const sharedNotes = new Map();
+      const sharedItems = new Map();
+      const ownerDirs = new Map();
+      if (!target) return { sharedNotes, sharedItems, ownerDirs };
+      for (const rec of Object.values(clean.notes)) {
+        if (!isSharedWithSpace(rec, target)) continue;
+        sharedNotes.set(rec.id, rec);
+        if (!ownerDirs.has(rec.ownerSpaceId)) ownerDirs.set(rec.ownerSpaceId, rec.ownerDirKey);
+      }
+      for (const rec of Object.values(clean.items)) {
+        if (!isSharedWithSpace(rec, target)) continue;
+        sharedItems.set(rec.id, rec);
+        if (!ownerDirs.has(rec.ownerSpaceId)) ownerDirs.set(rec.ownerSpaceId, rec.ownerDirKey);
+      }
+      return { sharedNotes, sharedItems, ownerDirs };
+    }
+    function resolveSpaceStorageTarget({ baseDir = "", mode = "shared", activeWorkspace = null, join = (...p) => p.join("/") } = {}) {
+      const cleanMode = cleanSpaceMode(mode);
+      if (cleanMode === "shared") return { mode: "shared", dir: baseDir, baseDir, spaceId: "", dirKey: "", ready: !!baseDir };
+      const uuid = cleanWorkspaceId(activeWorkspace?.uuid);
+      const dirKey = uuid ? (activeWorkspace?.dirKey && /^ws-[a-z0-9_-]{4,64}$/.test(activeWorkspace.dirKey) ? activeWorkspace.dirKey : workspaceDirKey(uuid)) : "";
+      if (!baseDir || !activeWorkspace?.ready || !uuid || !dirKey) {
+        return { mode: "space", dir: "", baseDir, spaceId: "", dirKey: "", ready: false };
+      }
+      return { mode: "space", dir: join(baseDir, SPACES_DIR, dirKey), baseDir, spaceId: uuid, dirKey, ready: true };
+    }
+    function canShareCalendarItemWithoutNote(item) {
+      return { allowed: !!item && !!item.id, sourceNoteHidden: !!item?.x?.noteId };
     }
     function planRootDedupe(roots) {
       const adopt = roots.length ? 0 : -1;
@@ -4525,6 +4762,8 @@
       },
       {
         id: "zen", label: "Zen sidebar (experiment)", items: [
+          { kind: "heading", label: "Zen spaces" },
+          { id: "spaceMode", label: "Notes and Agenda data across Zen spaces", pref: PREF.SPACE_MODE, kind: "choice", def: "shared", choices: [["shared", "Shared across all spaces"], ["space", "Separate per space (opt-in sharing)"]] },
           { kind: "heading", label: "Experiment, off by default: not verified in a live Zen" },
           { id: "zenMode", label: "Show notes in Zen's pinned-tabs folder tree", pref: PREF.ZEN_MODE, kind: "choice", def: "off", choices: [["off", "Off"], ["selected", "Only Notes (tabbar)"], ["all", "Whole notes tree"]] },
           { id: "zenNewBtn", label: "Keep a \"New note\" entry once in the NOTES folder and in every subfolder (it creates the note in that folder)", pref: PREF.ZEN_NEW_BUTTON, kind: "bool", def: false },
@@ -5067,9 +5306,10 @@
         ];
       }
       const noteId = calendarItem.x?.noteId || "";
+      const canOpenNote = !!noteId && (typeof store.canOpenSourceNote !== "function" || store.canOpenSourceNote(calendarItem).allowed);
       const recurring = !!calendarItem.x?.series || (Array.isArray(calendarItem.recurrence) && calendarItem.recurrence.length > 0);
       const actions = [
-        { id: "open", label: "Open linked note", callback: guard(() => (noteId ? openNote(noteId, { heading: calendarItem.x?.heading || "", itemId: calendarItem.id }) : showNotes(""))) },
+        { id: "open", label: canOpenNote ? "Open linked note" : "Open calendar", callback: guard(() => (canOpenNote ? openNote(noteId, { heading: calendarItem.x?.heading || "", itemId: calendarItem.id }) : showNotes(""))) },
         { id: "done", label: "Done", callback: guard(() => store.applyReminderLifecycle(calendarItem, "done")) },
       ];
       if (!recurring && !calendarItem.start?.date) {
@@ -5994,7 +6234,8 @@
       const run = () => { stopDebounce(); return pass().catch(() => {}); };
       const off = store.on((ev) => {
         if (destroyed || !started) return;
-        if (ev.type === "reset" || ev.type === "remove" || (ev.type === "change" && (ev.reminder || ev.meta || ev.remote || ev.created))) { notesDirty = true; run(); }
+        if (ev.type === "reset") { occurrenceCache.clear(); dirtySeries.clear(); notesDirty = true; run(); return; }
+        if (ev.type === "remove" || (ev.type === "change" && (ev.reminder || ev.meta || ev.remote || ev.created))) { notesDirty = true; run(); }
       });
       const offItems = store.items?.on?.((event, itemId) => {
         if (destroyed || !started) return;
@@ -6466,6 +6707,9 @@
       withHistoryLock = sharedReminderHistoryCoordinator(),
       now = () => Date.now(),
       getDir,
+      getSpaceMode = () => "shared",
+      getWorkspaceIdentity = () => ({ uuid: "", name: "", icon: "", dirKey: "", ready: false }),
+      getWorkspaces = () => [],
       getMaxSaveMs,
       getTrashDays = () => TRASH_DAYS,
       setTimer,
@@ -6495,7 +6739,21 @@
         calendarAlertSettings: CALENDAR_PART ? CALENDAR_PART.cleanAlertSettings(null) : {}, calendarNoteAlertOverrides: {},
         calendarAgendaDefaults: {}, calendarNoteAgendaOverrides: {} };
       let meta = { ...DEFAULT_META };
+      let baseDir = null;
       let dir = null;
+      let activeSpaceMode = "shared";
+      let activeSpaceId = "";
+      let activeSpaceDirKey = "";
+      let spaceRegistry = cleanSpaceRegistry(null);
+      let spaceShares = cleanSpaceShares(null);
+      let sharesWriteBlocked = false;
+      let sharesError = "";
+      let keptDamagedShares = "";
+      let missedShares = false;
+      const sharedOwnerMeta = new Map(); // ownerSpaceId -> metaFromRaw snapshot
+      const sharedOwnerItemStores = new Map(); // ownerSpaceId -> { ownerSpaceId, ownerDirKey, dir, store, offItems, offHistory }
+      const sharedOwnerByDir = new Map(); // ownerDir -> ownerSpaceId
+      let transitionChain = Promise.resolve();
       let chain = Promise.resolve();
       let retryTimer = null;
       let metaTimer = null;
@@ -6511,12 +6769,15 @@
       const missedRemote = new Map(); // note id -> conflict copy path named by the message
       let missedHistory = false;
       const state = { save: "saved", error: "" };
-      // ---- calendar items (roadmap T2.3): ONE file `calendar.json` next to the notes (never matches FILE_RE, so loadAll /
-      // refresh ignore it). Items written as marked lists inside a note are rebuilt from the note text; a note in Trash or
-      // with a missing file only HIDES its items (restoring it brings dragged times and calendar notes back); a note that is
-      // deleted for good removes them. Every call is guarded: the calendar must never break saving a note.
-      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, withHistoryLock, getParseOptions,
-        isNoteVisible: (id) => !!notes.get(id) && !notes.get(id).trashed,
+      // ---- calendar items (roadmap T2.3 + OW-18 federation): ONE `calendar.json` per partition; in space-local mode
+      // any explicitly shared notes/items from other spaces mount their owner space's canonical item & history store
+      // transparently behind one persistent `items` facade so alerts, history and edits stay canonical without copies.
+      const itemListeners = new Set();
+      const historyListeners = new Set();
+      const emitItem = (kind, id, detail) => { for (const fn of [...itemListeners]) { try { fn(kind, id, detail); } catch (e) { warn(e); } } };
+      const emitHistory = (ev) => { for (const fn of [...historyListeners]) { try { fn(ev); } catch (e) { warn(e); } } };
+      const localItems = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, withHistoryLock, getParseOptions,
+        isNoteVisible: (id) => !!notes.get(id) && !notes.get(id).trashed && !notes.get(id)._sharedFromOtherSpace,
         // The two files are not one transaction, so the order is fixed: note text first, then the calendar record that
         // refers to it. A crash in between leaves a line the next start rebuilds, never a record without its line.
         beforeWrite: () => notesFlush || (dirty.size ? flushDirty() : chain),
@@ -6524,7 +6785,483 @@
         // the calendar file gets its new records in the form that does not need the note; see `withheld` in the
         // calendar module.
         noteFileState: (id) => { const note = notes.get(id); return !note ? "saved" : !note._onDisk ? "absent" : dirty.has(id) ? "stale" : "saved"; },
+        onItemsWrite: (itemsDir) => { if (!closed) notify({ origin: windowId, kind: "calendar-items", dir: itemsDir }); },
         onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); } }) : null;
+      if (localItems) {
+        localItems.on((kind, id, detail) => emitItem(kind, id, detail));
+        localItems.history?.on?.((ev) => emitHistory(ev));
+      }
+      function activeSharePlan() {
+        if (activeSpaceMode !== "space" || !activeSpaceId) return { sharedNotes: new Map(), sharedItems: new Map(), ownerDirs: new Map() };
+        return planSpaceSharesForSpace(spaceShares, activeSpaceId);
+      }
+      function isSharedOwnerItemVisible(ownerSpaceId, itemOrId, ownerStore, plan = activeSharePlan()) {
+        if (activeSpaceMode !== "space" || !activeSpaceId || ownerSpaceId === activeSpaceId) return false;
+        const item = typeof itemOrId === "string" ? ownerStore?.get?.(itemOrId) : itemOrId;
+        const id = typeof itemOrId === "string" ? itemOrId : item?.id || "";
+        const historyId = item?.x?.historyId || "";
+        if (id && plan.sharedItems.has(id) && plan.sharedItems.get(id).ownerSpaceId === ownerSpaceId) return true;
+        if (historyId && plan.sharedItems.has(historyId) && plan.sharedItems.get(historyId).ownerSpaceId === ownerSpaceId) return true;
+        const noteId = item?.x?.noteId || "";
+        if (noteId && plan.sharedNotes.has(noteId) && plan.sharedNotes.get(noteId).ownerSpaceId === ownerSpaceId) {
+          const mountedNote = notes.get(noteId);
+          return !!mountedNote && !mountedNote.trashed;
+        }
+        return false;
+      }
+      function ownerItemStoreForNote(noteId) {
+        const n = noteId ? notes.get(noteId) : null;
+        if (n?._sharedFromOtherSpace && sharedOwnerItemStores.has(n._spaceOwner)) return sharedOwnerItemStores.get(n._spaceOwner).store;
+        return localItems;
+      }
+      function ownerItemStoreForItem(itemOrId) {
+        if (!localItems) return null;
+        if (!sharedOwnerItemStores.size) return localItems;
+        const id = typeof itemOrId === "string" ? itemOrId : itemOrId?.id || "";
+        if (id && localItems.get(id)) return localItems;
+        const noteId = typeof itemOrId === "object" ? itemOrId?.x?.noteId || "" : "";
+        if (noteId) {
+          const n = notes.get(noteId);
+          if (n?._sharedFromOtherSpace && sharedOwnerItemStores.has(n._spaceOwner)) return sharedOwnerItemStores.get(n._spaceOwner).store;
+        }
+        const plan = activeSharePlan();
+        for (const entry of sharedOwnerItemStores.values()) {
+          if (id && entry.store.get(id) && isSharedOwnerItemVisible(entry.ownerSpaceId, id, entry.store, plan)) return entry.store;
+        }
+        return localItems;
+      }
+      function ownerHistoryForIdentity(itemId) {
+        if (!localItems?.history) return null;
+        if (!sharedOwnerItemStores.size || !itemId) return localItems.history;
+        const id = String(itemId);
+        if (id.startsWith("note:")) {
+          const n = notes.get(id.slice(5));
+          if (n?._sharedFromOtherSpace && sharedOwnerItemStores.has(n._spaceOwner)) {
+            return sharedOwnerItemStores.get(n._spaceOwner).store.history || localItems.history;
+          }
+        }
+        const plan = activeSharePlan();
+        for (const entry of sharedOwnerItemStores.values()) {
+          for (const it of entry.store.list({ includeHidden: true })) {
+            if (!isSharedOwnerItemVisible(entry.ownerSpaceId, it, entry.store, plan)) continue;
+            if (it.id === id || it.x?.historyId === id) return entry.store.history || localItems.history;
+          }
+        }
+        return localItems.history;
+      }
+      const historyFacade = localItems ? {
+        open: () => localItems.history.open(),
+        startFresh: () => localItems.history.startFresh(),
+        storageState: () => localItems.history.storageState(),
+        stateFor: (itemId, occId) => (ownerHistoryForIdentity(itemId) || localItems.history).stateFor(itemId, occId),
+        append: (rec) => (ownerHistoryForIdentity(rec?.itemId) || localItems.history).append(rec),
+        claimAlert: (rec) => (ownerHistoryForIdentity(rec?.itemId) || localItems.history).claimAlert(rec),
+        async claimAlertGroups(groups) {
+          if (!Array.isArray(groups) || !groups.length) return [];
+          if (!sharedOwnerItemStores.size) return localItems.history.claimAlertGroups(groups);
+          const buckets = new Map();
+          for (let i = 0; i < groups.length; i++) {
+            const top = Array.isArray(groups[i]) && groups[i][0];
+            const target = ownerHistoryForIdentity(top?.itemId) || localItems.history;
+            if (!buckets.has(target)) buckets.set(target, { indices: [], groups: [] });
+            const b = buckets.get(target);
+            b.indices.push(i);
+            b.groups.push(groups[i]);
+          }
+          const claimed = [];
+          for (const [target, b] of buckets) {
+            const res = await target.claimAlertGroups(b.groups);
+            for (const subIdx of res) claimed.push(b.indices[subIdx]);
+          }
+          return claimed.sort((a, b) => a - b);
+        },
+        list(filter = {}) {
+          if (filter?.itemId) return (ownerHistoryForIdentity(filter.itemId) || localItems.history).list(filter);
+          const out = [...localItems.history.list(filter)];
+          if (sharedOwnerItemStores.size) {
+            const plan = activeSharePlan();
+            const allowedIds = new Set();
+            for (const entry of sharedOwnerItemStores.values()) {
+              for (const it of entry.store.list({ includeHidden: true })) {
+                if (!isSharedOwnerItemVisible(entry.ownerSpaceId, it, entry.store, plan)) continue;
+                allowedIds.add(it.id);
+                if (it.x?.historyId) allowedIds.add(it.x.historyId);
+              }
+              for (const rec of entry.store.history?.list?.(filter) || []) {
+                if (allowedIds.has(rec.itemId) || (rec.noteId && plan.sharedNotes.has(rec.noteId))) out.push(rec);
+              }
+            }
+            out.sort((a, b) => b.at - a.at || b.seq - a.seq);
+          }
+          return out;
+        },
+        async refresh() {
+          const res = await localItems.history.refresh();
+          for (const entry of sharedOwnerItemStores.values()) await entry.store.history?.refresh?.().catch(warn);
+          return res;
+        },
+        flush() {
+          return Promise.all([
+            localItems.history.flush(),
+            ...[...sharedOwnerItemStores.values()].map((entry) => entry.store.history?.flush?.().catch(warn)),
+          ]);
+        },
+        cancelTimers() {
+          localItems.history.cancelTimers?.();
+          for (const entry of sharedOwnerItemStores.values()) entry.store.history?.cancelTimers?.();
+        },
+        unloadSnapshot: () => localItems.history.unloadSnapshot?.() || null,
+        reconcileRecoveryEntry: (entry) => localItems.history.reconcileRecoveryEntry?.(entry),
+        on(fn) { historyListeners.add(fn); return () => historyListeners.delete(fn); },
+      } : null;
+      const items = localItems ? {
+        open: () => localItems.open(),
+        storageState: () => localItems.storageState(),
+        replaceDamagedStore: () => localItems.replaceDamagedStore(),
+        noteTextSaved() {
+          localItems.noteTextSaved?.();
+          for (const entry of sharedOwnerItemStores.values()) entry.store.noteTextSaved?.();
+        },
+        list(opts = {}) {
+          const base = localItems.list(opts);
+          if (!sharedOwnerItemStores.size) return base;
+          const seen = new Set(base.map((it) => it.id));
+          const plan = activeSharePlan();
+          const out = [...base];
+          for (const entry of sharedOwnerItemStores.values()) {
+            for (const it of entry.store.list(opts)) {
+              if (seen.has(it.id)) continue;
+              if (!isSharedOwnerItemVisible(entry.ownerSpaceId, it, entry.store, plan)) continue;
+              seen.add(it.id);
+              out.push(it);
+            }
+          }
+          return out;
+        },
+        get(id) {
+          const hit = localItems.get(id);
+          if (hit) return hit;
+          if (!sharedOwnerItemStores.size) return null;
+          const plan = activeSharePlan();
+          for (const entry of sharedOwnerItemStores.values()) {
+            const it = entry.store.get(id);
+            if (it && isSharedOwnerItemVisible(entry.ownerSpaceId, it, entry.store, plan)) return it;
+          }
+          return null;
+        },
+        has(id) { return !!this.get(id); },
+        categories() {
+          const set = new Set(localItems.categories());
+          if (sharedOwnerItemStores.size) {
+            for (const it of this.list()) if (it.x?.category) set.add(it.x.category);
+          }
+          return [...set].sort((a, b) => a.localeCompare(b));
+        },
+        category(name) {
+          const local = localItems.category(name);
+          if (local && !sharedOwnerItemStores.size) return local;
+          if (sharedOwnerItemStores.size) {
+            const key = String(name || "").trim().toLowerCase();
+            if (key) {
+              for (const entry of sharedOwnerItemStores.values()) {
+                const c = entry.store.category(name);
+                if (c && (!local || c.color !== local.color)) return local || c;
+              }
+            }
+          }
+          return local;
+        },
+        categoryList: () => localItems.categoryList(),
+        upsertCategory: (raw) => localItems.upsertCategory(raw),
+        hideNote: (noteId) => ownerItemStoreForNote(noteId).hideNote(noteId),
+        showNote: (noteId) => ownerItemStoreForNote(noteId).showNote(noteId),
+        isHidden: (noteId) => ownerItemStoreForNote(noteId).isHidden(noteId),
+        upsert: (raw) => ownerItemStoreForItem(raw).upsert(raw),
+        remove: (id) => ownerItemStoreForItem(id).remove(id),
+        removeNote: (noteId) => ownerItemStoreForNote(noteId).removeNote(noteId),
+        ensureNoteIds: (noteId, body) => ownerItemStoreForNote(noteId).ensureNoteIds(noteId, body),
+        syncNote: (noteId, body, opts) => ownerItemStoreForNote(noteId).syncNote(noteId, body, opts),
+        on(fn) { itemListeners.add(fn); return () => itemListeners.delete(fn); },
+        history: historyFacade,
+        flush() {
+          return Promise.all([
+            localItems.flush(),
+            ...[...sharedOwnerItemStores.values()].map((entry) => entry.store.flush().catch(warn)),
+          ]);
+        },
+        cancelTimers() {
+          localItems.cancelTimers?.();
+          for (const entry of sharedOwnerItemStores.values()) entry.store.cancelTimers?.();
+        },
+        unloadSnapshot: () => localItems.unloadSnapshot?.() || null,
+        async refresh() {
+          const res = await localItems.refresh();
+          for (const entry of sharedOwnerItemStores.values()) await entry.store.refresh?.().catch(warn);
+          return res;
+        },
+        reconcileRecoveryEntry: (entry, blockedNoteIds) => localItems.reconcileRecoveryEntry?.(entry, blockedNoteIds),
+      } : null;
+      function closeSharedOwnerStores() {
+        for (const entry of sharedOwnerItemStores.values()) {
+          try { entry.offItems?.(); } catch (_) {}
+          try { entry.offHistory?.(); } catch (_) {}
+          try { entry.store?.cancelTimers?.(); } catch (_) {}
+        }
+        sharedOwnerItemStores.clear();
+        sharedOwnerByDir.clear();
+        sharedOwnerMeta.clear();
+      }
+      function decorateNoteOwnership(note, { ownerSpaceId = activeSpaceId, ownerDir = dir, foreign = false } = {}) {
+        if (!note) return note;
+        note._spaceOwner = ownerSpaceId || "";
+        note._spaceDir = ownerDir || dir || "";
+        note._sharedFromOtherSpace = !!foreign;
+        const shareRec = activeSpaceMode === "space" ? spaceShares.notes[note.id] : null;
+        note._sharedTargets = shareRec && !shareRec.deleted ? [...shareRec.spaces] : [];
+        return note;
+      }
+      function spaceRegistryPath() {
+        return baseDir ? io.join(baseDir, SPACES_DIR, SPACE_REGISTRY_FILE) : "";
+      }
+      function spaceSharesPath() {
+        return baseDir ? io.join(baseDir, SPACES_DIR, SPACE_SHARES_FILE) : "";
+      }
+      async function loadSpaceRegistry() {
+        spaceRegistry = cleanSpaceRegistry(null);
+        const file = spaceRegistryPath();
+        if (!file) return spaceRegistry;
+        try {
+          if (!io.exists || (await io.exists(file))) {
+            const raw = JSON.parse(await io.readUTF8(file));
+            spaceRegistry = cleanSpaceRegistry(raw);
+          }
+        } catch (_) {}
+        const live = typeof getWorkspaces === "function" ? getWorkspaces() : [];
+        const active = typeof getWorkspaceIdentity === "function" ? getWorkspaceIdentity() : null;
+        const rec = reconcileSpaceRegistry(spaceRegistry, live, active, now());
+        spaceRegistry = rec.registry;
+        if (rec.changed) await saveSpaceRegistry().catch(warn);
+        return spaceRegistry;
+      }
+      async function saveSpaceRegistry() {
+        const file = spaceRegistryPath();
+        if (!file) return false;
+        const persist = async () => {
+          if (typeof io.makeDir === "function") await io.makeDir(io.join(baseDir, SPACES_DIR)).catch(() => {});
+          let disk = cleanSpaceRegistry(null);
+          try {
+            if (!io.exists || (await io.exists(file))) disk = cleanSpaceRegistry(JSON.parse(await io.readUTF8(file)));
+          } catch (_) {}
+          const merged = cleanSpaceRegistry({
+            version: 1,
+            spaces: { ...disk.spaces, ...spaceRegistry.spaces },
+          });
+          spaceRegistry = merged;
+          await io.writeUTF8(file, JSON.stringify(merged), { tmpPath: file + ".tmp" });
+          return true;
+        };
+        if (typeof withHistoryLock === "function") return withHistoryLock("space-registry:" + file, persist);
+        return persist();
+      }
+      async function readSpaceSharesFile() {
+        const file = spaceSharesPath();
+        if (!file) return { state: "missing" };
+        let absent = 0, failure = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            return { state: "ok", text: await io.readUTF8(file) };
+          } catch (error) {
+            failure = error;
+            let exists = false;
+            if (typeof io.exists === "function") {
+              try { exists = !!(await io.exists(file)); } catch (_) { exists = true; }
+            }
+            if (!exists && ++absent >= 2) return { state: "missing" };
+          }
+        }
+        return absent ? { state: "missing" } : { state: "unreadable", error: failure };
+      }
+      async function loadSpaceShares() {
+        sharesWriteBlocked = false;
+        sharesError = "";
+        spaceShares = cleanSpaceShares(null);
+        const file = spaceSharesPath();
+        if (!file) return spaceShares;
+        const read = await readSpaceSharesFile();
+        if (read.state === "missing") return spaceShares;
+        if (read.state === "unreadable") {
+          sharesWriteBlocked = true;
+          sharesError = String(read.error?.message || read.error || "Shares file unreadable");
+          warn("Spaces sharing manifest could not be read: " + sharesError);
+          return spaceShares;
+        }
+        let parsed = null;
+        try { parsed = JSON.parse(read.text); } catch (_) {}
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          sharesWriteBlocked = true;
+          sharesError = "The Spaces sharing manifest (shares.json) is damaged; writes are paused to protect it.";
+          if (typeof read.text === "string" && read.text.trim() && read.text !== keptDamagedShares) {
+            warn(sharesError);
+            try {
+              if (typeof io.makeDir === "function") await io.makeDir(io.join(baseDir, SPACES_DIR)).catch(() => {});
+              await io.writeUTF8(file + ".corrupt", read.text, {});
+              keptDamagedShares = read.text;
+            } catch (error) { warn(error); }
+          }
+          return spaceShares;
+        }
+        spaceShares = cleanSpaceShares(parsed);
+        return spaceShares;
+      }
+      async function mutateSpaceShares(mutator) {
+        if (activeSpaceMode !== "space" || !baseDir || sharesWriteBlocked) return false;
+        const file = spaceSharesPath();
+        const persist = async () => {
+          if (sharesWriteBlocked) return false;
+          if (typeof io.makeDir === "function") await io.makeDir(io.join(baseDir, SPACES_DIR)).catch(() => {});
+          let disk = cleanSpaceShares(null);
+          const read = await readSpaceSharesFile();
+          if (read.state === "unreadable") {
+            sharesWriteBlocked = true;
+            sharesError = String(read.error?.message || read.error || "Shares file unreadable");
+            return false;
+          }
+          if (read.state === "ok") {
+            let parsed = null;
+            try { parsed = JSON.parse(read.text); } catch (_) {}
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+              sharesWriteBlocked = true;
+              sharesError = "The Spaces sharing manifest (shares.json) is damaged; writes are paused to protect it.";
+              try { await io.writeUTF8(file + ".corrupt", read.text, {}); } catch (_) {}
+              return false;
+            }
+            disk = cleanSpaceShares(parsed);
+          }
+          const current = mergeSpaceShares(spaceShares, disk);
+          const mutated = mutator(current);
+          if (!mutated) return false;
+          const next = mergeSpaceShares(mutated, disk);
+          spaceShares = next;
+          await io.writeUTF8(file, JSON.stringify(next), { tmpPath: file + ".tmp" });
+          if (!closed) notify({ origin: windowId, kind: "shares", baseDir });
+          return true;
+        };
+        if (typeof withHistoryLock === "function") return withHistoryLock("space-shares:" + file, persist);
+        return persist();
+      }
+      async function loadOwnerMetaSnapshot(ownerSpaceId, ownerDir) {
+        try {
+          const file = io.join(ownerDir, "meta.json");
+          if (io.exists && !(await io.exists(file))) { sharedOwnerMeta.delete(ownerSpaceId); return; }
+          const raw = JSON.parse(await io.readUTF8(file));
+          if (raw && typeof raw === "object" && !Array.isArray(raw)) sharedOwnerMeta.set(ownerSpaceId, metaFromRaw(raw));
+        } catch (_) {}
+      }
+      async function mountSharedEntities({ emitChanges = false } = {}) {
+        if (activeSpaceMode !== "space" || !activeSpaceId || !baseDir) {
+          closeSharedOwnerStores();
+          return;
+        }
+        const plan = planSpaceSharesForSpace(spaceShares, activeSpaceId);
+        // Unmount foreign notes no longer shared into this space.
+        const removedIds = [];
+        for (const [id, note] of [...notes]) {
+          if (!note._sharedFromOtherSpace) continue;
+          const rec = plan.sharedNotes.get(id);
+          if (!rec || rec.ownerSpaceId !== note._spaceOwner) {
+            if (!dirty.has(id)) {
+              notes.delete(id);
+              diskSnapshots.delete(id);
+              removedIds.push(id);
+            }
+          }
+        }
+        // Unmount owner stores no longer needed.
+        for (const [ownerSpaceId, entry] of [...sharedOwnerItemStores]) {
+          if (!plan.ownerDirs.has(ownerSpaceId)) {
+            try { entry.offItems?.(); } catch (_) {}
+            try { entry.offHistory?.(); } catch (_) {}
+            try { entry.store?.cancelTimers?.(); } catch (_) {}
+            sharedOwnerItemStores.delete(ownerSpaceId);
+            sharedOwnerByDir.delete(entry.dir);
+            sharedOwnerMeta.delete(ownerSpaceId);
+          }
+        }
+        // Mount owner meta & canonical owner item stores for each sharing owner space.
+        for (const [ownerSpaceId, ownerDirKey] of plan.ownerDirs) {
+          const ownerDir = io.join(baseDir, SPACES_DIR, ownerDirKey);
+          await loadOwnerMetaSnapshot(ownerSpaceId, ownerDir);
+          if (CALENDAR_PART && !sharedOwnerItemStores.has(ownerSpaceId)) {
+            const ownerStore = CALENDAR_PART.createItemStore({
+              io,
+              getDir: () => ownerDir,
+              now,
+              setTimer,
+              clearTimer,
+              warn,
+              perf: PERF,
+              withHistoryLock,
+              getParseOptions,
+              isNoteVisible: () => true,
+              beforeWrite: () => notesFlush || (dirty.size ? flushDirty() : chain),
+              noteFileState: (id) => { const n = notes.get(id); return !n ? "saved" : !n._onDisk ? "absent" : dirty.has(id) ? "stale" : "saved"; },
+              onItemsWrite: (itemsDir) => { if (!closed) notify({ origin: windowId, kind: "calendar-items", dir: itemsDir }); },
+              onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); },
+            });
+            const offItems = ownerStore.on((kind, id, detail) => {
+              if (kind === "reset" || kind === "category" || kind === "conflict" || isSharedOwnerItemVisible(ownerSpaceId, id, ownerStore)) {
+                emitItem(kind, id, detail);
+              }
+            });
+            const offHistory = ownerStore.history?.on?.((ev) => emitHistory(ev));
+            const entry = { ownerSpaceId, ownerDirKey, dir: ownerDir, store: ownerStore, offItems, offHistory };
+            sharedOwnerItemStores.set(ownerSpaceId, entry);
+            sharedOwnerByDir.set(ownerDir, ownerSpaceId);
+            await ownerStore.open().catch(warn);
+          }
+        }
+        // Mount canonical shared notes from their owner spaces.
+        const addedOrUpdated = [];
+        for (const [noteId, rec] of plan.sharedNotes) {
+          const ownerDir = io.join(baseDir, SPACES_DIR, rec.ownerDirKey);
+          const existing = notes.get(noteId);
+          if (existing && !existing._sharedFromOtherSpace) {
+            warn("Skipped mounting shared note " + noteId + " because a local note with the same id already exists.");
+            continue;
+          }
+          if (existing && dirty.has(noteId)) continue;
+          const file = io.join(ownerDir, noteId + ".md");
+          const fresh = await readNote(file).catch(() => null);
+          if (!fresh || fresh.trashed) {
+            if (existing) {
+              notes.delete(noteId);
+              diskSnapshots.delete(noteId);
+              removedIds.push(noteId);
+            }
+            continue;
+          }
+          decorateNoteOwnership(fresh, { ownerSpaceId: rec.ownerSpaceId, ownerDir, foreign: true });
+          notes.set(noteId, fresh);
+          addedOrUpdated.push(noteId);
+        }
+        // Refresh _sharedTargets on local notes.
+        for (const note of notes.values()) {
+          if (!note._sharedFromOtherSpace) decorateNoteOwnership(note, { ownerSpaceId: activeSpaceId, ownerDir: dir, foreign: false });
+        }
+        if (emitChanges) {
+          for (const id of removedIds) emit("remove", id, { remote: true, share: true });
+          for (const id of addedOrUpdated) emit("change", id, { remote: true, share: true });
+          if (removedIds.length || addedOrUpdated.length || plan.sharedItems.size) {
+            emit("tree", "", { remote: true, share: true });
+            emitItem("reset", "");
+          }
+        }
+      }
+      async function refreshSpaceShares() {
+        if (activeSpaceMode !== "space" || !baseDir || closed) return;
+        await loadSpaceShares();
+        await mountSharedEntities({ emitChanges: true });
+      }
       function syncItems(id, stabilize = false, sourceEdit = false) {
         if (!items) return;
         try {
@@ -6571,8 +7308,11 @@
         if (!items) return;
         try {
           await items.open();
-          for (const id of [...notes.keys()]) syncItems(id, true);
-          for (const noteId of new Set(items.list().map((it) => it.x.noteId))) if (noteId && !notes.has(noteId)) items.hideNote(noteId);
+          for (const [id, n] of [...notes]) {
+            if (n?._sharedFromOtherSpace) continue;
+            syncItems(id, true);
+          }
+          for (const noteId of new Set(localItems.list().map((it) => it.x.noteId))) if (noteId && !notes.has(noteId)) localItems.hideNote(noteId);
         } catch (e) {
           warn(e);
         }
@@ -6587,7 +7327,8 @@
           }
         }
       };
-      const fileOf = (id) => io.join(dir, id + ".md");
+      const noteDir = (id) => notes.get(id)?._spaceDir || dir;
+      const fileOf = (id) => io.join(noteDir(id), id + ".md");
 
       async function readNote(file) {
         const name = io.filename(file);
@@ -6625,7 +7366,7 @@
             .filter((p) => FILE_RE.test(io.filename(p)))
             .map((p) => readNote(p).catch(() => null)),
         );
-        for (const note of found) if (note) notes.set(note.id, note);
+        for (const note of found) if (note) notes.set(note.id, decorateNoteOwnership(note, { ownerSpaceId: activeSpaceId, ownerDir: dir, foreign: false }));
       }
 
       // The settings file (folders with their labels, colours and permanent ids, calendar and alert settings, layout).
@@ -6872,7 +7613,7 @@
           if (conflictBackupPath) {
             emit("conflict", note.id, { winner: "local", backupPath: conflictBackupPath, reason: "concurrent-write" });
           }
-          notify({ id: note.id, origin: windowId, kind: "saved", ...(conflictBackupPath ? { conflictBackupPath } : {}) });
+          notify({ id: note.id, origin: windowId, kind: "saved", dir: noteDir(note.id), ...(conflictBackupPath ? { conflictBackupPath } : {}) });
         };
         // Calendar history already owns the coordinator that the windows of this application share
         // (see sharedNotesHome). Use a separate key for each note file.
@@ -6883,7 +7624,7 @@
       // ---- version history: history/<note id>/<UTC stamp>.md, written after a save, rules in the pure core ----
       const lastSnap = new Map(); // note id -> time of its newest snapshot
       const lastSnapText = new Map();
-      const histDir = (id) => io.join(dir, HISTORY_DIR, id);
+      const histDir = (id) => io.join(noteDir(id), HISTORY_DIR, id);
       async function historyNames(id) {
         try {
           return (await io.children(histDir(id))).map((p) => io.filename(p)).filter((n) => parseHistoryName(n));
@@ -6969,8 +7710,11 @@
         autosaver.touch();
       }
 
-      async function reloadFromDisk(id, conflictBackupCandidate = "") {
-        const file = fileOf(id);
+      async function reloadFromDisk(id, conflictBackupCandidate = "", explicitDir = "") {
+        const prev = notes.get(id) || null;
+        const targetDir = explicitDir || prev?._spaceDir || dir;
+        if (!targetDir) return;
+        const file = io.join(targetDir, id + ".md");
         let exists = false;
         try {
           exists = await io.exists(file);
@@ -6989,13 +7733,24 @@
         if (dirty.has(id)) return; // preserve local typing; its next save checks the disk snapshot
         const fresh = await readNote(file).catch(() => null);
         if (!fresh) return;
+        if (prev?._sharedFromOtherSpace) {
+          if (fresh.trashed) {
+            notes.delete(id);
+            diskSnapshots.delete(id);
+            emit("remove", id, { remote: true });
+            return;
+          }
+          decorateNoteOwnership(fresh, { ownerSpaceId: prev._spaceOwner, ownerDir: prev._spaceDir, foreign: true });
+        } else {
+          decorateNoteOwnership(fresh, { ownerSpaceId: activeSpaceId, ownerDir: dir, foreign: false });
+        }
         notes.set(id, fresh);
         syncItems(id, true, true);
         emit("change", id, { remote: true });
       }
 
       async function purgeOldTrash() {
-        const plan = trashPlan([...notes.values()], cleanTrashDays(getTrashDays()), now());
+        const plan = trashPlan([...notes.values()].filter((n) => !n._sharedFromOtherSpace), cleanTrashDays(getTrashDays()), now());
         for (const id of plan.expired) await removeNoteFiles(id);
       }
       // ---- backup of deleted notes (48 h): written BEFORE anything is removed; a failed backup never blocks a delete ----
@@ -7061,12 +7816,14 @@
         if (retryTimer !== null) { clearTimer(retryTimer); retryTimer = null; }
         items?.cancelTimers?.();
         if (!dir) return false;
-        const dirtyNotes = [];
+        const notesByDir = new Map();
         for (const id of [...dirty]) {
           const note = notes.get(id);
           if (!note || !isAssetNoteId(id)) continue;
+          const targetDir = note._spaceDir || dir;
+          if (!notesByDir.has(targetDir)) notesByDir.set(targetDir, []);
           const baseline = diskSnapshots.get(id);
-          dirtyNotes.push({
+          notesByDir.get(targetDir).push({
             id,
             text: serializeNote(note),
             baseline: typeof baseline === "string" ? baseline : null,
@@ -7076,34 +7833,42 @@
         const dirtyCalendar = items?.unloadSnapshot ? items.unloadSnapshot() : null;
         const dirtyHistory = items?.history?.unloadSnapshot ? items.history.unloadSnapshot() : null;
         const dirtyMeta = metaDirty && metaReady ? { base: cloneJson(metaBase), mine: cloneJson(meta) } : null;
-        const ops = planUnloadWrites({
-          dir,
-          notes: dirtyNotes,
-          calendar: dirtyCalendar,
-          history: dirtyHistory,
-          meta: dirtyMeta,
-          nowMs: now(),
-          windowId,
-          join: (...parts) => io.join(...parts),
-        });
-        if (!ops.length) return false;
-        // Issue every I/O call synchronously during `unload` so Gecko's I/O thread finishes them in FIFO order
-        // even though no further promise step will run in the closed window.
-        for (const op of ops) {
-          try {
-            if (op.op === "makeDir") {
-              if (typeof io.makeDir === "function") Promise.resolve(io.makeDir(op.path)).catch(() => {});
-            } else if (op.op === "copy") {
-              if (typeof io.copy === "function") Promise.resolve(io.copy(op.from, op.to)).catch(() => {});
-            } else if (op.op === "write") {
-              Promise.resolve(io.writeUTF8(op.path, op.text, op.opts)).catch(() => {});
-            }
-          } catch (_) {}
+        const dirsToStage = new Set([dir, ...notesByDir.keys()]);
+        let stagedAny = false;
+        for (const targetDir of dirsToStage) {
+          const isLocal = targetDir === dir;
+          const ownerEntry = !isLocal && sharedOwnerByDir.has(targetDir) ? sharedOwnerItemStores.get(sharedOwnerByDir.get(targetDir)) : null;
+          const ops = planUnloadWrites({
+            dir: targetDir,
+            notes: notesByDir.get(targetDir) || [],
+            calendar: isLocal ? dirtyCalendar : ownerEntry?.store?.unloadSnapshot?.() || null,
+            history: isLocal ? dirtyHistory : ownerEntry?.store?.history?.unloadSnapshot?.() || null,
+            meta: isLocal ? dirtyMeta : null,
+            nowMs: now(),
+            windowId,
+            join: (...parts) => io.join(...parts),
+          });
+          if (!ops.length) continue;
+          stagedAny = true;
+          // Issue every I/O call synchronously during `unload` so Gecko's I/O thread finishes them in FIFO order
+          // even though no further promise step will run in the closed window.
+          for (const op of ops) {
+            try {
+              if (op.op === "makeDir") {
+                if (typeof io.makeDir === "function") Promise.resolve(io.makeDir(op.path)).catch(() => {});
+              } else if (op.op === "copy") {
+                if (typeof io.copy === "function") Promise.resolve(io.copy(op.from, op.to)).catch(() => {});
+              } else if (op.op === "write") {
+                Promise.resolve(io.writeUTF8(op.path, op.text, op.opts)).catch(() => {});
+              }
+            } catch (_) {}
+          }
+          try { notify({ origin: windowId, kind: "unload-recovery", dir: targetDir }); } catch (_) {}
         }
+        if (!stagedAny) return false;
         dirty.clear();
         metaDirty = false;
         closed = true;
-        try { notify({ origin: windowId, kind: "unload-recovery", dir }); } catch (_) {}
         return true;
       }
       async function reconcileUnloadRecovery({ live = false } = {}) {
@@ -7247,11 +8012,20 @@
       }
       function removeNoteFiles(id) {
         const note = notes.get(id) || null;
+        const targetDir = note?._spaceDir || dir;
+        const file = io.join(targetDir, id + ".md");
+        const noteHistDir = io.join(targetDir, HISTORY_DIR, id);
         notes.delete(id);
         dirty.delete(id);
         diskSnapshots.delete(id);
         dropItems(id);
-        const file = fileOf(id);
+        if (activeSpaceMode === "space" && spaceShares.notes[id] && !spaceShares.notes[id].deleted && spaceShares.notes[id].ownerSpaceId === activeSpaceId) {
+          mutateSpaceShares((cur) => {
+            const prev = cur.notes[id];
+            if (!prev || prev.deleted || prev.ownerSpaceId !== activeSpaceId) return null;
+            return { ...cur, notes: { ...cur.notes, [id]: { ...prev, spaces: [], deleted: true, updated: Math.max(now(), prev.updated + 1), rev: (prev.rev || 1) + 1 } } };
+          }).catch(warn);
+        }
         return queue(async () => {
           // Pictures go with their note, unless another note (a copy, pasted text) still shows them.
           const prefix = ASSET_DIR + "/" + id + "/";
@@ -7259,11 +8033,11 @@
           await backupNote(id, note, file, !shared).catch(warn);
           for (const p of [file, file + ".bak", file + ".tmp"])
             await io.remove(p).catch(() => {});
-          if (io.removeTree && isAssetNoteId(id) && !shared) await io.removeTree(io.join(dir, ASSET_DIR, id)).catch(() => {});
-          if (io.removeTree && isAssetNoteId(id)) await io.removeTree(histDir(id)).catch(() => {});
+          if (io.removeTree && isAssetNoteId(id) && !shared) await io.removeTree(io.join(targetDir, ASSET_DIR, id)).catch(() => {});
+          if (io.removeTree && isAssetNoteId(id)) await io.removeTree(noteHistDir).catch(() => {});
           lastSnap.delete(id);
           lastSnapText.delete(id);
-          notify({ id, origin: windowId, kind: "deleted" });
+          notify({ id, origin: windowId, kind: "deleted", dir: targetDir });
         });
       }
 
@@ -7321,6 +8095,7 @@
         }
         const removed = [];
         for (const note of live) {
+          if (note._sharedFromOtherSpace) continue;
           if (only && !only.has(note.id)) continue;
           if (active.has(note.id) || itemRefs.has(note.id) || referenced.has(note.id)) continue;
           // A generated date note is always put in the Daily folder. Do not infer ownership from a date-shaped title alone.
@@ -7359,17 +8134,51 @@
         // every opening (the host passes the Agenda lines of older items).
         async open({ startup = null } = {}) {
           closed = false;
-          dir = await getDir();
+          closeSharedOwnerStores();
+          baseDir = await getDir();
+          const wantMode = cleanSpaceMode(typeof getSpaceMode === "function" ? getSpaceMode() : "shared");
+          const identity = wantMode === "space" && typeof getWorkspaceIdentity === "function" ? getWorkspaceIdentity() : null;
+          const resolved = resolveSpaceStorageTarget({
+            baseDir,
+            mode: wantMode,
+            activeWorkspace: identity,
+            join: (...parts) => io.join(...parts),
+          });
+          if (!resolved.ready || !resolved.dir) {
+            dir = null;
+            activeSpaceMode = wantMode;
+            activeSpaceId = "";
+            activeSpaceDirKey = "";
+            throw new Error("Zen workspace identity is not ready yet for space-local Notes storage.");
+          }
+          activeSpaceMode = resolved.mode;
+          activeSpaceId = resolved.spaceId;
+          activeSpaceDirKey = resolved.dirKey;
+          dir = resolved.dir;
+          if (activeSpaceMode === "space" && typeof io.makeDir === "function") {
+            await io.makeDir(io.join(baseDir, SPACES_DIR)).catch(() => {});
+            await io.makeDir(dir).catch(() => {});
+          }
           opening = true;
           missedRemote.clear();
           missedHistory = false;
           missedMeta = false;
+          missedShares = false;
           missedUnloadRecovery = false;
           const load = async () => {
             await reconcileUnloadRecovery({ live: false }).catch(warn);
+            if (activeSpaceMode === "space") {
+              await loadSpaceRegistry().catch(warn);
+              await loadSpaceShares().catch(warn);
+            } else {
+              spaceShares = cleanSpaceShares(null);
+              sharesWriteBlocked = false;
+              sharesError = "";
+            }
             await loadAll();
             await loadMeta();
             await openItems();
+            if (activeSpaceMode === "space") await mountSharedEntities({ emitChanges: false });
             try { // migrate the old generated "Daily" label; a folder the person renamed is left alone
               const df = meta.folders.find((f) => f.id === DATE_FOLDER);
               if (df && df.label === "Daily") api.renameFolder(DATE_FOLDER, DATE_FOLDER_LABEL);
@@ -7393,14 +8202,22 @@
               }, { waitMs: STARTUP_TURN_WAIT_MS });
             } else await load();
             // What another window saved while this one was reading the folder, and while this catching up runs.
-            while (missedRemote.size || missedMeta || missedUnloadRecovery) {
+            while (missedRemote.size || missedMeta || missedUnloadRecovery || missedShares) {
               if (missedUnloadRecovery) {
                 missedUnloadRecovery = false;
                 await reconcileUnloadRecovery({ live: true }).catch(warn);
               }
+              if (missedShares) {
+                missedShares = false;
+                await refreshSpaceShares().catch(warn);
+              }
               const missed = [...missedRemote];
               missedRemote.clear();
-              for (const [id, backup] of missed) await reloadFromDisk(id, backup).catch(warn);
+              for (const [id, info] of missed) {
+                const backup = typeof info === "string" ? info : info?.backup || "";
+                const msgDir = typeof info === "object" ? info?.dir || "" : "";
+                await reloadFromDisk(id, backup, msgDir).catch(warn);
+              }
               if (missedMeta) {
                 missedMeta = false;
                 await refreshMeta();
@@ -7413,8 +8230,240 @@
           emit("reset");
         },
         async switchDir() {
-          await api.flush();
-          await api.open();
+          return api.switchSpaceContext({ force: true });
+        },
+        switchSpaceContext({ force = false } = {}) {
+          const run = async () => {
+            const wantMode = cleanSpaceMode(typeof getSpaceMode === "function" ? getSpaceMode() : "shared");
+            const identity = wantMode === "space" && typeof getWorkspaceIdentity === "function" ? getWorkspaceIdentity() : null;
+            const nextBase = await getDir();
+            const target = resolveSpaceStorageTarget({
+              baseDir: nextBase,
+              mode: wantMode,
+              activeWorkspace: identity,
+              join: (...parts) => io.join(...parts),
+            });
+            if (!force && target.ready && target.mode === activeSpaceMode && target.dir === dir && target.spaceId === activeSpaceId) {
+              if (activeSpaceMode === "space") await loadSpaceRegistry().catch(warn);
+              return true;
+            }
+            if (dir) await api.flush().catch(warn);
+            await api.open();
+            return true;
+          };
+          const task = transitionChain.then(run, run);
+          transitionChain = task.catch(() => {});
+          return task;
+        },
+        spaceMode: () => activeSpaceMode,
+        spaceId: () => activeSpaceId,
+        baseDir: () => baseDir,
+        spaceStorageState: () => ({
+          mode: activeSpaceMode,
+          spaceId: activeSpaceId,
+          dirKey: activeSpaceDirKey,
+          sharesWriteBlocked,
+          sharesError,
+        }),
+        listSpaces() {
+          const live = typeof getWorkspaces === "function" ? getWorkspaces() : [];
+          const liveMap = new Map(live.map((w) => [w.uuid, w]));
+          const allIds = new Set([...Object.keys(spaceRegistry.spaces), ...liveMap.keys()]);
+          if (activeSpaceId) allIds.add(activeSpaceId);
+          return [...allIds].map((uuid) => {
+            const liveEntry = liveMap.get(uuid) || null;
+            const regEntry = spaceRegistry.spaces[uuid] || null;
+            return {
+              uuid,
+              dirKey: regEntry?.dirKey || liveEntry?.dirKey || workspaceDirKey(uuid),
+              label: liveEntry?.name || regEntry?.lastLabel || uuid,
+              icon: liveEntry?.icon || "",
+              active: uuid === activeSpaceId,
+              removed: !liveEntry && !!regEntry?.removedAt,
+              removedAt: regEntry?.removedAt || 0,
+            };
+          }).sort((a, b) => Number(b.active) - Number(a.active) || Number(a.removed) - Number(b.removed) || a.label.localeCompare(b.label));
+        },
+        noteShareInfo(noteId) {
+          const note = notes.get(noteId);
+          if (!note || activeSpaceMode !== "space") {
+            return { ownerSpaceId: "", isOwner: true, sharedFromOtherSpace: false, spaces: [], allSpaces: false, linkedItemCount: 0 };
+          }
+          const rec = spaceShares.notes[noteId];
+          const spaces = rec && !rec.deleted ? [...rec.spaces] : [];
+          const ownerSpaceId = note._spaceOwner || activeSpaceId;
+          const linkedItemCount = items ? items.list({ noteId, includeHidden: true }).length : 0;
+          return {
+            ownerSpaceId,
+            isOwner: !note._sharedFromOtherSpace && ownerSpaceId === activeSpaceId,
+            sharedFromOtherSpace: !!note._sharedFromOtherSpace,
+            spaces,
+            allSpaces: spaces.includes("*"),
+            linkedItemCount,
+          };
+        },
+        itemShareInfo(itemId) {
+          const item = items?.get?.(itemId) || null;
+          if (!item || activeSpaceMode !== "space") {
+            return { ownerSpaceId: "", isOwner: true, sharedFromOtherSpace: false, spaces: [], allSpaces: false, inheritedFromNote: false, sourceNoteShared: true, sourceNoteHidden: false };
+          }
+          const direct = spaceShares.items[itemId];
+          const noteId = item.x?.noteId || "";
+          const noteRec = noteId ? spaceShares.notes[noteId] : null;
+          const inheritedFromNote = !!noteRec && !noteRec.deleted && (isSharedWithSpace(noteRec, activeSpaceId) || noteRec.ownerSpaceId === activeSpaceId);
+          const inLocal = !!localItems?.get?.(itemId);
+          const ownerSpaceId = inLocal ? activeSpaceId : (direct?.ownerSpaceId || noteRec?.ownerSpaceId || "");
+          const isOwner = inLocal || ownerSpaceId === activeSpaceId;
+          const spaces = direct && !direct.deleted ? [...direct.spaces] : [];
+          const sourceNoteShared = !noteId || !!notes.get(noteId);
+          return {
+            ownerSpaceId,
+            isOwner,
+            sharedFromOtherSpace: !isOwner,
+            spaces,
+            allSpaces: spaces.includes("*"),
+            inheritedFromNote,
+            sourceNoteShared,
+            sourceNoteHidden: !!noteId && !notes.get(noteId),
+          };
+        },
+        async shareNote(noteId, targetSpaces) {
+          if (activeSpaceMode !== "space" || !activeSpaceId || sharesWriteBlocked) return false;
+          const note = notes.get(noteId);
+          if (!note || note.trashed || note._sharedFromOtherSpace) return false;
+          const targets = cleanShareTargets(targetSpaces, activeSpaceId);
+          const ok = await mutateSpaceShares((cur) => {
+            const prev = cur.notes[noteId];
+            const stamp = Math.max(now(), (prev?.updated || 0) + 1);
+            const rev = (prev?.rev || 0) + 1;
+            const deleted = targets.length === 0;
+            return {
+              ...cur,
+              notes: {
+                ...cur.notes,
+                [noteId]: { id: noteId, ownerSpaceId: activeSpaceId, ownerDirKey: activeSpaceDirKey, spaces: deleted ? [] : targets, deleted, updated: stamp, rev },
+              },
+            };
+          });
+          if (!ok) return false;
+          decorateNoteOwnership(note, { ownerSpaceId: activeSpaceId, ownerDir: dir, foreign: false });
+          emit("change", noteId, { meta: true, share: true });
+          emit("tree", noteId, { share: true });
+          return true;
+        },
+        async unshareNote(noteId, targetSpaceId = "") {
+          if (activeSpaceMode !== "space" || !activeSpaceId || sharesWriteBlocked) return false;
+          const note = notes.get(noteId);
+          if (!note) return false;
+          if (note._sharedFromOtherSpace) {
+            const ok = await mutateSpaceShares((cur) => {
+              const prev = cur.notes[noteId];
+              if (!prev || prev.deleted) return null;
+              const liveOthers = api.listSpaces().map((s) => s.uuid).filter((id) => id !== prev.ownerSpaceId && id !== activeSpaceId);
+              const nextTargets = prev.spaces.includes("*")
+                ? cleanShareTargets(liveOthers, prev.ownerSpaceId)
+                : prev.spaces.filter((id) => id !== activeSpaceId);
+              const deleted = nextTargets.length === 0;
+              return {
+                ...cur,
+                notes: {
+                  ...cur.notes,
+                  [noteId]: { ...prev, spaces: deleted ? [] : nextTargets, deleted, updated: Math.max(now(), prev.updated + 1), rev: (prev.rev || 1) + 1 },
+                },
+              };
+            });
+            if (!ok) return false;
+            await mountSharedEntities({ emitChanges: true });
+            return true;
+          }
+          const curRec = spaceShares.notes[noteId];
+          if (!curRec || curRec.deleted) return true;
+          const nextTargets = targetSpaceId
+            ? (curRec.spaces.includes("*")
+              ? api.listSpaces().map((s) => s.uuid).filter((id) => id !== activeSpaceId && id !== targetSpaceId)
+              : curRec.spaces.filter((id) => id !== targetSpaceId))
+            : [];
+          return api.shareNote(noteId, nextTargets);
+        },
+        async shareItem(itemId, targetSpaces) {
+          if (activeSpaceMode !== "space" || !activeSpaceId || sharesWriteBlocked || !localItems) return false;
+          const item = localItems.get(itemId);
+          if (!item) return false;
+          const targets = cleanShareTargets(targetSpaces, activeSpaceId);
+          const ok = await mutateSpaceShares((cur) => {
+            const prev = cur.items[itemId];
+            const stamp = Math.max(now(), (prev?.updated || 0) + 1);
+            const rev = (prev?.rev || 0) + 1;
+            const deleted = targets.length === 0;
+            return {
+              ...cur,
+              items: {
+                ...cur.items,
+                [itemId]: { id: itemId, ownerSpaceId: activeSpaceId, ownerDirKey: activeSpaceDirKey, noteId: item.x?.noteId || "", spaces: deleted ? [] : targets, deleted, updated: stamp, rev },
+              },
+            };
+          });
+          if (!ok) return false;
+          emitItem("change", itemId, { share: true });
+          return true;
+        },
+        async unshareItem(itemId, targetSpaceId = "") {
+          if (activeSpaceMode !== "space" || !activeSpaceId || sharesWriteBlocked) return false;
+          const curRec = spaceShares.items[itemId];
+          if (!curRec || curRec.deleted) return true;
+          if (curRec.ownerSpaceId !== activeSpaceId) {
+            const ok = await mutateSpaceShares((cur) => {
+              const prev = cur.items[itemId];
+              if (!prev || prev.deleted) return null;
+              const liveOthers = api.listSpaces().map((s) => s.uuid).filter((id) => id !== prev.ownerSpaceId && id !== activeSpaceId);
+              const nextTargets = prev.spaces.includes("*")
+                ? cleanShareTargets(liveOthers, prev.ownerSpaceId)
+                : prev.spaces.filter((id) => id !== activeSpaceId);
+              const deleted = nextTargets.length === 0;
+              return {
+                ...cur,
+                items: {
+                  ...cur.items,
+                  [itemId]: { ...prev, spaces: deleted ? [] : nextTargets, deleted, updated: Math.max(now(), prev.updated + 1), rev: (prev.rev || 1) + 1 },
+                },
+              };
+            });
+            if (!ok) return false;
+            await mountSharedEntities({ emitChanges: true });
+            return true;
+          }
+          const nextTargets = targetSpaceId
+            ? (curRec.spaces.includes("*")
+              ? api.listSpaces().map((s) => s.uuid).filter((id) => id !== activeSpaceId && id !== targetSpaceId)
+              : curRec.spaces.filter((id) => id !== targetSpaceId))
+            : [];
+          return api.shareItem(itemId, nextTargets);
+        },
+        noteAlertOverride(noteId) {
+          if (!noteId) return null;
+          const note = notes.get(noteId);
+          if (note?._sharedFromOtherSpace) return sharedOwnerMeta.get(note._spaceOwner)?.calendarNoteAlertOverrides?.[noteId] || null;
+          return meta.calendarNoteAlertOverrides?.[noteId] || null;
+        },
+        noteAgendaOverride(noteId) {
+          if (!noteId) return null;
+          const note = notes.get(noteId);
+          if (note?._sharedFromOtherSpace) return sharedOwnerMeta.get(note._spaceOwner)?.calendarNoteAgendaOverrides?.[noteId] || null;
+          return meta.calendarNoteAgendaOverrides?.[noteId] || null;
+        },
+        canOpenSourceNote(item) {
+          const noteId = item?.x?.noteId || "";
+          if (!noteId) return { allowed: false, reason: "no-source-note", noteId: "" };
+          const note = notes.get(noteId);
+          if (note && !note.trashed) return { allowed: true, reason: "", noteId };
+          if (activeSpaceMode === "space") {
+            const shareInfo = api.itemShareInfo(item.id);
+            if (shareInfo.sharedFromOtherSpace) {
+              const ownerLabel = api.listSpaces().find((s) => s.uuid === shareInfo.ownerSpaceId)?.label || shareInfo.ownerSpaceId;
+              return { allowed: false, reason: "source-note-private", noteId, ownerSpaceId: shareInfo.ownerSpaceId, ownerLabel };
+            }
+          }
+          return { allowed: false, reason: "missing-note", noteId };
         },
         get(id) {
           return notes.get(id) || null;
@@ -7526,7 +8575,7 @@
           const have = notes.get(id);
           if (have) return { note: have, created: false };
           const t = now();
-          const note = { id, body, created: t, updated: t, touched: false, color: "none", label: "", folder: cleanFolder(folder), pinned: false, trashed: 0, remind: 0, reminded: 0, _onDisk: false, _mtime: t };
+          const note = decorateNoteOwnership({ id, body, created: t, updated: t, touched: false, color: "none", label: "", folder: cleanFolder(folder), pinned: false, trashed: 0, remind: 0, reminded: 0, _onDisk: false, _mtime: t }, { ownerSpaceId: activeSpaceId, ownerDir: dir, foreign: false });
           notes.set(id, note);
           if (body) markDirty(id);
           if (body) syncItems(id, true, true);
@@ -7535,9 +8584,9 @@
         },
         create(body = "", folder = "") {
           let id = makeId(now());
-          while (notes.has(id)) id = makeId(now());
+          while (notes.has(id) || (activeSpaceMode === "space" && spaceShares.notes[id])) id = makeId(now());
           const t = now();
-          const note = {
+          const note = decorateNoteOwnership({
             id,
             body,
             created: t,
@@ -7552,7 +8601,7 @@
             reminded: 0,
             _onDisk: false,
             _mtime: t,
-          };
+          }, { ownerSpaceId: activeSpaceId, ownerDir: dir, foreign: false });
           notes.set(id, note);
           if (body) markDirty(id);
           if (body) syncItems(id, true, true);
@@ -7682,12 +8731,12 @@
         // line is round-trip checked (`agendaMirrorLine`); items a list line cannot express stay linked-only. Idempotent.
         // Returns the note id or "".
         mirrorItemToAgendaNote(itemId, { fmt } = {}) {
-          let item = items?.get?.(itemId);
+          let item = localItems?.get?.(itemId);
           if (!item || !CALENDAR_PART || item.x?.src !== "manual" || CALENDAR_PART.isRecurringItem(item)) return "";
           if (!item.x.noteId && !api.linkItemToAgendaNote(itemId, { fmt })) return "";
-          item = items.get(itemId);
+          item = localItems.get(itemId);
           const note = item?.x?.noteId ? notes.get(item.x.noteId) : null;
-          if (!note || note.trashed || !/^agenda$/i.test(item.x.heading || "")) return "";
+          if (!note || note.trashed || note._sharedFromOtherSpace || !/^agenda$/i.test(item.x.heading || "")) return "";
           const useFmt = fmt || getDateFormat() || CALENDAR_PART.DEFAULT_DATE_FORMAT;
           if (!dateOfNote(note, useFmt) || dateOfNote(note, useFmt) !== CALENDAR_PART.localDateKey(CALENDAR_PART.itemRange(item)[0])) return "";
           const identity = CALENDAR_PART.reminderIdentity(item);
@@ -7704,9 +8753,21 @@
           // or the note was saved and the calendar was not before a crash). The manual record is the same reminder:
           // it replaces the twin as the newer version, so its details are kept and no second item remains.
           const mirrored = CALENDAR_PART.mirroredItem(item, note.id, mirror.lineId, "Agenda");
-          const twin = exists ? items.get(mirrored.id) : null;
-          if (!items.upsert(twin ? { ...mirrored, updated: "" } : mirrored)) return "";
-          items.remove(item.id);
+          const twin = exists ? localItems.get(mirrored.id) : null;
+          if (!localItems.upsert(twin ? { ...mirrored, updated: "" } : mirrored)) return "";
+          localItems.remove(item.id);
+          if (activeSpaceMode === "space" && activeSpaceId && !sharesWriteBlocked) {
+            const prevShare = spaceShares.items[item.id];
+            if (prevShare && !prevShare.deleted && prevShare.ownerSpaceId === activeSpaceId && mirrored.id !== item.id) {
+              const targetSpaces = [...prevShare.spaces];
+              mutateSpaceShares((doc) => {
+                const stamp = now();
+                doc.items[mirrored.id] = { ownerSpaceId: activeSpaceId, ownerDirKey: activeSpaceDirKey, spaces: targetSpaces, updatedAt: stamp, deleted: false };
+                doc.items[item.id] = { ownerSpaceId: activeSpaceId, ownerDirKey: activeSpaceDirKey, spaces: [], updatedAt: stamp, deleted: true };
+                return true;
+              }).catch(warn);
+            }
+          }
           if (inserted.changed) api.update(note.id, inserted.body, "agenda");
           else items.syncNote(note.id, note.body, { updatedAt: note.updated });
           return note.id;
@@ -7715,8 +8776,8 @@
         // is mirrored. Safe to repeat; items a line cannot express are left as they are.
         backfillAgendaLinks({ fmt } = {}) {
           const result = { mirrored: 0, skipped: 0 };
-          if (!items || !CALENDAR_PART) return result;
-          for (const it of [...items.list()]) {
+          if (!localItems || !CALENDAR_PART) return result;
+          for (const it of [...localItems.list()]) {
             if (it.x?.src !== "manual" || CALENDAR_PART.isRecurringItem(it)) continue;
             if (it.x.noteId && !/^agenda$/i.test(it.x.heading || "")) continue;
             try { if (api.mirrorItemToAgendaNote(it.id, { fmt })) result.mirrored++; else result.skipped++; } catch (error) { warn(error); result.skipped++; }
@@ -7766,14 +8827,29 @@
         deleteCalendarItem(id) {
           const item = items?.get?.(id);
           if (!item || items.storageState?.().writeBlocked) return false;
-          if (item.x?.src === "manual") return items.remove(item.id);
+          const pruneItemShare = () => {
+            if (activeSpaceMode === "space" && spaceShares.items[id] && !spaceShares.items[id].deleted && spaceShares.items[id].ownerSpaceId === activeSpaceId) {
+              mutateSpaceShares((cur) => {
+                const prev = cur.items[id];
+                if (!prev || prev.deleted || prev.ownerSpaceId !== activeSpaceId) return null;
+                return { ...cur, items: { ...cur.items, [id]: { ...prev, spaces: [], deleted: true, updated: Math.max(now(), prev.updated + 1), rev: (prev.rev || 1) + 1 } } };
+              }).catch(warn);
+            }
+          };
+          if (item.x?.src === "manual") {
+            const removed = items.remove(item.id);
+            if (removed) pruneItemShare();
+            return removed;
+          }
           if (!CALENDAR_PART.isMirroredAgendaItem(item)) return false;
           const note = notes.get(item.x.noteId);
           if (!note || note.trashed) return false;
           const result = CALENDAR_PART.removeMirroredAgendaLine(note.body, item);
           if (!result.changed) return false;
           api.update(note.id, result.body, "agenda-delete");
-          return !items.get(item.id);
+          const gone = !items.get(item.id);
+          if (gone) pruneItemShare();
+          return gone;
         },
         // After a reschedule of a note-derived item, rewrite ITS line's date/time so the text and the calendar agree
         // (otherwise a later note edit would silently pull the old time back). Only the leading date/time of the one
@@ -8103,7 +9179,7 @@
           const chk = checkAssetBytes(bytes, claimedMime);
           if (!chk.ok) return chk;
           if (!io.makeDir || !io.writeBytes) return { ok: false, reason: "io" };
-          const folder = io.join(dir, ASSET_DIR, noteId);
+          const folder = io.join(noteDir(noteId), ASSET_DIR, noteId);
           try {
             await io.makeDir(folder);
             let existing = [];
@@ -8133,7 +9209,7 @@
           if (ASSET_EXT_MIME[ext] && sniffImageMime(bytes) !== ASSET_EXT_MIME[ext]) return { ok: false, reason: "type" };
           if (VIDEO_EXT_MIME[ext] && !sniffVideoMime(bytes, VIDEO_EXT_MIME[ext])) return { ok: false, reason: "type" };
           if (!io.makeDir || !io.writeBytes) return { ok: false, reason: "io" };
-          const folder = io.join(dir, ASSET_DIR, noteId);
+          const folder = io.join(noteDir(noteId), ASSET_DIR, noteId);
           try {
             await io.makeDir(folder);
             let existing = [];
@@ -8167,7 +9243,8 @@
           const link = image || video || file;
           if (!link || !dir || !io.readBytes) return null;
           try {
-            const filePath = io.join(dir, ASSET_DIR, link.noteId, link.file);
+            const ownerBase = notes.has(link.noteId) ? noteDir(link.noteId) : dir;
+            const filePath = io.join(ownerBase, ASSET_DIR, link.noteId, link.file);
             const maxBytes = video ? ASSET_VIDEO_MAX_BYTES : file ? ASSET_FILE_MAX_BYTES : ASSET_MAX_BYTES;
             if (io.stat) {
               const stat = await io.stat(filePath).catch(() => null);
@@ -8254,7 +9331,8 @@
         },
         // ---- folders (D2): the tree is the source of truth, files only carry `folder:` ----------------
         tree() {
-          return buildTree([...notes.values()], meta.folders);
+          const viewNotes = [...notes.values()].map((n) => (n._sharedFromOtherSpace ? { ...n, folder: "" } : n));
+          return buildTree(viewNotes, meta.folders);
         },
         setFolder(id, folderId) {
           const note = notes.get(id);
@@ -8487,6 +9565,7 @@
             if (!known || mtime > known._mtime + 2000) await reloadFromDisk(id);
           }
           for (const [id, n] of [...notes]) {
+            if (n._sharedFromOtherSpace) continue;
             if (n._onDisk && !present.has(id) && !dirty.has(id)) {
               notes.delete(id);
               syncItems(id);
@@ -8502,16 +9581,46 @@
             return;
           }
           if (!msg || msg.origin === windowId || !dir) return;
+          if (msg.kind === "shares") {
+            if (activeSpaceMode !== "space" || !baseDir || msg.baseDir !== baseDir) return;
+            if (opening) missedShares = true;
+            else refreshSpaceShares().catch(warn);
+            return;
+          }
+          if (msg.kind === "calendar-items") {
+            if (msg.dir === dir) {
+              if (!opening) localItems?.refresh?.().catch(warn);
+              return;
+            }
+            const ownerId = sharedOwnerByDir.get(msg.dir);
+            if (ownerId && sharedOwnerItemStores.has(ownerId)) {
+              if (!opening) sharedOwnerItemStores.get(ownerId).store.refresh?.().catch(warn);
+            }
+            return;
+          }
           if (msg.kind === "reminder-history") {
-            if (msg.dir !== dir) return;
-            if (opening) missedHistory = true;
-            else items?.history?.refresh?.().catch(warn);
+            if (msg.dir === dir) {
+              if (opening) missedHistory = true;
+              else localItems?.history?.refresh?.().catch(warn);
+              return;
+            }
+            const ownerId = sharedOwnerByDir.get(msg.dir);
+            if (ownerId && sharedOwnerItemStores.has(ownerId)) {
+              if (opening) missedHistory = true;
+              else sharedOwnerItemStores.get(ownerId).store.history?.refresh?.().catch(warn);
+            }
             return;
           }
           if (msg.kind === "meta") {
-            if (msg.dir !== dir) return;
-            if (opening) missedMeta = true;
-            else refreshMeta();
+            if (msg.dir === dir) {
+              if (opening) missedMeta = true;
+              else refreshMeta();
+              return;
+            }
+            const ownerId = sharedOwnerByDir.get(msg.dir);
+            if (ownerId) {
+              if (!opening) loadOwnerMetaSnapshot(ownerId, msg.dir).then(() => emit("tree", "", { remote: true })).catch(warn);
+            }
             return;
           }
           if (msg.kind === "unload-recovery") {
@@ -8521,22 +9630,33 @@
             return;
           }
           if (typeof msg.id !== "string" || !/^[\w.-]+$/.test(msg.id)) return;
+          if (msg.dir && msg.dir !== dir) {
+            const existing = notes.get(msg.id);
+            if (!existing || existing._spaceDir !== msg.dir) return;
+          } else if (!msg.dir && activeSpaceMode === "space") {
+            const existing = notes.get(msg.id);
+            if (existing?._sharedFromOtherSpace) return;
+          }
           // While the folder is being read the file may already have been read in its older state: look again afterwards.
           if (opening) {
-            missedRemote.set(msg.id, msg.conflictBackupPath || missedRemote.get(msg.id) || "");
+            const prev = missedRemote.get(msg.id);
+            const prevBackup = typeof prev === "string" ? prev : prev?.backup || "";
+            missedRemote.set(msg.id, { backup: msg.conflictBackupPath || prevBackup, dir: msg.dir || "" });
             return;
           }
-          reloadFromDisk(msg.id, msg.conflictBackupPath || "").catch(warn);
+          reloadFromDisk(msg.id, msg.conflictBackupPath || "", msg.dir || "").catch(warn);
         },
         async close({ unloading = false } = {}) {
           if (unloading || windowGone) {
             flushOnUnload();
+            closeSharedOwnerStores();
             closed = true;
             if (retryTimer !== null) clearTimer(retryTimer);
             retryTimer = null;
             return;
           }
           await api.flush();
+          closeSharedOwnerStores();
           closed = true;
           if (retryTimer !== null) clearTimer(retryTimer);
           retryTimer = null;
@@ -10894,7 +12014,7 @@
         if (!api.ensureRoot()) return;
         api.styleRoot?.();
         if (api.sweepStrays) api.sweepStrays(); // our tabs that ended up outside the NOTES folder (unpinned, essential, dragged away, restored)
-        const notes = store.list();
+        const notes = store.list().map((n) => (n._sharedFromOtherSpace ? { ...n, folder: "" } : n));
         const hideDateFolder = !!getAgendaEnabled();
         const visibleNotes = hideDateFolder ? notes.filter((note) => cleanFolder(note.folder) !== DATE_FOLDER && !cleanFolder(note.folder).startsWith(DATE_FOLDER + "/")) : notes;
         const visibleFolders = hideDateFolder ? store.meta.folders.filter((folder) => folder.id !== DATE_FOLDER && !folder.id.startsWith(DATE_FOLDER + "/")) : store.meta.folders;
@@ -10969,7 +12089,9 @@
 
     function agendaWindowForItem(item, store) {
       const category = item?.x?.category ? store.items?.category?.(item.x.category) : null;
-      const notePolicy = item?.x?.noteId ? store.meta?.calendarNoteAgendaOverrides?.[item.x.noteId] : null;
+      const notePolicy = item?.x?.noteId
+        ? (typeof store.noteAgendaOverride === "function" ? store.noteAgendaOverride(item.x.noteId) : store.meta?.calendarNoteAgendaOverrides?.[item.x.noteId])
+        : null;
       return CALENDAR_PART.resolveAgendaWindow(item, category?.agenda, notePolicy, store.meta?.calendarAgendaDefaults);
     }
 
@@ -10979,7 +12101,7 @@
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS, SHARED_TURN_WAIT_MS, STARTUP_TURN_WAIT_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, SHOWCASE_NOTE_ID, buildShowcaseNote, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
-        makeFolderUid, ensureFolderUids, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_STYLE, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
+        makeFolderUid, ensureFolderUids, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_STYLE, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, SPACE_MODES, cleanSpaceMode, SPACES_DIR, SPACE_REGISTRY_FILE, SPACE_SHARES_FILE, cleanWorkspaceId, workspaceDirKey, readZenWorkspaces, resolveActiveWorkspaceIdentity, cleanSpaceRegistry, reconcileSpaceRegistry, cleanShareTargets, cleanShareRecord, cleanSpaceShares, mergeSpaceShares, isSharedWithSpace, planSpaceSharesForSpace, resolveSpaceStorageTarget, canShareCalendarItemWithoutNote, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition, calendarMenuPosition, normalizeContextMenuItems,
@@ -13382,9 +14504,17 @@
       }
       function openCalendarItem(item) {
         const noteId = item.x?.noteId || "";
-        if (noteId && openNoteByIdAndHeading(noteId, item.x?.heading || "", item.id)) {
-          if (item.x?.calNote) flash("Calendar note: " + item.x.calNote.slice(0, 180), 6000);
-          return;
+        if (noteId) {
+          const check = typeof store.canOpenSourceNote === "function" ? store.canOpenSourceNote(item) : { allowed: true };
+          if (!check.allowed && check.reason === "source-note-private") {
+            flash("Source note is private to " + (check.ownerLabel || "another space"), 5000);
+            askCalendarItemDetails(item);
+            return;
+          }
+          if (openNoteByIdAndHeading(noteId, item.x?.heading || "", item.id)) {
+            if (item.x?.calNote) flash("Calendar note: " + item.x.calNote.slice(0, 180), 6000);
+            return;
+          }
         }
         askCalendarItemDetails(item);
       }
@@ -13723,7 +14853,17 @@
           const run = commands[row.command];
           return { ...row, run: row.enabled && typeof run === "function" ? () => run() : null };
         });
-        return bind(model);
+        const bound = bind(model);
+        if (typeof store.spaceMode === "function" && store.spaceMode() === "space") {
+          const shareInfo = store.itemShareInfo(item.id);
+          if (shareInfo.isOwner) {
+            const countLabel = shareInfo.allSpaces ? " (All spaces)" : shareInfo.spaces.length ? " (" + shareInfo.spaces.length + ")" : "";
+            bound.push({ sep: true }, { icon: "link", label: "Share with spaces\u2026" + countLabel, enabled: !store.spaceStorageState().sharesWriteBlocked, run: () => queueMicrotask(() => askShareSpaces({ kind: "item", id: item.id, title: item.summary || "Calendar item" })) });
+          } else if (!shareInfo.inheritedFromNote) {
+            bound.push({ sep: true }, { icon: "x", label: "Remove from this space", enabled: !store.spaceStorageState().sharesWriteBlocked, run: () => { store.unshareItem(item.id).then((ok) => { if (ok) { renderCalendar(); flash("Removed from this space"); } }); } });
+          }
+        }
+        return bound;
       }
       function showCalendarItemMenu(event, item, anchor = null) {
         event?.preventDefault?.();
@@ -16319,21 +17459,30 @@
           store.setPinned(n.id, !n.pinned);
           scheduleList();
         });
-        const t = iconButton("trash", "Move to trash");
+        const t = n._sharedFromOtherSpace ? iconButton("x", "Remove from this space") : iconButton("trash", "Move to trash");
         t.addEventListener("click", (e) => {
           e.stopPropagation();
+          if (n._sharedFromOtherSpace) {
+            store.unshareNote(n.id).then((ok) => { if (ok) { if (n.id === currentId) currentId = ""; scheduleList(); flash("Removed from this space"); } });
+            return;
+          }
           askNoteTrash(n.id, () => { if (n.id === currentId) currentId = ""; scheduleList(); });
         });
         act.append(p, t);
       }
+      const rowShareInfo = typeof store.spaceMode === "function" && store.spaceMode() === "space" ? store.noteShareInfo(n.id) : null;
+      const rowShareBadge = rowShareInfo?.sharedFromOtherSpace
+        ? ("Shared" + (rowShareInfo.ownerLabel ? " \u00b7 " + rowShareInfo.ownerLabel : ""))
+        : (rowShareInfo?.isOwner && (rowShareInfo.allSpaces || rowShareInfo.spaces.length > 0) ? "Shared" : "");
       item.append(
         h("span", { class: "zn-item-bar" }),
         h(
           "span",
           { class: "zn-item-main" },
           h("span", { class: "zn-item-title" }, (n.pinned ? "\u{1F4CC} " : "") + (titleOf(n.body) || "Untitled note")),
+          ...(rowShareBadge ? [h("span", { class: "zn-item-label zn-item-shared" }, rowShareBadge)] : []),
           ...(n.label ? [h("span", { class: "zn-item-label" }, n.label)] : []),
-          ...(!opts.tree && cleanFolder(n.folder) ? [h("span", { class: "zn-item-label zn-item-folder" }, cleanFolder(n.folder))] : []),
+          ...(!opts.tree && !n._sharedFromOtherSpace && cleanFolder(n.folder) ? [h("span", { class: "zn-item-label zn-item-folder" }, cleanFolder(n.folder))] : []),
           h("span", { class: "zn-item-snippet" }, snippetOf(n.body)),
         ),
         h("span", { class: "zn-item-time" }, relativeTime(trashed ? n.trashed : n.updated)),
@@ -17354,10 +18503,63 @@
         cancel.addEventListener("click", closeDialog);
         d.input.focus({ preventScroll: true });
       }
+      function askShareSpaces({ kind = "note", id, title = "" }) {
+        if (typeof store.spaceMode !== "function" || store.spaceMode() !== "space" || !id) return;
+        const info = kind === "note" ? store.noteShareInfo(id) : store.itemShareInfo(id);
+        if (!info.isOwner) return;
+        const spaces = store.listSpaces().filter((s) => !s.active && !s.removed);
+        let allSpaces = !!info.allSpaces;
+        const selected = new Set(allSpaces ? [] : info.spaces);
+        const list = h("div", { class: "zn-share-list" });
+        const allInput = h("input", { type: "checkbox" });
+        allInput.checked = allSpaces;
+        const spaceInputs = [];
+        const syncAll = () => {
+          allSpaces = allInput.checked;
+          for (const entry of spaceInputs) entry.input.disabled = allSpaces;
+        };
+        allInput.addEventListener("change", syncAll);
+        list.append(h("label", { class: "zn-share-row" }, allInput, h("span", {}, "All Zen spaces")));
+        if (!spaces.length) {
+          list.append(h("p", { class: "zn-muted" }, "No other active Zen spaces detected yet. You can still share with All Zen spaces."));
+        } else {
+          for (const sp of spaces) {
+            const input = h("input", { type: "checkbox" });
+            input.checked = !allSpaces && selected.has(sp.uuid);
+            input.disabled = allSpaces;
+            input.addEventListener("change", () => { if (input.checked) selected.add(sp.uuid); else selected.delete(sp.uuid); });
+            spaceInputs.push({ uuid: sp.uuid, input });
+            list.append(h("label", { class: "zn-share-row" }, input, h("span", {}, sp.label || sp.uuid)));
+          }
+        }
+        const hint = h("p", { class: "zn-muted" },
+          kind === "note"
+            ? "Sharing a note also shares its linked calendar items, reminders and attachments without copying files."
+            : (info.sourceNoteHidden || (store.items?.get?.(id)?.x?.noteId)
+              ? "Sharing this calendar item shares its schedule and reminder status without exposing its source note."
+              : "Sharing this calendar item keeps one canonical schedule and reminder history across spaces."));
+        const saveBtn = chip("Save", true);
+        const stopBtn = chip("Stop sharing");
+        const cancelBtn = chip("Cancel");
+        openCard("Share \u201c" + (title || (kind === "note" ? "Untitled note" : "Calendar item")) + "\u201d", hint, list, h("div", { class: "zn-dialog-actions" }, saveBtn, stopBtn, cancelBtn));
+        const apply = async (targets) => {
+          const ok = kind === "note" ? await store.shareNote(id, targets) : await store.shareItem(id, targets);
+          closeDialog();
+          if (!ok) return flash("Could not update sharing settings");
+          flash(targets.length ? "Sharing updated" : "Stopped sharing");
+          scheduleList();
+          if (kind === "item") renderCalendar();
+        };
+        saveBtn.addEventListener("click", () => apply(allSpaces ? ["*"] : [...selected]));
+        stopBtn.addEventListener("click", () => apply([]));
+        cancelBtn.addEventListener("click", closeDialog);
+      }
       function askMoveNote(n) {
         askFolderPick("Move note to folder", folderTargets(), (fid) => { store.setFolder(n.id, fid); applyState(); scheduleList(); }, cleanFolder(n.folder));
       }
       function noteMenuItems(n) {
+        const spaceLocal = typeof store.spaceMode === "function" && store.spaceMode() === "space";
+        const shareInfo = spaceLocal ? store.noteShareInfo(n.id) : null;
         if (n.trashed)
           return [
             { icon: "restore", label: "Restore", action: () => { store.restore(n.id); scheduleList(); } },
@@ -17365,20 +18567,29 @@
             { sep: true },
             { icon: "trash", label: "Delete forever", danger: true, action: () => askNoteDeleteForever(n.id, scheduleList) },
           ];
+        const shareRows = [];
+        if (spaceLocal && shareInfo) {
+          if (shareInfo.isOwner) {
+            const suffix = shareInfo.allSpaces ? " (All spaces)" : shareInfo.spaces.length ? " (" + shareInfo.spaces.length + ")" : "";
+            shareRows.push({ icon: "link", label: "Share with spaces\u2026" + suffix, enabled: !store.spaceStorageState().sharesWriteBlocked, action: () => queueMicrotask(() => askShareSpaces({ kind: "note", id: n.id, title: titleOf(n.body) || "Untitled note" })) });
+          } else if (shareInfo.sharedFromOtherSpace) {
+            shareRows.push({ icon: "x", label: "Remove from this space", enabled: !store.spaceStorageState().sharesWriteBlocked, action: () => { store.unshareNote(n.id).then((ok) => { if (ok) { if (n.id === currentId) currentId = ""; scheduleList(); flash("Removed from this space"); } }); } });
+          }
+        }
         return [
           { icon: "note", label: "Open", action: () => openNote(n.id) },
           { icon: "pin", label: n.pinned ? "Unpin" : "Pin", action: () => { store.setPinned(n.id, !n.pinned); scheduleList(); } },
           { icon: "plus", label: "Quick capture here\u2026", action: () => queueMicrotask(() => askQuickCapture(n.id)) },
           { icon: "plus", label: "Quick capture to today\u2019s note\u2026", action: () => queueMicrotask(() => askQuickCapture("")) },
           { icon: "calendar-plus", label: "Add to Calendar…", action: () => queueMicrotask(() => composeFromNote(n.id)) },
+          ...(shareRows.length ? [{ sep: true }, ...shareRows] : []),
           { sep: true },
-          { icon: "folder", label: "Move to folder\u2026", action: () => queueMicrotask(() => askMoveNote(n)) },
-          { icon: "duplicate", label: "Duplicate", action: () => { const c = store.create(n.body, n.folder); store.setColor(c.id, n.color); store.setLabel(c.id, n.label); scheduleList(); } },
+          ...(!shareInfo?.sharedFromOtherSpace ? [{ icon: "folder", label: "Move to folder\u2026", action: () => queueMicrotask(() => askMoveNote(n)) }] : []),
+          { icon: "duplicate", label: "Duplicate", action: () => { const c = store.create(n.body, shareInfo?.sharedFromOtherSpace ? "" : n.folder); store.setColor(c.id, n.color); store.setLabel(c.id, n.label); scheduleList(); } },
           { label: "Colour", group: [...NOTE_COLORS.map((c) => ({ label: c, action: () => { store.setColor(n.id, c); scheduleList(); } })), ...quickColors().map((c) => ({ label: c, action: () => { store.setColor(n.id, c); scheduleList(); } })), { label: "Custom color\u2026", action: () => queueMicrotask(() => askCustomColor("Custom note color", cleanHex(n.color), (v) => { store.setColor(n.id, v); scheduleList(); })) }] },
           ...(FLAVORS_PART ? [{ label: "Markdown mode", group: [["", "Follow the setting"], ...FLAVORS_PART.MODES.map((m) => [m, FLAVORS_PART.MODE_LABELS[m]])].map(([m, label]) => ({ label: (n.flavor || "") === m ? "\u2713 " + label : label, action: () => { store.setFlavor(n.id, m); scheduleList(); } })) }] : []),
           { icon: "link", label: "Copy link", action: () => { env.copyText?.("[[" + (titleOf(n.body) || "Untitled note") + "]]"); flash("Link copied"); } },
-          { sep: true },
-          { icon: "trash", label: "Move to trash", danger: true, action: () => askNoteTrash(n.id, () => { if (n.id === currentId) currentId = ""; scheduleList(); }) },
+          ...(!shareInfo?.sharedFromOtherSpace ? [{ sep: true }, { icon: "trash", label: "Move to trash", danger: true, action: () => askNoteTrash(n.id, () => { if (n.id === currentId) currentId = ""; scheduleList(); }) }] : []),
         ];
       }
       function trashMenuItems() {
@@ -19988,8 +21199,18 @@
         if (n.trashed) {
           items.push({ icon: "restore", label: "Restore", action: () => { store.restore(n.id); applyState(); } });
           items.push({ icon: "trash", label: "Delete forever", danger: true, action: () => askNoteDeleteForever(n.id, () => { currentId = ""; showEditor(); }) });
-        } else
-          items.push({ icon: "trash", label: "Move to trash", danger: true, action: () => askNoteTrash(n.id, () => { currentId = ""; showEditor(); }) });
+        } else {
+          const shareInfo = typeof store.spaceMode === "function" && store.spaceMode() === "space" ? store.noteShareInfo(n.id) : null;
+          if (shareInfo?.isOwner) {
+            const suffix = shareInfo.allSpaces ? " (All spaces)" : shareInfo.spaces.length ? " (" + shareInfo.spaces.length + ")" : "";
+            items.push({ icon: "link", label: "Share with spaces\u2026" + suffix, enabled: !store.spaceStorageState().sharesWriteBlocked, action: () => queueMicrotask(() => askShareSpaces({ kind: "note", id: n.id, title: titleOf(n.body) || "Untitled note" })) });
+          }
+          if (shareInfo?.sharedFromOtherSpace) {
+            items.push({ icon: "x", label: "Remove from this space", enabled: !store.spaceStorageState().sharesWriteBlocked, action: () => { store.unshareNote(n.id).then((ok) => { if (ok) { currentId = ""; showEditor(); flash("Removed from this space"); } }); } });
+          } else {
+            items.push({ icon: "trash", label: "Move to trash", danger: true, action: () => askNoteTrash(n.id, () => { currentId = ""; showEditor(); }) });
+          }
+        }
         return items;
       };
       listen(btnMore, "click", () => showMenu(btnMore, moreItems()));
@@ -22742,6 +23963,7 @@
           return make(fallback);
         }
       }
+      const spaceModeNow = () => cleanSpaceMode(prefStr(PREF.SPACE_MODE, "shared"));
       const store = createStore({
         io: realIO,
         notify: (msg) => {
@@ -22751,6 +23973,9 @@
         },
         windowId,
         getDir: resolveDir,
+        getSpaceMode: spaceModeNow,
+        getWorkspaceIdentity: () => resolveActiveWorkspaceIdentity(window),
+        getWorkspaces: () => readZenWorkspaces(window),
         getMaxSaveMs: () =>
           Math.max(2, Math.min(60, prefInt(PREF.AUTOSAVE, DEFAULT_MAX_SAVE_SECONDS))) * 1000,
         getTrashDays: () => cleanTrashDays(prefInt(PREF.TRASH_DAYS, TRASH_DAYS)),
@@ -23069,11 +24294,12 @@
         assetUrls.clear();
       });
       async function loadAsset(rel) {
-        if (assetUrls.has(rel)) return { url: assetUrls.get(rel) };
+        const key = (typeof store.spaceId === "function" ? (store.spaceId() || "shared") : "shared") + "\0" + rel;
+        if (assetUrls.has(key)) return { url: assetUrls.get(key) };
         const got = await store.readAsset(rel);
         if (!got || disposed) return null;
         const url = URL.createObjectURL(new Blob([got.bytes], { type: got.mime }));
-        assetUrls.set(rel, url);
+        assetUrls.set(key, url);
         return { url };
       }
       const tick = createTimeTickService({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), warn });
@@ -23169,7 +24395,7 @@
           const item = entry.__calendarReminder ? entry.__calendarItem : { x: { noteId: entry.id } };
           const stage = entry.__stage || "followup";
           const category = item.x?.category ? store.items?.category?.(item.x.category) : null;
-          const noteNotify = item.x?.noteId ? store.meta.calendarNoteAlertOverrides?.[item.x.noteId] : null;
+          const noteNotify = item.x?.noteId ? store.noteAlertOverride(item.x.noteId) : null;
           const policy = CALENDAR_PART.resolveAlertPolicy(item, category?.notify, noteNotify, store.meta.calendarAlertSettings, stage, Date.now());
           if (policy.play) sounds.set(stage + "|" + policy.sound, { stage, policy });
         }
@@ -23208,7 +24434,9 @@
           };
           return {
             identity, title: item?.summary || titleOf(entry.body) || "Untitled reminder",
-            open: () => item?.x?.noteId ? openReminderNote(item.x.noteId, { heading: item.x.heading || "", itemId: item.id }) : item ? openCalendarDayFromHost(C.localDateKey(C.itemRange(item)[0])) : openReminderNote(entry.id),
+            open: () => (item?.x?.noteId && (typeof store.canOpenSourceNote !== "function" || store.canOpenSourceNote(item).allowed))
+              ? openReminderNote(item.x.noteId, { heading: item.x.heading || "", itemId: item.id })
+              : item ? openCalendarDayFromHost(C.localDateKey(C.itemRange(item)[0])) : openReminderNote(entry.id),
             dismiss: () => {
               const current = latest(); if (!current) return true;
               return item ? !!store.applyReminderLifecycle(current, "dismissed", Date.now(), true) : !!store.setReminder(entry.id, 0, "dismissed");
@@ -24608,7 +25836,7 @@
         getWindowIsMasterPolicy: true,
         getWindow: (item) => {
           const category = item.x?.category ? store.items?.category?.(item.x.category) : null;
-          const notePolicy = item.x?.noteId ? store.meta.calendarNoteAgendaOverrides?.[item.x.noteId] : null;
+          const notePolicy = item.x?.noteId ? store.noteAgendaOverride(item.x.noteId) : null;
           return CALENDAR_PART.resolveAgendaWindow(item, category?.agenda, notePolicy, store.meta.calendarAgendaDefaults);
         },
         isDone: (item) => {
@@ -25382,16 +26610,26 @@
         storeWhenReady().then(() => { if (disposed || zenMode() === "off") return; zen.schedule(); if (agendaEnabled()) agendaController.schedule(); }).catch(warn);
       };
       let watchedWorkspaceManager = null, workspaceNativeBound = false, workspaceFallbackTimer = 0, lastWorkspaceId = "";
+      const needsWorkspaceWatch = () => spaceModeNow() === "space" || zenMode() !== "off" || agendaEnabled();
       const onSharedWorkspaceChanged = () => {
         if (disposed) return;
         if (!lifecycle?.watchNative) bindWorkspaceManager();
         try { lastWorkspaceId = window.gZenWorkspaces?.activeWorkspace || ""; } catch (_) { lastWorkspaceId = ""; }
+        if (spaceModeNow() === "space" && storePromise) {
+          store.switchSpaceContext().then(() => {
+            if (disposed) return;
+            syncSharedWorkspace();
+            if (zenMode() !== "off") zenSoon(true);
+            if (agendaEnabled()) agendaSoon(true);
+          }).catch(warn);
+          return;
+        }
         syncSharedWorkspace();
         if (zenMode() !== "off") zenSoon(true);
         if (agendaEnabled()) agendaSoon(true);
       };
       function bindWorkspaceManager() {
-        const manager = (zenMode() !== "off" || agendaEnabled()) ? window.gZenWorkspaces : null;
+        const manager = needsWorkspaceWatch() ? window.gZenWorkspaces : null;
         if (manager === watchedWorkspaceManager) return;
         try { watchedWorkspaceManager?.removeChangeListeners?.(onSharedWorkspaceChanged); } catch (_) {}
         watchedWorkspaceManager = null; workspaceNativeBound = false;
@@ -25401,8 +26639,8 @@
       }
       if (lifecycle?.watchNative) {
         const watcher = lifecycle.watchNative({
-          name: "notes-shared-workspace-projection", prefs: [PREF.ZEN_MODE, PREF.AGENDA_ENABLED],
-          enabled: () => zenMode() !== "off" || agendaEnabled(),
+          name: "notes-shared-workspace-projection", prefs: [PREF.ZEN_MODE, PREF.AGENDA_ENABLED, PREF.SPACE_MODE],
+          enabled: needsWorkspaceWatch,
           resolve: () => window.gZenWorkspaces || null,
           events: ["AfterWorkspacesSessionRestore", "ZenWorkspacesUIUpdate"],
           attach(manager, child) {
@@ -25419,7 +26657,7 @@
       // Older hosts without a workspace-change callback still expose TabSelect;
       // coalesce only actual space changes and wait until the native event ends.
       const onWorkspaceTabSelect = () => {
-        if (disposed || workspaceNativeBound || (zenMode() === "off" && !agendaEnabled())) return;
+        if (disposed || workspaceNativeBound || !needsWorkspaceWatch()) return;
         let current = ""; try { current = window.gZenWorkspaces?.activeWorkspace || ""; } catch (_) {}
         if (!current || current === lastWorkspaceId) return;
         lastWorkspaceId = current; window.clearTimeout(workspaceFallbackTimer);
@@ -26542,7 +27780,7 @@
       const prefObserver = {
         observe(_s, _t, name) {
           if (disposed) return;
-          if (!lifecycle?.watchNative && (name === PREF.ZEN_MODE || name === PREF.AGENDA_ENABLED)) bindWorkspaceManager();
+          if (!lifecycle?.watchNative && (name === PREF.ZEN_MODE || name === PREF.AGENDA_ENABLED || name === PREF.SPACE_MODE)) bindWorkspaceManager();
           // READ_PREFS (blank lines, line breaks, Setext) are read on every render of the read view;
           // open sheets draw it again now so the change shows at once.
           if (READ_PREFS.has(name)) {
@@ -26576,10 +27814,16 @@
               sh?.layout?.();
             }
           }
-          else if (name === PREF.FOLDER) {
+          else if (name === PREF.FOLDER || name === PREF.SPACE_MODE) {
             if (storePromise)
               store
-                .switchDir()
+                .switchSpaceContext({ force: name === PREF.FOLDER })
+                .then(() => {
+                  if (disposed) return;
+                  syncSharedWorkspace();
+                  if (zenMode() !== "off") zenSoon(true);
+                  if (agendaEnabled()) agendaSoon(true);
+                })
                 .catch(warn);
           } else if (name === PREF.ENABLED || name === PREF.SHOW_BUTTON) {
             attachObservers();

@@ -1073,6 +1073,7 @@
     "zen.workspace.zentral.notes.shortcut",
     "zen.workspace.zentral.notes.autosave_seconds",
     "zen.workspace.zentral.notes.folder",
+    "zen.workspace.zentral.notes.space_mode",
     "zen.workspace.zentral.notes.dock_sidebar",
     "zen.workspace.zentral.notes.avoid_sidebar",
     "zen.workspace.zentral.notes.wrap_lines",

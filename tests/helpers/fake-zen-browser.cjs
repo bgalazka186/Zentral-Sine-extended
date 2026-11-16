@@ -24,7 +24,7 @@ function loadRuntimeHoverCard(ctx) {
   return vm.runInNewContext("(" + runtimeSource.slice(start, i + 1) + ")", ctx);
 }
 
-function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyFolders = false, calendar = Calendar, hiddenDOMWindow = null } = {}) {
+function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyFolders = false, calendar = Calendar, hiddenDOMWindow = null, sharedObs = null, workspaceName = "Default" } = {}) {
   const dom = require("./fake-dom.cjs")(), { El, Ev, document } = dom;
   document.querySelector = (selector) => document.querySelectorAll(selector)[0] || null;
   document.createXULElement = (tag) => document.createElement(tag);
@@ -48,12 +48,25 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   El.prototype.insertBefore = function (node, before) { record(node, this); return insertBefore.call(this, node, before); };
   El.prototype.remove = function () { if (["tab", "zen-folder"].includes(this.localName) && this.parentElement) operations.push({ type: "remove", node: this, from: this.parentElement }); return remove.call(this); };
   const sidebar = dom.zenSidebar();
-  const workspaces = new Map([[sidebar.ws.id, { element: sidebar.ws, pinnedTabsContainer: sidebar.pinned }]]), workspaceListeners = new Set();
-  function addWorkspace(id) {
+  const workspaces = new Map([[sidebar.ws.id, { uuid: sidebar.ws.id, name: workspaceName, icon: "", element: sidebar.ws, pinnedTabsContainer: sidebar.pinned }]]), workspaceListeners = new Set();
+  function addWorkspace(id, opts = {}) {
     const element = document.createElement("zen-workspace"), pinnedTabsContainer = document.createElement("vbox");
     element.id = id; pinnedTabsContainer.className = "zen-workspace-tabs-section zen-workspace-pinned-tabs-section";
     pinnedTabsContainer.setAttribute("zen-workspace-id", id); element.append(pinnedTabsContainer); document.body.append(element);
-    workspaces.set(id, { element, pinnedTabsContainer }); return workspaces.get(id);
+    workspaces.set(id, { uuid: id, name: opts.name || id, icon: opts.icon || "", element, pinnedTabsContainer }); return workspaces.get(id);
+  }
+  function renameWorkspace(id, name) {
+    const entry = workspaces.get(id);
+    if (!entry) throw new Error("missing workspace");
+    entry.name = String(name || "");
+    return entry;
+  }
+  function removeWorkspace(id) {
+    const entry = workspaces.get(id);
+    if (!entry) return false;
+    entry.element?.remove?.();
+    workspaces.delete(id);
+    return true;
   }
   const emit = (type, target, extra = {}) => {
     const event = new Ev(type, { target, bubbles: true, ...extra });
@@ -68,6 +81,8 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     gZenWorkspaces: {
       activeWorkspace: sidebar.ws.id,
       workspaceElement(id) { return workspaces.get(id) || null; },
+      getWorkspaces() { return [...workspaces.values()].map(({ uuid, name, icon }) => ({ uuid, name, icon })); },
+      getActiveWorkspace() { const w = workspaces.get(this.activeWorkspace); return w ? { uuid: w.uuid, name: w.name, icon: w.icon } : null; },
       addChangeListeners(fn) { workspaceListeners.add(fn); },
       removeChangeListeners(fn) { workspaceListeners.delete(fn); },
     }, innerWidth: 1200, innerHeight: 800,
@@ -110,17 +125,34 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     removeObserver(prefix, observer) { prefObservers.get(prefix)?.delete(observer); },
   };
   const observers = new Map();
-  const obs = {
+  const obs = sharedObs || {
     addObserver(observer, topic) { if (!observers.has(topic)) observers.set(topic, new Set()); observers.get(topic).add(observer); },
     removeObserver(observer, topic) { observers.get(topic)?.delete(observer); },
     notifyObservers(subject, topic, data) { for (const observer of [...(observers.get(topic) || [])]) observer.observe(subject, topic, data); },
   };
   const Services = { prefs: prefApi, obs, sound: { beep() {} }, scriptSecurityManager: { getSystemPrincipal: () => ({}) }, wm: { getEnumerator: () => [] }, ...(hiddenDOMWindow ? { appShell: { hiddenDOMWindow } } : {}) };
+  const isDirPath = (p) => [...files.keys()].some((k) => k.startsWith(p + "/"));
   const IOUtils = {
-    makeDirectory: async () => {}, setPermissions: async () => {}, exists: async (p) => files.has(p),
-    readUTF8: async (p) => { if (!files.has(p)) { const e = new Error("not found"); e.code = "ENOENT"; throw e; } return files.get(p); },
-    writeUTF8: async (p, data) => { files.set(p, data); }, getChildren: async (p) => [...new Set([...files.keys()].filter((entry) => entry.startsWith(p + "/")).map((entry) => p + "/" + entry.slice(p.length + 1).split("/")[0]))],
-    stat: async () => ({ lastModified: Date.now() }), remove: async (p) => files.delete(p),
+    makeDirectory: async () => {}, setPermissions: async () => {}, exists: async (p) => files.has(p) || isDirPath(p),
+    readUTF8: async (p) => { if (!files.has(p)) { const e = new Error("not found"); e.code = "ENOENT"; throw e; } return String(files.get(p)); },
+    writeUTF8: async (p, data) => { files.set(p, String(data)); },
+    read: async (p) => { if (!files.has(p)) { const e = new Error("not found"); e.code = "ENOENT"; throw e; } const v = files.get(p); return v instanceof Uint8Array ? new Uint8Array(v) : Buffer.from(String(v)); },
+    write: async (p, bytes) => { files.set(p, bytes instanceof Uint8Array ? new Uint8Array(bytes) : new Uint8Array(bytes)); },
+    copy: async (from, to) => { if (!files.has(from)) { const e = new Error("not found"); e.code = "ENOENT"; throw e; } const v = files.get(from); files.set(to, v instanceof Uint8Array ? new Uint8Array(v) : String(v)); },
+    getChildren: async (p) => [...new Set([...files.keys()].filter((entry) => entry.startsWith(p + "/")).map((entry) => p + "/" + entry.slice(p.length + 1).split("/")[0]))],
+    stat: async (p) => {
+      if (files.has(p)) { const v = files.get(p); return { type: "regular", size: v instanceof Uint8Array ? v.byteLength : Buffer.byteLength(String(v)), lastModified: FakeDate.now() }; }
+      if (isDirPath(p)) return { type: "directory", size: 0, lastModified: FakeDate.now() };
+      const e = new Error("not found"); e.code = "ENOENT"; throw e;
+    },
+    remove: async (p, opts) => {
+      if (opts?.recursive) {
+        files.delete(p);
+        for (const k of [...files.keys()]) if (k.startsWith(p + "/")) files.delete(k);
+        return true;
+      }
+      return files.delete(p);
+    },
   };
   const PathUtils = { profileDir: "/profile", tempDir: "/tmp", join: (...parts) => parts.join("/"), filename: (p) => p.split("/").pop() };
   const mutationObservers = new Set();
@@ -130,7 +162,7 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     disconnect() { this.target = null; this.options = null; mutationObservers.delete(this); }
   }
   class ResizeObserver { observe() {} unobserve() {} disconnect() {} }
-  const vmGlobals = { window: win, document, globalThis: { Services }, ChromeUtils: { importESModule: () => ({}) }, PathUtils, IOUtils, MutationObserver, ResizeObserver, Event: Ev,
+  const vmGlobals = { window: win, document, globalThis: { Services }, ChromeUtils: { importESModule: () => ({}) }, PathUtils, IOUtils, MutationObserver, ResizeObserver, Event: Ev, Uint8Array,
     navigator: { platform: "Linux" }, console, URL, Date: FakeDate, JSON, Math, Promise, RegExp, Number, Map, Set, WeakMap, setTimeout, clearTimeout, queueMicrotask };
   const ctx = vm.createContext(vmGlobals);
   const sharedHoverCard = loadRuntimeHoverCard(ctx);
@@ -139,7 +171,7 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   if (!definition?.init) throw new Error("Notes registration missing");
   const destroy = definition.init();
   return { ...dom, window: win, sidebar, operations, events, timers, values, files, observers, obs, emit, destroy,
-    addWorkspace, workspaceListenerCount: () => workspaceListeners.size,
+    addWorkspace, renameWorkspace, removeWorkspace, workspaceListenerCount: () => workspaceListeners.size,
     activeObservers: () => [...mutationObservers].map((o) => ({ target: o.target, options: o.options })),
     listenerCount: (type) => listeners.get(type)?.size || 0, // window listeners of one event type (idle-cost checks)
     async switchWorkspace(id) { if (!workspaces.has(id)) throw new Error("missing workspace"); win.gZenWorkspaces.activeWorkspace = id; for (const listener of [...workspaceListeners]) await listener({ workspace: { uuid: id }, onInit: false }); },

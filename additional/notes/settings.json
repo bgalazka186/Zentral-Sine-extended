@@ -49,6 +49,22 @@
       "defaultValue": ""
     },
     {
+      "property": "zen.workspace.zentral.notes.space_mode",
+      "label": "Zen spaces: keep Notes and Agenda shared across all spaces or separate per space",
+      "type": "dropdown",
+      "defaultValue": "shared",
+      "options": [
+        {
+          "label": "Shared across all spaces (default)",
+          "value": "shared"
+        },
+        {
+          "label": "Separate per Zen space",
+          "value": "space"
+        }
+      ]
+    },
+    {
       "property": "zen.workspace.zentral.notes.wrap_lines",
       "label": "Wrap long lines (off = scroll sideways to see the whole line)",
       "type": "checkbox",
@@ -1216,6 +1232,11 @@
       "owner": "notes"
     },
     "zen.workspace.zentral.notes.folder": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.space_mode": {
       "category": "notes",
       "section": "Quick notes",
       "owner": "notes"

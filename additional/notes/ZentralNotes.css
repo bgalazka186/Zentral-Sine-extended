@@ -768,6 +768,9 @@
 .zentral-notes-sheet .zn-dialog-card p { margin: 6px 0 10px; color: var(--zn-muted); line-height: 1.45; overflow-wrap: anywhere; }
 .zentral-notes-sheet .zn-dialog-card > strong { overflow-wrap: anywhere; }
 .zentral-notes-sheet .zn-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.zentral-notes-sheet .zn-share-list { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 12px; max-height: 220px; overflow-y: auto; }
+.zentral-notes-sheet .zn-share-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.zentral-notes-sheet .zn-share-row:hover { background: color-mix(in srgb, currentColor 7%, transparent); }
 
 /* ---- callouts: > [!NOTE] Title ---------------------------------------------------- */
 .zentral-notes-sheet .zn-read .zn-callout { --zn-callout: #6aa7ff; border-left-color: var(--zn-callout); background: color-mix(in srgb, var(--zn-callout) 10%, transparent); padding: 4px 10px; border-radius: 0 6px 6px 0; }

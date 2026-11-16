@@ -2306,6 +2306,22 @@
     "defaultValue": ""
   },
   {
+    "property": "zen.workspace.zentral.notes.space_mode",
+    "label": "Zen spaces: keep Notes and Agenda shared across all spaces or separate per space",
+    "type": "dropdown",
+    "defaultValue": "shared",
+    "options": [
+      {
+        "label": "Shared across all spaces (default)",
+        "value": "shared"
+      },
+      {
+        "label": "Separate per Zen space",
+        "value": "space"
+      }
+    ]
+  },
+  {
     "property": "zen.workspace.zentral.notes.dock_sidebar",
     "label": "Dock Notes to the sidebar (opens beside the sidebar and adds a Notes button to it)",
     "type": "checkbox",

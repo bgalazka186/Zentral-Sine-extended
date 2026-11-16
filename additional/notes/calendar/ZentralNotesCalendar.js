@@ -2366,7 +2366,7 @@
 
   // `beforeWrite` (optional, async) runs before every calendar write, outside the calendar lock. The note store uses it to
   // put pending note text on disk first, so `calendar.json` never refers to a note line that was not saved (UI4.7).
-  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null, beforeWrite = null, noteFileState = null, getParseOptions = () => ({}) }) {
+  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, onItemsWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null, beforeWrite = null, noteFileState = null, getParseOptions = () => ({}) }) {
     const items = new Map();
     const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite, perf, withHistoryLock });
     const categoryDefs = new Map();
@@ -2548,6 +2548,7 @@
           const text = JSON.stringify({ v: 2, items: merged.items, categories: merged.categories });
           perf?.recordBytes?.("calendar.bytes", text);
           await io.writeUTF8(io.join(dir, ITEMS_FILE), text, { tmpPath: io.join(dir, ITEMS_FILE + ".tmp") });
+          try { onItemsWrite(dir); } catch (_) {}
           baseline = JSON.parse(JSON.stringify({ items: merged.items, categories: merged.categories }));
           applyMerged(local, merged);
           for (const conflict of merged.conflicts) if (conflict.winner === "remote") emit("conflict", conflict.id, conflict);

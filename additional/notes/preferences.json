@@ -618,6 +618,22 @@
     "defaultValue": ""
   },
   {
+    "property": "zen.workspace.zentral.notes.space_mode",
+    "label": "Zen spaces: keep Notes and Agenda shared across all spaces or separate per space",
+    "type": "dropdown",
+    "defaultValue": "shared",
+    "options": [
+      {
+        "label": "Shared across all spaces (default)",
+        "value": "shared"
+      },
+      {
+        "label": "Separate per Zen space",
+        "value": "space"
+      }
+    ]
+  },
+  {
     "property": "zen.workspace.zentral.notes.hub_descriptions",
     "label": "Hub notes: a list item that is only a link to another note shows that note's short description (read view)",
     "type": "checkbox",
