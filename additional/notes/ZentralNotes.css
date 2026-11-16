@@ -940,6 +940,22 @@
 .zentral-notes-sheet .zn-recurrence-until { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
 /* OW-23: the time-zone picker. A field, "Browse…" beside it, one line that says what the field holds, and the list of
    matches in the flow of the dialog (not floating: the dialog scrolls, the list scrolls inside it). */
+/* OW-24: how a typed time or date is read, in a line under its field (the last child of the field's row). */
+.zentral-notes-sheet .zn-entry-hint { min-width: 0; color: var(--zn-muted); font-size: 0.95em; overflow-wrap: anywhere; }
+.zentral-notes-sheet .zn-entry-hint:empty { display: none; }
+.zentral-notes-sheet .zn-entry-hint[data-bad="true"] { color: #ff6b6b; }
+/* A field with a button beside it ("Pick date…", "Choose date…"): .zn-entry-row on the grid that holds both. The
+   grid itself lays out the caption, the field and the line (the field's own row gives up its box), so the button
+   stands beside the field whatever the line under it says. Two classes in the selector, so that these win over
+   the rules of the two grids wherever those stand in this file. Padding, not margin: the space the field's row had
+   around it did not collapse either. */
+.zentral-notes-sheet .zn-cal-compose-date-row.zn-entry-row,
+.zentral-notes-sheet .zn-recurrence-until.zn-entry-row { grid-template-areas: "caption caption" "field button" "hint hint"; align-items: center; gap: 3px 8px; padding: 8px 0; }
+.zentral-notes-sheet .zn-entry-row > .zn-field-row { display: contents; }
+.zentral-notes-sheet .zn-entry-row > .zn-field-row > span:first-child { grid-area: caption; }
+.zentral-notes-sheet .zn-entry-row > .zn-field-row > .zn-field { grid-area: field; }
+.zentral-notes-sheet .zn-entry-row > .zn-field-row > .zn-entry-hint { grid-area: hint; }
+.zentral-notes-sheet .zn-entry-row > .zn-chip { grid-area: button; }
 .zentral-notes-sheet .zn-zone-picker { min-width: 0; margin: 8px 0; }
 .zentral-notes-sheet .zn-zone-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
 .zentral-notes-sheet .zn-zone-row .zn-field-row { min-width: 0; margin: 0; }
@@ -2128,6 +2144,7 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
   .zentral-notes-sheet .zn-dialog-card.zn-cal-compose-card { min-width: 0; width: 100%; padding: 10px; }
   .zentral-notes-sheet .zn-cal-compose-date-row { grid-template-columns: minmax(0, 1fr); }
   .zentral-notes-sheet .zn-cal-compose-date-row > .zn-chip { justify-self: start; }
+  .zentral-notes-sheet .zn-cal-compose-date-row.zn-entry-row { grid-template-areas: "caption" "field" "hint" "button"; }
 }
 
 /* T2.7c: compact per-stage sound and quiet-hour controls. */

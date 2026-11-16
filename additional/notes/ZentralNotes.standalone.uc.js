@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.177
+// @version 3.3.178
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.177, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.178, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.177";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.178";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1409,20 +1409,93 @@ const __zentralEmbeddedLoader = (function () {
     }
     return null;
   }
-  // "6:00", "06:00", "14:30" -> minutes after midnight or -1.
+  // ---------- times and dates typed into a field (OW-24) ----------
+  // These read what a person types into a field that holds nothing but a time or a date. Text of a note is NOT read
+  // with them: parseLine and inlineDateTokens look for the strict forms first ("- 3 apples" is no event at 03:00).
+  //
+  // A time -> minutes after midnight, or -1.
+  //   16, 8                              the hour
+  //   830, 0830, 1630                    hour and minutes without a separator (the last two digits are the minutes)
+  //   8:30, 8.30, 8,30, 8;30, 8 30, 8h30 hour and minutes; 9:5 is 09:05
+  //   16h                                the hour
+  //   9am, 9 pm, 9:15pm, 915p, 9.15 p.m. the twelve-hour clock (12am is 00:00, 12pm is 12:00)
+  // Never a guess: 25, 860, 24:00, 13pm and 0am are no times.
   function parseClock(text) {
-    const m = /^(\d{1,2})[:.](\d{2})$/.exec(String(text || "").trim());
-    if (!m) return -1;
-    const h = +m[1], mi = +m[2];
-    return h > 23 || mi > 59 ? -1 : h * 60 + mi;
+    let t = String(text ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (!t) return -1;
+    let half = "";
+    const meridiem = /^(.*\d) ?([ap])(?:\.? ?m\.?)?$/.exec(t);
+    if (meridiem) { t = meridiem[1]; half = meridiem[2]; }
+    let hour, minute = 0, m;
+    if ((m = /^(\d{1,2})$/.exec(t))) hour = +m[1];
+    else if ((m = /^(\d{1,2})(\d{2})$/.exec(t))) { hour = +m[1]; minute = +m[2]; }
+    else if ((m = /^(\d{1,2}) ?(?:[:.,;]|h) ?(\d{1,2})$/.exec(t)) || (m = /^(\d{1,2}) (\d{1,2})$/.exec(t))) { hour = +m[1]; minute = +m[2]; }
+    else if (!half && (m = /^(\d{1,2}) ?h$/.exec(t))) hour = +m[1];
+    else return -1;
+    if (minute > 59) return -1;
+    if (half) {
+      if (hour < 1 || hour > 12) return -1;
+      hour = (hour % 12) + (half === "p" ? 12 : 0);
+    } else if (hour > 23) return -1;
+    return hour * 60 + minute;
   }
-  // "06:00-14:00", "6:00 - 14:00", "14:30" -> { startMin, endMin (-1 = none) } or null.
+  // "08:30" for minutes after midnight, "" for anything else. The form every field shows once a time was read.
+  const clockOfMinutes = (minutes) => (Number.isInteger(minutes) && minutes >= 0 && minutes < 1440 ? p2(Math.floor(minutes / 60)) + ":" + p2(minutes % 60) : "");
+  // A time or two times: "14:30", "06:00-14:00", "8-16", "8:30 - 16", "9am-5pm", "8 to 16"
+  // -> { startMin, endMin (-1 = none) } or null. The end may be before the start (22-6): the caller decides.
   function parseTimeRange(text) {
-    const t = String(text || "").trim();
-    const r = /^(\d{1,2}[:.]\d{2})\s*[-\u2013\u2014]\s*(\d{1,2}[:.]\d{2})$/.exec(t);
-    if (r) { const a = parseClock(r[1]), b = parseClock(r[2]); return a < 0 || b < 0 ? null : { startMin: a, endMin: b }; }
-    const a = parseClock(t);
-    return a < 0 ? null : { startMin: a, endMin: -1 };
+    const t = String(text ?? "").trim();
+    const single = parseClock(t);
+    if (single >= 0) return { startMin: single, endMin: -1 };
+    const m = /^(.*\S)\s*(?:[-\u2013\u2014]|\bto\b)\s*(\S.*)$/i.exec(t);
+    if (!m) return null;
+    const a = parseClock(m[1]), b = parseClock(m[2]);
+    return a < 0 || b < 0 ? null : { startMin: a, endMin: b };
+  }
+  // Whether the month stands before the day where a date is typed without its year: "md" or "dm". The date format
+  // of the settings decides (MM/DD/YYYY and YYYY-MM-DD have the month first; "long" follows the language).
+  function dateEntryOrder(format, locale) {
+    const f = cleanDateFormat(format);
+    if (f === "MM/DD/YYYY" || f === "YYYY-MM-DD") return "md";
+    if (f !== "long") return "dm";
+    try {
+      const kinds = new Intl.DateTimeFormat(locale || undefined, { month: "numeric", day: "numeric" }).formatToParts(new Date(2026, 0, 2)).map((part) => part.type).filter((type) => type === "month" || type === "day");
+      return kinds[0] === "month" ? "md" : "dm";
+    } catch (_) { return "dm"; }
+  }
+  // A date -> its key "YYYY-MM-DD", or "".
+  //   14                                   the 14th of the month the field shows (opts.base, a key; else this month)
+  //   1411, 14.11, 14,11, 14-11, 14/11, 14 11   day and month: the next such day from today on (this year or a later one)
+  //   14.11.2026, 14-11-26, 2026-11-14     with the year; two digits of a year are 2000-2049 and 1950-1999
+  //   tomorrow, +3d, fri, 14 nov           the words parseDateText knows
+  // opts: { now, base, format, locale }. Where day and month could be either way round the format decides
+  // (dateEntryOrder); the other order is taken only where the first gives no date at all (14.11 with the month first).
+  function parseDateEntry(text, opts = {}) {
+    const raw = String(text ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (!raw) return "";
+    const now = Number.isFinite(Number(opts.now)) ? Number(opts.now) : Date.now(), today = dayStart(now);
+    const key = (year, month, day) => { const ms = dateFromParts(year, month, day); return ms === null ? "" : ymd(new Date(ms)); };
+    const monthFirst = dateEntryOrder(opts.format, opts.locale) === "md";
+    const orders = (a, b) => (monthFirst ? [[b, a], [a, b]] : [[a, b], [b, a]]); // [day, month], the order of the format first
+    // Between two numbers: one of - / . , with a space on either side, or a space alone ("14.11", "14. 11", "14 11").
+    let m = /^(\d{4})(?: ?[-/.] ?| )(\d{1,2})(?: ?[-/.] ?| )(\d{1,2})$/.exec(raw);
+    if (m) return key(+m[1], +m[2], +m[3]);
+    m = /^(\d{1,2})(?: ?[-/.,] ?| )(\d{1,2})(?: ?[-/.,] ?| )(\d{2}|\d{4})\.?$/.exec(raw);
+    if (m) {
+      const year = m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3];
+      for (const [day, month] of orders(+m[1], +m[2])) { const found = key(year, month, day); if (found) return found; }
+      return "";
+    }
+    m = /^(\d{1,2})(?: ?[-/.,] ?| )(\d{1,2})\.?$/.exec(raw) || /^(\d{2})(\d{2})$/.exec(raw);
+    if (m) {
+      for (const [day, month] of orders(+m[1], +m[2])) { const ms = futureMonthDay(month, day, today); if (ms !== null) return ymd(new Date(ms)); }
+      return "";
+    }
+    m = /^(\d{1,2})\.?$/.exec(raw);
+    if (m) { const shown = parseYmd(opts.base) || new Date(today); return key(shown.getFullYear(), shown.getMonth() + 1, +m[1]); }
+    if (!/[a-z\u00c0-\u024f]/.test(raw)) return "";
+    const ms = parseDateText(raw, now);
+    return ms === null ? "" : ymd(new Date(ms));
   }
   // One line of a plain list: "- 06:00-14:00 Work", "10-08 Jan Kowalski", "2026-11-20 14:00 Dentist" -> parts or null.
   // The leading date is optional when `defaultDay` (local midnight ms) is given.
@@ -4975,8 +5048,9 @@ const __zentralEmbeddedLoader = (function () {
     const zone = rawZone ? cleanZone(rawZone) : "";
     if (rawZone && !zone) return null;
     const wallTime = (date, time) => {
-      if (!parseYmd(date) || parseClock(time) < 0) return null;
-      return zonedDateTimeToMs(date, String(time), zone);
+      const minutes = parseClock(time);
+      if (!parseYmd(date) || minutes < 0) return null;
+      return zonedDateTimeToMs(date, clockOfMinutes(minutes), zone);
     };
     let start;
     if (allDay) start = { date: startDate };
@@ -5124,7 +5198,7 @@ const __zentralEmbeddedLoader = (function () {
   }
 
   const api = {
-    KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
+    KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
@@ -10687,7 +10761,7 @@ __zentralShim.register = function (def) {
     const remindTimeText = (t) => { const d = new Date(t); return pad2(d.getHours()) + ":" + pad2(d.getMinutes()); };
     // Live line under the reminder inputs: "Will ring at 16:43 (in 12 min)". `at` = parseRemindInput result (0 = unreadable).
     function remindPreview(at, now) {
-      if (!at) return "Enter the date as YYYY-MM-DD and the time as HH:MM";
+      if (!at) return "Enter a date (14, 14.11 or 2026-11-02) and a time (16, 830 or 9am)";
       if (at <= now) return "That time has already passed";
       const mins = Math.ceil((at - now) / 60000);
       const left = mins < 60 ? `${mins} min` : mins < 2880 ? `${Math.floor(mins / 60)} h${mins % 60 ? " " + (mins % 60) + " min" : ""}` : `${Math.round(mins / 1440)} days`;
@@ -17583,28 +17657,43 @@ __zentralShim.register = function (def) {
         flash("Reminder snoozed");
         return true;
       }
+      // OW-24: a time that can be typed ("830", "16", "9am") with the Clock under it; the two show the same time.
+      // -> { nodes: [field row, Clock], entry, read(): "HH:MM" }
+      function buildTypedClock(label, value) {
+        const part = field(label, value, "16, 830 or 9am");
+        let time = value;
+        const clock = buildClockPicker({ value, onPick: (picked) => { time = picked; entry.set(picked); } });
+        const entry = bindEntry(part, { kind: "time", onChange: (typed) => {
+          time = typed;
+          const hour = clock.querySelector(".zn-cal-clock-hour"), minute = clock.querySelector(".zn-cal-clock-minute");
+          if (hour && minute) { hour.value = typed.slice(0, 2); minute.value = typed.slice(3, 5); }
+        } });
+        return { nodes: [part.row, clock], entry, read: () => entry.read() || time };
+      }
       function askCustomReminderSnooze(item) {
         if (item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length)) return flash("Recurring occurrences need exception support before they can be snoozed");
         const startMs = CALENDAR_PART.itemRange(item)[0];
         const allDay = CALENDAR_PART.isAllDay(item);
-        const dateField = field("New date (YYYY-MM-DD)", CALENDAR_PART.ymd(new Date(startMs)), "YYYY-MM-DD");
+        const dateField = field("New date", CALENDAR_PART.ymd(new Date(startMs)), "14, 14.11 or 2026-11-14");
+        const dateEntry = bindEntry(dateField, { kind: "date" });
         const datePick = chip("Choose date…");
         const dateHost = h("div", { class: "zn-cal-snooze-date" }, dateField.row, datePick);
         datePick.addEventListener("click", () => {
-          const selected = CALENDAR_PART.parseYmd(dateField.input.value);
-          toggleDatePicker(datePick, dateHost, { selected: selected || startMs, items: calendarPickerItems(), onPick: (day) => { dateField.input.value = CALENDAR_PART.ymd(new Date(day)); } });
+          const selected = CALENDAR_PART.parseYmd(dateEntry.read());
+          toggleDatePicker(datePick, dateHost, { selected: selected || startMs, items: calendarPickerItems(), onPick: (day) => { dateEntry.set(CALENDAR_PART.ymd(new Date(day))); } });
         });
-        let selectedTime = allDay ? "" : calendarItemTime(item);
-        const clock = allDay ? null : buildClockPicker({ value: selectedTime, onPick: (value) => { selectedTime = value; } });
+        const time = allDay ? null : buildTypedClock("New time", calendarItemTime(item));
         const summary = h("p", { class: "zn-empty" }, "The source note text is not rewritten. The reminder's scheduled wall-clock time is preserved unless you change it.");
         const save = chip("Snooze reminder", true), cancel = chip("Cancel");
-        openCalendarCard("Custom reminder snooze", summary, dateHost, ...(clock ? [clock] : []), h("div", { class: "zn-dialog-actions" }, cancel, save));
+        openCalendarCard("Custom reminder snooze", summary, dateHost, ...(time ? time.nodes : []), h("div", { class: "zn-dialog-actions" }, cancel, save));
         const submit = () => {
+          const held = settleEntries([dateEntry, ...(time ? [time.entry] : [])]);
+          if (held) { held.input.focus(); return; }
           const day = dateField.input.value.trim();
           if (!CALENDAR_PART.parseYmd(day)) { dateField.input.dataset.bad = "true"; dateField.input.focus(); return; }
           let targetMs;
           if (allDay) targetMs = CALENDAR_PART.parseYmd(day).getTime();
-          else targetMs = CALENDAR_PART.zonedDateTimeToMs(day, selectedTime, item.x?.tz || "");
+          else targetMs = CALENDAR_PART.zonedDateTimeToMs(day, time.read(), item.x?.tz || "");
           if (!Number.isFinite(targetMs) || targetMs <= 0) { dateField.input.dataset.bad = "true"; dateField.input.focus(); return; }
           const start = CALENDAR_PART.snoozedItemStart(item, 0, targetMs);
           if (!start) return flash("That reminder date and time is invalid");
@@ -17634,15 +17723,15 @@ __zentralShim.register = function (def) {
         if (recurring && (!occurrence || occurrence.x?.series !== current.id || !occurrence.x?.recurrenceId)) return flash("Choose a visible occurrence before changing a recurring item");
         const scheduled = occurrence || current;
         const range = C.itemRange(scheduled), allDay = C.isAllDay(scheduled);
-        const dateField = field("New date (YYYY-MM-DD)", calendarItemDate(scheduled), "YYYY-MM-DD");
+        const dateField = field("New date", calendarItemDate(scheduled), "14, 14.11 or 2026-11-14");
+        const dateEntry = bindEntry(dateField, { kind: "date" });
         const datePick = chip("Choose date…");
         const dateHost = h("div", { class: "zn-cal-snooze-date" }, dateField.row, datePick);
         datePick.addEventListener("click", () => {
-          const selected = C.parseYmd(dateField.input.value);
-          toggleDatePicker(datePick, dateHost, { selected: selected || range[0], items: calendarPickerItems(), onPick: (day) => { dateField.input.value = C.ymd(new Date(day)); } });
+          const selected = C.parseYmd(dateEntry.read());
+          toggleDatePicker(datePick, dateHost, { selected: selected || range[0], items: calendarPickerItems(), onPick: (day) => { dateEntry.set(C.ymd(new Date(day))); } });
         });
-        let selectedTime = allDay ? "" : C.clockIn(range[0], scheduled.x?.tz || "");
-        const clock = allDay ? null : buildClockPicker({ value: selectedTime, onPick: (value) => { selectedTime = value; } });
+        const time = allDay ? null : buildTypedClock("New time", C.clockIn(range[0], scheduled.x?.tz || ""));
         let scopeSelect = null, scopeRow = null;
         if (recurring) {
           scopeSelect = h("select", { class: "zn-input", "aria-label": "Apply time change to" },
@@ -17656,8 +17745,10 @@ __zentralShim.register = function (def) {
         const note = h("p", { class: "zn-empty" }, allDay
           ? "The item stays all-day. Multi-day event length is preserved."
           : "The item's wall-clock time and duration are preserved in its saved time zone.");
-        openCalendarCard(recurring ? "Change recurring occurrence time" : "Change calendar item time", note, dateHost, ...(clock ? [clock] : []), ...(scopeRow ? [scopeRow] : []), h("div", { class: "zn-dialog-actions" }, cancel, save));
+        openCalendarCard(recurring ? "Change recurring occurrence time" : "Change calendar item time", note, dateHost, ...(time ? time.nodes : []), ...(scopeRow ? [scopeRow] : []), h("div", { class: "zn-dialog-actions" }, cancel, save));
         const submit = () => {
+          const held = settleEntries([dateEntry, ...(time ? [time.entry] : [])]);
+          if (held) { held.input.focus(); return; }
           const key = dateField.input.value.trim(), parsed = C.parseYmd(key);
           if (!parsed) { dateField.input.dataset.bad = "true"; dateField.input.focus(); return; }
           let start, end;
@@ -17667,7 +17758,7 @@ __zentralShim.register = function (def) {
             start = { date: key };
             if (scheduled.end?.date) end = { date: C.ymd(new Date(C.addDays(parsed.getTime(), span))) };
           } else {
-            const target = C.zonedDateTimeToMs(key, selectedTime, scheduled.x?.tz || "");
+            const target = C.zonedDateTimeToMs(key, time.read(), scheduled.x?.tz || "");
             if (!Number.isFinite(target) || target <= 0) { dateField.input.dataset.bad = "true"; dateField.input.focus(); return; }
             start = { dateTime: new Date(target).toISOString() };
             if (scheduled.end?.dateTime) {
@@ -18581,13 +18672,26 @@ __zentralShim.register = function (def) {
         const kindRow = h("label", { class: "zn-field-row zn-cal-compose-kind-row" }, h("span", {}, "Type"), kind);
         const allDayRow = h("label", { class: "zn-field-row zn-cal-compose-check" }, allDay, h("span", {}, "All day"));
 
-        const startDate = field("Start date", startDateDefault, "YYYY-MM-DD");
-        const endDate = field("End date (exclusive)", endDateDefault, "YYYY-MM-DD");
-        const startTime = field("Start time", startTimeDefault, "HH:MM");
-        const endTime = field("End time", endTimeDefault, "HH:MM");
+        const startDate = field("Start date", startDateDefault, "14, 14.11 or 2026-11-14");
+        const endDate = field("End date (exclusive)", endDateDefault, "14, 14.11 or 2026-11-14");
+        const startTime = field("Start time", startTimeDefault, "16, 830 or 9am");
+        const endTime = field("End time", endTimeDefault, "16, 830 or 9am");
+        // OW-24: the four fields take a time or a date typed fast (bindEntry). The start time of an event also takes
+        // both times at once ("8-16").
+        const startDateEntry = bindEntry(startDate, { kind: "date", onChange: () => {
+          // A new event whose end date nobody touched follows its start date.
+          if (!original && kind.value === "event" && endDate.input.value === startDateDefault) {
+            const startDay = C.parseYmd(startDate.input.value);
+            endDateEntry.set(startDay && allDay.checked ? C.ymd(new Date(C.addDays(startDay.getTime(), 1))) : startDate.input.value);
+          }
+          paintPreview();
+        } });
+        const endDateEntry = bindEntry(endDate, { kind: "date", base: () => startDateEntry.read(), onChange: () => paintPreview() });
+        const startTimeEntry = bindEntry(startTime, { kind: "time", range: () => kind.value === "event" && !allDay.checked, onRange: (end) => endTimeEntry.set(end), onChange: () => paintPreview() });
+        const endTimeEntry = bindEntry(endTime, { kind: "time", onChange: () => paintPreview() });
         const startDatePick = chip("Pick date…"), endDatePick = chip("Pick end…"), clockPick = chip("Clock…");
-        const startDateHost = h("div", { class: "zn-cal-compose-date-row" }, startDate.row, startDatePick);
-        const endDateHost = h("div", { class: "zn-cal-compose-date-row" }, endDate.row, endDatePick);
+        const startDateHost = h("div", { class: "zn-cal-compose-date-row zn-entry-row" }, startDate.row, startDatePick);
+        const endDateHost = h("div", { class: "zn-cal-compose-date-row zn-entry-row" }, endDate.row, endDatePick);
         const startTimeHost = h("div", { class: "zn-cal-compose-date-row" }, startTime.row, h("span", { class: "zn-cal-compose-clock-anchor" }));
         const endTimeHost = h("div", { class: "zn-cal-compose-date-row" }, endTime.row);
         const clockHost = h("div", { class: "zn-cal-compose-clock-host" });
@@ -18658,8 +18762,9 @@ __zentralShim.register = function (def) {
         endMode.value = currentRule?.count ? "count" : currentRule?.until ? "until" : "never";
         const count = h("input", { type: "number", class: "zn-field", min: "1", max: "5000", step: "1", "aria-label": "Repeat occurrence count" }); count.value = String(currentRule?.count || 10);
         const countRow = h("label", { class: "zn-field-row" }, h("span", {}, "Occurrences"), count);
-        const until = field("Last occurrence date", currentRule?.untilKey || "", "YYYY-MM-DD"); // the civil day itself: never `until` minus 24 hours (23-hour days)
-        const untilPick = chip("Choose date…"), untilHost = h("div", { class: "zn-recurrence-until" }, until.row, untilPick);
+        const until = field("Last occurrence date", currentRule?.untilKey || "", "14, 14.11 or 2026-11-14"); // the civil day itself: never `until` minus 24 hours (23-hour days)
+        const untilEntry = bindEntry(until, { kind: "date", base: () => startDateEntry.read() });
+        const untilPick = chip("Choose date…"), untilHost = h("div", { class: "zn-recurrence-until zn-entry-row" }, until.row, untilPick);
         const recurrenceBox = h("div", { class: "zn-recurrence-editor zn-cal-compose-section" },
           h("strong", {}, "Recurrence"),
           h("label", { class: "zn-field-row" }, h("span", {}, "Repeat"), frequency),
@@ -18725,8 +18830,8 @@ __zentralShim.register = function (def) {
           startTimeHost.hidden = fullDay;
           clockPick.hidden = fullDay;
           notifySection.hidden = !reminder;
-          if (!fullDay && !startTime.input.value.trim()) startTime.input.value = "09:00";
-          if (!fullDay && !reminder && !endTime.input.value.trim()) endTime.input.value = "10:00";
+          if (!fullDay && !startTime.input.value.trim()) startTimeEntry.set("09:00");
+          if (!fullDay && !reminder && !endTime.input.value.trim()) endTimeEntry.set("10:00");
           save.textContent = original ? "Save calendar item" : (reminder ? "Create reminder" : "Create event");
           paintPreview();
         };
@@ -18744,10 +18849,10 @@ __zentralShim.register = function (def) {
         }
         function paintPreview() {
           const all = allDay.checked, reminder = kind.value === "reminder";
-          const parts = [reminder ? "Reminder" : "Event", startDate.input.value || "Choose a date"];
+          const parts = [reminder ? "Reminder" : "Event", startDateEntry.read() || startDate.input.value || "Choose a date"];
           if (all) parts.push("all day");
-          else parts.push(startTime.input.value || "Choose a time");
-          if (!reminder && endDate.input.value) parts.push("through " + endDate.input.value + (all ? " (exclusive end)" : " at " + (endTime.input.value || "Choose an end time")));
+          else parts.push(startTimeEntry.read() || startTime.input.value || "Choose a time");
+          if (!reminder && endDate.input.value) parts.push("through " + (endDateEntry.read() || endDate.input.value) + (all ? " (exclusive end)" : " at " + (endTimeEntry.read() || endTime.input.value || "Choose an end time")));
           preview.textContent = parts.join(" · ");
           paintColor();
         }
@@ -18755,24 +18860,24 @@ __zentralShim.register = function (def) {
         clockPick.addEventListener("click", () => {
           if (clockOpen) { clockHost.replaceChildren(); clockOpen = false; clockPick.focus({ preventScroll: true }); return; }
           closeDatePicker({ restoreFocus: false });
-          const clock = buildClockPicker({ value: startTime.input.value, onPick: (value) => { startTime.input.value = value; paintPreview(); }, ...(kind.value === "event" ? { endValue: endTime.input.value, onEndPick: (value) => { endTime.input.value = value; paintPreview(); } } : {}) });
+          const clock = buildClockPicker({ value: startTimeEntry.read() || startTime.input.value, onPick: (value) => { startTimeEntry.set(value); paintPreview(); }, ...(kind.value === "event" ? { endValue: endTimeEntry.read() || endTime.input.value, onEndPick: (value) => { endTimeEntry.set(value); paintPreview(); } } : {}) });
           clockHost.replaceChildren(clock); clockOpen = true;
           clock.querySelector("select")?.focus({ preventScroll: true });
         });
-        const bindDatePicker = (button, host, input) => button.addEventListener("click", () => {
+        const bindDatePicker = (button, host, entry) => button.addEventListener("click", () => {
           if (clockOpen) { clockHost.replaceChildren(); clockOpen = false; }
-          const selected = C.parseYmd(input.value);
-          toggleDatePicker(button, host, { selected: selected?.getTime() || 0, items: calendarPickerItems(), onPick: (day) => { input.value = C.ymd(new Date(day)); paintPreview(); } });
+          const selected = C.parseYmd(entry.read());
+          toggleDatePicker(button, host, { selected: selected?.getTime() || 0, items: calendarPickerItems(), onPick: (day) => { entry.set(C.ymd(new Date(day))); paintPreview(); } });
         });
-        bindDatePicker(startDatePick, startDateHost, startDate.input);
-        bindDatePicker(endDatePick, endDateHost, endDate.input);
-        bindDatePicker(untilPick, untilHost, until.input);
+        bindDatePicker(startDatePick, startDateHost, startDateEntry);
+        bindDatePicker(endDatePick, endDateHost, endDateEntry);
+        bindDatePicker(untilPick, untilHost, untilEntry);
         for (const input of [startDate.input, endDate.input, startTime.input, endTime.input, zoneField.input]) input.addEventListener("input", paintPreview);
         for (const control of [kind, allDay]) control.addEventListener("change", () => {
           if (clockOpen) { clockHost.replaceChildren(); clockOpen = false; }
           if (kind.value === "event" && allDay.checked && (!C.parseYmd(endDate.input.value) || endDate.input.value <= startDate.input.value)) {
             const startDay = C.parseYmd(startDate.input.value);
-            if (startDay) endDate.input.value = C.ymd(new Date(C.addDays(startDay.getTime(), 1)));
+            if (startDay) endDateEntry.set(C.ymd(new Date(C.addDays(startDay.getTime(), 1))));
           }
           updateKindRows();
         });
@@ -18787,15 +18892,13 @@ __zentralShim.register = function (def) {
         for (const [stage, input] of Object.entries(notifyInputs)) input.addEventListener("change", () => { input.dataset.userChanged = "true"; });
         for (const select of Object.values(notifySelects)) select.addEventListener("change", () => { select.dataset.userChanged = "true"; });
         noteSelect.addEventListener("change", paintColor);
-        startDate.input.addEventListener("change", () => {
-          if (!original && kind.value === "event" && endDate.input.value === startDateDefault) {
-            const startDay = C.parseYmd(startDate.input.value);
-            endDate.input.value = startDay && allDay.checked ? C.ymd(new Date(C.addDays(startDay.getTime(), 1))) : startDate.input.value;
-          }
-          paintPreview();
-        });
 
         const submit = () => {
+          // OW-24: the fields that count are read as they stand (Enter in the title leaves no field). A text that
+          // is no time or no date stops here: its field is put back, marked, and named in the status line.
+          const timed = !allDay.checked, isEvent = kind.value === "event";
+          const held = settleEntries([startDateEntry, ...(timed ? [startTimeEntry] : []), ...(isEvent ? [endDateEntry] : []), ...(isEvent && timed ? [endTimeEntry] : []), ...(frequency.value !== "NONE" && endMode.value === "until" ? [untilEntry] : [])]);
+          if (held) { held.input.focus(); status.textContent = held.problem(); return; }
           const date = C.parseYmd(startDate.input.value);
           const zoneValue = zoneField.read();
           const recurrence = (original?.recurrence || []).filter((r) => !C.parseRule(r));
@@ -18992,8 +19095,10 @@ __zentralShim.register = function (def) {
       }
       function askCalendarFreeSlots() {
         const C = CALENDAR_PART, start = calendarWeekStart(), end = C.addDays(start, 6);
-        const from = field("From date (YYYY-MM-DD)", C.ymd(new Date(start)), "2026-11-12");
-        const through = field("Through date (YYYY-MM-DD)", C.ymd(new Date(end)), "2026-11-18");
+        const from = field("From date", C.ymd(new Date(start)), "14, 14.11 or 2026-11-14");
+        const through = field("Through date", C.ymd(new Date(end)), "14, 14.11 or 2026-11-14");
+        const fromEntry = bindEntry(from, { kind: "date", onEnter: () => run() });
+        const throughEntry = bindEntry(through, { kind: "date", base: () => fromEntry.read(), onEnter: () => run() });
         const duration = h("input", { type: "number", class: "zn-field", min: "15", max: "1440", step: "15", "aria-label": "Minimum free time in minutes" });
         duration.value = "60";
         const workOnly = h("input", { type: "checkbox", "aria-label": "Only working hours" });
@@ -19014,6 +19119,8 @@ __zentralShim.register = function (def) {
           h("label", { class: "zn-field-row zn-cal-free-check" }, allDayBusy, h("span", {}, "Treat all-day events as busy")));
         openCalendarCard("When am I free?", from.row, through.row, options, results, h("div", { class: "zn-dialog-actions" }, cancel, find));
         const run = () => {
+          const held = settleEntries([fromEntry, throughEntry]);
+          if (held) { held.input.focus(); results.textContent = held.problem(); return; }
           const fromDay = C.parseYmd(from.input.value), throughDay = C.parseYmd(through.input.value), min = Number(duration.value);
           const fromDate = fromDay ? new Date(fromDay) : null, throughDate = throughDay ? new Date(throughDay) : null;
           const daySpan = fromDate && throughDate ? Math.round((Date.UTC(throughDate.getFullYear(), throughDate.getMonth(), throughDate.getDate()) - Date.UTC(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate())) / 86400000) + 1 : 0;
@@ -19364,7 +19471,8 @@ __zentralShim.register = function (def) {
       // Supplying `endValue` + `onEndPick` adds a second clock for event ranges; reminder-only callers omit it.
       function buildClockPicker({ value = "09:00", onPick, endValue, onEndPick } = {}) {
         const makeTime = (label, raw, onChange) => {
-          const match = /^(\d{1,2}):(\d{2})$/.exec(String(raw || ""));
+          const typed = CALENDAR_PART ? CALENDAR_PART.parseClock(raw) : -1; // "830" in the field opens the Clock at 08:30
+          const match = typed >= 0 ? [null, Math.floor(typed / 60), typed % 60] : /^(\d{1,2}):(\d{2})$/.exec(String(raw || ""));
           const hour = h("select", { class: "zn-select zn-cal-clock-hour", "aria-label": label + " hour" });
           const minute = h("select", { class: "zn-select zn-cal-clock-minute", "aria-label": label + " minute" });
           for (let i = 0; i < 24; i++) hour.append(h("option", { value: String(i).padStart(2, "0") }, String(i).padStart(2, "0")));
@@ -19386,17 +19494,20 @@ __zentralShim.register = function (def) {
         const now = nowMs();
         const presets = reminderPresets(now);
         const start = n.remind > now ? n.remind : presets[0][1];
-        const d = field("Date (YYYY-MM-DD)", remindDateText(start), "2026-11-02");
-        const t = field("Time (HH:MM)", remindTimeText(start), "09:00");
+        const d = field("Date", remindDateText(start), "14, 14.11 or 2026-11-02");
+        const t = field("Time", remindTimeText(start), "16, 830 or 9am");
         const preview = h("div", { class: "zn-remind-preview", "aria-live": "polite" });
+        // The line reads the fields the way Save will (OW-24): "830" already counts as 08:30 while it is typed.
         const paintPreview = () => {
-          const at = parseRemindInput(d.input.value, t.input.value);
+          const at = parseRemindInput(dEntry.read(), tEntry.read());
           preview.textContent = remindPreview(at, nowMs());
           preview.dataset.bad = at && at > nowMs() ? "false" : "true";
         };
+        const dEntry = bindEntry(d, { kind: "date", onChange: () => paintPreview(), onEnter: () => submit() });
+        const tEntry = bindEntry(t, { kind: "time", onChange: () => paintPreview(), onEnter: () => submit() });
         const quick = presets.map(([label, at]) => {
           const b = chip(label);
-          b.addEventListener("click", () => { d.input.value = remindDateText(at); t.input.value = remindTimeText(at); paintPreview(); });
+          b.addEventListener("click", () => { dEntry.set(remindDateText(at)); tEntry.set(remindTimeText(at)); paintPreview(); });
           return b;
         });
         for (const f of [d, t]) f.input.addEventListener("input", paintPreview);
@@ -19410,14 +19521,14 @@ __zentralShim.register = function (def) {
         quick.push(clockBtn);
         pickBtn.addEventListener("click", () => {
           if (clockPicker) { clockPicker.remove(); clockPicker = null; }
-          const typed = parseRemindInput(d.input.value, "00:00");
-          toggleDatePicker(pickBtn, t.row, { selected: typed ? CALENDAR_PART.dayStart(typed) : 0, items: calendarPickerItems(), onPick: (day) => { d.input.value = remindDateText(day); paintPreview(); } });
+          const typed = parseRemindInput(dEntry.read(), "00:00");
+          toggleDatePicker(pickBtn, t.row, { selected: typed ? CALENDAR_PART.dayStart(typed) : 0, items: calendarPickerItems(), onPick: (day) => { dEntry.set(remindDateText(day)); paintPreview(); } });
         });
         let clockPicker = null;
         clockBtn.addEventListener("click", () => {
           if (clockPicker) { clockPicker.remove(); clockPicker = null; clockBtn.focus({ preventScroll: true }); return; }
           closeDatePicker({ restoreFocus: false });
-          clockPicker = buildClockPicker({ value: t.input.value, onPick: (value) => { t.input.value = value; paintPreview(); } });
+          clockPicker = buildClockPicker({ value: t.input.value, onPick: (value) => { tEntry.set(value); paintPreview(); } });
           (preview.parentNode || preview.parent).insertBefore(clockPicker, preview);
           clockPicker.querySelector("select")?.focus({ preventScroll: true });
         });
@@ -19432,6 +19543,8 @@ __zentralShim.register = function (def) {
         buttons.push(ok);
         openCard("Remind me about this note", h("div", { class: "zn-dialog-actions" }, ...quick), d.row, t.row, preview, h("div", { class: "zn-dialog-actions" }, ...buttons));
         const submit = () => {
+          const held = settleEntries([dEntry, tEntry]);
+          if (held) { held.input.focus(); return; }
           const at = parseRemindInput(d.input.value, t.input.value);
           if (!at || at <= nowMs()) {
             (at ? t : d).input.dataset.bad = "true";
@@ -19446,7 +19559,6 @@ __zentralShim.register = function (def) {
         };
         ok.addEventListener("click", submit);
         cancel.addEventListener("click", () => { closeDialog(); focusEditor(); });
-        for (const f of [d, t]) f.input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); submit(); } });
       }
       listen(remindEl, "click", () => askReminder());
       listen(btnQuickReminder, "click", () => askNotesReminderShortcut());
@@ -21494,6 +21606,144 @@ __zentralShim.register = function (def) {
         input.value = value;
         return { input, row: h("label", { class: "zn-field-row" }, h("span", {}, label), input) };
       };
+      // OW-24: a field for a time or a date takes what people type fast: "16", "830", "8.30", "9am"; "14" (that day
+      // of the month the field shows), "14,11", "1411", "tomorrow". The readers are C.parseClock and C.parseDateEntry,
+      // the same for every such field.
+      //   - While the field is typed in, a line under it says how the text is read.
+      //   - Enter, or leaving the field, writes the full form into it ("08:30", "2026-11-14").
+      //   - A text that is no time / no date puts back what the field held before and marks the field. The Save that
+      //     follows is held once (settle), so that nothing is saved with a value the person believed to have replaced.
+      //   - The field's text is selected when the field gets the focus, by Tab or by a click, so that what is typed
+      //     replaces the old value instead of landing inside it; a second click places the caret.
+      // part = { input, row } of field(). opts: kind "time" | "date"; onChange(value) after another time / date was
+      // read; onEnter() after Enter read one; range() -> true where the field may hold two times ("8-16"), then
+      // onRange(end) gets the second; base() -> the date whose month a day alone is in while the field is empty.
+      // -> { input, row, hint, read(), set(value), settle(), problem() }. settleEntries(list) is for Save.
+      // The line is the last child of the field's row. A row that also holds a button ("Pick date…") gets the
+      // class zn-entry-row on the element around both: the style sheet then keeps the button beside the field.
+      let entrySeq = 0;
+      function entryDateText(key) {
+        const day = CALENDAR_PART?.parseYmd?.(key);
+        if (!day) return "";
+        const text = displayDateKey(key);
+        if (dateDisplayFormat() === "long") return text; // names the weekday itself
+        let weekday = "";
+        try { weekday = day.toLocaleDateString(undefined, { weekday: "short" }); } catch (_) {}
+        return weekday ? weekday + ", " + text : text;
+      }
+      function bindEntry(part, opts = {}) {
+        const C = CALENDAR_PART, input = part.input, isTime = opts.kind === "time", noun = isTime ? "time" : "date";
+        // Without the calendar module the field is what it was: the caller reads the strict form.
+        if (!C) {
+          if (opts.onEnter) input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); opts.onEnter(); } });
+          return { input, row: part.row, hint: null, read: () => input.value.trim(), set: (value) => { input.value = value; }, settle: () => true, problem: () => "" };
+        }
+        const hint = h("span", { class: "zn-entry-hint", id: "zn-entry-hint-" + ++entrySeq, "aria-live": "polite" });
+        input.setAttribute("aria-describedby", hint.id);
+        // What can be typed. The fields open with a value in them, so the placeholder is rarely in sight.
+        if (!input.title) input.title = isTime ? "A time: 16, 830, 8.30 or 9am" + (opts.range ? ". For an event also both times: 8-16" : "") : "A date: 14 (a day of the month shown), 14.11, 2026-11-14, tomorrow or +3d";
+        part.row.append(hint);
+        let good = ""; // the time / date read last: what a refused text is replaced by, and the month a day alone is in
+        let refused = false;
+        const parse = (text) => {
+          if (!isTime) return { value: C.parseDateEntry(text, { now: nowMs(), base: good || opts.base?.() || "", format: dateDisplayFormat() }), end: "" };
+          const two = opts.range?.() ? C.parseTimeRange(text) : null;
+          if (two && two.endMin >= 0) return { value: C.clockOfMinutes(two.startMin), end: C.clockOfMinutes(two.endMin) };
+          return { value: C.clockOfMinutes(C.parseClock(text)), end: "" };
+        };
+        const describe = (value, end = "") => (isTime ? (end ? value + " \u2013 " + end : value) : entryDateText(value));
+        const paint = () => {
+          const text = input.value.trim(), found = parse(text);
+          delete hint.dataset.bad;
+          if (!text) hint.textContent = "";
+          else if (!found.value) hint.textContent = isTime ? "Not a time yet. Try 16, 830 or 9am." : "Not a date yet. Try 14, 14.11 or 2026-11-14.";
+          // A time already in its full form needs no second copy; a date always gets its weekday.
+          else hint.textContent = isTime && !found.end && text === found.value ? "" : describe(found.value, found.end);
+        };
+        const commit = () => {
+          if (input.value === good) return true; // nothing was typed since the field was read
+          const text = input.value.trim(), found = parse(text);
+          if (found.value) {
+            const changed = found.value !== good;
+            good = found.value; refused = false;
+            input.value = good;
+            delete input.dataset.bad;
+            paint();
+            if (found.end) opts.onRange?.(found.end);
+            if (changed || found.end) opts.onChange?.(good);
+            return true;
+          }
+          refused = true;
+          input.value = good;
+          input.dataset.bad = "true";
+          hint.dataset.bad = "true";
+          hint.textContent = (text ? "\u201c" + text.slice(0, 40) + "\u201d is not a " + noun : "An empty field is not a " + noun) + (good ? ". The field keeps " + describe(good) + "." : ".");
+          return false;
+        };
+        good = parse(input.value).value;
+        if (good && input.value !== good) input.value = good;
+        paint();
+        input.addEventListener("input", () => { armed = false; reselect = false; refused = false; delete input.dataset.bad; paint(); });
+        // "change" comes first when a field is left (the listeners of the dialog that follow read the full form);
+        // "blur" is for a text put into the field without typing.
+        input.addEventListener("change", commit);
+        input.addEventListener("blur", commit);
+        // Typing replaces the old value: the text is selected when the field gets the focus. Tab does that anyway; a
+        // click would put the caret into the old text ("09:00830"). So the first click into a field that has the
+        // focus and was not touched since leaves the text selected. The click after it, or any click after a key,
+        // places the caret as usual. `armed` = the field got the focus and nothing was done in it since.
+        let armed = false, keep = false, reselect = false;
+        const selectAll = () => { try { input.select?.(); } catch (_) {} };
+        input.addEventListener("focus", () => { armed = true; selectAll(); });
+        // keep: the field has the focus already (the dialog opened with it, or Tab reached it) and its whole text
+        // is selected. The click would only drop that selection, so the press is not let through.
+        input.addEventListener("mousedown", (event) => {
+          keep = armed && document.activeElement === input && !!input.value && input.selectionStart === 0 && input.selectionEnd === input.value.length;
+          if (keep) { armed = false; event.preventDefault(); }
+        });
+        // Otherwise the click that brought the focus has put a caret into the text: the text is selected instead,
+        // unless the person selected a part of it with that click.
+        input.addEventListener("mouseup", (event) => {
+          const first = armed, held = keep;
+          armed = false; keep = false;
+          if (!held && !(first && input.selectionStart === input.selectionEnd)) return;
+          event.preventDefault();
+          selectAll();
+          // An engine may still move the selection when the click is over (seen in Chromium): it is made once
+          // more then, unless a key has come first.
+          reselect = true;
+          window.setTimeout(() => { if (reselect && document.activeElement === input) selectAll(); reselect = false; }, 0);
+        });
+        input.addEventListener("keydown", (event) => {
+          armed = false; reselect = false;
+          if (event.key !== "Enter" || event.isComposing || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
+          event.preventDefault();
+          // A refusal by Enter is in front of the person (the field keeps the focus): it holds no Save, and
+          // Enter once more goes on with the value that was kept.
+          if (input.value !== good) { if (commit()) opts.onEnter?.(); else refused = false; return; }
+          refused = false;
+          opts.onEnter?.();
+        });
+        return {
+          input, row: part.row, hint,
+          // The full form of what the field holds now, "" when that is no time / date. Changes nothing.
+          read: () => parse(input.value.trim()).value,
+          // A value from a picker or a button.
+          set: (value) => { input.value = value; const found = parse(String(value ?? "").trim()).value; if (found) good = found; refused = false; delete input.dataset.bad; paint(); },
+          // For Save. false = hold it: the text is no time / date (the field is put back and marked, as on leaving
+          // it), or that has just happened and the person has to see it first. An empty field that never held a
+          // value is not held here: whether it is needed is the dialog's question.
+          settle: () => {
+            if (input.value !== good) { const ok = commit(); refused = false; return ok; }
+            if (refused) { refused = false; return false; }
+            return true;
+          },
+          problem: () => String(input.getAttribute("aria-label") || noun).replace(/\s*\(.*\)\s*$/, "") + ": " + hint.textContent,
+        };
+      }
+      // For Save: every field is read as it stands; -> the first field that holds the Save (see settle), or null.
+      // All of them are asked, so one held Save shows every refused field and the next one goes through.
+      const settleEntries = (entries) => entries.map((entry) => (entry.settle() ? null : entry)).find(Boolean) || null;
       // OW-23: one way to choose a time zone, for the calendar's display zone and for an item's own zone. Type a city,
       // a country, an abbreviation or an offset ("berlin", "poland", "cet", "utc+3") and take a match with Enter or a
       // click; "Browse…" lists every zone in groups, the computer's zone and the zones chosen lately on top. The field
@@ -21871,7 +22121,8 @@ __zentralShim.register = function (def) {
         openDay(ms, ymd);
       }
       function askOtherDate(initialDate = "") {
-        const d = field("Date (YYYY-MM-DD)", parseYmd(initialDate) ? initialDate : ymdOf(Date.now()), "2026-11-03");
+        const d = field("Date", parseYmd(initialDate) ? initialDate : ymdOf(Date.now()), "14, 14.11 or 2026-11-03");
+        const dEntry = bindEntry(d, { kind: "date", onEnter: () => go() });
         const pickBtn = chip("Pick day\u2026");
         pickBtn.title = "Pick the day in a calendar";
         const ok = chip("Open", true);
@@ -21879,22 +22130,22 @@ __zentralShim.register = function (def) {
         const actions = h("div", { class: "zn-dialog-actions" }, pickBtn, ok, cancel);
         openCard("Note for a date", d.row, actions);
         pickBtn.addEventListener("click", () => {
-          const selected = parseYmd(d.input.value);
+          const selected = parseYmd(dEntry.read());
           toggleDatePicker(pickBtn, actions, {
             selected: selected || 0,
             items: calendarPickerItems(),
-            onPick: (day) => { d.input.value = ymdOf(day); },
+            onPick: (day) => { dEntry.set(ymdOf(day)); },
           });
         });
         if (!CALENDAR_PART) pickBtn.hidden = true;
         const go = () => {
+          if (!dEntry.settle()) { d.input.focus(); return; }
           const ms = parseYmd(d.input.value);
-          if (!ms) return flash("Use the form 2026-11-03");
+          if (!ms) return flash("Type a date, for example 14, 14.11 or 2026-11-03");
           closeDialog();
           openDay(ms, ymdOf(ms));
         };
         ok.addEventListener("click", go);
-        d.input.addEventListener("keydown", (ev) => ev.key === "Enter" && go());
         cancel.addEventListener("click", closeDialog);
         d.input.focus({ preventScroll: true });
       }
@@ -21962,12 +22213,13 @@ __zentralShim.register = function (def) {
         const count = h("input", { class: "zn-field", type: "number", min: "1", max: "5000", step: "1", "aria-label": "Repeat occurrence count" }); count.value = String(currentRule?.count || 10);
         const countRow = h("label", { class: "zn-field-row" }, h("span", {}, "Occurrences"), count);
         const untilInitial = currentRule?.untilKey || ""; // the civil day itself: never `until` minus 24 hours (23-hour days)
-        const until = field("Last occurrence date", untilInitial, "YYYY-MM-DD");
+        const until = field("Last occurrence date", untilInitial, "14, 14.11 or 2026-11-14");
+        const untilEntry = bindEntry(until, { kind: "date", base: () => calendarItemDate(current) });
         const untilPick = chip("Choose date…");
-        const untilHost = h("div", { class: "zn-recurrence-until" }, until.row, untilPick);
+        const untilHost = h("div", { class: "zn-recurrence-until zn-entry-row" }, until.row, untilPick);
         untilPick.addEventListener("click", () => {
-          const selected = parseYmd(until.input.value);
-          toggleDatePicker(untilPick, untilHost, { selected: selected || startMs || nowMs(), items: calendarPickerItems(), onPick: (day) => { until.input.value = ymdOf(day); } });
+          const selected = parseYmd(untilEntry.read());
+          toggleDatePicker(untilPick, untilHost, { selected: selected || startMs || nowMs(), items: calendarPickerItems(), onPick: (day) => { untilEntry.set(ymdOf(day)); } });
         });
         const recurrenceBox = h("div", { class: "zn-recurrence-editor" },
           h("strong", {}, "Recurrence"),
@@ -22013,6 +22265,7 @@ __zentralShim.register = function (def) {
               if (!Number.isInteger(n) || n < 1 || n > 5000) { count.dataset.bad = "true"; count.focus(); return; }
               parts.push("COUNT=" + n);
             } else if (endMode.value === "until") {
+              if (!untilEntry.settle()) { until.input.focus(); return; }
               const endDay = parseYmd(until.input.value);
               const startDay = parseYmd(calendarItemDate(current));
               if (!endDay || (startDay && endDay < startDay)) { until.input.dataset.bad = "true"; until.input.focus(); return; }

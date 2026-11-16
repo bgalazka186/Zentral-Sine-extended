@@ -198,20 +198,93 @@
     }
     return null;
   }
-  // "6:00", "06:00", "14:30" -> minutes after midnight or -1.
+  // ---------- times and dates typed into a field (OW-24) ----------
+  // These read what a person types into a field that holds nothing but a time or a date. Text of a note is NOT read
+  // with them: parseLine and inlineDateTokens look for the strict forms first ("- 3 apples" is no event at 03:00).
+  //
+  // A time -> minutes after midnight, or -1.
+  //   16, 8                              the hour
+  //   830, 0830, 1630                    hour and minutes without a separator (the last two digits are the minutes)
+  //   8:30, 8.30, 8,30, 8;30, 8 30, 8h30 hour and minutes; 9:5 is 09:05
+  //   16h                                the hour
+  //   9am, 9 pm, 9:15pm, 915p, 9.15 p.m. the twelve-hour clock (12am is 00:00, 12pm is 12:00)
+  // Never a guess: 25, 860, 24:00, 13pm and 0am are no times.
   function parseClock(text) {
-    const m = /^(\d{1,2})[:.](\d{2})$/.exec(String(text || "").trim());
-    if (!m) return -1;
-    const h = +m[1], mi = +m[2];
-    return h > 23 || mi > 59 ? -1 : h * 60 + mi;
+    let t = String(text ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (!t) return -1;
+    let half = "";
+    const meridiem = /^(.*\d) ?([ap])(?:\.? ?m\.?)?$/.exec(t);
+    if (meridiem) { t = meridiem[1]; half = meridiem[2]; }
+    let hour, minute = 0, m;
+    if ((m = /^(\d{1,2})$/.exec(t))) hour = +m[1];
+    else if ((m = /^(\d{1,2})(\d{2})$/.exec(t))) { hour = +m[1]; minute = +m[2]; }
+    else if ((m = /^(\d{1,2}) ?(?:[:.,;]|h) ?(\d{1,2})$/.exec(t)) || (m = /^(\d{1,2}) (\d{1,2})$/.exec(t))) { hour = +m[1]; minute = +m[2]; }
+    else if (!half && (m = /^(\d{1,2}) ?h$/.exec(t))) hour = +m[1];
+    else return -1;
+    if (minute > 59) return -1;
+    if (half) {
+      if (hour < 1 || hour > 12) return -1;
+      hour = (hour % 12) + (half === "p" ? 12 : 0);
+    } else if (hour > 23) return -1;
+    return hour * 60 + minute;
   }
-  // "06:00-14:00", "6:00 - 14:00", "14:30" -> { startMin, endMin (-1 = none) } or null.
+  // "08:30" for minutes after midnight, "" for anything else. The form every field shows once a time was read.
+  const clockOfMinutes = (minutes) => (Number.isInteger(minutes) && minutes >= 0 && minutes < 1440 ? p2(Math.floor(minutes / 60)) + ":" + p2(minutes % 60) : "");
+  // A time or two times: "14:30", "06:00-14:00", "8-16", "8:30 - 16", "9am-5pm", "8 to 16"
+  // -> { startMin, endMin (-1 = none) } or null. The end may be before the start (22-6): the caller decides.
   function parseTimeRange(text) {
-    const t = String(text || "").trim();
-    const r = /^(\d{1,2}[:.]\d{2})\s*[-\u2013\u2014]\s*(\d{1,2}[:.]\d{2})$/.exec(t);
-    if (r) { const a = parseClock(r[1]), b = parseClock(r[2]); return a < 0 || b < 0 ? null : { startMin: a, endMin: b }; }
-    const a = parseClock(t);
-    return a < 0 ? null : { startMin: a, endMin: -1 };
+    const t = String(text ?? "").trim();
+    const single = parseClock(t);
+    if (single >= 0) return { startMin: single, endMin: -1 };
+    const m = /^(.*\S)\s*(?:[-\u2013\u2014]|\bto\b)\s*(\S.*)$/i.exec(t);
+    if (!m) return null;
+    const a = parseClock(m[1]), b = parseClock(m[2]);
+    return a < 0 || b < 0 ? null : { startMin: a, endMin: b };
+  }
+  // Whether the month stands before the day where a date is typed without its year: "md" or "dm". The date format
+  // of the settings decides (MM/DD/YYYY and YYYY-MM-DD have the month first; "long" follows the language).
+  function dateEntryOrder(format, locale) {
+    const f = cleanDateFormat(format);
+    if (f === "MM/DD/YYYY" || f === "YYYY-MM-DD") return "md";
+    if (f !== "long") return "dm";
+    try {
+      const kinds = new Intl.DateTimeFormat(locale || undefined, { month: "numeric", day: "numeric" }).formatToParts(new Date(2026, 0, 2)).map((part) => part.type).filter((type) => type === "month" || type === "day");
+      return kinds[0] === "month" ? "md" : "dm";
+    } catch (_) { return "dm"; }
+  }
+  // A date -> its key "YYYY-MM-DD", or "".
+  //   14                                   the 14th of the month the field shows (opts.base, a key; else this month)
+  //   1411, 14.11, 14,11, 14-11, 14/11, 14 11   day and month: the next such day from today on (this year or a later one)
+  //   14.11.2026, 14-11-26, 2026-11-14     with the year; two digits of a year are 2000-2049 and 1950-1999
+  //   tomorrow, +3d, fri, 14 nov           the words parseDateText knows
+  // opts: { now, base, format, locale }. Where day and month could be either way round the format decides
+  // (dateEntryOrder); the other order is taken only where the first gives no date at all (14.11 with the month first).
+  function parseDateEntry(text, opts = {}) {
+    const raw = String(text ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (!raw) return "";
+    const now = Number.isFinite(Number(opts.now)) ? Number(opts.now) : Date.now(), today = dayStart(now);
+    const key = (year, month, day) => { const ms = dateFromParts(year, month, day); return ms === null ? "" : ymd(new Date(ms)); };
+    const monthFirst = dateEntryOrder(opts.format, opts.locale) === "md";
+    const orders = (a, b) => (monthFirst ? [[b, a], [a, b]] : [[a, b], [b, a]]); // [day, month], the order of the format first
+    // Between two numbers: one of - / . , with a space on either side, or a space alone ("14.11", "14. 11", "14 11").
+    let m = /^(\d{4})(?: ?[-/.] ?| )(\d{1,2})(?: ?[-/.] ?| )(\d{1,2})$/.exec(raw);
+    if (m) return key(+m[1], +m[2], +m[3]);
+    m = /^(\d{1,2})(?: ?[-/.,] ?| )(\d{1,2})(?: ?[-/.,] ?| )(\d{2}|\d{4})\.?$/.exec(raw);
+    if (m) {
+      const year = m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3];
+      for (const [day, month] of orders(+m[1], +m[2])) { const found = key(year, month, day); if (found) return found; }
+      return "";
+    }
+    m = /^(\d{1,2})(?: ?[-/.,] ?| )(\d{1,2})\.?$/.exec(raw) || /^(\d{2})(\d{2})$/.exec(raw);
+    if (m) {
+      for (const [day, month] of orders(+m[1], +m[2])) { const ms = futureMonthDay(month, day, today); if (ms !== null) return ymd(new Date(ms)); }
+      return "";
+    }
+    m = /^(\d{1,2})\.?$/.exec(raw);
+    if (m) { const shown = parseYmd(opts.base) || new Date(today); return key(shown.getFullYear(), shown.getMonth() + 1, +m[1]); }
+    if (!/[a-z\u00c0-\u024f]/.test(raw)) return "";
+    const ms = parseDateText(raw, now);
+    return ms === null ? "" : ymd(new Date(ms));
   }
   // One line of a plain list: "- 06:00-14:00 Work", "10-08 Jan Kowalski", "2026-11-20 14:00 Dentist" -> parts or null.
   // The leading date is optional when `defaultDay` (local midnight ms) is given.
@@ -3764,8 +3837,9 @@
     const zone = rawZone ? cleanZone(rawZone) : "";
     if (rawZone && !zone) return null;
     const wallTime = (date, time) => {
-      if (!parseYmd(date) || parseClock(time) < 0) return null;
-      return zonedDateTimeToMs(date, String(time), zone);
+      const minutes = parseClock(time);
+      if (!parseYmd(date) || minutes < 0) return null;
+      return zonedDateTimeToMs(date, clockOfMinutes(minutes), zone);
     };
     let start;
     if (allDay) start = { date: startDate };
@@ -3913,7 +3987,7 @@
   }
 
   const api = {
-    KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
+    KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,

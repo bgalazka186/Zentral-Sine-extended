@@ -199,7 +199,7 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   openRowMenu(root, "menu-manual-event");
   for (const label of ["Show details", "Edit details…", "Change time…", "Convert to reminder", "Duplicate as independent item", "Delete event…"]) assert.ok(menuItem(root, label), `manual event menu includes ${label}`);
   menuItem(root, "Change time…").click(); await flush();
-  const dateInput = q(root, '[aria-label="New date (YYYY-MM-DD)"]');
+  const dateInput = q(root, '[aria-label="New date"]');
   assert.ok(dateInput, "change-time dialog exposes a validated date field");
   dateInput.value = tomorrowKey;
   root.querySelectorAll(".zn-dialog-card button").find((node) => node.textContent.trim() === "Save new time").click(); await flush();
@@ -248,7 +248,7 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   assert.ok(recurrenceScope, "recurring reschedule asks which scope the user intends");
   assert.deepEqual(recurrenceScope.querySelectorAll("option").map((option) => option.getAttribute("value")), ["this", "following", "series"]);
   recurrenceScope.value = "this";
-  const recurringDateInput = q(root, '[aria-label="New date (YYYY-MM-DD)"]');
+  const recurringDateInput = q(root, '[aria-label="New date"]');
   const targetOccurrenceDate = cal.ymd(new Date(cal.addDays(day, 2)));
   const originalMaster = store.items.get("menu-recurring-reminder");
   const originalFirst = cal.expandItem(originalMaster, day, cal.addDays(day, 4))[0];

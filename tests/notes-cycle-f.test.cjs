@@ -87,7 +87,7 @@ async function test(name, fn) {
     assert.equal(c.remindPreview(c.parseRemindInput("2026-11-05", "09:00"), now), "Will ring at 2026-11-05 09:00 (in 40 h 29 min)");
     assert.equal(c.remindPreview(c.parseRemindInput("2026-11-20", "09:00"), now), "Will ring at 2026-11-20 09:00 (in 17 days)");
     assert.equal(c.remindPreview(c.parseRemindInput("2026-11-03", "16:00"), now), "That time has already passed");
-    assert.match(c.remindPreview(0, now), /YYYY-MM-DD/);
+    assert.equal(c.remindPreview(0, now), "Enter a date (14, 14.11 or 2026-11-02) and a time (16, 830 or 9am)", "what can be typed since OW-24");
     assert.equal(c.REMIND_STEP_MS, 60000);
     assert.equal(c.cleanRemind(at + 4000), at, "seconds are dropped");
   });

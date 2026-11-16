@@ -933,7 +933,7 @@ const span = (r) => [r.startMin, r.endMin, r.extendedTop, r.extendedBottom];
     assert.ok(hoursOnly(), "the dialog offers the hours shown");
     assert.equal(hoursOnly().checked, true);
     assert.ok(card.querySelectorAll("label").some((el) => el.textContent.includes("Only within the visible hours (08:00–20:00)")));
-    q(card, '[aria-label="From date (YYYY-MM-DD)"]').value = MON; q(card, '[aria-label="Through date (YYYY-MM-DD)"]').value = MON;
+    q(card, '[aria-label="From date"]').value = MON; q(card, '[aria-label="Through date"]').value = MON;
     workOnly().checked = false;
     dialogButton("Find free times").click();
     assert.deepEqual(slots(), ["08:00–10:00", "11:00–20:00"], "Monday has Standup 10:00-11:00: free before and after it, inside 08:00-20:00");

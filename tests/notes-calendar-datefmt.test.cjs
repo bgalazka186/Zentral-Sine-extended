@@ -150,7 +150,7 @@ test("T2.19 exposes quick snooze choices only for supported reminder occurrences
   assert.match(source, /"snooze-3d":\s*\(\)\s*=>\s*snoozeReminderItem\(item,\s*3\)/);
   assert.match(source, /"snooze-monday":\s*\(\)\s*=>\s*snoozeReminderItem\(item,\s*nextMonday\)/);
   assert.match(source, /"snooze-custom":\s*\(\)\s*=>\s*queueMicrotask\(\(\)\s*=>\s*askCustomReminderSnooze\(item\)\)/);
-  assert.match(source, /zonedDateTimeToMs\(day,\s*selectedTime,\s*item\.x\?\.tz\s*\|\|\s*["']["']\)/);
+  assert.match(source, /zonedDateTimeToMs\(day,\s*time\.read\(\),\s*item\.x\?\.tz\s*\|\|\s*["']["']\)/, "the typed or chosen time is converted in the zone of the item (OW-24: the time comes from the field and the Clock)");
   assert.match(source, /button\.addEventListener\(["']contextmenu["'],\s*\(event\)\s*=>\s*showCalendarItemMenu\(event,\s*item,\s*button\)\)/);
 });
 
