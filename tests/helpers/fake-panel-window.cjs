@@ -9,6 +9,7 @@
 const fs = require("node:fs"), path = require("node:path"), vm = require("node:vm");
 const SOURCE = fs.readFileSync(path.join(__dirname, "../../additional/notes/ZentralNotes.uc.js"), "utf8");
 const CALENDAR_SOURCE = fs.readFileSync(path.join(__dirname, "../../additional/notes/calendar/ZentralNotesCalendar.js"), "utf8");
+const LANGUAGE_SOURCES = ["en", "pl"].map((code) => fs.readFileSync(path.join(__dirname, "../../additional/notes/i18n/" + code + ".js"), "utf8"));
 const DIR = "/profile/zentral-notes";
 
 function createPanelWorld({ sharedGlobal = null, hiddenWindow = null, freezeCui = true } = {}) {
@@ -120,6 +121,7 @@ function createPanelWorld({ sharedGlobal = null, hiddenWindow = null, freezeCui 
     if (calendar) {
       // A real window loads its own copy of the calendar part (its own module-level state), never a shared one.
       context.module = { exports: {} };
+      for (const source of LANGUAGE_SOURCES) vm.runInContext(source, context);
       vm.runInContext(CALENDAR_SOURCE, context);
       win.__zentralNotesParts = { "notes-calendar": context.module.exports };
       delete context.module;

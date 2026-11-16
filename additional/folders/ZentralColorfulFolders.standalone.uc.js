@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Colorful Folders
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.180
+// @version 3.3.195
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.180, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.195, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.180";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.195";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1849,7 +1849,9 @@ function nativeSidebarSide() {
       .zcf-status { min-height:1.4em; font-size:11px; color:color-mix(in srgb, CanvasText 70%, transparent); }
       .zcf-row button, .zcf-btns button { border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); border-radius: 7px; padding: 4px 8px; background: color-mix(in srgb, Canvas 90%, CanvasText 10%); color: inherit; }
       .zcf-swatches { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0; }
-      .zcf-swatch { min-width: 0; border: 1px solid color-mix(in srgb, CanvasText 30%, transparent); border-radius: 6px; padding: 5px 7px; color: CanvasText; font-size: 11px; }
+      .zcf-swatch { display: inline-flex; align-items: center; gap: 6px; min-width: 0; border: 1px solid color-mix(in srgb, CanvasText 30%, transparent); border-radius: 6px; padding: 5px 7px; background: color-mix(in srgb, Canvas 90%, CanvasText 10%); color: CanvasText; font-size: 11px; cursor: pointer; }
+      .zcf-swatch:hover { background: color-mix(in srgb, Canvas 82%, CanvasText 18%); }
+      .zcf-swatch-dot { flex: 0 0 13px; width: 13px; height: 11px; border-radius: 3px; border: 1px solid color-mix(in srgb, CanvasText 36%, transparent); box-sizing: border-box; }
       .zcf-list-row { display: grid; grid-template-columns: 18px minmax(0,1fr) auto auto; gap: 7px; align-items: center; padding: 5px 0; border-bottom: 1px solid color-mix(in srgb, CanvasText 12%, transparent); }
       .zcf-default-color { width:32px; height:24px; padding:0; border:1px solid color-mix(in srgb, CanvasText 25%, transparent); border-radius:6px; background:transparent; }
       .zcf-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
@@ -2218,7 +2220,9 @@ function nativeSidebarSide() {
       const presetButtons = [];
       const addPreset = (host, look, title) => {
         const button = createElement("button", { type: "button", class: "zcf-swatch", text: look.n, title });
-        button.style.background = previewBackground(look);
+        const dot = createElement("span", { class: "zcf-swatch-dot", "aria-hidden": "true" });
+        dot.style.background = previewBackground(look);
+        button.insertBefore(dot, button.firstChild);
         button.addEventListener("click", () => {
           record = { b: cleanHex(look.b), d: cleanDetail(look.d), o: cleanOpacity(look.o) };
           if (FOLDER_STYLE.needsDetailed(look)) setEditMode("detailed");

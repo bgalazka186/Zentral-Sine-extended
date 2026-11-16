@@ -403,6 +403,7 @@
           fitSecondaryBrowsers();
         }, 280);
       }
+      ctx.scheduleSecondaryGeometryFit = scheduleSecondaryGeometryFit;
 
       // Resume can leave secondary geometry/activity stale without a resize.
       // Coalesce native lifecycle signals; one delayed pass covers restored layout.
@@ -466,6 +467,7 @@
         if (secondaryFitFrame !== null) cancelAnimationFrame(secondaryFitFrame);
         if (secondaryFitTimer !== null) ctx.clearTimeout(secondaryFitTimer);
         resumeFrame = resumeTimer = secondaryFitFrame = secondaryFitTimer = null;
+        delete ctx.scheduleSecondaryGeometryFit;
       });
       function moveBrowser(browser, parent) {
         if (browser.parentNode === parent) return;
@@ -481,6 +483,10 @@
       function discardSecond() {
         state.geometryObserver?.disconnect();
         state.geometryObserver = null;
+        state.hoverObserver?.disconnect();
+        state.hoverObserver = null;
+        state.slideCleanup?.();
+        state.slideCleanup = null;
         if (state.handleFrame) cancelAnimationFrame(state.handleFrame);
         state.handleFrame = null;
         state.dividerHandle?.remove();
@@ -775,6 +781,34 @@
           state.geometryObserver.observe(bar);
           const toolbar = document.getElementById("zen-app-panel-toolbar");
           if (toolbar) state.geometryObserver.observe(toolbar);
+          const HoverObserver =
+            typeof MutationObserver === "function"
+              ? MutationObserver
+              : window.MutationObserver;
+          if (HoverObserver) {
+            state.hoverObserver = new HoverObserver(() => {
+              if (!ui.hasAttribute("bgalazka-hover-panel-hidden"))
+                scheduleSecondaryGeometryFit();
+            });
+            state.hoverObserver.observe(ui, {
+              attributes: true,
+              attributeFilter: ["bgalazka-hover-panel-hidden"],
+            });
+          }
+          const panelRoot = root();
+          if (panelRoot) {
+            const onPanelSlideEnd = (event) => {
+              if (
+                event.target === panelRoot &&
+                event.propertyName === "transform" &&
+                !ui.hasAttribute("bgalazka-hover-panel-hidden")
+              )
+                fitSecondaryBrowsers();
+            };
+            panelRoot.addEventListener("transitionend", onPanelSlideEnd);
+            state.slideCleanup = () =>
+              panelRoot.removeEventListener("transitionend", onPanelSlideEnd);
+          }
           let shield = null;
           let grabOffset = 0;
           let pointerId = null;

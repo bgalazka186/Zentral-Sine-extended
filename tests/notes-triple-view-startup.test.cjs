@@ -281,7 +281,7 @@ const upperGave = (t, pair) => { const s = stack(t); return (s.upper + s.lower +
 
   await test("Notes that does not fold with the panel (it hides on an outside click): restored inside the hidden panel, same contract once the panel is shown", async () => {
     const { world, t, pair, end } = await startUp({ share: 0.68, meta: { hideTrigger: "click" }, storeMs: 2600, revealAt: 5000 });
-    const s = stack(t);
+    const s = assertAtRest(t, "shown again");
     assert.deepEqual([s.slot, s.folded, s.gap], ["gap", false, 345]);
     assert.ok(Math.abs(upperGave(t, pair) - s.up) <= 1, `Notes holds the split that is on screen (it holds ${s.up}, the upper page gave ${round(upperGave(t, pair))})`);
     await assertEdgeOnly(t, world, "n", 30, "top grip down");

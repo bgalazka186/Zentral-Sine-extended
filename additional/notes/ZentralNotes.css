@@ -59,12 +59,13 @@
 
 /* ---- sheet ------------------------------------------------------------- */
 .zentral-notes-sheet {
-  --zn-accent: var(--zen-primary-color, #83a5ff);
+  color-scheme: light dark;
+  --zn-accent: var(--zn-accent-safe, var(--zen-primary-color, #83a5ff));
   --zn-surface: var(--bgalazka-look-toolbar-surface, var(--bgalazka-look-surface, #1e1e24));
   --zn-panel: var(--zn-surface);
   --zn-text: var(--bgalazka-look-text, #e9e9f0);
-  --zn-muted: color-mix(in srgb, var(--zn-text) 58%, transparent);
-  --zn-line: color-mix(in srgb, var(--zn-text) 14%, transparent);
+  --zn-muted: var(--zn-muted-resolved, color-mix(in srgb, var(--zn-text) 64%, transparent));
+  --zn-line: color-mix(in srgb, var(--zn-text) 16%, transparent);
   --zn-hover: color-mix(in srgb, var(--zn-text) 10%, transparent);
   --zn-radius: var(--zen-border-radius, 10px);
   --zn-tint: color-mix(in srgb, var(--zn-surface) 94%, transparent);
@@ -87,6 +88,8 @@
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
   animation: zn-in 0.14s ease-out;
 }
+.zentral-notes-sheet[data-scheme="light"] { color-scheme: light; }
+.zentral-notes-sheet[data-scheme="dark"] { color-scheme: dark; }
 .zentral-notes-sheet[hidden] {
   display: none !important;
 }
@@ -511,7 +514,23 @@
   color: var(--zn-text);
   font: inherit;
 }
-.zentral-notes-sheet .zn-new { background: color-mix(in srgb, var(--zn-accent) 24%, transparent); opacity: 1; }
+.zentral-notes-sheet .zn-new-split {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--zn-accent) 24%, transparent);
+}
+.zentral-notes-sheet .zn-new { background: transparent; opacity: 1; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.zentral-notes-sheet .zn-new-menu {
+  width: 16px;
+  padding: 0;
+  opacity: 0.85;
+  border-left: 1px solid color-mix(in srgb, var(--zn-line) 70%, transparent);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.zentral-notes-sheet .zn-new-menu:hover { opacity: 1; }
 .zentral-notes-sheet .zn-chips { display: flex; align-items: center; gap: 4px; padding: 0 6px 4px; }
 .zentral-notes-sheet .zn-chip {
   appearance: none;
@@ -628,12 +647,15 @@
   width: 20px;
   height: 20px;
   padding: 0;
-  border: 2px solid var(--zn-line);
+  border: 2px solid var(--zn-pal-outline, var(--zn-line));
   border-radius: 50%;
   background: transparent;
   cursor: pointer;
 }
-.zentral-notes-sheet .zn-swatch.is-on { border-color: var(--zn-text); }
+.zentral-notes-sheet .zn-swatch:hover,
+.zentral-notes-sheet .zn-swatch:focus-visible { outline: 2px solid var(--zn-pal-outline, var(--zn-accent)); outline-offset: 1px; }
+.zentral-notes-sheet .zn-swatch.is-on { border-color: var(--zn-pal-selected-outline, var(--zn-text)); box-shadow: inset 0 0 0 2px var(--zn-surface), 0 0 0 1px var(--zn-pal-selected-outline, var(--zn-text)); }
+.zentral-notes-sheet .zn-swatch:disabled { background: var(--zn-pal-disabled-bg, transparent); border-color: var(--zn-pal-disabled-outline, var(--zn-line)); color: var(--zn-pal-disabled-fg, var(--zn-muted)); cursor: not-allowed; }
 .zentral-notes-sheet .zn-swatch[data-color="yellow"] { background: #f5c542; }
 .zentral-notes-sheet .zn-swatch[data-color="green"] { background: #4cc38a; }
 .zentral-notes-sheet .zn-swatch[data-color="blue"] { background: #5aa9ff; }
@@ -1067,12 +1089,12 @@
 :root[zentral-notes-theme="recommended"] .zentral-notes-sheet {
   /* The popup's light/dark palette, rather than Zen's sometimes-black primary color, chooses the accent. */
   color-scheme: var(--zl-input-scheme, light dark);
-  --zn-surface: var(--zl-popup, var(--arrowpanel-background, #1f1f24));
-  --zn-text: var(--zl-popup-text, var(--arrowpanel-color, #eee));
-  --zn-muted: color-mix(in srgb, var(--zn-text) 62%, transparent);
+  --zn-surface: var(--zl-popup, var(--arrowpanel-background, light-dark(#ffffff, #1f1f24)));
+  --zn-text: var(--zl-popup-text, var(--arrowpanel-color, light-dark(#18181b, #eeeeee)));
+  --zn-muted: var(--zn-muted-resolved, color-mix(in srgb, var(--zn-text) 66%, transparent));
   --zn-hover: color-mix(in srgb, var(--zn-text) 10%, transparent);
   --zn-accent: light-dark(#2459b4, #9bbdff);
-  --zn-line: var(--zl-button-border-color, var(--arrowpanel-border-color, #444));
+  --zn-line: var(--zl-button-border-color, var(--arrowpanel-border-color, light-dark(#d0d0d7, #44444c)));
   --zn-tint: var(--zn-surface);
   --zn-radius: 10px;
   box-shadow: 0 6px 24px #0008;
@@ -1166,7 +1188,7 @@
 .zentral-notes-sheet .zn-set-row .zn-ctl-fill > .zn-quick-value { width: auto; min-width: 3.6em; white-space: normal; overflow-wrap: anywhere; }
 /* A text field beside its label keeps its own width; below the label it is never wider than the row. */
 .zentral-notes-sheet .zn-set-row > .zn-field { flex: 0 1 auto; min-width: 0; max-width: 100%; box-sizing: border-box; }
-.zentral-notes-sheet .zn-swatch { width: 38px; height: 22px; padding: 0; border: 1px solid var(--zn-line); border-radius: 6px; cursor: pointer; }
+.zentral-notes-sheet .zn-swatch { width: 38px; height: 22px; padding: 0; border: 1px solid var(--zn-pal-outline, var(--zn-line)); border-radius: 6px; cursor: pointer; }
 .zentral-notes-sheet .zn-swatch[data-empty="true"] { background-image: repeating-linear-gradient(45deg, var(--zn-line) 0 4px, transparent 4px 8px) !important; }
 .zentral-notes-sheet .zn-cpanel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin: 4px 0 8px; padding: 8px; border: 1px solid var(--zn-line); border-radius: 8px; }
 .zentral-notes-sheet .zn-cpanel[hidden] { display: none; }
@@ -1762,11 +1784,27 @@
 .zentral-notes-sheet .zn-frow[data-color] .zn-item-title { color: var(--zn-frow-label, inherit); }
 .zentral-notes-sheet .zn-frow[data-color] .zn-item-time { color: var(--zn-frow-accent, var(--zn-fc)); }
 .zentral-notes-sheet .zn-frow[data-color]:hover { background: var(--zn-frow-hover, color-mix(in srgb, var(--zn-fc) 18%, transparent)); }
+.zentral-notes-sheet .zn-frow[data-color].is-current,
+.zentral-notes-sheet .zn-frow[data-color][aria-selected="true"] { background: var(--zn-frow-selected, color-mix(in srgb, var(--zn-fc) 24%, transparent)); }
+.zentral-notes-sheet .zn-frow[data-color][aria-disabled="true"] { background: var(--zn-frow-disabled-bg, transparent); color: var(--zn-frow-disabled-fg, var(--zn-muted)); border-inline-start-color: var(--zn-frow-disabled-outline, var(--zn-line)); }
+.zentral-notes-sheet .zn-frow[data-color][aria-disabled="true"] .zn-item-title,
+.zentral-notes-sheet .zn-frow[data-color][aria-disabled="true"] .zn-item-time { color: var(--zn-frow-disabled-fg, var(--zn-muted)); }
 .zentral-notes-sheet .zn-frow-emoji { font-size: 13px; line-height: 14px; }
 .zentral-notes-sheet .zn-fstyle-colors { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .zentral-notes-sheet .zn-fstyle-presets { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 10px; }
 .zentral-notes-sheet .zn-fstyle-group-label { margin-top: 4px; font-size: 11px; font-weight: 700; opacity: .75; }
-.zentral-notes-sheet .zn-fstyle-presets .zn-chip { border: 1px solid color-mix(in srgb, currentColor 22%, transparent); }
+.zentral-notes-sheet .zn-fstyle-presets .zn-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--zn-pal-bg, transparent); color: var(--zn-pal-fg, var(--zn-text)); border: 1px solid var(--zn-pal-outline, color-mix(in srgb, currentColor 22%, transparent)); }
+.zentral-notes-sheet .zn-fstyle-presets .zn-chip:hover { background: var(--zn-pal-hover, var(--zn-hover)); color: var(--zn-pal-hover-fg, var(--zn-pal-fg, var(--zn-text))); }
+.zentral-notes-sheet .zn-fstyle-presets .zn-chip.is-on { background: var(--zn-pal-selected-bg, color-mix(in srgb, var(--zn-accent) 22%, transparent)); color: var(--zn-pal-selected-fg, var(--zn-text)); border-color: var(--zn-pal-selected-outline, var(--zn-accent)); box-shadow: inset 0 0 0 1px var(--zn-pal-selected-outline, var(--zn-accent)); }
+.zentral-notes-sheet .zn-fstyle-presets .zn-chip:disabled { background: var(--zn-pal-disabled-bg, transparent); color: var(--zn-pal-disabled-fg, var(--zn-muted)); border-color: var(--zn-pal-disabled-outline, var(--zn-line)); }
+.zentral-notes-sheet .zn-fstyle-preset-swatch { flex: 0 0 14px; width: 14px; height: 11px; border-radius: 3px; border: 1px solid var(--zn-pal-outline, currentColor); box-sizing: border-box; }
+.zentral-notes-sheet .zn-fstyle-preview { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 10px; padding: 8px; border: 1px solid var(--zn-line); border-radius: 8px; background: var(--zn-surface); }
+.zentral-notes-sheet .zn-fstyle-preview-row { cursor: default; }
+.zentral-notes-sheet .zn-fstyle-preview-states { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; }
+.zentral-notes-sheet .zn-fstyle-state-pill { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--zn-frow-stroke, var(--zn-line)); color: var(--zn-frow-label, var(--zn-text)); }
+.zentral-notes-sheet .zn-fstyle-state-pill[data-state="hover"] { background: var(--zn-frow-hover, var(--zn-hover)); }
+.zentral-notes-sheet .zn-fstyle-state-pill[data-state="selected"] { background: var(--zn-frow-selected, color-mix(in srgb, var(--zn-accent) 20%, transparent)); border-color: var(--zn-frow-accent, var(--zn-accent)); font-weight: 600; }
+.zentral-notes-sheet .zn-fstyle-state-pill[data-state="disabled"] { background: var(--zn-frow-disabled-bg, transparent); color: var(--zn-frow-disabled-fg, var(--zn-muted)); border-color: var(--zn-frow-disabled-outline, var(--zn-line)); }
 .zentral-notes-sheet .zn-fstyle-part { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 8px 0; }
 .zentral-notes-sheet .zn-fstyle-part > span:first-child { flex: 1 1 140px; font-size: 12px; }
 .zentral-notes-sheet .zn-fstyle-opacity { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; flex: 1 1 100%; min-width: 0; }
@@ -1783,12 +1821,14 @@
 .zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color="teal"] { --zn-fc: #2ec4b6; }
 .zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color="gray"] { --zn-fc: #9aa0a6; }
 
-/* ---- Custom colors (T3.6): data-color="custom" + the color in --zn-cc (set inline by the script, always a validated #rrggbb) ---- */
+/* ---- Custom colors (T3.6 / T3.6a): data-color="custom" + --zn-cc + surface-resolved --zn-pal-* ---- */
 .zentral-notes-sheet[data-color="custom"] { --zn-note: var(--zn-cc); }
-.zentral-notes-sheet .zn-dot[data-color="custom"] { background: var(--zn-cc); border-color: var(--zn-cc); }
+.zentral-notes-sheet .zn-dot[data-color]:not([data-color="none"]) { border-color: var(--zn-pal-outline, currentColor); }
+.zentral-notes-sheet .zn-dot[data-color="custom"] { background: var(--zn-cc); border-color: var(--zn-pal-outline, var(--zn-cc)); }
 .zentral-notes-sheet .zn-hl-dot[data-color="custom"] { background: var(--zn-cc); }
-.zentral-notes-sheet .zn-hl[data-color="custom"] { background: color-mix(in srgb, var(--zn-cc) 45%, transparent); }
-.zentral-notes-sheet .zn-item[data-color="custom"] .zn-item-bar { background: var(--zn-cc); }
+.zentral-notes-sheet .zn-hl[data-color] { background: var(--zn-pal-hl-bg, color-mix(in srgb, #ffd54a 45%, transparent)); color: var(--zn-pal-hl-fg, inherit); }
+.zentral-notes-sheet .zn-hl[data-color="custom"] { background: var(--zn-pal-hl-bg, color-mix(in srgb, var(--zn-cc) 45%, transparent)); color: var(--zn-pal-hl-fg, inherit); }
+.zentral-notes-sheet .zn-item[data-color]:not([data-color="none"]) .zn-item-bar { background: var(--zn-pal-outline, var(--zn-cc, var(--zn-accent))); }
 .zentral-notes-sheet .zn-swatch[data-color="custom"] { background: var(--zn-cc); }
 .zentral-notes-sheet .zn-frow[data-color="custom"] .zn-frow-icon { color: var(--zn-cc); }
 .zentral-notes-sheet .zn-swatches-custom { margin-top: 4px; }
@@ -1797,6 +1837,12 @@
 .zentral-notes-sheet .zn-color-picker-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .zentral-notes-sheet .zn-color-input { width: 36px; height: 28px; padding: 0; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 6px; background: transparent; cursor: pointer; }
 .zentral-notes-sheet .zn-hex-field { width: 92px; font-family: monospace; }
+.zentral-notes-sheet .zn-palette-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--zn-line); border-radius: 8px; background: var(--zn-surface); font-size: 11px; }
+.zentral-notes-sheet .zn-palette-preview-pill { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--zn-pal-outline, var(--zn-line)); background: var(--zn-pal-bg, transparent); color: var(--zn-pal-fg, var(--zn-text)); }
+.zentral-notes-sheet .zn-palette-preview-pill[data-state="hover"] { background: var(--zn-pal-hover, var(--zn-hover)); color: var(--zn-pal-hover-fg, var(--zn-pal-fg, var(--zn-text))); }
+.zentral-notes-sheet .zn-palette-preview-pill[data-state="selected"] { background: var(--zn-pal-selected-bg, transparent); color: var(--zn-pal-selected-fg, var(--zn-text)); border-color: var(--zn-pal-selected-outline, var(--zn-accent)); font-weight: 600; }
+.zentral-notes-sheet .zn-palette-preview-pill[data-state="disabled"] { background: var(--zn-pal-disabled-bg, transparent); color: var(--zn-pal-disabled-fg, var(--zn-muted)); border-color: var(--zn-pal-disabled-outline, var(--zn-line)); }
+.zentral-notes-sheet .zn-palette-preview-reminder { pointer-events: none; cursor: default; }
 
 /* ---- Emoji icon of a Notes folder in the Zen sidebar: drawn by CSS from the folder's attribute, so it does not depend on Zen's
    icon SVG internals (sub-folders showed none). The SVG <text> the script also adds is hidden to avoid a double icon. ---- */
@@ -1871,26 +1917,62 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-fstyle-warn:empty { display: none; }
 .zentral-notes-sheet .zn-fstyle-warn { font-size: 11px; opacity: .85; }
 .zentral-notes-sheet .zn-rootrow { display: flex; align-items: center; gap: 8px; padding: 5px 8px; margin: 2px 0 4px; border-radius: 8px; cursor: pointer; }
+.zentral-notes-sheet .zn-rootrow[data-color] { background: var(--zn-frow-tint, transparent); border-inline-start: 2px solid var(--zn-frow-accent, transparent); color: var(--zn-frow-label, inherit); }
+.zentral-notes-sheet .zn-rootrow[data-color]:hover { background: var(--zn-frow-hover, var(--zn-hover)); }
 .zentral-notes-sheet .zn-rootrow .zn-frow-icon { color: var(--zn-frow-stroke, currentColor); }
 .zentral-notes-sheet .zn-rootrow .zn-rootrow-name { flex: 1; min-width: 0; font-weight: 700; font-size: 12px; letter-spacing: .04em; }
 
-/* Mini calendar (date picker, roadmap T2.2) */
+/* Mini calendar (date picker, roadmap T2.2) + OW-10 compact composer schedule board and analog/digital Clock */
 .zentral-notes-sheet .zn-cal { margin: 4px 0 8px; padding: 6px; border: 1px solid var(--zn-line); border-radius: 8px; }
+.zentral-notes-sheet .zn-cal.is-compact { margin: 0; padding: 4px 5px; font-size: 0.85em; }
+.zentral-notes-sheet .zn-cal-date-targets { display: flex; gap: 4px; margin-bottom: 4px; }
 .zentral-notes-sheet .zn-cal-head { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.zentral-notes-sheet .zn-cal.is-compact .zn-cal-head { gap: 2px; margin-bottom: 2px; }
 .zentral-notes-sheet .zn-cal-title { flex: 1; text-align: center; font-weight: 600; text-transform: capitalize; }
 .zentral-notes-sheet .zn-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; outline: none; }
+.zentral-notes-sheet .zn-cal-grid.has-week-numbers { grid-template-columns: 1.9em repeat(7, minmax(0, 1fr)); }
+.zentral-notes-sheet .zn-cal.is-compact .zn-cal-grid { gap: 1px; }
 .zentral-notes-sheet .zn-cal-dow { text-align: center; font-size: 0.75em; color: var(--zn-muted); padding: 2px 0; }
+.zentral-notes-sheet .zn-cal.is-compact .zn-cal-dow { padding: 1px 0; font-size: 0.7em; }
 .zentral-notes-sheet .zn-cal-day { position: relative; min-width: 0; aspect-ratio: 1; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--zn-text); font: inherit; cursor: pointer; }
+.zentral-notes-sheet .zn-cal.is-compact .zn-cal-day { aspect-ratio: auto; height: 22px; min-height: 20px; border-radius: 5px; font-size: 0.9em; }
 .zentral-notes-sheet .zn-cal-day:hover { background: var(--zn-hover); }
 .zentral-notes-sheet .zn-cal-day.is-out { color: var(--zn-muted); }
 .zentral-notes-sheet .zn-cal-day.is-today { border-color: var(--zn-accent); }
 .zentral-notes-sheet .zn-cal-day.is-picked { background: color-mix(in srgb, var(--zn-accent) 28%, transparent); }
 .zentral-notes-sheet .zn-cal-grid:focus-visible .zn-cal-day.is-cursor, .zentral-notes-sheet .zn-cal-day.is-cursor:focus-visible { outline: 2px solid var(--zn-accent); outline-offset: -2px; }
 .zentral-notes-sheet .zn-cal-dot { position: absolute; left: 50%; bottom: 3px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--zn-accent); }
-.zentral-notes-sheet .zn-cal-clock { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0 8px; padding: 7px; border: 1px solid var(--zn-line); border-radius: 8px; }
-.zentral-notes-sheet .zn-cal-clock-set { display: inline-flex; flex: 1 1 150px; align-items: center; gap: 4px; min-width: 0; color: var(--zn-muted); font-size: 0.85em; }
+.zentral-notes-sheet .zn-cal.is-compact .zn-cal-dot { bottom: 1px; width: 3px; height: 3px; margin-left: -1.5px; }
+.zentral-notes-sheet .zn-cal-compose-schedule-board { display: grid; grid-template-columns: minmax(12em, 14.5em) minmax(13.5em, 1fr); gap: 8px; align-items: start; margin: 4px 0 8px; }
+.zentral-notes-sheet .zn-cal-compose-schedule-board[data-all-day="true"] { grid-template-columns: minmax(12em, 16em); }
+.zentral-notes-sheet .zn-cal-clock { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 8px; padding: 6px 7px; border: 1px solid var(--zn-line); border-radius: 8px; min-width: 0; }
+.zentral-notes-sheet .zn-cal-compose-schedule-board .zn-cal-clock { margin: 0; }
+.zentral-notes-sheet .zn-cal-clock[hidden] { display: none; }
+.zentral-notes-sheet .zn-cal-clock-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px; }
+.zentral-notes-sheet .zn-cal-clock-targets, .zentral-notes-sheet .zn-cal-clock-modes, .zentral-notes-sheet .zn-cal-clock-periods { display: inline-flex; align-items: center; gap: 3px; }
+.zentral-notes-sheet .zn-cal-clock-targets[hidden], .zentral-notes-sheet .zn-cal-clock-periods[hidden], .zentral-notes-sheet .zn-cal-clock-analog[hidden], .zentral-notes-sheet .zn-cal-clock-digital[hidden] { display: none; }
+.zentral-notes-sheet .zn-cal-clock-analog { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.zentral-notes-sheet .zn-cal-clock-readout { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
+.zentral-notes-sheet .zn-cal-clock-slider { appearance: none; min-width: 2.1em; padding: 1px 5px; border: 1px solid var(--zn-line); border-radius: 5px; background: transparent; color: var(--zn-text); font: inherit; font-weight: 600; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-clock-slider.is-active { border-color: var(--zn-accent); background: color-mix(in srgb, var(--zn-accent) 20%, transparent); }
+.zentral-notes-sheet .zn-cal-clock-dial { position: relative; width: 140px; height: 140px; border-radius: 50%; border: 1px solid var(--zn-line); background: var(--zn-hover); touch-action: none; user-select: none; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-clock-nums { position: absolute; inset: 0; }
+.zentral-notes-sheet .zn-cal-clock-num { position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px; padding: 0; border: none; border-radius: 50%; background: transparent; color: var(--zn-text); font: inherit; font-size: 10.5px; line-height: 20px; text-align: center; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-clock-num.is-inner { font-size: 9.5px; color: var(--zn-muted); }
+.zentral-notes-sheet .zn-cal-clock-num.is-on { background: var(--zn-accent); color: #fff; font-weight: 600; }
+.zentral-notes-sheet .zn-cal-clock-hand { position: absolute; left: 50%; bottom: 50%; width: 2px; margin-left: -1px; transform-origin: 50% 100%; transform: rotate(var(--zn-clock-angle, 0deg)); border-radius: 2px; background: color-mix(in srgb, var(--zn-accent) 45%, var(--zn-muted)); pointer-events: none; }
+.zentral-notes-sheet .zn-cal-clock-hand.is-hour { height: 42px; }
+.zentral-notes-sheet .zn-cal-clock-hand.is-hour.is-inner { height: 27px; }
+.zentral-notes-sheet .zn-cal-clock-hand.is-minute { height: 50px; }
+.zentral-notes-sheet .zn-cal-clock-hand.is-active { background: var(--zn-accent); width: 2.5px; }
+.zentral-notes-sheet .zn-cal-clock-pin { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: var(--zn-accent); pointer-events: none; }
+.zentral-notes-sheet .zn-cal-clock-digital { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.zentral-notes-sheet .zn-cal-clock-set { display: inline-flex; flex: 1 1 130px; align-items: center; gap: 4px; min-width: 0; color: var(--zn-muted); font-size: 0.85em; }
 .zentral-notes-sheet .zn-cal-clock-set > span:first-child { flex: 0 0 auto; min-width: 34px; }
 .zentral-notes-sheet .zn-cal-clock-set .zn-select { flex: 1 1 44px; width: 44px; min-width: 0; padding: 4px 3px; text-align: center; }
+@media (max-width: 560px) {
+  .zentral-notes-sheet .zn-cal-compose-schedule-board { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* T2.4a: All notes tree/calendar workspace. JS selects side-by-side, stacked or tabs from the
    measured sheet rectangle and remembers the user's split share independently per orientation. */
@@ -1913,6 +1995,11 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-month-wrap { display: flex; flex-direction: column; min-height: 0; }
 .zentral-notes-sheet .zn-cal-month-dows,
 .zentral-notes-sheet .zn-cal-month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.zentral-notes-sheet .zn-cal-month-dows.has-week-numbers,
+.zentral-notes-sheet .zn-cal-month-grid.has-week-numbers { grid-template-columns: 2.1em repeat(7, minmax(0, 1fr)); }
+.zentral-notes-sheet .zn-cal-week-col-head,
+.zentral-notes-sheet .zn-cal-week-num { display: flex; align-items: center; justify-content: center; min-width: 0; padding: 1px 2px; color: var(--zn-muted); font-size: .72em; font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; user-select: none; }
+.zentral-notes-sheet .zn-cal-month-grid > .zn-cal-week-num { border-right: 1px solid color-mix(in srgb, var(--zn-line) 70%, transparent); }
 .zentral-notes-sheet .zn-cal-month-dows { flex: 0 0 auto; margin-bottom: 3px; }
 .zentral-notes-sheet .zn-cal-month-dows > span { padding: 3px 2px; text-align: center; color: var(--zn-muted); font-size: .76em; font-weight: 650; }
 /* OW-03: the height of the six weeks. A cell never grows with what is in it; it shows as many items as it holds
@@ -1937,13 +2024,15 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-month-cell.is-selected { border-color: var(--zn-accent); background: color-mix(in srgb, var(--zn-accent) 10%, transparent); }
 .zentral-notes-sheet .zn-cal-month-date { align-self: flex-start; min-width: 23px; padding: 1px 4px; border: 0; border-radius: 5px; background: transparent; color: var(--zn-text); font: inherit; font-size: .82em; text-align: center; cursor: pointer; }
 .zentral-notes-sheet .zn-cal-month-date:hover { background: var(--zn-hover); }
-.zentral-notes-sheet .zn-cal-month-cell.is-selected .zn-cal-month-date { background: var(--zn-accent); color: white; }
+.zentral-notes-sheet .zn-cal-month-cell.is-selected .zn-cal-month-date { background: var(--zn-accent); color: var(--zn-accent-on-fill, white); }
 /* Pair text with our default accent; a person's explicit accent keeps the existing behavior. */
 :root[zentral-notes-theme="recommended"]:not([zentral-notes-ov~="accent"]) .zentral-notes-sheet .zn-cal-month-cell.is-selected .zn-cal-month-date { color: light-dark(#ffffff, #101c30); }
 .zentral-notes-sheet .zn-cal-month-allday { color: var(--zn-muted); font-size: .63em; line-height: 1; white-space: nowrap; }
 .zentral-notes-sheet .zn-cal-month-items { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
-.zentral-notes-sheet .zn-cal-month-mark { display: block; min-width: 0; overflow: hidden; padding: 1px 3px; border: 0; border-left: 2px solid var(--zn-cal-item-color, var(--zn-accent)); border-radius: 3px; background: color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 16%, transparent); color: var(--zn-text); font: inherit; font-size: .65em; line-height: 1.25; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.zentral-notes-sheet .zn-cal-month-mark.is-reminder::before { content: "● "; color: var(--zn-cal-item-color, var(--zn-accent)); }
+.zentral-notes-sheet .zn-cal-month-mark { display: block; min-width: 0; overflow: hidden; padding: 1px 3px; border: 0; border-left: 2px solid var(--zn-cal-item-outline, var(--zn-cal-item-color, var(--zn-accent))); border-radius: 3px; background: var(--zn-cal-item-bg, color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 16%, transparent)); color: var(--zn-cal-item-fg, var(--zn-text)); font: inherit; font-size: .65em; line-height: 1.25; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-month-mark:hover,
+.zentral-notes-sheet .zn-cal-month-mark:focus-visible { background: var(--zn-cal-item-hover, var(--zn-hover)); outline: 1px solid var(--zn-cal-item-outline, var(--zn-accent)); outline-offset: -1px; }
+.zentral-notes-sheet .zn-cal-month-mark.is-reminder::before { content: "● "; color: var(--zn-cal-item-outline, var(--zn-cal-item-color, var(--zn-accent))); }
 .zentral-notes-sheet .zn-cal-month-more { color: var(--zn-muted); font-size: .62em; }
 .zentral-notes-sheet .zn-cal-month-reminder-dot { position: absolute; top: 4px; right: 5px; color: var(--zn-accent); font-size: .55em; }
 .zentral-notes-sheet .zn-cal-day-group { min-width: 0; margin: 4px 0 9px; padding: 7px; border: 1px solid var(--zn-line); border-radius: 8px; }
@@ -1954,13 +2043,16 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-all-day-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 3px 0 5px; padding: 4px; border-radius: 5px; background: color-mix(in srgb, var(--zn-accent) 9%, transparent); }
 .zentral-notes-sheet .zn-cal-all-day-label { flex: 0 0 auto; color: var(--zn-muted); font-size: .7em; font-weight: 650; }
 .zentral-notes-sheet .zn-cal-day-items { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
-.zentral-notes-sheet .zn-cal-item { display: flex; min-width: 0; flex-wrap: wrap; align-items: baseline; gap: 4px 7px; padding: 4px 6px; border: 0; border-left: 3px solid var(--zn-cal-item-color, var(--zn-accent)); border-radius: 4px; background: color-mix(in srgb, var(--zn-cal-item-color, var(--zn-hover)) 10%, transparent); color: var(--zn-text); font: inherit; text-align: left; cursor: pointer; }
-.zentral-notes-sheet .zn-cal-item:hover { background: color-mix(in srgb, var(--zn-cal-item-color, var(--zn-hover)) 19%, transparent); }
-.zentral-notes-sheet .zn-cal-item.is-reminder .zn-cal-item-time::before { content: "● "; color: var(--zn-cal-item-color, var(--zn-accent)); }
-.zentral-notes-sheet .zn-cal-item-time { flex: 0 0 auto; color: var(--zn-muted); font-size: .75em; font-variant-numeric: tabular-nums; }
+.zentral-notes-sheet .zn-cal-item { display: flex; min-width: 0; flex-wrap: wrap; align-items: baseline; gap: 4px 7px; padding: 4px 6px; border: 0; border-left: 3px solid var(--zn-cal-item-outline, var(--zn-cal-item-color, var(--zn-accent))); border-radius: 4px; background: var(--zn-cal-item-bg, color-mix(in srgb, var(--zn-cal-item-color, var(--zn-hover)) 10%, transparent)); color: var(--zn-cal-item-fg, var(--zn-text)); font: inherit; text-align: left; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-item:hover,
+.zentral-notes-sheet .zn-cal-item:focus-visible { background: var(--zn-cal-item-hover, color-mix(in srgb, var(--zn-cal-item-color, var(--zn-hover)) 19%, transparent)); outline: 1px solid var(--zn-cal-item-outline, var(--zn-accent)); outline-offset: -1px; }
+.zentral-notes-sheet .zn-cal-item.is-selected,
+.zentral-notes-sheet .zn-cal-item[aria-selected="true"] { background: var(--zn-cal-item-selected-bg, color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 24%, transparent)); color: var(--zn-cal-item-selected-fg, var(--zn-text)); border-left-color: var(--zn-cal-item-selected-outline, var(--zn-accent)); }
+.zentral-notes-sheet .zn-cal-item.is-reminder .zn-cal-item-time::before { content: "● "; color: var(--zn-cal-item-outline, var(--zn-cal-item-color, var(--zn-accent))); }
+.zentral-notes-sheet .zn-cal-item-time { flex: 0 0 auto; color: var(--zn-cal-item-muted, var(--zn-muted)); font-size: .75em; font-variant-numeric: tabular-nums; }
 .zentral-notes-sheet .zn-cal-item-title { min-width: 0; flex: 1 1 auto; font-size: .84em; overflow-wrap: anywhere; }
-.zentral-notes-sheet .zn-cal-item-category { color: var(--zn-muted); font-size: .68em; }
-.zentral-notes-sheet .zn-cal-item-note { flex: 1 0 100%; min-width: 0; overflow: hidden; color: var(--zn-muted); font-size: .72em; text-overflow: ellipsis; white-space: nowrap; }
+.zentral-notes-sheet .zn-cal-item-category { color: var(--zn-cal-item-muted, var(--zn-muted)); font-size: .68em; }
+.zentral-notes-sheet .zn-cal-item-note { flex: 1 0 100%; min-width: 0; overflow: hidden; color: var(--zn-cal-item-muted, var(--zn-muted)); font-size: .72em; text-overflow: ellipsis; white-space: nowrap; }
 /* T2.4c1: week/day 24-hour time grid. All dimensions are compact and scroll inside the calendar pane. */
 .zentral-notes-sheet .zn-cal-time-view { display: flex; min-width: 0; min-height: 0; height: 100%; flex-direction: column; gap: 3px; }
 .zentral-notes-sheet .zn-cal-time-head,
@@ -2022,12 +2114,16 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-now-edge.is-after::before { bottom: 3px; border-bottom-width: 0; border-top-color: #ff5b5b; }
 .zentral-notes-sheet .zn-cal-hours-presets { display: flex; flex-wrap: wrap; gap: 6px; }
 .zentral-notes-sheet .zn-cal-busy-range { position: absolute; z-index: 1; right: 0; left: 0; border-top: 1px solid color-mix(in srgb, var(--zn-accent) 16%, transparent); background: color-mix(in srgb, var(--zn-accent) 6%, transparent); pointer-events: none; }
-.zentral-notes-sheet .zn-cal-time-event { position: absolute; box-sizing: border-box; min-width: 0; overflow: hidden; display: flex; flex-direction: column; flex-wrap: nowrap; align-items: flex-start; justify-content: flex-start; gap: 1px; padding: 2px 4px; border: 1px solid color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 45%, var(--zn-line)); border-left: 3px solid var(--zn-cal-item-color, var(--zn-accent)); border-radius: 4px; background: color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 24%, var(--zn-surface)); font-size: .68em; line-height: 1.15; }
+.zentral-notes-sheet .zn-cal-time-event { position: absolute; box-sizing: border-box; min-width: 0; overflow: hidden; display: flex; flex-direction: column; flex-wrap: nowrap; align-items: flex-start; justify-content: flex-start; gap: 1px; padding: 2px 4px; border: 1px solid color-mix(in srgb, var(--zn-cal-item-outline, var(--zn-cal-item-color, var(--zn-accent))) 48%, var(--zn-line)); border-left: 3px solid var(--zn-cal-item-outline, var(--zn-cal-item-color, var(--zn-accent))); border-radius: 4px; background: var(--zn-cal-item-bg, color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 24%, var(--zn-surface))); color: var(--zn-cal-item-fg, var(--zn-text)); font-family: inherit; font-size: .68em; line-height: 1.15; }
+.zentral-notes-sheet .zn-cal-time-event:hover,
+.zentral-notes-sheet .zn-cal-time-event:focus-visible { background: var(--zn-cal-item-hover, color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 30%, var(--zn-surface))); }
 .zentral-notes-sheet .zn-cal-time-event .zn-cal-item-time { font-size: .66em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .zentral-notes-sheet .zn-cal-time-event .zn-cal-item-title { min-width: 0; width: 100%; overflow: hidden; font-size: .78em; line-height: 1.15; white-space: nowrap; text-overflow: ellipsis; overflow-wrap: normal; }
 .zentral-notes-sheet .zn-cal-time-event .zn-cal-item-category,
 .zentral-notes-sheet .zn-cal-time-event .zn-cal-item-note { display: none; }
-.zentral-notes-sheet .zn-cal-time-reminder { position: absolute; box-sizing: border-box; min-width: 0; overflow: hidden; display: flex; flex-wrap: nowrap; align-items: center; gap: 3px; padding: 1px 4px; border: 1px solid color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 50%, var(--zn-line)); border-left: 3px solid var(--zn-cal-item-color, var(--zn-accent)); border-radius: 4px; background: color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 26%, var(--zn-surface)); font-size: .64em; line-height: 1.2; white-space: nowrap; }
+.zentral-notes-sheet .zn-cal-time-reminder { position: absolute; box-sizing: border-box; min-width: 0; overflow: hidden; display: flex; flex-wrap: nowrap; align-items: center; gap: 3px; padding: 1px 4px; border: 1px solid color-mix(in srgb, var(--zn-cal-item-outline, var(--zn-cal-item-color, var(--zn-accent))) 52%, var(--zn-line)); border-left: 3px solid var(--zn-cal-item-outline, var(--zn-cal-item-color, var(--zn-accent))); border-radius: 4px; background: var(--zn-cal-item-bg, color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 26%, var(--zn-surface))); color: var(--zn-cal-item-fg, var(--zn-text)); font-family: inherit; font-size: .64em; line-height: 1.2; white-space: nowrap; }
+.zentral-notes-sheet .zn-cal-time-reminder:hover,
+.zentral-notes-sheet .zn-cal-time-reminder:focus-visible { background: var(--zn-cal-item-hover, color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 32%, var(--zn-surface))); }
 .zentral-notes-sheet .zn-cal-time-reminder .zn-cal-item-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .zentral-notes-sheet .zn-cal-time-reminder .zn-cal-item-category,
 .zentral-notes-sheet .zn-cal-time-reminder .zn-cal-item-note { display: none; }
@@ -2076,16 +2172,16 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 }
 
 /* OW-09: tiny Month fallback is a date-only heat map. It deliberately has no event marks or item text in a cell. */
-.zentral-notes-sheet .zn-cal-picker-wrap { display: flex; min-width: 0; min-height: 0; flex: 1 1 auto; flex-direction: column; }
+.zentral-notes-sheet .zn-cal-picker-wrap { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1 1 auto; flex-direction: column; }
 .zentral-notes-sheet .zn-cal-picker-grid { flex: 1 1 auto; min-height: 0; grid-template-rows: repeat(6, minmax(24px, 1fr)); }
 .zentral-notes-sheet .zn-cal-picker-day {
   min-width: 0; min-height: 24px; padding: 2px; border: 1px solid var(--zn-line); border-radius: 6px;
   background: color-mix(in srgb, var(--zn-hover) 10%, var(--zn-surface)); color: var(--zn-text);
   font: inherit; font-size: .86em; font-weight: 600; text-align: center; cursor: pointer;
 }
-.zentral-notes-sheet .zn-cal-picker-day.is-heat-1 { background: color-mix(in srgb, var(--zn-cal-picker-tint, var(--zn-accent)) 14%, var(--zn-surface)); }
-.zentral-notes-sheet .zn-cal-picker-day.is-heat-2 { background: color-mix(in srgb, var(--zn-cal-picker-tint, var(--zn-accent)) 27%, var(--zn-surface)); }
-.zentral-notes-sheet .zn-cal-picker-day.is-heat-3 { background: color-mix(in srgb, var(--zn-cal-picker-tint, var(--zn-accent)) 43%, var(--zn-surface)); }
+.zentral-notes-sheet .zn-cal-picker-day.is-heat-1 { background: color-mix(in srgb, var(--zn-cal-picker-tint-safe, var(--zn-cal-picker-tint, var(--zn-accent))) 12%, var(--zn-surface)); }
+.zentral-notes-sheet .zn-cal-picker-day.is-heat-2 { background: color-mix(in srgb, var(--zn-cal-picker-tint-safe, var(--zn-cal-picker-tint, var(--zn-accent))) 20%, var(--zn-surface)); }
+.zentral-notes-sheet .zn-cal-picker-day.is-heat-3 { background: color-mix(in srgb, var(--zn-cal-picker-tint-safe, var(--zn-cal-picker-tint, var(--zn-accent))) 28%, var(--zn-surface)); }
 .zentral-notes-sheet .zn-cal-picker-day.is-out { opacity: .48; }
 .zentral-notes-sheet .zn-cal-picker-day.is-selected { border-color: var(--zn-accent); box-shadow: inset 0 0 0 1px var(--zn-accent); }
 .zentral-notes-sheet .zn-cal-picker-day.is-cursor:focus-visible { outline: 2px solid var(--zn-accent); outline-offset: -2px; }
@@ -2127,13 +2223,19 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-read .zn-front .zn-pill { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0.05em 0.6em; border-radius: 999px; font-size: 0.85em; line-height: 1.5; color: var(--zn-text); background: color-mix(in srgb, var(--zn-text) 10%, transparent); border: 1px solid color-mix(in srgb, var(--zn-text) 22%, transparent); }
 .zentral-notes-sheet .zn-read .zn-front .zn-pill-alias { font-style: italic; background: transparent; }
 
-/* T2.7a: lifecycle state is a local reminder concern, separate from Google event status. */
-.zn-cal-item.is-done { opacity: .62; }
-.zn-cal-item.is-done .zn-cal-item-title { text-decoration: line-through; }
-.zn-cal-item.is-dismissed { opacity: .42; }
-.zn-cal-item.is-dismissed .zn-cal-item-title { text-decoration: line-through; }
- .zn-cal-month-mark.is-done { opacity: .58; text-decoration: line-through; }
-.zn-cal-month-mark.is-dismissed { opacity: .4; text-decoration: line-through; }
+/* T2.7a + T3.6a: lifecycle state uses surface-derived muted/disabled tokens so done/dismissed items stay readable. */
+.zn-cal-item.is-done,
+.zn-cal-item.is-dismissed { background: var(--zn-cal-item-disabled-bg, transparent); color: var(--zn-cal-item-disabled-fg, var(--zn-muted)); border-left-color: var(--zn-cal-item-disabled-outline, var(--zn-line)); }
+.zn-cal-item.is-done .zn-cal-item-title,
+.zn-cal-item.is-dismissed .zn-cal-item-title { text-decoration: line-through; color: var(--zn-cal-item-disabled-fg, var(--zn-muted)); }
+.zn-cal-item.is-done :is(.zn-cal-item-time, .zn-cal-item-category, .zn-cal-item-note),
+.zn-cal-item.is-dismissed :is(.zn-cal-item-time, .zn-cal-item-category, .zn-cal-item-note),
+.zn-cal-item.is-done.is-reminder .zn-cal-item-time::before,
+.zn-cal-item.is-dismissed.is-reminder .zn-cal-item-time::before { color: var(--zn-cal-item-disabled-fg, var(--zn-muted)); }
+.zn-cal-month-mark.is-done,
+.zn-cal-month-mark.is-dismissed { background: var(--zn-cal-item-disabled-bg, transparent); color: var(--zn-cal-item-disabled-fg, var(--zn-muted)); border-left-color: var(--zn-cal-item-disabled-outline, var(--zn-line)); text-decoration: line-through; }
+.zn-cal-month-mark.is-done.is-reminder::before,
+.zn-cal-month-mark.is-dismissed.is-reminder::before { color: var(--zn-cal-item-disabled-fg, var(--zn-muted)); }
 .zn-reminder-history-info { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 3px; }
 .zn-reminder-history-when { color: var(--zen-colors-tertiary); font-size: .9em; }
 
@@ -2170,7 +2272,8 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-alert-editor { display: grid; gap: 9px; min-width: 0; }
 .zentral-notes-sheet .zn-cal-alert-rule { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; padding: 8px; border: 1px solid var(--zn-line); border-radius: 8px; }
 .zentral-notes-sheet .zn-cal-alert-rule > label { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.zentral-notes-sheet .zn-cal-alert-rule > label:first-child { justify-content: space-between; }
+.zentral-notes-sheet .zn-cal-alert-rule > label:first-child,
+.zentral-notes-sheet .zn-cal-alert-rule > label.zn-cal-alert-select-row { justify-content: space-between; }
 .zentral-notes-sheet .zn-cal-alert-rule .zn-select { max-width: 12em; }
 .zentral-notes-sheet .zn-cal-alert-allow { display: flex; flex-wrap: wrap; gap: 8px 14px; padding-inline-start: 22px; color: var(--zn-muted); font-size: .9em; }
 .zentral-notes-sheet .zn-cal-alert-allow label { display: inline-flex; align-items: center; gap: 4px; }
@@ -2254,10 +2357,41 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
   font: menu;
 }
 .zn-reminder-stack[hidden] { display: none !important; }
-.zn-reminder-stack:has(.zn-reminder-card[data-stage="followup"]) {
+.zn-reminder-stack:has(.zn-reminder-card[data-stage="due"]),
+.zn-reminder-stack:has(.zn-reminder-card[data-layout="large"]) {
+  width: min(440px, calc(100vw - 24px));
+}
+.zn-reminder-stack:has(.zn-reminder-card[data-layout="centred"]) {
   right: 50%;
   transform: translateX(50%);
-  width: min(480px, calc(100vw - 24px));
+  width: min(520px, calc(100vw - 24px));
+}
+.zn-reminder-stack[data-overlay="true"] {
+  inset: 0;
+  right: 0;
+  transform: none;
+  width: 100vw;
+  max-width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+}
+.zn-reminder-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: rgb(10 14 22 / 64%);
+  pointer-events: auto;
+}
+.zn-reminder-stack[data-overlay="true"] > :is(.zn-reminder-card, .zn-reminder-more) {
+  position: relative;
+  z-index: 1;
+  width: min(520px, calc(100vw - 32px));
 }
 .zn-reminder-card {
   box-sizing: border-box;
@@ -2270,18 +2404,62 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
   overflow-wrap: anywhere;
 }
 .zn-reminder-card[data-stage="pre"] { background: rgb(34 41 54 / 92%); border-color: #8395b8; }
-.zn-reminder-card[data-stage="due"] { background: #25354b; border: 2px solid #9bbcf0; }
+.zn-reminder-card[data-stage="due"],
+.zn-reminder-card[data-layout="large"] {
+  padding: 16px 18px;
+  background: #25354b;
+  border: 2px solid #9bbcf0;
+  border-left: 5px solid #7fb2ff;
+  box-shadow: 0 10px 28px #000a;
+  animation: zn-reminder-due-accent 2.6s ease-in-out infinite alternate;
+}
 .zn-reminder-card[data-stage="followup"] {
   padding: 16px;
   background: #3c2632;
   border: 3px solid #ffb7a8;
   animation: zn-reminder-calm-accent 3s ease-in-out infinite alternate;
 }
+.zn-reminder-card[data-layout="corner"] { padding: 12px; animation: none; }
+.zn-reminder-card[data-layout="centred"] { padding: 20px 22px; border-radius: 12px; box-shadow: 0 18px 48px #000c; }
+@keyframes zn-reminder-due-accent {
+  from { border-color: #7fb2ff; box-shadow: 0 10px 28px #000a, 0 0 0 0 rgb(127 178 255 / 0%); }
+  to { border-color: #d4e4ff; box-shadow: 0 10px 28px #000a, 0 0 0 3px rgb(155 188 240 / 28%); }
+}
 @keyframes zn-reminder-calm-accent { from { border-color: #ffb7a8; } to { border-color: #ffdea8; } }
-@media (prefers-reduced-motion: reduce) { .zn-reminder-card[data-stage="followup"] { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .zn-reminder-card[data-stage="due"],
+  .zn-reminder-card[data-layout="large"],
+  .zn-reminder-card[data-layout="centred"],
+  .zn-reminder-card[data-stage="followup"] { animation: none; }
+}
+.zn-reminder-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
 .zn-reminder-stage { font-weight: 700; font-size: .85em; margin-bottom: 4px; }
+.zn-reminder-head .zn-reminder-stage { margin-bottom: 0; }
+.zn-reminder-card[data-stage="due"] .zn-reminder-stage,
+.zn-reminder-card[data-layout="large"] .zn-reminder-stage,
+.zn-reminder-card[data-layout="centred"] .zn-reminder-stage { font-size: .92em; letter-spacing: .02em; }
+.zn-reminder-countdown {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid #9bbcf0;
+  background: #2f4363;
+  color: #ffffff;
+  font-size: .78em;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .zn-reminder-title { font-weight: 600; line-height: 1.35; }
+.zn-reminder-card[data-stage="due"] .zn-reminder-title,
+.zn-reminder-card[data-layout="large"] .zn-reminder-title { font-size: 1.08em; font-weight: 700; line-height: 1.4; }
+.zn-reminder-card[data-layout="centred"] .zn-reminder-title { font-size: 1.18em; font-weight: 700; line-height: 1.4; }
 .zn-reminder-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.zn-reminder-card[data-stage="due"] .zn-reminder-actions,
+.zn-reminder-card[data-layout="large"] .zn-reminder-actions { gap: 8px; margin-top: 12px; }
+.zn-reminder-card[data-layout="centred"] .zn-reminder-actions { gap: 10px; margin-top: 16px; }
 .zn-reminder-actions button {
   flex: 0 1 auto;
   max-width: 100%;
@@ -2294,8 +2472,32 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
   white-space: normal;
   cursor: pointer;
 }
-.zn-reminder-actions button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-.zn-reminder-actions button:hover { background: #4b6283; }
+.zn-reminder-card[data-stage="due"] .zn-reminder-actions button,
+.zn-reminder-card[data-layout="large"] .zn-reminder-actions button { padding: 6px 11px; font-weight: 600; }
+.zn-reminder-card[data-layout="centred"] .zn-reminder-actions button { padding: 10px 16px; min-height: 40px; font-size: 1em; font-weight: 700; border-radius: 8px; }
+.zn-reminder-actions button.zn-reminder-action-primary { background: #3f5d8a; border-color: #c8dcff; color: #ffffff; }
+.zn-reminder-actions button.zn-reminder-action-primary:hover { background: #4f72a8; }
+.zn-reminder-actions button:focus-visible,
+.zn-reminder-more:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.zn-reminder-actions button:hover,
+.zn-reminder-more:hover { background: #4b6283; }
+.zn-reminder-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border: 1px solid #9bbcf0;
+  border-radius: 8px;
+  background: #222936;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px #0006;
+}
 
 /* Keyboard entry points for calendar day context menus. */
 .zentral-notes-sheet :is(.zn-cal-month-cell, .zn-cal-day-group, .zn-cal-time-allday-cell, .zn-cal-time-track):focus-visible { outline: 2px solid var(--zn-accent); outline-offset: -2px; }
@@ -2305,6 +2507,8 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
 .zentral-notes-sheet :is(.zn-cal-time-event, .zn-cal-time-reminder, .zn-cal-time-allday-cell .zn-cal-item).is-movable { cursor: grab; touch-action: none; }
 .zentral-notes-sheet :is(.zn-cal-time-event, .zn-cal-time-reminder, .zn-cal-time-allday-cell .zn-cal-item).is-dragging { cursor: grabbing; opacity: .55; }
 .zentral-notes-sheet .zn-cal-drag-preview { position: absolute; z-index: 6; left: 0; right: 0; padding: 2px 4px; border-top: 2px solid var(--zn-accent); background: var(--zn-surface); color: var(--zn-text); font-size: .7em; pointer-events: none; }
+.zentral-notes-sheet .zn-cal-drag-preview.is-note-drop { border-radius: 4px; box-shadow: 0 2px 6px rgba(0, 0, 0, .18); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zentral-notes-sheet :is(.zn-cal-month-cell, .zn-cal-picker-day, .zn-cal-time-allday-cell, .zn-cal-time-track).is-note-drop { outline: 2px dashed var(--zn-accent); outline-offset: -2px; background: color-mix(in srgb, var(--zn-accent) 16%, transparent); }
 .zentral-notes-sheet .zn-cal-time-allday-cell { position: relative; }
 
 .zentral-notes-sheet .zn-cal-resize-handle { position: absolute; z-index: 4; box-sizing: border-box; height: 8px; min-width: 0; padding: 0; border: 0; border-radius: 3px; background: transparent; cursor: ns-resize; touch-action: none; }

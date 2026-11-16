@@ -205,10 +205,14 @@ function cssTests() {
   const css = fs.readFileSync(path.resolve(__dirname, "../extension/panels/browsers/ZentralBrowserIntegrations.css"), "utf8");
   const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ sel: m[1].trim().replace(/\/\*[\s\S]*?\*\//g, "").trim(), body: m[2] }));
   const handleRules = rules.filter((r) => r.sel.includes(".bgalazka-triple-drag-handle") && /pointer-events/.test(r.body));
+  const hiddenHandleSel = ":root[bgalazka-hover-panel-hidden] .bgalazka-triple-drag-handle";
   for (const r of handleRules) {
-    if (/pointer-events:\s*none/.test(r.body)) assert.fail("a rule disables the Triple divider handle: " + r.sel);
+    if (/pointer-events:\s*none/.test(r.body) && r.sel.replace(/\s+/g, " ") !== hiddenHandleSel) {
+      assert.fail("a rule disables the Triple divider handle: " + r.sel);
+    }
   }
-  assert.ok(handleRules.length >= 1, "the handle is switched on while the panel is open");
+  assert.ok(handleRules.some((r) => /pointer-events:\s*auto/.test(r.body)), "the handle is switched on while the panel is open");
+  assert.ok(handleRules.some((r) => r.sel.replace(/\s+/g, " ") === hiddenHandleSel && /pointer-events:\s*none/.test(r.body)), "the handle takes no pointer events while the panel is slid away");
   const sv = fs.readFileSync(path.resolve(__dirname, "../extension/panels/secondary-views/ZentralSecondaryViews.uc.js"), "utf8");
   assert.match(sv, /const lead = notesGap\(\) > 0 \? 0 : 3;/, "handle does not reach above the divider while Notes owns the gap");
   assert.match(sv, /state\.dividerHandle\.style\.top = `\$\{line\.top - lead\}px`/);

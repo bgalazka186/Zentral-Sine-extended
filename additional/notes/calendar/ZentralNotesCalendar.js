@@ -51,26 +51,284 @@
   const addDays = (ms, n) => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, d.getHours(), d.getMinutes()).getTime(); };
   const iso = (ms) => new Date(ms).toISOString();
 
-  // ---------- parsing ----------
-  const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-  // Month aliases are offline and cover English, German and Polish (including Polish genitive forms).
-  const MONTH_ALIASES = Object.create(null);
-  const MONTH_WORDS = [
-    ["january", "jan", "januar", "styczen", "stycznia", "sty"],
-    ["february", "feb", "februar", "luty", "lutego", "lut"],
-    ["march", "mar", "maerz", "marz", "marzec", "marca"],
-    ["april", "apr", "kwiecien", "kwietnia", "kwi"],
-    ["may", "mai", "maj", "maja"],
-    ["june", "jun", "juni", "czerwiec", "czerwca", "cze"],
-    ["july", "jul", "juli", "lipiec", "lipca", "lip"],
-    ["august", "aug", "sierpien", "sierpnia", "sie"],
-    ["september", "sep", "sept", "wrzesien", "wrzesnia", "wrz"],
-    ["october", "oct", "oktober", "okt", "pazdziernik", "pazdziernika", "paz"],
-    ["november", "nov", "listopad", "listopada", "lis"],
-    ["december", "dec", "dezember", "dez", "grudzien", "grudnia", "gru"],
-  ];
-  MONTH_WORDS.forEach((words, i) => words.forEach((word) => { MONTH_ALIASES[word] = i + 1; }));
-  const monthWord = (word) => String(word || "").toLowerCase().replace(/\.$/, "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  // ---------- language registry & parsing (AU-B4a) ----------
+  // Language dictionaries live in pure data files (`additional/notes/i18n/*.js`); parser logic is table-driven.
+  const NOTES_LANGUAGES = Object.freeze(["en", "pl"]);
+  const DEFAULT_NOTES_LANGUAGE = "en";
+  const LANG_REGISTRY = new Map();
+  const foldLanguageText = (text) =>
+    String(text ?? "")
+      .replace(/[\u0141\u0142]/g, "l")
+      .replace(/\u00df/g, "ss")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  const escapeRegExp = (text) => String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Legacy German month words accepted when acceptAll !== false so multilingual month dates keep working.
+  const EXTRA_MONTH_ALIASES = Object.freeze({
+    januar: 1,
+    februar: 2,
+    maerz: 3,
+    marz: 3,
+    mai: 5,
+    juni: 6,
+    juli: 7,
+    oktober: 10,
+    okt: 10,
+    dezember: 12,
+    dez: 12,
+  });
+
+  function compileLanguageTable(raw) {
+    if (!raw || typeof raw !== "object" || typeof raw.code !== "string" || !raw.code.trim()) return null;
+    const code = raw.code.trim().toLowerCase();
+    const locale = typeof raw.locale === "string" && raw.locale.trim() ? raw.locale.trim() : code;
+    const name = typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : code;
+    const agendaLabels = Object.freeze(
+      Array.isArray(raw.agendaLabels) && raw.agendaLabels.length
+        ? raw.agendaLabels.map((s) => String(s))
+        : ["Today", "Tomorrow"],
+    );
+    const todayLabel = typeof raw.todayLabel === "string" && raw.todayLabel ? raw.todayLabel : agendaLabels[0] || "Today";
+    const overdueLabel = typeof raw.overdueLabel === "string" && raw.overdueLabel ? raw.overdueLabel : "Overdue";
+    const dk = raw.dateKinds && typeof raw.dateKinds === "object" ? raw.dateKinds : {};
+    const dateKinds = Object.freeze({
+      today: String(dk.today || todayLabel),
+      tomorrow: String(dk.tomorrow || agendaLabels[1] || "Tomorrow"),
+      next: String(dk.next || "Next work day"),
+      other: String(dk.other || "Other date\u2026"),
+      earlier: String(dk.earlier || "Earlier days"),
+    });
+    const shortMon = Array.isArray(raw.weekdaysDisplay?.short) && raw.weekdaysDisplay.short.length === 7
+      ? raw.weekdaysDisplay.short.map((s) => String(s))
+      : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const longMon = Array.isArray(raw.weekdaysDisplay?.long) && raw.weekdaysDisplay.long.length === 7
+      ? raw.weekdaysDisplay.long.map((s) => String(s))
+      : ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    const weekdaysDisplay = Object.freeze({
+      short: Object.freeze(shortMon),
+      long: Object.freeze(longMon),
+      shortSun: Object.freeze([shortMon[6], ...shortMon.slice(0, 6)]),
+      longSun: Object.freeze([longMon[6], ...longMon.slice(0, 6)]),
+    });
+
+    const relativeMap = new Map();
+    const multiWordPhrases = new Set();
+    if (raw.relative && typeof raw.relative === "object") {
+      for (const [offsetKey, words] of Object.entries(raw.relative)) {
+        const offset = Number(offsetKey);
+        if (!Number.isInteger(offset) || !Array.isArray(words)) continue;
+        for (const w of words) {
+          const folded = foldLanguageText(w);
+          if (!folded) continue;
+          relativeMap.set(folded, offset);
+          if (folded.includes(" ")) multiWordPhrases.add(folded);
+        }
+      }
+    }
+
+    const weekdayMap = new Map();
+    const prefixes = Array.isArray(raw.weekdayPrefixes)
+      ? raw.weekdayPrefixes.map((p) => foldLanguageText(p)).filter(Boolean)
+      : [];
+    if (Array.isArray(raw.weekdays) && raw.weekdays.length === 7) {
+      raw.weekdays.forEach((words, wd) => {
+        if (!Array.isArray(words)) return;
+        for (const w of words) {
+          const folded = foldLanguageText(String(w || "").replace(/\.$/, ""));
+          if (!folded) continue;
+          weekdayMap.set(folded, wd);
+          for (const pref of prefixes) {
+            const full = pref + " " + folded;
+            weekdayMap.set(full, wd);
+            multiWordPhrases.add(full);
+          }
+        }
+      });
+    }
+
+    const monthMap = new Map();
+    if (Array.isArray(raw.months) && raw.months.length === 12) {
+      raw.months.forEach((words, idx) => {
+        if (!Array.isArray(words)) return;
+        for (const w of words) {
+          const folded = foldLanguageText(String(w || "").replace(/\.$/, ""));
+          if (folded) monthMap.set(folded, idx + 1);
+        }
+      });
+    }
+
+    const phraseOffsets = new Map();
+    if (Array.isArray(raw.offsets?.phrases)) {
+      for (const entry of raw.offsets.phrases) {
+        const folded = foldLanguageText(entry?.phrase);
+        const count = Number(entry?.count);
+        const unit = String(entry?.unit || "");
+        if (!folded || !Number.isInteger(count) || !["d", "w", "m", "y"].includes(unit)) continue;
+        phraseOffsets.set(folded, Object.freeze({ unit, count }));
+        if (folded.includes(" ")) multiWordPhrases.add(folded);
+      }
+    }
+
+    const countedRules = [];
+    const countedPrefixRes = [];
+    if (Array.isArray(raw.offsets?.counted)) {
+      for (const rule of raw.offsets.counted) {
+        const pref = foldLanguageText(rule?.prefix);
+        const suff = foldLanguageText(rule?.suffix);
+        const sign = rule?.sign === -1 ? -1 : 1;
+        const unitMap = new Map();
+        const unitWords = [];
+        for (const unit of ["d", "w", "m", "y"]) {
+          for (const u of rule?.units?.[unit] || []) {
+            const fu = foldLanguageText(u);
+            if (fu) { unitMap.set(fu, unit); unitWords.push(escapeRegExp(fu)); }
+          }
+        }
+        if (!unitWords.length) continue;
+        unitWords.sort((a, b) => b.length - a.length);
+        const unitGroup = "(?:" + unitWords.join("|") + ")";
+        const head = pref ? escapeRegExp(pref) + " " : "";
+        const tail = suff ? " " + escapeRegExp(suff) : "";
+        countedRules.push({
+          re: new RegExp("^" + head + "(\\d{1,4}) (" + unitGroup + ")" + tail + "$"),
+          sign,
+          unitMap,
+        });
+        const rawPref = pref ? pref.replace(/ /g, "\\s+") + "\\s+" : "";
+        const rawSuff = suff ? "\\s+" + suff.replace(/ /g, "\\s+") : "";
+        countedPrefixRes.push(new RegExp("^(" + rawPref + "\\d{1,4}\\s+[\\p{L}.]+" + rawSuff + ")(?=\\s|$)", "iu"));
+      }
+    }
+
+    const ordinalSuffixes = Array.isArray(raw.ordinals)
+      ? raw.ordinals.map((s) => foldLanguageText(s)).filter(Boolean).sort((a, b) => b.length - a.length)
+      : ["."];
+    const ordinalRe = ordinalSuffixes.length
+      ? new RegExp("^(\\d{1,2})(?:" + ordinalSuffixes.map(escapeRegExp).join("|") + ")?$")
+      : /^(\d{1,2})\.?$/;
+
+    // Verify each candidate span with parseDateText in parseDatePrefix.
+    const sortedPhrases = [...multiWordPhrases].sort((a, b) => b.length - a.length);
+    const wordCounts = [...new Set(sortedPhrases.map((p) => p.split(" ").length))].sort((a, b) => b - a);
+    const phraseSpanRes = [
+      ...countedPrefixRes,
+      ...wordCounts.map((n) => new RegExp("^([\\p{L}.-]+(?:\\s+[\\p{L}.-]+){" + (n - 1) + "})(?=\\s|$)", "iu")),
+    ];
+
+    return Object.freeze({
+      code,
+      locale,
+      name,
+      todayLabel,
+      overdueLabel,
+      agendaLabels,
+      dateKinds,
+      weekdaysDisplay,
+      relativeMap,
+      weekdayMap,
+      monthMap,
+      phraseOffsets,
+      countedRules,
+      ordinalRe,
+      prefixRes: phraseSpanRes,
+      strings: raw.strings && typeof raw.strings === "object" ? raw.strings : Object.freeze({}),
+    });
+  }
+
+  function registerLanguage(raw) {
+    const compiled = compileLanguageTable(raw);
+    if (!compiled) return null;
+    LANG_REGISTRY.set(compiled.code, compiled);
+    return compiled;
+  }
+
+  // Bootstrap built-in language tables across browser loader, standalone bundle, VM test harness, and Node require.
+  (function bootstrapBuiltinLanguages() {
+    if (typeof window !== "undefined" && window) {
+      const preloaded = window.__zentralNotesLangTables;
+      if (preloaded && typeof preloaded === "object") {
+        for (const key of Object.keys(preloaded)) registerLanguage(preloaded[key]);
+      }
+      if (window.ZentralModuleLoader && typeof window.ZentralModuleLoader.get === "function") {
+        for (const code of NOTES_LANGUAGES) {
+          if (!LANG_REGISTRY.has(code)) {
+            const mod = window.ZentralModuleLoader.get("notes-lang-" + code);
+            if (mod) registerLanguage(mod);
+          }
+        }
+      }
+    }
+    if (typeof require === "function") {
+      try { if (!LANG_REGISTRY.has("en")) registerLanguage(require("../i18n/en.js")); } catch (_) {}
+      try { if (!LANG_REGISTRY.has("pl")) registerLanguage(require("../i18n/pl.js")); } catch (_) {}
+    }
+    // Minimal inline fallback if neither loader nor require supplied English yet.
+    if (!LANG_REGISTRY.has("en")) {
+      registerLanguage({
+        code: "en",
+        locale: "en-GB",
+        name: "English",
+        agendaLabels: ["Today", "Tomorrow"],
+        relative: { "-1": ["yesterday"], "0": ["today"], "1": ["tomorrow"] },
+        weekdays: [["sunday", "sun"], ["monday", "mon"], ["tuesday", "tue"], ["wednesday", "wed"], ["thursday", "thu"], ["friday", "fri"], ["saturday", "sat"]],
+        months: [["january", "jan"], ["february", "feb"], ["march", "mar"], ["april", "apr"], ["may"], ["june", "jun"], ["july", "jul"], ["august", "aug"], ["september", "sep", "sept"], ["october", "oct"], ["november", "nov"], ["december", "dec"]],
+        ordinals: ["st", "nd", "rd", "th", "."],
+      });
+    }
+  })();
+
+  function cleanNotesLanguage(value) {
+    const s = String(value ?? "").trim().toLowerCase();
+    if (!s) return DEFAULT_NOTES_LANGUAGE;
+    if (LANG_REGISTRY.has(s)) return s;
+    const base = s.split(/[-_]/)[0];
+    if (base && LANG_REGISTRY.has(base)) return base;
+    return DEFAULT_NOTES_LANGUAGE;
+  }
+  function notesLanguageTable(lang) {
+    return LANG_REGISTRY.get(cleanNotesLanguage(lang)) || LANG_REGISTRY.get(DEFAULT_NOTES_LANGUAGE);
+  }
+  function notesLocaleFor(lang) {
+    return notesLanguageTable(lang)?.locale || "en-GB";
+  }
+  function normalizeDateParseOptions(opts) {
+    if (!opts) return { lang: DEFAULT_NOTES_LANGUAGE, acceptAll: true };
+    if (typeof opts === "string") return { lang: cleanNotesLanguage(opts), acceptAll: true };
+    return {
+      lang: cleanNotesLanguage(opts.lang),
+      acceptAll: opts.acceptAll !== false,
+    };
+  }
+  function activeLanguageTables(opts) {
+    const { lang, acceptAll } = normalizeDateParseOptions(opts);
+    const primary = notesLanguageTable(lang);
+    if (!acceptAll) return { tables: [primary], acceptAll: false };
+    const rest = [];
+    for (const [code, table] of LANG_REGISTRY) if (code !== primary.code) rest.push(table);
+    return { tables: [primary, ...rest], acceptAll: true };
+  }
+  function lookupMonthWord(word, tables, acceptAll) {
+    const folded = foldLanguageText(String(word || "").replace(/\.$/, ""));
+    if (!folded) return 0;
+    for (const table of tables) {
+      const m = table.monthMap.get(folded);
+      if (m) return m;
+    }
+    return acceptAll ? EXTRA_MONTH_ALIASES[folded] || 0 : 0;
+  }
+  function parseOrdinalDayToken(token, tables) {
+    const plain = /^(\d{1,2})\.?$/.exec(String(token || "").trim());
+    if (plain) return +plain[1];
+    const folded = foldLanguageText(token);
+    for (const table of tables) {
+      const m = table.ordinalRe.exec(folded);
+      if (m) return +m[1];
+    }
+    return 0;
+  }
   const dateFromParts = (year, month, date) => {
     if (!Number.isInteger(year) || year < 1 || year > 9999) return null;
     const d = parseYmd(year + "-" + p2(month) + "-" + p2(date));
@@ -100,9 +358,16 @@
     return new Date(year, month, Math.min(source.getDate(), lastDate.getDate())).getTime();
   }
   // A date as people type it: ISO, day/month/year, dotted/dashed/slashed dates, month names, @today, @tomorrow,
-  // @+3d / @-2d / @+1w / @+1m, @monday. Numeric day-first forms are deliberate; no locale-dependent guessing.
+  // @jutro, @pojutrze, @+3d / @-2d / @+1w / @+1m, 'in 3 days' / 'za 3 dni', 'next week', weekdays, and ordinals.
+  // Numeric day-first forms are deliberate; no locale-dependent guessing.
   // Two-digit years use 00-49 => 2000-2049 and 50-99 => 1950-1999.
-  function parseDateText(text, now) {
+  function applyCalendarOffset(base, count, unit) {
+    if (unit === "d") return addDays(base, count);
+    if (unit === "w") return addDays(base, count * 7);
+    if (unit === "m" || unit === "y") return shiftCalendarDate(base, count, unit);
+    return null;
+  }
+  function parseDateText(text, now, opts) {
     const t = String(text || "").trim().toLowerCase().replace(/^[@/]/, "").replace(/[,.]$/, "").trim();
     if (!t) return null;
     const base = dayStart(now);
@@ -110,51 +375,66 @@
     if (m) return dateFromParts(+m[1], +m[2], +m[3]);
     m = /^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/.exec(t);
     if (m) return dateFromParts(m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3], +m[2], +m[1]);
-    m = /^(\d{1,2})\.?\s+([a-z\u00c0-\u024f]+)(?:\s+(\d{2,4}))?$/.exec(t);
+    const { tables, acceptAll } = activeLanguageTables(opts);
+    m = /^(\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?)\s+([\p{L}]+)\.?(?:\s+(\d{2,4}))?$/iu.exec(t);
     if (m) {
-      const month = MONTH_ALIASES[monthWord(m[2])];
-      if (!month) return null;
-      return m[3] ? dateFromParts(m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3], month, +m[1]) : futureMonthDay(month, +m[1], base);
+      const date = parseOrdinalDayToken(m[1], tables);
+      const month = date ? lookupMonthWord(m[2], tables, acceptAll) : 0;
+      if (month && date) return m[3] ? dateFromParts(m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3], month, date) : futureMonthDay(month, date, base);
     }
-    m = /^([a-z\u00c0-\u024f]+)\s+(\d{1,2})(?:,?\s+(\d{2,4}))?$/.exec(t);
+    m = /^([\p{L}]+)\.?\s+(\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?)(?:,?\s+(\d{2,4}))?$/iu.exec(t);
     if (m) {
-      const month = MONTH_ALIASES[monthWord(m[1])];
-      if (!month) return null;
-      return m[3] ? dateFromParts(m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3], month, +m[2]) : futureMonthDay(month, +m[2], base);
+      const month = lookupMonthWord(m[1], tables, acceptAll);
+      const date = month ? parseOrdinalDayToken(m[2], tables) : 0;
+      if (month && date) return m[3] ? dateFromParts(m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3], month, date) : futureMonthDay(month, date, base);
     }
     m = /^(\d{1,2})[./-](\d{1,2})\.?$/.exec(t);
     if (m) return futureMonthDay(+m[2], +m[1], base);
-    if (t === "today") return base;
-    if (t === "tomorrow") return addDays(base, 1);
-    if (t === "yesterday") return addDays(base, -1);
     m = /^([+-])(\d{1,4})([dwmy])$/.exec(t);
     if (m) {
-      const n = (m[1] === "-" ? -1 : 1) * +m[2], d = new Date(base);
-      if (m[3] === "d") return addDays(base, n);
-      if (m[3] === "w") return addDays(base, n * 7);
-      if (m[3] === "m" || m[3] === "y") return shiftCalendarDate(base, n, m[3]);
+      const n = (m[1] === "-" ? -1 : 1) * +m[2];
+      return applyCalendarOffset(base, n, m[3]);
     }
-    const wd = WEEKDAYS.findIndex((w) => w === t || w.slice(0, 3) === t);
-    if (wd >= 0) return addDays(base, ((wd - new Date(base).getDay() + 7) % 7) || 7);
+    const folded = foldLanguageText(t);
+    if (!folded) return null;
+    for (const table of tables) {
+      if (table.relativeMap.has(folded)) return addDays(base, table.relativeMap.get(folded));
+    }
+    for (const table of tables) {
+      const phrase = table.phraseOffsets.get(folded);
+      if (phrase) return applyCalendarOffset(base, phrase.count, phrase.unit);
+      for (const rule of table.countedRules) {
+        const cm = rule.re.exec(folded);
+        if (cm) {
+          const unit = rule.unitMap.get(cm[2]);
+          if (unit) return applyCalendarOffset(base, rule.sign * +cm[1], unit);
+        }
+      }
+    }
+    for (const table of tables) {
+      const wd = table.weekdayMap.get(folded);
+      if (wd !== undefined) return addDays(base, ((wd - new Date(base).getDay() + 7) % 7) || 7);
+    }
     return null;
   }
   // Inline dates are deliberately recognised only in visible plain-text runs by the renderer. This scanner only
   // supplies candidates; the Markdown renderer decides whether the run is inside code, math or a link.
-  function inlineDateTokens(text, now) {
+  function inlineDateTokens(text, now, opts) {
     const source = String(text || ""), out = [];
-    const month = "[a-z\\u00c0-\\u024f]+\\.?";
-    const relative = "@(?:today|tomorrow|yesterday|[+-]\\d{1,4}[dwmy]|(?:mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?))";
+    const month = "[\\p{L}]+\\.?";
+    const dayOrd = "\\d{1,2}(?:-[\\p{L}]+|[\\p{L}]+|\\.)?";
+    const relative = "@(?:[+-]\\d{1,4}[dwmy]|[\\p{L}]+)";
     const patterns = [
       relative,
       "\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}",
       "\\d{1,2}[/-]\\d{1,2}(?:[/-]\\d{2,4})?",
       "\\d{1,2}\\.\\d{1,2}\\.(?:\\d{2,4})?",
-      "\\d{1,2}\\.?\\s+" + month + "(?:\\s+\\d{2,4})?",
-      month + "\\s+\\d{1,2}(?:,?\\s+\\d{2,4})?",
+      dayOrd + "\\s+" + month + "(?:\\s+\\d{2,4})?",
+      month + "\\s+" + dayOrd + "(?:,?\\s+\\d{2,4})?",
     ];
-    const re = new RegExp("(?<![\\w/@])(" + patterns.join("|") + ")(?:[ T](\\d{1,2}):(\\d{2}))?(?![\\w/-])", "giu");
+    const re = new RegExp("(?<![\\p{L}\\p{N}_/@])(" + patterns.join("|") + ")(?:[ T](\\d{1,2}):(\\d{2}))?(?![\\p{L}\\p{N}_/-])", "giu");
     for (let m; (m = re.exec(source)); ) {
-      const raw = m[1], day = parseDateText(raw, now);
+      const raw = m[1], day = parseDateText(raw, now, opts);
       // An unknown word can look like a month name (for example "12 and 25 listopada"). Do not let
       // that rejected candidate consume the next, valid date; resume one character after its start.
       if (day === null) { re.lastIndex = m.index + 1; continue; }
@@ -173,27 +453,35 @@
     return out;
   }
   const stripDateIgnoreMarks = (line) => String(line || "").replace(DATE_IGNORE_RE, "");
-  // A date prefix for list/heading lines; month-name forms can contain spaces.
-  function parseDatePrefix(text, now) {
+  // A date prefix for list/heading lines; month-name and relative phrases can contain spaces.
+  function parseDatePrefix(text, now, opts) {
     const s = String(text || "").trim();
+    if (!s) return null;
+    const { tables } = activeLanguageTables(opts);
+    const phrasePatterns = [];
+    for (const table of tables) for (const re of table.prefixRes) phrasePatterns.push(re);
     const patterns = [
       /^(\d{4}[./-]\d{1,2}[./-]\d{1,2})(?=\s|$)/,
       /^(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})(?=\s|$)/,
       /^(\d{1,2}[./-]\d{1,2}\.?)(?=\s|$)/,
-      /^(\d{1,2}\.?\s+[a-z\u00c0-\u024f]+\.?\s+\d{2,4})(?=\s|$)/i,
-      /^(\d{1,2}\.?\s+[a-z\u00c0-\u024f]+\.?)(?=\s|$)/i,
-      /^([a-z\u00c0-\u024f]+\.?\s+\d{1,2},?\s+\d{2,4})(?=\s|$)/i,
-      /^([a-z\u00c0-\u024f]+\.?\s+\d{1,2},?)(?=\s|$)/i,
+      /^(\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?\s+[\p{L}]+\.?\s+\d{2,4})(?=\s|$)/iu,
+      /^(\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?\s+[\p{L}]+\.?)(?=\s|$)/iu,
+      /^([\p{L}]+\.?\s+\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?,?\s+\d{2,4})(?=\s|$)/iu,
+      /^([\p{L}]+\.?\s+\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?,?)(?=\s|$)/iu,
+      ...phrasePatterns,
       /^(\S+)/,
     ];
     for (const re of patterns) {
       const m = re.exec(s);
       if (!m) continue;
-      const raw = m[1], day = parseDateText(raw, now);
+      const raw = m[1], day = parseDateText(raw, now, opts);
       // This is deliberately prefix-only. These patterns are anchored and non-global, so lastIndex cannot
       // resume a search later in the line; a leading non-date token means this is not a dated list/heading.
       if (day === null) continue;
-      const yearless = /^\d{1,2}[./-]\d{1,2}\.?$/.test(raw) || /^\d{1,2}\.?\s+[a-z\u00c0-\u024f]+\.?$/i.test(raw) || /^[a-z\u00c0-\u024f]+\.?\s+\d{1,2},?$/i.test(raw);
+      const yearless =
+        /^\d{1,2}[./-]\d{1,2}\.?$/.test(raw)
+        || (/^\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?\s+[\p{L}]+\.?$/iu.test(raw) && !phrasePatterns.some((pr) => pr.test(raw)))
+        || (/^[\p{L}]+\.?\s+\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?,?$/iu.test(raw) && !phrasePatterns.some((pr) => pr.test(raw)));
       return { day, raw, rest: s.slice(raw.length).trim(), yearless };
     }
     return null;
@@ -282,17 +570,19 @@
     }
     m = /^(\d{1,2})\.?$/.exec(raw);
     if (m) { const shown = parseYmd(opts.base) || new Date(today); return key(shown.getFullYear(), shown.getMonth() + 1, +m[1]); }
-    if (!/[a-z\u00c0-\u024f]/.test(raw)) return "";
-    const ms = parseDateText(raw, now);
+    const ordinal = parseOrdinalDayToken(raw, activeLanguageTables(opts).tables);
+    if (ordinal) { const shown = parseYmd(opts.base) || new Date(today); return key(shown.getFullYear(), shown.getMonth() + 1, ordinal); }
+    if (!/[\p{L}]/u.test(raw)) return "";
+    const ms = parseDateText(raw, now, opts);
     return ms === null ? "" : ymd(new Date(ms));
   }
   // One line of a plain list: "- 06:00-14:00 Work", "10-08 Jan Kowalski", "2026-11-20 14:00 Dentist" -> parts or null.
   // The leading date is optional when `defaultDay` (local midnight ms) is given.
-  function parseLine(line, now, defaultDay) {
+  function parseLine(line, now, defaultDay, opts) {
     let t = String(line || "").replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/, "").trim();
     if (!t) return null;
     let day = defaultDay ?? null, yearless = false;
-    const prefix = parseDatePrefix(t, now);
+    const prefix = parseDatePrefix(t, now, opts);
     // "03.12." (trailing dot) is a day-month date; "03.12" / "03:12" stay clock times.
     if (prefix && (!/^\d{1,2}[:.]\d{2}$/.test(prefix.raw) || /^\d{1,2}\.\d{1,2}\.$/.test(prefix.raw))) {
       day = prefix.day; t = prefix.rest; yearless = prefix.yearless;
@@ -444,15 +734,62 @@
     }
     return out.sort((a, b) => a.at - b.at || ["pre", "due", "followup"].indexOf(a.stage) - ["pre", "due", "followup"].indexOf(b.stage));
   }
+  function reminderDueAt(item) {
+    if (!item?.start) return 0;
+    const start = whenMs(item.start);
+    if (!Number.isFinite(start) || start <= 0) return 0;
+    const googleLead = (item.reminders?.overrides || []).reduce((max, override) => Math.max(max, Number(override?.minutes) || 0), 0);
+    return start - googleLead * MIN;
+  }
+  function reminderPreCountdownText(dueAt, now = Date.now()) {
+    const due = Number(dueAt), at = Number(now);
+    if (!Number.isFinite(due) || due <= 0 || !Number.isFinite(at)) return "";
+    const remaining = due - at;
+    if (remaining <= 0) return "Due now";
+    const totalSec = Math.max(1, Math.ceil(remaining / 1000));
+    if (totalSec >= 3600) {
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      return `Due in ${h}h ${m}m`;
+    }
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `Due in ${m}:${String(s).padStart(2, "0")}`;
+  }
+  function reminderCountdownDelayMs(dueAt, now = Date.now()) {
+    const due = Number(dueAt), at = Number(now);
+    if (!Number.isFinite(due) || due <= 0 || !Number.isFinite(at)) return 0;
+    const remaining = due - at;
+    if (remaining <= 0) return 0;
+    if (remaining > 3600000) return (remaining % 60000) || 60000;
+    return (remaining % 1000) || 1000;
+  }
+  const ALERT_LAYOUTS = Object.freeze(["corner", "large", "centred"]);
+  function cleanAlertLayout(value, fallback = "corner") {
+    const raw = String(value || "").trim().toLowerCase();
+    const normalized = raw === "centered" ? "centred" : raw;
+    if (ALERT_LAYOUTS.includes(normalized)) return normalized;
+    const fb = String(fallback || "").trim().toLowerCase();
+    const normFb = fb === "centered" ? "centred" : fb;
+    return ALERT_LAYOUTS.includes(normFb) ? normFb : "corner";
+  }
   const DEFAULT_ALERT_SETTINGS = Object.freeze({
-    stages: Object.freeze({ pre: Object.freeze({ sound: "quiet", quietAllow: Object.freeze([]) }), due: Object.freeze({ sound: "loud", quietAllow: Object.freeze([]) }), followup: Object.freeze({ sound: "normal", quietAllow: Object.freeze([]) }) }),
+    stages: Object.freeze({
+      pre: Object.freeze({ sound: "normal", layout: "corner", quietAllow: Object.freeze([]) }),
+      due: Object.freeze({ sound: "loud", layout: "large", quietAllow: Object.freeze([]) }),
+      followup: Object.freeze({ sound: "normal", layout: "centred", quietAllow: Object.freeze([]) }),
+    }),
     quietHours: Object.freeze({ enabled: false, start: "22:00", end: "07:00", days: Object.freeze([0, 1, 2, 3, 4, 5, 6]), allowed: Object.freeze({ pre: Object.freeze([]), due: Object.freeze([]), followup: Object.freeze([]) }) }),
   });
   function cleanSoundRule(raw, fallback = {}) {
     const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+    const rawLayout = String(src.layout || "").trim().toLowerCase();
+    const layoutExplicit = ALERT_LAYOUTS.includes(rawLayout === "centered" ? "centred" : rawLayout);
     return {
       sound: SOUND_LEVELS.includes(src.sound) ? src.sound : (SOUND_LEVELS.includes(fallback.sound) ? fallback.sound : "normal"),
       soundSpecified: typeof src.soundSpecified === "boolean" ? src.soundSpecified : SOUND_LEVELS.includes(src.sound),
+      layout: cleanAlertLayout(src.layout, fallback.layout || "corner"),
+      layoutSpecified: typeof src.layoutSpecified === "boolean" ? src.layoutSpecified : layoutExplicit,
       quietAllow: Array.isArray(src.quietAllow) ? [...new Set(src.quietAllow.filter((level) => SOUND_LEVELS.includes(level) && level !== "silent"))] : [...(fallback.quietAllow || [])],
       quietAllowSpecified: typeof src.quietAllowSpecified === "boolean" ? src.quietAllowSpecified : Array.isArray(src.quietAllow),
     };
@@ -605,19 +942,117 @@
       return isReminder(it) ? s >= from && s < to : s < to && e > from;
     }).sort((a, b) => itemRange(a)[0] - itemRange(b)[0] || itemRange(b)[1] - itemRange(a)[1] || (a.id < b.id ? -1 : 1));
   }
+  const WEEK_START_DAYS = Object.freeze([1, 0]);
+  function cleanWeekStart(value) {
+    if (value === 0 || value === "0") return 0;
+    if (value === 1 || value === "1") return 1;
+    if (typeof value === "string") {
+      const s = value.trim().toLowerCase();
+      if (s === "sun" || s === "sunday") return 0;
+      if (s === "mon" || s === "monday") return 1;
+    }
+    return 1;
+  }
+  function cleanWeekNumbers(value) {
+    return value === true;
+  }
+  const SHORT_WEEKDAY_NAMES = Object.freeze(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
+  const LONG_WEEKDAY_NAMES = Object.freeze(["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]);
+  function weekdayLabels(weekStart = 1, style = "short", lang = DEFAULT_NOTES_LANGUAGE) {
+    const ws = cleanWeekStart(weekStart);
+    const table = notesLanguageTable(lang);
+    const names = style === "long" ? table.weekdaysDisplay.longSun : table.weekdaysDisplay.shortSun;
+    return Array.from({ length: 7 }, (_, i) => names[(ws + i) % 7]);
+  }
+  // Pure week-of-year number in civil coordinates (immune to DST): ISO 8601 when weekStart = 1 (Monday),
+  // Sunday-first week-of-year (Week 1 contains Jan 1) when weekStart = 0 (Sunday).
+  function weekNumber(day, weekStart = 1) {
+    const d = new Date(dayStart(day));
+    const u = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+    const ws = cleanWeekStart(weekStart);
+    if (ws === 0) {
+      const dow = new Date(u).getUTCDay();
+      const sat = u + (6 - dow) * 86400000;
+      const year = new Date(sat).getUTCFullYear();
+      const jan1 = Date.UTC(year, 0, 1);
+      const week1Sun = jan1 - new Date(jan1).getUTCDay() * 86400000;
+      const sun = u - dow * 86400000;
+      return Math.floor((sun - week1Sun) / (7 * 86400000)) + 1;
+    }
+    const isoDow = new Date(u).getUTCDay() || 7;
+    const thu = u + (4 - isoDow) * 86400000;
+    const isoYear = new Date(thu).getUTCFullYear();
+    const jan1 = Date.UTC(isoYear, 0, 1);
+    return Math.ceil(((thu - jan1) / 86400000 + 1) / 7);
+  }
   // Month grid: 6 weeks x 7 days of local midnights; weekStart 0 = Sunday, 1 = Monday.
   function monthGrid(year, month, weekStart = 1) {
+    const ws = cleanWeekStart(weekStart);
     const first = new Date(year, month, 1);
-    const lead = (first.getDay() - weekStart + 7) % 7;
+    const lead = (first.getDay() - ws + 7) % 7;
     const days = [];
     for (let i = 0; i < 42; i++) days.push(new Date(year, month, 1 - lead + i).getTime());
     return Array.from({ length: 6 }, (_, w) => days.slice(w * 7, w * 7 + 7));
   }
   // Seven local midnights containing `day`; defaults to Monday-first to match the month view.
   function weekDays(day, weekStart = 1) {
-    const start = dayStart(day), offset = (new Date(start).getDay() - ((Number(weekStart) || 0) + 7) % 7 + 7) % 7;
+    const ws = cleanWeekStart(weekStart);
+    const start = dayStart(day), offset = (new Date(start).getDay() - ws + 7) % 7;
     const first = addDays(start, -offset);
     return Array.from({ length: 7 }, (_, i) => addDays(first, i));
+  }
+  const WEEK_DAYS_LIMITS = Object.freeze({ min: 1, max: 14, default: 7, minColPx: 84, gutterPx: 42 });
+  const WEEK_RANGE_STARTS = Object.freeze(["weekStart", "today", "selected"]);
+  const DEFAULT_WEEK_SPAN = Object.freeze({ days: 7, anchor: "weekStart" });
+  function cleanWeekDaysCount(value, fallback = 7) {
+    if (typeof value === "string" && value.trim().toLowerCase() === "auto") return "auto";
+    const n = Number(value);
+    if (Number.isFinite(n) && value !== "" && value !== null && typeof value !== "boolean") {
+      return Math.min(WEEK_DAYS_LIMITS.max, Math.max(WEEK_DAYS_LIMITS.min, Math.round(n)));
+    }
+    if (fallback === "auto") return "auto";
+    const fb = Number(fallback);
+    return Number.isFinite(fb) ? Math.min(WEEK_DAYS_LIMITS.max, Math.max(WEEK_DAYS_LIMITS.min, Math.round(fb))) : 7;
+  }
+  function cleanWeekRangeAnchor(value) {
+    if (value === "today") return "today";
+    if (value === "selected" || value === "cursor") return "selected";
+    return "weekStart";
+  }
+  function cleanWeekSpan(raw) {
+    if (raw === "auto" || typeof raw === "number" || (typeof raw === "string" && raw.trim() !== "")) {
+      return { days: cleanWeekDaysCount(raw, 7), anchor: "weekStart" };
+    }
+    if (!raw || typeof raw !== "object") return { ...DEFAULT_WEEK_SPAN };
+    return {
+      days: cleanWeekDaysCount(raw.days, 7),
+      anchor: cleanWeekRangeAnchor(raw.anchor),
+    };
+  }
+  function fitWeekDayCount(widthPx, { minColPx = WEEK_DAYS_LIMITS.minColPx, gutterPx = WEEK_DAYS_LIMITS.gutterPx, min = WEEK_DAYS_LIMITS.min, max = WEEK_DAYS_LIMITS.max, fallback = WEEK_DAYS_LIMITS.default } = {}) {
+    const w = Number(widthPx);
+    if (!(w > 0)) return fallback;
+    const usable = Math.max(0, w - (Number(gutterPx) || 0));
+    const col = Math.max(1, Number(minColPx) || WEEK_DAYS_LIMITS.minColPx);
+    return Math.max(min, Math.min(max, Math.floor(usable / col) || 1));
+  }
+  // OW-25: `count` consecutive local midnights starting at `start` (clamped 1..14, DST-safe).
+  function visibleDays(start, count = 7) {
+    const base = dayStart(start);
+    const n = cleanWeekDaysCount(count, 7);
+    const len = n === "auto" ? 7 : n;
+    return Array.from({ length: len }, (_, i) => addDays(base, i));
+  }
+  function resolveWeekVisibleDays({ cursor, today, weekStart = 1, span, widthPx = 0, panDay = "" } = {}) {
+    const cfg = cleanWeekSpan(span);
+    const count = cfg.days === "auto" ? fitWeekDayCount(widthPx) : cfg.days;
+    const pan = panDay ? parseYmd(panDay) : null;
+    let startDay;
+    if (pan) startDay = pan.getTime();
+    else if (cfg.anchor === "today") startDay = dayStart(today === undefined ? cursor : today);
+    else if (cfg.anchor === "selected") startDay = dayStart(cursor);
+    else startDay = weekDays(cursor, weekStart)[0];
+    return visibleDays(startDay, count);
   }
   // [{ day, items }] for `count` days from `from` (local midnight). Multi-day events appear on every day they cover.
   function daysForward(items, from, count) {
@@ -655,6 +1090,74 @@
     for (const r of rows) {
       if (cluster.length && r.s >= clusterEnd) flush();
       cluster.push(r); clusterEnd = Math.max(clusterEnd, r.e);
+    }
+    if (cluster.length) flush();
+    return out;
+  }
+  // Side-by-side columns for Week/Day grid boxes measured in clock-grid minutes [0..1440].
+  // Clustering on drawn clock-grid intervals keeps repeated fall-back events (1st-pass CEST vs 2nd-pass CET at 02:15)
+  // in separate side-by-side lanes instead of burying each other, and prevents short pre-gap boxes (01:50 + 20px) on
+  // spring-forward days from falsely colliding with post-gap events (03:05).
+  function layoutGridSpans(spans, { minBoxMin = 1, overlapMin = 0, gridEndMin = 1440 } = {}) {
+    const minBox = Math.max(1, Math.ceil(Number(minBoxMin) || 1));
+    const allowOverlap = Math.max(0, Math.floor(Number(overlapMin) || 0));
+    const endCap = Number.isFinite(Number(gridEndMin)) ? Number(gridEndMin) : 1440;
+    const lastBoxStart = endCap - minBox;
+    const rows = (spans || []).map((span) => {
+      const reminder = !!span.reminder;
+      const rawStart = Number(span.startMin) || 0;
+      const rawEnd = reminder ? rawStart : (Number(span.endMin) || 0);
+      const naturalLen = rawEnd - rawStart;
+      let boxStartMin, boxEndMin;
+      if (!reminder && naturalLen >= minBox) {
+        boxStartMin = rawStart;
+        boxEndMin = rawEnd;
+      } else {
+        boxStartMin = rawStart - Math.max(0, rawStart - lastBoxStart);
+        const length = reminder ? minBox : Math.max(1, naturalLen, minBox - allowOverlap);
+        boxEndMin = boxStartMin + length;
+      }
+      return {
+        span,
+        item: span.item,
+        original: span.item,
+        realStart: Number(span.start) || 0,
+        startMin: boxStartMin,
+        endMin: Math.max(boxStartMin + 1, boxEndMin),
+      };
+    }).sort((a, b) => (
+      a.startMin - b.startMin ||
+      a.realStart - b.realStart ||
+      (b.endMin - b.startMin) - (a.endMin - a.startMin) ||
+      (String(a.item?.id || "") < String(b.item?.id || "") ? -1 : String(a.item?.id || "") > String(b.item?.id || "") ? 1 : 0)
+    ));
+    const out = [];
+    let cluster = [], clusterEnd = -Infinity;
+    const flush = () => {
+      const laneEnds = [];
+      for (const r of cluster) {
+        let lane = laneEnds.findIndex((end) => end <= r.startMin);
+        if (lane < 0) { lane = laneEnds.length; laneEnds.push(r.endMin); } else laneEnds[lane] = r.endMin;
+        r.lane = lane;
+      }
+      for (const r of cluster) {
+        out.push({
+          item: r.item,
+          original: r.original,
+          span: r.span,
+          lane: r.lane,
+          lanes: laneEnds.length,
+          startMin: r.startMin,
+          endMin: r.endMin,
+        });
+      }
+      cluster = [];
+      clusterEnd = -Infinity;
+    };
+    for (const r of rows) {
+      if (cluster.length && r.startMin >= clusterEnd) flush();
+      cluster.push(r);
+      clusterEnd = Math.max(clusterEnd, r.endMin);
     }
     if (cluster.length) flush();
     return out;
@@ -744,6 +1247,64 @@
   function calendarMoveTimedEvent(item, placement, zone = "", now = Date.now()) {
     return !item?.x || isReminder(item) ? null : calendarMoveTimedItem(item, placement, zone, now);
   }
+  const NOTE_DRAG_MIME = "application/x-zentral-note-id";
+
+  // OW-02: map a calendar drop surface and pointer position to composer prefill fields without mutating any store.
+  // Month, narrow Month picker (OW-09) and Week/Day all-day cells resolve to all-day reminders (with an exclusive
+  // next-day endDate ready if the user switches Type to Event); Week/Day time tracks snap to `snapMin` inside the
+  // visible grid hours and resolve against `zone` (advancing across spring-forward gaps via zonedDateTimeToMs).
+  function calendarNoteDropSlot(surface, dateKey, { offsetPx = 0, hourPx = 54, grid = null, snapMin = 15, zone = "", durationMin = 60 } = {}) {
+    if (!["month", "picker", "allday", "time"].includes(surface)) return null;
+    const day = parseYmd(dateKey);
+    if (!day) return null;
+    const rawZone = String(zone || "").trim();
+    const validZone = rawZone ? cleanZone(rawZone) : "";
+    if (rawZone && !validZone) return null;
+    if (surface !== "time") {
+      return {
+        surface,
+        kind: "reminder",
+        allDay: true,
+        date: dateKey,
+        endDate: ymd(new Date(addDays(day.getTime(), 1))),
+        tz: validZone,
+        minute: null,
+      };
+    }
+    const px = Number(hourPx);
+    if (!Number.isFinite(px) || !(px > 0)) return null;
+    const step = cleanCalendarSnap(snapMin);
+    const minMinute = Math.max(0, gridStartMin(grid));
+    const maxMinute = Math.max(minMinute, Math.min(1440 - step, gridEndMin(grid)));
+    const rawMinute = gridMinuteAt(offsetPx, px, grid);
+    const snapped = Math.max(minMinute, Math.min(maxMinute, Math.round(rawMinute / step) * step));
+    const startMs = zonedDateTimeToMs(dateKey, clockOfMinutes(snapped), validZone);
+    if (!Number.isFinite(startMs)) return null;
+    const resolvedDate = zonedDateKey(startMs, validZone);
+    const startTime = clockIn(startMs, validZone);
+    const dur = Math.max(step, Math.round(Number(durationMin) || 60));
+    const endMs = startMs + dur * MIN;
+    const resolvedMin = parseClock(startTime);
+    return {
+      surface: "time",
+      kind: "reminder",
+      allDay: false,
+      date: resolvedDate,
+      startTime,
+      endDate: zonedDateKey(endMs, validZone),
+      endTime: clockIn(endMs, validZone),
+      tz: validZone,
+      minute: resolvedMin >= 0 ? resolvedMin : snapped,
+    };
+  }
+
+  function calendarNoteDropLabel(target, fmt = DEFAULT_DATE_FORMAT) {
+    if (!target || typeof target !== "object" || !parseYmd(target.date)) return "";
+    const dayText = formatDateKey(target.date, fmt);
+    if (target.allDay) return `${dayText} · all day`;
+    return target.startTime ? `${dayText} · ${target.startTime}` : dayText;
+  }
+
   // The drag-create range is civil-time based and direction independent. Only
   // produce composer fields after both endpoints resolve to real instants.
   function calendarDraftRange(originKey, originMinute, targetKey, targetMinute, zone = "", snapMin = 15) {
@@ -906,20 +1467,20 @@
     return match.length === 1 ? cleanCategoryName(match[0][1]) : null;
   }
   const stripItemCategoryMarks = (line) => String(line || "").replace(ITEM_CATEGORY_RE, "");
-  function parseMarkedLine(line, heading, now) {
+  function parseMarkedLine(line, heading, now, opts) {
     const ignored = ignoredDateTokens(line);
     let sourceLine = stripItemCategoryMarks(stripItemIdMarks(stripDateIgnoreMarks(line)));
     const listText = sourceLine.replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)(?:\[[ xX]\]\s+)?/, "");
-    const prefix = parseDatePrefix(listText, now);
+    const prefix = parseDatePrefix(listText, now, opts);
     // Ignoring a leading date disables that trigger; a dated heading may still supply its own date.
     if (prefix && ignored.some((raw) => raw === prefix.raw.toLowerCase() || raw.startsWith(prefix.raw.toLowerCase() + " "))) {
       const at = sourceLine.indexOf(prefix.raw);
       if (at >= 0) sourceLine = sourceLine.slice(0, at) + sourceLine.slice(at + prefix.raw.length);
     }
-    const dayOfHeading = heading.text ? (parseDatePrefix(heading.text, now)?.day ?? null) : null;
-    return { sourceLine, parsed: parseLine(sourceLine, now, dayOfHeading) };
+    const dayOfHeading = heading.text ? (parseDatePrefix(heading.text, now, opts)?.day ?? null) : null;
+    return { sourceLine, parsed: parseLine(sourceLine, now, dayOfHeading, opts) };
   }
-  function visitCalendarListLines(body, now, visit) {
+  function visitCalendarListLines(body, now, visit, opts) {
     const lines = String(body || "").split("\n");
     let fence = "", heading = { level: 0, text: "" }, sec = null;
     for (let i = 0; i < lines.length; i++) {
@@ -935,12 +1496,12 @@
       const mk = MARKER_RE.exec(line);
       if (mk) { sec = { category: (mk[1] || "").trim().slice(0, 80), level: heading.level }; continue; }
       if (!sec) continue;
-      const result = parseMarkedLine(line, heading, now);
+      const result = parseMarkedLine(line, heading, now, opts);
       if (result.parsed) visit({ index: i, line, heading, category: sec.category, ...result });
     }
     return lines;
   }
-  function ensureNoteItemIds(body, noteId, now = 0) {
+  function ensureNoteItemIds(body, noteId, now = 0, opts) {
     const lines = String(body || "").split("\n"), seen = new Set();
     let changed = false;
     visitCalendarListLines(body, now, (entry) => {
@@ -958,7 +1519,7 @@
         lines[entry.index] = core + " %%zn-item-id:" + id + "%%" + trailing;
         changed = true;
       }
-    });
+    }, opts);
     return { body: changed ? lines.join("\n") : String(body || ""), changed, count: seen.size };
   }
   // The jump target for note-less items: a `## Agenda` heading in their date note. An existing heading of any level
@@ -1203,7 +1764,7 @@
     });
     return { body: changed ? lines.join("\n") : text, changed, found, safe };
   }
-  function extractNoteItems(body, noteId, now = 0) {
+  function extractNoteItems(body, noteId, now = 0, opts) {
     const lines = String(body || "").split("\n");
     const out = [], seen = new Map();
     let fence = "", heading = { level: 0, text: "" }, sec = null;
@@ -1220,7 +1781,7 @@
       const mk = MARKER_RE.exec(line);
       if (mk) { sec = { category: (mk[1] || "").trim().slice(0, 80), level: heading.level }; continue; }
       if (!sec) continue;
-      const result = parseMarkedLine(line, heading, now), sourceLine = result.sourceLine, parsed = result.parsed;
+      const result = parseMarkedLine(line, heading, now, opts), sourceLine = result.sourceLine, parsed = result.parsed;
       if (!parsed) continue;
       const norm = sourceLine.replace(/\s+/g, " ").trim().toLowerCase() + "|" + heading.text;
       const n = (seen.get(norm) || 0) + 1; seen.set(norm, n);
@@ -1279,18 +1840,63 @@
       ...(raw.coalesced === true ? { coalesced: true } : {}),
     };
   }
+  const REMINDER_STACK_LIMIT = 3;
   // Display and cross-window retirement rules for occurrence-scoped reminder cards.
-  function reminderAlertPresentation(stage) {
+  function reminderAlertPresentation(stage, alertSettings = null) {
     const value = ["pre", "due", "followup"].includes(stage) ? stage : "followup";
-    return { stage: value, rank: value === "pre" ? 1 : value === "due" ? 2 : 3,
-      label: value === "pre" ? "Coming up" : value === "due" ? "Due now" : "Reminder overdue" };
+    const defaultLayout = value === "pre" ? "corner" : value === "due" ? "large" : "centred";
+    const configured = alertSettings ? cleanAlertSettings(alertSettings).stages[value]?.layout : "";
+    const layout = cleanAlertLayout(configured, defaultLayout);
+    return {
+      stage: value,
+      rank: value === "pre" ? 1 : value === "due" ? 2 : 3,
+      label: value === "pre" ? "Coming up" : value === "due" ? "Due now" : "Reminder overdue",
+      layout,
+      overlay: layout === "centred",
+      persistent: value !== "pre" || layout !== "corner",
+    };
   }
-  function reminderSnoozeTomorrowMinutes(at) {
+  function orderOverlayAlertActions(actions) {
+    if (!Array.isArray(actions)) return [];
+    const bucket = (id) => {
+      const k = String(id || "");
+      if (k === "done") return 0;
+      if (k.startsWith("snooze")) return 1;
+      if (k === "open") return 2;
+      if (k === "dismiss") return 3;
+      return 4;
+    };
+    return actions
+      .map((action, index) => ({ action, index, order: bucket(action?.id) }))
+      .sort((a, b) => (a.order - b.order) || (a.index - b.index))
+      .map((entry) => entry.action);
+  }
+  function reminderStackMoreLabel(hiddenCount, expanded = false) {
+    if (expanded === true) return "Show fewer";
+    const count = Math.trunc(Number(hiddenCount));
+    return count > 0 ? "+" + count + " more" : "";
+  }
+  function reminderSnoozeTomorrowMinutes(at, zone = "") {
     const stamp = Number(at);
     if (!Number.isFinite(stamp)) return 0;
-    const date = new Date(stamp);
-    date.setDate(date.getDate() + 1);
-    const minutes = Math.round((date.getTime() - stamp) / 60000);
+    const validZone = cleanZone(zone);
+    let target = NaN;
+    if (validZone) {
+      const baseKey = zonedDateKey(stamp, validZone);
+      const baseClock = clockIn(stamp, validZone);
+      const baseDay = parseYmd(baseKey);
+      if (baseDay && baseClock) {
+        const nextKey = ymd(new Date(baseDay.getFullYear(), baseDay.getMonth(), baseDay.getDate() + 1));
+        const zoned = zonedDateTimeToMs(nextKey, baseClock, validZone);
+        if (Number.isFinite(zoned)) target = zoned;
+      }
+    }
+    if (!Number.isFinite(target)) {
+      const date = new Date(stamp);
+      date.setDate(date.getDate() + 1);
+      target = date.getTime();
+    }
+    const minutes = Math.round((target - stamp) / 60000);
     return Number.isFinite(minutes) && minutes > 0 ? minutes : 0;
   }
   function reminderAlertShouldClose(identity, records, seen = new Set()) {
@@ -1717,7 +2323,7 @@
 
   // `beforeWrite` (optional, async) runs before every calendar write, outside the calendar lock. The note store uses it to
   // put pending note text on disk first, so `calendar.json` never refers to a note line that was not saved (UI4.7).
-  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null, beforeWrite = null, noteFileState = null }) {
+  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null, beforeWrite = null, noteFileState = null, getParseOptions = () => ({}) }) {
     const items = new Map();
     const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite, perf, withHistoryLock });
     const categoryDefs = new Map();
@@ -2096,15 +2702,15 @@
         return n;
       },
       // Auto-managed hidden IDs travel with Markdown lines, giving identical repeated rows stable per-line identity.
-      ensureNoteIds(noteId, body) { return ensureNoteItemIds(body, noteId, now()); },
+      ensureNoteIds(noteId, body) { return ensureNoteItemIds(body, noteId, now(), getParseOptions()); },
       // Rebuild the note-derived items. During upgrade, migrate extras from legacy IDs using the old content/ordinal key.
       // Thereafter exact line IDs win; unique legacy matches are safe, while an unidentified duplicate never inherits
       // another duplicate's metadata.
       syncNote(noteId, body, { sourceEdit = false, updatedAt = 0 } = {}) {
         const had = [...items.values()].filter((it) => it.x.noteId === noteId && it.x.src === "list");
         if (!had.length && !/%%\s*calendar/i.test(String(body || ""))) return false;
-        const fresh = extractNoteItems(body, noteId, now());
-        const checkedLines = sourceEdit ? listCheckboxStates(body, now()) : null;
+        const fresh = extractNoteItems(body, noteId, now(), getParseOptions());
+        const checkedLines = sourceEdit ? listCheckboxStates(body, now(), getParseOptions()) : null;
         const exact = new Map(had.map((it) => [it.id, it]));
         const byLegacy = new Map();
         for (const it of had) {
@@ -3187,7 +3793,12 @@
   function weekText(items, weekFrom, opts = {}) {
     const names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     const lines = [];
-    for (let i = 0; i < 7; i++) {
+    if (opts && opts.weekNumbers === true) {
+      lines.push("# Week " + weekNumber(weekFrom, opts.weekStart === undefined ? 1 : opts.weekStart), "");
+    }
+    const rawDays = Number(opts && opts.days);
+    const dayCount = Number.isFinite(rawDays) && rawDays >= 1 ? Math.min(WEEK_DAYS_LIMITS.max, Math.max(1, Math.round(rawDays))) : 7;
+    for (let i = 0; i < dayCount; i++) {
       const d = addDays(weekFrom, i);
       lines.push("## " + names[new Date(d).getDay()] + " " + ymd(new Date(d)));
       const list = expandRange(items, d, addDays(d, 1));
@@ -3230,8 +3841,9 @@
   // What the mini-calendar draws for a month: 6 weeks of local days, item count, heat level and dominant category.
   // selected = local midnight ms or 0. A single expansion supplies all cells, including recurring occurrences.
   function pickerMonth(year, month, { weekStart = 1, now = 0, selected = 0, items = [] } = {}) {
+    const ws = cleanWeekStart(weekStart);
     const today = now ? dayStart(now) : 0, sel = selected ? dayStart(selected) : 0;
-    const grid = monthGrid(year, month, weekStart);
+    const grid = monthGrid(year, month, ws);
     const first = grid[0][0], last = addDays(grid[5][6], 1);
     const stats = new Map();
     for (const it of expandRange(Array.isArray(items) ? items : [], first, last)) {
@@ -3269,6 +3881,7 @@
   }
   // Keyboard moves in the picker: arrows = 1 day / 1 week, PageUp/PageDown = 1 month, Home/End = start/end of week.
   function pickerKey(day, key, weekStart = 1) {
+    const ws = cleanWeekStart(weekStart);
     const d = new Date(day);
     switch (key) {
       case "ArrowLeft": return addDays(day, -1);
@@ -3277,8 +3890,8 @@
       case "ArrowDown": return addDays(day, 7);
       case "PageUp": return new Date(d.getFullYear(), d.getMonth() - 1, Math.min(d.getDate(), new Date(d.getFullYear(), d.getMonth(), 0).getDate())).getTime();
       case "PageDown": return new Date(d.getFullYear(), d.getMonth() + 1, Math.min(d.getDate(), new Date(d.getFullYear(), d.getMonth() + 2, 0).getDate())).getTime();
-      case "Home": return addDays(day, -((d.getDay() - weekStart + 7) % 7));
-      case "End": return addDays(day, 6 - ((d.getDay() - weekStart + 7) % 7));
+      case "Home": return addDays(day, -((d.getDay() - ws + 7) % 7));
+      case "End": return addDays(day, 6 - ((d.getDay() - ws + 7) % 7));
       default: return day;
     }
   }
@@ -3290,7 +3903,13 @@
   const DEFAULT_DATE_FORMAT = "DD-MM-YYYY";
   const cleanDateFormat = (v) => (DATE_FORMATS.includes(v) ? v : DEFAULT_DATE_FORMAT);
   // Local calendar-day key of an instant; never uses toISOString (UTC shifts a day near midnight).
-  const localDateKey = (ms) => (Number.isFinite(Number(ms)) ? ymd(new Date(Number(ms))) : "");
+  const localDateKey = (ms) => {
+    if (ms && typeof ms === "object") {
+      if (typeof ms.date === "string" && parseYmd(ms.date)) return ms.date;
+      if (typeof ms.dateTime === "string") ms = Date.parse(ms.dateTime);
+    }
+    return Number.isFinite(Number(ms)) ? ymd(new Date(Number(ms))) : "";
+  };
   // "YYYY-MM-DD" key -> text in the chosen format; "" for an invalid key. `locale` only matters for "long".
   function formatDateKey(key, fmt = DEFAULT_DATE_FORMAT, locale) {
     const d = parseYmd(key);
@@ -3366,8 +3985,12 @@
   // Agenda window: today .. today+days-1 (default 4 days = T..T+3). Counts live items per local day (recurrences expanded); `isDone(item)` is supplied by the reminder lifecycle (T2.7a), the item model has no done flag yet.
   const AGENDA_LABELS = Object.freeze(["Today", "Tomorrow"]);
   function agendaDayLabel(offset, day, locale = undefined) {
-    if (offset === 0 || offset === 1) return AGENDA_LABELS[offset];
-    return new Date(day).toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
+    const table = locale === undefined ? null : notesLanguageTable(locale);
+    const specialLabels = locale === "pl" || (table && table.code !== "en" && table.code !== "pl");
+    const labels = table?.agendaLabels || AGENDA_LABELS;
+    if (offset >= 0 && offset < labels.length && (offset < 2 || specialLabels)) return labels[offset];
+    const resolvedLocale = locale === undefined ? undefined : (LANG_REGISTRY.has(String(locale).toLowerCase()) ? notesLocaleFor(locale) : locale);
+    return new Date(day).toLocaleDateString(resolvedLocale, { weekday: "short", day: "numeric", month: "short" });
   }
   // Agenda visibility is independent of reminder alerts, snooze and recurrence state.
   // Each layer is sparse: an omitted field inherits from the next layer.
@@ -3461,14 +4084,14 @@
     }
     return Number.isFinite(next) ? next : null;
   }
-  function agendaBuckets(items, now, days = 4, isDone = () => false) {
+  function agendaBuckets(items, now, days = 4, isDone = () => false, locale = undefined) {
     const n = Math.max(1, Math.min(31, Math.floor(Number(days)) || 4));
     const base = dayStart(now);
     const out = [];
     for (let i = 0; i < n; i++) {
       const from = addDays(base, i), to = addDays(base, i + 1);
       const list = expandRange(items, from, to).filter((it) => !isDone(it));
-      out.push({ offset: i, key: localDateKey(from), label: agendaDayLabel(i, from), from, to, count: list.length, items: list });
+      out.push({ offset: i, key: localDateKey(from), label: agendaDayLabel(i, from, locale), from, to, count: list.length, items: list });
     }
     return out;
   }
@@ -3550,7 +4173,7 @@
       ended: !isReminder(item) && end > start && end <= Number(now),
     };
   }
-  function agendaZenProjection(items, now, days = 4, isDone = () => false, getWindow = null, policies = null) {
+  function agendaZenProjection(items, now, days = 4, isDone = () => false, getWindow = null, policies = null, options = {}) {
     // Expand the complete local window once, then fan overlapping multi-day events into
     // each day bucket. Calling expandRange once per day is needlessly O(days * items).
     const sourceItems = items || [];
@@ -3575,7 +4198,7 @@
     const candidateTo = fastDefault ? windowEnd : addDays(windowEnd, maxLead);
     const buckets = Array.from({ length: n }, (_, offset) => {
       const from = addDays(base, offset), to = addDays(base, offset + 1);
-      return { offset, key: localDateKey(from), label: agendaDayLabel(offset, from), from, to, count: 0, items: [] };
+      return { offset, key: localDateKey(from), label: agendaDayLabel(offset, from, options?.lang), from, to, count: 0, items: [] };
     });
     let candidates;
     if (fastDefault) {
@@ -3622,7 +4245,7 @@
   }
   // Separate, occurrence-scoped overdue bucket. Civil-day look-back excludes
   // today even for a past time today; item visibility and lifecycle still apply.
-  function agendaOverdueProjection(items, now, { enabled = true, days = 7, cap = 10, isDone = () => false, getWindow = null, policies = null } = {}) {
+  function agendaOverdueProjection(items, now, { enabled = true, days = 7, cap = 10, isDone = () => false, getWindow = null, policies = null, lang = undefined } = {}) {
     if (!enabled || !Number.isFinite(Number(now))) return null;
     const countDays = Math.max(1, Math.min(31, Math.floor(Number(days)) || 7));
     const limit = Math.max(1, Math.min(100, Math.floor(Number(cap)) || 10));
@@ -3636,7 +4259,7 @@
       return entry;
     });
     if (overdue.length > limit) shown.push({ key: "more:overdue", label: "+" + (overdue.length - limit) + " more", summary: "Open more overdue reminders", openDate: localDateKey(itemRange(overdue[limit])[0]) });
-    return { key: "day:overdue", date: "overdue", label: "Overdue", count: overdue.length, items: shown };
+    return { key: "day:overdue", date: "overdue", label: notesLanguageTable(lang).overdueLabel, count: overdue.length, items: shown };
   }
   // Only days with at least one visible item get a Zen Agenda folder. Empty
   // days (count === 0) are omitted so no empty Tomorrow / Day N folders are
@@ -3655,7 +4278,7 @@
   }
   // Coalesced, store-change-driven controller for the virtual Zen Agenda folder. The host
   // supplies DOM/Zen operations through `api`; this controller owns no browser globals.
-  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getReady = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
+  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getReady = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), getLanguage = () => undefined, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
     let dead = false, timer = null, timerAt = Infinity, last = [], busy = false, consecutiveChanges = 0, blockedUntil = 0;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
     function armAt(due) {
@@ -3695,8 +4318,8 @@
         if (!getReady()) return last;
         sourceItems = getItems?.() || [];
         policies = getWindowIsMasterPolicy ? prepareAgendaWindows(sourceItems, getWindow) : null;
-        fullProjection = agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow, policies);
-        overdue = agendaOverdueProjection(sourceItems, now(), { ...getOverdue(), isDone, getWindow, policies });
+        fullProjection = agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow, policies, { lang: getLanguage() });
+        overdue = agendaOverdueProjection(sourceItems, now(), { ...getOverdue(), isDone, getWindow, policies, lang: getLanguage() });
         const projection = [...(overdue ? [overdue] : []), ...agendaVisibleDays(fullProjection)];
         if (!projection.length) {
           api.removeAll?.(); last = projection; scheduleBoundary(sourceItems, policies, fullProjection, overdue); return projection;
@@ -3965,7 +4588,25 @@
     const start = cleanWhen(item?.start);
     if (!start) return null;
     const explicit = Number(targetMs);
-    const moved = Number.isFinite(explicit) && explicit > 0 ? Math.floor(explicit) : snoozeDays(whenMs(start), days);
+    let moved;
+    if (Number.isFinite(explicit) && explicit > 0) {
+      moved = Math.floor(explicit);
+    } else {
+      const baseMs = whenMs(start);
+      const stepDays = Math.round(Number(days) || 0);
+      const zone = start.date ? "" : cleanZone(item?.x?.tz);
+      if (zone && Number.isFinite(baseMs)) {
+        const baseKey = zonedDateKey(baseMs, zone);
+        const baseClock = clockIn(baseMs, zone);
+        const baseDay = parseYmd(baseKey);
+        if (baseDay && baseClock) {
+          const nextKey = ymd(new Date(baseDay.getFullYear(), baseDay.getMonth(), baseDay.getDate() + stepDays));
+          const zoned = zonedDateTimeToMs(nextKey, baseClock, zone);
+          if (Number.isFinite(zoned) && zoned > 0) moved = zoned;
+        }
+      }
+      if (!Number.isFinite(moved)) moved = snoozeDays(baseMs, stepDays);
+    }
     if (!Number.isFinite(moved) || moved <= 0) return null;
     return start.date ? { date: ymd(new Date(dayStart(moved))) } : { dateTime: iso(moved) };
   }
@@ -4048,12 +4689,702 @@
     return lr > rr ? local : remote; // exact ties deliberately prefer remote
   }
 
+  // OW-07: '+' menu in All notes (New note, New folder, New reminder, New event, and Date note when Agenda is off),
+  // remembering the last choice for a one-click default and falling back cleanly when Agenda hides Date note.
+  const ALL_NOTES_NEW_CHOICES = Object.freeze(["note", "folder", "reminder", "event", "date"]);
+  function cleanAllNotesNewChoice(value, { agendaEnabled = false, calendarAvailable = true } = {}) {
+    const choice = typeof value === "string" ? value.trim() : "";
+    if (!ALL_NOTES_NEW_CHOICES.includes(choice)) return "note";
+    if (choice === "date" && agendaEnabled) return "note";
+    if ((choice === "reminder" || choice === "event") && !calendarAvailable) return "note";
+    return choice;
+  }
+  function allNotesNewMenuModel({ choice = "note", agendaEnabled = false, calendarAvailable = true } = {}) {
+    const activeChoice = cleanAllNotesNewChoice(choice, { agendaEnabled, calendarAvailable });
+    const unavailableReason = calendarAvailable ? "" : "Calendar item storage is unavailable";
+    const entries = [
+      { id: "note", icon: "plus", label: "New note", active: activeChoice === "note", enabled: true, reason: "" },
+      { id: "folder", icon: "folder", label: "New folder", active: activeChoice === "folder", enabled: true, reason: "" },
+      { id: "reminder", icon: "bell", label: "New reminder", active: activeChoice === "reminder", enabled: !!calendarAvailable, reason: unavailableReason },
+      { id: "event", icon: "calendar-plus", label: "New event", active: activeChoice === "event", enabled: !!calendarAvailable, reason: unavailableReason },
+    ];
+    if (!agendaEnabled)
+      entries.push({ id: "date", icon: "calendar", label: "Date note", active: activeChoice === "date", enabled: true, reason: "" });
+    return entries;
+  }
+  function allNotesNewButtonLabel(choice, opts = {}) {
+    const clean = cleanAllNotesNewChoice(choice, opts);
+    if (clean === "folder") return "New folder";
+    if (clean === "reminder") return "New reminder";
+    if (clean === "event") return "New event";
+    if (clean === "date") return "Date note";
+    return "New note (Ctrl+N)";
+  }
+
+  // OW-10: analog + digital Clock modes, locale 12h/24h detection, angle<->time math, snapping, and hand stepping.
+  const CLOCK_MODES = Object.freeze(["both", "analog", "digital"]);
+  function cleanClockMode(value) {
+    const mode = typeof value === "string" ? value.trim().toLowerCase() : "";
+    return CLOCK_MODES.includes(mode) ? mode : "both";
+  }
+  function clockUses12Hour(locale) {
+    try {
+      const opts = new Intl.DateTimeFormat(locale || undefined, { hour: "numeric" }).resolvedOptions();
+      if (typeof opts.hour12 === "boolean") return opts.hour12;
+      return opts.hourCycle === "h11" || opts.hourCycle === "h12";
+    } catch (_) {
+      return false;
+    }
+  }
+  function clockPointerAngle(dx, dy) {
+    const x = Number(dx) || 0, y = Number(dy) || 0;
+    const radius = Math.hypot(x, y);
+    if (radius === 0) return { angleDeg: 0, radius: 0 };
+    const angleDeg = ((Math.atan2(x, -y) * 180 / Math.PI) % 360 + 360) % 360;
+    return { angleDeg, radius };
+  }
+  function clockAngleOfHour(hour24, { hour12 = false } = {}) {
+    const h = ((Math.floor(Number(hour24) || 0) % 24) + 24) % 24;
+    const slot = h % 12;
+    return {
+      hour: h,
+      slot,
+      angleDeg: slot * 30,
+      inner: !hour12 && h >= 12,
+      period: h >= 12 ? "PM" : "AM",
+    };
+  }
+  function clockHourFromAngle(angleDeg, { hour12 = false, period = "AM", inner = false } = {}) {
+    const deg = ((Number(angleDeg) || 0) % 360 + 360) % 360;
+    const slot = Math.round(deg / 30) % 12;
+    if (hour12) return String(period).toUpperCase() === "PM" ? slot + 12 : slot;
+    return inner ? slot + 12 : slot;
+  }
+  function clockAngleOfMinute(minute) {
+    const m = ((Math.floor(Number(minute) || 0) % 60) + 60) % 60;
+    return m * 6;
+  }
+  const ANALOG_CLOCK_SNAP = 5;
+  function clockMinuteFromAngle(angleDeg, snap = ANALOG_CLOCK_SNAP) {
+    const deg = ((Number(angleDeg) || 0) % 360 + 360) % 360;
+    const step = snap === 1 ? 1 : cleanCalendarSnap(snap);
+    return (Math.round((deg / 6) / step) * step) % 60;
+  }
+  function stepClockHand(minutesOfDay, hand, deltaSteps = 1, { snap = ANALOG_CLOCK_SNAP } = {}) {
+    const total = ((Math.floor(Number(minutesOfDay) || 0) % 1440) + 1440) % 1440;
+    const h = Math.floor(total / 60), m = total % 60;
+    const delta = Math.trunc(Number(deltaSteps) || 0);
+    if (hand === "hour") {
+      const nextH = ((h + delta) % 24 + 24) % 24;
+      return clockOfMinutes(nextH * 60 + m);
+    }
+    const step = snap === 1 ? 1 : cleanCalendarSnap(snap);
+    if (delta === 0) return clockOfMinutes(h * 60 + m);
+    let nextM;
+    if (m % step === 0) nextM = ((m + delta * step) % 60 + 60) % 60;
+    else if (delta > 0) nextM = (((Math.floor(m / step) + delta) * step) % 60 + 60) % 60;
+    else nextM = (((Math.ceil(m / step) + delta) * step) % 60 + 60) % 60;
+    return clockOfMinutes(h * 60 + nextM);
+  }
+  function clockDialPoints({ hour12 = false } = {}) {
+    const pt = (angleDeg, rPct) => {
+      const rad = (angleDeg * Math.PI) / 180;
+      return {
+        xPct: Math.round((50 + rPct * Math.sin(rad)) * 100) / 100,
+        yPct: Math.round((50 - rPct * Math.cos(rad)) * 100) / 100,
+      };
+    };
+    const hours = [];
+    for (let slot = 0; slot < 12; slot++) {
+      const angleDeg = slot * 30;
+      const disp = hour12 ? (slot === 0 ? 12 : slot) : slot;
+      hours.push({
+        value: slot,
+        label: hour12 ? String(disp) : p2(disp),
+        angleDeg,
+        ring: "outer",
+        ...pt(angleDeg, 39),
+      });
+      if (!hour12) {
+        const innerVal = slot + 12;
+        hours.push({
+          value: innerVal,
+          label: p2(innerVal),
+          angleDeg,
+          ring: "inner",
+          ...pt(angleDeg, 24),
+        });
+      }
+    }
+    const minutes = [];
+    for (let m = 0; m < 60; m += 5) {
+      const angleDeg = m * 6;
+      minutes.push({
+        value: m,
+        label: p2(m),
+        angleDeg,
+        ring: "outer",
+        ...pt(angleDeg, 39),
+      });
+    }
+    return { hours, minutes };
+  }
+
+  // ---- T3.6a: accessible color-palette contrast & surface-aware token derivation -------------------------
+  const PALETTE_COLOR_HEX = Object.freeze({
+    yellow: "#f5c542",
+    green: "#4cc38a",
+    blue: "#5aa9ff",
+    pink: "#ff7eb6",
+    purple: "#a78bfa",
+    orange: "#ff9f43",
+    red: "#ff6b6b",
+    teal: "#2ec4b6",
+    gray: "#9aa0a6",
+    brown: "#a1887f",
+    lime: "#b5d334",
+    cyan: "#4dd0e1",
+  });
+  const CSS_NAMED_HEX = Object.freeze({
+    white: "#ffffff",
+    black: "#000000",
+    gray: "#808080",
+    grey: "#808080",
+  });
+  const NOTE_THEME_SURFACES = Object.freeze({
+    light: Object.freeze({ scheme: "light", surface: "#fbfbfd", text: "#1d1d22", accent: "#3b6df0", line: "#dcdce4" }),
+    dark: Object.freeze({ scheme: "dark", surface: "#17171c", text: "#e9e9f0", accent: "#83a5ff", line: "#31313a" }),
+    paper: Object.freeze({ scheme: "light", surface: "#f4ecd8", text: "#3b3226", accent: "#9a6b2f", line: "#d5cbb4" }),
+    recommended: Object.freeze({
+      light: Object.freeze({ scheme: "light", surface: "#ffffff", text: "#18181b", accent: "#2459b4", line: "#d0d0d7" }),
+      dark: Object.freeze({ scheme: "dark", surface: "#1f1f24", text: "#eeeeee", accent: "#9bbdff", line: "#44444c" }),
+    }),
+    zentral: Object.freeze({
+      light: Object.freeze({ scheme: "light", surface: "#f5f5f8", text: "#1c1c22", accent: "#2f62d9", line: "#d4d4dc" }),
+      dark: Object.freeze({ scheme: "dark", surface: "#1e1e24", text: "#e9e9f0", accent: "#83a5ff", line: "#363640" }),
+    }),
+  });
+
+  function clampByte(n) {
+    return Math.max(0, Math.min(255, Math.round(Number(n) || 0)));
+  }
+  function rgbToHex(rgb) {
+    if (!rgb || typeof rgb !== "object") return "";
+    return "#" + [rgb.r, rgb.g, rgb.b].map((v) => clampByte(v).toString(16).padStart(2, "0")).join("");
+  }
+  function parseColorRgb(input, surfaceHex = "#1e1e24") {
+    if (!input) return null;
+    if (typeof input === "object" && Number.isFinite(input.r) && Number.isFinite(input.g) && Number.isFinite(input.b)) {
+      return { r: clampByte(input.r), g: clampByte(input.g), b: clampByte(input.b) };
+    }
+    const raw = String(input).trim().toLowerCase();
+    if (!raw) return null;
+    if (raw === "transparent") return surfaceHex ? parseColorRgb(surfaceHex, null) : { r: 30, g: 30, b: 36 };
+    const named = PALETTE_COLOR_HEX[raw] || CSS_NAMED_HEX[raw];
+    if (named) return parseColorRgb(named, surfaceHex);
+    const hex3 = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(raw);
+    if (hex3) {
+      return {
+        r: parseInt(hex3[1] + hex3[1], 16),
+        g: parseInt(hex3[2] + hex3[2], 16),
+        b: parseInt(hex3[3] + hex3[3], 16),
+      };
+    }
+    const hex6 = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})?$/.exec(raw);
+    if (hex6) {
+      const r = parseInt(hex6[1], 16), g = parseInt(hex6[2], 16), b = parseInt(hex6[3], 16);
+      if (!hex6[4]) return { r, g, b };
+      const a = parseInt(hex6[4], 16) / 255;
+      const bg = (surfaceHex && parseColorRgb(surfaceHex, null)) || { r: 30, g: 30, b: 36 };
+      return {
+        r: clampByte(r * a + bg.r * (1 - a)),
+        g: clampByte(g * a + bg.g * (1 - a)),
+        b: clampByte(b * a + bg.b * (1 - a)),
+      };
+    }
+    const fn = /^rgba?\(([^)]+)\)$/.exec(raw);
+    if (fn) {
+      const parts = fn[1].replace(/\//g, " ").trim().split(/[\s,]+/).filter(Boolean);
+      if (parts.length >= 3) {
+        const ch = (s) => (s.endsWith("%") ? (parseFloat(s) / 100) * 255 : parseFloat(s));
+        const r = clampByte(ch(parts[0])), g = clampByte(ch(parts[1])), b = clampByte(ch(parts[2]));
+        let a = 1;
+        if (parts[3] !== undefined) a = Math.max(0, Math.min(1, parts[3].endsWith("%") ? parseFloat(parts[3]) / 100 : parseFloat(parts[3])));
+        if (a >= 0.999) return { r, g, b };
+        const bg = (surfaceHex && parseColorRgb(surfaceHex, null)) || { r: 30, g: 30, b: 36 };
+        return {
+          r: clampByte(r * a + bg.r * (1 - a)),
+          g: clampByte(g * a + bg.g * (1 - a)),
+          b: clampByte(b * a + bg.b * (1 - a)),
+        };
+      }
+    }
+    return null;
+  }
+  function relativeLuminance(color, surfaceHex) {
+    const rgb = parseColorRgb(color, surfaceHex);
+    if (!rgb) return 0;
+    const lin = (v) => {
+      const s = v / 255;
+      return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * lin(rgb.r) + 0.7152 * lin(rgb.g) + 0.0722 * lin(rgb.b);
+  }
+  function contrastRatio(fg, bg) {
+    const l1 = relativeLuminance(fg, typeof bg === "string" ? bg : undefined);
+    const l2 = relativeLuminance(bg);
+    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+  }
+  function mixSrgb(colorA, colorB, weightA = 0.5) {
+    const w = Math.max(0, Math.min(1, Number(weightA)));
+    const a = parseColorRgb(colorA) || { r: 128, g: 128, b: 128 };
+    const b = parseColorRgb(colorB) || { r: 30, g: 30, b: 36 };
+    return rgbToHex({
+      r: a.r * w + b.r * (1 - w),
+      g: a.g * w + b.g * (1 - w),
+      b: a.b * w + b.b * (1 - w),
+    });
+  }
+  function colorHsl(color) {
+    const rgb = parseColorRgb(color);
+    if (!rgb) return null;
+    const r = rgb.r / 255, g = rgb.g / 255, b = rgb.b / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    const l = (max + min) / 2;
+    let h = 0, s = 0;
+    if (d > 1e-7) {
+      s = d / (1 - Math.abs(2 * l - 1));
+      if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+      else if (max === g) h = ((b - r) / d + 2) * 60;
+      else h = ((r - g) / d + 4) * 60;
+    }
+    return { h: ((h % 360) + 360) % 360, s: s * 100, l: l * 100 };
+  }
+  function hslToHex(h, s, l) {
+    const hh = (((Number(h) || 0) % 360) + 360) % 360;
+    const ss = Math.max(0, Math.min(100, Number(s) || 0)) / 100;
+    const ll = Math.max(0, Math.min(100, Number(l) || 0)) / 100;
+    const c = (1 - Math.abs(2 * ll - 1)) * ss;
+    const x = c * (1 - Math.abs(((hh / 60) % 2) - 1));
+    const m = ll - c / 2;
+    let r = 0, g = 0, b = 0;
+    if (hh < 60) [r, g, b] = [c, x, 0];
+    else if (hh < 120) [r, g, b] = [x, c, 0];
+    else if (hh < 180) [r, g, b] = [0, c, x];
+    else if (hh < 240) [r, g, b] = [0, x, c];
+    else if (hh < 300) [r, g, b] = [x, 0, c];
+    else [r, g, b] = [c, 0, x];
+    return rgbToHex({ r: (r + m) * 255, g: (g + m) * 255, b: (b + m) * 255 });
+  }
+  function hueDistanceDeg(colorA, colorB) {
+    const a = colorHsl(colorA), b = colorHsl(colorB);
+    if (!a || !b || a.s < 2 || b.s < 2) return 0;
+    const diff = Math.abs(a.h - b.h) % 360;
+    return diff > 180 ? 360 - diff : diff;
+  }
+  function splitCssArgs(inner) {
+    const out = [];
+    let depth = 0, start = 0;
+    for (let i = 0; i < inner.length; i++) {
+      const ch = inner[i];
+      if (ch === "(") depth++;
+      else if (ch === ")" && depth > 0) depth--;
+      else if (ch === "," && depth === 0) {
+        out.push(inner.slice(start, i).trim());
+        start = i + 1;
+      }
+    }
+    const tail = inner.slice(start).trim();
+    if (tail) out.push(tail);
+    return out;
+  }
+  function resolveCssColor(expr, surfaceSpec = null) {
+    const surfaceHex = surfaceSpec?.surface || "#1e1e24";
+    const isLight = surfaceSpec ? !!surfaceSpec.isLight : relativeLuminance(surfaceHex) > 0.35;
+    const raw = String(expr || "").trim();
+    if (!raw) return "";
+    const direct = parseColorRgb(raw, surfaceHex);
+    if (direct) return rgbToHex(direct);
+    const lower = raw.toLowerCase();
+    if (lower.startsWith("light-dark(") && raw.endsWith(")")) {
+      const args = splitCssArgs(raw.slice(11, -1));
+      if (args.length >= 2) return resolveCssColor(isLight ? args[0] : args[1], surfaceSpec);
+    }
+    if (lower.startsWith("color-mix(") && raw.endsWith(")")) {
+      const args = splitCssArgs(raw.slice(10, -1));
+      if (args.length >= 3 && /^in\s+srgb/i.test(args[0])) {
+        const parseStop = (token) => {
+          const m = /^(.*?)\s+(-?\d+(?:\.\d+)?)%\s*$/.exec(token.trim());
+          if (m) return { color: m[1].trim(), pct: Math.max(0, Math.min(100, parseFloat(m[2]))) };
+          return { color: token.trim(), pct: null };
+        };
+        const a = parseStop(args[1]), b = parseStop(args[2]);
+        const ca = resolveCssColor(a.color, surfaceSpec) || surfaceHex;
+        const cb = resolveCssColor(b.color, surfaceSpec) || surfaceHex;
+        let wa = 0.5;
+        if (a.pct !== null && b.pct !== null) {
+          const sum = a.pct + b.pct;
+          if (sum <= 0) return surfaceHex;
+          const mixed = mixSrgb(ca, cb, a.pct / sum);
+          return sum < 100 ? mixSrgb(mixed, surfaceHex, sum / 100) : mixed;
+        }
+        if (a.pct !== null) wa = a.pct / 100;
+        else if (b.pct !== null) wa = 1 - b.pct / 100;
+        return mixSrgb(ca, cb, wa);
+      }
+    }
+    return "";
+  }
+  function ensureContrastHex(seedColor, bgOrBgs, minRatio = 4.5, options = {}) {
+    const bgs = (Array.isArray(bgOrBgs) ? bgOrBgs : [bgOrBgs])
+      .map((b) => rgbToHex(parseColorRgb(b)))
+      .filter(Boolean);
+    if (!bgs.length) return rgbToHex(parseColorRgb(seedColor)) || "#83a5ff";
+    const seedRgb = parseColorRgb(seedColor, bgs[0]) || { r: 131, g: 165, b: 255 };
+    const seedHex = rgbToHex(seedRgb);
+    const passes = (hex) => bgs.every((bg) => contrastRatio(hex, bg) >= minRatio);
+    if (passes(seedHex)) return seedHex;
+    const hsl = colorHsl(seedRgb) || { h: 220, s: 0, l: 50 };
+    const sat = options.desaturate ? Math.min(hsl.s, options.maxSat ?? 45) : hsl.s;
+    const avgLum = bgs.reduce((acc, bg) => acc + relativeLuminance(bg), 0) / bgs.length;
+    const solveDir = (darken) => {
+      const poleL = darken ? 0 : 100;
+      const poleHex = hslToHex(hsl.h, sat, poleL);
+      if (!passes(poleHex)) return "";
+      let far = poleL, near = hsl.l;
+      for (let i = 0; i < 24; i++) {
+        const mid = (far + near) / 2;
+        if (passes(hslToHex(hsl.h, sat, mid))) far = mid;
+        else near = mid;
+      }
+      return hslToHex(hsl.h, sat, far);
+    };
+    const preferDark = avgLum >= 0.179;
+    const first = solveDir(preferDark);
+    if (first) return first;
+    const second = solveDir(!preferDark);
+    if (second) return second;
+    const blackMin = Math.min(...bgs.map((b) => contrastRatio("#000000", b)));
+    const whiteMin = Math.min(...bgs.map((b) => contrastRatio("#ffffff", b)));
+    return blackMin >= whiteMin ? "#000000" : "#ffffff";
+  }
+  function resolveThemeSurface(theme = "zentral", options = {}) {
+    const cleanTheme = Object.prototype.hasOwnProperty.call(NOTE_THEME_SURFACES, theme) ? theme : "zentral";
+    const reqScheme = options.scheme === "light" ? "light" : options.scheme === "dark" ? "dark" : "";
+    const baseEntry = NOTE_THEME_SURFACES[cleanTheme];
+    let base = baseEntry.surface ? baseEntry : baseEntry[reqScheme || "dark"];
+    if ((cleanTheme === "zentral" || cleanTheme === "recommended") && !reqScheme && options.hostSurface) {
+      const hostLum = relativeLuminance(options.hostSurface);
+      base = baseEntry[hostLum > 0.35 ? "light" : "dark"];
+    }
+    const ov = options.overrides && typeof options.overrides === "object" ? options.overrides : {};
+    const rawSurface = ov.bg || (cleanTheme === "zentral" || cleanTheme === "recommended" ? options.hostSurface : "") || base.surface;
+    const surface = rgbToHex(parseColorRgb(rawSurface)) || base.surface;
+    const isLight = relativeLuminance(surface) > 0.35;
+    const scheme = isLight ? "light" : "dark";
+    if (!baseEntry.surface) base = baseEntry[scheme];
+    const rawText = ov.text || (cleanTheme === "zentral" || cleanTheme === "recommended" ? options.hostText : "") || (isLight ? "#1c1c22" : "#e9e9f0");
+    const text = ensureContrastHex(rawText, surface, 7.0);
+    const mutedSeed = mixSrgb(text, surface, 0.68);
+    const muted = ensureContrastHex(mutedSeed, surface, 4.55);
+    const lineSeed = options.hostLine || mixSrgb(text, surface, isLight ? 0.18 : 0.22);
+    const line = rgbToHex(parseColorRgb(lineSeed, surface)) || base.line;
+    let rawAccent = ov.accent || (cleanTheme === "zentral" ? options.hostAccent : "") || base.accent;
+    const accentHsl = colorHsl(rawAccent);
+    // Zen's primary color can be pure black/near-gray on dark workspaces; fall back to the theme's chromatic accent when hostAccent is achromatic and clashes with surface.
+    if (!ov.accent && cleanTheme === "zentral" && options.hostAccent && accentHsl && accentHsl.s < 8 && contrastRatio(rawAccent, surface) < 3.0) {
+      rawAccent = base.accent;
+    }
+    const accent = ensureContrastHex(rawAccent, surface, 4.55);
+    const accentOutline = ensureContrastHex(rawAccent, surface, 3.1);
+    const accentFill = ensureContrastHex(rawAccent, surface, 3.0);
+    const onWhite = contrastRatio("#ffffff", accentFill);
+    const darkInk = isLight ? "#101826" : "#10141d";
+    const onDark = contrastRatio(darkInk, accentFill);
+    const accentOnFill = onWhite >= 4.5 && onWhite >= onDark ? "#ffffff" : onDark >= 4.5 ? darkInk : ensureContrastHex(darkInk, accentFill, 4.55);
+    return Object.freeze({
+      theme: cleanTheme,
+      scheme,
+      isLight,
+      surface,
+      text,
+      muted,
+      line,
+      accent,
+      accentOutline,
+      accentFill,
+      accentOnFill,
+    });
+  }
+  const paletteTokenCache = new Map();
+  function derivePaletteTokens(rawColor, surfaceInput, options = {}) {
+    const surfaceSpec = surfaceInput?.surface && surfaceInput?.text
+      ? surfaceInput
+      : resolveThemeSurface(typeof surfaceInput === "string" ? surfaceInput : "dark");
+    const kind = options.kind === "time" ? "time" : options.kind === "calendar" ? "calendar" : "swatch";
+    const sourceHex = rgbToHex(parseColorRgb(rawColor, surfaceSpec.surface)) || surfaceSpec.accent;
+    const cacheKey = `${sourceHex}|${surfaceSpec.surface}|${surfaceSpec.text}|${kind}`;
+    if (paletteTokenCache.has(cacheKey)) return paletteTokenCache.get(cacheKey);
+
+    const tintSeed = ensureContrastHex(sourceHex, surfaceSpec.surface, 3.1);
+    const weights = kind === "time"
+      ? (surfaceSpec.isLight ? [0.15, 0.22, 0.28] : [0.18, 0.25, 0.31])
+      : (surfaceSpec.isLight ? [0.11, 0.18, 0.25] : [0.13, 0.20, 0.27]);
+    const bg = mixSrgb(tintSeed, surfaceSpec.surface, weights[0]);
+    const hoverBg = mixSrgb(tintSeed, surfaceSpec.surface, weights[1]);
+    const selectedBg = mixSrgb(tintSeed, surfaceSpec.surface, weights[2]);
+    const allBgs = [surfaceSpec.surface, bg, hoverBg, selectedBg];
+
+    const outline = ensureContrastHex(sourceHex, [surfaceSpec.surface, bg, hoverBg], 3.08);
+    const selectedOutline = ensureContrastHex(sourceHex, [surfaceSpec.surface, selectedBg], 3.4);
+    const hueFg = ensureContrastHex(sourceHex, allBgs, 4.6);
+    const textFg = ensureContrastHex(surfaceSpec.text, allBgs, 4.6);
+    const fg = kind === "swatch" ? hueFg : textFg;
+    const mutedSeed = mixSrgb(tintSeed, surfaceSpec.text, 0.32);
+    const muted = ensureContrastHex(mutedSeed, allBgs, 4.6);
+    const hoverFg = ensureContrastHex(fg, [hoverBg], 4.6);
+    const selectedFg = ensureContrastHex(kind === "swatch" ? hueFg : textFg, [selectedBg], 4.6);
+
+    const disabledBg = mixSrgb(tintSeed, surfaceSpec.surface, 0.06);
+    const disabledSeed = mixSrgb(outline, surfaceSpec.surface, 0.38);
+    const disabledFg = ensureContrastHex(disabledSeed, [surfaceSpec.surface, disabledBg], 3.15, { desaturate: true, maxSat: 48 });
+    const disabledOutline = mixSrgb(outline, surfaceSpec.surface, 0.45);
+
+    const hlBg = mixSrgb(tintSeed, surfaceSpec.surface, surfaceSpec.isLight ? 0.30 : 0.28);
+    const hlFg = ensureContrastHex(surfaceSpec.text, [hlBg], 4.6);
+
+    const out = Object.freeze({
+      source: sourceHex,
+      bg,
+      fg,
+      hueFg,
+      muted,
+      outline,
+      hoverBg,
+      hoverFg,
+      hoverOutline: selectedOutline,
+      selectedBg,
+      selectedFg,
+      selectedOutline,
+      disabledBg,
+      disabledFg,
+      disabledOutline,
+      hlBg,
+      hlFg,
+    });
+    if (paletteTokenCache.size > 1024) paletteTokenCache.clear();
+    paletteTokenCache.set(cacheKey, out);
+    return out;
+  }
+  function resolveFolderSurfaceTokens(resolvedVisual, surfaceInput) {
+    const surfaceSpec = surfaceInput?.surface && surfaceInput?.text
+      ? surfaceInput
+      : resolveThemeSurface(typeof surfaceInput === "string" ? surfaceInput : "dark");
+    const props = resolvedVisual?.properties || {};
+    const parts = resolvedVisual?.parts || {};
+    const seedHex = resolveCssColor(resolvedVisual?.base || parts.accent || parts.front || parts.back || parts.label || surfaceSpec.accent, surfaceSpec) || surfaceSpec.accent;
+    const baseTokens = derivePaletteTokens(seedHex, surfaceSpec, { kind: "swatch" });
+
+    const rawTint = resolveCssColor(props["--tab-group-color-pale"], surfaceSpec);
+    const tint = rawTint && Math.abs(relativeLuminance(rawTint) - relativeLuminance(surfaceSpec.surface)) <= 0.25
+      ? rawTint
+      : baseTokens.bg;
+    const rawHover = resolveCssColor(props["--tab-group-background-color-hover"], surfaceSpec);
+    const hover = rawHover && rawHover !== surfaceSpec.surface && Math.abs(relativeLuminance(rawHover) - relativeLuminance(surfaceSpec.surface)) <= 0.30
+      ? rawHover
+      : baseTokens.hoverBg;
+    const selected = baseTokens.selectedBg;
+    const rowBgs = [surfaceSpec.surface, tint, hover, selected];
+
+    const rawStroke = resolveCssColor(props["--zen-folder-stroke"], surfaceSpec) || seedHex;
+    const stroke = ensureContrastHex(rawStroke, [surfaceSpec.surface, tint], 3.08);
+    const rawLabel = resolveCssColor(props["--bgalazka-fc-label"], surfaceSpec) || surfaceSpec.text;
+    const label = props["--bgalazka-fc-label"]
+      ? ensureContrastHex(rawLabel, rowBgs, 4.6)
+      : ensureContrastHex(surfaceSpec.text, rowBgs, 4.6);
+    const rawAccent = resolveCssColor(props["--tab-group-color"], surfaceSpec) || seedHex;
+    const accent = ensureContrastHex(rawAccent, rowBgs, 4.6);
+
+    return Object.freeze({
+      tint,
+      hover,
+      selected,
+      stroke,
+      label,
+      accent,
+      disabledBg: baseTokens.disabledBg,
+      disabledFg: baseTokens.disabledFg,
+      disabledOutline: baseTokens.disabledOutline,
+    });
+  }
+
+  // OW-11: pure resolver describing what 'Inherit' gives (and which layer provides it) across
+  // Agenda window, item colour (T2.3g), category stage notify defaults, alert sound/quietAllow,
+  // and note-section category inheritance.
+  function describeInheritance(kind, item = null, layers = {}) {
+    const k = String(kind || "").trim();
+    const srcLayers = layers && typeof layers === "object" ? layers : {};
+    const noteObj = srcLayers.note && typeof srcLayers.note === "object" ? srcLayers.note : {};
+    const catObj = srcLayers.category && typeof srcLayers.category === "object" ? srcLayers.category : {};
+    const globalObj = srcLayers.global && typeof srcLayers.global === "object" ? srcLayers.global : {};
+    const noteTitle = String(noteObj.title ?? srcLayers.noteTitle ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+    const catName = cleanCategoryName(catObj.name ?? srcLayers.categoryName ?? "");
+    const hasCategory = Boolean(catName || srcLayers.category || srcLayers.categoryNotify || srcLayers.categoryAgenda || srcLayers.categoryColor);
+    const noteSourceLabel = noteTitle ? "note " + noteTitle : "linked note";
+    const catSourceLabel = catName ? "category " + catName : "category";
+    const pack = (value, source, sourceName, valueLabel, sourceLabel, labelOverride = "", inherited = null) => ({
+      value,
+      source,
+      sourceName,
+      valueLabel,
+      sourceLabel,
+      label: labelOverride || ("Inherit (" + valueLabel + ", from " + sourceLabel + ")"),
+      ...(inherited ? { inherited } : {}),
+    });
+
+    const agendaKeyMap = {
+      "agenda.enabled": "enabled", agendaEnabled: "enabled",
+      "agenda.leadDays": "leadDays", agendaLeadDays: "leadDays",
+      "agenda.tailDays": "tailDays", agendaTailDays: "tailDays",
+    };
+    if (Object.prototype.hasOwnProperty.call(agendaKeyMap, k)) {
+      const key = agendaKeyMap[k];
+      const fallback = key === "enabled" ? true : 0;
+      const fmt = (v) => key === "enabled"
+        ? (v ? "Show in Agenda" : "Hide from Agenda")
+        : (v === 0 ? "Same day" : v === 1 ? "1 day" : v + " days");
+      const noteAgenda = cleanAgendaWindow(noteObj.agenda ?? srcLayers.noteAgenda);
+      const catAgenda = cleanAgendaWindow(catObj.agenda ?? srcLayers.categoryAgenda);
+      const globalAgenda = cleanAgendaWindow(globalObj.agenda ?? srcLayers.globalAgenda);
+      let inherited;
+      if (Object.prototype.hasOwnProperty.call(noteAgenda, key)) {
+        inherited = pack(noteAgenda[key], "note", noteTitle, fmt(noteAgenda[key]), noteSourceLabel);
+      } else if (Object.prototype.hasOwnProperty.call(catAgenda, key)) {
+        inherited = pack(catAgenda[key], "category", catName, fmt(catAgenda[key]), catSourceLabel);
+      } else {
+        const val = Object.prototype.hasOwnProperty.call(globalAgenda, key) ? globalAgenda[key] : fallback;
+        inherited = pack(val, "global", "", fmt(val), "global defaults");
+      }
+      const itemAgenda = cleanAgendaWindow(item?.x?.agendaWindow);
+      if (Object.prototype.hasOwnProperty.call(itemAgenda, key)) {
+        return pack(itemAgenda[key], "item", "", fmt(itemAgenda[key]), "this item", fmt(itemAgenda[key]), inherited);
+      }
+      return inherited;
+    }
+
+    if (k === "color" || k === "colour") {
+      const rawNote = String(noteObj.color ?? srcLayers.noteColor ?? "").trim();
+      const rawCat = String(catObj.color ?? srcLayers.categoryColor ?? "").trim();
+      const resolved = resolveItemColor(rawNote, rawCat);
+      if (resolved && rawNote && rawNote !== "none") {
+        const lower = rawNote.toLowerCase();
+        const hex = PALETTE_COLOR_HEX[lower] || resolveCssColor(rawNote) || rawNote;
+        const valLabel = PALETTE_COLOR_HEX[lower] ? (lower + " " + hex) : hex;
+        const srcLbl = noteTitle ? ("note " + noteTitle + " colour") : "note colour";
+        return pack(hex, "note", noteTitle, valLabel, srcLbl, "Inherit (" + srcLbl + ": " + valLabel + ")");
+      }
+      if (resolved && rawCat && rawCat !== "none") {
+        const lower = rawCat.toLowerCase();
+        const hex = PALETTE_COLOR_HEX[lower] || resolveCssColor(rawCat) || rawCat;
+        const valLabel = PALETTE_COLOR_HEX[lower] ? (lower + " " + hex) : hex;
+        const srcLbl = catName ? ("category " + catName + " colour") : "category colour";
+        return pack(hex, "category", catName, valLabel, srcLbl, "Inherit (" + srcLbl + ": " + valLabel + ")");
+      }
+      return pack("", "none", "", "none", "default accent", "Inherit (no note or category colour)");
+    }
+
+    const notifyMatch = /^notify\.(pre|due|followup)(?:\.(enabled|leadMinutes|delayMinutes))?$/.exec(k);
+    if (notifyMatch) {
+      const stage = notifyMatch[1], field = notifyMatch[2] || "";
+      const catNotify = cleanCategoryNotify(catObj.notify ?? srcLayers.categoryNotify);
+      const baseRule = catNotify[stage];
+      const baseSource = hasCategory ? "category" : "global";
+      const baseSourceName = hasCategory ? catName : "";
+      const baseSourceLabel = hasCategory ? catSourceLabel : "global defaults";
+      const itemRule = cleanNotifyOverrides(item?.x?.notify)[stage];
+      if (field) {
+        const fmtField = (v) => field === "enabled" ? (v ? "On" : "Off") : (v + " min");
+        const inh = pack(baseRule[field], baseSource, baseSourceName, fmtField(baseRule[field]), baseSourceLabel);
+        if (itemRule && Object.prototype.hasOwnProperty.call(itemRule, field)) {
+          return pack(itemRule[field], "item", "", fmtField(itemRule[field]), "this item", fmtField(itemRule[field]), inh);
+        }
+        return inh;
+      }
+      const pickShape = (r) => stage === "pre"
+        ? { enabled: r.enabled, leadMinutes: r.leadMinutes }
+        : stage === "followup"
+          ? { enabled: r.enabled, delayMinutes: r.delayMinutes }
+          : { enabled: r.enabled };
+      const fmtStage = (r) => !r.enabled
+        ? "Off"
+        : stage === "pre"
+          ? ("On, " + r.leadMinutes + " min")
+          : stage === "followup"
+            ? ("On, " + r.delayMinutes + " min")
+            : "On";
+      const inhShape = pickShape(baseRule);
+      const inh = pack(inhShape, baseSource, baseSourceName, fmtStage(inhShape), baseSourceLabel);
+      if (itemRule && (Object.prototype.hasOwnProperty.call(itemRule, "enabled") || Object.prototype.hasOwnProperty.call(itemRule, "leadMinutes") || Object.prototype.hasOwnProperty.call(itemRule, "delayMinutes"))) {
+        const merged = pickShape({ ...baseRule, ...itemRule });
+        return pack(merged, "item", "", fmtStage(merged), "this item", fmtStage(merged), inh);
+      }
+      return inh;
+    }
+
+    const alertMatch = /^alert\.(pre|due|followup)\.(sound|quietAllow)$/.exec(k);
+    if (alertMatch) {
+      const stage = alertMatch[1], prop = alertMatch[2];
+      const globalAlert = cleanAlertSettings(globalObj.alert ?? srcLayers.globalAlert);
+      const catStage = cleanCategoryNotify(catObj.notify ?? srcLayers.categoryNotify)[stage];
+      const noteStage = cleanNotifyOverrides(noteObj.notify ?? srcLayers.noteNotify)[stage] || {};
+      const itemStage = cleanNotifyOverrides(item?.x?.notify)[stage] || {};
+      if (prop === "sound") {
+        const hasSound = (r) => Boolean(r && (r.soundSpecified === true || (r.soundSpecified === undefined && SOUND_LEVELS.includes(r.sound))));
+        const cap = (s) => s ? s[0].toUpperCase() + s.slice(1) : "Normal";
+        let inh;
+        if (hasSound(noteStage)) inh = pack(noteStage.sound, "note", noteTitle, cap(noteStage.sound), noteSourceLabel);
+        else if (hasSound(catStage)) inh = pack(catStage.sound, "category", catName, cap(catStage.sound), catSourceLabel);
+        else {
+          const gSound = globalAlert.stages[stage].sound || "normal";
+          inh = pack(gSound, "global", "", cap(gSound), "global defaults");
+        }
+        if (hasSound(itemStage)) return pack(itemStage.sound, "item", "", cap(itemStage.sound), "this item", cap(itemStage.sound), inh);
+        return inh;
+      }
+      const hasAllow = (r) => Boolean(r && (r.quietAllowSpecified === true || (r.quietAllowSpecified === undefined && Array.isArray(r.quietAllow))));
+      const fmtAllow = (arr) => arr.length ? arr.join(", ") : "none";
+      let inh;
+      if (hasAllow(noteStage)) inh = pack([...noteStage.quietAllow], "note", noteTitle, fmtAllow(noteStage.quietAllow), noteSourceLabel);
+      else if (hasAllow(catStage)) inh = pack([...catStage.quietAllow], "category", catName, fmtAllow(catStage.quietAllow), catSourceLabel);
+      else {
+        const gAllow = [...globalAlert.quietHours.allowed[stage]];
+        inh = pack(gAllow, "global", "", fmtAllow(gAllow), "global defaults");
+      }
+      if (hasAllow(itemStage)) return pack([...itemStage.quietAllow], "item", "", fmtAllow(itemStage.quietAllow), "this item", fmtAllow(itemStage.quietAllow), inh);
+      return inh;
+    }
+
+    if (k === "category") {
+      const sec = cleanCategoryName(srcLayers.sectionCategory ?? item?._sectionCategory ?? item?.x?.category ?? "");
+      const valLabel = sec || "no category";
+      const srcLabel = noteTitle ? ("note " + noteTitle + " section") : "note section";
+      const inh = pack(sec, "note", noteTitle, valLabel, srcLabel);
+      if (typeof item?.x?.categoryOverride === "string") {
+        const ov = cleanCategoryName(item.x.categoryOverride);
+        return pack(ov, "item", "", ov || "no category", "this item", ov || "no category", inh);
+      }
+      return inh;
+    }
+
+    return pack(null, "none", "", "", "none", "Inherit");
+  }
+
   const api = {
-    KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
-    cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
+    KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
+    cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

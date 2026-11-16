@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.180
+// @version 3.3.195
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.180, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.195, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.180";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.195";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1208,6 +1208,271 @@ const __zentralEmbeddedLoader = (function () {
 })();
 
 },
+"additional/notes/i18n/en.js": function (window) {
+// Pure English language table for Zentral Notes & Calendar (AU-B4a / AU-B4b).
+// Adding a language is a data file, not parser or UI logic.
+(function () {
+  "use strict";
+
+  const freezeDeep = (value) => {
+    if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+    Object.freeze(value);
+    for (const key of Object.keys(value)) freezeDeep(value[key]);
+    return value;
+  };
+
+  const lang = freezeDeep({
+    code: "en",
+    locale: "en-GB",
+    name: "English",
+    todayLabel: "Today",
+    overdueLabel: "Overdue",
+    agendaLabels: ["Today", "Tomorrow"],
+    dateKinds: {
+      today: "Today",
+      tomorrow: "Tomorrow",
+      next: "Next work day",
+      other: "Other date\u2026",
+      earlier: "Earlier days",
+    },
+    relative: {
+      "-2": ["day before yesterday", "the day before yesterday"],
+      "-1": ["yesterday"],
+      "0": ["today"],
+      "1": ["tomorrow", "tmr", "tmrw"],
+      "2": ["day after tomorrow", "the day after tomorrow", "overmorrow"],
+    },
+    weekdays: [
+      ["sunday", "sun"],
+      ["monday", "mon"],
+      ["tuesday", "tue", "tues"],
+      ["wednesday", "wed"],
+      ["thursday", "thu", "thur", "thurs"],
+      ["friday", "fri"],
+      ["saturday", "sat"],
+    ],
+    weekdayPrefixes: ["on", "this", "next"],
+    weekdaysDisplay: {
+      short: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+      long: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+    },
+    months: [
+      ["january", "jan"],
+      ["february", "feb"],
+      ["march", "mar"],
+      ["april", "apr"],
+      ["may"],
+      ["june", "jun"],
+      ["july", "jul"],
+      ["august", "aug"],
+      ["september", "sep", "sept"],
+      ["october", "oct"],
+      ["november", "nov"],
+      ["december", "dec"],
+    ],
+    offsets: {
+      phrases: [
+        { phrase: "next week", unit: "w", count: 1 },
+        { phrase: "last week", unit: "w", count: -1 },
+        { phrase: "next month", unit: "m", count: 1 },
+        { phrase: "last month", unit: "m", count: -1 },
+        { phrase: "next year", unit: "y", count: 1 },
+        { phrase: "last year", unit: "y", count: -1 },
+        { phrase: "in a day", unit: "d", count: 1 },
+        { phrase: "in a week", unit: "w", count: 1 },
+        { phrase: "in a month", unit: "m", count: 1 },
+        { phrase: "in a year", unit: "y", count: 1 },
+      ],
+      counted: [
+        {
+          prefix: "in",
+          suffix: "",
+          sign: 1,
+          units: {
+            d: ["day", "days"],
+            w: ["week", "weeks"],
+            m: ["month", "months"],
+            y: ["year", "years"],
+          },
+        },
+        {
+          prefix: "",
+          suffix: "from now",
+          sign: 1,
+          units: {
+            d: ["day", "days"],
+            w: ["week", "weeks"],
+            m: ["month", "months"],
+            y: ["year", "years"],
+          },
+        },
+        {
+          prefix: "",
+          suffix: "ago",
+          sign: -1,
+          units: {
+            d: ["day", "days"],
+            w: ["week", "weeks"],
+            m: ["month", "months"],
+            y: ["year", "years"],
+          },
+        },
+      ],
+    },
+    ordinals: ["st", "nd", "rd", "th", "."],
+    strings: {},
+  });
+
+  if (typeof window !== "undefined" && window) {
+    if (!window.__zentralNotesLangTables) window.__zentralNotesLangTables = {};
+    window.__zentralNotesLangTables[lang.code] = lang;
+    if (window.__zentralNotesLoader && typeof window.__zentralNotesLoader.define === "function") {
+      window.__zentralNotesLoader.define("notes-lang-en", lang);
+    }
+  }
+  if (typeof module === "object" && module) module.exports = lang;
+})();
+
+},
+"additional/notes/i18n/pl.js": function (window) {
+// Pure Polish language table for Zentral Notes & Calendar (AU-B4a / AU-B4b).
+// Adding a language is a data file, not parser or UI logic.
+(function () {
+  "use strict";
+
+  const freezeDeep = (value) => {
+    if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+    Object.freeze(value);
+    for (const key of Object.keys(value)) freezeDeep(value[key]);
+    return value;
+  };
+
+  const lang = freezeDeep({
+    code: "pl",
+    locale: "pl-PL",
+    name: "Polski (Polish)",
+    todayLabel: "Dzi\u015b",
+    overdueLabel: "Zaleg\u0142e",
+    agendaLabels: ["Dzi\u015b", "Jutro", "Pojutrze"],
+    dateKinds: {
+      today: "Dzi\u015b",
+      tomorrow: "Jutro",
+      next: "Nast\u0119pny dzie\u0144 roboczy",
+      other: "Inna data\u2026",
+      earlier: "Wcze\u015bniejsze dni",
+    },
+    relative: {
+      "-2": ["przedwczoraj"],
+      "-1": ["wczoraj"],
+      "0": ["dzi\u015b", "dzis", "dzisiaj"],
+      "1": ["jutro"],
+      "2": ["pojutrze"],
+      "3": ["popojutrze"],
+    },
+    weekdays: [
+      ["niedziela", "niedziel\u0119", "niedziele", "niedz", "ndz", "nd"],
+      ["poniedzia\u0142ek", "poniedzialek", "pon", "pn"],
+      ["wtorek", "wt"],
+      ["\u015broda", "\u015brod\u0119", "sroda", "srode", "\u015br", "sr"],
+      ["czwartek", "czw", "cz"],
+      ["pi\u0105tek", "piatek", "pt"],
+      ["sobota", "sobot\u0119", "sobote", "sob", "sb"],
+    ],
+    weekdayPrefixes: [
+      "w",
+      "we",
+      "na",
+      "ten",
+      "ta",
+      "t\u0119",
+      "przysz\u0142y",
+      "przysz\u0142a",
+      "przysz\u0142\u0105",
+      "w przysz\u0142y",
+      "w przysz\u0142\u0105",
+      "nast\u0119pny",
+      "nast\u0119pna",
+      "nast\u0119pn\u0105",
+      "w nast\u0119pny",
+      "w nast\u0119pn\u0105",
+    ],
+    weekdaysDisplay: {
+      short: ["Pon", "Wt", "\u015ar", "Czw", "Pt", "Sob", "Ndz"],
+      long: ["poniedzia\u0142ek", "wtorek", "\u015broda", "czwartek", "pi\u0105tek", "sobota", "niedziela"],
+    },
+    months: [
+      ["stycze\u0144", "stycznia", "styczniu", "sty"],
+      ["luty", "lutego", "lutym", "lut"],
+      ["marzec", "marca", "marcu", "mar"],
+      ["kwiecie\u0144", "kwietnia", "kwietniu", "kwi", "kwiec"],
+      ["maj", "maja", "maju"],
+      ["czerwiec", "czerwca", "czerwcu", "cze", "czerw"],
+      ["lipiec", "lipca", "lipcu", "lip"],
+      ["sierpie\u0144", "sierpnia", "sierpniu", "sie", "sierp"],
+      ["wrzesie\u0144", "wrze\u015bnia", "wrze\u015bniu", "wrz", "wrzes"],
+      ["pa\u017adziernik", "pa\u017adziernika", "pa\u017adzierniku", "pa\u017a", "paz"],
+      ["listopad", "listopada", "listopadzie", "lis", "list"],
+      ["grudzie\u0144", "grudnia", "grudniu", "gru", "grudz"],
+    ],
+    offsets: {
+      phrases: [
+        { phrase: "za dzie\u0144", unit: "d", count: 1 },
+        { phrase: "dzie\u0144 temu", unit: "d", count: -1 },
+        { phrase: "za tydzie\u0144", unit: "w", count: 1 },
+        { phrase: "tydzie\u0144 temu", unit: "w", count: -1 },
+        { phrase: "przysz\u0142y tydzie\u0144", unit: "w", count: 1 },
+        { phrase: "w przysz\u0142ym tygodniu", unit: "w", count: 1 },
+        { phrase: "nast\u0119pny tydzie\u0144", unit: "w", count: 1 },
+        { phrase: "w nast\u0119pnym tygodniu", unit: "w", count: 1 },
+        { phrase: "zesz\u0142y tydzie\u0144", unit: "w", count: -1 },
+        { phrase: "w zesz\u0142ym tygodniu", unit: "w", count: -1 },
+        { phrase: "za miesi\u0105c", unit: "m", count: 1 },
+        { phrase: "przysz\u0142y miesi\u0105c", unit: "m", count: 1 },
+        { phrase: "w przysz\u0142ym miesi\u0105cu", unit: "m", count: 1 },
+        { phrase: "za rok", unit: "y", count: 1 },
+        { phrase: "przysz\u0142y rok", unit: "y", count: 1 },
+        { phrase: "w przysz\u0142ym roku", unit: "y", count: 1 },
+      ],
+      counted: [
+        {
+          prefix: "za",
+          suffix: "",
+          sign: 1,
+          units: {
+            d: ["dzie\u0144", "dni"],
+            w: ["tydzie\u0144", "tygodnie", "tygodni"],
+            m: ["miesi\u0105c", "miesi\u0105ce", "miesi\u0119cy"],
+            y: ["rok", "lata", "lat"],
+          },
+        },
+        {
+          prefix: "",
+          suffix: "temu",
+          sign: -1,
+          units: {
+            d: ["dzie\u0144", "dni"],
+            w: ["tydzie\u0144", "tygodnie", "tygodni"],
+            m: ["miesi\u0105c", "miesi\u0105ce", "miesi\u0119cy"],
+            y: ["rok", "lata", "lat"],
+          },
+        },
+      ],
+    },
+    ordinals: [".", "-go", "go", "-ego", "ego"],
+    strings: {},
+  });
+
+  if (typeof window !== "undefined" && window) {
+    if (!window.__zentralNotesLangTables) window.__zentralNotesLangTables = {};
+    window.__zentralNotesLangTables[lang.code] = lang;
+    if (window.__zentralNotesLoader && typeof window.__zentralNotesLoader.define === "function") {
+      window.__zentralNotesLoader.define("notes-lang-pl", lang);
+    }
+  }
+  if (typeof module === "object" && module) module.exports = lang;
+})();
+
+},
 "additional/notes/calendar/ZentralNotesCalendar.js": function (window) {
 /*
  * ZENTRAL FILE GUIDE - additional/notes/calendar/ZentralNotesCalendar.js
@@ -1262,26 +1527,284 @@ const __zentralEmbeddedLoader = (function () {
   const addDays = (ms, n) => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, d.getHours(), d.getMinutes()).getTime(); };
   const iso = (ms) => new Date(ms).toISOString();
 
-  // ---------- parsing ----------
-  const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-  // Month aliases are offline and cover English, German and Polish (including Polish genitive forms).
-  const MONTH_ALIASES = Object.create(null);
-  const MONTH_WORDS = [
-    ["january", "jan", "januar", "styczen", "stycznia", "sty"],
-    ["february", "feb", "februar", "luty", "lutego", "lut"],
-    ["march", "mar", "maerz", "marz", "marzec", "marca"],
-    ["april", "apr", "kwiecien", "kwietnia", "kwi"],
-    ["may", "mai", "maj", "maja"],
-    ["june", "jun", "juni", "czerwiec", "czerwca", "cze"],
-    ["july", "jul", "juli", "lipiec", "lipca", "lip"],
-    ["august", "aug", "sierpien", "sierpnia", "sie"],
-    ["september", "sep", "sept", "wrzesien", "wrzesnia", "wrz"],
-    ["october", "oct", "oktober", "okt", "pazdziernik", "pazdziernika", "paz"],
-    ["november", "nov", "listopad", "listopada", "lis"],
-    ["december", "dec", "dezember", "dez", "grudzien", "grudnia", "gru"],
-  ];
-  MONTH_WORDS.forEach((words, i) => words.forEach((word) => { MONTH_ALIASES[word] = i + 1; }));
-  const monthWord = (word) => String(word || "").toLowerCase().replace(/\.$/, "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  // ---------- language registry & parsing (AU-B4a) ----------
+  // Language dictionaries live in pure data files (`additional/notes/i18n/*.js`); parser logic is table-driven.
+  const NOTES_LANGUAGES = Object.freeze(["en", "pl"]);
+  const DEFAULT_NOTES_LANGUAGE = "en";
+  const LANG_REGISTRY = new Map();
+  const foldLanguageText = (text) =>
+    String(text ?? "")
+      .replace(/[\u0141\u0142]/g, "l")
+      .replace(/\u00df/g, "ss")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  const escapeRegExp = (text) => String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Legacy German month words accepted when acceptAll !== false so multilingual month dates keep working.
+  const EXTRA_MONTH_ALIASES = Object.freeze({
+    januar: 1,
+    februar: 2,
+    maerz: 3,
+    marz: 3,
+    mai: 5,
+    juni: 6,
+    juli: 7,
+    oktober: 10,
+    okt: 10,
+    dezember: 12,
+    dez: 12,
+  });
+
+  function compileLanguageTable(raw) {
+    if (!raw || typeof raw !== "object" || typeof raw.code !== "string" || !raw.code.trim()) return null;
+    const code = raw.code.trim().toLowerCase();
+    const locale = typeof raw.locale === "string" && raw.locale.trim() ? raw.locale.trim() : code;
+    const name = typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : code;
+    const agendaLabels = Object.freeze(
+      Array.isArray(raw.agendaLabels) && raw.agendaLabels.length
+        ? raw.agendaLabels.map((s) => String(s))
+        : ["Today", "Tomorrow"],
+    );
+    const todayLabel = typeof raw.todayLabel === "string" && raw.todayLabel ? raw.todayLabel : agendaLabels[0] || "Today";
+    const overdueLabel = typeof raw.overdueLabel === "string" && raw.overdueLabel ? raw.overdueLabel : "Overdue";
+    const dk = raw.dateKinds && typeof raw.dateKinds === "object" ? raw.dateKinds : {};
+    const dateKinds = Object.freeze({
+      today: String(dk.today || todayLabel),
+      tomorrow: String(dk.tomorrow || agendaLabels[1] || "Tomorrow"),
+      next: String(dk.next || "Next work day"),
+      other: String(dk.other || "Other date\u2026"),
+      earlier: String(dk.earlier || "Earlier days"),
+    });
+    const shortMon = Array.isArray(raw.weekdaysDisplay?.short) && raw.weekdaysDisplay.short.length === 7
+      ? raw.weekdaysDisplay.short.map((s) => String(s))
+      : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const longMon = Array.isArray(raw.weekdaysDisplay?.long) && raw.weekdaysDisplay.long.length === 7
+      ? raw.weekdaysDisplay.long.map((s) => String(s))
+      : ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    const weekdaysDisplay = Object.freeze({
+      short: Object.freeze(shortMon),
+      long: Object.freeze(longMon),
+      shortSun: Object.freeze([shortMon[6], ...shortMon.slice(0, 6)]),
+      longSun: Object.freeze([longMon[6], ...longMon.slice(0, 6)]),
+    });
+
+    const relativeMap = new Map();
+    const multiWordPhrases = new Set();
+    if (raw.relative && typeof raw.relative === "object") {
+      for (const [offsetKey, words] of Object.entries(raw.relative)) {
+        const offset = Number(offsetKey);
+        if (!Number.isInteger(offset) || !Array.isArray(words)) continue;
+        for (const w of words) {
+          const folded = foldLanguageText(w);
+          if (!folded) continue;
+          relativeMap.set(folded, offset);
+          if (folded.includes(" ")) multiWordPhrases.add(folded);
+        }
+      }
+    }
+
+    const weekdayMap = new Map();
+    const prefixes = Array.isArray(raw.weekdayPrefixes)
+      ? raw.weekdayPrefixes.map((p) => foldLanguageText(p)).filter(Boolean)
+      : [];
+    if (Array.isArray(raw.weekdays) && raw.weekdays.length === 7) {
+      raw.weekdays.forEach((words, wd) => {
+        if (!Array.isArray(words)) return;
+        for (const w of words) {
+          const folded = foldLanguageText(String(w || "").replace(/\.$/, ""));
+          if (!folded) continue;
+          weekdayMap.set(folded, wd);
+          for (const pref of prefixes) {
+            const full = pref + " " + folded;
+            weekdayMap.set(full, wd);
+            multiWordPhrases.add(full);
+          }
+        }
+      });
+    }
+
+    const monthMap = new Map();
+    if (Array.isArray(raw.months) && raw.months.length === 12) {
+      raw.months.forEach((words, idx) => {
+        if (!Array.isArray(words)) return;
+        for (const w of words) {
+          const folded = foldLanguageText(String(w || "").replace(/\.$/, ""));
+          if (folded) monthMap.set(folded, idx + 1);
+        }
+      });
+    }
+
+    const phraseOffsets = new Map();
+    if (Array.isArray(raw.offsets?.phrases)) {
+      for (const entry of raw.offsets.phrases) {
+        const folded = foldLanguageText(entry?.phrase);
+        const count = Number(entry?.count);
+        const unit = String(entry?.unit || "");
+        if (!folded || !Number.isInteger(count) || !["d", "w", "m", "y"].includes(unit)) continue;
+        phraseOffsets.set(folded, Object.freeze({ unit, count }));
+        if (folded.includes(" ")) multiWordPhrases.add(folded);
+      }
+    }
+
+    const countedRules = [];
+    const countedPrefixRes = [];
+    if (Array.isArray(raw.offsets?.counted)) {
+      for (const rule of raw.offsets.counted) {
+        const pref = foldLanguageText(rule?.prefix);
+        const suff = foldLanguageText(rule?.suffix);
+        const sign = rule?.sign === -1 ? -1 : 1;
+        const unitMap = new Map();
+        const unitWords = [];
+        for (const unit of ["d", "w", "m", "y"]) {
+          for (const u of rule?.units?.[unit] || []) {
+            const fu = foldLanguageText(u);
+            if (fu) { unitMap.set(fu, unit); unitWords.push(escapeRegExp(fu)); }
+          }
+        }
+        if (!unitWords.length) continue;
+        unitWords.sort((a, b) => b.length - a.length);
+        const unitGroup = "(?:" + unitWords.join("|") + ")";
+        const head = pref ? escapeRegExp(pref) + " " : "";
+        const tail = suff ? " " + escapeRegExp(suff) : "";
+        countedRules.push({
+          re: new RegExp("^" + head + "(\\d{1,4}) (" + unitGroup + ")" + tail + "$"),
+          sign,
+          unitMap,
+        });
+        const rawPref = pref ? pref.replace(/ /g, "\\s+") + "\\s+" : "";
+        const rawSuff = suff ? "\\s+" + suff.replace(/ /g, "\\s+") : "";
+        countedPrefixRes.push(new RegExp("^(" + rawPref + "\\d{1,4}\\s+[\\p{L}.]+" + rawSuff + ")(?=\\s|$)", "iu"));
+      }
+    }
+
+    const ordinalSuffixes = Array.isArray(raw.ordinals)
+      ? raw.ordinals.map((s) => foldLanguageText(s)).filter(Boolean).sort((a, b) => b.length - a.length)
+      : ["."];
+    const ordinalRe = ordinalSuffixes.length
+      ? new RegExp("^(\\d{1,2})(?:" + ordinalSuffixes.map(escapeRegExp).join("|") + ")?$")
+      : /^(\d{1,2})\.?$/;
+
+    // Verify each candidate span with parseDateText in parseDatePrefix.
+    const sortedPhrases = [...multiWordPhrases].sort((a, b) => b.length - a.length);
+    const wordCounts = [...new Set(sortedPhrases.map((p) => p.split(" ").length))].sort((a, b) => b - a);
+    const phraseSpanRes = [
+      ...countedPrefixRes,
+      ...wordCounts.map((n) => new RegExp("^([\\p{L}.-]+(?:\\s+[\\p{L}.-]+){" + (n - 1) + "})(?=\\s|$)", "iu")),
+    ];
+
+    return Object.freeze({
+      code,
+      locale,
+      name,
+      todayLabel,
+      overdueLabel,
+      agendaLabels,
+      dateKinds,
+      weekdaysDisplay,
+      relativeMap,
+      weekdayMap,
+      monthMap,
+      phraseOffsets,
+      countedRules,
+      ordinalRe,
+      prefixRes: phraseSpanRes,
+      strings: raw.strings && typeof raw.strings === "object" ? raw.strings : Object.freeze({}),
+    });
+  }
+
+  function registerLanguage(raw) {
+    const compiled = compileLanguageTable(raw);
+    if (!compiled) return null;
+    LANG_REGISTRY.set(compiled.code, compiled);
+    return compiled;
+  }
+
+  // Bootstrap built-in language tables across browser loader, standalone bundle, VM test harness, and Node require.
+  (function bootstrapBuiltinLanguages() {
+    if (typeof window !== "undefined" && window) {
+      const preloaded = window.__zentralNotesLangTables;
+      if (preloaded && typeof preloaded === "object") {
+        for (const key of Object.keys(preloaded)) registerLanguage(preloaded[key]);
+      }
+      if (window.__zentralNotesLoader && typeof window.__zentralNotesLoader.get === "function") {
+        for (const code of NOTES_LANGUAGES) {
+          if (!LANG_REGISTRY.has(code)) {
+            const mod = window.__zentralNotesLoader.get("notes-lang-" + code);
+            if (mod) registerLanguage(mod);
+          }
+        }
+      }
+    }
+    if (typeof require === "function") {
+      try { if (!LANG_REGISTRY.has("en")) registerLanguage(require("../i18n/en.js")); } catch (_) {}
+      try { if (!LANG_REGISTRY.has("pl")) registerLanguage(require("../i18n/pl.js")); } catch (_) {}
+    }
+    // Minimal inline fallback if neither loader nor require supplied English yet.
+    if (!LANG_REGISTRY.has("en")) {
+      registerLanguage({
+        code: "en",
+        locale: "en-GB",
+        name: "English",
+        agendaLabels: ["Today", "Tomorrow"],
+        relative: { "-1": ["yesterday"], "0": ["today"], "1": ["tomorrow"] },
+        weekdays: [["sunday", "sun"], ["monday", "mon"], ["tuesday", "tue"], ["wednesday", "wed"], ["thursday", "thu"], ["friday", "fri"], ["saturday", "sat"]],
+        months: [["january", "jan"], ["february", "feb"], ["march", "mar"], ["april", "apr"], ["may"], ["june", "jun"], ["july", "jul"], ["august", "aug"], ["september", "sep", "sept"], ["october", "oct"], ["november", "nov"], ["december", "dec"]],
+        ordinals: ["st", "nd", "rd", "th", "."],
+      });
+    }
+  })();
+
+  function cleanNotesLanguage(value) {
+    const s = String(value ?? "").trim().toLowerCase();
+    if (!s) return DEFAULT_NOTES_LANGUAGE;
+    if (LANG_REGISTRY.has(s)) return s;
+    const base = s.split(/[-_]/)[0];
+    if (base && LANG_REGISTRY.has(base)) return base;
+    return DEFAULT_NOTES_LANGUAGE;
+  }
+  function notesLanguageTable(lang) {
+    return LANG_REGISTRY.get(cleanNotesLanguage(lang)) || LANG_REGISTRY.get(DEFAULT_NOTES_LANGUAGE);
+  }
+  function notesLocaleFor(lang) {
+    return notesLanguageTable(lang)?.locale || "en-GB";
+  }
+  function normalizeDateParseOptions(opts) {
+    if (!opts) return { lang: DEFAULT_NOTES_LANGUAGE, acceptAll: true };
+    if (typeof opts === "string") return { lang: cleanNotesLanguage(opts), acceptAll: true };
+    return {
+      lang: cleanNotesLanguage(opts.lang),
+      acceptAll: opts.acceptAll !== false,
+    };
+  }
+  function activeLanguageTables(opts) {
+    const { lang, acceptAll } = normalizeDateParseOptions(opts);
+    const primary = notesLanguageTable(lang);
+    if (!acceptAll) return { tables: [primary], acceptAll: false };
+    const rest = [];
+    for (const [code, table] of LANG_REGISTRY) if (code !== primary.code) rest.push(table);
+    return { tables: [primary, ...rest], acceptAll: true };
+  }
+  function lookupMonthWord(word, tables, acceptAll) {
+    const folded = foldLanguageText(String(word || "").replace(/\.$/, ""));
+    if (!folded) return 0;
+    for (const table of tables) {
+      const m = table.monthMap.get(folded);
+      if (m) return m;
+    }
+    return acceptAll ? EXTRA_MONTH_ALIASES[folded] || 0 : 0;
+  }
+  function parseOrdinalDayToken(token, tables) {
+    const plain = /^(\d{1,2})\.?$/.exec(String(token || "").trim());
+    if (plain) return +plain[1];
+    const folded = foldLanguageText(token);
+    for (const table of tables) {
+      const m = table.ordinalRe.exec(folded);
+      if (m) return +m[1];
+    }
+    return 0;
+  }
   const dateFromParts = (year, month, date) => {
     if (!Number.isInteger(year) || year < 1 || year > 9999) return null;
     const d = parseYmd(year + "-" + p2(month) + "-" + p2(date));
@@ -1311,9 +1834,16 @@ const __zentralEmbeddedLoader = (function () {
     return new Date(year, month, Math.min(source.getDate(), lastDate.getDate())).getTime();
   }
   // A date as people type it: ISO, day/month/year, dotted/dashed/slashed dates, month names, @today, @tomorrow,
-  // @+3d / @-2d / @+1w / @+1m, @monday. Numeric day-first forms are deliberate; no locale-dependent guessing.
+  // @jutro, @pojutrze, @+3d / @-2d / @+1w / @+1m, 'in 3 days' / 'za 3 dni', 'next week', weekdays, and ordinals.
+  // Numeric day-first forms are deliberate; no locale-dependent guessing.
   // Two-digit years use 00-49 => 2000-2049 and 50-99 => 1950-1999.
-  function parseDateText(text, now) {
+  function applyCalendarOffset(base, count, unit) {
+    if (unit === "d") return addDays(base, count);
+    if (unit === "w") return addDays(base, count * 7);
+    if (unit === "m" || unit === "y") return shiftCalendarDate(base, count, unit);
+    return null;
+  }
+  function parseDateText(text, now, opts) {
     const t = String(text || "").trim().toLowerCase().replace(/^[@/]/, "").replace(/[,.]$/, "").trim();
     if (!t) return null;
     const base = dayStart(now);
@@ -1321,51 +1851,66 @@ const __zentralEmbeddedLoader = (function () {
     if (m) return dateFromParts(+m[1], +m[2], +m[3]);
     m = /^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/.exec(t);
     if (m) return dateFromParts(m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3], +m[2], +m[1]);
-    m = /^(\d{1,2})\.?\s+([a-z\u00c0-\u024f]+)(?:\s+(\d{2,4}))?$/.exec(t);
+    const { tables, acceptAll } = activeLanguageTables(opts);
+    m = /^(\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?)\s+([\p{L}]+)\.?(?:\s+(\d{2,4}))?$/iu.exec(t);
     if (m) {
-      const month = MONTH_ALIASES[monthWord(m[2])];
-      if (!month) return null;
-      return m[3] ? dateFromParts(m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3], month, +m[1]) : futureMonthDay(month, +m[1], base);
+      const date = parseOrdinalDayToken(m[1], tables);
+      const month = date ? lookupMonthWord(m[2], tables, acceptAll) : 0;
+      if (month && date) return m[3] ? dateFromParts(m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3], month, date) : futureMonthDay(month, date, base);
     }
-    m = /^([a-z\u00c0-\u024f]+)\s+(\d{1,2})(?:,?\s+(\d{2,4}))?$/.exec(t);
+    m = /^([\p{L}]+)\.?\s+(\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?)(?:,?\s+(\d{2,4}))?$/iu.exec(t);
     if (m) {
-      const month = MONTH_ALIASES[monthWord(m[1])];
-      if (!month) return null;
-      return m[3] ? dateFromParts(m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3], month, +m[2]) : futureMonthDay(month, +m[2], base);
+      const month = lookupMonthWord(m[1], tables, acceptAll);
+      const date = month ? parseOrdinalDayToken(m[2], tables) : 0;
+      if (month && date) return m[3] ? dateFromParts(m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3], month, date) : futureMonthDay(month, date, base);
     }
     m = /^(\d{1,2})[./-](\d{1,2})\.?$/.exec(t);
     if (m) return futureMonthDay(+m[2], +m[1], base);
-    if (t === "today") return base;
-    if (t === "tomorrow") return addDays(base, 1);
-    if (t === "yesterday") return addDays(base, -1);
     m = /^([+-])(\d{1,4})([dwmy])$/.exec(t);
     if (m) {
-      const n = (m[1] === "-" ? -1 : 1) * +m[2], d = new Date(base);
-      if (m[3] === "d") return addDays(base, n);
-      if (m[3] === "w") return addDays(base, n * 7);
-      if (m[3] === "m" || m[3] === "y") return shiftCalendarDate(base, n, m[3]);
+      const n = (m[1] === "-" ? -1 : 1) * +m[2];
+      return applyCalendarOffset(base, n, m[3]);
     }
-    const wd = WEEKDAYS.findIndex((w) => w === t || w.slice(0, 3) === t);
-    if (wd >= 0) return addDays(base, ((wd - new Date(base).getDay() + 7) % 7) || 7);
+    const folded = foldLanguageText(t);
+    if (!folded) return null;
+    for (const table of tables) {
+      if (table.relativeMap.has(folded)) return addDays(base, table.relativeMap.get(folded));
+    }
+    for (const table of tables) {
+      const phrase = table.phraseOffsets.get(folded);
+      if (phrase) return applyCalendarOffset(base, phrase.count, phrase.unit);
+      for (const rule of table.countedRules) {
+        const cm = rule.re.exec(folded);
+        if (cm) {
+          const unit = rule.unitMap.get(cm[2]);
+          if (unit) return applyCalendarOffset(base, rule.sign * +cm[1], unit);
+        }
+      }
+    }
+    for (const table of tables) {
+      const wd = table.weekdayMap.get(folded);
+      if (wd !== undefined) return addDays(base, ((wd - new Date(base).getDay() + 7) % 7) || 7);
+    }
     return null;
   }
   // Inline dates are deliberately recognised only in visible plain-text runs by the renderer. This scanner only
   // supplies candidates; the Markdown renderer decides whether the run is inside code, math or a link.
-  function inlineDateTokens(text, now) {
+  function inlineDateTokens(text, now, opts) {
     const source = String(text || ""), out = [];
-    const month = "[a-z\\u00c0-\\u024f]+\\.?";
-    const relative = "@(?:today|tomorrow|yesterday|[+-]\\d{1,4}[dwmy]|(?:mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?))";
+    const month = "[\\p{L}]+\\.?";
+    const dayOrd = "\\d{1,2}(?:-[\\p{L}]+|[\\p{L}]+|\\.)?";
+    const relative = "@(?:[+-]\\d{1,4}[dwmy]|[\\p{L}]+)";
     const patterns = [
       relative,
       "\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}",
       "\\d{1,2}[/-]\\d{1,2}(?:[/-]\\d{2,4})?",
       "\\d{1,2}\\.\\d{1,2}\\.(?:\\d{2,4})?",
-      "\\d{1,2}\\.?\\s+" + month + "(?:\\s+\\d{2,4})?",
-      month + "\\s+\\d{1,2}(?:,?\\s+\\d{2,4})?",
+      dayOrd + "\\s+" + month + "(?:\\s+\\d{2,4})?",
+      month + "\\s+" + dayOrd + "(?:,?\\s+\\d{2,4})?",
     ];
-    const re = new RegExp("(?<![\\w/@])(" + patterns.join("|") + ")(?:[ T](\\d{1,2}):(\\d{2}))?(?![\\w/-])", "giu");
+    const re = new RegExp("(?<![\\p{L}\\p{N}_/@])(" + patterns.join("|") + ")(?:[ T](\\d{1,2}):(\\d{2}))?(?![\\p{L}\\p{N}_/-])", "giu");
     for (let m; (m = re.exec(source)); ) {
-      const raw = m[1], day = parseDateText(raw, now);
+      const raw = m[1], day = parseDateText(raw, now, opts);
       // An unknown word can look like a month name (for example "12 and 25 listopada"). Do not let
       // that rejected candidate consume the next, valid date; resume one character after its start.
       if (day === null) { re.lastIndex = m.index + 1; continue; }
@@ -1384,27 +1929,35 @@ const __zentralEmbeddedLoader = (function () {
     return out;
   }
   const stripDateIgnoreMarks = (line) => String(line || "").replace(DATE_IGNORE_RE, "");
-  // A date prefix for list/heading lines; month-name forms can contain spaces.
-  function parseDatePrefix(text, now) {
+  // A date prefix for list/heading lines; month-name and relative phrases can contain spaces.
+  function parseDatePrefix(text, now, opts) {
     const s = String(text || "").trim();
+    if (!s) return null;
+    const { tables } = activeLanguageTables(opts);
+    const phrasePatterns = [];
+    for (const table of tables) for (const re of table.prefixRes) phrasePatterns.push(re);
     const patterns = [
       /^(\d{4}[./-]\d{1,2}[./-]\d{1,2})(?=\s|$)/,
       /^(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})(?=\s|$)/,
       /^(\d{1,2}[./-]\d{1,2}\.?)(?=\s|$)/,
-      /^(\d{1,2}\.?\s+[a-z\u00c0-\u024f]+\.?\s+\d{2,4})(?=\s|$)/i,
-      /^(\d{1,2}\.?\s+[a-z\u00c0-\u024f]+\.?)(?=\s|$)/i,
-      /^([a-z\u00c0-\u024f]+\.?\s+\d{1,2},?\s+\d{2,4})(?=\s|$)/i,
-      /^([a-z\u00c0-\u024f]+\.?\s+\d{1,2},?)(?=\s|$)/i,
+      /^(\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?\s+[\p{L}]+\.?\s+\d{2,4})(?=\s|$)/iu,
+      /^(\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?\s+[\p{L}]+\.?)(?=\s|$)/iu,
+      /^([\p{L}]+\.?\s+\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?,?\s+\d{2,4})(?=\s|$)/iu,
+      /^([\p{L}]+\.?\s+\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?,?)(?=\s|$)/iu,
+      ...phrasePatterns,
       /^(\S+)/,
     ];
     for (const re of patterns) {
       const m = re.exec(s);
       if (!m) continue;
-      const raw = m[1], day = parseDateText(raw, now);
+      const raw = m[1], day = parseDateText(raw, now, opts);
       // This is deliberately prefix-only. These patterns are anchored and non-global, so lastIndex cannot
       // resume a search later in the line; a leading non-date token means this is not a dated list/heading.
       if (day === null) continue;
-      const yearless = /^\d{1,2}[./-]\d{1,2}\.?$/.test(raw) || /^\d{1,2}\.?\s+[a-z\u00c0-\u024f]+\.?$/i.test(raw) || /^[a-z\u00c0-\u024f]+\.?\s+\d{1,2},?$/i.test(raw);
+      const yearless =
+        /^\d{1,2}[./-]\d{1,2}\.?$/.test(raw)
+        || (/^\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?\s+[\p{L}]+\.?$/iu.test(raw) && !phrasePatterns.some((pr) => pr.test(raw)))
+        || (/^[\p{L}]+\.?\s+\d{1,2}(?:-[\p{L}]+|[\p{L}]+|\.)?,?$/iu.test(raw) && !phrasePatterns.some((pr) => pr.test(raw)));
       return { day, raw, rest: s.slice(raw.length).trim(), yearless };
     }
     return null;
@@ -1493,17 +2046,19 @@ const __zentralEmbeddedLoader = (function () {
     }
     m = /^(\d{1,2})\.?$/.exec(raw);
     if (m) { const shown = parseYmd(opts.base) || new Date(today); return key(shown.getFullYear(), shown.getMonth() + 1, +m[1]); }
-    if (!/[a-z\u00c0-\u024f]/.test(raw)) return "";
-    const ms = parseDateText(raw, now);
+    const ordinal = parseOrdinalDayToken(raw, activeLanguageTables(opts).tables);
+    if (ordinal) { const shown = parseYmd(opts.base) || new Date(today); return key(shown.getFullYear(), shown.getMonth() + 1, ordinal); }
+    if (!/[\p{L}]/u.test(raw)) return "";
+    const ms = parseDateText(raw, now, opts);
     return ms === null ? "" : ymd(new Date(ms));
   }
   // One line of a plain list: "- 06:00-14:00 Work", "10-08 Jan Kowalski", "2026-11-20 14:00 Dentist" -> parts or null.
   // The leading date is optional when `defaultDay` (local midnight ms) is given.
-  function parseLine(line, now, defaultDay) {
+  function parseLine(line, now, defaultDay, opts) {
     let t = String(line || "").replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/, "").trim();
     if (!t) return null;
     let day = defaultDay ?? null, yearless = false;
-    const prefix = parseDatePrefix(t, now);
+    const prefix = parseDatePrefix(t, now, opts);
     // "03.12." (trailing dot) is a day-month date; "03.12" / "03:12" stay clock times.
     if (prefix && (!/^\d{1,2}[:.]\d{2}$/.test(prefix.raw) || /^\d{1,2}\.\d{1,2}\.$/.test(prefix.raw))) {
       day = prefix.day; t = prefix.rest; yearless = prefix.yearless;
@@ -1655,15 +2210,62 @@ const __zentralEmbeddedLoader = (function () {
     }
     return out.sort((a, b) => a.at - b.at || ["pre", "due", "followup"].indexOf(a.stage) - ["pre", "due", "followup"].indexOf(b.stage));
   }
+  function reminderDueAt(item) {
+    if (!item?.start) return 0;
+    const start = whenMs(item.start);
+    if (!Number.isFinite(start) || start <= 0) return 0;
+    const googleLead = (item.reminders?.overrides || []).reduce((max, override) => Math.max(max, Number(override?.minutes) || 0), 0);
+    return start - googleLead * MIN;
+  }
+  function reminderPreCountdownText(dueAt, now = Date.now()) {
+    const due = Number(dueAt), at = Number(now);
+    if (!Number.isFinite(due) || due <= 0 || !Number.isFinite(at)) return "";
+    const remaining = due - at;
+    if (remaining <= 0) return "Due now";
+    const totalSec = Math.max(1, Math.ceil(remaining / 1000));
+    if (totalSec >= 3600) {
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      return `Due in ${h}h ${m}m`;
+    }
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `Due in ${m}:${String(s).padStart(2, "0")}`;
+  }
+  function reminderCountdownDelayMs(dueAt, now = Date.now()) {
+    const due = Number(dueAt), at = Number(now);
+    if (!Number.isFinite(due) || due <= 0 || !Number.isFinite(at)) return 0;
+    const remaining = due - at;
+    if (remaining <= 0) return 0;
+    if (remaining > 3600000) return (remaining % 60000) || 60000;
+    return (remaining % 1000) || 1000;
+  }
+  const ALERT_LAYOUTS = Object.freeze(["corner", "large", "centred"]);
+  function cleanAlertLayout(value, fallback = "corner") {
+    const raw = String(value || "").trim().toLowerCase();
+    const normalized = raw === "centered" ? "centred" : raw;
+    if (ALERT_LAYOUTS.includes(normalized)) return normalized;
+    const fb = String(fallback || "").trim().toLowerCase();
+    const normFb = fb === "centered" ? "centred" : fb;
+    return ALERT_LAYOUTS.includes(normFb) ? normFb : "corner";
+  }
   const DEFAULT_ALERT_SETTINGS = Object.freeze({
-    stages: Object.freeze({ pre: Object.freeze({ sound: "quiet", quietAllow: Object.freeze([]) }), due: Object.freeze({ sound: "loud", quietAllow: Object.freeze([]) }), followup: Object.freeze({ sound: "normal", quietAllow: Object.freeze([]) }) }),
+    stages: Object.freeze({
+      pre: Object.freeze({ sound: "normal", layout: "corner", quietAllow: Object.freeze([]) }),
+      due: Object.freeze({ sound: "loud", layout: "large", quietAllow: Object.freeze([]) }),
+      followup: Object.freeze({ sound: "normal", layout: "centred", quietAllow: Object.freeze([]) }),
+    }),
     quietHours: Object.freeze({ enabled: false, start: "22:00", end: "07:00", days: Object.freeze([0, 1, 2, 3, 4, 5, 6]), allowed: Object.freeze({ pre: Object.freeze([]), due: Object.freeze([]), followup: Object.freeze([]) }) }),
   });
   function cleanSoundRule(raw, fallback = {}) {
     const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+    const rawLayout = String(src.layout || "").trim().toLowerCase();
+    const layoutExplicit = ALERT_LAYOUTS.includes(rawLayout === "centered" ? "centred" : rawLayout);
     return {
       sound: SOUND_LEVELS.includes(src.sound) ? src.sound : (SOUND_LEVELS.includes(fallback.sound) ? fallback.sound : "normal"),
       soundSpecified: typeof src.soundSpecified === "boolean" ? src.soundSpecified : SOUND_LEVELS.includes(src.sound),
+      layout: cleanAlertLayout(src.layout, fallback.layout || "corner"),
+      layoutSpecified: typeof src.layoutSpecified === "boolean" ? src.layoutSpecified : layoutExplicit,
       quietAllow: Array.isArray(src.quietAllow) ? [...new Set(src.quietAllow.filter((level) => SOUND_LEVELS.includes(level) && level !== "silent"))] : [...(fallback.quietAllow || [])],
       quietAllowSpecified: typeof src.quietAllowSpecified === "boolean" ? src.quietAllowSpecified : Array.isArray(src.quietAllow),
     };
@@ -1816,19 +2418,117 @@ const __zentralEmbeddedLoader = (function () {
       return isReminder(it) ? s >= from && s < to : s < to && e > from;
     }).sort((a, b) => itemRange(a)[0] - itemRange(b)[0] || itemRange(b)[1] - itemRange(a)[1] || (a.id < b.id ? -1 : 1));
   }
+  const WEEK_START_DAYS = Object.freeze([1, 0]);
+  function cleanWeekStart(value) {
+    if (value === 0 || value === "0") return 0;
+    if (value === 1 || value === "1") return 1;
+    if (typeof value === "string") {
+      const s = value.trim().toLowerCase();
+      if (s === "sun" || s === "sunday") return 0;
+      if (s === "mon" || s === "monday") return 1;
+    }
+    return 1;
+  }
+  function cleanWeekNumbers(value) {
+    return value === true;
+  }
+  const SHORT_WEEKDAY_NAMES = Object.freeze(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
+  const LONG_WEEKDAY_NAMES = Object.freeze(["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]);
+  function weekdayLabels(weekStart = 1, style = "short", lang = DEFAULT_NOTES_LANGUAGE) {
+    const ws = cleanWeekStart(weekStart);
+    const table = notesLanguageTable(lang);
+    const names = style === "long" ? table.weekdaysDisplay.longSun : table.weekdaysDisplay.shortSun;
+    return Array.from({ length: 7 }, (_, i) => names[(ws + i) % 7]);
+  }
+  // Pure week-of-year number in civil coordinates (immune to DST): ISO 8601 when weekStart = 1 (Monday),
+  // Sunday-first week-of-year (Week 1 contains Jan 1) when weekStart = 0 (Sunday).
+  function weekNumber(day, weekStart = 1) {
+    const d = new Date(dayStart(day));
+    const u = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+    const ws = cleanWeekStart(weekStart);
+    if (ws === 0) {
+      const dow = new Date(u).getUTCDay();
+      const sat = u + (6 - dow) * 86400000;
+      const year = new Date(sat).getUTCFullYear();
+      const jan1 = Date.UTC(year, 0, 1);
+      const week1Sun = jan1 - new Date(jan1).getUTCDay() * 86400000;
+      const sun = u - dow * 86400000;
+      return Math.floor((sun - week1Sun) / (7 * 86400000)) + 1;
+    }
+    const isoDow = new Date(u).getUTCDay() || 7;
+    const thu = u + (4 - isoDow) * 86400000;
+    const isoYear = new Date(thu).getUTCFullYear();
+    const jan1 = Date.UTC(isoYear, 0, 1);
+    return Math.ceil(((thu - jan1) / 86400000 + 1) / 7);
+  }
   // Month grid: 6 weeks x 7 days of local midnights; weekStart 0 = Sunday, 1 = Monday.
   function monthGrid(year, month, weekStart = 1) {
+    const ws = cleanWeekStart(weekStart);
     const first = new Date(year, month, 1);
-    const lead = (first.getDay() - weekStart + 7) % 7;
+    const lead = (first.getDay() - ws + 7) % 7;
     const days = [];
     for (let i = 0; i < 42; i++) days.push(new Date(year, month, 1 - lead + i).getTime());
     return Array.from({ length: 6 }, (_, w) => days.slice(w * 7, w * 7 + 7));
   }
   // Seven local midnights containing `day`; defaults to Monday-first to match the month view.
   function weekDays(day, weekStart = 1) {
-    const start = dayStart(day), offset = (new Date(start).getDay() - ((Number(weekStart) || 0) + 7) % 7 + 7) % 7;
+    const ws = cleanWeekStart(weekStart);
+    const start = dayStart(day), offset = (new Date(start).getDay() - ws + 7) % 7;
     const first = addDays(start, -offset);
     return Array.from({ length: 7 }, (_, i) => addDays(first, i));
+  }
+  const WEEK_DAYS_LIMITS = Object.freeze({ min: 1, max: 14, default: 7, minColPx: 84, gutterPx: 42 });
+  const WEEK_RANGE_STARTS = Object.freeze(["weekStart", "today", "selected"]);
+  const DEFAULT_WEEK_SPAN = Object.freeze({ days: 7, anchor: "weekStart" });
+  function cleanWeekDaysCount(value, fallback = 7) {
+    if (typeof value === "string" && value.trim().toLowerCase() === "auto") return "auto";
+    const n = Number(value);
+    if (Number.isFinite(n) && value !== "" && value !== null && typeof value !== "boolean") {
+      return Math.min(WEEK_DAYS_LIMITS.max, Math.max(WEEK_DAYS_LIMITS.min, Math.round(n)));
+    }
+    if (fallback === "auto") return "auto";
+    const fb = Number(fallback);
+    return Number.isFinite(fb) ? Math.min(WEEK_DAYS_LIMITS.max, Math.max(WEEK_DAYS_LIMITS.min, Math.round(fb))) : 7;
+  }
+  function cleanWeekRangeAnchor(value) {
+    if (value === "today") return "today";
+    if (value === "selected" || value === "cursor") return "selected";
+    return "weekStart";
+  }
+  function cleanWeekSpan(raw) {
+    if (raw === "auto" || typeof raw === "number" || (typeof raw === "string" && raw.trim() !== "")) {
+      return { days: cleanWeekDaysCount(raw, 7), anchor: "weekStart" };
+    }
+    if (!raw || typeof raw !== "object") return { ...DEFAULT_WEEK_SPAN };
+    return {
+      days: cleanWeekDaysCount(raw.days, 7),
+      anchor: cleanWeekRangeAnchor(raw.anchor),
+    };
+  }
+  function fitWeekDayCount(widthPx, { minColPx = WEEK_DAYS_LIMITS.minColPx, gutterPx = WEEK_DAYS_LIMITS.gutterPx, min = WEEK_DAYS_LIMITS.min, max = WEEK_DAYS_LIMITS.max, fallback = WEEK_DAYS_LIMITS.default } = {}) {
+    const w = Number(widthPx);
+    if (!(w > 0)) return fallback;
+    const usable = Math.max(0, w - (Number(gutterPx) || 0));
+    const col = Math.max(1, Number(minColPx) || WEEK_DAYS_LIMITS.minColPx);
+    return Math.max(min, Math.min(max, Math.floor(usable / col) || 1));
+  }
+  // OW-25: `count` consecutive local midnights starting at `start` (clamped 1..14, DST-safe).
+  function visibleDays(start, count = 7) {
+    const base = dayStart(start);
+    const n = cleanWeekDaysCount(count, 7);
+    const len = n === "auto" ? 7 : n;
+    return Array.from({ length: len }, (_, i) => addDays(base, i));
+  }
+  function resolveWeekVisibleDays({ cursor, today, weekStart = 1, span, widthPx = 0, panDay = "" } = {}) {
+    const cfg = cleanWeekSpan(span);
+    const count = cfg.days === "auto" ? fitWeekDayCount(widthPx) : cfg.days;
+    const pan = panDay ? parseYmd(panDay) : null;
+    let startDay;
+    if (pan) startDay = pan.getTime();
+    else if (cfg.anchor === "today") startDay = dayStart(today === undefined ? cursor : today);
+    else if (cfg.anchor === "selected") startDay = dayStart(cursor);
+    else startDay = weekDays(cursor, weekStart)[0];
+    return visibleDays(startDay, count);
   }
   // [{ day, items }] for `count` days from `from` (local midnight). Multi-day events appear on every day they cover.
   function daysForward(items, from, count) {
@@ -1866,6 +2566,74 @@ const __zentralEmbeddedLoader = (function () {
     for (const r of rows) {
       if (cluster.length && r.s >= clusterEnd) flush();
       cluster.push(r); clusterEnd = Math.max(clusterEnd, r.e);
+    }
+    if (cluster.length) flush();
+    return out;
+  }
+  // Side-by-side columns for Week/Day grid boxes measured in clock-grid minutes [0..1440].
+  // Clustering on drawn clock-grid intervals keeps repeated fall-back events (1st-pass CEST vs 2nd-pass CET at 02:15)
+  // in separate side-by-side lanes instead of burying each other, and prevents short pre-gap boxes (01:50 + 20px) on
+  // spring-forward days from falsely colliding with post-gap events (03:05).
+  function layoutGridSpans(spans, { minBoxMin = 1, overlapMin = 0, gridEndMin = 1440 } = {}) {
+    const minBox = Math.max(1, Math.ceil(Number(minBoxMin) || 1));
+    const allowOverlap = Math.max(0, Math.floor(Number(overlapMin) || 0));
+    const endCap = Number.isFinite(Number(gridEndMin)) ? Number(gridEndMin) : 1440;
+    const lastBoxStart = endCap - minBox;
+    const rows = (spans || []).map((span) => {
+      const reminder = !!span.reminder;
+      const rawStart = Number(span.startMin) || 0;
+      const rawEnd = reminder ? rawStart : (Number(span.endMin) || 0);
+      const naturalLen = rawEnd - rawStart;
+      let boxStartMin, boxEndMin;
+      if (!reminder && naturalLen >= minBox) {
+        boxStartMin = rawStart;
+        boxEndMin = rawEnd;
+      } else {
+        boxStartMin = rawStart - Math.max(0, rawStart - lastBoxStart);
+        const length = reminder ? minBox : Math.max(1, naturalLen, minBox - allowOverlap);
+        boxEndMin = boxStartMin + length;
+      }
+      return {
+        span,
+        item: span.item,
+        original: span.item,
+        realStart: Number(span.start) || 0,
+        startMin: boxStartMin,
+        endMin: Math.max(boxStartMin + 1, boxEndMin),
+      };
+    }).sort((a, b) => (
+      a.startMin - b.startMin ||
+      a.realStart - b.realStart ||
+      (b.endMin - b.startMin) - (a.endMin - a.startMin) ||
+      (String(a.item?.id || "") < String(b.item?.id || "") ? -1 : String(a.item?.id || "") > String(b.item?.id || "") ? 1 : 0)
+    ));
+    const out = [];
+    let cluster = [], clusterEnd = -Infinity;
+    const flush = () => {
+      const laneEnds = [];
+      for (const r of cluster) {
+        let lane = laneEnds.findIndex((end) => end <= r.startMin);
+        if (lane < 0) { lane = laneEnds.length; laneEnds.push(r.endMin); } else laneEnds[lane] = r.endMin;
+        r.lane = lane;
+      }
+      for (const r of cluster) {
+        out.push({
+          item: r.item,
+          original: r.original,
+          span: r.span,
+          lane: r.lane,
+          lanes: laneEnds.length,
+          startMin: r.startMin,
+          endMin: r.endMin,
+        });
+      }
+      cluster = [];
+      clusterEnd = -Infinity;
+    };
+    for (const r of rows) {
+      if (cluster.length && r.startMin >= clusterEnd) flush();
+      cluster.push(r);
+      clusterEnd = Math.max(clusterEnd, r.endMin);
     }
     if (cluster.length) flush();
     return out;
@@ -1955,6 +2723,64 @@ const __zentralEmbeddedLoader = (function () {
   function calendarMoveTimedEvent(item, placement, zone = "", now = Date.now()) {
     return !item?.x || isReminder(item) ? null : calendarMoveTimedItem(item, placement, zone, now);
   }
+  const NOTE_DRAG_MIME = "application/x-zentral-note-id";
+
+  // OW-02: map a calendar drop surface and pointer position to composer prefill fields without mutating any store.
+  // Month, narrow Month picker (OW-09) and Week/Day all-day cells resolve to all-day reminders (with an exclusive
+  // next-day endDate ready if the user switches Type to Event); Week/Day time tracks snap to `snapMin` inside the
+  // visible grid hours and resolve against `zone` (advancing across spring-forward gaps via zonedDateTimeToMs).
+  function calendarNoteDropSlot(surface, dateKey, { offsetPx = 0, hourPx = 54, grid = null, snapMin = 15, zone = "", durationMin = 60 } = {}) {
+    if (!["month", "picker", "allday", "time"].includes(surface)) return null;
+    const day = parseYmd(dateKey);
+    if (!day) return null;
+    const rawZone = String(zone || "").trim();
+    const validZone = rawZone ? cleanZone(rawZone) : "";
+    if (rawZone && !validZone) return null;
+    if (surface !== "time") {
+      return {
+        surface,
+        kind: "reminder",
+        allDay: true,
+        date: dateKey,
+        endDate: ymd(new Date(addDays(day.getTime(), 1))),
+        tz: validZone,
+        minute: null,
+      };
+    }
+    const px = Number(hourPx);
+    if (!Number.isFinite(px) || !(px > 0)) return null;
+    const step = cleanCalendarSnap(snapMin);
+    const minMinute = Math.max(0, gridStartMin(grid));
+    const maxMinute = Math.max(minMinute, Math.min(1440 - step, gridEndMin(grid)));
+    const rawMinute = gridMinuteAt(offsetPx, px, grid);
+    const snapped = Math.max(minMinute, Math.min(maxMinute, Math.round(rawMinute / step) * step));
+    const startMs = zonedDateTimeToMs(dateKey, clockOfMinutes(snapped), validZone);
+    if (!Number.isFinite(startMs)) return null;
+    const resolvedDate = zonedDateKey(startMs, validZone);
+    const startTime = clockIn(startMs, validZone);
+    const dur = Math.max(step, Math.round(Number(durationMin) || 60));
+    const endMs = startMs + dur * MIN;
+    const resolvedMin = parseClock(startTime);
+    return {
+      surface: "time",
+      kind: "reminder",
+      allDay: false,
+      date: resolvedDate,
+      startTime,
+      endDate: zonedDateKey(endMs, validZone),
+      endTime: clockIn(endMs, validZone),
+      tz: validZone,
+      minute: resolvedMin >= 0 ? resolvedMin : snapped,
+    };
+  }
+
+  function calendarNoteDropLabel(target, fmt = DEFAULT_DATE_FORMAT) {
+    if (!target || typeof target !== "object" || !parseYmd(target.date)) return "";
+    const dayText = formatDateKey(target.date, fmt);
+    if (target.allDay) return `${dayText} · all day`;
+    return target.startTime ? `${dayText} · ${target.startTime}` : dayText;
+  }
+
   // The drag-create range is civil-time based and direction independent. Only
   // produce composer fields after both endpoints resolve to real instants.
   function calendarDraftRange(originKey, originMinute, targetKey, targetMinute, zone = "", snapMin = 15) {
@@ -2117,20 +2943,20 @@ const __zentralEmbeddedLoader = (function () {
     return match.length === 1 ? cleanCategoryName(match[0][1]) : null;
   }
   const stripItemCategoryMarks = (line) => String(line || "").replace(ITEM_CATEGORY_RE, "");
-  function parseMarkedLine(line, heading, now) {
+  function parseMarkedLine(line, heading, now, opts) {
     const ignored = ignoredDateTokens(line);
     let sourceLine = stripItemCategoryMarks(stripItemIdMarks(stripDateIgnoreMarks(line)));
     const listText = sourceLine.replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)(?:\[[ xX]\]\s+)?/, "");
-    const prefix = parseDatePrefix(listText, now);
+    const prefix = parseDatePrefix(listText, now, opts);
     // Ignoring a leading date disables that trigger; a dated heading may still supply its own date.
     if (prefix && ignored.some((raw) => raw === prefix.raw.toLowerCase() || raw.startsWith(prefix.raw.toLowerCase() + " "))) {
       const at = sourceLine.indexOf(prefix.raw);
       if (at >= 0) sourceLine = sourceLine.slice(0, at) + sourceLine.slice(at + prefix.raw.length);
     }
-    const dayOfHeading = heading.text ? (parseDatePrefix(heading.text, now)?.day ?? null) : null;
-    return { sourceLine, parsed: parseLine(sourceLine, now, dayOfHeading) };
+    const dayOfHeading = heading.text ? (parseDatePrefix(heading.text, now, opts)?.day ?? null) : null;
+    return { sourceLine, parsed: parseLine(sourceLine, now, dayOfHeading, opts) };
   }
-  function visitCalendarListLines(body, now, visit) {
+  function visitCalendarListLines(body, now, visit, opts) {
     const lines = String(body || "").split("\n");
     let fence = "", heading = { level: 0, text: "" }, sec = null;
     for (let i = 0; i < lines.length; i++) {
@@ -2146,12 +2972,12 @@ const __zentralEmbeddedLoader = (function () {
       const mk = MARKER_RE.exec(line);
       if (mk) { sec = { category: (mk[1] || "").trim().slice(0, 80), level: heading.level }; continue; }
       if (!sec) continue;
-      const result = parseMarkedLine(line, heading, now);
+      const result = parseMarkedLine(line, heading, now, opts);
       if (result.parsed) visit({ index: i, line, heading, category: sec.category, ...result });
     }
     return lines;
   }
-  function ensureNoteItemIds(body, noteId, now = 0) {
+  function ensureNoteItemIds(body, noteId, now = 0, opts) {
     const lines = String(body || "").split("\n"), seen = new Set();
     let changed = false;
     visitCalendarListLines(body, now, (entry) => {
@@ -2169,7 +2995,7 @@ const __zentralEmbeddedLoader = (function () {
         lines[entry.index] = core + " %%zn-item-id:" + id + "%%" + trailing;
         changed = true;
       }
-    });
+    }, opts);
     return { body: changed ? lines.join("\n") : String(body || ""), changed, count: seen.size };
   }
   // The jump target for note-less items: a `## Agenda` heading in their date note. An existing heading of any level
@@ -2414,7 +3240,7 @@ const __zentralEmbeddedLoader = (function () {
     });
     return { body: changed ? lines.join("\n") : text, changed, found, safe };
   }
-  function extractNoteItems(body, noteId, now = 0) {
+  function extractNoteItems(body, noteId, now = 0, opts) {
     const lines = String(body || "").split("\n");
     const out = [], seen = new Map();
     let fence = "", heading = { level: 0, text: "" }, sec = null;
@@ -2431,7 +3257,7 @@ const __zentralEmbeddedLoader = (function () {
       const mk = MARKER_RE.exec(line);
       if (mk) { sec = { category: (mk[1] || "").trim().slice(0, 80), level: heading.level }; continue; }
       if (!sec) continue;
-      const result = parseMarkedLine(line, heading, now), sourceLine = result.sourceLine, parsed = result.parsed;
+      const result = parseMarkedLine(line, heading, now, opts), sourceLine = result.sourceLine, parsed = result.parsed;
       if (!parsed) continue;
       const norm = sourceLine.replace(/\s+/g, " ").trim().toLowerCase() + "|" + heading.text;
       const n = (seen.get(norm) || 0) + 1; seen.set(norm, n);
@@ -2490,18 +3316,63 @@ const __zentralEmbeddedLoader = (function () {
       ...(raw.coalesced === true ? { coalesced: true } : {}),
     };
   }
+  const REMINDER_STACK_LIMIT = 3;
   // Display and cross-window retirement rules for occurrence-scoped reminder cards.
-  function reminderAlertPresentation(stage) {
+  function reminderAlertPresentation(stage, alertSettings = null) {
     const value = ["pre", "due", "followup"].includes(stage) ? stage : "followup";
-    return { stage: value, rank: value === "pre" ? 1 : value === "due" ? 2 : 3,
-      label: value === "pre" ? "Coming up" : value === "due" ? "Due now" : "Reminder overdue" };
+    const defaultLayout = value === "pre" ? "corner" : value === "due" ? "large" : "centred";
+    const configured = alertSettings ? cleanAlertSettings(alertSettings).stages[value]?.layout : "";
+    const layout = cleanAlertLayout(configured, defaultLayout);
+    return {
+      stage: value,
+      rank: value === "pre" ? 1 : value === "due" ? 2 : 3,
+      label: value === "pre" ? "Coming up" : value === "due" ? "Due now" : "Reminder overdue",
+      layout,
+      overlay: layout === "centred",
+      persistent: value !== "pre" || layout !== "corner",
+    };
   }
-  function reminderSnoozeTomorrowMinutes(at) {
+  function orderOverlayAlertActions(actions) {
+    if (!Array.isArray(actions)) return [];
+    const bucket = (id) => {
+      const k = String(id || "");
+      if (k === "done") return 0;
+      if (k.startsWith("snooze")) return 1;
+      if (k === "open") return 2;
+      if (k === "dismiss") return 3;
+      return 4;
+    };
+    return actions
+      .map((action, index) => ({ action, index, order: bucket(action?.id) }))
+      .sort((a, b) => (a.order - b.order) || (a.index - b.index))
+      .map((entry) => entry.action);
+  }
+  function reminderStackMoreLabel(hiddenCount, expanded = false) {
+    if (expanded === true) return "Show fewer";
+    const count = Math.trunc(Number(hiddenCount));
+    return count > 0 ? "+" + count + " more" : "";
+  }
+  function reminderSnoozeTomorrowMinutes(at, zone = "") {
     const stamp = Number(at);
     if (!Number.isFinite(stamp)) return 0;
-    const date = new Date(stamp);
-    date.setDate(date.getDate() + 1);
-    const minutes = Math.round((date.getTime() - stamp) / 60000);
+    const validZone = cleanZone(zone);
+    let target = NaN;
+    if (validZone) {
+      const baseKey = zonedDateKey(stamp, validZone);
+      const baseClock = clockIn(stamp, validZone);
+      const baseDay = parseYmd(baseKey);
+      if (baseDay && baseClock) {
+        const nextKey = ymd(new Date(baseDay.getFullYear(), baseDay.getMonth(), baseDay.getDate() + 1));
+        const zoned = zonedDateTimeToMs(nextKey, baseClock, validZone);
+        if (Number.isFinite(zoned)) target = zoned;
+      }
+    }
+    if (!Number.isFinite(target)) {
+      const date = new Date(stamp);
+      date.setDate(date.getDate() + 1);
+      target = date.getTime();
+    }
+    const minutes = Math.round((target - stamp) / 60000);
     return Number.isFinite(minutes) && minutes > 0 ? minutes : 0;
   }
   function reminderAlertShouldClose(identity, records, seen = new Set()) {
@@ -2928,7 +3799,7 @@ const __zentralEmbeddedLoader = (function () {
 
   // `beforeWrite` (optional, async) runs before every calendar write, outside the calendar lock. The note store uses it to
   // put pending note text on disk first, so `calendar.json` never refers to a note line that was not saved (UI4.7).
-  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null, beforeWrite = null, noteFileState = null }) {
+  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null, beforeWrite = null, noteFileState = null, getParseOptions = () => ({}) }) {
     const items = new Map();
     const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite, perf, withHistoryLock });
     const categoryDefs = new Map();
@@ -3307,15 +4178,15 @@ const __zentralEmbeddedLoader = (function () {
         return n;
       },
       // Auto-managed hidden IDs travel with Markdown lines, giving identical repeated rows stable per-line identity.
-      ensureNoteIds(noteId, body) { return ensureNoteItemIds(body, noteId, now()); },
+      ensureNoteIds(noteId, body) { return ensureNoteItemIds(body, noteId, now(), getParseOptions()); },
       // Rebuild the note-derived items. During upgrade, migrate extras from legacy IDs using the old content/ordinal key.
       // Thereafter exact line IDs win; unique legacy matches are safe, while an unidentified duplicate never inherits
       // another duplicate's metadata.
       syncNote(noteId, body, { sourceEdit = false, updatedAt = 0 } = {}) {
         const had = [...items.values()].filter((it) => it.x.noteId === noteId && it.x.src === "list");
         if (!had.length && !/%%\s*calendar/i.test(String(body || ""))) return false;
-        const fresh = extractNoteItems(body, noteId, now());
-        const checkedLines = sourceEdit ? listCheckboxStates(body, now()) : null;
+        const fresh = extractNoteItems(body, noteId, now(), getParseOptions());
+        const checkedLines = sourceEdit ? listCheckboxStates(body, now(), getParseOptions()) : null;
         const exact = new Map(had.map((it) => [it.id, it]));
         const byLegacy = new Map();
         for (const it of had) {
@@ -4398,7 +5269,12 @@ const __zentralEmbeddedLoader = (function () {
   function weekText(items, weekFrom, opts = {}) {
     const names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     const lines = [];
-    for (let i = 0; i < 7; i++) {
+    if (opts && opts.weekNumbers === true) {
+      lines.push("# Week " + weekNumber(weekFrom, opts.weekStart === undefined ? 1 : opts.weekStart), "");
+    }
+    const rawDays = Number(opts && opts.days);
+    const dayCount = Number.isFinite(rawDays) && rawDays >= 1 ? Math.min(WEEK_DAYS_LIMITS.max, Math.max(1, Math.round(rawDays))) : 7;
+    for (let i = 0; i < dayCount; i++) {
       const d = addDays(weekFrom, i);
       lines.push("## " + names[new Date(d).getDay()] + " " + ymd(new Date(d)));
       const list = expandRange(items, d, addDays(d, 1));
@@ -4441,8 +5317,9 @@ const __zentralEmbeddedLoader = (function () {
   // What the mini-calendar draws for a month: 6 weeks of local days, item count, heat level and dominant category.
   // selected = local midnight ms or 0. A single expansion supplies all cells, including recurring occurrences.
   function pickerMonth(year, month, { weekStart = 1, now = 0, selected = 0, items = [] } = {}) {
+    const ws = cleanWeekStart(weekStart);
     const today = now ? dayStart(now) : 0, sel = selected ? dayStart(selected) : 0;
-    const grid = monthGrid(year, month, weekStart);
+    const grid = monthGrid(year, month, ws);
     const first = grid[0][0], last = addDays(grid[5][6], 1);
     const stats = new Map();
     for (const it of expandRange(Array.isArray(items) ? items : [], first, last)) {
@@ -4480,6 +5357,7 @@ const __zentralEmbeddedLoader = (function () {
   }
   // Keyboard moves in the picker: arrows = 1 day / 1 week, PageUp/PageDown = 1 month, Home/End = start/end of week.
   function pickerKey(day, key, weekStart = 1) {
+    const ws = cleanWeekStart(weekStart);
     const d = new Date(day);
     switch (key) {
       case "ArrowLeft": return addDays(day, -1);
@@ -4488,8 +5366,8 @@ const __zentralEmbeddedLoader = (function () {
       case "ArrowDown": return addDays(day, 7);
       case "PageUp": return new Date(d.getFullYear(), d.getMonth() - 1, Math.min(d.getDate(), new Date(d.getFullYear(), d.getMonth(), 0).getDate())).getTime();
       case "PageDown": return new Date(d.getFullYear(), d.getMonth() + 1, Math.min(d.getDate(), new Date(d.getFullYear(), d.getMonth() + 2, 0).getDate())).getTime();
-      case "Home": return addDays(day, -((d.getDay() - weekStart + 7) % 7));
-      case "End": return addDays(day, 6 - ((d.getDay() - weekStart + 7) % 7));
+      case "Home": return addDays(day, -((d.getDay() - ws + 7) % 7));
+      case "End": return addDays(day, 6 - ((d.getDay() - ws + 7) % 7));
       default: return day;
     }
   }
@@ -4501,7 +5379,13 @@ const __zentralEmbeddedLoader = (function () {
   const DEFAULT_DATE_FORMAT = "DD-MM-YYYY";
   const cleanDateFormat = (v) => (DATE_FORMATS.includes(v) ? v : DEFAULT_DATE_FORMAT);
   // Local calendar-day key of an instant; never uses toISOString (UTC shifts a day near midnight).
-  const localDateKey = (ms) => (Number.isFinite(Number(ms)) ? ymd(new Date(Number(ms))) : "");
+  const localDateKey = (ms) => {
+    if (ms && typeof ms === "object") {
+      if (typeof ms.date === "string" && parseYmd(ms.date)) return ms.date;
+      if (typeof ms.dateTime === "string") ms = Date.parse(ms.dateTime);
+    }
+    return Number.isFinite(Number(ms)) ? ymd(new Date(Number(ms))) : "";
+  };
   // "YYYY-MM-DD" key -> text in the chosen format; "" for an invalid key. `locale` only matters for "long".
   function formatDateKey(key, fmt = DEFAULT_DATE_FORMAT, locale) {
     const d = parseYmd(key);
@@ -4577,8 +5461,12 @@ const __zentralEmbeddedLoader = (function () {
   // Agenda window: today .. today+days-1 (default 4 days = T..T+3). Counts live items per local day (recurrences expanded); `isDone(item)` is supplied by the reminder lifecycle (T2.7a), the item model has no done flag yet.
   const AGENDA_LABELS = Object.freeze(["Today", "Tomorrow"]);
   function agendaDayLabel(offset, day, locale = undefined) {
-    if (offset === 0 || offset === 1) return AGENDA_LABELS[offset];
-    return new Date(day).toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
+    const table = locale === undefined ? null : notesLanguageTable(locale);
+    const specialLabels = locale === "pl" || (table && table.code !== "en" && table.code !== "pl");
+    const labels = table?.agendaLabels || AGENDA_LABELS;
+    if (offset >= 0 && offset < labels.length && (offset < 2 || specialLabels)) return labels[offset];
+    const resolvedLocale = locale === undefined ? undefined : (LANG_REGISTRY.has(String(locale).toLowerCase()) ? notesLocaleFor(locale) : locale);
+    return new Date(day).toLocaleDateString(resolvedLocale, { weekday: "short", day: "numeric", month: "short" });
   }
   // Agenda visibility is independent of reminder alerts, snooze and recurrence state.
   // Each layer is sparse: an omitted field inherits from the next layer.
@@ -4672,14 +5560,14 @@ const __zentralEmbeddedLoader = (function () {
     }
     return Number.isFinite(next) ? next : null;
   }
-  function agendaBuckets(items, now, days = 4, isDone = () => false) {
+  function agendaBuckets(items, now, days = 4, isDone = () => false, locale = undefined) {
     const n = Math.max(1, Math.min(31, Math.floor(Number(days)) || 4));
     const base = dayStart(now);
     const out = [];
     for (let i = 0; i < n; i++) {
       const from = addDays(base, i), to = addDays(base, i + 1);
       const list = expandRange(items, from, to).filter((it) => !isDone(it));
-      out.push({ offset: i, key: localDateKey(from), label: agendaDayLabel(i, from), from, to, count: list.length, items: list });
+      out.push({ offset: i, key: localDateKey(from), label: agendaDayLabel(i, from, locale), from, to, count: list.length, items: list });
     }
     return out;
   }
@@ -4761,7 +5649,7 @@ const __zentralEmbeddedLoader = (function () {
       ended: !isReminder(item) && end > start && end <= Number(now),
     };
   }
-  function agendaZenProjection(items, now, days = 4, isDone = () => false, getWindow = null, policies = null) {
+  function agendaZenProjection(items, now, days = 4, isDone = () => false, getWindow = null, policies = null, options = {}) {
     // Expand the complete local window once, then fan overlapping multi-day events into
     // each day bucket. Calling expandRange once per day is needlessly O(days * items).
     const sourceItems = items || [];
@@ -4786,7 +5674,7 @@ const __zentralEmbeddedLoader = (function () {
     const candidateTo = fastDefault ? windowEnd : addDays(windowEnd, maxLead);
     const buckets = Array.from({ length: n }, (_, offset) => {
       const from = addDays(base, offset), to = addDays(base, offset + 1);
-      return { offset, key: localDateKey(from), label: agendaDayLabel(offset, from), from, to, count: 0, items: [] };
+      return { offset, key: localDateKey(from), label: agendaDayLabel(offset, from, options?.lang), from, to, count: 0, items: [] };
     });
     let candidates;
     if (fastDefault) {
@@ -4833,7 +5721,7 @@ const __zentralEmbeddedLoader = (function () {
   }
   // Separate, occurrence-scoped overdue bucket. Civil-day look-back excludes
   // today even for a past time today; item visibility and lifecycle still apply.
-  function agendaOverdueProjection(items, now, { enabled = true, days = 7, cap = 10, isDone = () => false, getWindow = null, policies = null } = {}) {
+  function agendaOverdueProjection(items, now, { enabled = true, days = 7, cap = 10, isDone = () => false, getWindow = null, policies = null, lang = undefined } = {}) {
     if (!enabled || !Number.isFinite(Number(now))) return null;
     const countDays = Math.max(1, Math.min(31, Math.floor(Number(days)) || 7));
     const limit = Math.max(1, Math.min(100, Math.floor(Number(cap)) || 10));
@@ -4847,7 +5735,7 @@ const __zentralEmbeddedLoader = (function () {
       return entry;
     });
     if (overdue.length > limit) shown.push({ key: "more:overdue", label: "+" + (overdue.length - limit) + " more", summary: "Open more overdue reminders", openDate: localDateKey(itemRange(overdue[limit])[0]) });
-    return { key: "day:overdue", date: "overdue", label: "Overdue", count: overdue.length, items: shown };
+    return { key: "day:overdue", date: "overdue", label: notesLanguageTable(lang).overdueLabel, count: overdue.length, items: shown };
   }
   // Only days with at least one visible item get a Zen Agenda folder. Empty
   // days (count === 0) are omitted so no empty Tomorrow / Day N folders are
@@ -4866,7 +5754,7 @@ const __zentralEmbeddedLoader = (function () {
   }
   // Coalesced, store-change-driven controller for the virtual Zen Agenda folder. The host
   // supplies DOM/Zen operations through `api`; this controller owns no browser globals.
-  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getReady = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
+  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getReady = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), getLanguage = () => undefined, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
     let dead = false, timer = null, timerAt = Infinity, last = [], busy = false, consecutiveChanges = 0, blockedUntil = 0;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
     function armAt(due) {
@@ -4906,8 +5794,8 @@ const __zentralEmbeddedLoader = (function () {
         if (!getReady()) return last;
         sourceItems = getItems?.() || [];
         policies = getWindowIsMasterPolicy ? prepareAgendaWindows(sourceItems, getWindow) : null;
-        fullProjection = agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow, policies);
-        overdue = agendaOverdueProjection(sourceItems, now(), { ...getOverdue(), isDone, getWindow, policies });
+        fullProjection = agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow, policies, { lang: getLanguage() });
+        overdue = agendaOverdueProjection(sourceItems, now(), { ...getOverdue(), isDone, getWindow, policies, lang: getLanguage() });
         const projection = [...(overdue ? [overdue] : []), ...agendaVisibleDays(fullProjection)];
         if (!projection.length) {
           api.removeAll?.(); last = projection; scheduleBoundary(sourceItems, policies, fullProjection, overdue); return projection;
@@ -5176,7 +6064,25 @@ const __zentralEmbeddedLoader = (function () {
     const start = cleanWhen(item?.start);
     if (!start) return null;
     const explicit = Number(targetMs);
-    const moved = Number.isFinite(explicit) && explicit > 0 ? Math.floor(explicit) : snoozeDays(whenMs(start), days);
+    let moved;
+    if (Number.isFinite(explicit) && explicit > 0) {
+      moved = Math.floor(explicit);
+    } else {
+      const baseMs = whenMs(start);
+      const stepDays = Math.round(Number(days) || 0);
+      const zone = start.date ? "" : cleanZone(item?.x?.tz);
+      if (zone && Number.isFinite(baseMs)) {
+        const baseKey = zonedDateKey(baseMs, zone);
+        const baseClock = clockIn(baseMs, zone);
+        const baseDay = parseYmd(baseKey);
+        if (baseDay && baseClock) {
+          const nextKey = ymd(new Date(baseDay.getFullYear(), baseDay.getMonth(), baseDay.getDate() + stepDays));
+          const zoned = zonedDateTimeToMs(nextKey, baseClock, zone);
+          if (Number.isFinite(zoned) && zoned > 0) moved = zoned;
+        }
+      }
+      if (!Number.isFinite(moved)) moved = snoozeDays(baseMs, stepDays);
+    }
     if (!Number.isFinite(moved) || moved <= 0) return null;
     return start.date ? { date: ymd(new Date(dayStart(moved))) } : { dateTime: iso(moved) };
   }
@@ -5259,12 +6165,702 @@ const __zentralEmbeddedLoader = (function () {
     return lr > rr ? local : remote; // exact ties deliberately prefer remote
   }
 
+  // OW-07: '+' menu in All notes (New note, New folder, New reminder, New event, and Date note when Agenda is off),
+  // remembering the last choice for a one-click default and falling back cleanly when Agenda hides Date note.
+  const ALL_NOTES_NEW_CHOICES = Object.freeze(["note", "folder", "reminder", "event", "date"]);
+  function cleanAllNotesNewChoice(value, { agendaEnabled = false, calendarAvailable = true } = {}) {
+    const choice = typeof value === "string" ? value.trim() : "";
+    if (!ALL_NOTES_NEW_CHOICES.includes(choice)) return "note";
+    if (choice === "date" && agendaEnabled) return "note";
+    if ((choice === "reminder" || choice === "event") && !calendarAvailable) return "note";
+    return choice;
+  }
+  function allNotesNewMenuModel({ choice = "note", agendaEnabled = false, calendarAvailable = true } = {}) {
+    const activeChoice = cleanAllNotesNewChoice(choice, { agendaEnabled, calendarAvailable });
+    const unavailableReason = calendarAvailable ? "" : "Calendar item storage is unavailable";
+    const entries = [
+      { id: "note", icon: "plus", label: "New note", active: activeChoice === "note", enabled: true, reason: "" },
+      { id: "folder", icon: "folder", label: "New folder", active: activeChoice === "folder", enabled: true, reason: "" },
+      { id: "reminder", icon: "bell", label: "New reminder", active: activeChoice === "reminder", enabled: !!calendarAvailable, reason: unavailableReason },
+      { id: "event", icon: "calendar-plus", label: "New event", active: activeChoice === "event", enabled: !!calendarAvailable, reason: unavailableReason },
+    ];
+    if (!agendaEnabled)
+      entries.push({ id: "date", icon: "calendar", label: "Date note", active: activeChoice === "date", enabled: true, reason: "" });
+    return entries;
+  }
+  function allNotesNewButtonLabel(choice, opts = {}) {
+    const clean = cleanAllNotesNewChoice(choice, opts);
+    if (clean === "folder") return "New folder";
+    if (clean === "reminder") return "New reminder";
+    if (clean === "event") return "New event";
+    if (clean === "date") return "Date note";
+    return "New note (Ctrl+N)";
+  }
+
+  // OW-10: analog + digital Clock modes, locale 12h/24h detection, angle<->time math, snapping, and hand stepping.
+  const CLOCK_MODES = Object.freeze(["both", "analog", "digital"]);
+  function cleanClockMode(value) {
+    const mode = typeof value === "string" ? value.trim().toLowerCase() : "";
+    return CLOCK_MODES.includes(mode) ? mode : "both";
+  }
+  function clockUses12Hour(locale) {
+    try {
+      const opts = new Intl.DateTimeFormat(locale || undefined, { hour: "numeric" }).resolvedOptions();
+      if (typeof opts.hour12 === "boolean") return opts.hour12;
+      return opts.hourCycle === "h11" || opts.hourCycle === "h12";
+    } catch (_) {
+      return false;
+    }
+  }
+  function clockPointerAngle(dx, dy) {
+    const x = Number(dx) || 0, y = Number(dy) || 0;
+    const radius = Math.hypot(x, y);
+    if (radius === 0) return { angleDeg: 0, radius: 0 };
+    const angleDeg = ((Math.atan2(x, -y) * 180 / Math.PI) % 360 + 360) % 360;
+    return { angleDeg, radius };
+  }
+  function clockAngleOfHour(hour24, { hour12 = false } = {}) {
+    const h = ((Math.floor(Number(hour24) || 0) % 24) + 24) % 24;
+    const slot = h % 12;
+    return {
+      hour: h,
+      slot,
+      angleDeg: slot * 30,
+      inner: !hour12 && h >= 12,
+      period: h >= 12 ? "PM" : "AM",
+    };
+  }
+  function clockHourFromAngle(angleDeg, { hour12 = false, period = "AM", inner = false } = {}) {
+    const deg = ((Number(angleDeg) || 0) % 360 + 360) % 360;
+    const slot = Math.round(deg / 30) % 12;
+    if (hour12) return String(period).toUpperCase() === "PM" ? slot + 12 : slot;
+    return inner ? slot + 12 : slot;
+  }
+  function clockAngleOfMinute(minute) {
+    const m = ((Math.floor(Number(minute) || 0) % 60) + 60) % 60;
+    return m * 6;
+  }
+  const ANALOG_CLOCK_SNAP = 5;
+  function clockMinuteFromAngle(angleDeg, snap = ANALOG_CLOCK_SNAP) {
+    const deg = ((Number(angleDeg) || 0) % 360 + 360) % 360;
+    const step = snap === 1 ? 1 : cleanCalendarSnap(snap);
+    return (Math.round((deg / 6) / step) * step) % 60;
+  }
+  function stepClockHand(minutesOfDay, hand, deltaSteps = 1, { snap = ANALOG_CLOCK_SNAP } = {}) {
+    const total = ((Math.floor(Number(minutesOfDay) || 0) % 1440) + 1440) % 1440;
+    const h = Math.floor(total / 60), m = total % 60;
+    const delta = Math.trunc(Number(deltaSteps) || 0);
+    if (hand === "hour") {
+      const nextH = ((h + delta) % 24 + 24) % 24;
+      return clockOfMinutes(nextH * 60 + m);
+    }
+    const step = snap === 1 ? 1 : cleanCalendarSnap(snap);
+    if (delta === 0) return clockOfMinutes(h * 60 + m);
+    let nextM;
+    if (m % step === 0) nextM = ((m + delta * step) % 60 + 60) % 60;
+    else if (delta > 0) nextM = (((Math.floor(m / step) + delta) * step) % 60 + 60) % 60;
+    else nextM = (((Math.ceil(m / step) + delta) * step) % 60 + 60) % 60;
+    return clockOfMinutes(h * 60 + nextM);
+  }
+  function clockDialPoints({ hour12 = false } = {}) {
+    const pt = (angleDeg, rPct) => {
+      const rad = (angleDeg * Math.PI) / 180;
+      return {
+        xPct: Math.round((50 + rPct * Math.sin(rad)) * 100) / 100,
+        yPct: Math.round((50 - rPct * Math.cos(rad)) * 100) / 100,
+      };
+    };
+    const hours = [];
+    for (let slot = 0; slot < 12; slot++) {
+      const angleDeg = slot * 30;
+      const disp = hour12 ? (slot === 0 ? 12 : slot) : slot;
+      hours.push({
+        value: slot,
+        label: hour12 ? String(disp) : p2(disp),
+        angleDeg,
+        ring: "outer",
+        ...pt(angleDeg, 39),
+      });
+      if (!hour12) {
+        const innerVal = slot + 12;
+        hours.push({
+          value: innerVal,
+          label: p2(innerVal),
+          angleDeg,
+          ring: "inner",
+          ...pt(angleDeg, 24),
+        });
+      }
+    }
+    const minutes = [];
+    for (let m = 0; m < 60; m += 5) {
+      const angleDeg = m * 6;
+      minutes.push({
+        value: m,
+        label: p2(m),
+        angleDeg,
+        ring: "outer",
+        ...pt(angleDeg, 39),
+      });
+    }
+    return { hours, minutes };
+  }
+
+  // ---- T3.6a: accessible color-palette contrast & surface-aware token derivation -------------------------
+  const PALETTE_COLOR_HEX = Object.freeze({
+    yellow: "#f5c542",
+    green: "#4cc38a",
+    blue: "#5aa9ff",
+    pink: "#ff7eb6",
+    purple: "#a78bfa",
+    orange: "#ff9f43",
+    red: "#ff6b6b",
+    teal: "#2ec4b6",
+    gray: "#9aa0a6",
+    brown: "#a1887f",
+    lime: "#b5d334",
+    cyan: "#4dd0e1",
+  });
+  const CSS_NAMED_HEX = Object.freeze({
+    white: "#ffffff",
+    black: "#000000",
+    gray: "#808080",
+    grey: "#808080",
+  });
+  const NOTE_THEME_SURFACES = Object.freeze({
+    light: Object.freeze({ scheme: "light", surface: "#fbfbfd", text: "#1d1d22", accent: "#3b6df0", line: "#dcdce4" }),
+    dark: Object.freeze({ scheme: "dark", surface: "#17171c", text: "#e9e9f0", accent: "#83a5ff", line: "#31313a" }),
+    paper: Object.freeze({ scheme: "light", surface: "#f4ecd8", text: "#3b3226", accent: "#9a6b2f", line: "#d5cbb4" }),
+    recommended: Object.freeze({
+      light: Object.freeze({ scheme: "light", surface: "#ffffff", text: "#18181b", accent: "#2459b4", line: "#d0d0d7" }),
+      dark: Object.freeze({ scheme: "dark", surface: "#1f1f24", text: "#eeeeee", accent: "#9bbdff", line: "#44444c" }),
+    }),
+    zentral: Object.freeze({
+      light: Object.freeze({ scheme: "light", surface: "#f5f5f8", text: "#1c1c22", accent: "#2f62d9", line: "#d4d4dc" }),
+      dark: Object.freeze({ scheme: "dark", surface: "#1e1e24", text: "#e9e9f0", accent: "#83a5ff", line: "#363640" }),
+    }),
+  });
+
+  function clampByte(n) {
+    return Math.max(0, Math.min(255, Math.round(Number(n) || 0)));
+  }
+  function rgbToHex(rgb) {
+    if (!rgb || typeof rgb !== "object") return "";
+    return "#" + [rgb.r, rgb.g, rgb.b].map((v) => clampByte(v).toString(16).padStart(2, "0")).join("");
+  }
+  function parseColorRgb(input, surfaceHex = "#1e1e24") {
+    if (!input) return null;
+    if (typeof input === "object" && Number.isFinite(input.r) && Number.isFinite(input.g) && Number.isFinite(input.b)) {
+      return { r: clampByte(input.r), g: clampByte(input.g), b: clampByte(input.b) };
+    }
+    const raw = String(input).trim().toLowerCase();
+    if (!raw) return null;
+    if (raw === "transparent") return surfaceHex ? parseColorRgb(surfaceHex, null) : { r: 30, g: 30, b: 36 };
+    const named = PALETTE_COLOR_HEX[raw] || CSS_NAMED_HEX[raw];
+    if (named) return parseColorRgb(named, surfaceHex);
+    const hex3 = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(raw);
+    if (hex3) {
+      return {
+        r: parseInt(hex3[1] + hex3[1], 16),
+        g: parseInt(hex3[2] + hex3[2], 16),
+        b: parseInt(hex3[3] + hex3[3], 16),
+      };
+    }
+    const hex6 = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})?$/.exec(raw);
+    if (hex6) {
+      const r = parseInt(hex6[1], 16), g = parseInt(hex6[2], 16), b = parseInt(hex6[3], 16);
+      if (!hex6[4]) return { r, g, b };
+      const a = parseInt(hex6[4], 16) / 255;
+      const bg = (surfaceHex && parseColorRgb(surfaceHex, null)) || { r: 30, g: 30, b: 36 };
+      return {
+        r: clampByte(r * a + bg.r * (1 - a)),
+        g: clampByte(g * a + bg.g * (1 - a)),
+        b: clampByte(b * a + bg.b * (1 - a)),
+      };
+    }
+    const fn = /^rgba?\(([^)]+)\)$/.exec(raw);
+    if (fn) {
+      const parts = fn[1].replace(/\//g, " ").trim().split(/[\s,]+/).filter(Boolean);
+      if (parts.length >= 3) {
+        const ch = (s) => (s.endsWith("%") ? (parseFloat(s) / 100) * 255 : parseFloat(s));
+        const r = clampByte(ch(parts[0])), g = clampByte(ch(parts[1])), b = clampByte(ch(parts[2]));
+        let a = 1;
+        if (parts[3] !== undefined) a = Math.max(0, Math.min(1, parts[3].endsWith("%") ? parseFloat(parts[3]) / 100 : parseFloat(parts[3])));
+        if (a >= 0.999) return { r, g, b };
+        const bg = (surfaceHex && parseColorRgb(surfaceHex, null)) || { r: 30, g: 30, b: 36 };
+        return {
+          r: clampByte(r * a + bg.r * (1 - a)),
+          g: clampByte(g * a + bg.g * (1 - a)),
+          b: clampByte(b * a + bg.b * (1 - a)),
+        };
+      }
+    }
+    return null;
+  }
+  function relativeLuminance(color, surfaceHex) {
+    const rgb = parseColorRgb(color, surfaceHex);
+    if (!rgb) return 0;
+    const lin = (v) => {
+      const s = v / 255;
+      return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * lin(rgb.r) + 0.7152 * lin(rgb.g) + 0.0722 * lin(rgb.b);
+  }
+  function contrastRatio(fg, bg) {
+    const l1 = relativeLuminance(fg, typeof bg === "string" ? bg : undefined);
+    const l2 = relativeLuminance(bg);
+    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+  }
+  function mixSrgb(colorA, colorB, weightA = 0.5) {
+    const w = Math.max(0, Math.min(1, Number(weightA)));
+    const a = parseColorRgb(colorA) || { r: 128, g: 128, b: 128 };
+    const b = parseColorRgb(colorB) || { r: 30, g: 30, b: 36 };
+    return rgbToHex({
+      r: a.r * w + b.r * (1 - w),
+      g: a.g * w + b.g * (1 - w),
+      b: a.b * w + b.b * (1 - w),
+    });
+  }
+  function colorHsl(color) {
+    const rgb = parseColorRgb(color);
+    if (!rgb) return null;
+    const r = rgb.r / 255, g = rgb.g / 255, b = rgb.b / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    const l = (max + min) / 2;
+    let h = 0, s = 0;
+    if (d > 1e-7) {
+      s = d / (1 - Math.abs(2 * l - 1));
+      if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+      else if (max === g) h = ((b - r) / d + 2) * 60;
+      else h = ((r - g) / d + 4) * 60;
+    }
+    return { h: ((h % 360) + 360) % 360, s: s * 100, l: l * 100 };
+  }
+  function hslToHex(h, s, l) {
+    const hh = (((Number(h) || 0) % 360) + 360) % 360;
+    const ss = Math.max(0, Math.min(100, Number(s) || 0)) / 100;
+    const ll = Math.max(0, Math.min(100, Number(l) || 0)) / 100;
+    const c = (1 - Math.abs(2 * ll - 1)) * ss;
+    const x = c * (1 - Math.abs(((hh / 60) % 2) - 1));
+    const m = ll - c / 2;
+    let r = 0, g = 0, b = 0;
+    if (hh < 60) [r, g, b] = [c, x, 0];
+    else if (hh < 120) [r, g, b] = [x, c, 0];
+    else if (hh < 180) [r, g, b] = [0, c, x];
+    else if (hh < 240) [r, g, b] = [0, x, c];
+    else if (hh < 300) [r, g, b] = [x, 0, c];
+    else [r, g, b] = [c, 0, x];
+    return rgbToHex({ r: (r + m) * 255, g: (g + m) * 255, b: (b + m) * 255 });
+  }
+  function hueDistanceDeg(colorA, colorB) {
+    const a = colorHsl(colorA), b = colorHsl(colorB);
+    if (!a || !b || a.s < 2 || b.s < 2) return 0;
+    const diff = Math.abs(a.h - b.h) % 360;
+    return diff > 180 ? 360 - diff : diff;
+  }
+  function splitCssArgs(inner) {
+    const out = [];
+    let depth = 0, start = 0;
+    for (let i = 0; i < inner.length; i++) {
+      const ch = inner[i];
+      if (ch === "(") depth++;
+      else if (ch === ")" && depth > 0) depth--;
+      else if (ch === "," && depth === 0) {
+        out.push(inner.slice(start, i).trim());
+        start = i + 1;
+      }
+    }
+    const tail = inner.slice(start).trim();
+    if (tail) out.push(tail);
+    return out;
+  }
+  function resolveCssColor(expr, surfaceSpec = null) {
+    const surfaceHex = surfaceSpec?.surface || "#1e1e24";
+    const isLight = surfaceSpec ? !!surfaceSpec.isLight : relativeLuminance(surfaceHex) > 0.35;
+    const raw = String(expr || "").trim();
+    if (!raw) return "";
+    const direct = parseColorRgb(raw, surfaceHex);
+    if (direct) return rgbToHex(direct);
+    const lower = raw.toLowerCase();
+    if (lower.startsWith("light-dark(") && raw.endsWith(")")) {
+      const args = splitCssArgs(raw.slice(11, -1));
+      if (args.length >= 2) return resolveCssColor(isLight ? args[0] : args[1], surfaceSpec);
+    }
+    if (lower.startsWith("color-mix(") && raw.endsWith(")")) {
+      const args = splitCssArgs(raw.slice(10, -1));
+      if (args.length >= 3 && /^in\s+srgb/i.test(args[0])) {
+        const parseStop = (token) => {
+          const m = /^(.*?)\s+(-?\d+(?:\.\d+)?)%\s*$/.exec(token.trim());
+          if (m) return { color: m[1].trim(), pct: Math.max(0, Math.min(100, parseFloat(m[2]))) };
+          return { color: token.trim(), pct: null };
+        };
+        const a = parseStop(args[1]), b = parseStop(args[2]);
+        const ca = resolveCssColor(a.color, surfaceSpec) || surfaceHex;
+        const cb = resolveCssColor(b.color, surfaceSpec) || surfaceHex;
+        let wa = 0.5;
+        if (a.pct !== null && b.pct !== null) {
+          const sum = a.pct + b.pct;
+          if (sum <= 0) return surfaceHex;
+          const mixed = mixSrgb(ca, cb, a.pct / sum);
+          return sum < 100 ? mixSrgb(mixed, surfaceHex, sum / 100) : mixed;
+        }
+        if (a.pct !== null) wa = a.pct / 100;
+        else if (b.pct !== null) wa = 1 - b.pct / 100;
+        return mixSrgb(ca, cb, wa);
+      }
+    }
+    return "";
+  }
+  function ensureContrastHex(seedColor, bgOrBgs, minRatio = 4.5, options = {}) {
+    const bgs = (Array.isArray(bgOrBgs) ? bgOrBgs : [bgOrBgs])
+      .map((b) => rgbToHex(parseColorRgb(b)))
+      .filter(Boolean);
+    if (!bgs.length) return rgbToHex(parseColorRgb(seedColor)) || "#83a5ff";
+    const seedRgb = parseColorRgb(seedColor, bgs[0]) || { r: 131, g: 165, b: 255 };
+    const seedHex = rgbToHex(seedRgb);
+    const passes = (hex) => bgs.every((bg) => contrastRatio(hex, bg) >= minRatio);
+    if (passes(seedHex)) return seedHex;
+    const hsl = colorHsl(seedRgb) || { h: 220, s: 0, l: 50 };
+    const sat = options.desaturate ? Math.min(hsl.s, options.maxSat ?? 45) : hsl.s;
+    const avgLum = bgs.reduce((acc, bg) => acc + relativeLuminance(bg), 0) / bgs.length;
+    const solveDir = (darken) => {
+      const poleL = darken ? 0 : 100;
+      const poleHex = hslToHex(hsl.h, sat, poleL);
+      if (!passes(poleHex)) return "";
+      let far = poleL, near = hsl.l;
+      for (let i = 0; i < 24; i++) {
+        const mid = (far + near) / 2;
+        if (passes(hslToHex(hsl.h, sat, mid))) far = mid;
+        else near = mid;
+      }
+      return hslToHex(hsl.h, sat, far);
+    };
+    const preferDark = avgLum >= 0.179;
+    const first = solveDir(preferDark);
+    if (first) return first;
+    const second = solveDir(!preferDark);
+    if (second) return second;
+    const blackMin = Math.min(...bgs.map((b) => contrastRatio("#000000", b)));
+    const whiteMin = Math.min(...bgs.map((b) => contrastRatio("#ffffff", b)));
+    return blackMin >= whiteMin ? "#000000" : "#ffffff";
+  }
+  function resolveThemeSurface(theme = "zentral", options = {}) {
+    const cleanTheme = Object.prototype.hasOwnProperty.call(NOTE_THEME_SURFACES, theme) ? theme : "zentral";
+    const reqScheme = options.scheme === "light" ? "light" : options.scheme === "dark" ? "dark" : "";
+    const baseEntry = NOTE_THEME_SURFACES[cleanTheme];
+    let base = baseEntry.surface ? baseEntry : baseEntry[reqScheme || "dark"];
+    if ((cleanTheme === "zentral" || cleanTheme === "recommended") && !reqScheme && options.hostSurface) {
+      const hostLum = relativeLuminance(options.hostSurface);
+      base = baseEntry[hostLum > 0.35 ? "light" : "dark"];
+    }
+    const ov = options.overrides && typeof options.overrides === "object" ? options.overrides : {};
+    const rawSurface = ov.bg || (cleanTheme === "zentral" || cleanTheme === "recommended" ? options.hostSurface : "") || base.surface;
+    const surface = rgbToHex(parseColorRgb(rawSurface)) || base.surface;
+    const isLight = relativeLuminance(surface) > 0.35;
+    const scheme = isLight ? "light" : "dark";
+    if (!baseEntry.surface) base = baseEntry[scheme];
+    const rawText = ov.text || (cleanTheme === "zentral" || cleanTheme === "recommended" ? options.hostText : "") || (isLight ? "#1c1c22" : "#e9e9f0");
+    const text = ensureContrastHex(rawText, surface, 7.0);
+    const mutedSeed = mixSrgb(text, surface, 0.68);
+    const muted = ensureContrastHex(mutedSeed, surface, 4.55);
+    const lineSeed = options.hostLine || mixSrgb(text, surface, isLight ? 0.18 : 0.22);
+    const line = rgbToHex(parseColorRgb(lineSeed, surface)) || base.line;
+    let rawAccent = ov.accent || (cleanTheme === "zentral" ? options.hostAccent : "") || base.accent;
+    const accentHsl = colorHsl(rawAccent);
+    // Zen's primary color can be pure black/near-gray on dark workspaces; fall back to the theme's chromatic accent when hostAccent is achromatic and clashes with surface.
+    if (!ov.accent && cleanTheme === "zentral" && options.hostAccent && accentHsl && accentHsl.s < 8 && contrastRatio(rawAccent, surface) < 3.0) {
+      rawAccent = base.accent;
+    }
+    const accent = ensureContrastHex(rawAccent, surface, 4.55);
+    const accentOutline = ensureContrastHex(rawAccent, surface, 3.1);
+    const accentFill = ensureContrastHex(rawAccent, surface, 3.0);
+    const onWhite = contrastRatio("#ffffff", accentFill);
+    const darkInk = isLight ? "#101826" : "#10141d";
+    const onDark = contrastRatio(darkInk, accentFill);
+    const accentOnFill = onWhite >= 4.5 && onWhite >= onDark ? "#ffffff" : onDark >= 4.5 ? darkInk : ensureContrastHex(darkInk, accentFill, 4.55);
+    return Object.freeze({
+      theme: cleanTheme,
+      scheme,
+      isLight,
+      surface,
+      text,
+      muted,
+      line,
+      accent,
+      accentOutline,
+      accentFill,
+      accentOnFill,
+    });
+  }
+  const paletteTokenCache = new Map();
+  function derivePaletteTokens(rawColor, surfaceInput, options = {}) {
+    const surfaceSpec = surfaceInput?.surface && surfaceInput?.text
+      ? surfaceInput
+      : resolveThemeSurface(typeof surfaceInput === "string" ? surfaceInput : "dark");
+    const kind = options.kind === "time" ? "time" : options.kind === "calendar" ? "calendar" : "swatch";
+    const sourceHex = rgbToHex(parseColorRgb(rawColor, surfaceSpec.surface)) || surfaceSpec.accent;
+    const cacheKey = `${sourceHex}|${surfaceSpec.surface}|${surfaceSpec.text}|${kind}`;
+    if (paletteTokenCache.has(cacheKey)) return paletteTokenCache.get(cacheKey);
+
+    const tintSeed = ensureContrastHex(sourceHex, surfaceSpec.surface, 3.1);
+    const weights = kind === "time"
+      ? (surfaceSpec.isLight ? [0.15, 0.22, 0.28] : [0.18, 0.25, 0.31])
+      : (surfaceSpec.isLight ? [0.11, 0.18, 0.25] : [0.13, 0.20, 0.27]);
+    const bg = mixSrgb(tintSeed, surfaceSpec.surface, weights[0]);
+    const hoverBg = mixSrgb(tintSeed, surfaceSpec.surface, weights[1]);
+    const selectedBg = mixSrgb(tintSeed, surfaceSpec.surface, weights[2]);
+    const allBgs = [surfaceSpec.surface, bg, hoverBg, selectedBg];
+
+    const outline = ensureContrastHex(sourceHex, [surfaceSpec.surface, bg, hoverBg], 3.08);
+    const selectedOutline = ensureContrastHex(sourceHex, [surfaceSpec.surface, selectedBg], 3.4);
+    const hueFg = ensureContrastHex(sourceHex, allBgs, 4.6);
+    const textFg = ensureContrastHex(surfaceSpec.text, allBgs, 4.6);
+    const fg = kind === "swatch" ? hueFg : textFg;
+    const mutedSeed = mixSrgb(tintSeed, surfaceSpec.text, 0.32);
+    const muted = ensureContrastHex(mutedSeed, allBgs, 4.6);
+    const hoverFg = ensureContrastHex(fg, [hoverBg], 4.6);
+    const selectedFg = ensureContrastHex(kind === "swatch" ? hueFg : textFg, [selectedBg], 4.6);
+
+    const disabledBg = mixSrgb(tintSeed, surfaceSpec.surface, 0.06);
+    const disabledSeed = mixSrgb(outline, surfaceSpec.surface, 0.38);
+    const disabledFg = ensureContrastHex(disabledSeed, [surfaceSpec.surface, disabledBg], 3.15, { desaturate: true, maxSat: 48 });
+    const disabledOutline = mixSrgb(outline, surfaceSpec.surface, 0.45);
+
+    const hlBg = mixSrgb(tintSeed, surfaceSpec.surface, surfaceSpec.isLight ? 0.30 : 0.28);
+    const hlFg = ensureContrastHex(surfaceSpec.text, [hlBg], 4.6);
+
+    const out = Object.freeze({
+      source: sourceHex,
+      bg,
+      fg,
+      hueFg,
+      muted,
+      outline,
+      hoverBg,
+      hoverFg,
+      hoverOutline: selectedOutline,
+      selectedBg,
+      selectedFg,
+      selectedOutline,
+      disabledBg,
+      disabledFg,
+      disabledOutline,
+      hlBg,
+      hlFg,
+    });
+    if (paletteTokenCache.size > 1024) paletteTokenCache.clear();
+    paletteTokenCache.set(cacheKey, out);
+    return out;
+  }
+  function resolveFolderSurfaceTokens(resolvedVisual, surfaceInput) {
+    const surfaceSpec = surfaceInput?.surface && surfaceInput?.text
+      ? surfaceInput
+      : resolveThemeSurface(typeof surfaceInput === "string" ? surfaceInput : "dark");
+    const props = resolvedVisual?.properties || {};
+    const parts = resolvedVisual?.parts || {};
+    const seedHex = resolveCssColor(resolvedVisual?.base || parts.accent || parts.front || parts.back || parts.label || surfaceSpec.accent, surfaceSpec) || surfaceSpec.accent;
+    const baseTokens = derivePaletteTokens(seedHex, surfaceSpec, { kind: "swatch" });
+
+    const rawTint = resolveCssColor(props["--tab-group-color-pale"], surfaceSpec);
+    const tint = rawTint && Math.abs(relativeLuminance(rawTint) - relativeLuminance(surfaceSpec.surface)) <= 0.25
+      ? rawTint
+      : baseTokens.bg;
+    const rawHover = resolveCssColor(props["--tab-group-background-color-hover"], surfaceSpec);
+    const hover = rawHover && rawHover !== surfaceSpec.surface && Math.abs(relativeLuminance(rawHover) - relativeLuminance(surfaceSpec.surface)) <= 0.30
+      ? rawHover
+      : baseTokens.hoverBg;
+    const selected = baseTokens.selectedBg;
+    const rowBgs = [surfaceSpec.surface, tint, hover, selected];
+
+    const rawStroke = resolveCssColor(props["--zen-folder-stroke"], surfaceSpec) || seedHex;
+    const stroke = ensureContrastHex(rawStroke, [surfaceSpec.surface, tint], 3.08);
+    const rawLabel = resolveCssColor(props["--bgalazka-fc-label"], surfaceSpec) || surfaceSpec.text;
+    const label = props["--bgalazka-fc-label"]
+      ? ensureContrastHex(rawLabel, rowBgs, 4.6)
+      : ensureContrastHex(surfaceSpec.text, rowBgs, 4.6);
+    const rawAccent = resolveCssColor(props["--tab-group-color"], surfaceSpec) || seedHex;
+    const accent = ensureContrastHex(rawAccent, rowBgs, 4.6);
+
+    return Object.freeze({
+      tint,
+      hover,
+      selected,
+      stroke,
+      label,
+      accent,
+      disabledBg: baseTokens.disabledBg,
+      disabledFg: baseTokens.disabledFg,
+      disabledOutline: baseTokens.disabledOutline,
+    });
+  }
+
+  // OW-11: pure resolver describing what 'Inherit' gives (and which layer provides it) across
+  // Agenda window, item colour (T2.3g), category stage notify defaults, alert sound/quietAllow,
+  // and note-section category inheritance.
+  function describeInheritance(kind, item = null, layers = {}) {
+    const k = String(kind || "").trim();
+    const srcLayers = layers && typeof layers === "object" ? layers : {};
+    const noteObj = srcLayers.note && typeof srcLayers.note === "object" ? srcLayers.note : {};
+    const catObj = srcLayers.category && typeof srcLayers.category === "object" ? srcLayers.category : {};
+    const globalObj = srcLayers.global && typeof srcLayers.global === "object" ? srcLayers.global : {};
+    const noteTitle = String(noteObj.title ?? srcLayers.noteTitle ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+    const catName = cleanCategoryName(catObj.name ?? srcLayers.categoryName ?? "");
+    const hasCategory = Boolean(catName || srcLayers.category || srcLayers.categoryNotify || srcLayers.categoryAgenda || srcLayers.categoryColor);
+    const noteSourceLabel = noteTitle ? "note " + noteTitle : "linked note";
+    const catSourceLabel = catName ? "category " + catName : "category";
+    const pack = (value, source, sourceName, valueLabel, sourceLabel, labelOverride = "", inherited = null) => ({
+      value,
+      source,
+      sourceName,
+      valueLabel,
+      sourceLabel,
+      label: labelOverride || ("Inherit (" + valueLabel + ", from " + sourceLabel + ")"),
+      ...(inherited ? { inherited } : {}),
+    });
+
+    const agendaKeyMap = {
+      "agenda.enabled": "enabled", agendaEnabled: "enabled",
+      "agenda.leadDays": "leadDays", agendaLeadDays: "leadDays",
+      "agenda.tailDays": "tailDays", agendaTailDays: "tailDays",
+    };
+    if (Object.prototype.hasOwnProperty.call(agendaKeyMap, k)) {
+      const key = agendaKeyMap[k];
+      const fallback = key === "enabled" ? true : 0;
+      const fmt = (v) => key === "enabled"
+        ? (v ? "Show in Agenda" : "Hide from Agenda")
+        : (v === 0 ? "Same day" : v === 1 ? "1 day" : v + " days");
+      const noteAgenda = cleanAgendaWindow(noteObj.agenda ?? srcLayers.noteAgenda);
+      const catAgenda = cleanAgendaWindow(catObj.agenda ?? srcLayers.categoryAgenda);
+      const globalAgenda = cleanAgendaWindow(globalObj.agenda ?? srcLayers.globalAgenda);
+      let inherited;
+      if (Object.prototype.hasOwnProperty.call(noteAgenda, key)) {
+        inherited = pack(noteAgenda[key], "note", noteTitle, fmt(noteAgenda[key]), noteSourceLabel);
+      } else if (Object.prototype.hasOwnProperty.call(catAgenda, key)) {
+        inherited = pack(catAgenda[key], "category", catName, fmt(catAgenda[key]), catSourceLabel);
+      } else {
+        const val = Object.prototype.hasOwnProperty.call(globalAgenda, key) ? globalAgenda[key] : fallback;
+        inherited = pack(val, "global", "", fmt(val), "global defaults");
+      }
+      const itemAgenda = cleanAgendaWindow(item?.x?.agendaWindow);
+      if (Object.prototype.hasOwnProperty.call(itemAgenda, key)) {
+        return pack(itemAgenda[key], "item", "", fmt(itemAgenda[key]), "this item", fmt(itemAgenda[key]), inherited);
+      }
+      return inherited;
+    }
+
+    if (k === "color" || k === "colour") {
+      const rawNote = String(noteObj.color ?? srcLayers.noteColor ?? "").trim();
+      const rawCat = String(catObj.color ?? srcLayers.categoryColor ?? "").trim();
+      const resolved = resolveItemColor(rawNote, rawCat);
+      if (resolved && rawNote && rawNote !== "none") {
+        const lower = rawNote.toLowerCase();
+        const hex = PALETTE_COLOR_HEX[lower] || resolveCssColor(rawNote) || rawNote;
+        const valLabel = PALETTE_COLOR_HEX[lower] ? (lower + " " + hex) : hex;
+        const srcLbl = noteTitle ? ("note " + noteTitle + " colour") : "note colour";
+        return pack(hex, "note", noteTitle, valLabel, srcLbl, "Inherit (" + srcLbl + ": " + valLabel + ")");
+      }
+      if (resolved && rawCat && rawCat !== "none") {
+        const lower = rawCat.toLowerCase();
+        const hex = PALETTE_COLOR_HEX[lower] || resolveCssColor(rawCat) || rawCat;
+        const valLabel = PALETTE_COLOR_HEX[lower] ? (lower + " " + hex) : hex;
+        const srcLbl = catName ? ("category " + catName + " colour") : "category colour";
+        return pack(hex, "category", catName, valLabel, srcLbl, "Inherit (" + srcLbl + ": " + valLabel + ")");
+      }
+      return pack("", "none", "", "none", "default accent", "Inherit (no note or category colour)");
+    }
+
+    const notifyMatch = /^notify\.(pre|due|followup)(?:\.(enabled|leadMinutes|delayMinutes))?$/.exec(k);
+    if (notifyMatch) {
+      const stage = notifyMatch[1], field = notifyMatch[2] || "";
+      const catNotify = cleanCategoryNotify(catObj.notify ?? srcLayers.categoryNotify);
+      const baseRule = catNotify[stage];
+      const baseSource = hasCategory ? "category" : "global";
+      const baseSourceName = hasCategory ? catName : "";
+      const baseSourceLabel = hasCategory ? catSourceLabel : "global defaults";
+      const itemRule = cleanNotifyOverrides(item?.x?.notify)[stage];
+      if (field) {
+        const fmtField = (v) => field === "enabled" ? (v ? "On" : "Off") : (v + " min");
+        const inh = pack(baseRule[field], baseSource, baseSourceName, fmtField(baseRule[field]), baseSourceLabel);
+        if (itemRule && Object.prototype.hasOwnProperty.call(itemRule, field)) {
+          return pack(itemRule[field], "item", "", fmtField(itemRule[field]), "this item", fmtField(itemRule[field]), inh);
+        }
+        return inh;
+      }
+      const pickShape = (r) => stage === "pre"
+        ? { enabled: r.enabled, leadMinutes: r.leadMinutes }
+        : stage === "followup"
+          ? { enabled: r.enabled, delayMinutes: r.delayMinutes }
+          : { enabled: r.enabled };
+      const fmtStage = (r) => !r.enabled
+        ? "Off"
+        : stage === "pre"
+          ? ("On, " + r.leadMinutes + " min")
+          : stage === "followup"
+            ? ("On, " + r.delayMinutes + " min")
+            : "On";
+      const inhShape = pickShape(baseRule);
+      const inh = pack(inhShape, baseSource, baseSourceName, fmtStage(inhShape), baseSourceLabel);
+      if (itemRule && (Object.prototype.hasOwnProperty.call(itemRule, "enabled") || Object.prototype.hasOwnProperty.call(itemRule, "leadMinutes") || Object.prototype.hasOwnProperty.call(itemRule, "delayMinutes"))) {
+        const merged = pickShape({ ...baseRule, ...itemRule });
+        return pack(merged, "item", "", fmtStage(merged), "this item", fmtStage(merged), inh);
+      }
+      return inh;
+    }
+
+    const alertMatch = /^alert\.(pre|due|followup)\.(sound|quietAllow)$/.exec(k);
+    if (alertMatch) {
+      const stage = alertMatch[1], prop = alertMatch[2];
+      const globalAlert = cleanAlertSettings(globalObj.alert ?? srcLayers.globalAlert);
+      const catStage = cleanCategoryNotify(catObj.notify ?? srcLayers.categoryNotify)[stage];
+      const noteStage = cleanNotifyOverrides(noteObj.notify ?? srcLayers.noteNotify)[stage] || {};
+      const itemStage = cleanNotifyOverrides(item?.x?.notify)[stage] || {};
+      if (prop === "sound") {
+        const hasSound = (r) => Boolean(r && (r.soundSpecified === true || (r.soundSpecified === undefined && SOUND_LEVELS.includes(r.sound))));
+        const cap = (s) => s ? s[0].toUpperCase() + s.slice(1) : "Normal";
+        let inh;
+        if (hasSound(noteStage)) inh = pack(noteStage.sound, "note", noteTitle, cap(noteStage.sound), noteSourceLabel);
+        else if (hasSound(catStage)) inh = pack(catStage.sound, "category", catName, cap(catStage.sound), catSourceLabel);
+        else {
+          const gSound = globalAlert.stages[stage].sound || "normal";
+          inh = pack(gSound, "global", "", cap(gSound), "global defaults");
+        }
+        if (hasSound(itemStage)) return pack(itemStage.sound, "item", "", cap(itemStage.sound), "this item", cap(itemStage.sound), inh);
+        return inh;
+      }
+      const hasAllow = (r) => Boolean(r && (r.quietAllowSpecified === true || (r.quietAllowSpecified === undefined && Array.isArray(r.quietAllow))));
+      const fmtAllow = (arr) => arr.length ? arr.join(", ") : "none";
+      let inh;
+      if (hasAllow(noteStage)) inh = pack([...noteStage.quietAllow], "note", noteTitle, fmtAllow(noteStage.quietAllow), noteSourceLabel);
+      else if (hasAllow(catStage)) inh = pack([...catStage.quietAllow], "category", catName, fmtAllow(catStage.quietAllow), catSourceLabel);
+      else {
+        const gAllow = [...globalAlert.quietHours.allowed[stage]];
+        inh = pack(gAllow, "global", "", fmtAllow(gAllow), "global defaults");
+      }
+      if (hasAllow(itemStage)) return pack([...itemStage.quietAllow], "item", "", fmtAllow(itemStage.quietAllow), "this item", fmtAllow(itemStage.quietAllow), inh);
+      return inh;
+    }
+
+    if (k === "category") {
+      const sec = cleanCategoryName(srcLayers.sectionCategory ?? item?._sectionCategory ?? item?.x?.category ?? "");
+      const valLabel = sec || "no category";
+      const srcLabel = noteTitle ? ("note " + noteTitle + " section") : "note section";
+      const inh = pack(sec, "note", noteTitle, valLabel, srcLabel);
+      if (typeof item?.x?.categoryOverride === "string") {
+        const ov = cleanCategoryName(item.x.categoryOverride);
+        return pack(ov, "item", "", ov || "no category", "this item", ov || "no category", inh);
+      }
+      return inh;
+    }
+
+    return pack(null, "none", "", "", "none", "Inherit");
+  }
+
   const api = {
-    KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
-    cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
+    KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
+    cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -5997,6 +7593,8 @@ __zentralShim.register = function (def) {
       HIDDEN_MENU: "zen.workspace.zentral.notes.hidden_tools_menu",
       DATE_MODE: "zen.workspace.zentral.notes.date_notes_mode",
       DATE_DISPLAY: "zen.workspace.zentral.notes.date_display_format",
+      NOTES_LANGUAGE: "zen.workspace.zentral.notes.language",
+      NOTES_LANGUAGE_ACCEPT_ALL: "zen.workspace.zentral.notes.language_accept_all",
       MD_FLAVOR: "zen.workspace.zentral.notes.markdown_flavor",
       TILDE: "zen.workspace.zentral.notes.single_tilde",
       IGNORE_SYNTAX: "zen.workspace.zentral.notes.ignore_syntax",
@@ -6648,8 +8246,37 @@ __zentralShim.register = function (def) {
       return NOTE_COLORS.includes(s0) ? s0 : cleanHex(s0) || "none";
     };
     const cleanHighlightColor = (v) => (HIGHLIGHT_COLORS.includes(v) ? v : cleanHex(v) || "");
+    const PALETTE_VAR_NAMES = Object.freeze([
+      "--zn-pal-bg", "--zn-pal-fg", "--zn-pal-hue-fg", "--zn-pal-muted", "--zn-pal-outline",
+      "--zn-pal-hover", "--zn-pal-hover-fg", "--zn-pal-selected-bg", "--zn-pal-selected-fg", "--zn-pal-selected-outline",
+      "--zn-pal-disabled-bg", "--zn-pal-disabled-fg", "--zn-pal-disabled-outline", "--zn-pal-hl-bg", "--zn-pal-hl-fg",
+    ]);
+    function clearPaletteVars(el) {
+      if (!el?.style) return;
+      for (const k of PALETTE_VAR_NAMES) el.style.removeProperty(k);
+    }
+    function applyPaletteVars(el, rawColor, kind = "swatch", surfaceSpec = null) {
+      if (!el?.style || !CALENDAR_PART?.derivePaletteTokens) return null;
+      const tok = CALENDAR_PART.derivePaletteTokens(rawColor, surfaceSpec || "dark", { kind });
+      el.style.setProperty("--zn-pal-bg", tok.bg);
+      el.style.setProperty("--zn-pal-fg", tok.fg);
+      el.style.setProperty("--zn-pal-hue-fg", tok.hueFg);
+      el.style.setProperty("--zn-pal-muted", tok.muted);
+      el.style.setProperty("--zn-pal-outline", tok.outline);
+      el.style.setProperty("--zn-pal-hover", tok.hoverBg);
+      el.style.setProperty("--zn-pal-hover-fg", tok.hoverFg);
+      el.style.setProperty("--zn-pal-selected-bg", tok.selectedBg);
+      el.style.setProperty("--zn-pal-selected-fg", tok.selectedFg);
+      el.style.setProperty("--zn-pal-selected-outline", tok.selectedOutline);
+      el.style.setProperty("--zn-pal-disabled-bg", tok.disabledBg);
+      el.style.setProperty("--zn-pal-disabled-fg", tok.disabledFg);
+      el.style.setProperty("--zn-pal-disabled-outline", tok.disabledOutline);
+      el.style.setProperty("--zn-pal-hl-bg", tok.hlBg);
+      el.style.setProperty("--zn-pal-hl-fg", tok.hlFg);
+      return tok;
+    }
     // The element carries `data-color="custom"` plus the colour in --zn-cc (the sheet CSS reads it); a palette name stays a name.
-    function setColorData(el, color) {
+    function setColorData(el, color, surfaceSpec = null, kind = "swatch") {
       const hex = cleanHex(color);
       if (hex) {
         el.dataset.color = "custom";
@@ -6658,6 +8285,8 @@ __zentralShim.register = function (def) {
         el.dataset.color = color || "none";
         el.style.removeProperty("--zn-cc");
       }
+      if (surfaceSpec && color && color !== "none") applyPaletteVars(el, hex || color, kind, surfaceSpec);
+      else if (surfaceSpec) clearPaletteVars(el);
     }
     const cleanFolderColor = (v) => (FOLDER_COLORS.includes(v) ? v : cleanHex(v));
     const FOLDER_PARTS = Object.freeze(["back", "front", "stroke", "label", "accent", "tint", "hover"]);
@@ -7617,9 +9246,9 @@ __zentralShim.register = function (def) {
     });
     const colorHex = (name) => TINT_HEX[name] || cleanHex(name);
     // `depth` = nesting level in the Zen sidebar: the NOTES root is level 1, so a top-level folder of the All notes tree is 2.
-    function resolveFolderVisual(raw = {}, depth = 2) {
+    function resolveFolderVisual(raw = {}, depth = 2, modeOverride = "") {
       const record = { b: colorHex(raw.b ?? raw.color) || "", d: cleanFolderParts(raw.d ?? raw.parts), o: cleanFolderOpacity(raw.o ?? raw.opacity) };
-      const shared = window.__zentralFolderColorStyleBridge;
+      const shared = !modeOverride ? window.__zentralFolderColorStyleBridge : null;
       if (shared?.version === 1 && shared.revision >= 3 && typeof shared.resolve === "function") {
         try {
           const resolved = shared.resolve(record, depth);
@@ -7629,7 +9258,7 @@ __zentralShim.register = function (def) {
       // Notes-only install (or an older shared module): the same core, fed from the shared preferences.
       const defaults = colorfulFolderDefaults();
       return FOLDER_STYLE.resolve(record, depth, {
-        mode: defaults.mode,
+        mode: modeOverride || defaults.mode,
         defaults: { b: defaults.b, d: defaults.d, o: defaults.o },
         layers: defaults.layers,
         ignoreLabel: defaults.ignoreLabel,
@@ -10863,32 +12492,203 @@ __zentralShim.register = function (def) {
       if (!recurring && !calendarItem.start?.date) {
         actions.push({ id: "snooze-10", label: "Snooze 10 min", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, 10)) });
         actions.push({ id: "snooze-60", label: "Snooze 1 hour", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, 60)) });
-        actions.push({ id: "snooze-tomorrow", label: "Tomorrow", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, CALENDAR_PART.reminderSnoozeTomorrowMinutes(Date.now()))) });
+        actions.push({ id: "snooze-tomorrow", label: "Tomorrow", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, CALENDAR_PART.reminderSnoozeTomorrowMinutes(Date.now(), calendarItem.x?.tz || ""))) });
       }
       actions.push({ id: "dismiss", label: "Dismiss", callback: guard(() => store.applyReminderLifecycle(calendarItem, "dismissed")) });
       return actions;
     }
     // One manual top-layer stack, with a single delegated listener. All strings
     // come from textContent; the caller owns the scope and the teardown.
-    function createReminderAlertStack({ document, history, listen, warn = () => {}, onBulkEnd = () => {} }) {
+    function createReminderAlertStack({
+      document, history, listen, warn = () => {}, onBulkEnd = () => {},
+      now = () => Date.now(), setTimer = (fn, ms) => window.setTimeout?.(fn, ms), clearTimer = (id) => window.clearTimeout?.(id),
+      maxVisible = CALENDAR_PART?.REMINDER_STACK_LIMIT || 3,
+      getAlertSettings = null,
+    }) {
       const cards = new Map();
-      let host = null, stopClick = null, stopped = false, bulkRunning = false;
+      const digestKey = "__missed_reminders_digest__";
+      const stackLimit = Math.max(1, Math.trunc(Number(maxVisible) || 3));
+      let host = null, stopClick = null, stopEscape = null, stopped = false, bulkRunning = false, countdownTimer = null;
+      let nextSeq = 1, stackExpanded = false, moreBtn = null, scrimEl = null;
+      let wasOverlay = false, previousFocus = null, lastEscEvent = null;
       const html = (tag, cls, text) => {
         const el = document.createElementNS("http://www.w3.org/1999/xhtml", tag);
         if (cls) el.setAttribute("class", cls);
         if (text !== undefined) el.textContent = String(text);
         return el;
       };
-      const close = (key) => {
+      const stopCountdown = () => {
+        if (countdownTimer !== null) {
+          clearTimer(countdownTimer);
+          countdownTimer = null;
+        }
+      };
+      const teardownEscape = () => {
+        if (stopEscape) {
+          stopEscape();
+          stopEscape = null;
+        }
+      };
+      const ensureEscape = () => {
+        if (stopEscape || stopped) return;
+        const onKeydown = (event) => {
+          if (stopped || !wasOverlay || event?.key !== "Escape" || event === lastEscEvent) return;
+          lastEscEvent = event;
+          const regular = [];
+          for (const [k, card] of cards.entries()) {
+            if (!card.digest && card.node?.parentElement && card.layout === "centred") regular.push({ key: k, card });
+          }
+          if (!regular.length) return;
+          regular.sort((a, b) => (b.card.rank - a.card.rank) || (a.card.seq - b.card.seq));
+          const { key, card } = regular[0];
+          event.preventDefault();
+          event.stopPropagation();
+          const dismiss = card.actions.get("dismiss");
+          if (typeof dismiss === "function") {
+            try { if (dismiss() !== false) close(key); } catch (error) { warn(error); }
+          } else if (!card.actions.size) {
+            close(key);
+          }
+        };
+        const offs = [];
+        if (document?.documentElement) offs.push(listen(document.documentElement, "keydown", onKeydown));
+        if (document && document !== document.documentElement && typeof document.addEventListener === "function") {
+          offs.push(listen(document, "keydown", onKeydown));
+        }
+        stopEscape = () => { while (offs.length) { try { offs.pop()?.(); } catch (_) {} } };
+      };
+      const syncCountdown = () => {
+        stopCountdown();
+        if (stopped || !CALENDAR_PART?.reminderCountdownDelayMs) return;
+        const at = now();
+        let nextDelay = 0;
+        for (const card of cards.values()) {
+          if (card.stage !== "pre" || !card.countdownEl || !(card.dueAt > 0)) continue;
+          const d = CALENDAR_PART.reminderCountdownDelayMs(card.dueAt, at);
+          if (d > 0 && (!nextDelay || d < nextDelay)) nextDelay = d;
+        }
+        if (nextDelay > 0) countdownTimer = setTimer(tickCountdown, nextDelay);
+      };
+      function tickCountdown() {
+        countdownTimer = null;
+        if (stopped || !CALENDAR_PART?.reminderPreCountdownText) return;
+        const at = now();
+        for (const card of cards.values()) {
+          if (card.stage !== "pre" || !card.countdownEl || !(card.dueAt > 0)) continue;
+          card.countdownEl.textContent = CALENDAR_PART.reminderPreCountdownText(card.dueAt, at);
+        }
+        syncCountdown();
+      }
+      function restorePriorFocus() {
+        const target = previousFocus;
+        previousFocus = null;
+        if (target && target.isConnected !== false) {
+          try { target.focus?.({ preventScroll: true }); } catch (_) {}
+        }
+      }
+      function syncStackLayout() {
+        if (stopped) return;
+        const digestCard = cards.get(digestKey);
+        const regular = [];
+        for (const card of cards.values()) {
+          if (!card.digest && card.node) regular.push(card);
+        }
+        regular.sort((a, b) => (b.rank - a.rank) || (a.seq - b.seq));
+        if (regular.length <= stackLimit) stackExpanded = false;
+        const visibleRegular = stackExpanded ? regular : regular.slice(0, stackLimit);
+        const hiddenCount = Math.max(0, regular.length - stackLimit);
+        const topOverlay = visibleRegular.find((c) => c.layout === "centred") || null;
+        const hasOverlay = !!topOverlay;
+        const desired = [];
+        if (hasOverlay) {
+          if (!wasOverlay && document?.activeElement && (!host || !host.contains(document.activeElement))) {
+            previousFocus = document.activeElement;
+          }
+          if (!scrimEl) {
+            scrimEl = html("div", "zn-reminder-scrim");
+            scrimEl.setAttribute("aria-hidden", "true");
+          }
+          desired.push(scrimEl);
+        } else {
+          scrimEl?.remove();
+        }
+        if (digestCard?.node) desired.push(digestCard.node);
+        for (const card of visibleRegular) {
+          if (card.stage === "pre" && card.countdownEl && card.dueAt > 0 && CALENDAR_PART?.reminderPreCountdownText) {
+            card.countdownEl.textContent = CALENDAR_PART.reminderPreCountdownText(card.dueAt, now());
+          }
+          desired.push(card.node);
+        }
+        const visibleNodes = new Set(desired);
+        for (const card of regular) {
+          if (!visibleNodes.has(card.node) && card.node.parentElement) card.node.remove();
+        }
+        if (!desired.length) {
+          moreBtn?.remove();
+          teardownEscape();
+          if (host) {
+            host.removeAttribute("data-overlay");
+            try { host.hidePopover?.(); } catch (_) {}
+            host.hidden = true;
+          }
+          if (wasOverlay) {
+            wasOverlay = false;
+            restorePriorFocus();
+          }
+          return;
+        }
+        const parent = ensureHost();
+        if (hasOverlay) {
+          parent.setAttribute("data-overlay", "true");
+          ensureEscape();
+        } else {
+          parent.removeAttribute("data-overlay");
+          teardownEscape();
+        }
+        if (hiddenCount > 0) {
+          if (!moreBtn) {
+            moreBtn = html("button", "zn-reminder-more");
+            moreBtn.setAttribute("type", "button");
+            moreBtn.setAttribute("data-action", "toggle-more");
+          }
+          moreBtn.setAttribute("aria-expanded", stackExpanded ? "true" : "false");
+          moreBtn.textContent = CALENDAR_PART?.reminderStackMoreLabel
+            ? CALENDAR_PART.reminderStackMoreLabel(hiddenCount, stackExpanded)
+            : (stackExpanded ? "Show fewer" : "+" + hiddenCount + " more");
+          desired.push(moreBtn);
+        } else {
+          moreBtn?.remove();
+        }
+        for (let i = 0; i < desired.length; i++) {
+          const n = desired[i];
+          if (parent.children[i] !== n) parent.insertBefore(n, parent.children[i] || null);
+        }
+        parent.hidden = false;
+        try {
+          if (typeof parent.showPopover === "function") {
+            if (hasOverlay && !wasOverlay && parent.matches(":popover-open")) parent.hidePopover?.();
+            if (!parent.matches(":popover-open")) parent.showPopover();
+          } else {
+            parent.removeAttribute("popover");
+          }
+        } catch (_) { parent.removeAttribute("popover"); }
+        if (hasOverlay && (!wasOverlay || !parent.contains(document?.activeElement))) {
+          try { topOverlay.primaryButton?.focus?.({ preventScroll: true }); } catch (_) {}
+        } else if (!hasOverlay && wasOverlay) {
+          restorePriorFocus();
+        }
+        wasOverlay = hasOverlay;
+      }
+      const close = (key, { silent = false } = {}) => {
         const card = cards.get(key); if (!card) return;
         cards.delete(key); card.node?.remove();
-        if (!cards.size && host) {
-          try { host.hidePopover?.(); } catch (_) {}
-          host.hidden = true;
+        if (!silent) {
+          syncStackLayout();
+          syncCountdown();
         }
       };
       const onHistory = (event) => {
-        if (stopped || bulkRunning || (event?.kind === "append" && ["alerted", "skipped"].includes(event.action))) return;
+        if (stopped || bulkRunning || !CALENDAR_PART?.reminderAlertShouldClose || (event?.kind === "append" && ["alerted", "skipped"].includes(event.action))) return;
         for (const [key, card] of [...cards]) {
           if (card.digest) {
             card.entries = card.entries.filter((entry) => {
@@ -10913,11 +12713,18 @@ __zentralShim.register = function (def) {
         (document.body || document.documentElement).append(host);
         stopClick = listen(host, "click", (event) => {
           const button = event.target?.closest?.("button[data-action]");
-          const node = button?.closest?.(".zn-reminder-card");
-          const key = node?.getAttribute("data-key"), card = cards.get(key);
-          if (!card || !button) return;
-          event.preventDefault(); event.stopPropagation();
+          if (!button) return;
           const action = button.getAttribute("data-action");
+          if (action === "toggle-more") {
+            event.preventDefault(); event.stopPropagation();
+            stackExpanded = !stackExpanded;
+            syncStackLayout();
+            return;
+          }
+          const node = button.closest?.(".zn-reminder-card");
+          const key = node?.getAttribute("data-key"), card = cards.get(key);
+          if (!card) return;
+          event.preventDefault(); event.stopPropagation();
           if (action === "close") { close(key); return; }
           const callback = card.actions.get(action);
           if (!callback) return;
@@ -10925,10 +12732,10 @@ __zentralShim.register = function (def) {
         });
         return host;
       }
-      const digestKey = "__missed_reminders_digest__";
       function renderDigest(card) {
         if (!card.entries.length) { close(digestKey); return; }
-        const parent = ensureHost(), previous = card.node, node = html("section", "zn-reminder-card");
+        ensureHost();
+        const previous = card.node, node = html("section", "zn-reminder-card");
         node.setAttribute("data-key", digestKey); node.setAttribute("data-stage", "followup"); node.setAttribute("role", "status");
         const count = card.entries.length;
         node.append(html("div", "zn-reminder-stage", "Missed reminders"));
@@ -10980,9 +12787,8 @@ __zentralShim.register = function (def) {
           node.append(list);
         }
         card.node = node; card.actions = callbacks;
-        if (previous?.parentElement) previous.replaceWith(node); else parent.append(node);
-        parent.hidden = false;
-        try { if (typeof parent.showPopover === "function") { if (!parent.matches(":popover-open")) parent.showPopover(); } else parent.removeAttribute("popover"); } catch (_) { parent.removeAttribute("popover"); }
+        if (previous?.parentElement) previous.replaceWith(node);
+        syncStackLayout();
       }
       return {
         showDigest(entries) {
@@ -10999,39 +12805,81 @@ __zentralShim.register = function (def) {
           }
           renderDigest(card); return !!card.entries.length;
         },
-        show({ identity, title, stage, actions = [] }) {
+        show({ identity, title, stage, layout: layoutOverride = "", dueAt = 0, actions = [] }) {
           if (stopped || !identity?.itemId || !identity?.occurrenceId) return false;
           if (["done", "dismissed"].includes(history?.stateFor?.(identity.itemId, identity.occurrenceId))) return false;
-          const presentation = CALENDAR_PART.reminderAlertPresentation(stage);
+          const settings = typeof getAlertSettings === "function" ? getAlertSettings() : null;
+          const presentation = CALENDAR_PART?.reminderAlertPresentation
+            ? CALENDAR_PART.reminderAlertPresentation(stage, settings)
+            : { stage: "followup", rank: 3, label: "Reminder overdue", layout: "centred", overlay: true, persistent: true };
+          const resolvedLayout = layoutOverride
+            ? (CALENDAR_PART?.cleanAlertLayout ? CALENDAR_PART.cleanAlertLayout(layoutOverride, presentation.layout) : layoutOverride)
+            : (presentation.layout || "corner");
+          const isOverlay = resolvedLayout === "centred";
+          const isPersistent = presentation.stage !== "pre" || resolvedLayout !== "corner";
           const key = JSON.stringify([identity.itemId, identity.occurrenceId]);
           const existing = cards.get(key);
           if (existing && existing.rank > presentation.rank) return true;
-          if (existing) close(key);
-          const parent = ensureHost(), node = html("section", "zn-reminder-card");
+          if (existing) close(key, { silent: true });
+          ensureHost();
+          const node = html("section", "zn-reminder-card");
           node.setAttribute("data-key", key);
           node.setAttribute("data-stage", presentation.stage);
-          node.setAttribute("role", presentation.stage === "followup" ? "alert" : "status");
-          node.append(html("div", "zn-reminder-stage", presentation.label));
+          node.setAttribute("data-layout", resolvedLayout);
+          if (isPersistent) node.setAttribute("data-persistent", "true");
+          node.setAttribute("role", isOverlay ? "alertdialog" : (presentation.stage === "followup" ? "alert" : "status"));
+          if (isOverlay) node.setAttribute("aria-modal", "true");
+          const dueStamp = Number(dueAt) > 0 ? Number(dueAt) : 0;
+          let countdownEl = null;
+          if (presentation.stage === "pre" && dueStamp > 0 && CALENDAR_PART?.reminderPreCountdownText) {
+            const head = html("div", "zn-reminder-head");
+            head.append(html("div", "zn-reminder-stage", presentation.label));
+            countdownEl = html("span", "zn-reminder-countdown", CALENDAR_PART.reminderPreCountdownText(dueStamp, now()));
+            countdownEl.setAttribute("aria-hidden", "true");
+            head.append(countdownEl);
+            node.append(head);
+          } else {
+            node.append(html("div", "zn-reminder-stage", presentation.label));
+          }
           node.append(html("div", "zn-reminder-title", title || "Untitled reminder"));
+          const orderedActions = isOverlay && CALENDAR_PART?.orderOverlayAlertActions
+            ? CALENDAR_PART.orderOverlayAlertActions(actions)
+            : actions;
           const row = html("div", "zn-reminder-actions"), callbacks = new Map();
-          for (const action of actions) {
+          let primaryButton = null;
+          for (const action of orderedActions) {
             if (!action?.id || typeof action.callback !== "function") continue;
-            const button = html("button", "", action.label);
+            const button = html("button", action.id === "done" ? "zn-reminder-action-primary" : "", action.label);
             button.setAttribute("type", "button"); button.setAttribute("data-action", action.id);
+            if (action.id === "done" || !primaryButton) primaryButton = button;
             callbacks.set(action.id, action.callback); row.append(button);
           }
-          const closeButton = html("button", "zn-reminder-close", "Close");
-          closeButton.setAttribute("type", "button"); closeButton.setAttribute("data-action", "close");
-          row.append(closeButton); node.append(row);
+          if (!isPersistent || !callbacks.size) {
+            const closeButton = html("button", "zn-reminder-close", "Close");
+            closeButton.setAttribute("type", "button"); closeButton.setAttribute("data-action", "close");
+            if (!primaryButton) primaryButton = closeButton;
+            row.append(closeButton);
+          }
+          node.append(row);
           const records = history?.list?.({ itemId: identity.itemId, occurrenceId: identity.occurrenceId }) || [];
-          cards.set(key, { identity: { ...identity }, node, actions: callbacks, rank: presentation.rank, seen: new Set(records.map((record) => record.id)) });
-          parent.append(node); parent.hidden = false;
-          try { if (typeof parent.showPopover === "function") { if (!parent.matches(":popover-open")) parent.showPopover(); } else parent.removeAttribute("popover"); } catch (_) { parent.removeAttribute("popover"); }
+          cards.set(key, {
+            identity: { ...identity }, node, actions: callbacks,
+            stage: presentation.stage, layout: resolvedLayout,
+            persistent: isPersistent, primaryButton,
+            dueAt: dueStamp, countdownEl,
+            rank: presentation.rank, seq: nextSeq++,
+            seen: new Set(records.map((record) => record.id)),
+          });
+          syncStackLayout();
+          syncCountdown();
           return true;
         },
         destroy() {
           if (stopped) return;
-          stopped = true; offHistory?.(); stopClick?.(); cards.clear();
+          stopped = true; stopCountdown(); teardownEscape(); offHistory?.(); stopClick?.(); cards.clear();
+          scrimEl?.remove(); scrimEl = null;
+          moreBtn?.remove(); moreBtn = null;
+          previousFocus = null; wasOverlay = false;
           try { host?.hidePopover?.(); } catch (_) {}
           host?.remove(); host = null;
         },
@@ -11093,9 +12941,10 @@ __zentralShim.register = function (def) {
       return api;
     }
 
-    function createReminderScheduler({ store, now = () => Date.now(), setTimer, clearTimer, onDue, onDigest = null, getDigestDays = () => 7, deferUntilStart = false }) {
+    function createReminderScheduler({ store, now = () => Date.now(), setTimer, clearTimer, onDue, onDigest = null, getDigestDays = () => 7, deferUntilStart = false, isActiveWindow = null, activeYieldMs = 120 }) {
       let timer = null, debounceTimer = null, destroyed = false, busy = false, again = false;
       let started = !deferUntilStart, digestRequested = false;
+      const deferredOverlays = new Set();
       const stop = () => { if (timer !== null) { clearTimer(timer); timer = null; } };
       const stopDebounce = () => { if (debounceTimer !== null) { clearTimer(debounceTimer); debounceTimer = null; } };
       let windowKey = "", occurrenceCache = new Map(), dirtySeries = new Set(), notesDirty = true, pendingNotes = [];
@@ -11263,11 +13112,22 @@ __zentralShim.register = function (def) {
               notesDirty = true;
             }
             const calendar = calendarCandidates(nowAt);
-            let retryClaim = false;
+            let retryClaim = false, deferredYield = false;
             for (const item of calendar.due) {
               if (destroyed) return;
               const identity = item.__historyIdentity;
               const history = store.items?.history;
+              if (!item.__skipped && !item.__coalesced && typeof isActiveWindow === "function" && CALENDAR_PART?.reminderAlertPresentation) {
+                const pres = CALENDAR_PART.reminderAlertPresentation(item.__stage, store.meta?.calendarAlertSettings);
+                if (pres.overlay && !isActiveWindow()) {
+                  const deferKey = JSON.stringify([identity.itemId, identity.occurrenceId, item.__stage, item.__scheduledStart?.date || "", item.__scheduledStart?.dateTime || ""]);
+                  if (!deferredOverlays.has(deferKey)) {
+                    deferredOverlays.add(deferKey);
+                    deferredYield = true;
+                    continue;
+                  }
+                }
+              }
               const entry = { itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: item.summary, start: item.__scheduledStart, stage: item.__stage, at: nowAt, action: item.__skipped ? "skipped" : "alerted", coalesced: item.__coalesced, requirePending: true };
               // claimAlert re-reads the shared history first so a second window does not show the same banner.
               let record = null;
@@ -11283,6 +13143,10 @@ __zentralShim.register = function (def) {
             if (fired.length) { try { onDue(fired.map((n) => n.__calendarReminder ? n : (store.get(n.id) || n))); } catch (_) {} }
             const nextNote = nextReminderAt(pendingNoteCandidates(), now());
             let next = calendar.next && nextNote ? Math.min(calendar.next, nextNote) : calendar.next || nextNote;
+            if (deferredYield) {
+              const yieldAt = now() + Math.max(20, Number(activeYieldMs) || 120);
+              next = next ? Math.min(next, yieldAt) : yieldAt;
+            }
             // A failed claim was rolled back and is still due. Retry a bounded
             // number of times, even when it was the last stage in the schedule.
             if (retryClaim) next = next ? Math.min(next, now() + 30000) : now() + 30000;
@@ -11715,6 +13579,7 @@ __zentralShim.register = function (def) {
       warn = () => {},
       getHistory = () => ({ on: true, ...HISTORY_DEFAULTS }),
       getDateFormat = () => "",
+      getParseOptions = () => { try { return { lang: Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en"), acceptAll: Services.prefs.getBoolPref(PREF.NOTES_LANGUAGE_ACCEPT_ALL, true) }; } catch (_) { return { lang: "en", acceptAll: true }; } },
     }) {
       const notes = new Map();
       // Exact bytes last read or written for each note. This detects stale writes even when a window is dirty.
@@ -11725,8 +13590,9 @@ __zentralShim.register = function (def) {
       const listeners = new Set();
       const backedUp = new Set();
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, cardDock: "", cardW: 0,
+        allNewChoice: "note", calendarClockMode: "both",
         calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarTab: "tree",
-        calendarView: "month", calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
+        calendarView: "month", calendarWeekStart: 1, calendarWeekNumbers: false, calendarWeekSpan: { days: 7, anchor: "weekStart" }, calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
         // The hours Week and Day show ({ on, startMin, endMin }; off = the whole day). Replaced as a whole, never changed in place.
         calendarHours: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHours(null) : { on: false, startMin: 480, endMin: 1200 },
         // The size of each calendar view ("auto" = fitted to the pane, or px; OW-03). Replaced as a whole, never changed in place.
@@ -11754,7 +13620,7 @@ __zentralShim.register = function (def) {
       // refresh ignore it). Items written as marked lists inside a note are rebuilt from the note text; a note in Trash or
       // with a missing file only HIDES its items (restoring it brings dragged times and calendar notes back); a note that is
       // deleted for good removes them. Every call is guarded: the calendar must never break saving a note.
-      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, withHistoryLock,
+      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, withHistoryLock, getParseOptions,
         isNoteVisible: (id) => !!notes.get(id) && !notes.get(id).trashed,
         // The two files are not one transaction, so the order is fixed: note text first, then the calendar record that
         // refers to it. A crash in between leaves a line the next start rebuilds, never a record without its line.
@@ -11956,6 +13822,8 @@ __zentralShim.register = function (def) {
             meta[k] = Number.isFinite(v) && v > 0 ? clampShare(v) : 0;
           }
           if (CALENDAR_PART) {
+            meta.allNewChoice = CALENDAR_PART.cleanAllNotesNewChoice(raw.allNewChoice);
+            meta.calendarClockMode = CALENDAR_PART.cleanClockMode(raw.calendarClockMode);
             meta.calendarLayout = CALENDAR_PART.cleanCalendarLayout(raw.calendarLayout);
             meta.calendarSplitLR = CALENDAR_PART.cleanCalendarShare(raw.calendarSplitLR, DEFAULT_META.calendarSplitLR);
             meta.calendarSplitTB = CALENDAR_PART.cleanCalendarShare(raw.calendarSplitTB, DEFAULT_META.calendarSplitTB);
@@ -11964,6 +13832,9 @@ __zentralShim.register = function (def) {
             if (meta.calendarTreeCollapsed && meta.calendarPaneCollapsed) meta.calendarTreeCollapsed = meta.calendarPaneCollapsed = false;
             meta.calendarTab = raw.calendarTab === "calendar" ? "calendar" : "tree";
             meta.calendarView = ["month", "upcoming", "agenda", "week", "day"].includes(raw.calendarView) ? raw.calendarView : "month";
+            meta.calendarWeekStart = CALENDAR_PART.cleanWeekStart(raw.calendarWeekStart);
+            meta.calendarWeekNumbers = CALENDAR_PART.cleanWeekNumbers(raw.calendarWeekNumbers);
+            meta.calendarWeekSpan = CALENDAR_PART.cleanWeekSpan(raw.calendarWeekSpan);
             // `calendarDensity` (one of three steps for all views, until 3.3.175) is read only where no size is stored yet.
             meta.calendarScale = CALENDAR_PART.cleanCalendarScale(raw.calendarScale, raw.calendarDensity);
             meta.calendarPicker = CALENDAR_PART.cleanCalendarPicker(raw.calendarPicker);
@@ -15455,7 +17326,7 @@ __zentralShim.register = function (def) {
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS, SHARED_TURN_WAIT_MS, STARTUP_TURN_WAIT_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
-        makeFolderUid, ensureFolderUids, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
+        makeFolderUid, ensureFolderUids, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_STYLE, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition, calendarMenuPosition, normalizeContextMenuItems,
@@ -15641,7 +17512,7 @@ __zentralShim.register = function (def) {
       const ignored = Number.isInteger(env.dateLine) && env.dateLine >= 0
         ? CALENDAR_PART.ignoredDateTokens(env.dateLineText?.(env.dateLine) || "")
         : [];
-      const tokens = CALENDAR_PART.inlineDateTokens(source, env.dateNow?.() ?? Date.now());
+      const tokens = CALENDAR_PART.inlineDateTokens(source, env.dateNow?.() ?? Date.now(), env.dateParseOpts?.());
       if (!tokens.length) { parent.append(document.createTextNode(source)); return; }
       let at = 0;
       for (const token of tokens) {
@@ -15863,7 +17734,7 @@ __zentralShim.register = function (def) {
           if (n.t === "math") node.className = "zn-math";
           else if (n.t === "hl") {
             node.className = "zn-hl";
-            setColorData(node, n.color);
+            setColorData(node, n.color, env.surfaceSpec?.());
           } else if (n.t === "a") {
             // No href attribute: a real link inside browser chrome could
             // navigate the window. Clicks go through env.openLink instead.
@@ -16306,7 +18177,155 @@ __zentralShim.register = function (def) {
       // The NOTES root style code below reads string preferences with this; it used to name a helper that only exists in the
       // controller scope, so clicking the root style button threw a ReferenceError and did nothing.
       const prefStr = (k, d) => String(getPref(k, d) ?? d);
-      const setPref = (k, v) => env.setPref?.(k, v);
+      const THEME_PALETTE_PREFS = new Set([PREF.THEME, PREF.LOOK_BG, PREF.LOOK_TEXT, PREF.LOOK_ACCENT, PREF.LOOK_LINE]);
+      const paletteRefreshers = new Set();
+      function currentSurfaceSpec() {
+        const rootDoc = document.documentElement;
+        const attrTheme = rootDoc?.getAttribute?.("zentral-notes-theme") || "";
+        const theme = NOTE_THEMES.some(([k]) => k === attrTheme)
+          ? attrTheme
+          : normalizeTheme(prefStr(PREF.THEME, "zentral"));
+        const explicitScheme = rootDoc?.getAttribute?.("zentral-notes-scheme") || "";
+        let scheme = explicitScheme === "light" || explicitScheme === "dark" ? explicitScheme : "";
+        if (!scheme) {
+          try {
+            if (window.matchMedia?.("(prefers-color-scheme: light)")?.matches) scheme = "light";
+            else if (window.matchMedia?.("(prefers-color-scheme: dark)")?.matches) scheme = "dark";
+          } catch (_) {}
+        }
+        let hostSurface = "", hostText = "", hostAccent = "", hostLine = "";
+        try {
+          const cs = window.getComputedStyle?.(rootDoc || root);
+          const pick = (...vars) => {
+            for (const name of vars) {
+              const v = String(cs?.getPropertyValue?.(name) || "").trim();
+              if (v && CALENDAR_PART?.parseColorRgb?.(v)) return v;
+            }
+            return "";
+          };
+          if (theme === "recommended") {
+            hostSurface = pick("--zl-popup", "--arrowpanel-background");
+            hostText = pick("--zl-popup-text", "--arrowpanel-color");
+            hostLine = pick("--zl-button-border-color", "--arrowpanel-border-color");
+          } else if (theme === "zentral") {
+            hostSurface = pick("--bgalazka-look-toolbar-surface", "--bgalazka-look-surface");
+            hostText = pick("--bgalazka-look-text");
+            hostAccent = pick("--zen-primary-color");
+          }
+        } catch (_) {}
+        const ovColor = (prefKey, varName) => {
+          const p = cleanHex(prefStr(prefKey, "").trim());
+          if (p) return p;
+          const inline = cleanHex(String(rootDoc?.style?.getPropertyValue?.(varName) || "").trim());
+          return inline || "";
+        };
+        const overrides = {
+          bg: ovColor(PREF.LOOK_BG, "--zentral-notes-ov-bg"),
+          text: ovColor(PREF.LOOK_TEXT, "--zentral-notes-ov-text"),
+          accent: ovColor(PREF.LOOK_ACCENT, "--zentral-notes-ov-accent"),
+        };
+        if (!CALENDAR_PART?.resolveThemeSurface) {
+          return { theme, scheme: scheme || "dark", isLight: scheme === "light", surface: "#1e1e24", text: "#e9e9f0", muted: "#a4a4b2", line: "#363640", accent: "#83a5ff", accentOutline: "#83a5ff", accentFill: "#83a5ff", accentOnFill: "#10141d" };
+        }
+        return CALENDAR_PART.resolveThemeSurface(theme, { scheme, hostSurface, hostText, hostAccent, hostLine, overrides });
+      }
+      function syncSheetSurfaceTokens() {
+        const s = currentSurfaceSpec();
+        root.dataset.scheme = s.scheme;
+        root.style.setProperty("--zn-accent-safe", s.accent);
+        root.style.setProperty("--zn-accent-outline", s.accentOutline);
+        root.style.setProperty("--zn-accent-on-fill", s.accentOnFill);
+        root.style.setProperty("--zn-surface-resolved", s.surface);
+        root.style.setProperty("--zn-text-resolved", s.text);
+        root.style.setProperty("--zn-muted-resolved", s.muted);
+        return s;
+      }
+      const setSheetColorData = (el, color, kind = "swatch") => setColorData(el, color, currentSurfaceSpec(), kind);
+      function applyCalendarItemColors(el, color, kind = "calendar") {
+        if (!el?.style) return;
+        if (color) el.style.setProperty("--zn-cal-item-color", color);
+        else el.style.removeProperty("--zn-cal-item-color");
+        if (!CALENDAR_PART?.derivePaletteTokens) return;
+        const surf = currentSurfaceSpec();
+        const tok = CALENDAR_PART.derivePaletteTokens(color || surf.accent, surf, { kind });
+        el.style.setProperty("--zn-cal-item-bg", tok.bg);
+        el.style.setProperty("--zn-cal-item-fg", tok.fg);
+        el.style.setProperty("--zn-cal-item-muted", tok.muted);
+        el.style.setProperty("--zn-cal-item-outline", tok.outline);
+        el.style.setProperty("--zn-cal-item-hover", tok.hoverBg);
+        el.style.setProperty("--zn-cal-item-selected-bg", tok.selectedBg);
+        el.style.setProperty("--zn-cal-item-selected-fg", tok.selectedFg);
+        el.style.setProperty("--zn-cal-item-selected-outline", tok.selectedOutline);
+        el.style.setProperty("--zn-cal-item-disabled-bg", tok.disabledBg);
+        el.style.setProperty("--zn-cal-item-disabled-fg", tok.disabledFg);
+        el.style.setProperty("--zn-cal-item-disabled-outline", tok.disabledOutline);
+      }
+      const FOLDER_ROW_ALL_VARS = Object.freeze([
+        "--zn-frow-back", "--zn-frow-front", "--zn-frow-stroke", "--zn-frow-label",
+        "--zn-frow-accent", "--zn-frow-tint", "--zn-frow-hover", "--zn-frow-selected",
+        "--zn-frow-disabled-bg", "--zn-frow-disabled-fg", "--zn-frow-disabled-outline",
+      ]);
+      function applyFolderRowVisual(row, raw, depth = 2, modeOverride = "") {
+        const resolved = resolveFolderVisual(raw, depth, modeOverride);
+        const visualParts = resolved.parts || {};
+        const rowColor = resolved.base || cleanHex(visualParts.accent) || cleanHex(visualParts.front) || cleanHex(visualParts.back) || cleanHex(visualParts.label) || "";
+        const hasVisual = Object.keys(resolved.properties || {}).length > 0;
+        if (!hasVisual) {
+          row.removeAttribute("data-color");
+          row.style.removeProperty("--zn-fc");
+          clearPaletteVars(row);
+          for (const v of FOLDER_ROW_ALL_VARS) row.style.removeProperty(v);
+          return resolved;
+        }
+        setSheetColorData(row, rowColor || "custom", "swatch");
+        row.style.setProperty("--zn-fc", rowColor || "#707780");
+        const backVal = resolved.properties?.["--zen-folder-behind-bgcolor"] || "";
+        const frontVal = resolved.properties?.["--zen-folder-front-bgcolor"] || "";
+        if (backVal) row.style.setProperty("--zn-frow-back", backVal); else row.style.removeProperty("--zn-frow-back");
+        if (frontVal) row.style.setProperty("--zn-frow-front", frontVal); else row.style.removeProperty("--zn-frow-front");
+        const surf = currentSurfaceSpec();
+        const ftok = CALENDAR_PART?.resolveFolderSurfaceTokens?.(resolved, surf);
+        if (ftok) {
+          row.style.setProperty("--zn-frow-stroke", ftok.stroke);
+          row.style.setProperty("--zn-frow-label", ftok.label);
+          row.style.setProperty("--zn-frow-accent", ftok.accent);
+          row.style.setProperty("--zn-frow-tint", ftok.tint);
+          row.style.setProperty("--zn-frow-hover", ftok.hover);
+          row.style.setProperty("--zn-frow-selected", ftok.selected);
+          row.style.setProperty("--zn-frow-disabled-bg", ftok.disabledBg);
+          row.style.setProperty("--zn-frow-disabled-fg", ftok.disabledFg);
+          row.style.setProperty("--zn-frow-disabled-outline", ftok.disabledOutline);
+        }
+        return resolved;
+      }
+      function refreshSheetThemeColors() {
+        if (destroyed) return;
+        syncSheetSurfaceTokens();
+        if (isOpen) {
+          applyState();
+          if (view === "editor" && mode !== "edit") refreshRead();
+          if (view === "list") {
+            scheduleList();
+            if (!calendarPane.hidden) renderCalendar();
+          }
+        }
+        for (const fn of [...paletteRefreshers]) {
+          try { if (fn() === false) paletteRefreshers.delete(fn); } catch (_) { paletteRefreshers.delete(fn); }
+        }
+      }
+      listen(window, "zentral-notes-theme-changed", refreshSheetThemeColors);
+      try {
+        const mq = window.matchMedia?.("(prefers-color-scheme: light)");
+        if (mq?.addEventListener) {
+          const onMq = () => refreshSheetThemeColors();
+          mq.addEventListener("change", onMq);
+          cleanups.push(() => { try { mq.removeEventListener("change", onMq); } catch (_) {} });
+        }
+      } catch (_) {}
+      const setPref = (k, v) => {
+        env.setPref?.(k, v);
+        if (THEME_PALETTE_PREFS.has(k)) refreshSheetThemeColors();
+      };
       let shortcutCache = { raw: null, hid: null, list: [] };
       const hiddenTools = () => parseHidden(getPref(PREF.HIDDEN_TOOLS, DEFAULT_HIDDEN_TOOLS));
       function shortcutList() {
@@ -16345,6 +18364,9 @@ __zentralShim.register = function (def) {
         spellcheck: "false",
       });
       const btnNew = iconButton("plus", "New note (Ctrl+N)", "zn-new");
+      const btnNewMenu = iconButton("caret", "Create menu", "zn-new-menu");
+      btnNewMenu.setAttribute("aria-haspopup", "menu");
+      const newSplit = h("span", { class: "zn-new-split", role: "group", "aria-label": "Create in All notes" }, btnNew, btnNewMenu);
       const btnFolder = iconButton("folder", "New folder", "zn-newfolder");
       const chipAll = h("button", { type: "button", class: "zn-chip" }, "Notes");
       const chipRecent = h("button", { type: "button", class: "zn-chip" }, "Recent");
@@ -16355,7 +18377,7 @@ __zentralShim.register = function (def) {
       const listEl = h(
         "div",
         { class: "zn-list" },
-        h("div", { class: "zn-list-head" }, h("span", { class: "zn-search-wrap" }, icon("search", 13), search), btnFolder, btnNew),
+        h("div", { class: "zn-list-head" }, h("span", { class: "zn-search-wrap" }, icon("search", 13), search), btnFolder, newSplit),
         h("div", { class: "zn-chips" }, chipAll, chipRecent, chipTrash, chipTags, h("span", { class: "zn-grow" }), chipEmpty),
         listItems,
       );
@@ -16497,9 +18519,7 @@ __zentralShim.register = function (def) {
         const calendarViewName = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
         calendarViewSelect.dataset.value = calendarViewName;
         calendarViewSelect.textContent = ({ month: "Month", upcoming: "Next days", agenda: "Agenda", week: "Week", day: "Day" })[calendarViewName];
-        calendarDaysSelect.dataset.value = String([3, 7, 14, 30].includes(Number(store.meta.calendarDaysForward)) ? Number(store.meta.calendarDaysForward) : 7);
-        calendarDaysSelect.textContent = calendarDaysSelect.dataset.value + " days";
-        calendarDaysSelect.hidden = calendarViewName !== "upcoming";
+        syncCalendarDaysControl(calendarViewName);
         // A change of size alone draws the calendar again only when it would come out differently (OW-03); before,
         // every px of a resize drew it again.
         if (active && !calendarPane.hidden) { if (resized && !calendarWasHidden) refitCalendar(); else requestCalendarBackground(); }
@@ -16524,7 +18544,17 @@ __zentralShim.register = function (def) {
         store.setMeta({ [key]: drag.share });
       }
       // Split view as two windows: only where the sheet floats over a host and the option is on.
+      function syncAllNewButton() {
+        const opts = { agendaEnabled: !!getPref(PREF.AGENDA_ENABLED, false), calendarAvailable: !!store.items };
+        const choice = CALENDAR_PART ? CALENDAR_PART.cleanAllNotesNewChoice(store.meta.allNewChoice, opts) : "note";
+        const label = CALENDAR_PART ? CALENDAR_PART.allNotesNewButtonLabel(choice, opts) : "New note (Ctrl+N)";
+        btnNew.title = label;
+        btnNew.setAttribute("aria-label", label);
+        btnNew.dataset.choice = choice;
+      }
       function applyState() {
+        syncSheetSurfaceTokens();
+        syncAllNewButton();
         const n = note();
         root.dataset.view = view;
         root.dataset.mode = mode;
@@ -16537,12 +18567,12 @@ __zentralShim.register = function (def) {
         const categoryInfo = activeCategory ? store.items?.category?.(activeCategory) : null;
         categoryText.textContent = activeCategory || "Category";
         categoryDot.hidden = !categoryInfo;
-        if (categoryInfo) setColorData(categoryDot, categoryInfo.color);
-        else setColorData(categoryDot, "none");
+        if (categoryInfo) setSheetColorData(categoryDot, categoryInfo.color);
+        else setSheetColorData(categoryDot, "none");
         btnCategory.title = activeCategory ? `Calendar category: ${activeCategory} (change section category)` : "Choose or create a category for the calendar section at the caret";
         paintReminderChip(n);
         paintFindState();
-                setColorData(root, n?.color || "none");
+        setSheetColorData(root, n?.color || "none");
         root.dataset.trashed = n?.trashed ? "true" : "false";
         titleEl.textContent =
           view === "list" ? (filter === "trash" ? "Trash" : "All notes") : titleOf(n?.body || "") || "Untitled note";
@@ -16550,7 +18580,7 @@ __zentralShim.register = function (def) {
         btnPin.classList.toggle("is-on", !!n?.pinned);
         btnPin.title = n?.pinned ? "Unpin note" : "Pin note to the top of the list";
         btnPin.setAttribute("aria-pressed", n?.pinned ? "true" : "false");
-        setColorData(colorDot, n?.color || "none");
+        setSheetColorData(colorDot, n?.color || "none");
         const big = store.meta.size !== "peek";
         btnSize.replaceChildren(icon(big ? "minimize" : "maximize"));
         btnSize.title = big ? "Smaller (hold: fill the whole area)" : "Larger (hold: fill the whole area)";
@@ -16585,7 +18615,7 @@ __zentralShim.register = function (def) {
         tSplit.title = mode === "split" ? "Close split view" : "Split view: editor and preview";
         tMode.replaceChildren(icon(mode === "read" ? "edit" : "eye"));
         tMode.title = mode === "read" ? "Edit (Ctrl+E)" : "Read (Ctrl+E)";
-        setColorData(hlDot, store.meta.highlight);
+        setSheetColorData(hlDot, store.meta.highlight);
         const gone = hiddenTools();
         for (const [btn, base, id] of TOOL_TITLES) {
           const combo = shortcutList().find((x) => x.id === id)?.combo;
@@ -16637,7 +18667,7 @@ __zentralShim.register = function (def) {
           const categoryInfo = activeCategory ? store.items?.category?.(activeCategory) : null;
           categoryText.textContent = activeCategory || "Category";
           categoryDot.hidden = !categoryInfo;
-          if (categoryInfo) setColorData(categoryDot, categoryInfo.color); else setColorData(categoryDot, "none");
+          if (categoryInfo) setSheetColorData(categoryDot, categoryInfo.color); else setSheetColorData(categoryDot, "none");
           btnCategory.title = activeCategory ? `Calendar category: ${activeCategory} (change section category)` : "Choose or create a category for the calendar section at the caret";
           titleEl.textContent =
             view === "list" ? titleEl.textContent : titleOf(n.body) || "Untitled note";
@@ -16942,10 +18972,12 @@ __zentralShim.register = function (def) {
       };
       // Delegates to the caller's env (live: later changes to it stay visible) and only adds the two lookups.
       env = Object.assign(Object.create(env), {
+        surfaceSpec: () => currentSurfaceSpec(),
         noteInfo,
         renderEmbed,
         displayDateKey: (key) => displayDateKey(key),
         dateNow: () => nowMs(),
+        dateParseOpts: () => { try { return { lang: Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en"), acceptAll: Services.prefs.getBoolPref(PREF.NOTES_LANGUAGE_ACCEPT_ALL, true) }; } catch (_) { return { lang: "en", acceptAll: true }; } },
         dateLineText: (line) => {
           const body = note()?.body || "";
           return normalizeNewlines(body).split("\n")[line] || "";
@@ -17481,27 +19513,85 @@ __zentralShim.register = function (def) {
         remindEl.classList.toggle("is-due", passed);
         remindEl.title = (passed ? "Reminder time passed: " : "Reminder: ") + reminderText(n.remind) + " (click to change)";
       }
-      // Shared date picker (T2.2a): every date surface uses this same Monday-first, keyboard-accessible month grid.
+      let calendarWeekPanDay = "";
+      const calendarWeekStartDay = () => (CALENDAR_PART ? CALENDAR_PART.cleanWeekStart(store.meta.calendarWeekStart) : 1);
+      const calendarShowWeekNumbers = () => (CALENDAR_PART ? CALENDAR_PART.cleanWeekNumbers(store.meta.calendarWeekNumbers) : false);
+      function calendarWeekAutoWidth() {
+        const cw = Number(calendarContent?.clientWidth);
+        if (cw > 0) return cw;
+        const cr = calendarContent?.getBoundingClientRect?.();
+        if (cr && Number(cr.width) > 0) return Number(cr.width);
+        const pr = calendarPane?.getBoundingClientRect?.();
+        if (pr && Number(pr.width) > 0) return Number(pr.width);
+        return 0;
+      }
+      function calendarWeekSpanConfig() {
+        return CALENDAR_PART ? CALENDAR_PART.cleanWeekSpan(store.meta.calendarWeekSpan) : { days: 7, anchor: "weekStart" };
+      }
+      function calendarShownWeekDays(cursorOverride) {
+        const C = CALENDAR_PART;
+        const stored = C.parseYmd(store.meta.calendarCursor);
+        const cursor = cursorOverride !== undefined ? cursorOverride : (stored ? stored.getTime() : calendarTodayDay());
+        return C.resolveWeekVisibleDays({
+          cursor,
+          today: calendarTodayDay(),
+          weekStart: calendarWeekStartDay(),
+          span: store.meta.calendarWeekSpan,
+          widthPx: calendarWeekAutoWidth(),
+          panDay: calendarWeekPanDay,
+        });
+      }
+      function syncCalendarDaysControl(viewName) {
+        if (viewName === "week" && CALENDAR_PART) {
+          const span = calendarWeekSpanConfig();
+          const count = span.days === "auto"
+            ? (calendarFit?.view === "week" && calendarFit.weekDays ? calendarFit.weekDays : CALENDAR_PART.fitWeekDayCount(calendarWeekAutoWidth()))
+            : span.days;
+          calendarDaysSelect.dataset.value = String(span.days);
+          calendarDaysSelect.textContent = span.days === "auto"
+            ? `Auto · ${count} day${count === 1 ? "" : "s"}`
+            : `${count} day${count === 1 ? "" : "s"}`;
+          calendarDaysSelect.setAttribute("aria-label", "Days shown in Week view");
+          calendarDaysSelect.title = span.days === "auto"
+            ? `Week view fits ${count} day${count === 1 ? "" : "s"} to the pane width. Press to set 1–14 days or change where the range starts.`
+            : `Week view shows ${count} day${count === 1 ? "" : "s"}. Press to set 1–14 days, Auto, or where the range starts.`;
+          calendarDaysSelect.hidden = false;
+          return;
+        }
+        const days = [3, 7, 14, 30].includes(Number(store.meta.calendarDaysForward)) ? Number(store.meta.calendarDaysForward) : 7;
+        calendarDaysSelect.dataset.value = String(days);
+        calendarDaysSelect.textContent = days + " days";
+        calendarDaysSelect.setAttribute("aria-label", "Number of days forward");
+        calendarDaysSelect.title = "";
+        calendarDaysSelect.hidden = viewName !== "upcoming";
+      }
+      // Shared date picker (T2.2a): every date surface uses this same keyboard-accessible month grid, honouring
+      // the configured week start day (AU-B5) and optional week numbers column.
       // `selected` / return values are local-midnight ms. Optional clock controls are composed separately below.
-      function buildDatePicker({ selected, items = [], onPick }) {
+      function buildDatePicker({ selected, items = [], onPick, compact = false, topBar = null, weekStart: weekStartOpt, weekNumbers: weekNumbersOpt }) {
         const C = CALENDAR_PART;
         if (!C) return null;
-        const weekStart = 1;
-        let cursor = selected || C.dayStart(nowMs());
+        const weekStart = weekStartOpt === undefined ? calendarWeekStartDay() : C.cleanWeekStart(weekStartOpt);
+        const showWeeks = weekNumbersOpt === undefined ? calendarShowWeekNumbers() : C.cleanWeekNumbers(weekNumbersOpt);
+        let cursor = selected ? C.dayStart(selected) : C.dayStart(nowMs());
         let view = { year: new Date(cursor).getFullYear(), month: new Date(cursor).getMonth() };
         const title = h("div", { class: "zn-cal-title", "aria-live": "polite" });
         const prev = iconButton("chevronLeft", "Previous month", "zn-cal-nav"), next = iconButton("chevronRight", "Next month", "zn-cal-nav");
         const todayBtn = chip("Today");
-        const grid = h("div", { class: "zn-cal-grid", role: "grid", tabindex: "0", "aria-label": "Choose a day" });
-        const root = h("div", { class: "zn-cal" }, h("div", { class: "zn-cal-head" }, prev, title, next, todayBtn), grid);
-        const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        const grid = h("div", { class: "zn-cal-grid" + (showWeeks ? " has-week-numbers" : ""), role: "grid", tabindex: "0", "aria-label": "Choose a day" });
+        const root = h("div", { class: "zn-cal" + (compact ? " is-compact" : "") }, ...(topBar ? [topBar] : []), h("div", { class: "zn-cal-head" }, prev, title, next, todayBtn), grid);
+        const dowLabels = C.weekdayLabels(weekStart, "short", (() => { try { return Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en"); } catch (_) { return "en"; } })());
         const draw = () => {
-          const monthName = new Date(view.year, view.month, 1).toLocaleString(undefined, { month: "long", year: "numeric" });
+          const monthName = new Date(view.year, view.month, 1).toLocaleString(undefined, { month: compact ? "short" : "long", year: "numeric" });
           title.textContent = monthName;
           const rows = C.pickerMonth(view.year, view.month, { weekStart, now: nowMs(), selected: cursor, items });
-          grid.replaceChildren(
-            ...Array.from({ length: 7 }, (_, i) => h("span", { class: "zn-cal-dow" }, names[(weekStart + i) % 7])),
-            ...rows.flat().map((c) => {
+          const bodyNodes = [];
+          for (const row of rows) {
+            if (showWeeks && row.length) {
+              const wk = C.weekNumber(row[0].day, weekStart);
+              bodyNodes.push(h("span", { class: "zn-cal-week-num", role: "rowheader", "aria-label": "Week " + wk }, String(wk)));
+            }
+            for (const c of row) {
               const b = h("button", { type: "button", class: "zn-cal-day", "data-day": String(c.day), tabindex: "-1", "aria-label": new Date(c.day).toDateString() + (c.count ? ", " + c.count + " item" + (c.count > 1 ? "s" : "") : "") }, String(c.date));
               if (!c.inMonth) b.classList.add("is-out");
               if (c.today) b.classList.add("is-today");
@@ -17509,8 +19599,13 @@ __zentralShim.register = function (def) {
               if (c.day === cursor) { b.classList.add("is-cursor"); b.setAttribute("aria-selected", "true"); }
               if (c.count) b.append(h("i", { class: "zn-cal-dot" }));
               b.addEventListener("click", () => { cursor = c.day; selected = c.day; onPick?.(c.day); draw(); grid.focus({ preventScroll: true }); });
-              return b;
-            }),
+              bodyNodes.push(b);
+            }
+          }
+          grid.replaceChildren(
+            ...(showWeeks ? [h("span", { class: "zn-cal-dow zn-cal-week-col-head", "aria-label": "Week number" }, "W#")] : []),
+            ...dowLabels.map((label) => h("span", { class: "zn-cal-dow" }, label)),
+            ...bodyNodes,
           );
         };
         const go = (delta) => {
@@ -17531,6 +19626,13 @@ __zentralShim.register = function (def) {
           e.preventDefault(); e.stopPropagation();
           cursor = moved; view = { year: new Date(cursor).getFullYear(), month: new Date(cursor).getMonth() }; draw();
         });
+        root.setSelected = (dayMs, { jumpView = true } = {}) => {
+          const nextMs = dayMs ? C.dayStart(dayMs) : C.dayStart(nowMs());
+          selected = nextMs;
+          cursor = nextMs;
+          if (jumpView) view = { year: new Date(nextMs).getFullYear(), month: new Date(nextMs).getMonth() };
+          draw();
+        };
         draw();
         return root;
       }
@@ -17585,12 +19687,9 @@ __zentralShim.register = function (def) {
         const requestedCategory = typeof store.meta.calendarFilterCategory === "string" ? store.meta.calendarFilterCategory : "";
         const category = categories.some((entry) => entry.name === requestedCategory) ? requestedCategory : "";
         const view = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
-        const days = [3, 7, 14, 30].includes(Number(store.meta.calendarDaysForward)) ? Number(store.meta.calendarDaysForward) : 7;
         calendarViewSelect.dataset.value = view;
         calendarViewSelect.textContent = ({ month: "Month", upcoming: "Next days", agenda: "Agenda", week: "Week", day: "Day" })[view];
-        calendarDaysSelect.dataset.value = String(days);
-        calendarDaysSelect.textContent = days + " days";
-        calendarDaysSelect.hidden = view !== "upcoming";
+        syncCalendarDaysControl(view);
         calendarKindSelect.dataset.value = kind;
         calendarKindSelect.textContent = ({ all: "All items", event: "Events", reminder: "Reminders" })[kind];
         calendarCategorySelect.dataset.value = category;
@@ -17605,12 +19704,14 @@ __zentralShim.register = function (def) {
         })));
       }
       function calendarDisplayZone() { return CALENDAR_PART?.cleanZone?.(store.meta.calendarDisplayZone) || ""; }
+      function calendarTodayLabel() { try { return CALENDAR_PART.notesLanguageTable(Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en")).todayLabel; } catch (_) { return "Today"; } }
       function calendarTodayKey() { return CALENDAR_PART.zonedDateKey(nowMs(), calendarDisplayZone()); }
       function calendarTodayDay() { return CALENDAR_PART.parseYmd(calendarTodayKey())?.getTime() || CALENDAR_PART.dayStart(nowMs()); }
       function calendarDayLabel(day, options = {}) {
         const d = new Date(day);
         const date = displayDateKey(CALENDAR_PART.localDateKey(day));
-        const weekday = options.weekday === false ? "" : d.toLocaleDateString(undefined, { weekday: options.weekday || "long" });
+        const locale = (() => { try { return CALENDAR_PART.notesLocaleFor(Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en")); } catch (_) { return undefined; } })();
+        const weekday = options.weekday === false ? "" : d.toLocaleDateString(locale, { weekday: options.weekday || "long" });
         return weekday ? weekday + ", " + date : date;
       }
       function calendarItemColor(item) {
@@ -17729,8 +19830,11 @@ __zentralShim.register = function (def) {
         const clock = buildClockPicker({ value, onPick: (picked) => { time = picked; entry.set(picked); } });
         const entry = bindEntry(part, { kind: "time", onChange: (typed) => {
           time = typed;
-          const hour = clock.querySelector(".zn-cal-clock-hour"), minute = clock.querySelector(".zn-cal-clock-minute");
-          if (hour && minute) { hour.value = typed.slice(0, 2); minute.value = typed.slice(3, 5); }
+          if (clock.setValue) clock.setValue(typed);
+          else {
+            const hour = clock.querySelector(".zn-cal-clock-hour"), minute = clock.querySelector(".zn-cal-clock-minute");
+            if (hour && minute) { hour.value = typed.slice(0, 2); minute.value = typed.slice(3, 5); }
+          }
         } });
         return { nodes: [part.row, clock], entry, read: () => entry.read() || time };
       }
@@ -17738,7 +19842,10 @@ __zentralShim.register = function (def) {
         if (item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length)) return flash("Recurring occurrences need exception support before they can be snoozed");
         const startMs = CALENDAR_PART.itemRange(item)[0];
         const allDay = CALENDAR_PART.isAllDay(item);
-        const dateField = field("New date", CALENDAR_PART.ymd(new Date(startMs)), "14, 14.11 or 2026-11-14");
+        const initialDate = allDay
+          ? (calendarItemDate(item) || CALENDAR_PART.ymd(new Date(startMs)))
+          : (CALENDAR_PART.zonedDateKey(startMs, item.x?.tz || "") || CALENDAR_PART.ymd(new Date(startMs)));
+        const dateField = field("New date", initialDate, "14, 14.11 or 2026-11-14");
         const dateEntry = bindEntry(dateField, { kind: "date" });
         const datePick = chip("Choose date…");
         const dateHost = h("div", { class: "zn-cal-snooze-date" }, dateField.row, datePick);
@@ -17932,7 +20039,7 @@ __zentralShim.register = function (def) {
         const historyWritable = !!history && !history.storageState().writeBlocked;
         const agendaVisible = agendaWindowForItem(item, store).enabled;
         const model = CALENDAR_PART.calendarItemMenuModel(item, { state: lifecycle, historyWritable, agendaVisible, agendaWritable: !!currentCalendarItem(item) });
-        const date = new Date(CALENDAR_PART.itemRange(item)[0]);
+        const date = CALENDAR_PART.parseYmd(calendarItemDate(item)) || new Date(CALENDAR_PART.itemRange(item)[0]);
         const nextMonday = (8 - date.getDay()) % 7 || 7;
         const commands = {
           open: () => { const latest = currentCalendarItem(item); if (latest) openCalendarItem(latest); },
@@ -18013,7 +20120,7 @@ __zentralShim.register = function (def) {
           }
         }
         const color = calendarItemColor(item);
-        if (color) button.style.setProperty("--zn-cal-item-color", color);
+        applyCalendarItemColors(button, color, "calendar");
         button.append(h("span", { class: "zn-cal-item-time" }, calendarItemTime(item)), h("span", { class: "zn-cal-item-title" }, item.summary || "Untitled item"));
         if (item.x?.category) button.append(h("span", { class: "zn-cal-item-category" }, item.x.category));
         if (item.x?.calNote) button.append(h("span", { class: "zn-cal-item-note" }, item.x.calNote.slice(0, 110)));
@@ -18039,7 +20146,7 @@ __zentralShim.register = function (def) {
         const isToday = CALENDAR_PART.localDateKey(day) === CALENDAR_PART.localDateKey(nowMs());
         const section = h("section", { class: "zn-cal-day-group" + (selected ? " is-selected" : "") + (isToday ? " is-today" : ""), tabindex: "0", "aria-label": calendarDayLabel(day, { year: true }) });
         bindCalendarDayContext(section, day);
-        const head = h("div", { class: "zn-cal-day-head" }, h("strong", {}, calendarDayLabel(day, { year: true })), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, "Today")] : []), h("span", {}, `${dayItems.length} item${dayItems.length === 1 ? "" : "s"}`));
+        const head = h("div", { class: "zn-cal-day-head" }, h("strong", {}, calendarDayLabel(day, { year: true })), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), h("span", {}, `${dayItems.length} item${dayItems.length === 1 ? "" : "s"}`));
         section.append(head);
         const allDay = dayItems.filter((item) => CALENDAR_PART.isAllDay(item));
         const timed = dayItems.filter((item) => !CALENDAR_PART.isAllDay(item));
@@ -18091,7 +20198,9 @@ __zentralShim.register = function (def) {
       }
       function calendarMonthView(items, cursor, compact) {
         const date = new Date(cursor), year = date.getFullYear(), month = date.getMonth();
-        const grid = CALENDAR_PART.monthGrid(year, month, 1);
+        const weekStart = calendarWeekStartDay(), showWeeks = calendarShowWeekNumbers();
+        const dowNames = CALENDAR_PART.weekdayLabels(weekStart, "short", (() => { try { return Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en"); } catch (_) { return "en"; } })());
+        const grid = CALENDAR_PART.monthGrid(year, month, weekStart);
         const first = grid[0][0], afterLast = CALENDAR_PART.addDays(grid[5][6], 1);
         const expanded = CALENDAR_PART.expandRange(items, first, afterLast);
         calendarPeriod.textContent = date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
@@ -18100,9 +20209,13 @@ __zentralShim.register = function (def) {
           calendarContent.dataset.picker = "true";
           const pickerPrefs = CALENDAR_PART.cleanCalendarPicker(store.meta.calendarPicker);
           const pickerWrap = h("div", { class: "zn-cal-month-wrap zn-cal-picker-wrap" });
-          const names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-          const dows = h("div", { class: "zn-cal-month-dows" }, ...names.map((name) => h("span", {}, name)));
-          const cells = h("div", { class: "zn-cal-month-grid zn-cal-picker-grid", role: "grid", "aria-label": "Choose a date in " + date.toLocaleDateString(undefined, { month: "long", year: "numeric" }), title: "Colour legend: no items, 1 item, 2–3 items, 4 or more items." });
+          const dows = h(
+            "div",
+            { class: "zn-cal-month-dows" + (showWeeks ? " has-week-numbers" : "") },
+            ...(showWeeks ? [h("span", { class: "zn-cal-week-col-head", "aria-label": "Week number" }, "W#")] : []),
+            ...dowNames.map((name) => h("span", {}, name)),
+          );
+          const cells = h("div", { class: "zn-cal-month-grid zn-cal-picker-grid" + (showWeeks ? " has-week-numbers" : ""), role: "grid", "aria-label": "Choose a date in " + date.toLocaleDateString(undefined, { month: "long", year: "numeric" }), title: "Colour legend: no items, 1 item, 2–3 items, 4 or more items." });
           const selected = CALENDAR_PART.parseYmd(store.meta.calendarCursor)?.getTime() || cursor;
           const selection = h("div", { class: "zn-cal-month-selection zn-cal-picker-selection" });
           let focusedDay = selected, selectedDay = selected, visibleYear = year, visibleMonth = month;
@@ -18129,49 +20242,59 @@ __zentralShim.register = function (def) {
             const monthDate = new Date(visibleYear, visibleMonth, 1);
             calendarPeriod.textContent = monthDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
             const rows = CALENDAR_PART.pickerMonth(visibleYear, visibleMonth, {
-              weekStart: 1, now: nowMs(), selected: selectedDay, items,
+              weekStart, now: nowMs(), selected: selectedDay, items,
             });
-            const buttons = rows.flat().map((cell) => {
-              const key = CALENDAR_PART.localDateKey(cell.day);
-              const dateName = calendarDayLabel(cell.day, { year: true });
-              const countText = cell.count + " item" + (cell.count === 1 ? "" : "s");
-              const button = h("button", {
-                type: "button", class: "zn-cal-picker-day is-heat-" + cell.level,
-                role: "gridcell", tabindex: cell.day === focusedDay ? "0" : "-1",
-                "data-day": key, "data-day-value": String(cell.day),
-                "aria-label": dateName + ", " + countText,
-                "aria-selected": cell.day === selectedDay ? "true" : "false",
-                "aria-pressed": cell.day === selectedDay ? "true" : "false",
-                title: countText + ". Colour legend: 0 none, 1 light, 2–3 medium, 4+ strong.",
-              }, String(cell.date));
-              if (!cell.inMonth) button.classList.add("is-out");
-              if (cell.today) button.classList.add("is-today");
-              if (cell.day === selectedDay) button.classList.add("is-selected");
-              if (cell.day === focusedDay) button.classList.add("is-cursor");
-              const tint = tintFor(cell.dominantCategory);
-              if (tint) button.style.setProperty("--zn-cal-picker-tint", tint);
-              button.addEventListener("click", () => selectPickerDay(cell.day));
-              button.addEventListener("keydown", (event) => {
-                if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) return;
-                event.preventDefault();
-                event.stopPropagation();
-                movePickerFocus(cell.day, event.key);
-              });
-              return button;
-            });
-            cells.replaceChildren(...buttons);
+            const nodes = [];
+            for (const row of rows) {
+              if (showWeeks && row.length) {
+                const wk = CALENDAR_PART.weekNumber(row[0].day, weekStart);
+                nodes.push(h("span", { class: "zn-cal-week-num", role: "rowheader", "aria-label": "Week " + wk }, String(wk)));
+              }
+              for (const cell of row) {
+                const key = CALENDAR_PART.localDateKey(cell.day);
+                const dateName = calendarDayLabel(cell.day, { year: true });
+                const countText = cell.count + " item" + (cell.count === 1 ? "" : "s");
+                const button = h("button", {
+                  type: "button", class: "zn-cal-picker-day is-heat-" + cell.level,
+                  role: "gridcell", tabindex: cell.day === focusedDay ? "0" : "-1",
+                  "data-day": key, "data-day-value": String(cell.day),
+                  "aria-label": dateName + ", " + countText,
+                  "aria-selected": cell.day === selectedDay ? "true" : "false",
+                  "aria-pressed": cell.day === selectedDay ? "true" : "false",
+                  title: countText + ". Colour legend: 0 none, 1 light, 2–3 medium, 4+ strong.",
+                }, String(cell.date));
+                if (!cell.inMonth) button.classList.add("is-out");
+                if (cell.today) button.classList.add("is-today");
+                if (cell.day === selectedDay) button.classList.add("is-selected");
+                if (cell.day === focusedDay) button.classList.add("is-cursor");
+                const tint = tintFor(cell.dominantCategory);
+                if (tint) {
+                  button.style.setProperty("--zn-cal-picker-tint", tint);
+                  const ptok = CALENDAR_PART.derivePaletteTokens?.(tint, currentSurfaceSpec(), { kind: "calendar" });
+                  if (ptok) button.style.setProperty("--zn-cal-picker-tint-safe", ptok.outline);
+                }
+                button.addEventListener("click", () => selectPickerDay(cell.day));
+                button.addEventListener("keydown", (event) => {
+                  if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  movePickerFocus(cell.day, event.key);
+                });
+                nodes.push(button);
+              }
+            }
+            cells.replaceChildren(...nodes);
           };
           const movePickerFocus = (day, key) => {
-            const next = CALENDAR_PART.pickerKey(day, key, 1);
+            const next = CALENDAR_PART.pickerKey(day, key, weekStart);
             if (next === day) return;
             focusedDay = next;
             const date = new Date(next);
             if (date.getFullYear() !== visibleYear || date.getMonth() !== visibleMonth) {
               visibleYear = date.getFullYear();
               visibleMonth = date.getMonth();
-              const first = CALENDAR_PART.monthGrid(visibleYear, visibleMonth, 1)[0][0];
-              const weeks = CALENDAR_PART.monthGrid(visibleYear, visibleMonth, 1);
-              pickerExpanded = CALENDAR_PART.expandRange(items, first, CALENDAR_PART.addDays(weeks[5][6], 1));
+              const weeks = CALENDAR_PART.monthGrid(visibleYear, visibleMonth, weekStart);
+              pickerExpanded = CALENDAR_PART.expandRange(items, weeks[0][0], CALENDAR_PART.addDays(weeks[5][6], 1));
               buildPickerCells();
             } else {
               for (const button of [...cells.querySelectorAll(".zn-cal-picker-day")]) {
@@ -18187,12 +20310,13 @@ __zentralShim.register = function (def) {
             const key = CALENDAR_PART.localDateKey(day);
             selectedDay = day;
             focusedDay = day;
+            calendarWeekPanDay = "";
             store.setMeta({ calendarCursor: key });
             const date = new Date(day);
             if (date.getFullYear() !== visibleYear || date.getMonth() !== visibleMonth) {
               visibleYear = date.getFullYear();
               visibleMonth = date.getMonth();
-              const weeks = CALENDAR_PART.monthGrid(visibleYear, visibleMonth, 1);
+              const weeks = CALENDAR_PART.monthGrid(visibleYear, visibleMonth, weekStart);
               pickerExpanded = CALENDAR_PART.expandRange(items, weeks[0][0], CALENDAR_PART.addDays(weeks[5][6], 1));
               focusedDay = day;
               buildPickerCells();
@@ -18214,14 +20338,21 @@ __zentralShim.register = function (def) {
         calendarContent.dataset.picker = "false";
         const monthWrap = h("div", { class: "zn-cal-month-wrap" });
         monthWrap.dataset.density = "comfortable"; // the look of the cells; fitCalendarMonth sets the one of their height
-        const dows = h("div", { class: "zn-cal-month-dows" }, ...["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((name) => h("span", {}, name)));
-        const cells = h("div", { class: "zn-cal-month-grid", role: "grid", "aria-label": date.toLocaleDateString(undefined, { month: "long", year: "numeric" }) });
+        if (showWeeks) monthWrap.dataset.weekNumbers = "true";
+        const dows = h(
+          "div",
+          { class: "zn-cal-month-dows" + (showWeeks ? " has-week-numbers" : "") },
+          ...(showWeeks ? [h("span", { class: "zn-cal-week-col-head", "aria-label": "Week number" }, "W#")] : []),
+          ...dowNames.map((name) => h("span", {}, name)),
+        );
+        const cells = h("div", { class: "zn-cal-month-grid" + (showWeeks ? " has-week-numbers" : ""), role: "grid", "aria-label": date.toLocaleDateString(undefined, { month: "long", year: "numeric" }) });
         const selected = CALENDAR_PART.parseYmd(store.meta.calendarCursor) ? CALENDAR_PART.parseYmd(store.meta.calendarCursor).getTime() : calendarTodayDay();
         const today = calendarTodayDay();
         const selection = h("div", { class: "zn-cal-month-selection" });
         const drawCells = [];
         const selectDay = (day) => {
           const key = CALENDAR_PART.localDateKey(day);
+          calendarWeekPanDay = "";
           store.setMeta({ calendarCursor: key });
           for (const c of cells.querySelectorAll(".zn-cal-month-cell")) {
             const active = c.getAttribute("data-day") === key;
@@ -18232,7 +20363,12 @@ __zentralShim.register = function (def) {
           const entries = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.addDays(day, 1));
           selection.replaceChildren(calendarDayGroup(day, entries, { selected: true }));
         };
-        for (const week of grid) for (const day of week) {
+        for (const week of grid) {
+          if (showWeeks && week.length) {
+            const wk = CALENDAR_PART.weekNumber(week[0], weekStart);
+            cells.append(h("span", { class: "zn-cal-week-num", role: "rowheader", "aria-label": "Week " + wk }, String(wk)));
+          }
+          for (const day of week) {
           const inMonth = new Date(day).getMonth() === month;
           const dayItems = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.addDays(day, 1));
           const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", tabindex: "0", "aria-selected": day === selected ? "true" : "false", "aria-label": "Calendar day " + calendarDayLabel(day, { year: true }), "data-day": CALENDAR_PART.ymd(new Date(day)) });
@@ -18246,7 +20382,7 @@ __zentralShim.register = function (def) {
           const markOf = (item) => {
             const reminder = CALENDAR_PART.isReminder(item), lifecycle = reminder ? reminderLifecycleState(item) : "";
             const mark = h("button", { type: "button", class: "zn-cal-month-mark" + (reminder ? " is-reminder is-" + lifecycle : " is-event"), title: [item.summary, reminder ? "Reminder: " + lifecycle : "", item.x?.calNote].filter(Boolean).join(" — "), "aria-haspopup": "menu" }, item.summary || "Untitled");
-            const color = calendarItemColor(item); if (color) mark.style.setProperty("--zn-cal-item-color", color);
+            applyCalendarItemColors(mark, calendarItemColor(item), "calendar");
             mark.addEventListener("click", (event) => { event.stopPropagation(); openCalendarItem(item); });
             mark.addEventListener("contextmenu", (event) => showCalendarItemMenu(event, item, mark));
             mark.addEventListener("keydown", (event) => {
@@ -18283,6 +20419,7 @@ __zentralShim.register = function (def) {
           });
           cell.append(mini); cells.append(cell);
           draw(calendarMonthLines);
+          }
         }
         monthWrap.append(dows, cells);
         calendarContent.append(monthWrap);
@@ -18330,7 +20467,7 @@ __zentralShim.register = function (def) {
           if (page.count >= 160) break;
           const itemDay = CALENDAR_PART.itemRange(item)[0];
           const isToday = CALENDAR_PART.localDateKey(itemDay) === calendarTodayKey();
-          const row = h("div", { class: "zn-cal-agenda-row" + (isToday ? " is-today" : "") }, h("span", { class: "zn-cal-agenda-date" }, calendarDayLabel(itemDay, { year: true }), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, "Today")] : [])), calendarItemButton(item, true));
+          const row = h("div", { class: "zn-cal-agenda-row" + (isToday ? " is-today" : "") }, h("span", { class: "zn-cal-agenda-date" }, calendarDayLabel(itemDay, { year: true }), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : [])), calendarItemButton(item, true));
           page.list.append(row); page.count++;
         }
         page.offset = limit;
@@ -18346,6 +20483,7 @@ __zentralShim.register = function (def) {
       // One captured pointer gesture per sheet. A calendar re-render, view change,
       // Escape, pointer cancellation, panel close or teardown discards the preview.
       let calendarDrag = null, calendarMoveUndo = null, calendarDragClickTimer = 0, calendarSuppressedClick = null;
+      let calendarNoteDrop = null, calendarDragNoteId = "", noteDragCanceled = false;
       // The Week / Day grid as it is drawn now (OW-04, OW-03): { startMin, endMin } the hours it shows, `hourPx` the
       // height of an hour, `fit` whether that height is fitted to the timeline, `openMin` the minute a timeline that
       // scrolls opens at. And per day what was laid out in it ({ startMin, endMin, item }), kept so that an update of
@@ -18397,7 +20535,7 @@ __zentralShim.register = function (def) {
         return Math.max(0, Number(calendarPane.clientWidth) || Number(rect?.width) || 0);
       }
       let calendarBackgroundPending = false, calendarFlushQueued = false;
-      const calendarInteracting = () => !!(calendarDrag || dialog || menu?.calendar);
+      const calendarInteracting = () => !!(calendarDrag || calendarNoteDrop || dialog || menu?.calendar);
       function queueCalendarBackgroundFlush() {
         if (!calendarBackgroundPending || calendarFlushQueued) return;
         calendarFlushQueued = true;
@@ -18516,7 +20654,138 @@ __zentralShim.register = function (def) {
       listen(root, "pointerup", (event) => { commitCalendarDrag(event); releaseCalendarSuppressedClick(event); });
       listen(window, "pointerup", releaseCalendarSuppressedClick, true);
       listen(root, "pointercancel", (event) => { if (calendarDrag && (event.pointerId === undefined || event.pointerId === calendarDrag.pointerId)) cancelCalendarDrag(); releaseCalendarSuppressedClick(event); });
-      cleanups.push(() => { cancelCalendarDrag(); window.clearTimeout(calendarDragClickTimer); calendarDragClickTimer = 0; calendarSuppressedClick = null; });
+      function clearCalendarNoteDrop() {
+        const active = calendarNoteDrop;
+        calendarNoteDrop = null;
+        if (!active) return;
+        active.node?.classList.remove("is-note-drop");
+        active.preview?.remove();
+        queueCalendarBackgroundFlush();
+      }
+      function cancelNoteDrag() {
+        noteDragCanceled = true;
+        dragNoteId = "";
+        calendarDragNoteId = "";
+        for (const row of listItems.querySelectorAll(".zn-frow.is-drop")) row.classList.remove("is-drop");
+        clearCalendarNoteDrop();
+      }
+      function hasNoteDragPayload(event) {
+        if (noteDragCanceled || !CALENDAR_PART || !store.items) return false;
+        const mime = CALENDAR_PART.NOTE_DRAG_MIME;
+        const dt = event?.dataTransfer;
+        if (dt?.types) {
+          const types = typeof dt.types.includes === "function" ? dt.types : Array.from(dt.types);
+          if (types.includes(mime) || dt.types.contains?.(mime)) return true;
+          if (types.length) return false;
+        }
+        try { if (dt?.getData?.(mime)) return true; } catch (_) {}
+        const source = calendarDragNoteId ? store.get(calendarDragNoteId) : null;
+        return !!(source && !source.trashed);
+      }
+      function readNoteDragId(event) {
+        if (noteDragCanceled || !CALENDAR_PART) return "";
+        const mime = CALENDAR_PART.NOTE_DRAG_MIME;
+        let id = "";
+        try { id = String(event?.dataTransfer?.getData?.(mime) || "").trim(); } catch (_) {}
+        if (!id && calendarDragNoteId) {
+          const dt = event?.dataTransfer;
+          const types = dt?.types ? Array.from(dt.types) : [];
+          if (!types.length || types.includes(mime) || dt?.types?.contains?.(mime)) id = calendarDragNoteId;
+        }
+        const source = id ? store.get(id) : null;
+        return source && !source.trashed ? source.id : "";
+      }
+      function resolveCalendarNoteDrop(event) {
+        const C = CALENDAR_PART;
+        const el = event?.target?.closest ? event.target : event?.target?.parentElement;
+        if (!C || !el) return null;
+        const pickerDay = el.closest?.(".zn-cal-picker-day");
+        if (pickerDay) {
+          const slot = C.calendarNoteDropSlot("picker", pickerDay.getAttribute("data-day"), { zone: calendarDisplayZone() });
+          return slot ? { node: pickerDay, host: pickerDay.closest(".zn-cal-picker-wrap") || pickerDay, slot } : null;
+        }
+        const monthCell = el.closest?.(".zn-cal-month-cell");
+        if (monthCell) {
+          const slot = C.calendarNoteDropSlot("month", monthCell.getAttribute("data-day"), { zone: calendarDisplayZone() });
+          return slot ? { node: monthCell, host: monthCell, slot } : null;
+        }
+        const allDayCell = el.closest?.(".zn-cal-time-allday-cell");
+        if (allDayCell) {
+          const slot = C.calendarNoteDropSlot("allday", allDayCell.getAttribute("data-day"), { zone: calendarDisplayZone() });
+          return slot ? { node: allDayCell, host: allDayCell, slot } : null;
+        }
+        const timeTrack = el.closest?.(".zn-cal-time-track");
+        if (timeTrack) {
+          const rect = timeTrack.getBoundingClientRect?.();
+          const offsetPx = Number.isFinite(event.clientY) && rect ? event.clientY - rect.top : 0;
+          const hourPx = calendarGridHours?.hourPx || 54;
+          const slot = C.calendarNoteDropSlot("time", timeTrack.getAttribute("data-day"), {
+            offsetPx, hourPx, grid: calendarGridHours, snapMin: C.cleanCalendarSnap(store.meta.calendarSnap), zone: calendarDisplayZone(),
+          });
+          return slot ? { node: timeTrack, host: timeTrack, slot, hourPx, grid: calendarGridHours } : null;
+        }
+        return null;
+      }
+      listen(calendarContent, "dragover", (event) => {
+        if (!hasNoteDragPayload(event)) return;
+        const hit = resolveCalendarNoteDrop(event);
+        if (!hit) { clearCalendarNoteDrop(); return; }
+        event.preventDefault();
+        try { if (event.dataTransfer) event.dataTransfer.dropEffect = "copy"; } catch (_) {}
+        if (calendarNoteDrop && calendarNoteDrop.node !== hit.node) calendarNoteDrop.node.classList.remove("is-note-drop");
+        const preview = calendarNoteDrop?.preview || h("div", { class: "zn-cal-drag-preview is-note-drop", "aria-hidden": "true" });
+        hit.node.classList.add("is-note-drop");
+        if (preview.parentElement !== hit.host) hit.host.append(preview);
+        if (hit.slot.surface === "time") {
+          const topPx = Math.max(0, CALENDAR_PART.gridOffsetOf(hit.slot.minute, hit.hourPx, hit.grid)) + "px";
+          preview.style.removeProperty("bottom");
+          preview.style.setProperty("top", topPx);
+          preview.style.top = topPx;
+        } else if (hit.slot.surface === "allday") {
+          preview.style.removeProperty("bottom");
+          preview.style.setProperty("top", "0px");
+          preview.style.top = "0px";
+        } else {
+          preview.style.removeProperty("top");
+          preview.style.setProperty("bottom", "0px");
+          preview.style.bottom = "0px";
+        }
+        preview.textContent = CALENDAR_PART.calendarNoteDropLabel(hit.slot, dateDisplayFormat());
+        calendarNoteDrop = { node: hit.node, host: hit.host, preview, slot: hit.slot };
+      }, true);
+      listen(calendarContent, "dragleave", (event) => {
+        if (!calendarNoteDrop) return;
+        if (event.relatedTarget && calendarNoteDrop.node.contains?.(event.relatedTarget)) return;
+        clearCalendarNoteDrop();
+      }, true);
+      listen(calendarContent, "drop", (event) => {
+        if (noteDragCanceled) {
+          noteDragCanceled = false;
+          dragNoteId = "";
+          calendarDragNoteId = "";
+          clearCalendarNoteDrop();
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        if (!hasNoteDragPayload(event)) return;
+        const hit = resolveCalendarNoteDrop(event) || (calendarNoteDrop ? { slot: calendarNoteDrop.slot } : null);
+        const id = readNoteDragId(event);
+        dragNoteId = "";
+        calendarDragNoteId = "";
+        clearCalendarNoteDrop();
+        if (!hit) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (id && isOpen && !destroyed) composeFromNote(id, hit.slot);
+      }, true);
+      listen(window, "keydown", (event) => {
+        if (event.key === "Escape" && (calendarNoteDrop || calendarDragNoteId)) {
+          cancelNoteDrag();
+          event.preventDefault();
+        }
+      }, true);
+      cleanups.push(() => { cancelCalendarDrag(); clearCalendarNoteDrop(); calendarDragNoteId = ""; noteDragCanceled = false; window.clearTimeout(calendarDragClickTimer); calendarDragClickTimer = 0; calendarSuppressedClick = null; });
       // `grid` = the hours the timeline shows ({ startMin, endMin }); a position in a track is a time counted from its
       // first hour, not from midnight (OW-04). The all-day row has no hours and passes none.
       function bindCalendarDrag(button, item, { track, columns, scroll, dayKey, hourHeight, zone, grid = null, allDay = false, edge = "" }) {
@@ -18556,7 +20825,9 @@ __zentralShim.register = function (def) {
         track.addEventListener("lostpointercapture", (event) => { if (calendarDrag?.button === track && calendarDrag.pointerId === event.pointerId) cancelCalendarDrag(); });
       }
       function calendarTimeGridView(items, cursor, mode, patch = null) {
-        const C = CALENDAR_PART, zone = calendarDisplayZone(), days = mode === "week" ? C.weekDays(cursor, 1) : [C.dayStart(cursor)];
+        const C = CALENDAR_PART, zone = calendarDisplayZone(), weekStart = calendarWeekStartDay(), showWeeks = calendarShowWeekNumbers();
+        const days = mode === "week" ? calendarShownWeekDays(cursor) : [C.dayStart(cursor)];
+        if (!patch && calendarFit && mode === "week") calendarFit.weekDays = days.length;
         const workDays = patch ? days.filter((day) => patch.days.has(C.localDateKey(day))) : days;
         const firstDay = workDays[0], firstBounds = C.zonedDayBounds(C.localDateKey(firstDay), zone) || [firstDay, C.addDays(firstDay, 1)];
         const lastDay = workDays[workDays.length - 1], lastBounds = C.zonedDayBounds(C.localDateKey(lastDay), zone) || [lastDay, C.addDays(lastDay, 1)];
@@ -18593,7 +20864,7 @@ __zentralShim.register = function (def) {
         const gridHours = (grid.endMin - grid.startMin) / 60;
         const gridClock = (minute) => { const m = Math.floor(minute); return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
         const fmt = (day) => calendarDayLabel(day, { weekday: mode === "week" ? "short" : "long", year: true });
-        calendarPeriod.textContent = mode === "week" ? `${fmt(days[0])} – ${fmt(days[6])}` : fmt(days[0]);
+        calendarPeriod.textContent = mode === "week" && days.length > 1 ? `${fmt(days[0])} – ${fmt(days[days.length - 1])}` : fmt(days[0]);
         const cols = `42px repeat(${days.length}, minmax(0, 1fr))`;
         const todayKey = C.zonedDateKey(nowMs(), zone);
         const root = h("div", { class: "zn-cal-time-view is-" + mode, "aria-label": mode === "week" ? "Week calendar" : "Day calendar" });
@@ -18601,10 +20872,15 @@ __zentralShim.register = function (def) {
         root.style.setProperty("--zn-cal-hours", String(gridHours));
         const header = h("div", { class: "zn-cal-time-head" });
         header.style.gridTemplateColumns = cols;
-        header.append(h("span", { class: "zn-cal-time-corner", "aria-hidden": "true" }));
+        const cornerWeek = showWeeks ? C.weekNumber(days[0], weekStart) : 0;
+        header.append(
+          showWeeks
+            ? h("span", { class: "zn-cal-time-corner zn-cal-week-num", "aria-label": "Week " + cornerWeek, title: "Week " + cornerWeek }, "W" + cornerWeek)
+            : h("span", { class: "zn-cal-time-corner", "aria-hidden": "true" }),
+        );
         for (const day of days) {
           const isToday = C.localDateKey(day) === todayKey;
-          const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", Today" : "") }, h("strong", {}, new Date(day).toLocaleDateString(undefined, { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, "Today")] : []));
+          const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", Today" : "") }, h("strong", {}, new Date(day).toLocaleDateString(undefined, { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []));
           dayHead.addEventListener("click", () => { store.setMeta({ calendarCursor: C.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); });
           bindCalendarDayContext(dayHead, day);
           header.append(dayHead);
@@ -18679,19 +20955,10 @@ __zentralShim.register = function (def) {
         const minBoxPx = C.calendarMinBoxPx(hourPx);
         const minBoxMin = Math.max(1, Math.ceil((minBoxPx / hourPx) * 60));
         const overlapMin = Math.floor((minBoxPx / 5 / hourPx) * 60);
-        const lastBoxStart = grid.endMin - minBoxMin;
         const laidOut = new Map();
         for (const day of workDays) {
           const dayKey = C.localDateKey(day), { bounds, spans } = timed.get(dayKey);
-          const spanById = new Map(spans.map((span) => [String(span.item.id), span]));
-          const layoutItems = spans.map((span) => {
-            if (!span.reminder && span.endMin - span.startMin >= minBoxMin) return span.item;
-            const start = span.start - Math.max(0, span.startMin - lastBoxStart) * 60000;
-            const length = span.reminder ? minBoxMin : Math.max(1, span.endMin - span.startMin, minBoxMin - overlapMin);
-            return { ...span.item, x: { ...(span.item.x || {}), kind: "event" }, start: { dateTime: new Date(start).toISOString() }, end: { dateTime: new Date(start + length * 60000).toISOString() } };
-          });
-          const entries = C.layoutDay(layoutItems, day, zone);
-          for (const entry of entries) { entry.span = spanById.get(String(entry.item.id)) || null; entry.original = entry.span ? entry.span.item : entry.item; }
+          const entries = C.layoutGridSpans(spans, { minBoxMin, overlapMin, gridEndMin: grid.endMin });
           laidOut.set(dayKey, { bounds, entries });
         }
         const gridRow = h("div", { class: "zn-cal-time-grid-row" });
@@ -18756,6 +21023,7 @@ __zentralShim.register = function (def) {
             const reminder = C.isReminder(original);
             const button = calendarItemButton(original, true);
             button.classList.add(reminder ? "zn-cal-time-reminder" : "zn-cal-time-event");
+            applyCalendarItemColors(button, calendarItemColor(original), "time");
             const top = gridY(entry.startMin);
             const height = reminder ? minBoxPx : Math.max(minBoxPx, ((entry.span ? entry.span.endMin - entry.span.startMin : entry.endMin - entry.startMin)) / 60 * hourPx);
             button.style.top = top + "px";
@@ -18858,23 +21126,90 @@ __zentralShim.register = function (def) {
         const endTime = field("End time", endTimeDefault, "16, 830 or 9am");
         // OW-24: the four fields take a time or a date typed fast (bindEntry). The start time of an event also takes
         // both times at once ("8-16").
-        const startDateEntry = bindEntry(startDate, { kind: "date", onChange: () => {
-          // A new event whose end date nobody touched follows its start date.
+        let datePickerTarget = "start";
+        const dateTargetStartBtn = chip("Start"), dateTargetEndBtn = chip("End");
+        dateTargetStartBtn.classList.add("zn-cal-date-target");
+        dateTargetEndBtn.classList.add("zn-cal-date-target");
+        const dateTargetBar = h("div", { class: "zn-cal-date-targets" }, dateTargetStartBtn, dateTargetEndBtn);
+        let inlineDatePicker = null, inlineClock = null;
+        const syncDateTargetUI = () => {
+          dateTargetBar.hidden = kind.value === "reminder";
+          if (kind.value === "reminder") datePickerTarget = "start";
+          dateTargetStartBtn.classList.toggle("is-on", datePickerTarget === "start");
+          dateTargetEndBtn.classList.toggle("is-on", datePickerTarget === "end");
+          dateTargetStartBtn.setAttribute("aria-pressed", datePickerTarget === "start" ? "true" : "false");
+          dateTargetEndBtn.setAttribute("aria-pressed", datePickerTarget === "end" ? "true" : "false");
+        };
+        const followUntouchedEndDate = (nextStartKey) => {
           if (!original && kind.value === "event" && endDate.input.value === startDateDefault) {
-            const startDay = C.parseYmd(startDate.input.value);
-            endDateEntry.set(startDay && allDay.checked ? C.ymd(new Date(C.addDays(startDay.getTime(), 1))) : startDate.input.value);
+            const startDay = C.parseYmd(nextStartKey);
+            endDateEntry.set(startDay && allDay.checked ? C.ymd(new Date(C.addDays(startDay.getTime(), 1))) : nextStartKey);
+          }
+        };
+        const startDateEntry = bindEntry(startDate, { kind: "date", onChange: (next) => {
+          // A new event whose end date nobody touched follows its start date.
+          followUntouchedEndDate(next || startDate.input.value);
+          if (datePickerTarget === "start") {
+            const d = C.parseYmd(next || startDate.input.value);
+            if (d) inlineDatePicker?.setSelected?.(d.getTime());
           }
           paintPreview();
         } });
-        const endDateEntry = bindEntry(endDate, { kind: "date", base: () => startDateEntry.read(), onChange: () => paintPreview() });
-        const startTimeEntry = bindEntry(startTime, { kind: "time", range: () => kind.value === "event" && !allDay.checked, onRange: (end) => endTimeEntry.set(end), onChange: () => paintPreview() });
-        const endTimeEntry = bindEntry(endTime, { kind: "time", onChange: () => paintPreview() });
+        const endDateEntry = bindEntry(endDate, { kind: "date", base: () => startDateEntry.read(), onChange: (next) => {
+          if (datePickerTarget === "end") {
+            const d = C.parseYmd(next || endDate.input.value);
+            if (d) inlineDatePicker?.setSelected?.(d.getTime());
+          }
+          paintPreview();
+        } });
+        const startTimeEntry = bindEntry(startTime, { kind: "time", range: () => kind.value === "event" && !allDay.checked, onRange: (end) => {
+          endTimeEntry.set(end);
+          inlineClock?.setEndValue?.(end);
+        }, onChange: (next) => {
+          inlineClock?.setValue?.(next);
+          paintPreview();
+        } });
+        const endTimeEntry = bindEntry(endTime, { kind: "time", onChange: (next) => {
+          inlineClock?.setEndValue?.(next);
+          paintPreview();
+        } });
         const startDatePick = chip("Pick date…"), endDatePick = chip("Pick end…"), clockPick = chip("Clock…");
         const startDateHost = h("div", { class: "zn-cal-compose-date-row zn-entry-row" }, startDate.row, startDatePick);
         const endDateHost = h("div", { class: "zn-cal-compose-date-row zn-entry-row" }, endDate.row, endDatePick);
-        const startTimeHost = h("div", { class: "zn-cal-compose-date-row" }, startTime.row, h("span", { class: "zn-cal-compose-clock-anchor" }));
+        const startTimeHost = h("div", { class: "zn-cal-compose-date-row zn-entry-row" }, startTime.row, clockPick);
         const endTimeHost = h("div", { class: "zn-cal-compose-date-row" }, endTime.row);
-        const clockHost = h("div", { class: "zn-cal-compose-clock-host" });
+        inlineDatePicker = buildDatePicker({
+          selected: C.parseYmd(startDateDefault)?.getTime() || C.dayStart(nowMs()),
+          items: calendarPickerItems(),
+          compact: true,
+          topBar: dateTargetBar,
+          onPick: (day) => {
+            const key = C.ymd(new Date(day));
+            if (kind.value === "event" && datePickerTarget === "end") endDateEntry.set(key);
+            else {
+              const wasUntouched = !original && kind.value === "event" && endDate.input.value === startDateDefault;
+              startDateEntry.set(key);
+              if (wasUntouched) endDateEntry.set(allDay.checked ? C.ymd(new Date(C.addDays(day, 1))) : key);
+            }
+            paintPreview();
+          },
+        });
+        inlineClock = buildClockPicker({
+          value: startTimeDefault,
+          onPick: (value) => { startTimeEntry.set(value); paintPreview(); },
+          endValue: endTimeDefault,
+          onEndPick: (value) => { endTimeEntry.set(value); paintPreview(); },
+        });
+        const scheduleBoard = h("div", { class: "zn-cal-compose-schedule-board" }, ...(inlineDatePicker ? [inlineDatePicker] : []), inlineClock);
+        const selectDateTarget = (target) => {
+          datePickerTarget = target === "end" && kind.value === "event" ? "end" : "start";
+          syncDateTargetUI();
+          const activeEntry = datePickerTarget === "end" ? endDateEntry : startDateEntry;
+          const parsed = C.parseYmd(activeEntry.read());
+          if (parsed) inlineDatePicker?.setSelected?.(parsed.getTime());
+        };
+        dateTargetStartBtn.addEventListener("click", () => selectDateTarget("start"));
+        dateTargetEndBtn.addEventListener("click", () => selectDateTarget("end"));
 
         const noteSelect = h("select", { class: "zn-select", "aria-label": "Linked note" });
         noteSelect.append(h("option", { value: "" }, "No linked note"));
@@ -18891,11 +21226,6 @@ __zentralShim.register = function (def) {
         const noteAlertRow = h("div", { class: "zn-cal-note-alert-row" }, noteAlertDefaults, noteAgendaDefaults);
         noteAlertDefaults.addEventListener("click", () => { if (noteSelect.value) askNoteAlertDefaults(noteSelect.value); else status.textContent = "Choose a linked note first."; });
         noteAgendaDefaults.addEventListener("click", () => { if (noteSelect.value) askNoteAgendaDefaults(noteSelect.value); else status.textContent = "Choose a linked note first."; });
-        const agendaWindowEditor = buildAgendaWindowEditor(original?.x?.agendaWindow || {}, { inherit: true });
-        const agendaWindowSection = h("div", { class: "zn-recurrence-editor zn-cal-compose-section" },
-          h("strong", {}, "Agenda visibility (independent of alerts)"), agendaWindowEditor.element,
-          h("p", { class: "zn-empty" }, "Choose whether this item appears in Zen Agenda and how many local calendar days before or after its date it remains visible. Inherited values come from the linked note, category, then global defaults."));
-
         const categorySelect = h("select", { class: "zn-select", "aria-label": "Calendar category" });
         const categories = store.items.categoryList();
         let inheritCategory = "__zentral_note_category__", sourceCategory = "";
@@ -18911,6 +21241,36 @@ __zentralShim.register = function (def) {
         categorySelect.value = original?.x?.src === "list" && typeof original.x.categoryOverride !== "string" ? inheritCategory : (original?.x?.category || options.category || "");
         const selectedCategory = () => categorySelect.value === inheritCategory ? sourceCategory : categorySelect.value;
         const categoryRow = h("label", { class: "zn-field-row" }, h("span", {}, "Category"), categorySelect);
+        const composeLayers = () => {
+          const noteId = noteSelect.value;
+          const linked = noteId ? store.get(noteId) : null;
+          const catName = selectedCategory();
+          const catEntry = catName ? store.items.category(catName) : null;
+          return {
+            sectionCategory: sourceCategory,
+            note: linked ? {
+              id: linked.id,
+              title: titleOf(linked.body) || "",
+              color: linked.color || "",
+              agenda: (store.meta.calendarNoteAgendaOverrides || {})[linked.id] || null,
+              notify: (store.meta.calendarNoteAlertOverrides || {})[linked.id] || null,
+            } : null,
+            category: catEntry ? {
+              name: catEntry.name,
+              color: catEntry.color || "",
+              agenda: catEntry.agenda || null,
+              notify: catEntry.notify || null,
+            } : null,
+            global: {
+              agenda: store.meta.calendarAgendaDefaults || null,
+              alert: store.meta.calendarAlertSettings || null,
+            },
+          };
+        };
+        const agendaWindowEditor = buildAgendaWindowEditor(original?.x?.agendaWindow || {}, { inherit: true, getLayers: composeLayers });
+        const agendaWindowSection = h("div", { class: "zn-recurrence-editor zn-cal-compose-section" },
+          h("strong", {}, "Agenda visibility (independent of alerts)"), agendaWindowEditor.element,
+          h("p", { class: "zn-empty" }, "Choose whether this item appears in Zen Agenda and how many local calendar days before or after its date it remains visible. Inherited values come from the linked note, category, then global defaults."));
         const colorPreview = h("span", { class: "zn-cal-compose-color", "aria-hidden": "true" });
         const colorLabel = h("span", { class: "zn-cal-compose-color-label", "aria-live": "polite" }, "Color follows the linked note, then the category");
         const colorRow = h("div", { class: "zn-cal-compose-color-row" }, colorPreview, colorLabel);
@@ -18964,12 +21324,13 @@ __zentralShim.register = function (def) {
         endMode.addEventListener("change", syncRecurrence);
         syncRecurrence();
 
-        const notifySection = h("div", { class: "zn-recurrence-editor zn-cal-compose-alerts" }, h("strong", {}, "Reminder alerts"));
+        const notifyInheritHint = h("p", { class: "zn-empty zn-cal-compose-notify-inherit", "aria-live": "polite" });
+        const notifySection = h("div", { class: "zn-recurrence-editor zn-cal-compose-alerts" }, h("strong", {}, "Reminder alerts"), notifyInheritHint);
         const notifyInputs = {};
         const notifySelects = {};
         const categoryDefaults = () => C.cleanCategoryNotify(store.items.category(selectedCategory())?.notify);
         const oldNotify = original?.x?.notify || {};
-        const alertSoundEditor = buildAlertSoundEditor(oldNotify, { inherit: true });
+        const alertSoundEditor = buildAlertSoundEditor(oldNotify, { inherit: true, getLayers: composeLayers });
         const alertRules = [
           ["pre", "Tier 1 · Gentle pre-alert", "leadMinutes", [1, 2, 3, 5, 7, 10], 5],
           ["due", "Tier 2 · At due time", null, [], null],
@@ -18997,7 +21358,7 @@ __zentralShim.register = function (def) {
         const actions = h("div", { class: "zn-dialog-actions" }, cancel, save);
         const intro = h("p", { class: "zn-empty" }, "The title is independent from the linked note. Calendar notes stay with this item; a full-day reminder has no end time.");
         const card = openCalendarCard(original ? "Edit calendar item" : "Create calendar item", intro, title.row, kindRow, allDayRow,
-          startDateHost, endDateHost, startTimeHost, endTimeHost, clockPick, clockHost,
+          startDateHost, endDateHost, startTimeHost, endTimeHost, scheduleBoard,
           noteRow, noteAlertRow, agendaWindowSection, categoryRow, colorRow, descriptionRow, calNoteRow, zoneField.row,
           recurrenceBox, notifySection, preview, status, actions);
         card.classList.add("zn-cal-compose-card");
@@ -19012,20 +21373,30 @@ __zentralShim.register = function (def) {
           notifySection.hidden = !reminder;
           if (!fullDay && !startTime.input.value.trim()) startTimeEntry.set("09:00");
           if (!fullDay && !reminder && !endTime.input.value.trim()) endTimeEntry.set("10:00");
+          syncDateTargetUI();
+          inlineClock.hidden = fullDay;
+          inlineClock.setRangeEnabled?.(!reminder, endTimeEntry.read() || endTime.input.value);
+          inlineClock.setValue?.(startTimeEntry.read() || startTime.input.value);
+          scheduleBoard.dataset.allDay = fullDay ? "true" : "false";
           save.textContent = original ? "Save calendar item" : (reminder ? "Create reminder" : "Create event");
           paintPreview();
         };
-        function currentColor() {
-          const noteId = noteSelect.value;
-          const linked = noteId ? store.get(noteId) : null;
-          const inherited = linked && linked.color && linked.color !== "none" ? colorHex(linked.color) : "";
-          const categoryColor = store.items.category(selectedCategory())?.color || "";
-          return inherited || categoryColor || "";
+        function syncComposeInheritance() {
+          const layers = composeLayers();
+          agendaWindowEditor.syncInheritance?.(layers);
+          alertSoundEditor.syncInheritance?.(layers);
+          const preDesc = C.describeInheritance("notify.pre", null, layers);
+          const dueDesc = C.describeInheritance("notify.due", null, layers);
+          const folDesc = C.describeInheritance("notify.followup", null, layers);
+          notifyInheritHint.textContent = `Stage defaults (from ${preDesc.sourceLabel}): Tier 1 ${preDesc.valueLabel} · Tier 2 ${dueDesc.valueLabel} · Tier 3 ${folDesc.valueLabel}`;
+          const cDesc = C.describeInheritance("color", null, layers);
+          colorPreview.style.backgroundColor = cDesc.value || "transparent";
+          colorLabel.textContent = cDesc.value
+            ? `Effective item colour: ${cDesc.label}`
+            : `No inherited or category colour (${cDesc.label})`;
         }
         function paintColor() {
-          const color = currentColor();
-          colorPreview.style.backgroundColor = color || "transparent";
-          colorLabel.textContent = color ? `Effective item colour: ${color}` : "No inherited or category colour";
+          syncComposeInheritance();
         }
         function paintPreview() {
           const all = allDay.checked, reminder = kind.value === "reminder";
@@ -19036,25 +21407,26 @@ __zentralShim.register = function (def) {
           preview.textContent = parts.join(" · ");
           paintColor();
         }
-        let clockOpen = false;
         clockPick.addEventListener("click", () => {
-          if (clockOpen) { clockHost.replaceChildren(); clockOpen = false; clockPick.focus({ preventScroll: true }); return; }
-          closeDatePicker({ restoreFocus: false });
-          const clock = buildClockPicker({ value: startTimeEntry.read() || startTime.input.value, onPick: (value) => { startTimeEntry.set(value); paintPreview(); }, ...(kind.value === "event" ? { endValue: endTimeEntry.read() || endTime.input.value, onEndPick: (value) => { endTimeEntry.set(value); paintPreview(); } } : {}) });
-          clockHost.replaceChildren(clock); clockOpen = true;
-          clock.querySelector("select")?.focus({ preventScroll: true });
+          inlineClock.hidden = false;
+          inlineClock.setValue?.(startTimeEntry.read() || startTime.input.value);
+          if (kind.value === "event") inlineClock.setEndValue?.(endTimeEntry.read() || endTime.input.value);
+          inlineClock.focusPrimary?.();
         });
-        const bindDatePicker = (button, host, entry) => button.addEventListener("click", () => {
-          if (clockOpen) { clockHost.replaceChildren(); clockOpen = false; }
-          const selected = C.parseYmd(entry.read());
-          toggleDatePicker(button, host, { selected: selected?.getTime() || 0, items: calendarPickerItems(), onPick: (day) => { entry.set(C.ymd(new Date(day))); paintPreview(); } });
+        startDatePick.addEventListener("click", () => {
+          selectDateTarget("start");
+          inlineDatePicker?.querySelector(".zn-cal-grid")?.focus({ preventScroll: true });
         });
-        bindDatePicker(startDatePick, startDateHost, startDateEntry);
-        bindDatePicker(endDatePick, endDateHost, endDateEntry);
-        bindDatePicker(untilPick, untilHost, untilEntry);
+        endDatePick.addEventListener("click", () => {
+          selectDateTarget("end");
+          inlineDatePicker?.querySelector(".zn-cal-grid")?.focus({ preventScroll: true });
+        });
+        untilPick.addEventListener("click", () => {
+          const selected = C.parseYmd(untilEntry.read());
+          toggleDatePicker(untilPick, untilHost, { selected: selected?.getTime() || 0, items: calendarPickerItems(), onPick: (day) => { untilEntry.set(C.ymd(new Date(day))); paintPreview(); } });
+        });
         for (const input of [startDate.input, endDate.input, startTime.input, endTime.input, zoneField.input]) input.addEventListener("input", paintPreview);
         for (const control of [kind, allDay]) control.addEventListener("change", () => {
-          if (clockOpen) { clockHost.replaceChildren(); clockOpen = false; }
           if (kind.value === "event" && allDay.checked && (!C.parseYmd(endDate.input.value) || endDate.input.value <= startDate.input.value)) {
             const startDay = C.parseYmd(startDate.input.value);
             if (startDay) endDateEntry.set(C.ymd(new Date(C.addDays(startDay.getTime(), 1))));
@@ -19229,10 +21601,11 @@ __zentralShim.register = function (def) {
         }
         askCalendarComposer({ kind: "reminder", allDay: false, date: selectedDate || undefined, summary: usefulTitle, noteId, heading, linkCurrent: false });
       }
-      function askCalendarSlotEvent(start, end) {
-        const C = CALENDAR_PART;
-        const startDate = C.ymd(new Date(start)), endDate = C.ymd(new Date(end));
-        askCalendarComposer({ kind: "event", allDay: false, date: startDate, startTime: C.clockIn(start), endDate, endTime: C.clockIn(end), linkCurrent: false });
+      function askCalendarSlotEvent(start, end, zone = calendarDisplayZone()) {
+        const C = CALENDAR_PART, validZone = C.cleanZone(zone);
+        const startDate = C.zonedDateKey(start, validZone) || C.ymd(new Date(start));
+        const endDate = C.zonedDateKey(end, validZone) || C.ymd(new Date(end));
+        askCalendarComposer({ kind: "event", allDay: false, date: startDate, startTime: C.clockIn(start, validZone), endDate, endTime: C.clockIn(end, validZone), tz: validZone, linkCurrent: false });
       }
       function askCreateCalendarItem(kind, allDay, date = "") {
         const selected = date || store.meta.calendarCursor || CALENDAR_PART.ymd(new Date(nowMs()));
@@ -19307,7 +21680,7 @@ __zentralShim.register = function (def) {
         from.focus({ preventScroll: true });
       }
       function askCalendarFreeSlots() {
-        const C = CALENDAR_PART, start = calendarWeekStart(), end = C.addDays(start, 6);
+        const C = CALENDAR_PART, shownDays = calendarShownWeekDays(), start = shownDays[0], end = shownDays[shownDays.length - 1];
         const from = field("From date", C.ymd(new Date(start)), "14, 14.11 or 2026-11-14");
         const through = field("Through date", C.ymd(new Date(end)), "14, 14.11 or 2026-11-14");
         const fromEntry = bindEntry(from, { kind: "date", onEnter: () => run() });
@@ -19345,17 +21718,22 @@ __zentralShim.register = function (def) {
           }
           if (!Number.isInteger(min) || min < 15 || min > 1440) { duration.dataset.bad = "true"; duration.focus(); return; }
           const work = workOnly.checked ? C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK) : null;
-          const slots = C.freeSlots(calendarBaseItems(), fromDay, C.addDays(throughDay, 1), min, { work, hours: shownHours.on && hoursOnly.checked ? shownHours : null, blockAllDay: allDayBusy.checked, zone: calendarDisplayZone() });
+          const zone = calendarDisplayZone();
+          const slots = C.freeSlots(calendarBaseItems(), fromDay, C.addDays(throughDay, 1), min, { work, hours: shownHours.on && hoursOnly.checked ? shownHours : null, blockAllDay: allDayBusy.checked, zone });
           results.replaceChildren();
           if (!slots.length) { results.append(h("p", { class: "zn-empty" }, "No matching free time was found in this range.")); return; }
           results.append(h("p", { class: "zn-empty" }, `${slots.length} free slot${slots.length === 1 ? "" : "s"} found · showing up to 20`));
           for (const [slotStart, slotEnd] of slots.slice(0, 20)) {
-            const date = new Date(slotStart).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-            const crossesDay = C.ymd(new Date(slotStart)) !== C.ymd(new Date(slotEnd));
-            const endLabel = crossesDay ? new Date(slotEnd).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : C.clockIn(slotEnd);
-            const label = `${date} · ${C.clockIn(slotStart)}–${endLabel} · ${Math.round((slotEnd - slotStart) / 60000)} min`;
+            const startKey = C.zonedDateKey(slotStart, zone) || C.ymd(new Date(slotStart));
+            const endKey = C.zonedDateKey(slotEnd, zone) || C.ymd(new Date(slotEnd));
+            const startCivil = C.parseYmd(startKey) || new Date(slotStart);
+            const endCivil = C.parseYmd(endKey) || new Date(slotEnd);
+            const date = startCivil.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+            const crossesDay = startKey !== endKey;
+            const endLabel = crossesDay ? `${endCivil.toLocaleDateString(undefined, { month: "short", day: "numeric" })}, ${C.clockIn(slotEnd, zone)}` : C.clockIn(slotEnd, zone);
+            const label = `${date} · ${C.clockIn(slotStart, zone)}–${endLabel} · ${Math.round((slotEnd - slotStart) / 60000)} min`;
             const button = h("button", { type: "button", class: "zn-cal-free-slot" }, label);
-            button.addEventListener("click", () => { closeDialog(); askCalendarSlotEvent(slotStart, slotEnd); });
+            button.addEventListener("click", () => { closeDialog(); askCalendarSlotEvent(slotStart, slotEnd, zone); });
             results.append(button);
           }
         };
@@ -19411,13 +21789,13 @@ __zentralShim.register = function (def) {
       }
       function patchCalendarItem(kind, id) {
         const C = CALENDAR_PART, mode = store.meta.calendarView;
-        if (!id || !["change", "remove"].includes(kind) || !["day", "week"].includes(mode) || calendarDrag) return false;
+        if (!id || !["change", "remove"].includes(kind) || !["day", "week"].includes(mode) || calendarDrag || calendarNoteDrop) return false;
         const oldItem = calendarRenderedItems.get(id), current = calendarFilteredItems();
         const newItem = current.find((item) => item.id === id);
         // A note-id removal may refer to several hidden items, not a master id.
         if (!oldItem && !newItem) return false;
         const cursor = C.parseYmd(store.meta.calendarCursor)?.getTime() || calendarTodayDay();
-        const days = mode === "week" ? C.weekDays(cursor, 1) : [C.dayStart(cursor)], zone = calendarDisplayZone();
+        const days = mode === "week" ? calendarShownWeekDays(cursor) : [C.dayStart(cursor)], zone = calendarDisplayZone();
         const bounds = days.map((day) => C.zonedDayBounds(C.localDateKey(day), zone) || [day, C.addDays(day, 1)]);
         const changed = new Set();
         for (const master of [oldItem, newItem]) if (master) {
@@ -19453,6 +21831,7 @@ __zentralShim.register = function (def) {
         calendarBackgroundPending = false;
         if (menu?.calendar && menu.calendarView !== (store.meta.calendarView || "month")) closeMenu();
         cancelCalendarDrag();
+        clearCalendarNoteDrop();
         calendarUndoMove.hidden = !calendarMoveUndo;
         syncCalendarFilterOptions();
         hideCalendarHoverCard();
@@ -19496,6 +21875,7 @@ __zentralShim.register = function (def) {
         else if (view === "upcoming") calendarUpcomingView(items, cursor, Number(store.meta.calendarDaysForward) || 7);
         else if (view === "agenda") calendarAgendaView(items, cursor);
         else calendarTimeGridView(items, cursor, view);
+        syncCalendarDaysControl(view);
         paintCalendarSize();
         restoreCalendarViewState(prior);
       }
@@ -19548,20 +21928,34 @@ __zentralShim.register = function (def) {
         // Month is a list in a narrow pane and a grid in a wide one.
         if (fit.view === "month" && fit.compact !== calendarMonthNarrow()) return requestCalendarBackground();
         if (fit.view === "month" && !fit.compact) return fitCalendarMonth();
+        if (fit.view === "week" && calendarWeekSpanConfig().days === "auto" && fit.weekDays !== CALENDAR_PART.fitWeekDayCount(calendarWeekAutoWidth())) return requestCalendarBackground();
         if ((fit.view === "week" || fit.view === "day") && calendarHourStale()) requestCalendarBackground();
       }
       function scheduleCalendarFit() {
         if (rafCalendarFit) return;
         rafCalendarFit = window.requestAnimationFrame(() => { rafCalendarFit = 0; refitCalendar(); });
       }
-      function changeCalendarCursor(delta) {
+      function changeCalendarCursor(delta, shiftKey = false) {
         const C = CALENDAR_PART, stored = C.parseYmd(store.meta.calendarCursor), base = stored ? stored.getTime() : C.dayStart(nowMs());
         const view = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
         let next;
         if (view === "month") {
           const date = new Date(base), moved = C.stepMonth(date.getFullYear(), date.getMonth(), delta);
           next = new Date(moved.year, moved.month, 1).getTime();
-        } else next = C.addDays(base, delta * (view === "upcoming" ? Number(store.meta.calendarDaysForward) || 7 : view === "week" ? 7 : view === "day" ? 1 : 30));
+          calendarWeekPanDay = "";
+        } else if (view === "week") {
+          const shown = calendarShownWeekDays(base);
+          const cfg = calendarWeekSpanConfig();
+          const step = shiftKey ? 1 : shown.length;
+          if (!shiftKey && cfg.anchor === "weekStart" && shown.length % 7 === 0 && !calendarWeekPanDay) {
+            next = C.addDays(base, delta * shown.length);
+          } else {
+            next = C.addDays(shown[0], delta * step);
+            calendarWeekPanDay = C.localDateKey(next);
+          }
+        } else {
+          next = C.addDays(base, delta * (view === "upcoming" ? Number(store.meta.calendarDaysForward) || 7 : view === "day" ? 1 : 30));
+        }
         store.setMeta({ calendarCursor: C.ymd(new Date(next)) });
         renderCalendar();
       }
@@ -19643,12 +22037,54 @@ __zentralShim.register = function (def) {
         store.setMeta({ calendarHours: { ...hours, on: !hours.on } });
         renderCalendar();
       });
-      listen(calendarPrev, "click", () => changeCalendarCursor(-1));
-      listen(calendarNext, "click", () => changeCalendarCursor(1));
-      listen(calendarToday, "click", () => { store.setMeta({ calendarCursor: calendarTodayKey() }); renderCalendar(); });
-      listen(calendarDaysSelect, "click", () => calendarChoiceMenu(calendarDaysSelect,
-        [3, 7, 14, 30].map((days) => ({ value: String(days), label: days + " days" })),
-        String(store.meta.calendarDaysForward || 7), (value) => { store.setMeta({ calendarDaysForward: Number(value) }); renderCalendar(); }));
+      listen(calendarPrev, "click", (event) => changeCalendarCursor(-1, !!event?.shiftKey));
+      listen(calendarNext, "click", (event) => changeCalendarCursor(1, !!event?.shiftKey));
+      listen(calendarToday, "click", () => { calendarWeekPanDay = ""; store.setMeta({ calendarCursor: calendarTodayKey() }); renderCalendar(); });
+      listen(calendarDaysSelect, "click", () => {
+        const C = CALENDAR_PART;
+        if ((store.meta.calendarView || "month") === "week" && C) {
+          const spanNow = () => calendarWeekSpanConfig();
+          const drawnCount = () => {
+            if (calendarFit?.view === "week" && calendarFit.weekDays) return calendarFit.weekDays;
+            const s = spanNow();
+            return s.days === "auto" ? C.fitWeekDayCount(calendarWeekAutoWidth()) : s.days;
+          };
+          const setWeekSpan = (patch, resetPan = false) => {
+            if (resetPan) calendarWeekPanDay = "";
+            store.setMeta({ calendarWeekSpan: C.cleanWeekSpan({ ...spanNow(), ...patch }) });
+            renderCalendar();
+          };
+          const anchorNow = spanNow().anchor;
+          const wsName = calendarWeekStartDay() === 0 ? "Sunday" : "Monday";
+          return showMenu(calendarDaysSelect, [
+            { heading: true, label: "Days shown in Week view" },
+            {
+              slider: {
+                min: C.WEEK_DAYS_LIMITS.min,
+                max: C.WEEK_DAYS_LIMITS.max,
+                label: "Days shown in Week view",
+                fitLabel: "Auto (fit width)",
+                state: () => {
+                  const cur = spanNow(), n = drawnCount();
+                  return cur.days === "auto"
+                    ? { auto: true, value: n, text: `Auto · ${n} day${n === 1 ? "" : "s"}` }
+                    : { auto: false, value: cur.days, text: `${cur.days} day${cur.days === 1 ? "" : "s"}` };
+                },
+                input: (value) => setWeekSpan({ days: value }),
+                fit: () => setWeekSpan({ days: "auto" }),
+              },
+            },
+            { sep: true },
+            { heading: true, label: "Start of range" },
+            { icon: anchorNow === "weekStart" ? "check" : undefined, label: `Week start (${wsName})`, action: () => setWeekSpan({ anchor: "weekStart" }, true) },
+            { icon: anchorNow === "today" ? "check" : undefined, label: "Today", action: () => setWeekSpan({ anchor: "today" }, true) },
+            { icon: anchorNow === "selected" ? "check" : undefined, label: "Selected day", action: () => setWeekSpan({ anchor: "selected" }, true) },
+          ]);
+        }
+        calendarChoiceMenu(calendarDaysSelect,
+          [3, 7, 14, 30].map((days) => ({ value: String(days), label: days + " days" })),
+          String(store.meta.calendarDaysForward || 7), (value) => { store.setMeta({ calendarDaysForward: Number(value) }); renderCalendar(); });
+      });
       listen(calendarKindSelect, "click", () => calendarChoiceMenu(calendarKindSelect,
         [{ value: "all", label: "All items" }, { value: "event", label: "Events" }, { value: "reminder", label: "Reminders" }],
         store.meta.calendarFilterKind || "all", (value) => { store.setMeta({ calendarFilterKind: value }); renderCalendar(); }));
@@ -19659,12 +22095,38 @@ __zentralShim.register = function (def) {
           store.meta.calendarFilterCategory || "", (value) => { store.setMeta({ calendarFilterCategory: value }); renderCalendar(); });
       });
       function calendarWeekStart() {
-        const C = CALENDAR_PART, stored = C.parseYmd(store.meta.calendarCursor);
-        return C.weekDays(stored ? stored.getTime() : C.dayStart(nowMs()), 1)[0];
+        return calendarShownWeekDays()[0];
       }
       function calendarWeekMarkdown() {
-        const C = CALENDAR_PART, start = calendarWeekStart();
-        return { start, text: C.weekText(calendarBaseItems(), start, { category: true }) };
+        const C = CALENDAR_PART, weekStart = calendarWeekStartDay(), shown = calendarShownWeekDays(), start = shown[0];
+        return { start, text: C.weekText(calendarBaseItems(), start, { category: true, weekNumbers: calendarShowWeekNumbers(), weekStart, days: shown.length }) };
+      }
+      function askCalendarWeekSettings() {
+        const C = CALENDAR_PART;
+        if (!C) return;
+        const startSelect = h("select", { class: "zn-select", "aria-label": "First day of week" },
+          h("option", { value: "1" }, "Monday"),
+          h("option", { value: "0" }, "Sunday"),
+        );
+        startSelect.value = String(calendarWeekStartDay());
+        const numbersToggle = h("input", { type: "checkbox", "aria-label": "Show week numbers" });
+        numbersToggle.checked = calendarShowWeekNumbers();
+        const startRow = h("label", { class: "zn-cal-alert-select-row" }, h("span", {}, "First day of week"), startSelect);
+        const numbersRow = h("label", { class: "zn-fstyle-check" }, numbersToggle, h("span", {}, "Show week numbers in Month, Week, Day, date pickers and week export"));
+        const note = h("p", { class: "zn-empty", role: "status" }, "Used across Month, Week, narrow date picker, date popups and week Markdown export.");
+        const cancel = chip("Cancel"), save = chip("Apply", true);
+        const submit = () => {
+          const nextStart = C.cleanWeekStart(startSelect.value);
+          const nextNumbers = numbersToggle.checked === true;
+          store.setMeta({ calendarWeekStart: nextStart, calendarWeekNumbers: nextNumbers });
+          closeDialog();
+          renderCalendar();
+          flash("Week starts on " + (nextStart === 0 ? "Sunday" : "Monday") + (nextNumbers ? " · week numbers on" : ""));
+        };
+        save.addEventListener("click", submit);
+        cancel.addEventListener("click", closeDialog);
+        openCalendarCard("Week start and week numbers", startRow, numbersRow, note, h("div", { class: "zn-dialog-actions" }, cancel, save));
+        startSelect.focus({ preventScroll: true });
       }
       function openReminderHistory() {
         const history = reminderHistoryStore();
@@ -19721,6 +22183,7 @@ __zentralShim.register = function (def) {
         { id: "reminder-alert-settings", label: "Reminder sounds & quiet hours…", icon: "volume-2", run: askCalendarAlertSettings },
         { id: "agenda-visibility-defaults", label: "Zen Agenda visibility defaults…", icon: "calendar-check", run: askAgendaVisibilityDefaults },
         { sep: true },
+        { id: "calendar-week-settings", icon: "calendar", label: "Week start & numbers: " + (calendarWeekStartDay() === 0 ? "Sunday" : "Monday") + (calendarShowWeekNumbers() ? ", W#" : "") + "…", run: askCalendarWeekSettings },
         { icon: "clock", label: "Visible hours: " + (CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours).on ? calendarHoursText(store.meta.calendarHours).long : "all 24") + "…", action: () => queueMicrotask(askCalendarHours) },
         { icon: "globe", label: "Display time zone: " + (calendarDisplayZone() || "Local"), action: () => queueMicrotask(askCalendarDisplayZone) },
         { icon: "clock", label: "When am I free?…", action: () => queueMicrotask(askCalendarFreeSlots) },
@@ -19729,25 +22192,310 @@ __zentralShim.register = function (def) {
         { icon: "download", label: "Save this week as Markdown…", action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.exportCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((saved) => { if (saved) flash("Week exported"); }).catch((error) => flash("Week export failed: " + String(error?.message || error))); } },
         { icon: "printer", label: "Print this week…", action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.printCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((printed) => { if (printed) flash("Week opened for printing"); }).catch((error) => flash("Week print failed: " + String(error?.message || error))); } },
       ]));
-      // Accessible hour/minute selectors are easier to use than free-form typing and work with keyboards.
-      // Supplying `endValue` + `onEndPick` adds a second clock for event ranges; reminder-only callers omit it.
-      function buildClockPicker({ value = "09:00", onPick, endValue, onEndPick } = {}) {
-        const makeTime = (label, raw, onChange) => {
-          const typed = CALENDAR_PART ? CALENDAR_PART.parseClock(raw) : -1; // "830" in the field opens the Clock at 08:30
-          const match = typed >= 0 ? [null, Math.floor(typed / 60), typed % 60] : /^(\d{1,2}):(\d{2})$/.exec(String(raw || ""));
+      // OW-10: shared Clock with analog face (draggable/clickable hour then minute hand, locale 12h/24h, fixed 5-min
+      // resolution delinked from Week/Day calendarSnap, wheel & keyboard role=slider), digital hour/minute selectors,
+      // Analog/Digital/Both toggle, and Start/End range reuse.
+      function buildClockPicker({ value = "09:00", onPick, endValue, onEndPick, locale, mode } = {}) {
+        const C = CALENDAR_PART;
+        const parseMins = (raw, fallback = 9 * 60) => {
+          if (C) {
+            const parsed = C.parseClock(raw);
+            if (parsed >= 0) return parsed;
+          }
+          const m = /^(\d{1,2}):(\d{2})$/.exec(String(raw || ""));
+          return m ? Math.min(23, Number(m[1])) * 60 + Math.min(59, Number(m[2])) : fallback;
+        };
+        const fmtMins = (mins) => {
+          const clean = ((Math.floor(Number(mins) || 0) % 1440) + 1440) % 1440;
+          return C ? C.clockOfMinutes(clean) : String(Math.floor(clean / 60)).padStart(2, "0") + ":" + String(clean % 60).padStart(2, "0");
+        };
+        let startMins = parseMins(value, 9 * 60);
+        let endMins = parseMins(endValue ?? "10:00", 10 * 60);
+        let hasEnd = endValue !== undefined && typeof onEndPick === "function";
+        let activeTarget = "start";
+        let activeHand = "hour";
+        const effLocale = locale ?? (env.locale?.() || (typeof navigator === "object" && navigator?.language) || undefined);
+        const hour12 = C ? C.clockUses12Hour(effLocale) : false;
+        const analogSnap = C?.ANALOG_CLOCK_SNAP || 5;
+        let currentMode = C ? C.cleanClockMode(mode ?? store.meta.calendarClockMode) : "digital";
+
+        const makeDigitalSet = (label, initialMins, onChange) => {
           const hour = h("select", { class: "zn-select zn-cal-clock-hour", "aria-label": label + " hour" });
           const minute = h("select", { class: "zn-select zn-cal-clock-minute", "aria-label": label + " minute" });
           for (let i = 0; i < 24; i++) hour.append(h("option", { value: String(i).padStart(2, "0") }, String(i).padStart(2, "0")));
           for (let i = 0; i < 60; i++) minute.append(h("option", { value: String(i).padStart(2, "0") }, String(i).padStart(2, "0")));
-          hour.value = match ? String(Math.min(23, Number(match[1]))).padStart(2, "0") : "09";
-          minute.value = match ? String(Math.min(59, Number(match[2]))).padStart(2, "0") : "00";
-          const emit = () => onChange?.(hour.value + ":" + minute.value);
+          const write = (mins) => {
+            hour.value = String(Math.floor(mins / 60)).padStart(2, "0");
+            minute.value = String(mins % 60).padStart(2, "0");
+          };
+          write(initialMins);
+          const emit = () => onChange(Number(hour.value) * 60 + Number(minute.value));
           hour.addEventListener("change", emit);
           minute.addEventListener("change", emit);
-          return h("label", { class: "zn-cal-clock-set" }, h("span", {}, label), hour, h("span", { "aria-hidden": "true" }, ":"), minute);
+          const node = h("label", { class: "zn-cal-clock-set" }, h("span", {}, label), hour, h("span", { "aria-hidden": "true" }, ":"), minute);
+          return { node, hour, minute, write };
         };
-        const root = h("div", { class: "zn-cal-clock", "aria-label": "Choose time" }, makeTime("Time", value, onPick));
-        if (endValue !== undefined && onEndPick) root.append(makeTime("End", endValue, onEndPick));
+
+        const activeMins = () => (hasEnd && activeTarget === "end" ? endMins : startMins);
+        const commitTargetMins = (target, nextMins) => {
+          const clean = ((Math.floor(Number(nextMins) || 0) % 1440) + 1440) % 1440;
+          if (target === "end" && hasEnd) {
+            endMins = clean;
+            syncClockUI();
+            onEndPick?.(fmtMins(clean));
+          } else {
+            startMins = clean;
+            syncClockUI();
+            onPick?.(fmtMins(clean));
+          }
+        };
+        const commitActiveMins = (nextMins) => commitTargetMins(hasEnd && activeTarget === "end" ? "end" : "start", nextMins);
+
+        const startSet = makeDigitalSet("Time", startMins, (mins) => { activeTarget = "start"; commitTargetMins("start", mins); });
+        const endSet = makeDigitalSet("End", endMins, (mins) => { activeTarget = "end"; commitTargetMins("end", mins); });
+        const digitalWrap = h("div", { class: "zn-cal-clock-digital" }, startSet.node);
+
+        const targetStartBtn = chip("Start"), targetEndBtn = chip("End");
+        targetStartBtn.classList.add("zn-cal-clock-target"); targetStartBtn.dataset.target = "start";
+        targetEndBtn.classList.add("zn-cal-clock-target"); targetEndBtn.dataset.target = "end";
+        const targetBar = h("div", { class: "zn-cal-clock-targets" }, targetStartBtn, targetEndBtn);
+
+        const modeDefs = [["both", "Both"], ["analog", "Analog"], ["digital", "Digital"]];
+        const modeButtons = modeDefs.map(([m, label]) => {
+          const b = chip(label);
+          b.classList.add("zn-cal-clock-mode");
+          b.dataset.mode = m;
+          b.addEventListener("click", () => {
+            currentMode = m;
+            store.setMeta({ calendarClockMode: m });
+            syncClockUI();
+          });
+          return b;
+        });
+        const modeBar = h("div", { class: "zn-cal-clock-modes", role: "group", "aria-label": "Clock display" }, ...modeButtons);
+        const headBar = h("div", { class: "zn-cal-clock-head" }, targetBar, modeBar);
+
+        const hourSlider = h("button", {
+          type: "button",
+          class: "zn-cal-clock-slider zn-cal-clock-slider-hour",
+          role: "slider",
+          tabindex: "0",
+          "aria-label": "Analog hour",
+          "aria-valuemin": "0",
+          "aria-valuemax": "23",
+          "aria-valuenow": "9",
+        });
+        const minSlider = h("button", {
+          type: "button",
+          class: "zn-cal-clock-slider zn-cal-clock-slider-minute",
+          role: "slider",
+          tabindex: "0",
+          "aria-label": "Analog minute",
+          "aria-valuemin": "0",
+          "aria-valuemax": "59",
+          "aria-valuenow": "0",
+        });
+        const amBtn = chip("AM"), pmBtn = chip("PM");
+        amBtn.classList.add("zn-cal-clock-period"); amBtn.dataset.period = "AM";
+        pmBtn.classList.add("zn-cal-clock-period"); pmBtn.dataset.period = "PM";
+        const periodWrap = h("span", { class: "zn-cal-clock-periods" }, amBtn, pmBtn);
+        periodWrap.hidden = !hour12;
+        const readout = h("div", { class: "zn-cal-clock-readout" }, hourSlider, h("span", { "aria-hidden": "true" }, ":"), minSlider, periodWrap);
+
+        const hourHand = h("div", { class: "zn-cal-clock-hand is-hour", "aria-hidden": "true" });
+        const minHand = h("div", { class: "zn-cal-clock-hand is-minute", "aria-hidden": "true" });
+        const numsLayer = h("div", { class: "zn-cal-clock-nums" });
+        const dial = h("div", { class: "zn-cal-clock-dial" }, numsLayer, hourHand, minHand, h("div", { class: "zn-cal-clock-pin", "aria-hidden": "true" }));
+        const analogWrap = h("div", { class: "zn-cal-clock-analog" }, readout, dial);
+
+        const root = h("div", { class: "zn-cal-clock", "aria-label": "Choose time" }, ...(C ? [headBar, analogWrap] : []), digitalWrap);
+
+        const stepActive = (hand, delta) => {
+          activeHand = hand;
+          if (!C) return;
+          const next = C.stepClockHand(activeMins(), hand, delta, { snap: analogSnap });
+          commitActiveMins(C.parseClock(next));
+        };
+
+        targetStartBtn.addEventListener("click", () => { activeTarget = "start"; activeHand = "hour"; syncClockUI(); });
+        targetEndBtn.addEventListener("click", () => { if (!hasEnd) return; activeTarget = "end"; activeHand = "hour"; syncClockUI(); });
+        amBtn.addEventListener("click", () => {
+          const cur = activeMins();
+          commitActiveMins((Math.floor(cur / 60) % 12) * 60 + (cur % 60));
+        });
+        pmBtn.addEventListener("click", () => {
+          const cur = activeMins();
+          commitActiveMins(((Math.floor(cur / 60) % 12) + 12) * 60 + (cur % 60));
+        });
+        hourSlider.addEventListener("click", () => { activeHand = "hour"; syncClockUI(); });
+        minSlider.addEventListener("click", () => { activeHand = "minute"; syncClockUI(); });
+        hourSlider.addEventListener("keydown", (e) => {
+          if (e.key === "ArrowUp" || e.key === "ArrowRight") { e.preventDefault(); stepActive("hour", 1); }
+          else if (e.key === "ArrowDown" || e.key === "ArrowLeft") { e.preventDefault(); stepActive("hour", -1); }
+          else if (e.key === "Home") { e.preventDefault(); activeHand = "hour"; commitActiveMins(activeMins() % 60); }
+          else if (e.key === "End") { e.preventDefault(); activeHand = "hour"; commitActiveMins(23 * 60 + (activeMins() % 60)); }
+          else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activeHand = "minute"; syncClockUI(); minSlider.focus?.({ preventScroll: true }); }
+        });
+        minSlider.addEventListener("keydown", (e) => {
+          if (e.key === "ArrowUp" || e.key === "ArrowRight") { e.preventDefault(); stepActive("minute", 1); }
+          else if (e.key === "ArrowDown" || e.key === "ArrowLeft") { e.preventDefault(); stepActive("minute", -1); }
+          else if (e.key === "PageUp") { e.preventDefault(); stepActive("minute", 3); }
+          else if (e.key === "PageDown") { e.preventDefault(); stepActive("minute", -3); }
+          else if (e.key === "Home") { e.preventDefault(); activeHand = "minute"; commitActiveMins(Math.floor(activeMins() / 60) * 60); }
+          else if (e.key === "End") { e.preventDefault(); activeHand = "minute"; commitActiveMins(Math.floor(activeMins() / 60) * 60 + (60 - analogSnap)); }
+        });
+        const onWheel = (handOf) => (e) => {
+          e.preventDefault();
+          stepActive(handOf(), (e.deltaY || 0) < 0 ? 1 : -1);
+        };
+        hourSlider.addEventListener("wheel", onWheel(() => "hour"));
+        minSlider.addEventListener("wheel", onWheel(() => "minute"));
+        dial.addEventListener("wheel", onWheel(() => activeHand));
+
+        let draggingDial = false;
+        const applyDialPointer = (e, advanceHand) => {
+          if (!C) return;
+          const rect = dial.getBoundingClientRect?.() || { left: 0, top: 0, width: 0, height: 0 };
+          if (!rect.width || !rect.height) return;
+          const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+          const rMax = Math.min(rect.width, rect.height) / 2;
+          const { angleDeg, radius } = C.clockPointerAngle((e.clientX || 0) - cx, (e.clientY || 0) - cy);
+          const cur = activeMins(), curH = Math.floor(cur / 60), curM = cur % 60;
+          if (activeHand === "hour") {
+            const inner = !hour12 && radius > 0 && radius < rMax * 0.64;
+            const period = curH >= 12 ? "PM" : "AM";
+            const nextH = C.clockHourFromAngle(angleDeg, { hour12, period, inner });
+            commitActiveMins(nextH * 60 + curM);
+            if (advanceHand) {
+              activeHand = "minute";
+              syncClockUI();
+              minSlider.focus?.({ preventScroll: true });
+            }
+          } else {
+            const nextM = C.clockMinuteFromAngle(angleDeg, analogSnap);
+            commitActiveMins(curH * 60 + nextM);
+          }
+        };
+        dial.addEventListener("pointerdown", (e) => {
+          if (e.button && e.button !== 0) return;
+          e.preventDefault();
+          draggingDial = true;
+          dial.setPointerCapture?.(e.pointerId);
+          applyDialPointer(e, false);
+        });
+        dial.addEventListener("pointermove", (e) => {
+          if (!draggingDial) return;
+          applyDialPointer(e, false);
+        });
+        dial.addEventListener("pointerup", (e) => {
+          if (!draggingDial) return;
+          draggingDial = false;
+          dial.releasePointerCapture?.(e.pointerId);
+          applyDialPointer(e, true);
+        });
+        dial.addEventListener("pointercancel", () => { draggingDial = false; });
+
+        const dialPoints = C ? C.clockDialPoints({ hour12 }) : { hours: [], minutes: [] };
+        let renderedDialHand = "";
+        function renderDialNumbers(curH, curM) {
+          if (!C) return;
+          if (renderedDialHand !== activeHand) {
+            renderedDialHand = activeHand;
+            const list = activeHand === "hour" ? dialPoints.hours : dialPoints.minutes;
+            numsLayer.replaceChildren(...list.map((pt) => {
+              const btn = h("button", {
+                type: "button",
+                class: "zn-cal-clock-num" + (pt.ring === "inner" ? " is-inner" : ""),
+                tabindex: "-1",
+                "data-val": String(pt.value),
+              }, pt.label);
+              btn.style.setProperty("left", pt.xPct + "%");
+              btn.style.setProperty("top", pt.yPct + "%");
+              btn.addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                const now = activeMins(), nowH = Math.floor(now / 60), nowM = now % 60;
+                if (activeHand === "hour") {
+                  const chosenH = hour12 ? (nowH >= 12 ? pt.value + 12 : pt.value) : pt.value;
+                  commitActiveMins(chosenH * 60 + nowM);
+                  activeHand = "minute";
+                  syncClockUI();
+                  minSlider.focus?.({ preventScroll: true });
+                } else {
+                  commitActiveMins(nowH * 60 + pt.value);
+                }
+              });
+              return btn;
+            }));
+          }
+          for (const node of numsLayer.querySelectorAll(".zn-cal-clock-num")) {
+            const val = Number(node.getAttribute("data-val"));
+            const selected = activeHand === "hour" ? (hour12 ? curH % 12 === val : curH === val) : curM === val;
+            node.classList.toggle("is-on", selected);
+          }
+        }
+
+        function syncClockUI() {
+          startSet.write(startMins);
+          endSet.write(endMins);
+          if (hasEnd && !endSet.node.parentNode) digitalWrap.append(endSet.node);
+          else if (!hasEnd && endSet.node.parentNode) endSet.node.remove();
+          root.dataset.clockMode = currentMode;
+          root.dataset.hand = activeHand;
+          root.dataset.target = hasEnd ? activeTarget : "start";
+          targetBar.hidden = !hasEnd;
+          targetStartBtn.classList.toggle("is-on", activeTarget === "start");
+          targetEndBtn.classList.toggle("is-on", activeTarget === "end");
+          targetStartBtn.setAttribute("aria-pressed", activeTarget === "start" ? "true" : "false");
+          targetEndBtn.setAttribute("aria-pressed", activeTarget === "end" ? "true" : "false");
+          for (const b of modeButtons) {
+            const on = b.dataset.mode === currentMode;
+            b.classList.toggle("is-on", on);
+            b.setAttribute("aria-pressed", on ? "true" : "false");
+          }
+          analogWrap.hidden = !C || currentMode === "digital";
+          digitalWrap.hidden = Boolean(C && currentMode === "analog");
+          if (!C) return;
+          const cur = activeMins(), curH = Math.floor(cur / 60), curM = cur % 60;
+          const dispH = hour12 ? String(curH % 12 || 12) : String(curH).padStart(2, "0");
+          const dispM = String(curM).padStart(2, "0");
+          const prefix = hasEnd ? (activeTarget === "end" ? "End " : "Start ") : "";
+          hourSlider.textContent = dispH;
+          hourSlider.setAttribute("aria-label", prefix + "analog hour");
+          hourSlider.setAttribute("aria-valuenow", String(curH));
+          hourSlider.setAttribute("aria-valuetext", hour12 ? `${dispH} ${curH >= 12 ? "PM" : "AM"}` : `${dispH} hours`);
+          hourSlider.classList.toggle("is-active", activeHand === "hour");
+          minSlider.textContent = dispM;
+          minSlider.setAttribute("aria-label", prefix + "analog minute");
+          minSlider.setAttribute("aria-valuenow", String(curM));
+          minSlider.setAttribute("aria-valuetext", `${dispM} minutes`);
+          minSlider.classList.toggle("is-active", activeHand === "minute");
+          amBtn.classList.toggle("is-on", curH < 12);
+          pmBtn.classList.toggle("is-on", curH >= 12);
+          amBtn.setAttribute("aria-pressed", curH < 12 ? "true" : "false");
+          pmBtn.setAttribute("aria-pressed", curH >= 12 ? "true" : "false");
+          const hInfo = C.clockAngleOfHour(curH, { hour12 });
+          const mAngle = C.clockAngleOfMinute(curM);
+          hourHand.style.setProperty("--zn-clock-angle", hInfo.angleDeg + "deg");
+          hourHand.classList.toggle("is-inner", !!hInfo.inner);
+          hourHand.classList.toggle("is-active", activeHand === "hour");
+          minHand.style.setProperty("--zn-clock-angle", mAngle + "deg");
+          minHand.classList.toggle("is-active", activeHand === "minute");
+          renderDialNumbers(curH, curM);
+        }
+
+        root.setValue = (raw) => { startMins = parseMins(raw, startMins); syncClockUI(); };
+        root.setEndValue = (raw) => { endMins = parseMins(raw, endMins); syncClockUI(); };
+        root.setRangeEnabled = (on, rawEnd) => {
+          hasEnd = !!on && typeof onEndPick === "function";
+          if (rawEnd !== undefined) endMins = parseMins(rawEnd, endMins);
+          if (!hasEnd) activeTarget = "start";
+          syncClockUI();
+        };
+        root.focusPrimary = () => {
+          if (!C || currentMode === "digital") startSet.hour.focus?.({ preventScroll: true });
+          else hourSlider.focus?.({ preventScroll: true });
+        };
+        syncClockUI();
         return root;
       }
       function askReminder() {
@@ -19857,16 +22605,27 @@ __zentralShim.register = function (def) {
       if (opts.tree) {
         item.style.setProperty("--d", String(opts.depth || 0));
         item.setAttribute("aria-level", String((opts.depth || 0) + 1));
+      }
+      if (!trashed) {
         item.setAttribute("draggable", "true");
         item.addEventListener("dragstart", (e) => {
-          dragNoteId = n.id;
+          noteDragCanceled = false;
+          dragNoteId = opts.tree ? n.id : "";
+          calendarDragNoteId = n.id;
           try {
+            if (CALENDAR_PART?.NOTE_DRAG_MIME) e.dataTransfer?.setData(CALENDAR_PART.NOTE_DRAG_MIME, n.id);
             e.dataTransfer?.setData("text/plain", n.id);
+            if (e.dataTransfer) e.dataTransfer.effectAllowed = "copyMove";
           } catch (_) {}
         });
-        item.addEventListener("dragend", () => (dragNoteId = ""));
+        item.addEventListener("dragend", () => {
+          dragNoteId = "";
+          calendarDragNoteId = "";
+          noteDragCanceled = false;
+          clearCalendarNoteDrop();
+        });
       }
-      setColorData(item, n.color);
+      setSheetColorData(item, n.color);
       item.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -19967,12 +22726,7 @@ __zentralShim.register = function (def) {
         const row = h("div", { class: "zn-rootrow", role: "treeitem", tabindex: "0", "aria-level": "1", title: "NOTES folder in the Zen sidebar: click for colors and icon" },
           h("span", { class: "zn-frow-icon" + (emoji ? " is-emoji" : " is-folder") }, emoji ? h("span", { class: "zn-frow-emoji" }, emoji) : icon("folder", 14)),
           h("span", { class: "zn-rootrow-name" }, "NOTES"), edit);
-        const resolved = resolveFolderVisual({ b: colorHex(prefStr(PREF.ZEN_ROOT_COLOR, "")) || "", d: parseFolderParts(prefStr(PREF.ZEN_ROOT_PARTS, "{}")), o: parseFolderOpacity(prefStr(PREF.ZEN_ROOT_PART_OPACITY, "{}")) }, 1);
-        for (const [target, source] of [["--zn-frow-back", "--zen-folder-behind-bgcolor"], ["--zn-frow-front", "--zen-folder-front-bgcolor"], ["--zn-frow-stroke", "--zen-folder-stroke"], ["--zn-frow-label", "--bgalazka-fc-label"], ["--zn-frow-accent", "--tab-group-color"], ["--zn-frow-tint", "--tab-group-color-pale"], ["--zn-frow-hover", "--tab-group-background-color-hover"]]) {
-          const value = resolved.properties?.[source] || "";
-          if (value) row.style.setProperty(target, value);
-        }
-        if (Object.keys(resolved.properties || {}).length) setColorData(row, resolved.base || "custom");
+        applyFolderRowVisual(row, { b: colorHex(prefStr(PREF.ZEN_ROOT_COLOR, "")) || "", d: parseFolderParts(prefStr(PREF.ZEN_ROOT_PARTS, "{}")), o: parseFolderOpacity(prefStr(PREF.ZEN_ROOT_PART_OPACITY, "{}")) }, 1);
         const open = (e) => { e.preventDefault?.(); e.stopPropagation?.(); askRootStyle(); };
         row.addEventListener("click", open);
         row.addEventListener("contextmenu", open);
@@ -19994,34 +22748,7 @@ __zentralShim.register = function (def) {
           h("span", { class: "zn-item-actions" }, add, more),
         );
         row.style.setProperty("--d", String(depth));
-        const resolved = resolveFolderVisual({ b: node.color, d: node.parts, o: node.opacity }, depth + 2);
-        const visualParts = resolved.parts || {};
-        const rowColor = resolved.base || cleanHex(visualParts.accent) || cleanHex(visualParts.front) || cleanHex(visualParts.back) || cleanHex(visualParts.label) || "";
-        const hasVisual = Object.keys(resolved.properties || {}).length > 0;
-        if (hasVisual) {
-          // A detail-only global palette (for example a custom label color)
-          // still needs the data-color selector so its layer variables apply.
-          setColorData(row, rowColor || "custom");
-          if (rowColor) row.style.setProperty("--zn-fc", rowColor);
-          else row.style.setProperty("--zn-fc", "#707780");
-        } else {
-          row.removeAttribute("data-color");
-          row.style.removeProperty("--zn-fc");
-        }
-        const rowProperties = {
-          "--zn-frow-back": "--zen-folder-behind-bgcolor",
-          "--zn-frow-front": "--zen-folder-front-bgcolor",
-          "--zn-frow-stroke": "--zen-folder-stroke",
-          "--zn-frow-label": "--bgalazka-fc-label",
-          "--zn-frow-accent": "--tab-group-color",
-          "--zn-frow-tint": "--tab-group-color-pale",
-          "--zn-frow-hover": "--tab-group-background-color-hover",
-        };
-        for (const [targetProperty, sourceProperty] of Object.entries(rowProperties)) {
-          const value = resolved.properties?.[sourceProperty] || "";
-          if (value) row.style.setProperty(targetProperty, value);
-          else row.style.removeProperty(targetProperty);
-        }
+        applyFolderRowVisual(row, { b: node.color, d: node.parts, o: node.opacity }, depth + 2);
         const toggle = () => store.setFolderCollapsed(node.id, open);
         chev.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -20070,7 +22797,7 @@ __zentralShim.register = function (def) {
           }
         });
         row.addEventListener("dragover", (e) => {
-          if (!dragNoteId) return;
+          if (!dragNoteId || noteDragCanceled) return;
           e.preventDefault();
           row.classList.add("is-drop");
         });
@@ -20079,11 +22806,13 @@ __zentralShim.register = function (def) {
           e.preventDefault();
           e.stopPropagation();
           row.classList.remove("is-drop");
+          if (noteDragCanceled) { noteDragCanceled = false; dragNoteId = ""; calendarDragNoteId = ""; return; }
           let id = dragNoteId;
           try {
             id = id || e.dataTransfer?.getData("text/plain") || "";
           } catch (_) {}
           dragNoteId = "";
+          calendarDragNoteId = "";
           if (id && store.get(id) && store.setFolder(id, node.id)) scheduleList();
         });
         return row;
@@ -20132,10 +22861,11 @@ __zentralShim.register = function (def) {
       }
       // Small dialogs for folder actions (one text field, a confirm, a target picker).
       // Colour and icon of a folder: shown in this tree and on the folder in the Zen sidebar. The icon is one emoji.
-      function askFolderStyle(node, save, title, level = 2) {
+      function askFolderStyle(node, save, title, level) {
         // Same controls and rules as the Zen sidebar editor of Colorful Folders: Simple = a primary color (the folder) and
         // a secondary color (its outline), Detailed = every layer with its own transparency. In Simple, choosing a color or
         // a look drops the Detailed layers (Simple overrides Detailed); a Detailed layer left on Auto follows the primary.
+        const resolvedLevel = Number.isFinite(level) ? level : (node?.id ? folderDepth(node.id) + 1 : 2);
         let color = node.color || "";
         let parts = cleanFolderParts(node.parts);
         let opacity = cleanFolderOpacity(node.opacity);
@@ -20149,20 +22879,45 @@ __zentralShim.register = function (def) {
         const detailTab = chip("Detailed");
         const modes = h("div", { class: "zn-fstyle-modes", role: "tablist" }, simpleTab, detailTab);
 
+        const previewIconWrap = h("span", { class: "zn-frow-icon is-folder" }, icon("folder", 14));
+        const previewRow = h(
+          "div",
+          { class: "zn-item zn-frow zn-fstyle-preview-row" },
+          previewIconWrap,
+          h("span", { class: "zn-item-main" }, h("span", { class: "zn-item-title" }, node.label || "Folder")),
+          h("span", { class: "zn-item-time" }, "3"),
+        );
+        const previewStates = h(
+          "div",
+          { class: "zn-fstyle-preview-states" },
+          h("span", { class: "zn-fstyle-state-pill", "data-state": "hover" }, "Hover"),
+          h("span", { class: "zn-fstyle-state-pill", "data-state": "selected" }, "Selected"),
+          h("span", { class: "zn-fstyle-state-pill", "data-state": "disabled" }, "Disabled"),
+        );
+        const previewBox = h("div", { class: "zn-fstyle-preview", role: "region", "aria-label": "Folder style preview" }, previewRow, previewStates);
+
         const palette = h("div", { class: "zn-fstyle-presets" });
         const presetButtons = [];
         const syncPalette = () => {
-          for (const button of presetButtons) button.classList.toggle("is-on", button._theme?.b === color && serializeFolderParts(button._theme?.d) === serializeFolderParts(parts) && serializeFolderOpacity(button._theme?.o) === serializeFolderOpacity(opacity));
+          const surf = currentSurfaceSpec();
+          for (const button of presetButtons) {
+            const theme = button._theme;
+            button.classList.toggle("is-on", theme?.b === color && serializeFolderParts(theme?.d) === serializeFolderParts(parts) && serializeFolderOpacity(theme?.o) === serializeFolderOpacity(opacity));
+            const tok = applyPaletteVars(button, theme?.b || theme?.d?.front || theme?.d?.stroke || "#667788", "swatch", surf);
+            if (button._swatch && tok) button._swatch.style.borderColor = tok.outline;
+          }
         };
         for (const group of folderColorPresets()) {
           palette.append(h("div", { class: "zn-fstyle-group-label" }, group.group));
           const row = h("div", { class: "zn-fstyle-colors" });
           for (const theme of group.items) {
+            const swatch = h("span", { class: "zn-fstyle-preset-swatch", "aria-hidden": "true" });
+            swatch.style.background = "linear-gradient(135deg, " + (theme.d?.back || theme.b) + " 0 35%, " + (theme.d?.front || theme.b) + " 35% 70%, " + (theme.d?.stroke || theme.b) + " 70% 100%)";
             const button = chip(theme.n);
+            button.insertBefore(swatch, button.firstChild);
             button._theme = theme;
+            button._swatch = swatch;
             button.title = group.group + " · " + theme.n;
-            button.style.background = "linear-gradient(135deg, " + (theme.d?.back || theme.b) + " 0 35%, " + (theme.d?.front || theme.b) + " 35% 70%, " + (theme.d?.stroke || theme.b) + " 70% 100%)";
-            button.style.borderColor = theme.d?.stroke || theme.b;
             button.addEventListener("click", () => {
               color = theme.b;
               parts = cleanFolderParts(theme.d);
@@ -20211,6 +22966,7 @@ __zentralShim.register = function (def) {
           if (v >= 100) { delete opacity.back; delete opacity.front; } else { opacity.back = v; opacity.front = v; }
           bodyAlphaValue.textContent = v >= 100 ? "Auto" : v + "%";
           syncPalette();
+          syncPreview();
         });
         const alphaRow = h("div", { class: "zn-fstyle-edge" }, h("span", {}, "Folder opacity (0% = transparent)"), bodyAlpha, bodyAlphaValue);
 
@@ -20238,11 +22994,25 @@ __zentralShim.register = function (def) {
             opacity[part] = Number(alpha.value);
             opacityValue.textContent = alpha.value + "%";
             syncPalette();
+            syncPreview();
           });
           auto.addEventListener("click", () => { delete parts[part]; delete opacity[part]; syncAll(); });
           detail.append(line);
           partInputs.set(part, { input, hex, opacity: alpha, opacityValue });
         }
+        function syncPreview() {
+          const emoji = cleanFolderIcon(f.input.value.trim()) || "";
+          previewIconWrap.className = "zn-frow-icon" + (emoji ? " is-emoji" : " is-folder");
+          previewIconWrap.replaceChildren(emoji ? h("span", { class: "zn-frow-emoji" }, emoji) : icon("folder", 14));
+          const activeParts = editMode === "simple" ? edgeOnly() : parts;
+          applyFolderRowVisual(previewRow, { b: color, d: activeParts, o: opacity }, resolvedLevel, editMode);
+          for (const k of ["--zn-frow-label", "--zn-frow-accent", "--zn-frow-stroke", "--zn-frow-tint", "--zn-frow-hover", "--zn-frow-selected", "--zn-frow-disabled-bg", "--zn-frow-disabled-fg", "--zn-frow-disabled-outline"]) {
+            const v = previewRow.style.getPropertyValue(k);
+            if (v) previewStates.style.setProperty(k, v);
+            else previewStates.style.removeProperty(k);
+          }
+        }
+        f.input.addEventListener("input", syncPreview);
         function syncAll(skipPrimary = false, skipEdge = false, skipPart = "") {
           if (!skipPrimary) picker.sync(colorHex(color) || "#667788");
           const edge = parts.stroke || "";
@@ -20259,6 +23029,7 @@ __zentralShim.register = function (def) {
             controls.opacityValue.textContent = opacity[part] === undefined ? "Auto" : opacity[part] + "%";
           }
           syncPalette();
+          syncPreview();
         }
         function setMode(next) {
           editMode = next === "simple" ? "simple" : "detailed";
@@ -20291,9 +23062,15 @@ __zentralShim.register = function (def) {
         const cancel = chip("Close");
         openCard(
           title || "Folder color and icon",
-          h("div", { class: "zn-fstyle" }, modes, primaryBox, edgeRow, edgeWarn, alphaRow, detail, h("div", { class: "zn-fstyle-group-label" }, "Collections"), palette, behaviorBox, f.row, status),
+          h("div", { class: "zn-fstyle" }, modes, previewBox, primaryBox, edgeRow, edgeWarn, alphaRow, detail, h("div", { class: "zn-fstyle-group-label" }, "Collections"), palette, behaviorBox, f.row, status),
           h("div", { class: "zn-dialog-actions" }, reset, cancel, apply, ok),
         );
+        paletteRefreshers.add(() => {
+          if (!previewBox.isConnected) return false;
+          syncPalette();
+          syncPreview();
+          return true;
+        });
         const commit = (closeAfter) => {
           const icon = f.input.value.trim();
           if (icon && !cleanFolderIcon(icon)) {
@@ -20349,18 +23126,33 @@ __zentralShim.register = function (def) {
         const hexField = h("input", { type: "text", class: "zn-field zn-hex-field", spellcheck: "false", maxlength: "7", placeholder: "#rrggbb", "aria-label": "Color as #rrggbb" });
         hexField.value = cur;
         const quick = h("div", { class: "zn-quick zn-flow" });
+        const previewRem = h("span", { class: "zn-palette-preview-reminder zn-cal-item is-reminder is-compact" }, h("span", { class: "zn-cal-item-time" }, "09:00"), h("span", { class: "zn-cal-item-title" }, "Reminder"));
+        const preview = h(
+          "div",
+          { class: "zn-palette-preview", role: "region", "aria-label": "Color contrast preview" },
+          h("span", { class: "zn-palette-preview-pill", "data-state": "normal" }, "Normal"),
+          h("span", { class: "zn-palette-preview-pill", "data-state": "hover" }, "Hover"),
+          h("span", { class: "zn-palette-preview-pill", "data-state": "selected" }, "Selected"),
+          h("span", { class: "zn-palette-preview-pill", "data-state": "disabled" }, "Disabled"),
+          previewRem,
+        );
+        const paintPreview = () => {
+          applyPaletteVars(preview, cur, "swatch", currentSurfaceSpec());
+          applyCalendarItemColors(previewRem, cur, "calendar");
+        };
         const set = (hex) => {
           cur = hex;
           native.value = hex;
           hexField.value = hex;
           delete hexField.dataset.bad;
+          paintPreview();
           onChange(hex);
         };
         const paintQuick = () => {
           quick.replaceChildren();
           for (const c of quickColors()) {
             const b = h("button", { type: "button", class: "zn-swatch", title: c + " (right-click removes it)", "aria-label": "Quick color " + c });
-            setColorData(b, c);
+            setSheetColorData(b, c);
             b.addEventListener("click", () => set(c));
             b.addEventListener("contextmenu", (e) => {
               e.preventDefault();
@@ -20384,7 +23176,14 @@ __zentralShim.register = function (def) {
           paintQuick();
         });
         paintQuick();
-        const el = h("div", { class: "zn-color-picker" }, h("div", { class: "zn-color-picker-row" }, native, hexField, keep), quick);
+        paintPreview();
+        const el = h("div", { class: "zn-color-picker" }, h("div", { class: "zn-color-picker-row" }, native, hexField, keep), quick, preview);
+        paletteRefreshers.add(() => {
+          if (!el.isConnected) return false;
+          paintQuick();
+          paintPreview();
+          return true;
+        });
         return { el, value: () => cur, sync: (hex) => { const clean = cleanHex(hex); if (clean) set(clean); } };
       }
       function askCustomColor(title, current, onOk) {
@@ -20408,8 +23207,8 @@ __zentralShim.register = function (def) {
         const nameField = old ? null : field("Category name", "", "e.g. Birthdays");
         const color = colorPicker(old?.color || "#7d8da8", () => {});
         const defaults = CALENDAR_PART.cleanCategoryNotify(old?.notify);
-        const soundEditor = buildAlertSoundEditor(old?.notify || defaults, { inherit: true });
-        const agendaEditor = buildAgendaWindowEditor(old?.agenda || {}, { inherit: true });
+        const soundEditor = buildAlertSoundEditor(old?.notify || defaults, { inherit: true, getLayers: () => ({ global: { alert: store.meta.calendarAlertSettings } }) });
+        const agendaEditor = buildAgendaWindowEditor(old?.agenda || {}, { inherit: true, getLayers: () => ({ global: { agenda: store.meta.calendarAgendaDefaults } }) });
         const stageChoice = (label, value) => {
           const select = h("select", { class: "zn-select", "aria-label": label });
           select.append(h("option", { value: "on" }, "On"), h("option", { value: "off" }, "Off"));
@@ -20458,17 +23257,30 @@ __zentralShim.register = function (def) {
         nameField?.input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); submit(); } });
         if (nameField) { nameField.input.focus?.({ preventScroll: true }); }
       }
-      function buildAlertSoundEditor(raw, { inherit = false } = {}) {
+      function buildAlertSoundEditor(raw, { inherit = false, includeLayout = false, getLayers = null } = {}) {
         const source = raw?.stages || raw || {};
         const rows = [], fields = {};
+        const layoutLabels = { corner: "Corner card", large: "Large card", centred: "Centred overlay" };
         for (const stage of ["pre", "due", "followup"]) {
           const rule = source[stage] && typeof source[stage] === "object" ? source[stage] : {};
           const soundExplicit = rule.soundSpecified === true || (rule.soundSpecified === undefined && Object.prototype.hasOwnProperty.call(rule, "sound"));
           const allowExplicit = rule.quietAllowSpecified === true || (rule.quietAllowSpecified === undefined && Object.prototype.hasOwnProperty.call(rule, "quietAllow"));
           const sound = h("select", { class: "zn-select", "aria-label": stage + " sound level" });
-          if (inherit) sound.append(h("option", { value: "" }, "Inherit"));
+          const inheritOption = inherit ? h("option", { value: "" }, "Inherit") : null;
+          if (inheritOption) sound.append(inheritOption);
           for (const level of CALENDAR_PART.SOUND_LEVELS) sound.append(h("option", { value: level }, level[0].toUpperCase() + level.slice(1)));
           sound.value = soundExplicit ? rule.sound : (inherit ? "" : (rule.sound || "normal"));
+          let layout = null;
+          if (includeLayout) {
+            const defaultLayout = stage === "pre" ? "corner" : stage === "due" ? "large" : "centred";
+            layout = h("select", { class: "zn-select", "aria-label": stage + " alert layout" });
+            for (const mode of (CALENDAR_PART.ALERT_LAYOUTS || ["corner", "large", "centred"])) {
+              layout.append(h("option", { value: mode }, layoutLabels[mode] || mode));
+            }
+            layout.value = CALENDAR_PART.cleanAlertLayout
+              ? CALENDAR_PART.cleanAlertLayout(rule.layout, defaultLayout)
+              : (rule.layout || defaultLayout);
+          }
           const allowToggle = h("input", { type: "checkbox", "aria-label": stage + " quiet-hours bypass override" });
           allowToggle.checked = inherit ? allowExplicit : true;
           const allowChecks = {};
@@ -20482,19 +23294,40 @@ __zentralShim.register = function (def) {
             allowRow.append(h("label", {}, check, h("span", {}, level)));
           }
           allowToggle.addEventListener("change", () => { for (const check of Object.values(allowChecks)) check.disabled = inherit && !allowToggle.checked; });
-          const row = h("div", { class: "zn-cal-alert-rule" },
-            h("label", {}, h("span", {}, stage === "pre" ? "Tier 1 · Pre-alert sound" : stage === "due" ? "Tier 2 · Due sound" : "Tier 3 · Follow-up sound"), sound),
-            h("label", {}, allowToggle, h("span", {}, inherit ? "Override quiet-hours bypass list" : "Quiet-hours bypass sounds")), allowRow);
+          const allowCaption = h("span", {}, inherit ? "Override quiet-hours bypass list" : "Quiet-hours bypass sounds");
+          const rowChildren = [
+            h("label", { class: "zn-cal-alert-select-row" }, h("span", {}, stage === "pre" ? "Tier 1 · Pre-alert sound" : stage === "due" ? "Tier 2 · Due sound" : "Tier 3 · Follow-up sound"), sound),
+          ];
+          if (layout) {
+            rowChildren.push(
+              h("label", { class: "zn-cal-alert-select-row" }, h("span", {}, stage === "pre" ? "Tier 1 · Pre-alert display" : stage === "due" ? "Tier 2 · Due display" : "Tier 3 · Follow-up display"), layout)
+            );
+          }
+          rowChildren.push(h("label", {}, allowToggle, allowCaption), allowRow);
+          const row = h("div", { class: "zn-cal-alert-rule" }, ...rowChildren);
           rows.push(row);
-          fields[stage] = { sound, allowToggle, allowChecks };
+          fields[stage] = { sound, layout, inheritOption, allowToggle, allowCaption, allowChecks };
         }
+        const syncInheritance = (layersInput = null) => {
+          if (!inherit || !CALENDAR_PART?.describeInheritance) return;
+          const layers = layersInput || getLayers?.() || {};
+          for (const stage of ["pre", "due", "followup"]) {
+            const field = fields[stage];
+            if (field.inheritOption) field.inheritOption.textContent = CALENDAR_PART.describeInheritance("alert." + stage + ".sound", null, layers).label;
+            const qDesc = CALENDAR_PART.describeInheritance("alert." + stage + ".quietAllow", null, layers);
+            field.allowCaption.textContent = "Override quiet-hours bypass list — " + qDesc.label;
+          }
+        };
+        syncInheritance();
         return {
           element: h("div", { class: "zn-cal-alert-editor" }, ...rows),
+          syncInheritance,
           read() {
             const out = {};
             for (const stage of ["pre", "due", "followup"]) {
               const field = fields[stage], rule = {};
               if (field.sound.value) rule.sound = field.sound.value;
+              if (field.layout?.value) rule.layout = field.layout.value;
               if (!inherit || field.allowToggle.checked) rule.quietAllow = ["quiet", "normal", "loud"].filter((level) => field.allowChecks[level].checked);
               if (Object.keys(rule).length) out[stage] = rule;
             }
@@ -20502,11 +23335,12 @@ __zentralShim.register = function (def) {
           },
         };
       }
-      function buildAgendaWindowEditor(raw, { inherit = true } = {}) {
+      function buildAgendaWindowEditor(raw, { inherit = true, getLayers = null } = {}) {
         const current = CALENDAR_PART.cleanAgendaWindow(raw);
         const makeSelect = (label, key, maximum, defaultValue) => {
           const select = h("select", { class: "zn-select", "aria-label": label });
-          if (inherit) select.append(h("option", { value: "" }, "Inherit"));
+          const inheritOption = inherit ? h("option", { value: "" }, "Inherit") : null;
+          if (inheritOption) select.append(inheritOption);
           if (key === "enabled") {
             select.append(h("option", { value: "on" }, "Show in Agenda"), h("option", { value: "off" }, "Hide from Agenda"));
             select.value = Object.prototype.hasOwnProperty.call(current, key) ? (current[key] ? "on" : "off") : (inherit ? "" : (defaultValue ? "on" : "off"));
@@ -20515,22 +23349,31 @@ __zentralShim.register = function (def) {
             for (let n = 1; n <= maximum; n++) select.append(h("option", { value: String(n) }, n + " day" + (n === 1 ? "" : "s")));
             select.value = Object.prototype.hasOwnProperty.call(current, key) ? String(current[key]) : (inherit ? "" : String(defaultValue));
           }
-          return select;
+          return { select, inheritOption };
         };
         const enabled = makeSelect("Agenda inclusion", "enabled", 0, true);
         const lead = makeSelect("Days before item to show in Agenda", "leadDays", CALENDAR_PART.AGENDA_WINDOW_MAX_DAYS, 0);
         const tail = makeSelect("Days after item to keep in Agenda", "tailDays", CALENDAR_PART.AGENDA_WINDOW_MAX_DAYS, 0);
+        const syncInheritance = (layersInput = null) => {
+          if (!inherit || !CALENDAR_PART?.describeInheritance) return;
+          const layers = layersInput || getLayers?.() || {};
+          if (enabled.inheritOption) enabled.inheritOption.textContent = CALENDAR_PART.describeInheritance("agenda.enabled", null, layers).label;
+          if (lead.inheritOption) lead.inheritOption.textContent = CALENDAR_PART.describeInheritance("agenda.leadDays", null, layers).label;
+          if (tail.inheritOption) tail.inheritOption.textContent = CALENDAR_PART.describeInheritance("agenda.tailDays", null, layers).label;
+        };
+        syncInheritance();
         const element = h("div", { class: "zn-cal-agenda-window-editor" },
-          h("label", { class: "zn-field-row" }, h("span", {}, "Agenda inclusion"), enabled),
-          h("label", { class: "zn-field-row" }, h("span", {}, "Show before"), lead),
-          h("label", { class: "zn-field-row" }, h("span", {}, "Keep after"), tail));
+          h("label", { class: "zn-field-row" }, h("span", {}, "Agenda inclusion"), enabled.select),
+          h("label", { class: "zn-field-row" }, h("span", {}, "Show before"), lead.select),
+          h("label", { class: "zn-field-row" }, h("span", {}, "Keep after"), tail.select));
         return {
           element,
+          syncInheritance,
           read() {
             const out = {};
-            if (enabled.value) out.enabled = enabled.value === "on";
-            if (lead.value !== "") out.leadDays = Number(lead.value);
-            if (tail.value !== "") out.tailDays = Number(tail.value);
+            if (enabled.select.value) out.enabled = enabled.select.value === "on";
+            if (lead.select.value !== "") out.leadDays = Number(lead.select.value);
+            if (tail.select.value !== "") out.tailDays = Number(tail.select.value);
             return CALENDAR_PART.cleanAgendaWindow(out);
           },
         };
@@ -20553,7 +23396,7 @@ __zentralShim.register = function (def) {
         const target = store.get(noteId);
         if (!target || !CALENDAR_PART) return;
         const all = store.meta.calendarNoteAgendaOverrides || {};
-        const editor = buildAgendaWindowEditor(all[noteId] || {}, { inherit: true });
+        const editor = buildAgendaWindowEditor(all[noteId] || {}, { inherit: true, getLayers: () => ({ global: { agenda: store.meta.calendarAgendaDefaults } }) });
         const ok = chip("Save note Agenda defaults", true), clear = chip("Use inherited defaults"), cancel = chip("Cancel");
         openCalendarCard("Zen Agenda · " + (titleOf(target.body) || "Note"), editor.element,
           h("p", { class: "zn-empty" }, "These visibility rules apply to calendar items linked to this note unless an individual item overrides them. They do not change alert due times, snooze, or recurrence."),
@@ -20583,7 +23426,7 @@ __zentralShim.register = function (def) {
           const input = h("input", { type: "checkbox", "aria-label": "Quiet hours " + label }); input.checked = current.quietHours.days.includes(day);
           return { day, input, node: h("label", {}, input, h("span", {}, label)) };
         });
-        const soundEditor = buildAlertSoundEditor(current, { inherit: false });
+        const soundEditor = buildAlertSoundEditor(current, { inherit: false, includeLayout: true });
         const status = h("p", { class: "zn-empty", role: "status", "aria-live": "polite" }, "Quiet hours are off by default. During an enabled window, only sounds listed for that stage can bypass quiet mode. Visual alerts and due times are unchanged.");
         const ok = chip("Save alert settings", true), cancel = chip("Cancel");
         openCalendarCard("Reminder sounds and quiet hours",
@@ -20609,7 +23452,7 @@ __zentralShim.register = function (def) {
         if (!target || !CALENDAR_PART) return;
         const all = store.meta.calendarNoteAlertOverrides || {};
         const current = all[noteId] || {};
-        const editor = buildAlertSoundEditor(current, { inherit: true });
+        const editor = buildAlertSoundEditor(current, { inherit: true, getLayers: () => ({ global: { alert: store.meta.calendarAlertSettings } }) });
         const ok = chip("Save note defaults", true), clear = chip("Use inherited defaults"), cancel = chip("Cancel");
         openCalendarCard("Reminder sounds · " + (titleOf(target.body) || "Note"), editor.element,
           h("p", { class: "zn-empty" }, "These sound and quiet-hour bypass rules apply to reminders linked to this note unless an individual reminder overrides them."),
@@ -21281,10 +24124,12 @@ __zentralShim.register = function (def) {
           for (const it of list) {
             if (it.sep) m.append(h("div", { class: "zn-sep" }));
             else if (it.swatches) {
+              const surf = currentSurfaceSpec();
               const row = h("div", { class: "zn-swatches" });
               for (const c of it.swatches) {
                 const b = h("button", { type: "button", class: "zn-swatch", title: c, "aria-label": c });
                 b.dataset.color = c;
+                applyPaletteVars(b, c === "none" ? surf.muted : (colorHex(c) || c), "swatch", surf);
                 if (c === it.current) b.classList.add("is-on");
                 b.addEventListener("click", () => {
                   closeMenu();
@@ -21298,7 +24143,7 @@ __zentralShim.register = function (def) {
                 const crow = h("div", { class: "zn-swatches zn-swatches-custom" });
                 for (const c of quickColors()) {
                   const b = h("button", { type: "button", class: "zn-swatch", title: c + " (right-click removes it from the quick colors)", "aria-label": "Custom color " + c });
-                  setColorData(b, c);
+                  setSheetColorData(b, c);
                   if (c === cleanHex(it.current)) b.classList.add("is-on");
                   b.addEventListener("click", () => {
                     closeMenu();
@@ -21910,7 +24755,7 @@ __zentralShim.register = function (def) {
         let good = ""; // the time / date read last: what a refused text is replaced by, and the month a day alone is in
         let refused = false;
         const parse = (text) => {
-          if (!isTime) return { value: C.parseDateEntry(text, { now: nowMs(), base: good || opts.base?.() || "", format: dateDisplayFormat() }), end: "" };
+          if (!isTime) return { value: C.parseDateEntry(text, { now: nowMs(), base: good || opts.base?.() || "", format: dateDisplayFormat(), lang: (() => { try { return Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en"); } catch (_) { return "en"; } })(), acceptAll: (() => { try { return Services.prefs.getBoolPref(PREF.NOTES_LANGUAGE_ACCEPT_ALL, true); } catch (_) { return true; } })() }), end: "" };
           const two = opts.range?.() ? C.parseTimeRange(text) : null;
           if (two && two.endMin >= 0) return { value: C.clockOfMinutes(two.startMin), end: C.clockOfMinutes(two.endMin) };
           return { value: C.clockOfMinutes(C.parseClock(text)), end: "" };
@@ -23214,6 +26059,8 @@ __zentralShim.register = function (def) {
             const c = stored();
             swatch.style.background = c || "transparent";
             swatch.dataset.empty = c ? "false" : "true";
+            if (c) applyPaletteVars(swatch, c, "swatch", currentSurfaceSpec());
+            else clearPaletteVars(swatch);
             theme.classList.toggle("is-on", !c);
             const v = hsl();
             sh.value = String(v.h);
@@ -23889,10 +26736,49 @@ __zentralShim.register = function (def) {
       cleanups.push(() => {
         if (rafDrag) window.cancelAnimationFrame(rafDrag);
       });
+      // OW-07: '+' in All notes opens the remembered create action in one click, while its menu arrow offers
+      // New note, New folder, New reminder, New event, and (when Agenda is off) Date note.
+      function selectedCalendarDayKey() {
+        if (CALENDAR_PART) {
+          const picked = CALENDAR_PART.parseYmd(store.meta.calendarCursor);
+          return CALENDAR_PART.ymd(picked || new Date(nowMs()));
+        }
+        return parseYmd(store.meta.calendarCursor) ? store.meta.calendarCursor : ymdOf(nowMs());
+      }
+      function runAllNewChoice(rawChoice, { remember = false } = {}) {
+        const opts = { agendaEnabled: !!getPref(PREF.AGENDA_ENABLED, false), calendarAvailable: !!store.items };
+        const choice = CALENDAR_PART ? CALENDAR_PART.cleanAllNotesNewChoice(rawChoice, opts) : "note";
+        if (remember) {
+          store.setMeta({ allNewChoice: choice });
+          syncAllNewButton();
+        }
+        if (choice === "folder") return askFolderName("New folder", "", (name) => store.addFolder(name, ""));
+        if (choice === "reminder") return askCreateCalendarItem("reminder", false, selectedCalendarDayKey());
+        if (choice === "event") return askCreateCalendarItem("event", false, selectedCalendarDayKey());
+        if (choice === "date") {
+          const dayKey = selectedCalendarDayKey();
+          return openDay(parseYmd(dayKey) || nowMs(), dayKey);
+        }
+        return newNote();
+      }
+      function openAllNewMenu() {
+        const opts = { choice: store.meta.allNewChoice, agendaEnabled: !!getPref(PREF.AGENDA_ENABLED, false), calendarAvailable: !!store.items };
+        const entries = CALENDAR_PART ? CALENDAR_PART.allNotesNewMenuModel(opts) : [
+          { id: "note", icon: "plus", label: "New note", active: true, enabled: true, reason: "" },
+          { id: "folder", icon: "folder", label: "New folder", active: false, enabled: true, reason: "" },
+        ];
+        showMenu(newSplit, entries.map((entry) => ({
+          icon: entry.active ? "check" : entry.icon,
+          label: entry.label,
+          enabled: entry.enabled,
+          reason: entry.reason || undefined,
+          action: () => runAllNewChoice(entry.id, { remember: true }),
+        })));
+      }
       // Cycle F #7: with pref new_note_chooser the + button asks first (Blank is focused, so Enter = blank note).
       // Ctrl+N and the menu entries stay instant. Esc only closes the menu.
       function newNoteChooser() {
-        if (!getPref(PREF.NEW_CHOOSER, false)) return newNote();
+        if (!getPref(PREF.NEW_CHOOSER, false)) return runAllNewChoice(store.meta.allNewChoice);
         const now = Date.now();
         const day = (k, label) => ({ icon: "bell", label: label + "  " + dateTarget(k, now).ymd, action: () => openDateNote(k) });
         showMenu(btnNew, [
@@ -23904,6 +26790,9 @@ __zentralShim.register = function (def) {
         ]);
       }
       listen(btnNew, "click", () => newNoteChooser());
+      listen(btnNew, "contextmenu", (e) => { e.preventDefault(); openAllNewMenu(); });
+      listen(btnNew, "keydown", (e) => { if (e.key === "ArrowDown") { e.preventDefault(); openAllNewMenu(); } });
+      listen(btnNewMenu, "click", () => openAllNewMenu());
       listen(btnFolder, "click", () => askFolderName("New folder", "", (name) => store.addFolder(name, "")));
       listen(btnCalendarLayout, "click", () => {
         const mode = CALENDAR_PART?.cleanCalendarLayout?.(store.meta.calendarLayout) || "auto";
@@ -24273,6 +27162,7 @@ __zentralShim.register = function (def) {
         const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
         if (key === "Escape") {
           if (calendarDrag) { cancelCalendarDrag(); e.preventDefault(); return; }
+          if (calendarNoteDrop || calendarDragNoteId || dragNoteId) { cancelNoteDrag(); e.preventDefault(); return; }
           if (armed.length && !dialog && !menu) disarm();
           else if (dialog) closeDialog();
           else if (menu) closeMenu();
@@ -25202,6 +28092,10 @@ __zentralShim.register = function (def) {
         if (!isOpen) return;
         isOpen = false;
         cancelCalendarDrag();
+        clearCalendarNoteDrop();
+        calendarDragNoteId = "";
+        noteDragCanceled = false;
+        dragNoteId = "";
         window.clearTimeout(calendarDragClickTimer); calendarDragClickTimer = 0; calendarSuppressedClick = null;
         calendarMoveUndo = null;
         collapsed = false;
@@ -26499,7 +29393,7 @@ __zentralShim.register = function (def) {
       let soundCtx = null;
       function playReminderSound(stage = "followup", policy = null) {
         if (policy && !policy.play) return;
-        const level = policy?.sound || "normal";
+        const level = policy?.sound || CALENDAR_PART?.DEFAULT_ALERT_SETTINGS?.stages?.[stage]?.sound || "normal";
         if (level === "silent") return;
         try {
           const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -26507,11 +29401,11 @@ __zentralShim.register = function (def) {
           const ctx = soundCtx || (soundCtx = new Ctx());
           if (ctx.state === "suspended") ctx.resume?.().catch?.(() => {});
           const urgent = stage === "due", gentle = stage === "pre";
-          const pulses = urgent ? [0, 0.16, 0.32] : gentle ? [0] : [0, 0.28];
+          const pulses = urgent ? [0, 0.16, 0.32] : gentle ? [0, 0.2] : [0, 0.28];
           const volume = policy?.volume ?? ({ quiet: 0.08, normal: 0.2, loud: 0.35 })[level] ?? 0.2;
-          pulses.forEach((at) => {
+          pulses.forEach((at, index) => {
             const osc = ctx.createOscillator(), gain = ctx.createGain();
-            osc.frequency.value = gentle ? 620 : urgent ? 1040 : 880;
+            osc.frequency.value = gentle ? (index ? 784 : 660) : urgent ? 1040 : 880;
             gain.gain.setValueAtTime(0.0001, ctx.currentTime + at);
             gain.gain.exponentialRampToValueAtTime(volume, ctx.currentTime + at + 0.02);
             gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + at + (urgent ? 0.13 : 0.22));
@@ -26560,6 +29454,10 @@ __zentralShim.register = function (def) {
       }
       const alertStack = createReminderAlertStack({
         document, history: store.items?.history, warn,
+        now: () => Date.now(),
+        setTimer: (fn, ms) => window.setTimeout(fn, ms),
+        clearTimer: (id) => window.clearTimeout(id),
+        getAlertSettings: () => store.meta?.calendarAlertSettings,
         onBulkEnd() { store.items?.history?.flush?.().catch?.(warn); },
         listen(target, type, fn) {
           if (lifecycle?.listen) return lifecycle.listen(target, type, fn);
@@ -26571,7 +29469,7 @@ __zentralShim.register = function (def) {
       onCleanup(() => alertStack.destroy());
       function showReminders(list) {
         if (disposed) return;
-        const visible = list.slice(0, 15), sounds = new Map();
+        const visible = list.slice(0, 200), sounds = new Map();
         for (const entry of visible) {
           const item = entry.__calendarReminder ? entry.__calendarItem : { x: { noteId: entry.id } };
           const stage = entry.__stage || "followup";
@@ -26584,9 +29482,19 @@ __zentralShim.register = function (def) {
         for (const n of visible) {
           const item = n.__calendarReminder ? n.__calendarItem : null;
           const identity = item ? CALENDAR_PART.reminderIdentity(item) : { itemId: "note-reminder:" + n.id, occurrenceId: "note-reminder:" + n.id };
+          const stage = n.__stage || "followup";
+          const presentation = CALENDAR_PART.reminderAlertPresentation?.(stage, store.meta?.calendarAlertSettings);
+          const dueAt = item ? (CALENDAR_PART.reminderDueAt?.(item) || 0) : (Number(n.remind) || 0);
           const actions = createReminderAlertActions({ store, note: n, openNote: openReminderNote, showNotes, warn });
           try {
-            alertStack.show({ identity, title: item?.summary || titleOf(n.body) || "Untitled note", stage: n.__stage || "followup", actions });
+            alertStack.show({
+              identity,
+              title: item?.summary || titleOf(n.body) || "Untitled note",
+              stage,
+              ...(presentation?.layout ? { layout: presentation.layout } : {}),
+              ...(dueAt > 0 ? { dueAt } : {}),
+              actions,
+            });
           } catch (error) { warn(error); }
         }
       }
@@ -26612,8 +29520,10 @@ __zentralShim.register = function (def) {
             },
             snooze: () => {
               const current = latest(); if (!current) return true;
-              if (!item) return !!store.snoozeReminder(entry.id, C.reminderSnoozeTomorrowMinutes(Date.now()));
-              const start = C.snoozedItemStart(current, 0, C.addDays(Date.now(), 1)); if (!start) return false;
+              const now = Date.now();
+              if (!item) return !!store.snoozeReminder(entry.id, C.reminderSnoozeTomorrowMinutes(now));
+              const tomorrowMins = C.reminderSnoozeTomorrowMinutes(now, current.x?.tz || "");
+              const start = C.snoozedItemStart(current, 0, tomorrowMins > 0 ? now + tomorrowMins * 60000 : C.addDays(now, 1)); if (!start) return false;
               const master = store.items?.get?.(current.x?.series || current.id); if (!master) return false;
               if (current.x?.series) {
                 const moved = C.moveOccurrence(master, current, start, "this", Date.now()); if (!moved) return false;
@@ -26635,6 +29545,13 @@ __zentralShim.register = function (def) {
         onDigest: showMissedReminders,
         getDigestDays: () => prefInt(PREF.MISSED_DAYS, 7),
         deferUntilStart: true,
+        isActiveWindow: () => {
+          try {
+            if (typeof document?.hasFocus === "function" && document.hasFocus()) return true;
+            const focused = Services?.focus?.activeWindow || Services?.wm?.getMostRecentWindow?.("navigator:browser");
+            return !focused || focused === window;
+          } catch (_) { return true; }
+        },
       });
       onCleanup(() => reminders.destroy());
       // The store opens lazily; reminders need it, so open it shortly after startup (not on the critical path).
@@ -27708,6 +30625,7 @@ __zentralShim.register = function (def) {
         api: agendaApi, perf: PERF,
         getItems: agendaItems,
         getDays: agendaDays,
+        getLanguage: () => { try { return CALENDAR_PART.cleanNotesLanguage(Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en")); } catch (_) { return "en"; } },
         getOverdue: () => ({ enabled: prefBool(PREF.AGENDA_OVERDUE, true), days: Math.max(1, Math.min(31, prefInt(PREF.AGENDA_OVERDUE_DAYS, 7))), cap: Math.max(1, Math.min(100, prefInt(PREF.AGENDA_OVERDUE_CAP, 10))) }),
         getEnabled: agendaEnabled,
         getReady: () => storeReady,
@@ -29626,6 +32544,7 @@ __zentralShim.register = function (def) {
         for (const [k, v] of Object.entries(look.vars)) rootEl.style.setProperty(k, v);
         if (look.flags.length) rootEl.setAttribute("zentral-notes-ov", look.flags.join(" "));
         else rootEl.removeAttribute("zentral-notes-ov");
+        window.dispatchEvent?.(new Event("zentral-notes-theme-changed"));
       }
       applyViewPrefs();
       onCleanup(() => {
