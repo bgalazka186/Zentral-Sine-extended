@@ -75,7 +75,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
-|     2 | `H1.6`      | `OPEN`    | High                | S-M    | —                 | Write unsaved note text when a window closes                                                             |
 |     3 | `OW-30`     | `OPEN`    | High                | M      | —                 | Triple View start-up without the Startup mod; Notes height remembered                                    |
 |     4 | `SB6.3`     | `OPEN`    | High                | M      | none              | Run Agenda quick actions headlessly (no Notes sheet)                                                     |
 |     5 | `T3.4a`     | `PARTIAL` | High                | M      | none              | RSS-style floating hover preview cards for Notes & Agenda tabs in Zen sidebar (includes the old `AU-B2`) |
@@ -137,19 +136,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 ---
 
 ## Task blocks (same order as the Master Order)
-
-#### `H1.6` — Write unsaved note text when a window closes
-
-**Status:** `OPEN` · **Impact:** High · **Effort:** S-M · **Source:** handoff 3.3.168 review, accepted 2026-11-16
-
-**Problem:** The save on closing a window first reads the note file (to notice a foreign change) and Firefox runs no further promise step of a closed window, so text typed in the last ~0.8 s (autosave delay), a calendar change from the last 0.6 s and a folder made in the last 0.6 s (`meta.json`) are probably lost.
-**Plan (do in this order):**
-
-1. On `unload` write what is dirty with calls issued at once (the I/O thread finishes them without the window): copy the current file to the recovery area first, then the unsaved text.
-2. Same for `calendar.json` and `meta.json`; keep the order note text before `calendar.json` (`UI4.7`).
-3. Never overwrite a foreign change: when the file changed outside, keep only the recovery copy.
-
-**Tests / done when:** Fake window closed between a key and the autosave: the text is on disk or in recovery; foreign-change case; two windows.
 
 #### `OW-30` — Triple View start-up works without the Startup mod; Notes height remembered
 
@@ -711,14 +697,15 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.196, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.197, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.196.** `F0.1`–`F0.14`, `H1.1`–`H1.5`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B5`, `SB6.1`, `SB6.8`, `T2.8b`, `T3.1`, `T3.6a`, `T4.1`, `T4.5`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c` and `OW-25`, `AU-B4a`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`156/156` test files) passes in Node/fake-Zen at 3.3.196. Live Zen is not available in the sandbox. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.197.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B5`, `SB6.1`, `SB6.8`, `T2.8b`, `T3.1`, `T3.6a`, `T4.1`, `T4.5`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c` and `OW-25`, `AU-B4a`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`157/157` test files) passes in Node/fake-Zen at 3.3.197. Live Zen is not available in the sandbox. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
-Completed this session (3.3.163–3.3.196), every finished item archived in `docs/LEGACY_done_rows.md`:
+Completed this session (3.3.163–3.3.197), every finished item archived in `docs/LEGACY_done_rows.md`:
 
+- `H1.6` DONE (3.3.197) — added synchronous unload write staging (`UNLOAD_RECOVERY_DIR`, `unloadEntryStem`, `parseUnloadEntryName`, `planUnloadWrites`, `decideNoteRecovery`, `store.flushOnUnload`, `store.reconcileUnloadRecovery`, `items.unloadSnapshot`/`reconcileRecoveryEntry`/`refresh`, `history.unloadSnapshot`/`reconcileRecoveryEntry`, `realIO.copy`) wired to `window` `unload` so unsaved notes, `calendar.json`, reminder history and `meta.json` are copied and staged synchronously on Gecko's I/O thread in strict note-before-calendar order (`UI4.7`) without awaiting promise steps in the closed window, then automatically reconciled on next open or live sibling window without ever overwriting a foreign change (keeping only the recovery copy on conflict). Added `tests/notes-unload-save.test.cjs` + Gecko `unload()` dead-promise simulation in `tests/helpers/fake-panel-window.cjs` (`157/157` suite).
 - `T4.1` DONE (3.3.196) — added pure `SHOWCASE_NOTE_ID` (`zn-demo-showcase`) and `buildShowcaseNote()` bundled into `DEMO_NOTES` (`Markdown & Extended Syntax Feature Showcase`, 12 sections: inline styles/dividers, H1–H6 + auto-updated `## Table of Contents`, multi-paragraph/nested blockquotes, Obsidian callouts including foldable `[!faq]-`, unordered/ordered/interactive task lists, aligned GFM table with escaped pipes `\|`, JS/Python/Rust/JSON highlighted code blocks, inline/block LaTeX equations & matrices, wikilinks with alias/`#Heading`/`^block-id`/nested `#tags`/`![[embeds|450]]`, standard & inline footnotes, native `<details>` accordions, and Mermaid `flowchart`/`gitGraph` blocks). Added `tests/notes-showcase.test.cjs` and updated `tests/notes-cycle-f.test.cjs` & `tests/notes-p4-ui.test.cjs` (`156/156` suite).
 
 - Roadmap audit 2026-11-16 (no code changed, version stays 3.3.195): every open row was checked against the code and the tests. Closed and archived because the code and a passing test already exist: `OW-27` (an Agenda entry opens on the first stationary release, `tests/notes-agenda-click.test.cjs`, `tests/notes-agenda-bounce.test.cjs`), `T2.4c1` (nothing left that `T2.4c4` does not own), `B3.3.32-7` (its only LEFT was `T2.9`) and `T2.18` (the Zen Agenda day and item menus exist; its last bullet, the split-view menu action, moved to `T3.8`). Narrowed: `T2.19` (only recurring snooze left), `T3.4` (only _Create reminder in this folder…_ left), `T3.4a` (Agenda title card exists, now `PARTIAL`), `SB6.4` (Overdue is capped, now `PARTIAL`), `T2.9` (blank-note purge exists, now `PARTIAL`). Live-check wording removed from `T1.18`, `B3.3.50-6`, `T2.4c4`. `T4.4` carries a warning: `stretched()` and `SLOT.quad` are live code. Second pass 2026-11-16 (owner accepted all proposals): new rows `H1.6`, `OW-30`, `OW-29`, `UI4.9`, `F0.15`, `DOC-1`; dropped `T3.11`, `T4.4`, `AU-B2` (folded into `T3.4a`); `T3.5` trimmed; the phase headings are gone, the blocks follow the Master Order, and the Master Order is sorted by impact (High first), then effort (S first), never ahead of a dependency (59 rows after the third pass: new `UI4.10`, `UI4.11`, `F0.16`, `TM3.7`; `T2.5` reworded; `SB6.2`, `SB6.3`, `T3.4a`, `T2.11` no longer wait for `T3.4`; `T2.9` needs an owner decision first). The root `TODO_handoff.md` is a byte copy of `docs/LEGACY_handoff_3.1.3.md` and should be deleted from the repository.

@@ -44,22 +44,40 @@ function createPanelWorld({ sharedGlobal = null, hiddenWindow = null, freezeCui 
     if (f) { f.times--; throw new Error(f.message + ": " + p); }
   }
   const direct = (d) => [...new Set([...disk.keys()].filter((k) => k.startsWith(d + "/")).map((k) => d + "/" + k.slice(d.length + 1).split("/")[0]))];
-  const ioFor = (id) => ({
-    makeDirectory: async (p) => { await gate("makeDirectory", p, id); }, setPermissions: async () => {},
-    readUTF8: async (p) => { await gate("read", p, id); if (!disk.has(p)) { const e = new Error("NotFoundError: " + p); e.name = "NotFoundError"; throw e; } return disk.get(p); },
-    writeUTF8: async (p, text, opts = {}) => {
-      await gate("write", p, id);
-      if (opts.mode === "create" && disk.has(p)) throw new Error("exists: " + p);
-      if (opts.backupFile && disk.has(p)) disk.set(opts.backupFile, disk.get(p));
-      disk.set(p, text); writes.push({ path: p, window: id, at: now });
-    },
-    write: async (p, bytes) => { disk.set(p, bytes); }, read: async (p) => disk.get(p),
-    remove: async (p, o = {}) => { await gate("remove", p, id); for (const k of [...disk.keys()]) if (k === p || (o.recursive && k.startsWith(p + "/"))) disk.delete(k); },
-    exists: async (p) => { await gate("exists", p, id); return disk.has(p) || [...disk.keys()].some((k) => k.startsWith(p + "/")); },
-    getChildren: async (d) => { await gate("children", d, id); return direct(d); },
-    stat: async (p) => ({ lastModified: 1, type: disk.has(p) ? "regular" : "directory", size: String(disk.get(p) ?? "").length }),
-    move: async (a, b) => { for (const k of [...disk.keys()]) if (k === a || k.startsWith(a + "/")) { disk.set(b + k.slice(a.length), disk.get(k)); disk.delete(k); } },
-  });
+  const ioOps = [];
+  const ioFor = (id, isDead = () => false) => {
+    const run = (op, p, fn, extra = {}) => {
+      const work = Promise.resolve().then(fn);
+      ioOps.push({ op, path: p, window: id, at: now, ...extra });
+      // A closed Firefox window runs no further promise step, while the I/O thread still completes
+      // every IOUtils call already issued during `unload`.
+      if (isDead()) { work.catch(() => {}); return new Promise(() => {}); }
+      return work;
+    };
+    return {
+      makeDirectory: (p) => run("makeDirectory", p, async () => { await gate("makeDirectory", p, id); }),
+      setPermissions: (p) => run("setPermissions", p, async () => {}),
+      readUTF8: (p) => run("read", p, async () => { await gate("read", p, id); if (!disk.has(p)) { const e = new Error("NotFoundError: " + p); e.name = "NotFoundError"; throw e; } return disk.get(p); }),
+      writeUTF8: (p, text, opts = {}) => run("write", p, async () => {
+        await gate("write", p, id);
+        if (opts.mode === "create" && disk.has(p)) throw new Error("exists: " + p);
+        if (opts.backupFile && disk.has(p)) disk.set(opts.backupFile, disk.get(p));
+        disk.set(p, text); writes.push({ path: p, window: id, at: now });
+      }),
+      copy: (from, to) => run("copy", from, async () => {
+        await gate("copy", from, id);
+        if (!disk.has(from)) { const e = new Error("NotFoundError: " + from); e.name = "NotFoundError"; throw e; }
+        disk.set(to, disk.get(from)); writes.push({ path: to, from, copy: true, window: id, at: now });
+      }, { to }),
+      write: (p, bytes) => run("writeBytes", p, async () => { disk.set(p, bytes); }),
+      read: (p) => run("readBytes", p, async () => disk.get(p)),
+      remove: (p, o = {}) => run("remove", p, async () => { await gate("remove", p, id); for (const k of [...disk.keys()]) if (k === p || (o.recursive && k.startsWith(p + "/"))) disk.delete(k); }),
+      exists: (p) => run("exists", p, async () => { await gate("exists", p, id); return disk.has(p) || [...disk.keys()].some((k) => k.startsWith(p + "/")); }),
+      getChildren: (d) => run("children", d, async () => { await gate("children", d, id); return direct(d); }),
+      stat: (p) => run("stat", p, async () => ({ lastModified: 1, type: disk.has(p) ? "regular" : "directory", size: String(disk.get(p) ?? "").length })),
+      move: (a, b) => run("move", a, async () => { for (const k of [...disk.keys()]) if (k === a || k.startsWith(a + "/")) { disk.set(b + k.slice(a.length), disk.get(k)); disk.delete(k); } }, { to: b }),
+    };
+  };
   // ---- CustomizableUI: one module object for the application, frozen like the real one ----
   const widgets = new Map(), cuiLog = [];
   const cui = {
@@ -75,7 +93,7 @@ function createPanelWorld({ sharedGlobal = null, hiddenWindow = null, freezeCui 
   function openWindow({ id = "w" + (windows.length + 1), components = !!sharedGlobal, hidden = hiddenWindow, calendar = true, globals = {} } = {}) {
     const dom = require("./fake-dom.cjs")(), { El, Ev, document, raf } = dom;
     const prefObservers = [], listeners = [], mutationObservers = [], own = new Set();
-    let registered = null;
+    let registered = null, unloaded = false;
     const Services = {
       prefs: {
         getBoolPref: (k, d) => (prefs.has(k) ? prefs.get(k) : d), getStringPref: (k, d) => (prefs.has(k) ? prefs.get(k) : d), getIntPref: (k, d) => (prefs.has(k) ? prefs.get(k) : d),
@@ -112,7 +130,7 @@ function createPanelWorld({ sharedGlobal = null, hiddenWindow = null, freezeCui 
       window: win, document, Event: Ev, console: { ...console, warn: log, error: log }, URL, Date, JSON, Math, Promise, RegExp, Number, Map, Set,
       setTimeout: setTimer, clearTimeout: clearTimer, MutationObserver: FakeMO, ResizeObserver: FakeRO, navigator: { platform: "Linux" },
       globalThis: { Services, CustomizableUI: cui }, ChromeUtils: { importESModule: () => ({ AppConstants: {} }) },
-      PathUtils: { profileDir: "/profile", join: (...p) => p.join("/"), filename: (p) => p.split("/").pop() }, IOUtils: ioFor(id),
+      PathUtils: { profileDir: "/profile", join: (...p) => p.join("/"), filename: (p) => p.split("/").pop() }, IOUtils: ioFor(id, () => unloaded),
       // What privileged scripts see: Components.utils.getGlobalForObject(module) is the one global all system modules share.
       ...(components ? { Components: { utils: { getGlobalForObject: () => sharedGlobal } } } : {}),
       ...globals,
@@ -135,6 +153,14 @@ function createPanelWorld({ sharedGlobal = null, hiddenWindow = null, freezeCui 
       core: win.__zentralNotesTestSeam.core,
       start() { w.stop = registered.init(); return w.stop; },
       async close() { if (w.closed) return; w.closed = true; await w.stop?.(); },
+      // Simulates closing a real Firefox window: `unload` listeners run synchronously, every IOUtils call
+      // already issued during `unload` completes on the I/O thread, and NO promise continuation runs in this window.
+      unload() {
+        if (w.closed) return;
+        unloaded = true;
+        w.closed = true;
+        for (const l of listeners.filter((x) => x.type === "unload")) l.fn();
+      },
       // Tell the observers that watch `target` what changed (the fake DOM does not do it by itself).
       mutate(target, records = [{ type: "childList", addedNodes: [], removedNodes: [] }]) { for (const mo of mutationObservers.slice()) if (mo.targets.some((x) => x.target === target)) mo.cb(records); },
       observes: (target) => mutationObservers.some((mo) => mo.targets.some((x) => x.target === target)),
@@ -176,7 +202,7 @@ function createPanelWorld({ sharedGlobal = null, hiddenWindow = null, freezeCui 
   const noteFiles = () => [...disk.keys()].filter((k) => k.startsWith(DIR + "/") && k.endsWith(".md") && !k.slice(DIR.length + 1).includes("/"));
   // The topics a window listens to through Services.obs (one entry per registration).
   const observerTopics = (id) => [...observers].filter((e) => e.id === id).map((e) => e.topic);
-  return { DIR, disk, prefs, windows, writes, warnings, widgets, cui, cuiLog, timers, openWindow, advance, flush, settle, hold, failNext, meta, noteFiles, observerTopics, get now() { return now; } };
+  return { DIR, disk, prefs, windows, writes, ioOps, warnings, widgets, cui, cuiLog, timers, openWindow, advance, flush, settle, hold, failNext, meta, noteFiles, observerTopics, get now() { return now; } };
 }
 // A note file as Notes writes it.
 const noteText = (title, { folder = "", body = "", updated = "2026-11-01T10:00:00.000Z" } = {}) =>

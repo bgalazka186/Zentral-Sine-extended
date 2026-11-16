@@ -2250,6 +2250,49 @@
         if (!dir || writeBlocked) return 0;
         return mergeStored(dir);
       },
+      cancelTimers() {
+        if (timer !== null) { clearTimer(timer); timer = null; }
+      },
+      unloadSnapshot() {
+        if (writeBlocked || !unsaved.size || !getDir()) return null;
+        return {
+          records: [...unsaved].map((record) => ({ ...record, start: record.start ? { ...record.start } : null })),
+        };
+      },
+      async reconcileRecoveryEntry(entry) {
+        const dir = getDir();
+        if (!dir || !entry || !Array.isArray(entry.records) || !entry.records.length) return { ok: true, changed: false };
+        return queueHistory(dir, async () => {
+          const file = io.join(dir, REMINDER_HISTORY_FILE);
+          let existing = [];
+          try {
+            const text = await io.readUTF8(file);
+            let raw;
+            try { raw = JSON.parse(text); } catch (error) { return { ok: false, backedUp: false, error }; }
+            if (!raw || typeof raw !== "object" || Array.isArray(raw) || !Array.isArray(raw.records)) return { ok: false, backedUp: false };
+            existing = decodeHistoryRecords(raw.records).clean;
+          } catch (error) {
+            const message = String(error?.message || error || "");
+            let missing = error?.code === "ENOENT" || error?.name === "NotFoundError" || /(?:^|\b)(?:nf|not found|no such file|does not exist|NS_ERROR_FILE_NOT_FOUND)(?:\b|$)/i.test(message);
+            if (!missing && typeof io.exists === "function") { try { missing = !(await io.exists(file)); } catch (_) {} }
+            if (!missing) return { ok: false, backedUp: false, error };
+          }
+          const incoming = decodeHistoryRecords(entry.records).clean;
+          if (!incoming.length) return { ok: true, changed: false };
+          const known = new Set(existing.map((record) => record.id));
+          let changed = false;
+          for (const record of incoming) {
+            if (known.has(record.id)) continue;
+            known.add(record.id);
+            existing.push(record);
+            changed = true;
+          }
+          if (!changed) return { ok: true, changed: false };
+          const text = JSON.stringify({ v: 1, records: existing.map((record) => ({ ...record, start: record.start ? { ...record.start } : null })) });
+          await io.writeUTF8(file, text, { tmpPath: file + ".tmp" });
+          return { ok: true, changed: true };
+        });
+      },
       // Check and persist while holding the same per-file lock as ordinary writes.
       async claimAlert(raw) {
         const dir = getDir();
@@ -2769,6 +2812,105 @@
       on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
       history,
       flush() { return Promise.all([writeNow(), history.flush()]); },
+      cancelTimers() {
+        if (timer !== null) { clearTimer(timer); timer = null; }
+        history.cancelTimers?.();
+      },
+      unloadSnapshot() {
+        if (writeBlocked || !dirty || !getDir()) return null;
+        return {
+          baseline: JSON.parse(JSON.stringify(baseline)),
+          local: snapshot(),
+        };
+      },
+      async refresh() {
+        const dir = getDir();
+        if (!dir || writeBlocked) return false;
+        return withCalendarLock(io.join(dir, ITEMS_FILE), async () => {
+          if (writeBlocked) return false;
+          let text;
+          try { text = await io.readUTF8(io.join(dir, ITEMS_FILE)); } catch (_) { return false; }
+          let remote;
+          try { remote = parseCalendarSnapshot(text); } catch (_) { return false; }
+          const captured = snapshot();
+          const merged = mergeCalendarSnapshots(baseline, captured, remote);
+          if (!merged.safe) return false;
+          baseline = JSON.parse(JSON.stringify(remote));
+          applyMerged(captured, merged);
+          return true;
+        });
+      },
+      async reconcileRecoveryEntry(entry, blockedNoteIds = new Set()) {
+        const dir = getDir();
+        if (!dir || !entry || !entry.local || !Array.isArray(entry.local.items)) return { ok: true, changed: false, conflict: false };
+        return withCalendarLock(io.join(dir, ITEMS_FILE), async () => {
+          const base = {
+            items: (Array.isArray(entry.baseline?.items) ? entry.baseline.items : []).map((it) => cleanItem(it, 0)).filter(Boolean),
+            categories: (Array.isArray(entry.baseline?.categories) ? entry.baseline.categories : []).map(cleanCategory).filter(Boolean),
+          };
+          const rawLocal = {
+            items: entry.local.items.map((it) => cleanItem(it, 0)).filter(Boolean),
+            categories: (Array.isArray(entry.local.categories) ? entry.local.categories : []).map(cleanCategory).filter(Boolean),
+          };
+          // If a note's unload recovery was blocked by a foreign change, never write a mirrored calendar item pointing
+          // at lines that did not land on disk (preserve it as a standalone reminder instead, matching UI4.7).
+          const blocked = blockedNoteIds instanceof Set ? blockedNoteIds : new Set();
+          let local = rawLocal;
+          if (blocked.size) {
+            const prevById = new Map(base.items.map((r) => [r.id, r]));
+            const nextItems = [];
+            const seen = new Set();
+            for (const record of rawLocal.items) {
+              const noteId = record.x?.noteId;
+              const old = prevById.get(record.id) || null;
+              if (noteId && blocked.has(noteId) && old?.x?.noteId !== noteId) {
+                if (record.x.src === "manual") {
+                  const unlinked = cleanItem({ ...record, etag: "", x: { ...record.x, noteId: old?.x?.noteId || "", heading: old?.x?.heading || "" } }, 0);
+                  if (unlinked && !seen.has(unlinked.id)) { seen.add(unlinked.id); nextItems.push(unlinked); }
+                } else {
+                  const standalone = unmirroredItem(record);
+                  if (standalone && !seen.has(standalone.id)) { seen.add(standalone.id); nextItems.push(standalone); }
+                }
+                continue;
+              }
+              if (!seen.has(record.id)) { seen.add(record.id); nextItems.push(record); }
+            }
+            local = { categories: rawLocal.categories, items: nextItems };
+          }
+          const file = io.join(dir, ITEMS_FILE);
+          let remote = { items: [], categories: [] };
+          let exists = true;
+          let text = "";
+          try { text = await io.readUTF8(file); }
+          catch (error) {
+            const message = String(error?.message || error || "");
+            let missing = error?.code === "ENOENT" || error?.name === "NotFoundError" || /(?:^|\b)(?:nf|not found|no such file|does not exist|NS_ERROR_FILE_NOT_FOUND)(?:\b|$)/i.test(message);
+            if (!missing && typeof io.exists === "function") { try { missing = !(await io.exists(file)); } catch (_) {} }
+            if (!missing) {
+              const backupPath = await backupLocalCalendar(dir, local);
+              return { ok: !!backupPath, changed: false, conflict: true, backupPath };
+            }
+            exists = false;
+          }
+          if (exists) {
+            try { remote = parseCalendarSnapshot(text); }
+            catch (_) {
+              const backupPath = await backupLocalCalendar(dir, local);
+              return { ok: !!backupPath, changed: false, conflict: true, backupPath };
+            }
+          }
+          const merged = mergeCalendarSnapshots(base, local, remote);
+          if (!merged.safe) {
+            const backupPath = await backupLocalCalendar(dir, local, remote);
+            return { ok: !!backupPath, changed: false, conflict: true, backupPath };
+          }
+          const out = JSON.stringify({ v: 2, items: merged.items, categories: merged.categories });
+          if (!exists || out !== text) {
+            await io.writeUTF8(file, out, { tmpPath: file + ".tmp" });
+          }
+          return { ok: true, changed: true, conflict: false };
+        });
+      },
       // The owner of the note files saved text: records that waited for it (see `withheld`) are written now, straight
       // after the note as in every other save (no debounce: another window is about to read that note).
       noteTextSaved() { if (heldBack && dirty && !writeBlocked && getDir()) writeNow().catch(() => {}); },

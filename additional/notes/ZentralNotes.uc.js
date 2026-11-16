@@ -6194,6 +6194,7 @@
       let metaRetry = 0; // saves of the settings that failed in a row
       let keptDamagedMeta = ""; // the damaged text already copied to meta.json.corrupt
       let missedMeta = false; // another window saved the settings while this one was reading the folder
+      let missedUnloadRecovery = false; // another window closed with staged unload writes while this one was opening
       let closed = false;
       let opening = false; // the folder is being read; messages from other windows wait in missedRemote
       const missedRemote = new Map(); // note id -> conflict copy path named by the message
@@ -6736,6 +6737,199 @@
         const plan = backupPlan(await backupNames(), now());
         for (const name of plan.expired) await io.removeTree(io.join(backupRoot(), name)).catch(() => {});
       }
+      // ---- unload recovery (H1.6): synchronous write staging on window close + safe reconciliation on next open / live sibling ----
+      const unloadRoot = () => io.join(dir, BACKUP_DIR, UNLOAD_RECOVERY_DIR);
+      const UNLOAD_KIND_ORDER = { note: 0, calendar: 1, history: 2, meta: 3 };
+      function flushOnUnload() {
+        autosaver.cancel();
+        if (metaTimer !== null) { clearTimer(metaTimer); metaTimer = null; }
+        if (retryTimer !== null) { clearTimer(retryTimer); retryTimer = null; }
+        items?.cancelTimers?.();
+        if (!dir) return false;
+        const dirtyNotes = [];
+        for (const id of [...dirty]) {
+          const note = notes.get(id);
+          if (!note || !isAssetNoteId(id)) continue;
+          const baseline = diskSnapshots.get(id);
+          dirtyNotes.push({
+            id,
+            text: serializeNote(note),
+            baseline: typeof baseline === "string" ? baseline : null,
+            onDisk: !!note._onDisk,
+          });
+        }
+        const dirtyCalendar = items?.unloadSnapshot ? items.unloadSnapshot() : null;
+        const dirtyHistory = items?.history?.unloadSnapshot ? items.history.unloadSnapshot() : null;
+        const dirtyMeta = metaDirty && metaReady ? { base: cloneJson(metaBase), mine: cloneJson(meta) } : null;
+        const ops = planUnloadWrites({
+          dir,
+          notes: dirtyNotes,
+          calendar: dirtyCalendar,
+          history: dirtyHistory,
+          meta: dirtyMeta,
+          nowMs: now(),
+          windowId,
+          join: (...parts) => io.join(...parts),
+        });
+        if (!ops.length) return false;
+        // Issue every I/O call synchronously during `unload` so Gecko's I/O thread finishes them in FIFO order
+        // even though no further promise step will run in the closed window.
+        for (const op of ops) {
+          try {
+            if (op.op === "makeDir") {
+              if (typeof io.makeDir === "function") Promise.resolve(io.makeDir(op.path)).catch(() => {});
+            } else if (op.op === "copy") {
+              if (typeof io.copy === "function") Promise.resolve(io.copy(op.from, op.to)).catch(() => {});
+            } else if (op.op === "write") {
+              Promise.resolve(io.writeUTF8(op.path, op.text, op.opts)).catch(() => {});
+            }
+          } catch (_) {}
+        }
+        dirty.clear();
+        metaDirty = false;
+        closed = true;
+        try { notify({ origin: windowId, kind: "unload-recovery", dir }); } catch (_) {}
+        return true;
+      }
+      async function reconcileUnloadRecovery({ live = false } = {}) {
+        if (!dir || typeof io.children !== "function") return { applied: 0, conflicts: 0 };
+        const run = async () => {
+          const root = unloadRoot();
+          let names = [];
+          try {
+            names = (await io.children(root)).map((p) => io.filename(p));
+          } catch (_) {
+            return { applied: 0, conflicts: 0 };
+          }
+          const entries = names
+            .map((name) => ({ name, parsed: parseUnloadEntryName(name) }))
+            .filter((x) => x.parsed && x.parsed.ext === "json")
+            .sort((a, b) =>
+              a.parsed.ms - b.parsed.ms ||
+              (UNLOAD_KIND_ORDER[a.parsed.kind] ?? 9) - (UNLOAD_KIND_ORDER[b.parsed.kind] ?? 9) ||
+              a.parsed.seq - b.parsed.seq ||
+              (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+          if (!entries.length) return { applied: 0, conflicts: 0 };
+          const cleanPair = async (parsed, name) => {
+            await io.remove(io.join(root, name)).catch(() => {});
+            await io.remove(io.join(root, parsed.stem + ".prev")).catch(() => {});
+          };
+          const blockedNoteIds = new Set();
+          const changedNotes = new Set();
+          let changedCalendar = false, changedHistory = false, changedMeta = false;
+          let applied = 0, conflicts = 0;
+          for (const { name, parsed } of entries) {
+            const full = io.join(root, name);
+            let rawText = "";
+            try { rawText = await io.readUTF8(full); }
+            catch (_) { continue; } // already reconciled by another window or missing
+            let entry = null;
+            try { entry = JSON.parse(rawText); }
+            catch (_) { await cleanPair(parsed, name); continue; }
+            if (!entry || typeof entry !== "object" || entry.kind !== parsed.kind) {
+              await cleanPair(parsed, name);
+              continue;
+            }
+            if (parsed.kind === "note") {
+              if (!isAssetNoteId(parsed.id) || typeof entry.text !== "string") {
+                await cleanPair(parsed, name);
+                continue;
+              }
+              const file = fileOf(parsed.id);
+              const handleNote = async () => {
+                const diskExists = await io.exists(file).catch(() => false);
+                const diskText = diskExists ? await io.readUTF8(file).catch(() => null) : null;
+                const decision = decideNoteRecovery({ entry, diskExists, diskText });
+                if (decision.action === "noop") {
+                  await cleanPair(parsed, name);
+                  return;
+                }
+                if (decision.action === "apply") {
+                  const opts = { tmpPath: file + ".tmp", flush: true };
+                  if (diskExists) opts.backupFile = file + ".bak";
+                  await io.writeUTF8(file, decision.text, opts);
+                  if (!diskExists && typeof io.restrict === "function") await io.restrict(file).catch(() => {});
+                  await cleanPair(parsed, name);
+                  changedNotes.add(parsed.id);
+                  applied++;
+                  return;
+                }
+                // Foreign change: never overwrite the live file. Keep only the recovery copy in the 48h backup area.
+                blockedNoteIds.add(parsed.id);
+                conflicts++;
+                let backupPath = "";
+                try { backupPath = await backupConflictText(parsed.id, entry.text); } catch (error) { warn(error); }
+                if (backupPath) {
+                  await cleanPair(parsed, name);
+                  emit("conflict", parsed.id, { winner: "remote", backupPath, reason: "unload-foreign-change" });
+                }
+              };
+              try {
+                if (typeof withHistoryLock === "function") await withHistoryLock("note:" + file, handleNote);
+                else await handleNote();
+              } catch (error) {
+                warn(error);
+              }
+            } else if (parsed.kind === "calendar") {
+              if (!items?.reconcileRecoveryEntry) { await cleanPair(parsed, name); continue; }
+              try {
+                const res = await items.reconcileRecoveryEntry(entry, blockedNoteIds);
+                if (res?.ok) {
+                  await cleanPair(parsed, name);
+                  if (res.changed) { changedCalendar = true; applied++; }
+                  if (res.conflict) {
+                    conflicts++;
+                    emit("conflict", "", { winner: "remote", backupPath: res.backupPath || "", reason: "unload-foreign-change" });
+                  }
+                }
+              } catch (error) {
+                warn(error);
+              }
+            } else if (parsed.kind === "history") {
+              if (!items?.history?.reconcileRecoveryEntry) { await cleanPair(parsed, name); continue; }
+              try {
+                const res = await items.history.reconcileRecoveryEntry(entry);
+                if (res?.ok) {
+                  await cleanPair(parsed, name);
+                  if (res.changed) { changedHistory = true; applied++; }
+                }
+              } catch (error) {
+                warn(error);
+              }
+            } else if (parsed.kind === "meta") {
+              try {
+                await metaTurn(async () => {
+                  const read = await readMeta("staged settings from a closed window are merged");
+                  if (read.state === "unreadable") return; // keep staging file untouched rather than overwriting
+                  const base = entry.base && typeof entry.base === "object" ? entry.base : null;
+                  const mine = entry.mine && typeof entry.mine === "object" ? entry.mine : null;
+                  if (!mine) { await cleanPair(parsed, name); return; }
+                  const { file } = mergeMeta(base, mine, read.state === "ok" ? read.value : null);
+                  if (read.state !== "ok" || !sameJson(file, read.value)) {
+                    await io.writeUTF8(io.join(dir, "meta.json"), JSON.stringify(file), { tmpPath: io.join(dir, "meta.json.tmp") });
+                    changedMeta = true;
+                    applied++;
+                  }
+                  await cleanPair(parsed, name);
+                });
+              } catch (error) {
+                warn(error);
+              }
+            }
+          }
+          if (live && !closed) {
+            for (const id of changedNotes) {
+              if (!dirty.has(id)) await reloadFromDisk(id).catch(warn);
+            }
+            if (changedCalendar) await items?.refresh?.().catch(warn);
+            if (changedHistory) await items?.history?.refresh?.().catch(warn);
+            if (changedMeta) await refreshMeta().catch(warn);
+          }
+          return { applied, conflicts };
+        };
+        if (typeof withHistoryLock === "function") return withHistoryLock("unload-recovery:" + dir, run);
+        return run();
+      }
       function removeNoteFiles(id) {
         const note = notes.get(id) || null;
         notes.delete(id);
@@ -6855,7 +7049,9 @@
           missedRemote.clear();
           missedHistory = false;
           missedMeta = false;
+          missedUnloadRecovery = false;
           const load = async () => {
+            await reconcileUnloadRecovery({ live: false }).catch(warn);
             await loadAll();
             await loadMeta();
             await openItems();
@@ -6882,7 +7078,11 @@
               }, { waitMs: STARTUP_TURN_WAIT_MS });
             } else await load();
             // What another window saved while this one was reading the folder, and while this catching up runs.
-            while (missedRemote.size || missedMeta) {
+            while (missedRemote.size || missedMeta || missedUnloadRecovery) {
+              if (missedUnloadRecovery) {
+                missedUnloadRecovery = false;
+                await reconcileUnloadRecovery({ live: true }).catch(warn);
+              }
               const missed = [...missedRemote];
               missedRemote.clear();
               for (const [id, backup] of missed) await reloadFromDisk(id, backup).catch(warn);
@@ -7711,6 +7911,8 @@
           autosaver.cancel();
           return Promise.all([flushDirty(), writeMetaNow(), items ? items.flush() : null]);
         },
+        flushOnUnload,
+        reconcileUnloadRecovery,
         // Picks up files added or edited by other apps (sync tools, editors).
         async refresh() {
           if (!dir) return;
@@ -7762,6 +7964,12 @@
             else refreshMeta();
             return;
           }
+          if (msg.kind === "unload-recovery") {
+            if (msg.dir !== dir) return;
+            if (opening) missedUnloadRecovery = true;
+            else reconcileUnloadRecovery({ live: true }).catch(warn);
+            return;
+          }
           if (typeof msg.id !== "string" || !/^[\w.-]+$/.test(msg.id)) return;
           // While the folder is being read the file may already have been read in its older state: look again afterwards.
           if (opening) {
@@ -7770,7 +7978,14 @@
           }
           reloadFromDisk(msg.id, msg.conflictBackupPath || "").catch(warn);
         },
-        async close() {
+        async close({ unloading = false } = {}) {
+          if (unloading || windowGone) {
+            flushOnUnload();
+            closed = true;
+            if (retryTimer !== null) clearTimer(retryTimer);
+            retryTimer = null;
+            return;
+          }
           await api.flush();
           closed = true;
           if (retryTimer !== null) clearTimer(retryTimer);
@@ -9394,6 +9609,126 @@
       const min = Math.max(0, Math.round((expiresMs - now) / 60000));
       return min >= 90 ? Math.round(min / 60) + " h left" : min + " min left";
     }
+    // ---- unload recovery (H1.6): pure naming, planning and conflict decision helpers ----
+    const UNLOAD_RECOVERY_DIR = "unload";
+    const UNLOAD_KINDS = Object.freeze(["note", "calendar", "history", "meta"]);
+    function unloadEntryStem(ms, seq, windowId, kind, id) {
+      if (!UNLOAD_KINDS.includes(kind)) return "";
+      if (kind === "note" ? !isAssetNoteId(id) : id !== kind) return "";
+      const stamp = String(Math.max(0, Math.floor(Number(ms) || 0))).padStart(15, "0");
+      const order = String(Math.max(0, Math.min(9999, Math.floor(Number(seq) || 0)))).padStart(4, "0");
+      const win = String(windowId || "win").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 24) || "win";
+      return `${stamp}-${order}-${win}-${kind}~${id}`;
+    }
+    function parseUnloadEntryName(name) {
+      const m = /^(\d{15})-(\d{4})-([A-Za-z0-9_-]{1,24})-(note|calendar|history|meta)~(.+?)\.(json|prev)$/.exec(String(name ?? ""));
+      if (!m) return null;
+      const [, msStr, seqStr, windowId, kind, id, ext] = m;
+      if (kind === "note" ? !isAssetNoteId(id) : id !== kind) return null;
+      const ms = Number(msStr), seq = Number(seqStr);
+      if (!Number.isFinite(ms) || !Number.isFinite(seq)) return null;
+      return { ms, seq, windowId, kind, id, ext, stem: String(name).slice(0, -(ext.length + 1)) };
+    }
+    function planUnloadWrites({ dir, notes = [], calendar = null, history = null, meta = null, nowMs = 0, windowId = "win", join = (...p) => p.join("/") } = {}) {
+      if (!dir) return [];
+      const validNotes = (notes || []).filter((n) => n && isAssetNoteId(n.id) && typeof n.text === "string");
+      const hasCalendar = !!(calendar && calendar.local && Array.isArray(calendar.local.items));
+      const hasHistory = !!(history && Array.isArray(history.records) && history.records.length);
+      const hasMeta = !!(meta && meta.mine && typeof meta.mine === "object");
+      if (!validNotes.length && !hasCalendar && !hasHistory && !hasMeta) return [];
+      const unloadDir = join(dir, BACKUP_DIR, UNLOAD_RECOVERY_DIR);
+      const ops = [{ op: "makeDir", path: unloadDir }];
+      let seq = 1;
+      // 1. Notes first (UI4.7: always before calendar.json). Copy current live file to recovery first, then write unsaved text.
+      for (const n of validNotes) {
+        const stem = unloadEntryStem(nowMs, seq++, windowId, "note", n.id);
+        if (!stem) continue;
+        if (n.onDisk) {
+          ops.push({ op: "copy", from: join(dir, n.id + ".md"), to: join(unloadDir, stem + ".prev"), kind: "note", id: n.id });
+        }
+        ops.push({
+          op: "write",
+          path: join(unloadDir, stem + ".json"),
+          text: JSON.stringify({
+            v: 1,
+            kind: "note",
+            id: n.id,
+            text: n.text,
+            baseline: typeof n.baseline === "string" ? n.baseline : null,
+            onDisk: !!n.onDisk,
+            at: nowMs,
+            windowId,
+          }),
+          opts: { mode: "create" },
+          kind: "note",
+          id: n.id,
+        });
+        if (!n.onDisk) {
+          ops.push({
+            op: "write",
+            path: join(dir, n.id + ".md"),
+            text: n.text,
+            opts: { mode: "create" },
+            kind: "note",
+            id: n.id,
+            direct: true,
+          });
+        }
+      }
+      // 2. calendar.json second (strictly after notes).
+      if (hasCalendar) {
+        const stem = unloadEntryStem(nowMs, seq++, windowId, "calendar", "calendar");
+        const calFile = CALENDAR_PART?.ITEMS_FILE || "calendar.json";
+        ops.push({ op: "copy", from: join(dir, calFile), to: join(unloadDir, stem + ".prev"), kind: "calendar", id: "calendar" });
+        ops.push({
+          op: "write",
+          path: join(unloadDir, stem + ".json"),
+          text: JSON.stringify({ v: 1, kind: "calendar", id: "calendar", baseline: calendar.baseline || { items: [], categories: [] }, local: calendar.local, at: nowMs, windowId }),
+          opts: { mode: "create" },
+          kind: "calendar",
+          id: "calendar",
+        });
+      }
+      // 3. reminder-history.json third.
+      if (hasHistory) {
+        const stem = unloadEntryStem(nowMs, seq++, windowId, "history", "history");
+        const histFile = CALENDAR_PART?.REMINDER_HISTORY_FILE || "reminder-history.json";
+        ops.push({ op: "copy", from: join(dir, histFile), to: join(unloadDir, stem + ".prev"), kind: "history", id: "history" });
+        ops.push({
+          op: "write",
+          path: join(unloadDir, stem + ".json"),
+          text: JSON.stringify({ v: 1, kind: "history", id: "history", records: history.records, at: nowMs, windowId }),
+          opts: { mode: "create" },
+          kind: "history",
+          id: "history",
+        });
+      }
+      // 4. meta.json fourth.
+      if (hasMeta) {
+        const stem = unloadEntryStem(nowMs, seq++, windowId, "meta", "meta");
+        ops.push({ op: "copy", from: join(dir, "meta.json"), to: join(unloadDir, stem + ".prev"), kind: "meta", id: "meta" });
+        ops.push({
+          op: "write",
+          path: join(unloadDir, stem + ".json"),
+          text: JSON.stringify({ v: 1, kind: "meta", id: "meta", base: meta.base || null, mine: meta.mine, at: nowMs, windowId }),
+          opts: { mode: "create" },
+          kind: "meta",
+          id: "meta",
+        });
+      }
+      return ops;
+    }
+    function decideNoteRecovery({ entry, diskExists, diskText }) {
+      if (!entry || typeof entry.text !== "string") return { action: "noop", reason: "invalid" };
+      if (diskExists && diskText === entry.text) return { action: "noop", reason: "already-saved" };
+      if (!entry.onDisk) {
+        return !diskExists ? { action: "apply", text: entry.text } : { action: "conflict", reason: "foreign-change" };
+      }
+      if (diskExists && typeof entry.baseline === "string" && diskText === entry.baseline) {
+        return { action: "apply", text: entry.text };
+      }
+      return { action: "conflict", reason: "foreign-change" };
+    }
 
     // ---- [[ completion while typing ------------------------------------------------------------------------
     // `title` is the text before a "#" (a heading is being typed when `heading` is a string, "" right after the "#").
@@ -10120,7 +10455,7 @@
         headingSlug, headingsOf, cleanAnchor, noteLinkParts, headingOffset, tocBlock, tocList, findToc, updateToc, insertToc, insertFootnote, nextFootnoteLabel, mentionRe, hasMention, linkFirstMention, collectRefs, attachTrailingBlockId, nextMarkdownFence, TASK_BOX_CHARS, TASK_BOX_TOKEN,
         hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_FOLDER_LABEL, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
         DATE_TITLE_RE, dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
-        HISTORY_DIR, HISTORY_DEFAULTS, HISTORY_RANGE, BACKUP_DIR, BACKUP_HOURS, backupEntryName, parseBackupName, backupPlan, backupLeft, historyOptions, historyStamp, historyFileName, parseHistoryName, shouldSnapshot, pruneHistory, historyWarning,
+        HISTORY_DIR, HISTORY_DEFAULTS, HISTORY_RANGE, BACKUP_DIR, BACKUP_HOURS, backupEntryName, parseBackupName, backupPlan, backupLeft, UNLOAD_RECOVERY_DIR, UNLOAD_KINDS, unloadEntryStem, parseUnloadEntryName, planUnloadWrites, decideNoteRecovery, historyOptions, historyStamp, historyFileName, parseHistoryName, shouldSnapshot, pruneHistory, historyWarning,
         orderPlan, childSequence, wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, pseudoTabCleanupKind, sweepRestoredPseudoTabs, filterZenSidebarState, acquireZenSidebarShield, restoredPseudoFolderKind, retireRestoredPseudoFolder, projectZen,
         utf8Bytes, createPerfSampler, createZenFolder,
       };
@@ -20893,7 +21228,7 @@
           else forget();
         }
         setBusy("");
-        store.flush().catch((error) => console.warn("[ZentralNotes] flush failed", error));
+        if (!unloadingClose) store.flush().catch((error) => console.warn("[ZentralNotes] flush failed", error));
         window.removeEventListener("mousedown", onOutsidePress, true);
         window.removeEventListener("mousedown", onPress, true);
         window.removeEventListener("mouseup", onRelease, true);
@@ -20908,12 +21243,14 @@
         adapter.setActive(false);
         adapter.onClosed?.({ manual: !destroying });
       }
-      let destroying = false;
-      function destroy() {
+      let destroying = false, unloadingClose = false;
+      function destroy({ unloading = false } = {}) {
         if (destroyed) return;
         destroying = true;
+        unloadingClose = !!unloading;
         if (isOpen) close();
         else trackOpenNote("");
+        unloadingClose = false;
         destroyed = true;
         offStore();
         for (const fn of cleanups.splice(0).reverse()) {
@@ -21738,6 +22075,7 @@
       readBytes: (p) => IOUtils.read(p),
       removeTree: (p) => IOUtils.remove(p, { recursive: true, ignoreAbsent: true }),
       moveTree: (from, to) => IOUtils.move(from, to),
+      copy: (from, to) => IOUtils.copy(from, to),
       // Owner-only permissions where the platform supports them.
       restrict: (p) =>
         /^Win/i.test(navigator.platform || "")
@@ -24727,9 +25065,9 @@
             if (floating?.isOpen()) return floating.close();
             return binding.isOpen() ? binding.close() : binding.open();
           },
-          destroy() {
+          destroy(opts) {
             try {
-              sheet?.destroy();
+              sheet?.destroy(opts);
             } catch (_) {}
             sheet = null;
             button.remove();
@@ -25119,7 +25457,7 @@
             open: () => sheet.open(),
             close: () => sheet.close(),
             toggle: () => sheet.toggle(),
-            destroy: () => sheet.destroy(),
+            destroy: (opts) => sheet.destroy(opts),
             // Dock preference changed while open: move to the new place.
             refresh() {
               if (sheet.isOpen()) {
@@ -25520,13 +25858,13 @@
       bindZen(zenMode() !== "off");
 
       const api = {
-        destroy() {
+        destroy({ unloading = false } = {}) {
           if (disposed) return;
           disposed = true;
-          const closing = store.close().catch(() => {});
-          for (const b of bindings.values()) b.destroy();
+          for (const b of bindings.values()) b.destroy({ unloading });
           bindings.clear();
-          floating?.destroy();
+          floating?.destroy({ unloading });
+          const closing = store.close({ unloading }).catch(() => {});
           for (const fn of cleanups.splice(0).reverse()) {
             try {
               fn();
@@ -25547,7 +25885,7 @@
           if (window.__zentralNotesTestSeam?.sidebar === sidebar) delete window.__zentralNotesTestSeam.sidebar;
         });
       }
-      window.addEventListener("unload", () => api.destroy(), { once: true });
+      window.addEventListener("unload", () => api.destroy({ unloading: true }), { once: true });
       return () => api.destroy();
     }
 
