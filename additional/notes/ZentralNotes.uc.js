@@ -6172,7 +6172,7 @@
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, cardDock: "", cardW: 0,
         allNewChoice: "note", calendarClockMode: "both",
         calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarTab: "tree",
-        calendarView: "month", calendarWeekStart: 1, calendarWeekNumbers: false, calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
+        calendarView: "month", calendarWeekStart: 1, calendarWeekNumbers: false, calendarWeekSpan: { days: 7, anchor: "weekStart" }, calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
         // The hours Week and Day show ({ on, startMin, endMin }; off = the whole day). Replaced as a whole, never changed in place.
         calendarHours: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHours(null) : { on: false, startMin: 480, endMin: 1200 },
         // The size of each calendar view ("auto" = fitted to the pane, or px; OW-03). Replaced as a whole, never changed in place.
@@ -6414,6 +6414,7 @@
             meta.calendarView = ["month", "upcoming", "agenda", "week", "day"].includes(raw.calendarView) ? raw.calendarView : "month";
             meta.calendarWeekStart = CALENDAR_PART.cleanWeekStart(raw.calendarWeekStart);
             meta.calendarWeekNumbers = CALENDAR_PART.cleanWeekNumbers(raw.calendarWeekNumbers);
+            meta.calendarWeekSpan = CALENDAR_PART.cleanWeekSpan(raw.calendarWeekSpan);
             // `calendarDensity` (one of three steps for all views, until 3.3.175) is read only where no size is stored yet.
             meta.calendarScale = CALENDAR_PART.cleanCalendarScale(raw.calendarScale, raw.calendarDensity);
             meta.calendarPicker = CALENDAR_PART.cleanCalendarPicker(raw.calendarPicker);
@@ -11098,9 +11099,7 @@
         const calendarViewName = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
         calendarViewSelect.dataset.value = calendarViewName;
         calendarViewSelect.textContent = ({ month: "Month", upcoming: "Next days", agenda: "Agenda", week: "Week", day: "Day" })[calendarViewName];
-        calendarDaysSelect.dataset.value = String([3, 7, 14, 30].includes(Number(store.meta.calendarDaysForward)) ? Number(store.meta.calendarDaysForward) : 7);
-        calendarDaysSelect.textContent = calendarDaysSelect.dataset.value + " days";
-        calendarDaysSelect.hidden = calendarViewName !== "upcoming";
+        syncCalendarDaysControl(calendarViewName);
         // A change of size alone draws the calendar again only when it would come out differently (OW-03); before,
         // every px of a resize drew it again.
         if (active && !calendarPane.hidden) { if (resized && !calendarWasHidden) refitCalendar(); else requestCalendarBackground(); }
@@ -12093,8 +12092,58 @@
         remindEl.classList.toggle("is-due", passed);
         remindEl.title = (passed ? "Reminder time passed: " : "Reminder: ") + reminderText(n.remind) + " (click to change)";
       }
+      let calendarWeekPanDay = "";
       const calendarWeekStartDay = () => (CALENDAR_PART ? CALENDAR_PART.cleanWeekStart(store.meta.calendarWeekStart) : 1);
       const calendarShowWeekNumbers = () => (CALENDAR_PART ? CALENDAR_PART.cleanWeekNumbers(store.meta.calendarWeekNumbers) : false);
+      function calendarWeekAutoWidth() {
+        const cw = Number(calendarContent?.clientWidth);
+        if (cw > 0) return cw;
+        const cr = calendarContent?.getBoundingClientRect?.();
+        if (cr && Number(cr.width) > 0) return Number(cr.width);
+        const pr = calendarPane?.getBoundingClientRect?.();
+        if (pr && Number(pr.width) > 0) return Number(pr.width);
+        return 0;
+      }
+      function calendarWeekSpanConfig() {
+        return CALENDAR_PART ? CALENDAR_PART.cleanWeekSpan(store.meta.calendarWeekSpan) : { days: 7, anchor: "weekStart" };
+      }
+      function calendarShownWeekDays(cursorOverride) {
+        const C = CALENDAR_PART;
+        const stored = C.parseYmd(store.meta.calendarCursor);
+        const cursor = cursorOverride !== undefined ? cursorOverride : (stored ? stored.getTime() : calendarTodayDay());
+        return C.resolveWeekVisibleDays({
+          cursor,
+          today: calendarTodayDay(),
+          weekStart: calendarWeekStartDay(),
+          span: store.meta.calendarWeekSpan,
+          widthPx: calendarWeekAutoWidth(),
+          panDay: calendarWeekPanDay,
+        });
+      }
+      function syncCalendarDaysControl(viewName) {
+        if (viewName === "week" && CALENDAR_PART) {
+          const span = calendarWeekSpanConfig();
+          const count = span.days === "auto"
+            ? (calendarFit?.view === "week" && calendarFit.weekDays ? calendarFit.weekDays : CALENDAR_PART.fitWeekDayCount(calendarWeekAutoWidth()))
+            : span.days;
+          calendarDaysSelect.dataset.value = String(span.days);
+          calendarDaysSelect.textContent = span.days === "auto"
+            ? `Auto · ${count} day${count === 1 ? "" : "s"}`
+            : `${count} day${count === 1 ? "" : "s"}`;
+          calendarDaysSelect.setAttribute("aria-label", "Days shown in Week view");
+          calendarDaysSelect.title = span.days === "auto"
+            ? `Week view fits ${count} day${count === 1 ? "" : "s"} to the pane width. Press to set 1–14 days or change where the range starts.`
+            : `Week view shows ${count} day${count === 1 ? "" : "s"}. Press to set 1–14 days, Auto, or where the range starts.`;
+          calendarDaysSelect.hidden = false;
+          return;
+        }
+        const days = [3, 7, 14, 30].includes(Number(store.meta.calendarDaysForward)) ? Number(store.meta.calendarDaysForward) : 7;
+        calendarDaysSelect.dataset.value = String(days);
+        calendarDaysSelect.textContent = days + " days";
+        calendarDaysSelect.setAttribute("aria-label", "Number of days forward");
+        calendarDaysSelect.title = "";
+        calendarDaysSelect.hidden = viewName !== "upcoming";
+      }
       // Shared date picker (T2.2a): every date surface uses this same keyboard-accessible month grid, honouring
       // the configured week start day (AU-B5) and optional week numbers column.
       // `selected` / return values are local-midnight ms. Optional clock controls are composed separately below.
@@ -12217,12 +12266,9 @@
         const requestedCategory = typeof store.meta.calendarFilterCategory === "string" ? store.meta.calendarFilterCategory : "";
         const category = categories.some((entry) => entry.name === requestedCategory) ? requestedCategory : "";
         const view = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
-        const days = [3, 7, 14, 30].includes(Number(store.meta.calendarDaysForward)) ? Number(store.meta.calendarDaysForward) : 7;
         calendarViewSelect.dataset.value = view;
         calendarViewSelect.textContent = ({ month: "Month", upcoming: "Next days", agenda: "Agenda", week: "Week", day: "Day" })[view];
-        calendarDaysSelect.dataset.value = String(days);
-        calendarDaysSelect.textContent = days + " days";
-        calendarDaysSelect.hidden = view !== "upcoming";
+        syncCalendarDaysControl(view);
         calendarKindSelect.dataset.value = kind;
         calendarKindSelect.textContent = ({ all: "All items", event: "Events", reminder: "Reminders" })[kind];
         calendarCategorySelect.dataset.value = category;
@@ -12838,6 +12884,7 @@
             const key = CALENDAR_PART.localDateKey(day);
             selectedDay = day;
             focusedDay = day;
+            calendarWeekPanDay = "";
             store.setMeta({ calendarCursor: key });
             const date = new Date(day);
             if (date.getFullYear() !== visibleYear || date.getMonth() !== visibleMonth) {
@@ -12879,6 +12926,7 @@
         const drawCells = [];
         const selectDay = (day) => {
           const key = CALENDAR_PART.localDateKey(day);
+          calendarWeekPanDay = "";
           store.setMeta({ calendarCursor: key });
           for (const c of cells.querySelectorAll(".zn-cal-month-cell")) {
             const active = c.getAttribute("data-day") === key;
@@ -13352,7 +13400,8 @@
       }
       function calendarTimeGridView(items, cursor, mode, patch = null) {
         const C = CALENDAR_PART, zone = calendarDisplayZone(), weekStart = calendarWeekStartDay(), showWeeks = calendarShowWeekNumbers();
-        const days = mode === "week" ? C.weekDays(cursor, weekStart) : [C.dayStart(cursor)];
+        const days = mode === "week" ? calendarShownWeekDays(cursor) : [C.dayStart(cursor)];
+        if (!patch && calendarFit && mode === "week") calendarFit.weekDays = days.length;
         const workDays = patch ? days.filter((day) => patch.days.has(C.localDateKey(day))) : days;
         const firstDay = workDays[0], firstBounds = C.zonedDayBounds(C.localDateKey(firstDay), zone) || [firstDay, C.addDays(firstDay, 1)];
         const lastDay = workDays[workDays.length - 1], lastBounds = C.zonedDayBounds(C.localDateKey(lastDay), zone) || [lastDay, C.addDays(lastDay, 1)];
@@ -13389,7 +13438,7 @@
         const gridHours = (grid.endMin - grid.startMin) / 60;
         const gridClock = (minute) => { const m = Math.floor(minute); return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
         const fmt = (day) => calendarDayLabel(day, { weekday: mode === "week" ? "short" : "long", year: true });
-        calendarPeriod.textContent = mode === "week" ? `${fmt(days[0])} – ${fmt(days[days.length - 1])}` : fmt(days[0]);
+        calendarPeriod.textContent = mode === "week" && days.length > 1 ? `${fmt(days[0])} – ${fmt(days[days.length - 1])}` : fmt(days[0]);
         const cols = `42px repeat(${days.length}, minmax(0, 1fr))`;
         const todayKey = C.zonedDateKey(nowMs(), zone);
         const root = h("div", { class: "zn-cal-time-view is-" + mode, "aria-label": mode === "week" ? "Week calendar" : "Day calendar" });
@@ -14213,7 +14262,7 @@
         from.focus({ preventScroll: true });
       }
       function askCalendarFreeSlots() {
-        const C = CALENDAR_PART, start = calendarWeekStart(), end = C.addDays(start, 6);
+        const C = CALENDAR_PART, shownDays = calendarShownWeekDays(), start = shownDays[0], end = shownDays[shownDays.length - 1];
         const from = field("From date", C.ymd(new Date(start)), "14, 14.11 or 2026-11-14");
         const through = field("Through date", C.ymd(new Date(end)), "14, 14.11 or 2026-11-14");
         const fromEntry = bindEntry(from, { kind: "date", onEnter: () => run() });
@@ -14323,7 +14372,7 @@
         // A note-id removal may refer to several hidden items, not a master id.
         if (!oldItem && !newItem) return false;
         const cursor = C.parseYmd(store.meta.calendarCursor)?.getTime() || calendarTodayDay();
-        const days = mode === "week" ? C.weekDays(cursor, calendarWeekStartDay()) : [C.dayStart(cursor)], zone = calendarDisplayZone();
+        const days = mode === "week" ? calendarShownWeekDays(cursor) : [C.dayStart(cursor)], zone = calendarDisplayZone();
         const bounds = days.map((day) => C.zonedDayBounds(C.localDateKey(day), zone) || [day, C.addDays(day, 1)]);
         const changed = new Set();
         for (const master of [oldItem, newItem]) if (master) {
@@ -14403,6 +14452,7 @@
         else if (view === "upcoming") calendarUpcomingView(items, cursor, Number(store.meta.calendarDaysForward) || 7);
         else if (view === "agenda") calendarAgendaView(items, cursor);
         else calendarTimeGridView(items, cursor, view);
+        syncCalendarDaysControl(view);
         paintCalendarSize();
         restoreCalendarViewState(prior);
       }
@@ -14455,20 +14505,34 @@
         // Month is a list in a narrow pane and a grid in a wide one.
         if (fit.view === "month" && fit.compact !== calendarMonthNarrow()) return requestCalendarBackground();
         if (fit.view === "month" && !fit.compact) return fitCalendarMonth();
+        if (fit.view === "week" && calendarWeekSpanConfig().days === "auto" && fit.weekDays !== CALENDAR_PART.fitWeekDayCount(calendarWeekAutoWidth())) return requestCalendarBackground();
         if ((fit.view === "week" || fit.view === "day") && calendarHourStale()) requestCalendarBackground();
       }
       function scheduleCalendarFit() {
         if (rafCalendarFit) return;
         rafCalendarFit = window.requestAnimationFrame(() => { rafCalendarFit = 0; refitCalendar(); });
       }
-      function changeCalendarCursor(delta) {
+      function changeCalendarCursor(delta, shiftKey = false) {
         const C = CALENDAR_PART, stored = C.parseYmd(store.meta.calendarCursor), base = stored ? stored.getTime() : C.dayStart(nowMs());
         const view = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
         let next;
         if (view === "month") {
           const date = new Date(base), moved = C.stepMonth(date.getFullYear(), date.getMonth(), delta);
           next = new Date(moved.year, moved.month, 1).getTime();
-        } else next = C.addDays(base, delta * (view === "upcoming" ? Number(store.meta.calendarDaysForward) || 7 : view === "week" ? 7 : view === "day" ? 1 : 30));
+          calendarWeekPanDay = "";
+        } else if (view === "week") {
+          const shown = calendarShownWeekDays(base);
+          const cfg = calendarWeekSpanConfig();
+          const step = shiftKey ? 1 : shown.length;
+          if (!shiftKey && cfg.anchor === "weekStart" && shown.length % 7 === 0 && !calendarWeekPanDay) {
+            next = C.addDays(base, delta * shown.length);
+          } else {
+            next = C.addDays(shown[0], delta * step);
+            calendarWeekPanDay = C.localDateKey(next);
+          }
+        } else {
+          next = C.addDays(base, delta * (view === "upcoming" ? Number(store.meta.calendarDaysForward) || 7 : view === "day" ? 1 : 30));
+        }
         store.setMeta({ calendarCursor: C.ymd(new Date(next)) });
         renderCalendar();
       }
@@ -14550,12 +14614,54 @@
         store.setMeta({ calendarHours: { ...hours, on: !hours.on } });
         renderCalendar();
       });
-      listen(calendarPrev, "click", () => changeCalendarCursor(-1));
-      listen(calendarNext, "click", () => changeCalendarCursor(1));
-      listen(calendarToday, "click", () => { store.setMeta({ calendarCursor: calendarTodayKey() }); renderCalendar(); });
-      listen(calendarDaysSelect, "click", () => calendarChoiceMenu(calendarDaysSelect,
-        [3, 7, 14, 30].map((days) => ({ value: String(days), label: days + " days" })),
-        String(store.meta.calendarDaysForward || 7), (value) => { store.setMeta({ calendarDaysForward: Number(value) }); renderCalendar(); }));
+      listen(calendarPrev, "click", (event) => changeCalendarCursor(-1, !!event?.shiftKey));
+      listen(calendarNext, "click", (event) => changeCalendarCursor(1, !!event?.shiftKey));
+      listen(calendarToday, "click", () => { calendarWeekPanDay = ""; store.setMeta({ calendarCursor: calendarTodayKey() }); renderCalendar(); });
+      listen(calendarDaysSelect, "click", () => {
+        const C = CALENDAR_PART;
+        if ((store.meta.calendarView || "month") === "week" && C) {
+          const spanNow = () => calendarWeekSpanConfig();
+          const drawnCount = () => {
+            if (calendarFit?.view === "week" && calendarFit.weekDays) return calendarFit.weekDays;
+            const s = spanNow();
+            return s.days === "auto" ? C.fitWeekDayCount(calendarWeekAutoWidth()) : s.days;
+          };
+          const setWeekSpan = (patch, resetPan = false) => {
+            if (resetPan) calendarWeekPanDay = "";
+            store.setMeta({ calendarWeekSpan: C.cleanWeekSpan({ ...spanNow(), ...patch }) });
+            renderCalendar();
+          };
+          const anchorNow = spanNow().anchor;
+          const wsName = calendarWeekStartDay() === 0 ? "Sunday" : "Monday";
+          return showMenu(calendarDaysSelect, [
+            { heading: true, label: "Days shown in Week view" },
+            {
+              slider: {
+                min: C.WEEK_DAYS_LIMITS.min,
+                max: C.WEEK_DAYS_LIMITS.max,
+                label: "Days shown in Week view",
+                fitLabel: "Auto (fit width)",
+                state: () => {
+                  const cur = spanNow(), n = drawnCount();
+                  return cur.days === "auto"
+                    ? { auto: true, value: n, text: `Auto · ${n} day${n === 1 ? "" : "s"}` }
+                    : { auto: false, value: cur.days, text: `${cur.days} day${cur.days === 1 ? "" : "s"}` };
+                },
+                input: (value) => setWeekSpan({ days: value }),
+                fit: () => setWeekSpan({ days: "auto" }),
+              },
+            },
+            { sep: true },
+            { heading: true, label: "Start of range" },
+            { icon: anchorNow === "weekStart" ? "check" : undefined, label: `Week start (${wsName})`, action: () => setWeekSpan({ anchor: "weekStart" }, true) },
+            { icon: anchorNow === "today" ? "check" : undefined, label: "Today", action: () => setWeekSpan({ anchor: "today" }, true) },
+            { icon: anchorNow === "selected" ? "check" : undefined, label: "Selected day", action: () => setWeekSpan({ anchor: "selected" }, true) },
+          ]);
+        }
+        calendarChoiceMenu(calendarDaysSelect,
+          [3, 7, 14, 30].map((days) => ({ value: String(days), label: days + " days" })),
+          String(store.meta.calendarDaysForward || 7), (value) => { store.setMeta({ calendarDaysForward: Number(value) }); renderCalendar(); });
+      });
       listen(calendarKindSelect, "click", () => calendarChoiceMenu(calendarKindSelect,
         [{ value: "all", label: "All items" }, { value: "event", label: "Events" }, { value: "reminder", label: "Reminders" }],
         store.meta.calendarFilterKind || "all", (value) => { store.setMeta({ calendarFilterKind: value }); renderCalendar(); }));
@@ -14566,12 +14672,11 @@
           store.meta.calendarFilterCategory || "", (value) => { store.setMeta({ calendarFilterCategory: value }); renderCalendar(); });
       });
       function calendarWeekStart() {
-        const C = CALENDAR_PART, stored = C.parseYmd(store.meta.calendarCursor);
-        return C.weekDays(stored ? stored.getTime() : C.dayStart(nowMs()), calendarWeekStartDay())[0];
+        return calendarShownWeekDays()[0];
       }
       function calendarWeekMarkdown() {
-        const C = CALENDAR_PART, weekStart = calendarWeekStartDay(), start = calendarWeekStart();
-        return { start, text: C.weekText(calendarBaseItems(), start, { category: true, weekNumbers: calendarShowWeekNumbers(), weekStart }) };
+        const C = CALENDAR_PART, weekStart = calendarWeekStartDay(), shown = calendarShownWeekDays(), start = shown[0];
+        return { start, text: C.weekText(calendarBaseItems(), start, { category: true, weekNumbers: calendarShowWeekNumbers(), weekStart, days: shown.length }) };
       }
       function askCalendarWeekSettings() {
         const C = CALENDAR_PART;

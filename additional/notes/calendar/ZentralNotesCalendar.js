@@ -710,6 +710,59 @@
     const first = addDays(start, -offset);
     return Array.from({ length: 7 }, (_, i) => addDays(first, i));
   }
+  const WEEK_DAYS_LIMITS = Object.freeze({ min: 1, max: 14, default: 7, minColPx: 84, gutterPx: 42 });
+  const WEEK_RANGE_STARTS = Object.freeze(["weekStart", "today", "selected"]);
+  const DEFAULT_WEEK_SPAN = Object.freeze({ days: 7, anchor: "weekStart" });
+  function cleanWeekDaysCount(value, fallback = 7) {
+    if (typeof value === "string" && value.trim().toLowerCase() === "auto") return "auto";
+    const n = Number(value);
+    if (Number.isFinite(n) && value !== "" && value !== null && typeof value !== "boolean") {
+      return Math.min(WEEK_DAYS_LIMITS.max, Math.max(WEEK_DAYS_LIMITS.min, Math.round(n)));
+    }
+    if (fallback === "auto") return "auto";
+    const fb = Number(fallback);
+    return Number.isFinite(fb) ? Math.min(WEEK_DAYS_LIMITS.max, Math.max(WEEK_DAYS_LIMITS.min, Math.round(fb))) : 7;
+  }
+  function cleanWeekRangeAnchor(value) {
+    if (value === "today") return "today";
+    if (value === "selected" || value === "cursor") return "selected";
+    return "weekStart";
+  }
+  function cleanWeekSpan(raw) {
+    if (raw === "auto" || typeof raw === "number" || (typeof raw === "string" && raw.trim() !== "")) {
+      return { days: cleanWeekDaysCount(raw, 7), anchor: "weekStart" };
+    }
+    if (!raw || typeof raw !== "object") return { ...DEFAULT_WEEK_SPAN };
+    return {
+      days: cleanWeekDaysCount(raw.days, 7),
+      anchor: cleanWeekRangeAnchor(raw.anchor),
+    };
+  }
+  function fitWeekDayCount(widthPx, { minColPx = WEEK_DAYS_LIMITS.minColPx, gutterPx = WEEK_DAYS_LIMITS.gutterPx, min = WEEK_DAYS_LIMITS.min, max = WEEK_DAYS_LIMITS.max, fallback = WEEK_DAYS_LIMITS.default } = {}) {
+    const w = Number(widthPx);
+    if (!(w > 0)) return fallback;
+    const usable = Math.max(0, w - (Number(gutterPx) || 0));
+    const col = Math.max(1, Number(minColPx) || WEEK_DAYS_LIMITS.minColPx);
+    return Math.max(min, Math.min(max, Math.floor(usable / col) || 1));
+  }
+  // OW-25: `count` consecutive local midnights starting at `start` (clamped 1..14, DST-safe).
+  function visibleDays(start, count = 7) {
+    const base = dayStart(start);
+    const n = cleanWeekDaysCount(count, 7);
+    const len = n === "auto" ? 7 : n;
+    return Array.from({ length: len }, (_, i) => addDays(base, i));
+  }
+  function resolveWeekVisibleDays({ cursor, today, weekStart = 1, span, widthPx = 0, panDay = "" } = {}) {
+    const cfg = cleanWeekSpan(span);
+    const count = cfg.days === "auto" ? fitWeekDayCount(widthPx) : cfg.days;
+    const pan = panDay ? parseYmd(panDay) : null;
+    let startDay;
+    if (pan) startDay = pan.getTime();
+    else if (cfg.anchor === "today") startDay = dayStart(today === undefined ? cursor : today);
+    else if (cfg.anchor === "selected") startDay = dayStart(cursor);
+    else startDay = weekDays(cursor, weekStart)[0];
+    return visibleDays(startDay, count);
+  }
   // [{ day, items }] for `count` days from `from` (local midnight). Multi-day events appear on every day they cover.
   function daysForward(items, from, count) {
     const n = Math.max(1, Math.min(366, Math.floor(count) || 1));
@@ -3369,7 +3422,9 @@
     if (opts && opts.weekNumbers === true) {
       lines.push("# Week " + weekNumber(weekFrom, opts.weekStart === undefined ? 1 : opts.weekStart), "");
     }
-    for (let i = 0; i < 7; i++) {
+    const rawDays = Number(opts && opts.days);
+    const dayCount = Number.isFinite(rawDays) && rawDays >= 1 ? Math.min(WEEK_DAYS_LIMITS.max, Math.max(1, Math.round(rawDays))) : 7;
+    for (let i = 0; i < dayCount; i++) {
       const d = addDays(weekFrom, i);
       lines.push("## " + names[new Date(d).getDay()] + " " + ymd(new Date(d)));
       const list = expandRange(items, d, addDays(d, 1));
@@ -4926,7 +4981,7 @@
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);
