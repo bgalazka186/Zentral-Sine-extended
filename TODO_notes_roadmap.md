@@ -77,8 +77,7 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
 |    12 | `T2.9`      | `PARTIAL` | Med-High            | M      | none              | Daily-note lifecycle and archive policy inside Agenda                                                    |
-|    13 | `T1.19b`    | `OPEN`    | Med-High            | M      | —                 | Obsidian vault export                                                                                    |
-|    14 | `T1.19c`    | `OPEN`    | Med-High            | M      | T1.19b            | Obsidian vault import                                                                                    |
+|    14 | `T1.19c`    | `OPEN`    | Med-High            | M      | —                 | Obsidian vault import                                                                                    |
 |    15 | `T3.2`      | `OPEN`    | Med-High            | M      | —                 | Multi-select notes & folders in tree view                                                                |
 |    16 | `T4.2`      | `OPEN`    | Med-High            | M      | —                 | Performance audit & active timer/listener registry table                                                 |
 |    17 | `OW-29`     | `OPEN`    | Med-High            | M      | —                 | Retyping a date or time in a calendar line moves the stored item                                         |
@@ -129,11 +128,11 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 ## Task blocks (same order as the Master Order)
 
-#### `T1.19b` / `T1.19c` — Obsidian export, Obsidian import
+#### `T1.19c` — Obsidian vault import
 
-**Status:** `OPEN` · **Impact:** Med-High · **Effort:** M each · **Depends on:** none (b), then b to c · **Source:** split of T1.19 (`T1.19a` DONE in `docs/LEGACY_done_rows.md`)
+**Status:** `OPEN` · **Impact:** Med-High · **Effort:** M · **Depends on:** — · **Source:** split of T1.19 (`T1.19a` and `T1.19b` DONE in `docs/LEGACY_done_rows.md`)
 
-`b`: export a vault folder mapping YAML front matter, `[[Note#Heading|alias]]`, `![[embeds]]`, callouts, tags. `c`: import such a vault, with a re-import that does not duplicate notes.
+Import an Obsidian vault folder (YAML front matter, folder hierarchy, `[[Note#Heading|alias]]`, `![[embeds]]`, attachments, callouts, tags), with a re-import that does not duplicate notes.
 
 #### `T2.9` — Daily-note lifecycle and archive policy inside Agenda
 
@@ -568,13 +567,19 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.204, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.209, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.204.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B5`, `SB6.1`, `SB6.3`, `SB6.8`, `T1.18`, `T2.8b`, `T3.1`, `T3.4a`, `T3.6a`, `T4.1`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-30`, `AU-B4a`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`162/162` test files) passes in Node/fake-Zen at 3.3.204. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.209.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B5`, `SB6.1`, `SB6.3`, `SB6.8`, `T1.18`, `T1.19a`, `T1.19b`, `T2.4c4`, `T2.5`, `T2.8b`, `T3.1`, `T3.4`, `T3.4a`, `T3.6a`, `T4.1`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-30`, `AU-B4a`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`167/167` test files) passes in Node/fake-Zen at 3.3.209. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
-Completed this session (3.3.163–3.3.204), every finished item archived in `docs/LEGACY_done_rows.md`:
+Completed this session (3.3.163–3.3.209), every finished item archived in `docs/LEGACY_done_rows.md`:
+
+- `T1.19b` (3.3.209) — added pure Obsidian vault export (`OBSIDIAN_VAULT_APP_CONFIG`, `safeObsidianSegment`, `cleanVaultRelPath`, `obsidianYamlScalar`, `splitYamlEntries`, `planObsidianVaultPaths`, `buildObsidianFrontMatter`, `collectObsidianAssetRefs`, `convertBodyToObsidian`, `buildObsidianVaultPlan`), optional `mapLink` callback and atomic `![[...]]` span handling in `mapMarkdownForExport`, `store.buildObsidianVault()`, Gecko `env.exportObsidianVault()` (never overwriting existing files via `mode: "create"`), and `More > Import & export > Export as Obsidian vault…` (`tests/notes-obsidian-export.test.cjs`, `167/167` suite).
+- `T2.5` (3.3.208) — pointer drag of recurring calendar occurrences with explicit scope choice (`tests/notes-calendar-recurring-drag.test.cjs`, `166/166` suite).
+- `T2.4c4` (3.3.207) — real 23/25-hour DST timelines and repeated/skipped-hour rendering in Week/Day grids (`tests/notes-calendar-dst-grid.test.cjs`, `165/165` suite).
+- `T3.4` (3.3.206) — `"Create reminder in this folder…"` on verified Notes folders in Zen tab bar (`tests/notes-sidebar-folder-reminder.test.cjs`, `164/164` suite).
+- `T1.19a` (3.3.205) — full ZIP backup of notes + assets + calendar + history & merge/overwrite restore (`tests/notes-zip-backup.test.cjs`, `163/163` suite).
 
 - `T1.18` (3.3.204) — completed the remaining export syntax-mismatch & per-note flavor/ignore audit in `ZentralNotes.uc.js`: protected all Zentral calendar metadata markers (`%%calendar:...%%`, `%%zn-item-id:...%%`, `%%zn-item-category:...%%`, `%%zn-date-ignore:...%%`, `%%not-date%%`) as HTML comments even when `A31` is off; added warning + portable conversion for `E12`/`E19` list shorthands, `D02` Reddit no-space headings, `L04` Reddit `r/`/`u/` links (guarded against link labels), YouTube/video `![alt](...)` media embeds, and `B17` / Zentral `#w=&a=` image sizing; propagated per-note `flavor` into `markdownExportWarnings(noteObj, opts)`, `exportBody(..., readOpts)`, HTML/TXT `exportNote`, and PDF `printNote`. Expanded `tests/notes-export-flavor.test.cjs` (`162/162` suite).
 
