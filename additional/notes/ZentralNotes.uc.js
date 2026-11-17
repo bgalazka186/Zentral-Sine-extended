@@ -15867,7 +15867,7 @@
         const point = calendarDragPoint(g, event);
         const originCivilMin = g.allDay ? 0 : CALENDAR_PART.timelineToCivilMinute(g.grid?.timeline, g.originMinute);
         const targetCivilMin = !point || g.allDay ? 0 : CALENDAR_PART.timelineToCivilMinute(g.grid?.timeline, point.minute);
-        const placement = point && (g.create ? { date: point.day, minute: point.minute } : g.allDay ? { date: point.day } : g.edge ? CALENDAR_PART.calendarResizePlacement(g.before, g.edge, g.originDay, originCivilMin, point.day, targetCivilMin, g.zone, g.snap) : CALENDAR_PART.calendarMovePlacement(g.before, g.originDay, originCivilMin, point.day, targetCivilMin, g.zone, g.snap));
+        const placement = point && (g.create ? { date: point.day, minute: point.minute } : g.allDay ? { date: point.day } : g.edge ? CALENDAR_PART.calendarResizePlacement(g.before, g.edge, g.originDay, originCivilMin, point.day, targetCivilMin, g.zone, g.snap) : CALENDAR_PART.calendarMovePlacement(g.occurrence || g.before, g.originDay, originCivilMin, point.day, targetCivilMin, g.zone, g.snap));
         g.placement = placement;
         if (!placement) { g.preview?.remove(); g.preview = null; return; }
         if (!g.preview) g.preview = h("div", { class: "zn-cal-drag-preview", "aria-hidden": "true" });
@@ -15894,9 +15894,82 @@
         }
         applyCalendarPlacement(g, placement);
       }
+      function askCalendarRecurringDragScope(g, placement, targetStart) {
+        const C = CALENDAR_PART, occurrence = g.occurrence;
+        const name = String(occurrence?.summary || g.before?.summary || "Untitled item").trim() || "Untitled item";
+        const targetMs = targetStart.dateTime ? Date.parse(targetStart.dateTime) : NaN;
+        const destText = targetStart.date
+          ? `${displayDateKey(targetStart.date)} · all day`
+          : `${displayDateKey(C.zonedDateKey(targetMs, g.zone))} · ${C.clockIn(targetMs, g.zone)}`;
+        const scopeSelect = h("select", { class: "zn-input", "aria-label": "Apply move to" },
+          h("option", { value: "this" }, "This occurrence only"),
+          h("option", { value: "following" }, "This and following occurrences"),
+          h("option", { value: "series" }, "Entire series"));
+        scopeSelect.value = "this";
+        const scopeRow = h("label", { class: "zn-field-row zn-cal-recurrence-scope" }, h("span", {}, "Apply to"), scopeSelect);
+        const moveBtn = chip("Move", true), cancelBtn = chip("Cancel");
+        const note = h("p", { class: "zn-empty" }, `Move "${name}" to ${destText}.`);
+        openCalendarCard("Move recurring occurrence", note, scopeRow, h("div", { class: "zn-dialog-actions" }, cancelBtn, moveBtn));
+        const submit = () => {
+          const scope = scopeSelect.value || "this";
+          const current = store.items.get(g.before.id);
+          if (!current || current.rev !== g.before.rev || current.etag !== g.before.etag) {
+            closeDialog();
+            return flash("Calendar item changed while choosing scope; nothing was moved");
+          }
+          const reminder = C.isReminder(current);
+          if (reminder && (!store.items.history || store.items.history.storageState().writeBlocked)) {
+            closeDialog();
+            return flash("Could not move the calendar item; check storage and reminder history");
+          }
+          const stamp = Math.max(nowMs(), Date.parse(current.updated) || 0);
+          const next = C.calendarMoveRecurringOccurrence(current, occurrence, placement, scope, { originKey: g.originDay, zone: g.zone, allDay: g.allDay, now: stamp });
+          if (!next) {
+            closeDialog();
+            return flash("That recurrence move is unavailable");
+          }
+          if (reminder) {
+            next.historyAction = "rescheduled";
+            next.occurrenceId = String(occurrence.id);
+            next.historyStart = targetStart;
+          }
+          const before = {
+            start: current.start,
+            end: current.end,
+            moved: current.x?.moved,
+            recurrenceExceptions: JSON.parse(JSON.stringify(current.x?.recurrenceExceptions || [])),
+            occurrenceId: String(occurrence.id),
+            occurrenceStart: occurrence.start,
+          };
+          const saved = store.items.upsert(next);
+          if (!saved) {
+            closeDialog();
+            return flash("Could not move the calendar item; check storage and reminder history");
+          }
+          const latest = store.items.get(saved.id);
+          const identity = latest && reminder ? C.reminderIdentity(occurrence) : null;
+          const historyHead = identity ? store.items.history?.list({ itemId: identity.itemId, occurrenceId: identity.occurrenceId, limit: 1 })[0]?.id || "" : "";
+          calendarMoveUndo = latest ? { id: latest.id, rev: latest.rev, etag: latest.etag, recurring: true, before, noteId: "", noteBody: "", identity, historyHead } : null;
+          closeDialog();
+          renderCalendar();
+          flash(scope === "this" ? "Occurrence moved" : scope === "following" ? "This and following occurrences moved" : "Entire series moved");
+        };
+        scopeSelect.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); submit(); } });
+        moveBtn.addEventListener("click", submit);
+        cancelBtn.addEventListener("click", closeDialog);
+        scopeSelect.focus({ preventScroll: true });
+      }
       function applyCalendarPlacement(g, placement) {
         const current = store.items.get(g.before.id);
         if (!current || current.rev !== g.before.rev || current.etag !== g.before.etag) return flash("Calendar item changed during the drag; nothing was moved");
+        if (g.recurring) {
+          const occurrence = g.occurrence;
+          const targetStart = CALENDAR_PART.calendarOccurrenceTargetStart(occurrence, placement, { originKey: g.originDay, zone: g.zone, allDay: g.allDay });
+          if (!targetStart) return flash("That calendar move is unavailable");
+          if (JSON.stringify(targetStart) === JSON.stringify(occurrence.start)) return;
+          askCalendarRecurringDragScope(g, placement, targetStart);
+          return;
+        }
         const stamp = Math.max(nowMs(), Date.parse(current.updated) || 0);
         const next = g.allDay ? CALENDAR_PART.calendarMoveAllDayReminder(current, g.originDay, placement.date, stamp) : g.edge ? CALENDAR_PART.calendarResizeTimedEvent(current, g.edge, placement, g.zone, g.snap, stamp) : CALENDAR_PART.calendarMoveTimedItem(current, placement, g.zone, stamp);
         if (!next) return flash("That calendar move is unavailable");
@@ -15920,10 +15993,16 @@
         if (!current || current.rev !== undo.rev || current.etag !== undo.etag || (undo.noteId && (!note || note.body !== undo.noteBody)) || head !== undo.historyHead) {
           calendarMoveUndo = null; renderCalendar(); return flash("Cannot undo: the item, source note or reminder history changed");
         }
-        const restored = store.items.upsert({ ...current, start: undo.before.start, end: undo.before.end, x: { ...current.x, moved: undo.before.moved } });
+        const restored = store.items.upsert({
+          ...current,
+          start: undo.before.start,
+          end: undo.before.end,
+          x: { ...current.x, moved: undo.before.moved, ...(undo.recurring ? { recurrenceExceptions: undo.before.recurrenceExceptions } : {}) },
+          ...(undo.recurring && CALENDAR_PART.isReminder(current) ? { historyAction: "rescheduled", occurrenceId: undo.before.occurrenceId, historyStart: undo.before.occurrenceStart } : {}),
+        });
         if (!restored) return flash("Could not undo the calendar move");
         calendarMoveUndo = null;
-        if (restored.x?.src === "list") { try { store.syncItemScheduleToNote(restored, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
+        if (!undo.recurring && restored.x?.src === "list") { try { store.syncItemScheduleToNote(restored, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
         renderCalendar(); flash("Calendar change undone");
       }
       listen(calendarUndoMove, "click", undoCalendarMove);
@@ -16068,16 +16147,20 @@
       function bindCalendarDrag(button, item, { track, columns, scroll, dayKey, hourHeight, zone, grid = null, allDay = false, edge = "" }) {
         const reminder = CALENDAR_PART.isReminder(item);
         const writable = !reminder || (!!store.items.history && !store.items.history.storageState().writeBlocked);
-        if (!writable || item.x?.series || (item.recurrence || []).length || item.x?.src === "note") return;
+        const recurring = CALENDAR_PART.isRecurringItem(item);
+        const recurringMovable = recurring && !edge && !!item.x?.series && !!item.x?.recurrenceId;
+        if (!writable || item.x?.src === "note" || (recurring && !recurringMovable)) return;
         button.classList.add("is-movable");
-        if (!edge) button.title += " — Drag to move; use the context menu for keyboard time changes";
+        if (!edge) button.title += recurring ? " — Drag to move (choose scope on drop); use the context menu for keyboard time changes" : " — Drag to move; use the context menu for keyboard time changes";
         button.addEventListener("pointerdown", (event) => {
           if ((event.button !== undefined && event.button !== 0) || calendarDrag || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
           button._znSuppressDragClick = false;
           const current = currentCalendarItem(item);
           if (!current || current.rev !== item.rev || current.etag !== item.etag) return;
+          const occurrence = recurring ? currentCalendarOccurrence(item) : null;
+          if (recurring && (!occurrence || occurrence.x?.series !== current.id || !occurrence.x?.recurrenceId)) return;
           const rect = track.getBoundingClientRect();
-          calendarDrag = { button, pointerId: event.pointerId, x: event.clientX, y: event.clientY, before: current, originDay: dayKey,
+          calendarDrag = { button, pointerId: event.pointerId, x: event.clientX, y: event.clientY, before: current, occurrence, recurring, originDay: dayKey,
             originMinute: allDay ? 0 : CALENDAR_PART.gridMinuteAt(event.clientY - rect.top, hourHeight, grid),
             hourHeight, grid, snap: CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap), columns, scroll, zone, allDay, edge, active: false, placement: null, preview: null };
           try {

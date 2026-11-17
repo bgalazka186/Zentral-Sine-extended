@@ -76,7 +76,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
-|    11 | `T2.5`      | `PARTIAL` | Med-High            | M      | —                 | Drag, resize and create items in the calendar                                                            |
 |    12 | `T2.9`      | `PARTIAL` | Med-High            | M      | none              | Daily-note lifecycle and archive policy inside Agenda                                                    |
 |    13 | `T1.19b`    | `OPEN`    | Med-High            | M      | —                 | Obsidian vault export                                                                                    |
 |    14 | `T1.19c`    | `OPEN`    | Med-High            | M      | T1.19b            | Obsidian vault import                                                                                    |
@@ -135,12 +134,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 **Status:** `OPEN` · **Impact:** Med-High · **Effort:** M each · **Depends on:** none (b), then b to c · **Source:** split of T1.19 (`T1.19a` DONE in `docs/LEGACY_done_rows.md`)
 
 `b`: export a vault folder mapping YAML front matter, `[[Note#Heading|alias]]`, `![[embeds]]`, callouts, tags. `c`: import such a vault, with a re-import that does not duplicate notes.
-
-#### `T2.5` — Drag, resize and create items in the calendar
-
-**Status:** `PARTIAL` · **Impact:** Med-High · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
-
-**LEFT (only this):** pointer drag of recurring occurrences with a scope choice (this / this and following / all). The scope chooser and the pure move exist now (`askCalendarItemReschedule`, `moveOccurrence`, `recurrenceExceptions`); `calendarMoveTimedItem` still returns null for a series, so build the drag on `moveOccurrence`. Everything else (timed move/resize, reminder move, drag-create, undo, snap) is DONE; `T2.5a`-`T2.5d` are merged here.
 
 #### `T2.9` — Daily-note lifecycle and archive policy inside Agenda
 

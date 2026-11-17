@@ -775,7 +775,7 @@ const setSize = async (root, px) => {
   assert.equal(store.items.get("drag-allday-reminder").start.date, zoneKey, "undo restores the all-day date");
   assert.equal(store.items.history.list({ itemId: "drag-allday-reminder" }).filter((entry) => entry.action === "rescheduled").length, 2, "undo records a second schedule transition independently of any skipped creation stages");
   const recurringAllDay = root.querySelectorAll(".zn-cal-time-allday-cell .zn-cal-item").find((el) => el.textContent.includes("Daily check-in"));
-  if (recurringAllDay) assert.equal(recurringAllDay.classList.contains("is-movable"), false, "recurring all-day reminders do not bypass occurrence scopes");
+  if (recurringAllDay) assert.equal(recurringAllDay.classList.contains("is-movable"), true, "recurring all-day reminders are movable via the occurrence scope chooser");
   store.items.remove("drag-allday-reminder");
   await chooseMenu(root, ".zn-calendar-view-select", "Day");
 

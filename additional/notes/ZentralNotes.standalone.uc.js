@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.207
+// @version 3.3.208
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.207, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.208, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.207";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.208";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -3202,6 +3202,35 @@ const __zentralEmbeddedLoader = (function () {
   }
   function calendarMoveTimedEvent(item, placement, zone = "", now = Date.now()) {
     return !item?.x || isReminder(item) ? null : calendarMoveTimedItem(item, placement, zone, now);
+  }
+  // T2.5: resolve a pointer-drag placement on an expanded recurring occurrence into a target
+  // start (`{ date }` for all-day, `{ dateTime }` for timed) without mutating anything.
+  function calendarOccurrenceTargetStart(occurrence, placement, { originKey = "", zone = "", allDay = false } = {}) {
+    if (!occurrence?.x?.series || !occurrence.x?.recurrenceId || !occurrence.start || !placement || typeof placement !== "object") return null;
+    const itemAllDay = isAllDay(occurrence);
+    if (Boolean(allDay) !== itemAllDay) return null;
+    if (itemAllDay) {
+      const origin = parseYmd(originKey || occurrence.start.date), target = parseYmd(placement.date), start = parseYmd(occurrence.start.date);
+      if (!origin || !target || !start) return null;
+      const offset = localDayOrdinal(target.getTime()) - localDayOrdinal(origin.getTime());
+      const result = ymd(new Date(addDays(start.getTime(), offset)));
+      return parseYmd(result) ? { date: result } : null;
+    }
+    if (!occurrence.start.dateTime || !parseYmd(placement.date)
+        || !Number.isInteger(placement.minute) || placement.minute < 0 || placement.minute >= 1440 || (zone && !cleanZone(zone))) return null;
+    const clock = p2(Math.floor(placement.minute / 60)) + ":" + p2(placement.minute % 60);
+    const target = zonedDateTimeToMs(placement.date, clock, zone);
+    return Number.isFinite(target) ? { dateTime: iso(target) } : null;
+  }
+  // T2.5: move an expanded recurring occurrence from a pointer-drag placement using an explicit
+  // recurrence scope ("this" | "following" | "series"). Built on moveOccurrence so master/exceptions stay pure.
+  function calendarMoveRecurringOccurrence(master, occurrence, placement, scope, { originKey = "", zone = "", allDay = false, now = Date.now() } = {}) {
+    if (!master?.x || master.x.src === "note" || !occurrence?.x?.series || occurrence.x.series !== master.id) return null;
+    const itemAllDay = isAllDay(master);
+    if (Boolean(allDay) !== itemAllDay) return null;
+    const targetStart = calendarOccurrenceTargetStart(occurrence, placement, { originKey, zone, allDay: itemAllDay });
+    if (!targetStart) return null;
+    return moveOccurrence(master, occurrence, targetStart, scope, now);
   }
   const NOTE_DRAG_MIME = "application/x-zentral-note-id";
 
@@ -7829,7 +7858,7 @@ const __zentralEmbeddedLoader = (function () {
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -24253,7 +24282,7 @@ __zentralShim.register = function (def) {
         const point = calendarDragPoint(g, event);
         const originCivilMin = g.allDay ? 0 : CALENDAR_PART.timelineToCivilMinute(g.grid?.timeline, g.originMinute);
         const targetCivilMin = !point || g.allDay ? 0 : CALENDAR_PART.timelineToCivilMinute(g.grid?.timeline, point.minute);
-        const placement = point && (g.create ? { date: point.day, minute: point.minute } : g.allDay ? { date: point.day } : g.edge ? CALENDAR_PART.calendarResizePlacement(g.before, g.edge, g.originDay, originCivilMin, point.day, targetCivilMin, g.zone, g.snap) : CALENDAR_PART.calendarMovePlacement(g.before, g.originDay, originCivilMin, point.day, targetCivilMin, g.zone, g.snap));
+        const placement = point && (g.create ? { date: point.day, minute: point.minute } : g.allDay ? { date: point.day } : g.edge ? CALENDAR_PART.calendarResizePlacement(g.before, g.edge, g.originDay, originCivilMin, point.day, targetCivilMin, g.zone, g.snap) : CALENDAR_PART.calendarMovePlacement(g.occurrence || g.before, g.originDay, originCivilMin, point.day, targetCivilMin, g.zone, g.snap));
         g.placement = placement;
         if (!placement) { g.preview?.remove(); g.preview = null; return; }
         if (!g.preview) g.preview = h("div", { class: "zn-cal-drag-preview", "aria-hidden": "true" });
@@ -24280,9 +24309,82 @@ __zentralShim.register = function (def) {
         }
         applyCalendarPlacement(g, placement);
       }
+      function askCalendarRecurringDragScope(g, placement, targetStart) {
+        const C = CALENDAR_PART, occurrence = g.occurrence;
+        const name = String(occurrence?.summary || g.before?.summary || "Untitled item").trim() || "Untitled item";
+        const targetMs = targetStart.dateTime ? Date.parse(targetStart.dateTime) : NaN;
+        const destText = targetStart.date
+          ? `${displayDateKey(targetStart.date)} · all day`
+          : `${displayDateKey(C.zonedDateKey(targetMs, g.zone))} · ${C.clockIn(targetMs, g.zone)}`;
+        const scopeSelect = h("select", { class: "zn-input", "aria-label": "Apply move to" },
+          h("option", { value: "this" }, "This occurrence only"),
+          h("option", { value: "following" }, "This and following occurrences"),
+          h("option", { value: "series" }, "Entire series"));
+        scopeSelect.value = "this";
+        const scopeRow = h("label", { class: "zn-field-row zn-cal-recurrence-scope" }, h("span", {}, "Apply to"), scopeSelect);
+        const moveBtn = chip("Move", true), cancelBtn = chip("Cancel");
+        const note = h("p", { class: "zn-empty" }, `Move "${name}" to ${destText}.`);
+        openCalendarCard("Move recurring occurrence", note, scopeRow, h("div", { class: "zn-dialog-actions" }, cancelBtn, moveBtn));
+        const submit = () => {
+          const scope = scopeSelect.value || "this";
+          const current = store.items.get(g.before.id);
+          if (!current || current.rev !== g.before.rev || current.etag !== g.before.etag) {
+            closeDialog();
+            return flash("Calendar item changed while choosing scope; nothing was moved");
+          }
+          const reminder = C.isReminder(current);
+          if (reminder && (!store.items.history || store.items.history.storageState().writeBlocked)) {
+            closeDialog();
+            return flash("Could not move the calendar item; check storage and reminder history");
+          }
+          const stamp = Math.max(nowMs(), Date.parse(current.updated) || 0);
+          const next = C.calendarMoveRecurringOccurrence(current, occurrence, placement, scope, { originKey: g.originDay, zone: g.zone, allDay: g.allDay, now: stamp });
+          if (!next) {
+            closeDialog();
+            return flash("That recurrence move is unavailable");
+          }
+          if (reminder) {
+            next.historyAction = "rescheduled";
+            next.occurrenceId = String(occurrence.id);
+            next.historyStart = targetStart;
+          }
+          const before = {
+            start: current.start,
+            end: current.end,
+            moved: current.x?.moved,
+            recurrenceExceptions: JSON.parse(JSON.stringify(current.x?.recurrenceExceptions || [])),
+            occurrenceId: String(occurrence.id),
+            occurrenceStart: occurrence.start,
+          };
+          const saved = store.items.upsert(next);
+          if (!saved) {
+            closeDialog();
+            return flash("Could not move the calendar item; check storage and reminder history");
+          }
+          const latest = store.items.get(saved.id);
+          const identity = latest && reminder ? C.reminderIdentity(occurrence) : null;
+          const historyHead = identity ? store.items.history?.list({ itemId: identity.itemId, occurrenceId: identity.occurrenceId, limit: 1 })[0]?.id || "" : "";
+          calendarMoveUndo = latest ? { id: latest.id, rev: latest.rev, etag: latest.etag, recurring: true, before, noteId: "", noteBody: "", identity, historyHead } : null;
+          closeDialog();
+          renderCalendar();
+          flash(scope === "this" ? "Occurrence moved" : scope === "following" ? "This and following occurrences moved" : "Entire series moved");
+        };
+        scopeSelect.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); submit(); } });
+        moveBtn.addEventListener("click", submit);
+        cancelBtn.addEventListener("click", closeDialog);
+        scopeSelect.focus({ preventScroll: true });
+      }
       function applyCalendarPlacement(g, placement) {
         const current = store.items.get(g.before.id);
         if (!current || current.rev !== g.before.rev || current.etag !== g.before.etag) return flash("Calendar item changed during the drag; nothing was moved");
+        if (g.recurring) {
+          const occurrence = g.occurrence;
+          const targetStart = CALENDAR_PART.calendarOccurrenceTargetStart(occurrence, placement, { originKey: g.originDay, zone: g.zone, allDay: g.allDay });
+          if (!targetStart) return flash("That calendar move is unavailable");
+          if (JSON.stringify(targetStart) === JSON.stringify(occurrence.start)) return;
+          askCalendarRecurringDragScope(g, placement, targetStart);
+          return;
+        }
         const stamp = Math.max(nowMs(), Date.parse(current.updated) || 0);
         const next = g.allDay ? CALENDAR_PART.calendarMoveAllDayReminder(current, g.originDay, placement.date, stamp) : g.edge ? CALENDAR_PART.calendarResizeTimedEvent(current, g.edge, placement, g.zone, g.snap, stamp) : CALENDAR_PART.calendarMoveTimedItem(current, placement, g.zone, stamp);
         if (!next) return flash("That calendar move is unavailable");
@@ -24306,10 +24408,16 @@ __zentralShim.register = function (def) {
         if (!current || current.rev !== undo.rev || current.etag !== undo.etag || (undo.noteId && (!note || note.body !== undo.noteBody)) || head !== undo.historyHead) {
           calendarMoveUndo = null; renderCalendar(); return flash("Cannot undo: the item, source note or reminder history changed");
         }
-        const restored = store.items.upsert({ ...current, start: undo.before.start, end: undo.before.end, x: { ...current.x, moved: undo.before.moved } });
+        const restored = store.items.upsert({
+          ...current,
+          start: undo.before.start,
+          end: undo.before.end,
+          x: { ...current.x, moved: undo.before.moved, ...(undo.recurring ? { recurrenceExceptions: undo.before.recurrenceExceptions } : {}) },
+          ...(undo.recurring && CALENDAR_PART.isReminder(current) ? { historyAction: "rescheduled", occurrenceId: undo.before.occurrenceId, historyStart: undo.before.occurrenceStart } : {}),
+        });
         if (!restored) return flash("Could not undo the calendar move");
         calendarMoveUndo = null;
-        if (restored.x?.src === "list") { try { store.syncItemScheduleToNote(restored, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
+        if (!undo.recurring && restored.x?.src === "list") { try { store.syncItemScheduleToNote(restored, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
         renderCalendar(); flash("Calendar change undone");
       }
       listen(calendarUndoMove, "click", undoCalendarMove);
@@ -24454,16 +24562,20 @@ __zentralShim.register = function (def) {
       function bindCalendarDrag(button, item, { track, columns, scroll, dayKey, hourHeight, zone, grid = null, allDay = false, edge = "" }) {
         const reminder = CALENDAR_PART.isReminder(item);
         const writable = !reminder || (!!store.items.history && !store.items.history.storageState().writeBlocked);
-        if (!writable || item.x?.series || (item.recurrence || []).length || item.x?.src === "note") return;
+        const recurring = CALENDAR_PART.isRecurringItem(item);
+        const recurringMovable = recurring && !edge && !!item.x?.series && !!item.x?.recurrenceId;
+        if (!writable || item.x?.src === "note" || (recurring && !recurringMovable)) return;
         button.classList.add("is-movable");
-        if (!edge) button.title += " — Drag to move; use the context menu for keyboard time changes";
+        if (!edge) button.title += recurring ? " — Drag to move (choose scope on drop); use the context menu for keyboard time changes" : " — Drag to move; use the context menu for keyboard time changes";
         button.addEventListener("pointerdown", (event) => {
           if ((event.button !== undefined && event.button !== 0) || calendarDrag || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
           button._znSuppressDragClick = false;
           const current = currentCalendarItem(item);
           if (!current || current.rev !== item.rev || current.etag !== item.etag) return;
+          const occurrence = recurring ? currentCalendarOccurrence(item) : null;
+          if (recurring && (!occurrence || occurrence.x?.series !== current.id || !occurrence.x?.recurrenceId)) return;
           const rect = track.getBoundingClientRect();
-          calendarDrag = { button, pointerId: event.pointerId, x: event.clientX, y: event.clientY, before: current, originDay: dayKey,
+          calendarDrag = { button, pointerId: event.pointerId, x: event.clientX, y: event.clientY, before: current, occurrence, recurring, originDay: dayKey,
             originMinute: allDay ? 0 : CALENDAR_PART.gridMinuteAt(event.clientY - rect.top, hourHeight, grid),
             hourHeight, grid, snap: CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap), columns, scroll, zone, allDay, edge, active: false, placement: null, preview: null };
           try {
