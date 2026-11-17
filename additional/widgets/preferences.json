@@ -232,12 +232,6 @@
     ]
   },
   {
-    "property": "zen.workspace.zentral.widgets.quick_note.enabled",
-    "label": "Show the quick note row in the Timer widget",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
     "type": "text",
     "label": "**Status**",
     "size": "16px"

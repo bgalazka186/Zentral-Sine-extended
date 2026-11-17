@@ -188,13 +188,14 @@ test("a running timer is visible on the Clock line even with the panel closed", 
   assert.ok(/resolveClockPanelState\(/.test(SRC), "the Clock's click handler uses the panel rule");
 });
 
-test("the panel is compact: chips instead of five full presets, and the note is a chip", () => {
+test("the panel is compact: chips instead of five full presets, and the note is always under the clock", () => {
   const clockStart = SRC.indexOf('id: "clock"');
   const clock = SRC.slice(clockStart, SRC.indexOf('id: "date"', clockStart));
   assert.match(clock, /CHIP_TEXT = \["1m", "5m", "10m", "30m", "1h"\]/, "the presets are short chips");
-  assert.match(clock, /clockNoteRow\.hidden = true/, "the note row ships hidden");
-  assert.match(clock, /clockNoteChip\.addEventListener\("click"/, "and is revealed by its own chip");
-  assert.ok(!/clockNoteRow\.hidden = !ok;/.test(clock), "Notes availability hides the chip, not a permanent row");
+  // OW-65, the owner's shape: the note is a plain part of the Clock face, drawn whenever Notes can take one — not a
+  // fold revealed by a chip, which made a permanent feature look like an optional extra.
+  assert.match(clock, /clockNoteRow\.hidden = !ok/, "Notes availability is what shows or hides the row");
+  assert.ok(!/clockNoteChip\.addEventListener\("click"/.test(clock), "there is no chip to reveal it any more");
   assert.match(clock, /laps\.hidden = !sw\.laps\.length \|\| !sw\.running/, "laps only while the stopwatch runs");
 });
 

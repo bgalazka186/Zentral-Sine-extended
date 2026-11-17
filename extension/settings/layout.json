@@ -235,9 +235,6 @@
           "label": "Weather"
         },
         {
-          "label": "Timer"
-        },
-        {
           "label": "Status"
         },
         {
@@ -1008,7 +1005,6 @@
     "zen.workspace.zentral.widgets.clock.mode",
     "zen.workspace.zentral.widgets.timer.end_sound",
     "zen.workspace.zentral.widgets.timer.end_notice",
-    "zen.workspace.zentral.widgets.quick_note.enabled",
     {
       "type": "text",
       "label": "**Sidebar Widgets · Status**",

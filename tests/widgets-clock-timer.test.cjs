@@ -174,6 +174,66 @@ test("the end sound has a real tone behind the beep, and falls back to the beep"
   assert.match(sound, /catch \(_\) \{\n          try \{ Services\.sound\.beep\(\); \}/, "no WebAudio still rings");
 });
 
+// The bug behind the owner's report: JS hides a face with `.hidden`, but a `display: flex !important` rule outranks the
+// user agent's `[hidden]` rule, so the clock kept drawing above the stopwatch. The JS flag was right all along, which is
+// why no behavioural test saw it — only the cascade did.
+{
+  const hiddenRules = CSS.slice(CSS.indexOf(".zw-clock-main[hidden]"), CSS.indexOf(".zw-clock-main {", CSS.indexOf(".zw-clock-main[hidden]")));
+  for (const el of ["zw-clock-main", "zw-clock-timer-face", "zw-clock-badge", "zw-clock-zone", "zw-timer-laps", "zw-timer-field-row", "zw-timer-presets"]) {
+    assert.ok(CSS.includes(`.${el}[hidden]`), `.${el} has its own [hidden] rule, or an !important display beats it`);
+  }
+  assert.match(hiddenRules, /display: none !important/);
+  // Every element the code hides by property must be in that list, or it silently stays on screen.
+  for (const cls of ["main", "timerFace", "zoneEl", "badgeEl", "laps", "fieldRow", "presets"]) {
+    assert.ok(new RegExp(`${cls}\\.hidden = `).test(SRC), `${cls} is hidden by property, so it needs the rule above`);
+  }
+}
+
+// ---- the owner's shape (2026-11-17): clock, then the quick note under it; click the hour, the stopwatch panel
+// appears where the clock was, with the same note still under it. Driven on the real card with Notes present. ----
+(async () => {
+  const h = createFakeSidebarHarness({
+    "zen.workspace.zentral.widgets.enabled": true,
+    "zen.workspace.zentral.widgets.clock.enabled": true,
+    "zen.workspace.zentral.widgets.date.enabled": false,
+    "zen.workspace.zentral.widgets.weather.enabled": false,
+    "zen.workspace.zentral.widgets.timer.click_stopwatch": true,
+    "zen.workspace.zentral.widgets.timer.enabled": false,
+  }, { notes: true });
+  const { api } = h.start();
+  await new Promise((r) => setTimeout(r, 40));
+  const clock = api.getTray().children.find((el) => el.getAttribute("data-zw-widget") === "clock");
+  const body = clock.querySelector(".zw-clock");
+  const noteRow = body.querySelector(".zw-clock-note-row");
+  const timeCol = body.querySelector(".zw-clock-time-col");
+
+  assert.equal(body.getAttribute("data-zw-clock-face"), "clock", "the card rests on the clock");
+  assert.equal(noteRow.hidden, false, "the quick note is under the clock by default — no click, no chip");
+  assert.equal(body.querySelector(".zw-clock-note-chip").hidden, true, "and there is no separate chip to reveal it");
+  const order = Array.from(body.children).map((el) => el.className);
+  assert.ok(order.indexOf("zw-clock-time-col") !== -1 && order.indexOf("zw-clock-note-row") > order.indexOf("zw-clock-time-col"),
+    "the note comes AFTER the time area, so it is drawn under it");
+
+  // Click the hour: the stopwatch panel takes the clock's place in the same column, and the note does not move.
+  const cardClick = clock._listeners.find(([t]) => t === "click")[1];
+  cardClick({ button: 0, stopPropagation() {}, preventDefault() {} });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(body.getAttribute("data-zw-clock-face"), "timer", "clicking the hour brings up the stopwatch panel");
+  assert.equal(noteRow.hidden, false, "the note is still there, under the panel now");
+  assert.ok(timeCol.querySelector(".zw-clock-timer-face"), "the panel took the clock's place inside the same column");
+  assert.equal(timeCol.querySelector(".zw-clock-timer-face").hidden, false, "and it is the visible face");
+  assert.equal(body.querySelector(".zw-clock-main").hidden, true, "while the clock is put away, not stacked above it");
+  assert.ok(Array.from(body.children).indexOf(noteRow) > Array.from(body.children).indexOf(timeCol),
+    "the note is still drawn after the time area");
+
+  // The timer controls, not the card, own their clicks — the "Wyzeruj" bug was a button pushed past the edge.
+  const reset = body.querySelectorAll(".zw-timer-btn").find((b) => /Wyzeruj|Reset/.test(b.textContent));
+  assert.ok(reset, "the reset control is on the panel");
+
+  api.destroy();
+  console.log("ok - the owner's shape: note under the clock, and still under the stopwatch when it is up");
+})();
+
 // ---- live: the real host, the real card ------------------------------------------------
 (async () => {
   const h = createFakeSidebarHarness({
@@ -296,16 +356,24 @@ test("the end sound has a real tone behind the beep, and falls back to the beep"
   assert.equal(face.querySelector(".zw-timer-mode").textContent, "countdown", "and the face says so");
   assert.match(valueEl.textContent, /^1:00$|^0:59$/, "counting down from a minute");
 
-  // 3. the quick note is reachable from the CLOCK face
+  // 3. the quick note is a plain part of the Clock face (the owner: it is not a separate feature to switch on)
   cardClicks[0][1]({ button: 0, stopPropagation() {}, preventDefault() {} });
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(body.getAttribute("data-zw-clock-face"), "clock");
-  const noteChip = body.querySelector(".zw-clock-note-chip");
-  assert.ok(noteChip, "the clock face carries the note chip");
+  // This harness has no Notes, so the row is correctly ABSENT: it is part of the face, not a switch that draws an
+  // empty field nobody can save. (The "under the clock" case is driven in its own test below, with Notes present.)
   const noteRow = body.querySelector(".zw-clock-note-row");
-  assert.equal(noteRow.hidden, true, "the row ships hidden");
-  clickAll(noteChip);
-  assert.equal(noteRow.hidden, false, "the chip reveals it");
+  assert.equal(noteRow.hidden, true, "without Notes the row is not drawn at all");
+  const noteChip = body.querySelector(".zw-clock-note-chip");
+  assert.ok(noteChip.hidden, "and there is no chip to reveal it: it is not a separate feature");
+  // The note lives in the same column as the time and BOTH faces, so it sits under whichever one is up.
+  const timeCol = body.querySelector(".zw-clock-time-col");
+  assert.ok(timeCol, "the card has a time column");
+  assert.ok(timeCol.querySelector(".zw-clock-main"), "the clock face is inside it");
+  assert.ok(timeCol.querySelector(".zw-clock-timer-face"), "and so is the timer panel");
+  const kids = Array.from(body.children).map((el) => el.className);
+  assert.ok(kids.indexOf("zw-clock-time-col") < kids.indexOf("zw-clock-note-row"),
+    "the note row comes after the time column, not beside it");
 
   api.destroy();
   console.log(`PASS widgets-clock-timer (${passed} tests, 1 live)`);

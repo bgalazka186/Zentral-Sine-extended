@@ -274,12 +274,6 @@
       ]
     },
     {
-      "property": "zen.workspace.zentral.widgets.quick_note.enabled",
-      "label": "Show the quick note row in the Timer widget",
-      "type": "checkbox",
-      "defaultValue": true
-    },
-    {
       "property": "zen.workspace.zentral.widgets.status.enabled",
       "label": "Show Status widget (battery and memory)",
       "type": "checkbox",
@@ -304,9 +298,18 @@
       "type": "dropdown",
       "defaultValue": "auto",
       "options": [
-        { "label": "Follow the Notes language", "value": "auto" },
-        { "label": "English", "value": "en" },
-        { "label": "Polski (Polish)", "value": "pl" }
+        {
+          "label": "Follow the Notes language",
+          "value": "auto"
+        },
+        {
+          "label": "English",
+          "value": "en"
+        },
+        {
+          "label": "Polski (Polish)",
+          "value": "pl"
+        }
       ]
     }
   ],
@@ -423,7 +426,7 @@
     },
     "zen.workspace.zentral.widgets.timer.click_stopwatch": {
       "category": "widgets",
-      "section": "Timer",
+      "section": "Clock & Date",
       "owner": "widgets"
     },
     "zen.workspace.zentral.widgets.clock.mode": {
@@ -433,17 +436,12 @@
     },
     "zen.workspace.zentral.widgets.timer.end_sound": {
       "category": "widgets",
-      "section": "Timer",
+      "section": "Clock & Date",
       "owner": "widgets"
     },
     "zen.workspace.zentral.widgets.timer.end_notice": {
       "category": "widgets",
-      "section": "Timer",
-      "owner": "widgets"
-    },
-    "zen.workspace.zentral.widgets.quick_note.enabled": {
-      "category": "widgets",
-      "section": "Timer",
+      "section": "Clock & Date",
       "owner": "widgets"
     },
     "zen.workspace.zentral.widgets.status.enabled": {

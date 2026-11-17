@@ -52,7 +52,6 @@
     WEATHER_PLACES: "zen.workspace.zentral.widgets.weather.places",
     TIMER_ENABLED: "zen.workspace.zentral.widgets.timer.enabled",
     TIMER_CLICK_STOPWATCH: "zen.workspace.zentral.widgets.timer.click_stopwatch",
-    TIMER_QUICK_NOTE: "zen.workspace.zentral.widgets.quick_note.enabled",
     // OW-56: one Clock card, two faces; and what a finished countdown does.
     CLOCK_MODE: "zen.workspace.zentral.widgets.clock.mode",
     TIMER_END_SOUND: "zen.workspace.zentral.widgets.timer.end_sound",
@@ -90,7 +89,6 @@
     WEATHER_REFRESH_MINUTES: 30,
     TIMER_ENABLED: true,
     TIMER_CLICK_STOPWATCH: true,
-    TIMER_QUICK_NOTE: true,
     CLOCK_MODE: "clock",
     TIMER_END_SOUND: "beep",
     TIMER_END_NOTICE: "none",
@@ -3251,10 +3249,16 @@
           modeHintEl.className = "zw-card-meta zw-clock-mode-hint";
           modeHintEl.hidden = true;
 
-          wrap.appendChild(main);
+          // The owner's shape, in one place: the card is a column with a time area on top and the quick note under it.
+          // The time area holds both faces — the clock and the stopwatch panel — and exactly one of them is shown, so
+          // the note never moves: it is always directly under whichever time element is up.
+          const timeCol = doc.createElement("div");
+          timeCol.className = "zw-clock-time-col";
+          timeCol.appendChild(main);
+          timeCol.appendChild(timerFace);
+          wrap.appendChild(timeCol);
           wrap.appendChild(badgeEl);
           wrap.appendChild(zoneEl);
-          wrap.appendChild(timerFace);
           wrap.appendChild(clockNoteRow);
           wrap.appendChild(modeHintEl);
           presets.appendChild(clockNoteChip);
@@ -3349,7 +3353,7 @@
                 return true;
               }
             })();
-            const controls = clockPanelControls(timerState, { wide, quickNote: clockNoteRow.getAttribute("data-zw-forced-off") !== "true" });
+            const controls = clockPanelControls(timerState, { wide, quickNote: true });
             lapBtn.hidden = !controls.lap;
             lapBtn.disabled = !sw.running;
             resetBtn.disabled = !controls.reset;
@@ -3485,18 +3489,15 @@
             clockNoteField.value = "";
             clockNoteRow.hidden = true;
           };
+          // The quick note is part of the Clock face, not a feature to switch on: it is there whenever Notes can take a
+          // note, and it simply disappears when it cannot. No chip, no fold, nothing to configure.
           const syncClockNote = () => {
             const opener = resolveCalendarOpener(window);
-            const ok = Boolean(opener && typeof opener.openQuickNote === "function") && getBool(WIDGET_PREFS.TIMER_QUICK_NOTE, DEFAULTS.TIMER_QUICK_NOTE);
-            clockNoteChip.hidden = !ok;
+            const ok = Boolean(opener && typeof opener.openQuickNote === "function");
+            clockNoteChip.hidden = true;
+            clockNoteRow.hidden = !ok;
             clockNoteRow.setAttribute("data-zw-forced-off", ok ? "false" : "true");
-            if (!ok) clockNoteRow.hidden = true;
           };
-          clockNoteChip.addEventListener("click", (e) => {
-            e?.stopPropagation?.();
-            clockNoteRow.hidden = !clockNoteRow.hidden;
-            if (!clockNoteRow.hidden) clockNoteField.focus?.();
-          });
           clockNoteRow.addEventListener("click", (e) => e?.stopPropagation?.());
           clockNoteBtn.addEventListener("click", (e) => { e?.stopPropagation?.(); saveClockNote(); });
           clockNoteField.addEventListener("keydown", (e) => {

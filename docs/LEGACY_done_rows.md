@@ -1373,6 +1373,22 @@ the literal `$`, then the real sheet: the disclosure and its aria state, replace
 refusal, Enter and Alt+Enter, and two non-target notes (one live, one in the Trash) unchanged throughout. Suite
 `236/236`.
 
+**`OW-65` DONE (3.3.301)** — the Clock card is the shape the owner drew: the clock, the quick note under it, and on a
+click of the hour the stopwatch/countdown panel in the clock's place with the same note still under it. Three defects
+sat behind his three complaints. The clock appearing *above* the stopwatch was a cascade bug: `paintFace` always set
+`main.hidden = true`, but `.zw-clock-main { display: flex !important }` outranks the user agent's
+`[hidden] { display: none }`, so the attribute was ignored — every element the card hides by property now has its own
+`[hidden] { display: none !important }` rule, and a test reads the stylesheet because no behavioural test could ever
+have seen this (the JS flag was right). "Wyzeruj" being cut off came from `align-items: flex-start` sizing the time
+column to its content while the card is `overflow: hidden`, so a wide control row left the card and was clipped: the
+column stretches, the rows wrap, and a too-long label wraps its own words instead of disappearing. And the quick note is
+no longer a feature: `quick_note.enabled` is gone from the schema, `preferences.json`, the layout and the code, the
+reveal chip is gone, and the row is drawn whenever Notes can take a note. The separate **Timer** settings section is
+gone as well — its four prefs moved into **Clock & Date**, because a group of its own was the last place the retired
+second card still showed. Tests: `widgets-clock-timer` +1 live (the owner's exact sequence, with Notes present via the
+harness's new `notes: true` opener), `widgets-status` and `widgets-timer` re-pointed at the accepted shape. Suite
+`236/236`.
+
 ## The Master Order rows that were finished (moved out of the TODO table, 2026-11-17)
 
 The owner asked for the finished rows to leave the TODO list: the working table now holds only what is still

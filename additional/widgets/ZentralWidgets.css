@@ -215,6 +215,36 @@
   flex-wrap: wrap !important;
   gap: 4px !important;
   min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+/* The owner: a button like "Wyzeruj" was clipped by the edge of the sidebar. Three rules stop it, in order of what
+   actually can go wrong: a button never shrinks below its own words (otherwise the words spill out of the card), it
+   may be wider than one line of chips only by wrapping, and a button longer than the whole card breaks its own label
+   instead of disappearing past the edge. */
+#zentral-sidebar-widgets .zw-timer-btn,
+#zentral-sidebar-widgets .zw-timer-preset {
+  flex: 0 0 auto !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  /* NOT `white-space: nowrap`: "Wyzeruj" and "Międzyczas" must stay on one line at any realistic width, and they do
+     because they are short — but a label in a language that is not, or a very narrow sidebar, breaks its own words
+     instead of being clipped by the card's `overflow: hidden`. A clipped word is invisible; a wrapped one is not. */
+  overflow-wrap: anywhere !important;
+}
+
+/* The panel is inside the card now: it must not be wider than the card, and the numbers may shrink rather than push
+   the controls sideways. */
+#zentral-sidebar-widgets .zw-clock-timer-face {
+  align-self: stretch !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+#zentral-sidebar-widgets .zw-clock-timer-value {
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
 #zentral-sidebar-widgets .zw-timer-btn,
@@ -265,6 +295,20 @@
 #zentral-sidebar-widgets .zw-timer-field-row .zw-timer-btn {
   flex: 0 0 auto !important;
   white-space: nowrap !important;
+  max-width: 100% !important;
+}
+/* OW-65: below a sensible width the field and the button stop sharing a line at all, so neither can be pushed out. */
+@media (max-width: 240px) {
+  #zentral-sidebar-widgets .zw-timer-field-row,
+  #zentral-sidebar-widgets .zw-clock-note-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  #zentral-sidebar-widgets .zw-timer-field-row .zw-timer-field,
+  #zentral-sidebar-widgets .zw-clock-note {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
 }
 
 #zentral-sidebar-widgets .zw-timer-field,
@@ -466,6 +510,37 @@
   min-width: 0 !important;
 }
 
+/* The owner's shape: a time area on top, the quick note under it. Both faces live inside the time area and only one is
+   shown, so the note is under the clock when the clock is up and under the stopwatch when the stopwatch is up — it
+   never jumps and the card never grows a second block. */
+#zentral-sidebar-widgets .zw-clock-time-col {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  align-self: stretch !important;
+  gap: 2px !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+/* A `display: ... !important` rule beats the user agent's own `[hidden] { display: none }`, so every element this card
+   hides with the `hidden` property needs its own rule. Without these the clock stayed drawn above the stopwatch face —
+   the exact shape the owner reported ("clock is secondary element of stopwatch appears ... above it"). */
+#zentral-sidebar-widgets .zw-clock-main[hidden],
+#zentral-sidebar-widgets .zw-clock-timer-face[hidden],
+#zentral-sidebar-widgets .zw-clock-time-col[hidden],
+#zentral-sidebar-widgets .zw-clock-seconds[hidden],
+#zentral-sidebar-widgets .zw-clock-meridiem[hidden],
+#zentral-sidebar-widgets .zw-clock-badge[hidden],
+#zentral-sidebar-widgets .zw-clock-zone[hidden],
+#zentral-sidebar-widgets .zw-clock-mode-hint[hidden],
+#zentral-sidebar-widgets .zw-timer-laps[hidden],
+#zentral-sidebar-widgets .zw-timer-field-row[hidden],
+#zentral-sidebar-widgets .zw-timer-presets[hidden],
+#zentral-sidebar-widgets .zw-timer-btn[hidden] {
+  display: none !important;
+}
+
 #zentral-sidebar-widgets .zw-clock-main {
   display: flex !important;
   align-items: baseline !important;
@@ -520,9 +595,19 @@
    always one click away, and it is gone entirely when Notes is not installed. */
 #zentral-sidebar-widgets .zw-clock-note-row {
   display: flex !important;
+  /* OW-63's rule, on this row too: a narrow sidebar must never push a button out of the card. The field gives ground
+     first, and the button wraps to its own line rather than being clipped. */
+  flex-wrap: wrap !important;
   gap: 4px !important;
   align-items: center !important;
+  align-self: stretch !important;
+  max-width: 100% !important;
   margin-top: 4px !important;
+  min-width: 0 !important;
+}
+#zentral-sidebar-widgets .zw-clock-note-row .zw-clock-note-btn {
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
 }
 #zentral-sidebar-widgets .zw-clock-note-row[hidden] {
   display: none !important;

@@ -160,7 +160,13 @@ test("the settings section exists and every pref is declared", () => {
   }
   assert.equal(SETTINGS.schema.find((x) => x.property === c.WIDGET_PREFS.STATUS_ENABLED).defaultValue, false, "status ships off");
   const sections = new Set(Object.values(SETTINGS.settings).map((s) => s.section));
-  for (const section of ["Weather", "Timer", "Status"]) assert.ok(sections.has(section), "new section " + section);
+  for (const section of ["Weather", "Status"]) assert.ok(sections.has(section), "new section " + section);
+  // OW-65: the Timer is not a section of its own any more — it is the Clock card's other face, so its prefs sit with
+  // the clock's. A separate "Timer" group in Settings was the last place the retired second feature still showed.
+  assert.equal(sections.has("Timer"), false, "there is no separate Timer section to find");
+  const timerPrefs = Object.keys(SETTINGS.settings).filter((k) => k.includes("widgets.timer."));
+  assert.ok(timerPrefs.length >= 3, "the timer's own prefs are still declared");
+  for (const k of timerPrefs) assert.equal(SETTINGS.settings[k].section, "Clock & Date", k + " lives with the clock");
 });
 
 console.log("\nPASS widgets-status (" + passed + " tests)");

@@ -11,7 +11,7 @@ const root = path.resolve(__dirname, "..", "..");
 const widgetSrc = fs.readFileSync(path.join(root, "additional/widgets/ZentralWidgets.uc.js"), "utf8");
 const widgetCss = fs.readFileSync(path.join(root, "additional/widgets/ZentralWidgets.css"), "utf8");
 
-function createFakeSidebarHarness(initialPrefs = {}, { fetch: fetchImpl = null } = {}) {
+function createFakeSidebarHarness(initialPrefs = {}, { fetch: fetchImpl = null, notes = false } = {}) {
   const prefs = new Map(Object.entries(initialPrefs));
   const prefObservers = [];
   let nowMs = 1_700_000_000_000;
@@ -327,6 +327,17 @@ function createFakeSidebarHarness(initialPrefs = {}, { fetch: fetchImpl = null }
     },
   };
 
+  // `notes: true` gives the window the opener Notes publishes (`zentral/notes-calendar-opener/v1`). The quick note
+  // hangs off exactly this symbol, so without one the row is correctly absent; with it, the row is part of the face.
+  const quickNotes = [];
+  if (notes) {
+    window[Symbol.for("zentral/notes-calendar-opener/v1")] = {
+      openCalendar() {},
+      openQuickNote(text) { quickNotes.push(text); },
+      isAvailable: () => true,
+    };
+  }
+
   class FakeMutationObserver {
     constructor(cb) {
       this.cb = cb;
@@ -436,6 +447,7 @@ function createFakeSidebarHarness(initialPrefs = {}, { fetch: fetchImpl = null }
     videoPreview,
     bottomButtons,
     core: window.__zentralWidgetsTestSeam.core,
+    quickNotes,
     start,
     flushRaf,
     advanceTime,
