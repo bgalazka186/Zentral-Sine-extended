@@ -296,6 +296,18 @@
       "label": "Show the memory in the Status widget",
       "type": "checkbox",
       "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.language",
+      "label": "Language of the widgets",
+      "description": "Follow the Notes language until you choose otherwise; a choice made here is kept.",
+      "type": "dropdown",
+      "defaultValue": "auto",
+      "options": [
+        { "label": "Follow the Notes language", "value": "auto" },
+        { "label": "English", "value": "en" },
+        { "label": "Polski (Polish)", "value": "pl" }
+      ]
     }
   ],
   "settings": {
@@ -447,6 +459,11 @@
     "zen.workspace.zentral.widgets.status.show_memory": {
       "category": "widgets",
       "section": "Status",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.language": {
+      "category": "widgets",
+      "section": "Sidebar widgets",
       "owner": "widgets"
     }
   }

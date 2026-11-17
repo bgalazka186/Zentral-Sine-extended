@@ -1956,6 +1956,27 @@
     "defaultValue": true
   },
   {
+    "property": "zen.workspace.zentral.widgets.language",
+    "label": "Language of the widgets",
+    "description": "Follow the Notes language until you choose otherwise; a choice made here is kept.",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "options": [
+      {
+        "label": "Follow the Notes language",
+        "value": "auto"
+      },
+      {
+        "label": "English",
+        "value": "en"
+      },
+      {
+        "label": "Polski (Polish)",
+        "value": "pl"
+      }
+    ]
+  },
+  {
     "type": "text",
     "label": "**Sidebar Widgets · Layout & visibility**",
     "size": "16px"

@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Widgets
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.298
+// @version 3.3.299
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.298, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.299, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.298";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.299";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1156,6 +1156,9 @@ function nativeSidebarSide() {
     STATUS_ENABLED: "zen.workspace.zentral.widgets.status.enabled",
     STATUS_SHOW_BATTERY: "zen.workspace.zentral.widgets.status.show_battery",
     STATUS_SHOW_MEMORY: "zen.workspace.zentral.widgets.status.show_memory",
+    // OW-64: one language for every widget. "auto" follows the Notes interface language, so the two never disagree
+    // until the person says otherwise; anything else is their own choice and stays their own choice.
+    LANGUAGE: "zen.workspace.zentral.widgets.language",
   });
 
   const DEFAULTS = Object.freeze({
@@ -1190,7 +1193,113 @@ function nativeSidebarSide() {
     STATUS_ENABLED: false,
     STATUS_SHOW_BATTERY: true,
     STATUS_SHOW_MEMORY: true,
+    LANGUAGE: "auto",
   });
+
+  // ---- OW-64: one language for every widget ----------------------------------------------------------------
+  // "auto" means "whatever Notes is set to", read at the moment a string is needed, so changing the Notes language
+  // changes every widget that has not been told otherwise. An explicit choice is that person's choice and stays it.
+  const WIDGET_LANGUAGES = Object.freeze(["auto", "en", "pl"]);
+  // Lower-cased before the check: a pref is a person's text, and "PL" is not a different language from "pl".
+  const cleanWidgetLanguage = (v) => {
+    const value = String(v ?? "").trim().toLowerCase();
+    return WIDGET_LANGUAGES.includes(value) ? value : "auto";
+  };
+  const NOTES_LANGUAGE_PREF = "zen.workspace.zentral.notes.language";
+  // Every string a widget draws. Kept small on purpose: the widgets are a clock, a date, a weather line and a status
+  // line, and everything here is a word a person sees.
+  const WIDGET_STRINGS = Object.freeze({
+    en: Object.freeze({
+      "clock.title": "Clock",
+      "date.title": "Date",
+      "weather.title": "Weather",
+      "status.title": "Status",
+      "tray.label": "Sidebar widgets",
+      "clock.aria": "Clock. Click for the timer.",
+      "clock.ariaAlert": "Countdown finished. ",
+      "timer.aria": "Timer {value}{kind}. Click for the clock.",
+      "timer.kind.countdown": ", countdown",
+      "timer.kind.stopwatch": ", stopwatch",
+      "timer.kind.stopped": ", stopped",
+      "timer.clickClock": " Click for the clock.",
+      "timer.start": "Start",
+      "timer.stop": "Stop",
+      "timer.resume": "Resume",
+      "timer.set": "Set",
+      "timer.save": "Save",
+      "timer.note": "Note",
+      "timer.lap": "Lap",
+      "timer.reset": "Reset",
+      "timer.setTitle": "Start the countdown with the typed duration",
+      "timer.fieldAria": "A duration for the timer, for example 5 min or 1:30",
+      "timer.presetTitle": "Start a countdown of {value}",
+      "timer.noteAria": "Write a quick note",
+      "timer.noteSaveTitle": "Save this text as a note",
+      "timer.countdownRunning": "Countdown running",
+      "timer.stopwatchRunning": "Stopwatch running",
+      "timer.stopTitle": "Stop the countdown",
+      "timer.stopStopwatchTitle": "Stop the stopwatch",
+      "timer.startStopwatchTitle": "Start the stopwatch",
+      "status.noBattery": "no battery",
+      "status.noBatteryTitle": "This machine has no battery the browser can read",
+      "status.memoryUnavailable": "Memory usage is not available in this build",
+      "status.memoryTitle": "Memory used by the browser",
+    }),
+    pl: Object.freeze({
+      "clock.title": "Zegar",
+      "date.title": "Data",
+      "weather.title": "Pogoda",
+      "status.title": "Stan",
+      "tray.label": "Widgety panelu bocznego",
+      "clock.aria": "Zegar. Kliknij, aby otworzyć minutnik.",
+      "clock.ariaAlert": "Minutnik zakończony. ",
+      "timer.aria": "Minutnik {value}{kind}. Kliknij, aby wrócić do zegara.",
+      "timer.kind.countdown": ", odliczanie",
+      "timer.kind.stopwatch": ", stoper",
+      "timer.kind.stopped": ", zatrzymany",
+      "timer.clickClock": " Kliknij, aby wrócić do zegara.",
+      "timer.start": "Start",
+      "timer.stop": "Stop",
+      "timer.resume": "Wznów",
+      "timer.set": "Ustaw",
+      "timer.save": "Zapisz",
+      "timer.note": "Notatka",
+      "timer.lap": "Międzyczas",
+      "timer.reset": "Wyzeruj",
+      "timer.setTitle": "Uruchom odliczanie wpisanego czasu",
+      "timer.fieldAria": "Czas minutnika, na przykład 5 min lub 1:30",
+      "timer.presetTitle": "Uruchom odliczanie {value}",
+      "timer.noteAria": "Napisz szybką notatkę",
+      "timer.noteSaveTitle": "Zapisz ten tekst jako notatkę",
+      "timer.countdownRunning": "Odliczanie trwa",
+      "timer.stopwatchRunning": "Stoper działa",
+      "timer.stopTitle": "Zatrzymaj odliczanie",
+      "timer.stopStopwatchTitle": "Zatrzymaj stoper",
+      "timer.startStopwatchTitle": "Uruchom stoper",
+      "status.noBattery": "brak baterii",
+      "status.noBatteryTitle": "Ten komputer nie ma baterii, którą przeglądarka potrafi odczytać",
+      "status.memoryUnavailable": "Zużycie pamięci nie jest dostępne w tej wersji",
+      "status.memoryTitle": "Pamięć zużywana przez przeglądarkę",
+    }),
+  });
+  // What the widgets are really set to right now. `notesRaw` is the Notes language as read from its pref; the caller
+  // passes it in so this stays a pure function.
+  function resolveWidgetLanguage(setting, notesRaw) {
+    const chosen = cleanWidgetLanguage(setting);
+    if (chosen !== "auto") return chosen;
+    return String(notesRaw ?? "").toLowerCase().startsWith("pl") ? "pl" : "en";
+  }
+  // A string with {placeholders}. A missing key falls back to English and then to the key itself, so a half-finished
+  // translation can never draw an empty button.
+  function widgetText(lang, key, params = null) {
+    const code = WIDGET_STRINGS[lang] ? lang : "en";
+    let text = WIDGET_STRINGS[code][key];
+    if (text === undefined) text = WIDGET_STRINGS.en[key];
+    if (text === undefined) return String(key);
+    if (params && typeof params === "object")
+      text = text.replace(/\{([a-z]+)\}/gi, (all, name) => (Object.hasOwn(params, name) ? String(params[name]) : all));
+    return text;
+  }
 
   const CLOCK_FORMATS = Object.freeze(["auto", "24h", "12h"]);
   const DATE_FORMATS = Object.freeze(["long", "short", "iso"]);
@@ -2619,19 +2728,21 @@ function nativeSidebarSide() {
   // Two different kinds of "nothing": a desktop simply has no battery (quiet — the setting asked for a battery, there
   // is none), while a build that cannot report memory is a surprise worth one dash. Neither is ever drawn as 0%.
   function unavailableParts(opts = {}, batterySupported = true, memorySupported = true) {
+    // OW-64: the words follow the widget language; the language comes in through `opts` so this stays pure.
+    const lang = resolveWidgetLanguage(opts.language, opts.notesRaw);
     const out = [];
     if (opts.showMemory !== false && !memorySupported) {
-      out.push({ kind: "memory", text: "\u2014", title: "Memory usage is not available in this build", level: "muted", unavailable: true });
+      out.push({ kind: "memory", text: "\u2014", title: widgetText(lang, "status.memoryUnavailable"), level: "muted", unavailable: true });
     }
     // A battery that cannot be read is only worth a word when memory is not carrying the card.
     if (opts.showBattery !== false && !batterySupported && opts.showMemory === false) {
-      out.push({ kind: "battery", text: "no battery", title: "This machine has no battery the browser can read", level: "muted", unavailable: true });
+      out.push({ kind: "battery", text: widgetText(lang, "status.noBattery"), title: widgetText(lang, "status.noBatteryTitle"), level: "muted", unavailable: true });
     }
     return out;
   }
 
   // "used / limit" from the two byte counts Firefox reports; a missing limit prints only what is used.
-  function memoryParts(usage) {
+  function memoryParts(usage, opts = {}) {
     if (!usage || typeof usage !== "object") return null;
     const used = Number(usage.usedSize ?? usage.used);
     const limit = Number(usage.totalSize ?? usage.total ?? usage.limit);
@@ -2643,7 +2754,7 @@ function nativeSidebarSide() {
       limitBytes: Number.isFinite(limit) && limit > 0 ? limit : 0,
       sharePercent: Number.isFinite(limit) && limit > 0 ? Math.round((used / limit) * 100) : 0,
       text,
-      title: "Memory used by the browser",
+      title: widgetText(resolveWidgetLanguage(opts.language, opts.notesRaw), "status.memoryTitle"),
     };
   }
 
@@ -2655,7 +2766,7 @@ function nativeSidebarSide() {
       if (b) out.push({ kind: "battery", text: b.text + (b.charging ? " \u26a1" : ""), title: b.title, level: b.level });
     }
     if (opts.showMemory !== false) {
-      const m = memoryParts(memory);
+      const m = memoryParts(memory, opts);
       if (m) out.push({ kind: "memory", text: m.text, title: m.title, level: m.sharePercent >= 90 ? "critical" : m.sharePercent >= 75 ? "low" : "ok" });
     }
     return out;
@@ -2908,34 +3019,34 @@ function nativeSidebarSide() {
   // WMO weather codes, as Open-Meteo reports them. The table is the whole vocabulary: a code nobody knows is drawn
   // as "unknown", never guessed.
   const WMO_CODES = Object.freeze({
-    0: ["Clear sky", "sun"],
-    1: ["Mainly clear", "sun"],
-    2: ["Partly cloudy", "cloud-sun"],
-    3: ["Overcast", "cloud"],
-    45: ["Fog", "fog"],
-    48: ["Depositing rime fog", "fog"],
-    51: ["Light drizzle", "drizzle"],
-    53: ["Drizzle", "drizzle"],
-    55: ["Dense drizzle", "drizzle"],
-    56: ["Light freezing drizzle", "sleet"],
-    57: ["Freezing drizzle", "sleet"],
-    61: ["Light rain", "rain"],
-    63: ["Rain", "rain"],
-    65: ["Heavy rain", "rain"],
-    66: ["Light freezing rain", "sleet"],
-    67: ["Freezing rain", "sleet"],
-    71: ["Light snow", "snow"],
-    73: ["Snow", "snow"],
-    75: ["Heavy snow", "snow"],
-    77: ["Snow grains", "snow"],
-    80: ["Light showers", "rain"],
-    81: ["Showers", "rain"],
-    82: ["Violent showers", "rain"],
-    85: ["Light snow showers", "snow"],
-    86: ["Snow showers", "snow"],
-    95: ["Thunderstorm", "storm"],
-    96: ["Thunderstorm with hail", "storm"],
-    99: ["Heavy thunderstorm with hail", "storm"],
+    0: ["Clear sky", "sun", "Bezchmurnie"],
+    1: ["Mainly clear", "sun", "Prawie bezchmurnie"],
+    2: ["Partly cloudy", "cloud-sun", "Częściowe zachmurzenie"],
+    3: ["Overcast", "cloud", "Zachmurzenie"],
+    45: ["Fog", "fog", "Mgła"],
+    48: ["Depositing rime fog", "fog", "Mgła osadzająca szadź"],
+    51: ["Light drizzle", "drizzle", "Słaba mżawka"],
+    53: ["Drizzle", "drizzle", "Mżawka"],
+    55: ["Dense drizzle", "drizzle", "Gęsta mżawka"],
+    56: ["Light freezing drizzle", "sleet", "Słaba marznąca mżawka"],
+    57: ["Freezing drizzle", "sleet", "Marznąca mżawka"],
+    61: ["Light rain", "rain", "Słaby deszcz"],
+    63: ["Rain", "rain", "Deszcz"],
+    65: ["Heavy rain", "rain", "Ulewny deszcz"],
+    66: ["Light freezing rain", "sleet", "Słaby marznący deszcz"],
+    67: ["Freezing rain", "sleet", "Marznący deszcz"],
+    71: ["Light snow", "snow", "Słaby śnieg"],
+    73: ["Snow", "snow", "Śnieg"],
+    75: ["Heavy snow", "snow", "Intensywny śnieg"],
+    77: ["Snow grains", "snow", "Ziarna śniegu"],
+    80: ["Light showers", "rain", "Słabe przelotne opady"],
+    81: ["Showers", "rain", "Przelotne opady"],
+    82: ["Violent showers", "rain", "Gwałtowne przelotne opady"],
+    85: ["Light snow showers", "snow", "Słabe opady śniegu"],
+    86: ["Snow showers", "snow", "Opady śniegu"],
+    95: ["Thunderstorm", "storm", "Burza"],
+    96: ["Thunderstorm with hail", "storm", "Burza z gradem"],
+    99: ["Heavy thunderstorm with hail", "storm", "Silna burza z gradem"],
   });
 
   // Plain text glyphs, not pictures: they follow the widget font and never load a remote asset.
@@ -2952,9 +3063,13 @@ function nativeSidebarSide() {
     unknown: "\u2601",
   });
 
-  function weatherCodeInfo(code) {
+  // OW-64: the description follows the widget language. `lang` defaults to English so a pure caller (and every test
+  // written before this) keeps exactly the words it had.
+  function weatherCodeInfo(code, lang = "en") {
     const entry = WMO_CODES[Math.round(Number(code))];
-    return entry ? { code: Math.round(Number(code)), label: entry[0], icon: entry[1] } : { code: -1, label: "Unknown", icon: "unknown" };
+    if (!entry) return { code: -1, label: lang === "pl" ? "Nieznana" : "Unknown", icon: "unknown" };
+    const label = lang === "pl" && entry[2] ? entry[2] : entry[0];
+    return { code: Math.round(Number(code)), label, icon: entry[1] };
   }
 
   function cleanWeatherUnits(raw) {
@@ -3105,12 +3220,12 @@ function nativeSidebarSide() {
   }
 
   // The first wet day after today: { index, daysAhead, date, code, label, icon } or null for a dry week.
-  function nextWetDay(days, fromIndex = 1) {
+  function nextWetDay(days, fromIndex = 1, lang = "en") {
     if (!Array.isArray(days)) return null;
     for (let i = Math.max(0, fromIndex); i < days.length; i++) {
       const day = days[i];
       if (!isWetDay(day)) continue;
-      const info = weatherCodeInfo(day.code);
+      const info = weatherCodeInfo(day.code, lang);
       return {
         index: i,
         daysAhead: i,
@@ -3160,11 +3275,11 @@ function nativeSidebarSide() {
   }
 
   // The response is reduced to what is drawn, once: the cache then holds a tiny object, not the raw payload.
-  function readWeatherPayload(payload, units) {
+  function readWeatherPayload(payload, units, lang = "en") {
     if (!payload || typeof payload !== "object") return null;
     const cur = payload.current;
     if (!cur || typeof cur !== "object") return null;
-    const info = weatherCodeInfo(cur.weather_code);
+    const info = weatherCodeInfo(cur.weather_code, lang);
     const day = payload.daily || {};
     const high = Array.isArray(day.temperature_2m_max) ? roundWeather(day.temperature_2m_max[0]) : null;
     const low = Array.isArray(day.temperature_2m_min) ? roundWeather(day.temperature_2m_min[0]) : null;
@@ -3177,9 +3292,9 @@ function nativeSidebarSide() {
     const snows = Array.isArray(day.snowfall_sum) ? day.snowfall_sum : [];
     const dates = Array.isArray(day.time) ? day.time : [];
     const week = codes.slice(0, WEATHER_FORECAST_DAYS).map((code, index) => ({
-      code: weatherCodeInfo(code).code,
-      icon: weatherCodeInfo(code).icon,
-      label: weatherCodeInfo(code).label,
+      code: weatherCodeInfo(code, lang).code,
+      icon: weatherCodeInfo(code, lang).icon,
+      label: weatherCodeInfo(code, lang).label,
       high: index < highs.length ? roundWeather(highs[index]) : null,
       low: index < lows.length ? roundWeather(lows[index]) : null,
       precipitationProbability: index < chances.length ? roundWeather(chances[index]) : null,
@@ -3378,6 +3493,12 @@ function nativeSidebarSide() {
     measureTabsContentHeight,
     measureSidebarMetrics,
     createWidgetScheduler,
+    // OW-64: the language contract, so a test can prove the rule without a running panel.
+    WIDGET_LANGUAGES,
+    WIDGET_STRINGS,
+    cleanWidgetLanguage,
+    resolveWidgetLanguage,
+    widgetText,
   });
 
   if (window.__zentralWidgetsTestSeam) {
@@ -3418,6 +3539,13 @@ function nativeSidebarSide() {
           return fallback;
         }
       };
+
+      // OW-64: the language every widget draws with, resolved once per draw. `auto` asks Notes at that moment, so a
+      // change there shows up here without a restart.
+      const widgetLang = () =>
+        resolveWidgetLanguage(getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), getString(NOTES_LANGUAGE_PREF, "en"));
+      // One string, in that language. Read at call time, never cached: the same rule as the language itself.
+      const tw = (key, params = null) => widgetText(widgetLang(), key, params);
 
       const registry = new Map(); // id -> def
       const mountedCards = new Map(); // id -> { card, body, instance }
@@ -3526,7 +3654,7 @@ function nativeSidebarSide() {
           tray.className = "zw-tray";
           tray.hidden = true;
           tray.setAttribute("role", "region");
-          tray.setAttribute("aria-label", "Sidebar widgets");
+          tray.setAttribute("aria-label", tw("tray.label"));
         }
         const rt = getRuntime();
         const fallbackSidebar =
@@ -4073,7 +4201,7 @@ function nativeSidebarSide() {
 
       registerWidget({
         id: "clock",
-        title: "Clock",
+        title: tw("clock.title"),
         showHeader: false,
         order: 10,
         pref: WIDGET_PREFS.CLOCK_ENABLED,
@@ -4145,9 +4273,9 @@ function nativeSidebarSide() {
             timerActions.appendChild(b);
             return b;
           };
-          const startBtn = mkTimerButton("start", "Start", "Start the stopwatch");
-          const lapBtn = mkTimerButton("lap", "Lap", "Take a lap");
-          const resetBtn = mkTimerButton("reset", "Reset", "Reset to zero");
+          const startBtn = mkTimerButton("start", tw("timer.start"), tw("timer.startStopwatchTitle"));
+          const lapBtn = mkTimerButton("lap", tw("timer.lap"), tw("timer.lap"));
+          const resetBtn = mkTimerButton("reset", tw("timer.reset"), tw("timer.reset"));
 
           // The same five durations the old card offered, as short chips.
           const presets = doc.createElement("div");
@@ -4158,8 +4286,8 @@ function nativeSidebarSide() {
             b.type = "button";
             b.className = "zw-timer-preset";
             b.textContent = CHIP_TEXT[index] || formatDuration(ms);
-            b.title = "Start a countdown of " + formatDuration(ms);
-            b.setAttribute("aria-label", "Start a countdown of " + formatDuration(ms));
+            b.title = tw("timer.presetTitle", { value: formatDuration(ms) });
+            b.setAttribute("aria-label", tw("timer.presetTitle", { value: formatDuration(ms) }));
             presets.appendChild(b);
             return { ms, button: b };
           });
@@ -4170,13 +4298,13 @@ function nativeSidebarSide() {
           field.type = "text";
           field.className = "zw-timer-field";
           field.placeholder = "in 5 min";
-          field.setAttribute("aria-label", "A duration for the timer, for example 5 min or 1:30");
+          field.setAttribute("aria-label", tw("timer.fieldAria"));
           field.spellcheck = false;
           const setBtn = doc.createElement("button");
           setBtn.type = "button";
           setBtn.className = "zw-timer-btn";
-          setBtn.textContent = "Set";
-          setBtn.title = "Start the countdown with the typed duration";
+          setBtn.textContent = tw("timer.set");
+          setBtn.title = tw("timer.setTitle");
           fieldRow.appendChild(field);
           fieldRow.appendChild(setBtn);
 
@@ -4199,21 +4327,21 @@ function nativeSidebarSide() {
           clockNoteField.type = "text";
           clockNoteField.className = "zw-clock-note";
           clockNoteField.placeholder = "Quick note";
-          clockNoteField.setAttribute("aria-label", "Write a quick note");
+          clockNoteField.setAttribute("aria-label", tw("timer.noteAria"));
           clockNoteField.spellcheck = false;
           const clockNoteBtn = doc.createElement("button");
           clockNoteBtn.type = "button";
           clockNoteBtn.className = "zw-clock-note-btn";
-          clockNoteBtn.textContent = "Save";
-          clockNoteBtn.title = "Save this text as a note";
+          clockNoteBtn.textContent = tw("timer.save");
+          clockNoteBtn.title = tw("timer.noteSaveTitle");
           clockNoteRow.appendChild(clockNoteField);
           clockNoteRow.appendChild(clockNoteBtn);
           const clockNoteChip = doc.createElement("button");
           clockNoteChip.type = "button";
           clockNoteChip.className = "zw-clock-chip zw-clock-note-chip";
-          clockNoteChip.textContent = "Note";
-          clockNoteChip.title = "Write a quick note";
-          clockNoteChip.setAttribute("aria-label", "Write a quick note");
+          clockNoteChip.textContent = tw("timer.note");
+          clockNoteChip.title = tw("timer.noteAria");
+          clockNoteChip.setAttribute("aria-label", tw("timer.noteAria"));
 
           const modeHintEl = doc.createElement("div");
           modeHintEl.className = "zw-card-meta zw-clock-mode-hint";
@@ -4303,9 +4431,10 @@ function nativeSidebarSide() {
             const usingTimer = t.running || (t.remainingMs > 0 && t.remainingMs < t.durationMs);
             const value = usingTimer ? timerRemaining(t, nowMs()) : stopwatchElapsed(sw, nowMs());
             timerValueEl.textContent = formatDuration(value);
-            timerKindEl.textContent = usingTimer ? "countdown" : sw.running ? "stopwatch" : sw.accumulatedMs > 0 ? "stopped" : "";
-            startBtn.textContent = usingTimer ? (t.running ? "Stop" : "Resume") : sw.running ? "Stop" : "Start";
-            startBtn.title = usingTimer ? "Stop the countdown" : sw.running ? "Stop the stopwatch" : "Start the stopwatch";
+            const kindKey = usingTimer ? "timer.kind.countdown" : sw.running ? "timer.kind.stopwatch" : sw.accumulatedMs > 0 ? "timer.kind.stopped" : "";
+            timerKindEl.textContent = kindKey ? tw(kindKey).replace(/^[, ]+/, "") : "";
+            startBtn.textContent = usingTimer ? (t.running ? tw("timer.stop") : tw("timer.resume")) : sw.running ? tw("timer.stop") : tw("timer.start");
+            startBtn.title = usingTimer ? tw("timer.stopTitle") : sw.running ? tw("timer.stopStopwatchTitle") : tw("timer.startStopwatchTitle");
             startBtn.setAttribute("aria-label", startBtn.title);
             // The face changes with the state instead of showing every control at once (OW-49's rule, kept).
             const wide = (() => {
@@ -4339,13 +4468,13 @@ function nativeSidebarSide() {
               clockBadgeElement.textContent = badge.text;
               clockBadgeElement.hidden = !badge.text;
               clockBadgeElement.setAttribute("data-zw-badge", badge.kind);
-              if (badge.text) clockBadgeElement.title = badge.kind === "countdown" ? "Countdown running" : "Stopwatch running";
+              if (badge.text) clockBadgeElement.title = badge.kind === "countdown" ? tw("timer.countdownRunning") : tw("timer.stopwatchRunning");
             }
 
             if (timerFaceUp) {
-              wrap.setAttribute("aria-label", "Timer " + timerValueEl.textContent + (timerKindEl.textContent ? ", " + timerKindEl.textContent : "") + ". Click for the clock.");
+              wrap.setAttribute("aria-label", tw("timer.aria", { value: timerValueEl.textContent, kind: timerKindEl.textContent ? ", " + timerKindEl.textContent : "" }));
             } else {
-              wrap.setAttribute("aria-label", (alert.ringing ? "Countdown finished. " : "") + "Clock. Click for the timer.");
+              wrap.setAttribute("aria-label", (alert.ringing ? tw("clock.ariaAlert") : "") + tw("clock.aria"));
             }
             modeHintEl.hidden = true;
 
@@ -4530,7 +4659,7 @@ function nativeSidebarSide() {
 
       registerWidget({
         id: "date",
-        title: "Date",
+        title: tw("date.title"),
         showHeader: false,
         order: 20,
         pref: WIDGET_PREFS.DATE_ENABLED,
@@ -4714,7 +4843,7 @@ function nativeSidebarSide() {
       // with the sidebar, and paints the cached value first, so a cold sidebar shows the last reading immediately.
       registerWidget({
         id: "weather",
-        title: "Weather",
+        title: tw("weather.title"),
         showHeader: false,
         order: 30,
         pref: WIDGET_PREFS.WEATHER_ENABLED,
@@ -4896,7 +5025,7 @@ function nativeSidebarSide() {
               if (!url) return null;
               return fetch(url, { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" })
                 .then((res) => (res && res.ok ? res.json() : null))
-                .then((payload) => (payload ? readWeatherPayload(payload, opts.units) : null))
+                .then((payload) => (payload ? readWeatherPayload(payload, opts.units, widgetLang()) : null))
                 .catch(() => null);
             },
             isStale(now, cached) {
@@ -5191,7 +5320,7 @@ function nativeSidebarSide() {
       };
       registerWidget({
         id: "status",
-        title: "Status",
+        title: tw("status.title"),
         showHeader: false,
         order: 50,
         pref: WIDGET_PREFS.STATUS_ENABLED,
@@ -5230,7 +5359,8 @@ function nativeSidebarSide() {
               return nextStatusDelayMs(cached?.value?.battery);
             },
             render(value) {
-              const opts = value?.opts || { showBattery: true, showMemory: true };
+              // OW-64: the card's words follow the widget language, read now (not when the reading was taken).
+              const opts = { ...(value?.opts || { showBattery: true, showMemory: true }), language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), notesRaw: getString(NOTES_LANGUAGE_PREF, "en") };
               const parts = composeStatusParts(opts, value?.battery, value?.memory, value?.support || {});
               const find = (kind) => parts.find((p) => p.kind === kind);
               const b = find("battery");

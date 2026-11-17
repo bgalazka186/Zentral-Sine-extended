@@ -3,7 +3,7 @@
   "themeId": "zentral-widgets",
   "name": "Zentral Sidebar Widgets",
   "description": "New-tab-page-style sidebar widgets with automatic free-area sizing, video-player avoidance, pause-when-hidden, and cached values. Standalone part of Zentral Extended.",
-  "version": "3.3.298",
+  "version": "3.3.299",
   "entry": "ZentralWidgets.uc.js",
   "output": "ZentralWidgets.standalone.uc.js",
   "settings": "settings.json",
@@ -67,6 +67,8 @@
     "zen.workspace.zentral.widgets.status.enabled",
     "zen.workspace.zentral.widgets.status.show_battery",
     "zen.workspace.zentral.widgets.status.show_memory",
+    "zen.workspace.zentral.widgets.language",
+    "zen.workspace.zentral.notes.language",
     {
       "type": "text",
       "label": "**Layout & visibility**",
@@ -81,5 +83,13 @@
   "externalPrefs": [
     "zen.workspace.zentral.widgets.timer.enabled"
   ],
-  "externalPrefsReason": "OW-60 reads the retired standalone Timer card pref once, to put that owner on the Clock's timer face. It is intentionally not a setting any more."
+  "externalPrefsReason": "OW-60 reads the retired standalone Timer card pref once, to put that owner on the Clock's timer face. It is intentionally not a setting any more.",
+  "borrowedSettings": [
+    {
+      "from": "additional/notes/settings.json",
+      "properties": [
+        "zen.workspace.zentral.notes.language"
+      ]
+    }
+  ]
 }

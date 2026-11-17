@@ -1017,6 +1017,7 @@
     "zen.workspace.zentral.widgets.status.enabled",
     "zen.workspace.zentral.widgets.status.show_battery",
     "zen.workspace.zentral.widgets.status.show_memory",
+    "zen.workspace.zentral.widgets.language",
     {
       "type": "text",
       "label": "**Sidebar Widgets · Layout & visibility**",

@@ -1333,6 +1333,26 @@ refusal was never about safety, it was about looking in the wrong list. Tests:
 refused, a hidden item is still found, a mirrored line creates the note at the named id, a bad id is refused, and the
 menu never sends the person to a note that does not exist. Suite `234/234`.
 
+**`OW-64` DONE (3.3.299)** — every widget speaks one language, and it follows Notes until the person says otherwise.
+The owner: "build language selector for all widgets, it should sync with notes language untill user decides that it
+should not". Notes had a language (`notesLang`) and the widgets had none — English literals, with the browser's locale
+used only for the clock's numbers. There is now one pref, `zentral.widgets.language`, with three states: `auto` follows
+the Notes pref **at the moment a string is drawn** (so changing Notes changes every widget that never chose, with no
+restart), `en` and `pl` are the person's own choice and ignore Notes from then on. The three states are a `dropdown` in
+the settings schema — not a free-text field — and they went through the whole chain (schema, settings meta, layout,
+`standalone.json`), so the selector is in the dialog; the widgets also declare the Notes language pref as
+`borrowedSettings`, because the ownership gate is right that reading another package's pref is a promise, and the build
+refuses to ship one it cannot explain. The vocabulary is 34 keys in English and Polish (`WIDGET_STRINGS`), plus the
+twenty-eight WMO weather descriptions, which gained a Polish column rather than a second table. Two rules are worth
+keeping: a missing key falls back to English and then to the key itself, so a half-finished translation can never draw
+an empty button; and an unreadable value in the pref means `auto`, because "I do not understand this" should be the
+state nobody has to fix. `cleanWidgetLanguage` lower-cases before it checks — a locale tag is a person's text, and `PL`
+is not a different language from `pl` (found by the test, not by reading). Tests: `tests/widgets-language.test.cjs`
+(8) — the pref reaches the dialog, `auto` and an explicit choice both behave, junk follows Notes, both languages have
+every key and every weather code, placeholders survive translation, and the status card's own words are translated
+through its options so its pure part stays pure. Verified live in the fake panel: `auto`+Notes-Polish draws "Zegar.
+Kliknij, aby otworzyć minutnik." and an explicit `en` keeps English. Suite `235/235`.
+
 
 ## The Master Order rows that were finished (moved out of the TODO table, 2026-11-17)
 
