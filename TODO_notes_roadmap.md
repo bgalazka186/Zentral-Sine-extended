@@ -77,7 +77,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
 |    12 | `T2.9`      | `PARTIAL` | Med-High            | M      | none              | Daily-note lifecycle and archive policy inside Agenda                                                    |
-|    16 | `T4.2`      | `OPEN`    | Med-High            | M      | —                 | Performance audit & active timer/listener registry table                                                 |
 |    17 | `OW-29`     | `OPEN`    | Med-High            | M      | —                 | Retyping a date or time in a calendar line moves the stored item                                         |
 |    18 | `AU-B4b`    | `OPEN`    | Med-High            | L      | AU-B4a            | [new] Notes language: interface strings (English/Polish)                                                 |
 |    19 | `SB6.2`     | `OPEN`    | Med                 | S      | none              | Agenda root folder right-click menu                                                                      |
@@ -135,14 +134,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 **Full specification (original row):** **OPEN.** Depends on `T2.2c`, `T2.8`. Migrate existing Daily notes/folder and preserve links. Past daily notes move to Trash the next day and stay 30 days, then live only in the 48-hour rolling backup. Setting _always archive, never trash_ keeps compressed copies in a separate archive folder. No duplicate Daily pseudo-folder beside Agenda.
 
 **Owner decision needed first (2026-11-16):** past date notes that are not blank are never cleaned up today. Decide whether they may ever go to Trash automatically (the safe default is never; only the archive setting moves them).
-
-#### `T4.2` — Performance audit & active timer/listener registry table
-
-**Status:** `OPEN` · **Impact:** Med-High · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
-
-**Current state and what is LEFT:** Profile parser, reminder scheduler, and DOM observers; document all active timers/listeners and verify rapid date-note switching returns listener count to baseline.
-
-**Full specification (original row):** **OPEN.** Profile parser, reminder scheduler, and DOM observers; document all active `setInterval`/`setTimeout`/event listeners in a central registry to guarantee zero memory leaks on panel close. Include the rapid-switch case from the owner's second roadmap: open several date/day notes quickly and assert the listener count returns to its baseline (this mod has no `BroadcastChannel`/`WebSocket`; the leak risk is `addEventListener` and timers).
 
 #### `OW-29` — Retyping a date or time in a calendar line moves the stored item
 
@@ -557,7 +548,9 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 State: **3.3.211.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B5`, `SB6.1`, `SB6.3`, `SB6.8`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.8b`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T4.1`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-30`, `AU-B4a`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`169/169` test files) passes in Node/fake-Zen at 3.3.211. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
-Completed this session (3.3.163–3.3.211), every finished item archived in `docs/LEGACY_done_rows.md`:
+Completed this session (3.3.163–3.3.212), every finished item archived in `docs/LEGACY_done_rows.md`:
+
+- `T4.2` (3.3.212) — completed performance audit and centralized active resource registry (`createResourceRegistry`, `ACTIVE_RESOURCE_INVENTORY`, `sheet.resourceSnapshot()`, `docs/NOTES_PERFORMANCE_AUDIT.md`), verified zero `setInterval`/`BroadcastChannel`/`WebSocket` across Notes & Calendar, fixed teardown leaks (`cancelAllAsync()` in both `sheet.close()` and `sheet.destroy()` cancelling `emptyTimer`, `outlineRaf`, `rafFit`, `rafFitReset`, `rafDrag`, `rafListFocus`, `swallowTimer`, `calendarDragClickTimer`, plus `readCleanups` flushing checkbox hold timers on `resetRead()`/`close()`/`destroy()`, `SLOT.againRaf`/`againTimer` cancellation in `releaseSlot()`, and `onZenAttr` tracking in `zenIconTimers`), and profiled Markdown parsing and 500-item calendar expansion + reminder scheduling with rapid 25-date-note switching baseline verification (`tests/notes-perf-resource-audit.test.cjs`, `170/170` suite).
 
 - `T3.2` (3.3.211) — added multi-select notes & folders in the All notes tree (`applyTreeSelection`, `resolveTreeSelection`, `cleanBatchTag`, `appendTagToBody`), `Shift+Click` contiguous range & `Ctrl/Cmd+Click` toggle (plus keyboard `Ctrl/Cmd/Shift+Space` and `Escape` clear), compact `.zn-batch-bar` toolbar and batch right-click context menu for batch move (folder-depth & cycle guarded), batch `#tag` / `label` / linked calendar `category` assignment, batch export (Markdown files, ZIP, Obsidian vault), and batch move to Trash (with `T2.3e` reminder-impact guard and foreign-shared-note protection) (`tests/notes-tree-multiselect.test.cjs`, `169/169` suite).
 

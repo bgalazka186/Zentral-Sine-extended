@@ -13498,6 +13498,157 @@
     // One sampler for the whole file; it records nothing while the debug_perf preference is off.
     let PERF_ON = false;
     const PERF = createPerfSampler({ enabled: () => PERF_ON });
+
+    // T4.2: Centralized active timer, RAF, listener, and DOM/service observer registry.
+    // Zero interval polling exists across Notes or Calendar; every periodic/deferred
+    // operation is bounded by a single-shot setTimeout or requestAnimationFrame and torn down
+    // when its owning sheet, adapter, or window closes.
+    function createResourceRegistry() {
+      const listeners = new Set();
+      const timers = new Map();
+      const rafs = new Map();
+      const observers = new Set();
+      return {
+        listen(label, target, type, fn, opts) {
+          target.addEventListener(type, fn, opts);
+          const rec = { kind: "listener", label: String(label || type), target, type, fn, opts, active: true };
+          listeners.add(rec);
+          return () => {
+            if (!rec.active) return;
+            rec.active = false;
+            listeners.delete(rec);
+            try { target.removeEventListener(type, fn, opts); } catch (_) {}
+          };
+        },
+        trackListener(label, type, remove) {
+          const rec = { kind: "listener", label: String(label || type), type: String(type || ""), remove, active: true };
+          listeners.add(rec);
+          return () => {
+            if (!rec.active) return;
+            rec.active = false;
+            listeners.delete(rec);
+            try { remove?.(); } catch (_) {}
+          };
+        },
+        setTimeout(label, fn, ms, hooks = null) {
+          const set = hooks?.set || ((cb, delay) => window.setTimeout(cb, delay));
+          const clear = hooks?.clear || ((id) => window.clearTimeout(id));
+          let id = 0;
+          const rec = { kind: "timer", label: String(label || "timer"), clear, active: true };
+          id = set(() => {
+            rec.active = false;
+            timers.delete(id);
+            fn();
+          }, ms);
+          timers.set(id, rec);
+          return id;
+        },
+        clearTimeout(id) {
+          const rec = timers.get(id);
+          if (!rec) return;
+          timers.delete(id);
+          if (!rec.active) return;
+          rec.active = false;
+          try { rec.clear(id); } catch (_) {}
+        },
+        requestAnimationFrame(label, fn, hooks = null) {
+          const req = hooks?.request || ((cb) => window.requestAnimationFrame(cb));
+          const cancel = hooks?.cancel || ((id) => window.cancelAnimationFrame(id));
+          let id = 0;
+          const rec = { kind: "raf", label: String(label || "raf"), cancel, active: true };
+          id = req((ts) => {
+            rec.active = false;
+            rafs.delete(id);
+            fn(ts);
+          });
+          rafs.set(id, rec);
+          return id;
+        },
+        cancelAnimationFrame(id) {
+          const rec = rafs.get(id);
+          if (!rec) return;
+          rafs.delete(id);
+          if (!rec.active) return;
+          rec.active = false;
+          try { rec.cancel(id); } catch (_) {}
+        },
+        observer(label, kind, disconnect) {
+          const rec = { kind: String(kind || "Observer"), label: String(label || "observer"), disconnect, active: true };
+          observers.add(rec);
+          return () => {
+            if (!rec.active) return;
+            rec.active = false;
+            observers.delete(rec);
+            try { disconnect?.(); } catch (_) {}
+          };
+        },
+        snapshot() {
+          const entries = [
+            ...[...listeners].map((r) => ({ category: "listener", label: r.label, detail: r.type })),
+            ...[...timers.values()].map((r) => ({ category: "timer", label: r.label, detail: "setTimeout" })),
+            ...[...rafs.values()].map((r) => ({ category: "raf", label: r.label, detail: "requestAnimationFrame" })),
+            ...[...observers].map((r) => ({ category: "observer", label: r.label, detail: r.kind })),
+          ];
+          return {
+            total: entries.length,
+            listeners: listeners.size,
+            timers: timers.size,
+            rafs: rafs.size,
+            observers: observers.size,
+            entries,
+          };
+        },
+        disposeAll() {
+          for (const rec of [...listeners]) {
+            rec.active = false;
+            listeners.delete(rec);
+            try {
+              if (rec.remove) rec.remove();
+              else rec.target.removeEventListener(rec.type, rec.fn, rec.opts);
+            } catch (_) {}
+          }
+          for (const [id, rec] of [...timers]) {
+            timers.delete(id);
+            if (rec.active) {
+              rec.active = false;
+              try { rec.clear(id); } catch (_) {}
+            }
+          }
+          for (const [id, rec] of [...rafs]) {
+            rafs.delete(id);
+            if (rec.active) {
+              rec.active = false;
+              try { rec.cancel(id); } catch (_) {}
+            }
+          }
+          for (const rec of [...observers]) {
+            rec.active = false;
+            observers.delete(rec);
+            try { rec.disconnect?.(); } catch (_) {}
+          }
+        },
+      };
+    }
+
+    // Complete inventory of active timers, listeners, and observers across Notes & Calendar (T4.2).
+    const ACTIVE_RESOURCE_INVENTORY = Object.freeze([
+      Object.freeze({ id: "store.autosave", file: "ZentralNotes.uc.js", kind: "setTimeout", scope: "store", owner: "createStore.close()" }),
+      Object.freeze({ id: "timeTick.minuteWake", file: "ZentralNotes.uc.js", kind: "setTimeout", scope: "window", owner: "start().onCleanup()" }),
+      Object.freeze({ id: "timeTick.visibilityWake", file: "ZentralNotes.uc.js", kind: "listener+Services.obs", scope: "window/document", owner: "start().onCleanup()" }),
+      Object.freeze({ id: "reminders.scheduler", file: "ZentralNotesCalendar.js", kind: "setTimeout", scope: "window", owner: "reminders.dispose()" }),
+      Object.freeze({ id: "sheet.openWindowPointer", file: "ZentralNotes.uc.js", kind: "window.addEventListener", scope: "sheet:open", owner: "sheet.close() & sheet.destroy()" }),
+      Object.freeze({ id: "sheet.popupGuard", file: "ZentralNotes.uc.js", kind: "window.addEventListener", scope: "sheet", owner: "sheet.destroy()" }),
+      Object.freeze({ id: "sheet.splitAndFitRO", file: "ZentralNotes.uc.js", kind: "ResizeObserver", scope: "sheet", owner: "sheet.destroy()" }),
+      Object.freeze({ id: "sheet.dialogCardRO", file: "ZentralNotes.uc.js", kind: "ResizeObserver", scope: "sheet:dialog", owner: "closeDialog() & sheet.close() & sheet.destroy()" }),
+      Object.freeze({ id: "sheet.parentPanelMO", file: "ZentralNotes.uc.js", kind: "MutationObserver", scope: "sheet:open", owner: "unwatchParentPanelHidden() & sheet.close() & sheet.destroy()" }),
+      Object.freeze({ id: "sheet.debouncedTimersAndRafs", file: "ZentralNotes.uc.js", kind: "setTimeout+rAF", scope: "sheet:open", owner: "cancelAllAsync() in sheet.close() & sheet.destroy()" }),
+      Object.freeze({ id: "sheet.readHoldActions", file: "ZentralNotes.uc.js", kind: "setTimeout", scope: "sheet:read", owner: "resetRead() & sheet.close() & sheet.destroy()" }),
+      Object.freeze({ id: "adapter.barWatch", file: "ZentralNotes.uc.js", kind: "ResizeObserver+MutationObserver+listener", scope: "sheet:open", owner: "adapter.watch() unwatch on sheet.close()" }),
+      Object.freeze({ id: "adapter.slotReserveRetry", file: "ZentralNotes.uc.js", kind: "setTimeout+rAF", scope: "window:slot", owner: "releaseSlot()" }),
+      Object.freeze({ id: "host.prefsAndServicesObs", file: "ZentralNotes.uc.js", kind: "Services.prefs+Services.obs", scope: "window", owner: "start().onCleanup()" }),
+      Object.freeze({ id: "host.zenAndAgendaSidebar", file: "ZentralNotes.uc.js", kind: "setTimeout+tabListeners", scope: "window:sidebar", owner: "start().onCleanup() & bindZen/bindAgenda" }),
+      Object.freeze({ id: "host.hoverCardAndToast", file: "ZentralNotes.uc.js", kind: "setTimeout", scope: "window:ephemeral", owner: "start().onCleanup()" }),
+    ]);
     // ---- Zen sidebar folder controller (experiment, off by default; the browser is reached ONLY through `api`) ----
     // Order of work on every run: read the mode, build the wanted list with projectZen, diff it against what the
     // folder holds (only tabs that carry our marker), apply the difference. Any exception switches the whole
@@ -13845,7 +13996,7 @@
         DATE_TITLE_RE, dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
         HISTORY_DIR, HISTORY_DEFAULTS, HISTORY_RANGE, BACKUP_DIR, BACKUP_HOURS, backupEntryName, parseBackupName, backupPlan, backupLeft, UNLOAD_RECOVERY_DIR, UNLOAD_KINDS, unloadEntryStem, parseUnloadEntryName, planUnloadWrites, decideNoteRecovery, historyOptions, historyStamp, historyFileName, parseHistoryName, shouldSnapshot, pruneHistory, historyWarning,
         orderPlan, childSequence, wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, pseudoTabCleanupKind, sweepRestoredPseudoTabs, filterZenSidebarState, acquireZenSidebarShield, restoredPseudoFolderKind, retireRestoredPseudoFolder, projectZen,
-        utf8Bytes, createPerfSampler, createZenFolder,
+        utf8Bytes, createPerfSampler, createResourceRegistry, ACTIVE_RESOURCE_INVENTORY, createZenFolder,
       };
     }
 
@@ -14466,6 +14617,7 @@
                 // runs on the release and the event only keeps the native menu away (a keyboard-opened one still cycles).
                 let rightSeen = false;
                 const rightHold = createHoldAction({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), onTap: () => {}, onHold: () => env.taskMenuMore?.(item.line, marker) });
+                env.onReadCleanup?.(() => { hold.cancel(); rightHold.cancel(); });
                 marker.addEventListener("pointerdown", (e) => { if (e.button === 2) { rightSeen = true; rightHold.cancel(); rightHold.press(); } });
                 marker.addEventListener("pointerup", (e) => {
                   if (e.button !== 2) return;
@@ -14532,12 +14684,21 @@
     function createSheet({ store, adapter, env, ensureStore }) {
       const token = {};
       const cleanups = [];
+      const resources = createResourceRegistry();
+      let openWindowOff = [];
+      let readCleanups = [];
       // The host's logger lives in another closure. A failed side effect (calendar or Agenda sync) is reported here
       // and never thrown at the person who pressed Save.
       const warn = (error) => console.warn("[ZentralNotes]", error);
       const listen = (target, type, fn, opts) => {
-        target.addEventListener(type, fn, opts);
-        cleanups.push(() => target.removeEventListener(type, fn, opts));
+        const off = resources.listen("sheet:" + type, target, type, fn, opts);
+        cleanups.push(off);
+        return off;
+      };
+      const flushReadCleanups = () => {
+        for (const fn of readCleanups.splice(0)) {
+          try { fn(); } catch (_) {}
+        }
       };
       let currentId = "";
       let armed = []; // tool ids waiting for text, in the order they were armed
@@ -14555,7 +14716,10 @@
       let menu = null;
       let rafChrome = 0,
         rafList = 0,
-        rafLayout = 0;
+        rafLayout = 0,
+        rafListFocus = 0,
+        rafFitReset = 0,
+        swallowTimer = 0;
       let unwatch = null;
       let confirmTimer = 0;
       let destroyed = false;
@@ -14574,6 +14738,7 @@
       let collapsed = false; // hover mode: open but folded away; only the thin real strip stays in layout
       let revealEl = null;
       let panelHiddenObserver = null;
+      let panelHiddenObserverOff = null;
       let foldedByParentPanel = false;
       let openTimer = 0; // armed only while the pointer rests on the strip
       let graceTimer = 0; // armed only while a hover-opened sheet waits to fold away
@@ -15193,6 +15358,7 @@
       // Draws only the blocks that changed since the last draw (see diffSigs). A note switch or a
       // changed read option starts from scratch.
       function resetRead() {
+        flushReadCleanups();
         readEl.replaceChildren();
         readSigs = [];
         readNodes = [];
@@ -15264,9 +15430,10 @@
         for (const nodes of readNodes.slice(prefix, readNodes.length - suffix)) for (const nd of nodes) nd.remove();
         const anchor = tail.find((nodes) => nodes.length)?.[0] || null;
         const fresh = [];
+        const readEnv = Object.assign(Object.create(env), { onReadCleanup: (fn) => { if (typeof fn === "function") readCleanups.push(fn); } });
         for (let i = prefix; i < blocks.length - suffix; i++) {
           const tmp = h("div");
-          renderBlocks(tmp, [blocks[i]], env, (line, kind) => setBody(kind ? toggleCalloutOption(note().body, line) : toggleCheckboxLine(note().body, line)));
+          renderBlocks(tmp, [blocks[i]], readEnv, (line, kind) => setBody(kind ? toggleCalloutOption(note().body, line) : toggleCheckboxLine(note().body, line)));
           const nodes = [...tmp.childNodes];
           for (const nd of nodes) readEl.insertBefore(nd, anchor);
           fresh.push(nodes);
@@ -15599,8 +15766,10 @@
         setOutlineOpen(false);
         applyState();
         renderList();
-        window.requestAnimationFrame(() => {
-          if (outsideClaim) return;
+        if (rafListFocus) window.cancelAnimationFrame(rafListFocus);
+        rafListFocus = window.requestAnimationFrame(() => {
+          rafListFocus = 0;
+          if (!isOpen || destroyed || outsideClaim) return;
           try {
             search.focus({ preventScroll: true });
             search.select();
@@ -21301,11 +21470,15 @@
           activeDatePicker = null;
         }
         try {
+          cardROOff?.();
           cardRO?.disconnect();
         } catch (_) {}
+        cardROOff = null;
         cardRO = null;
         window.cancelAnimationFrame(rafFit);
         rafFit = 0;
+        window.cancelAnimationFrame(rafFitReset);
+        rafFitReset = 0;
         delete root.dataset.dialogSpill;
         try { if (dialog.hasAttribute("popover")) dialog.hidePopover?.(); } catch (_) {}
         dialog.removeAttribute("popover");
@@ -21316,6 +21489,7 @@
       // V4-QS: a dialog card is sized in em/ch (it follows the sheet font) and, when it is bigger than the sheet,
       // grows past it up to the window (fitDialog). Re-run after every redraw and when the card resizes.
       let cardRO = null;
+      let cardROOff = null;
       let rafFit = 0;
       let fitting = false;
       const FIT_PROPS = ["position", "left", "top", "width", "height", "minWidth", "maxWidth", "maxHeight"];
@@ -21327,7 +21501,8 @@
         const card = dialog.querySelector(".zn-dialog-card");
         if (!card || card.classList.contains("zn-settings")) return null;
         fitting = true;
-        window.requestAnimationFrame(() => (fitting = false));
+        if (rafFitReset) window.cancelAnimationFrame(rafFitReset);
+        rafFitReset = window.requestAnimationFrame(() => { rafFitReset = 0; fitting = false; });
         const doc = (root.ownerDocument || document).documentElement || {};
         const viewport = { width: doc.clientWidth || window.innerWidth || 0, height: doc.clientHeight || window.innerHeight || 0 };
         for (const k of FIT_PROPS) card.style[k] = "";
@@ -21787,6 +21962,7 @@
               if (!fitting) scheduleFit();
             });
             cardRO.observe(card);
+            cardROOff = resources.observer("sheet:dialogCardRO", "ResizeObserver", () => cardRO?.disconnect());
           }
         } catch (_) {}
         return card;
@@ -23992,7 +24168,7 @@
         if (RO) {
           const splitRO = new RO(scheduleAllLayout);
           splitRO.observe(allLayout);
-          cleanups.push(() => splitRO.disconnect());
+          cleanups.push(resources.observer("sheet:splitRO", "ResizeObserver", () => splitRO.disconnect()));
           // The box the calendar is drawn in changes without the sheet changing: the splitter is dragged, the toolbar
           // above it takes another row, the text size is changed. What is fitted to it follows (OW-03). Only the fit
           // is checked here: the layout pass would put the splitter back to the stored share in the middle of a drag.
@@ -24000,7 +24176,7 @@
           fitRO.observe(calendarContent);
           calendarFitWatch = fitRO;
           if (calendarFitWatched) fitRO.observe(calendarFitWatched);
-          cleanups.push(() => { calendarFitWatch = null; fitRO.disconnect(); });
+          cleanups.push(resources.observer("sheet:fitRO", "ResizeObserver", () => { calendarFitWatch = null; fitRO.disconnect(); }));
         }
       } catch (_) {}
       listen(chipAll, "contextmenu", (e) => {
@@ -24652,7 +24828,8 @@
         for (const ev of ["pointerup", "pointercancel"]) {
           listen(pillEl, ev, () => {
             endGesture();
-            window.setTimeout(() => { swallowClick = false; }, 0);
+            window.clearTimeout(swallowTimer);
+            swallowTimer = window.setTimeout(() => { swallowTimer = 0; swallowClick = false; }, 0);
           });
         }
         listen(pillEl, "mouseenter", () => {
@@ -24775,12 +24952,8 @@
         if (n === "menupopup" || n === "panel") openPopups.add(e.target);
       };
       const onPopupHide = (e) => openPopups.delete(e.target);
-      window.addEventListener("popupshown", onPopupShow, true);
-      window.addEventListener("popuphidden", onPopupHide, true);
-      cleanups.push(() => {
-        window.removeEventListener("popupshown", onPopupShow, true);
-        window.removeEventListener("popuphidden", onPopupHide, true);
-      });
+      listen(window, "popupshown", onPopupShow, true);
+      listen(window, "popuphidden", onPopupHide, true);
       // The safeguards of the panel's hover logic: the card stays while the user works in the sidebar, the
       // compact sidebar / top bar is showing, a menu is open, or the address bar has the focus.
       function chromeBusy() {
@@ -24895,9 +25068,12 @@
           attributes: true,
           attributeFilter: ["bgalazka-hover-panel-enabled", "bgalazka-hover-panel-hidden"],
         });
+        panelHiddenObserverOff = resources.observer("sheet:parentPanelMO", "MutationObserver", () => panelHiddenObserver?.disconnect());
         syncParentPanelHidden();
       }
       function unwatchParentPanelHidden() {
+        panelHiddenObserverOff?.();
+        panelHiddenObserverOff = null;
         panelHiddenObserver?.disconnect();
         panelHiddenObserver = null;
         foldedByParentPanel = false;
@@ -25184,9 +25360,15 @@
         if (adapter.pushPanel) applyPush(0, 0);
         layout();
         unwatch = adapter.watch(scheduleLayout);
+        for (const off of openWindowOff.splice(0)) off();
         window.addEventListener("mousedown", onOutsidePress, true);
         window.addEventListener("mousedown", onPress, true);
         window.addEventListener("mouseup", onRelease, true);
+        openWindowOff.push(
+          resources.trackListener("sheet:outsidePress", "mousedown", () => window.removeEventListener("mousedown", onOutsidePress, true)),
+          resources.trackListener("sheet:press", "mousedown", () => window.removeEventListener("mousedown", onPress, true)),
+          resources.trackListener("sheet:release", "mouseup", () => window.removeEventListener("mouseup", onRelease, true)),
+        );
         adapter.setActive(true);
         watchParentPanelHidden();
         raise();
@@ -25248,6 +25430,28 @@
             h("div", { class: "zn-dialog-actions" }, ...actions));
         }
       }
+      function cancelAllAsync() {
+        window.clearTimeout(confirmTimer); confirmTimer = 0;
+        window.clearTimeout(previewTimer); previewTimer = 0;
+        window.clearTimeout(flashTimer); flashTimer = 0;
+        window.clearTimeout(findTimer); findTimer = 0;
+        window.clearTimeout(graceTimer); graceTimer = 0;
+        window.clearTimeout(openTimer); openTimer = 0;
+        window.clearTimeout(emptyTimer); emptyTimer = 0;
+        window.clearTimeout(swallowTimer); swallowTimer = 0;
+        window.clearTimeout(calendarDragClickTimer); calendarDragClickTimer = 0; calendarSuppressedClick = null;
+        if (rafChrome) { window.cancelAnimationFrame(rafChrome); rafChrome = 0; }
+        if (rafList) { window.cancelAnimationFrame(rafList); rafList = 0; }
+        if (rafLayout) { window.cancelAnimationFrame(rafLayout); rafLayout = 0; }
+        if (rafSync) { window.cancelAnimationFrame(rafSync); rafSync = 0; }
+        if (rafAllLayout) { window.cancelAnimationFrame(rafAllLayout); rafAllLayout = 0; }
+        if (rafCalendarFit) { window.cancelAnimationFrame(rafCalendarFit); rafCalendarFit = 0; }
+        if (outlineRaf) { window.cancelAnimationFrame(outlineRaf); outlineRaf = 0; }
+        if (rafFit) { window.cancelAnimationFrame(rafFit); rafFit = 0; }
+        if (rafFitReset) { window.cancelAnimationFrame(rafFitReset); rafFitReset = 0; }
+        if (rafDrag) { window.cancelAnimationFrame(rafDrag); rafDrag = 0; }
+        if (rafListFocus) { window.cancelAnimationFrame(rafListFocus); rafListFocus = 0; }
+      }
       function close() {
         if (!isOpen) return;
         isOpen = false;
@@ -25256,23 +25460,20 @@
         calendarDragNoteId = "";
         noteDragCanceled = false;
         dragNoteId = "";
-        window.clearTimeout(calendarDragClickTimer); calendarDragClickTimer = 0; calendarSuppressedClick = null;
         calendarMoveUndo = null;
         collapsed = false;
         unwatchParentPanelHidden();
         delete root.dataset.collapsed;
         dropReveal();
         dropPill();
-        window.clearTimeout(graceTimer);
-        graceTimer = 0;
         ptrDown = false;
         ptrInside = false;
         cancelGesture();
         applyPush(0, 0);
         closeMenu();
         closeDialog();
-        window.clearTimeout(previewTimer);
-        previewTimer = 0;
+        flushReadCleanups();
+        cancelAllAsync();
         const leavingId = registeredOpenNote || currentId;
         if (currentId) store.discardIfEmpty(currentId);
         trackOpenNote("");
@@ -25286,9 +25487,7 @@
         }
         setBusy("");
         if (!unloadingClose) store.flush().catch((error) => console.warn("[ZentralNotes] flush failed", error));
-        window.removeEventListener("mousedown", onOutsidePress, true);
-        window.removeEventListener("mousedown", onPress, true);
-        window.removeEventListener("mouseup", onRelease, true);
+        for (const off of openWindowOff.splice(0)) off();
         endGesture();
         drop();
         root.hidden = true;
@@ -25310,21 +25509,17 @@
         unloadingClose = false;
         destroyed = true;
         offStore();
+        unwatchParentPanelHidden();
+        closeDialog();
+        flushReadCleanups();
+        cancelAllAsync();
+        for (const off of openWindowOff.splice(0)) off();
         for (const fn of cleanups.splice(0).reverse()) {
           try {
             fn();
           } catch (_) {}
         }
-        window.clearTimeout(confirmTimer);
-        window.clearTimeout(previewTimer);
-        window.clearTimeout(flashTimer);
-        window.clearTimeout(findTimer);
-        window.clearTimeout(graceTimer);
-        window.clearTimeout(openTimer);
-        for (const id of [rafChrome, rafList, rafLayout, rafSync, rafAllLayout, rafCalendarFit]) if (id) window.cancelAnimationFrame(id);
-        window.removeEventListener("mousedown", onOutsidePress, true);
-        window.removeEventListener("mousedown", onPress, true);
-        window.removeEventListener("mouseup", onRelease, true);
+        resources.disposeAll();
         dropReveal();
         dropPill();
         root.remove();
@@ -25458,6 +25653,12 @@
           outsideClaim = false;
           return openAgendaDay(key);
         },
+        openNote: (id, opts) => {
+          if (!isOpen || destroyed || !store.get(id)) return false;
+          openNote(id, opts);
+          return true;
+        },
+        resourceSnapshot: () => resources.snapshot(),
       };
     }
 
@@ -25476,8 +25677,10 @@
     // folded (its upper part as a fraction), and the strip's own upper part that goes with it (see gapFrac).
     // `moved`: an edge of the gap was dragged, so how it is divided between the two panels is the user's. Until then
     // (and again after a size or reset action) the gap is centred on the divider every time it is asked for.
-    const SLOT = { owner: null, px: 0, gap: false, quad: false, pseudo: false, up: -1, suspended: null, strip: false, frac: -1, fracUp: -1, moved: false };
+    const SLOT = { owner: null, px: 0, gap: false, quad: false, pseudo: false, up: -1, suspended: null, strip: false, frac: -1, fracUp: -1, moved: false, againRaf: 0, againTimer: 0 };
     function releaseSlot() {
+      if (SLOT.againRaf) { window.cancelAnimationFrame(SLOT.againRaf); SLOT.againRaf = 0; }
+      if (SLOT.againTimer) { window.clearTimeout(SLOT.againTimer); SLOT.againTimer = 0; }
       SLOT.suspended = null;
       if (!SLOT.owner && !SLOT.px) return;
       const r = document.documentElement;
@@ -25709,8 +25912,10 @@
               document.dispatchEvent(new Event("zentral-notes-reserve"));
             } catch (_) {}
           };
-          window.requestAnimationFrame(again);
-          window.setTimeout(again, 300);
+          if (SLOT.againRaf) window.cancelAnimationFrame(SLOT.againRaf);
+          if (SLOT.againTimer) window.clearTimeout(SLOT.againTimer);
+          SLOT.againRaf = window.requestAnimationFrame(() => { SLOT.againRaf = 0; again(); });
+          SLOT.againTimer = window.setTimeout(() => { SLOT.againTimer = 0; again(); }, 300);
           return quad || between;
         },
         // The band the sheet (or, collapsed, the hover strip) occupies in the layout, or null.
@@ -27256,7 +27461,8 @@
         if (disposed || zenIconBusy || tab?.localName !== "tab" || !notesTabKey(tab)) return;
         const changed = ev.detail?.changed;
         if (Array.isArray(changed) && !changed.includes("image")) return;
-        window.setTimeout(() => zenEnsureIcon(tab), 0);
+        const id = window.setTimeout(() => { zenIconTimers.delete(id); zenEnsureIcon(tab); }, 0);
+        zenIconTimers.add(id);
       };
       const zenFolderIcon = notesFolderIcon;
       const zenApi = {
