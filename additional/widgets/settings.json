@@ -1,0 +1,110 @@
+{
+  "_documentation": {
+    "purpose": "Settings schema and category/section metadata owned by widgets.",
+    "consumer": "extension/settings/controllers/ZentralSettingsCatalog.js reads schema/settings; Runtime filters availability, UI controllers render controls.",
+    "feature_source": "additional/widgets/ZentralWidgets.uc.js",
+    "contract": "This object is data only. Missing descriptor hides owner settings; it does not start or unload the feature. Keep property/defaultValue and category IDs synchronized with preferences.json and extension/settings/layout.json."
+  },
+  "owner": "widgets",
+  "schema": [
+    {
+      "property": "zen.workspace.zentral.widgets.enabled",
+      "label": "Enable sidebar widgets",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.max_height_share",
+      "label": "Maximum share of free sidebar height (%)",
+      "type": "input",
+      "defaultValue": 45,
+      "numeric": {
+        "min": 15,
+        "max": 80,
+        "unit": "%"
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.min_free_height",
+      "label": "Hide widgets when free height is below (px)",
+      "type": "input",
+      "defaultValue": 140,
+      "numeric": {
+        "min": 60,
+        "max": 400,
+        "unit": "px"
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.min_sidebar_width",
+      "label": "Hide widgets when sidebar width is below (px)",
+      "type": "input",
+      "defaultValue": 120,
+      "numeric": {
+        "min": 80,
+        "max": 320,
+        "unit": "px"
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.tabs_reserve_px",
+      "label": "Minimum free space kept below tabs & folders (px)",
+      "type": "input",
+      "defaultValue": 24,
+      "numeric": {
+        "min": 0,
+        "max": 200,
+        "unit": "px"
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.pause_when_hidden",
+      "label": "Pause widget updates when window or sidebar is hidden",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.disabled_ids",
+      "label": "Disabled widget IDs (comma-separated)",
+      "type": "string",
+      "defaultValue": ""
+    }
+  ],
+  "settings": {
+    "zen.workspace.zentral.widgets.enabled": {
+      "category": "widgets",
+      "section": "Sidebar widgets",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.disabled_ids": {
+      "category": "widgets",
+      "section": "Sidebar widgets",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.max_height_share": {
+      "category": "widgets",
+      "section": "Layout & visibility",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.min_free_height": {
+      "category": "widgets",
+      "section": "Layout & visibility",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.min_sidebar_width": {
+      "category": "widgets",
+      "section": "Layout & visibility",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.tabs_reserve_px": {
+      "category": "widgets",
+      "section": "Layout & visibility",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.pause_when_hidden": {
+      "category": "widgets",
+      "section": "Layout & visibility",
+      "owner": "widgets"
+    }
+  }
+}

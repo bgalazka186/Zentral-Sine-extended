@@ -1,0 +1,131 @@
+/*
+ * ZENTRAL FILE GUIDE - additional/widgets/ZentralWidgets.css
+ *
+ * Purpose: New-tab-page-inspired sidebar widget tray and card presentation.
+ * Interaction / execution: Registered at USER_SHEET origin by Runtime (or by Sine in standalone mode).
+ * Ownership / failure: Normal sidebar flex flow only (no stacking overlay conflict); never styles or
+ *   interacts with #zentral-video-preview. Hides completely when [hidden] is set.
+ * Direct source consumers: loader/ZentralCatalog.js
+ * Local interface selectors: #zentral-sidebar-widgets; .zw-tray; .zw-card; .zw-card-head; .zw-card-title;
+ *   .zw-card-body; .zw-card-meta; .zw-card-stale; .zw-card-error
+ *
+ * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree.
+ */
+
+#zentral-sidebar-widgets {
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex: 0 0 auto !important;
+  flex-direction: column !important;
+  align-self: stretch !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  max-height: var(--zw-max-height, 0px) !important;
+  contain: inline-size !important;
+  gap: var(--zw-gap, 6px) !important;
+  padding: 4px 4px 6px !important;
+  margin: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-width: thin !important;
+  color: var(--zen-colors-text, currentColor) !important;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+}
+
+#zentral-sidebar-widgets[hidden] {
+  display: none !important;
+}
+
+/* New-tab-page-style translucent widget card */
+#zentral-sidebar-widgets .zw-card {
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex: 0 0 auto !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  padding: 8px 10px !important;
+  border-radius: var(--zw-radius, 10px) !important;
+  border: 1px solid color-mix(in srgb, currentColor 11%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--zen-colors-tertiary, var(--toolbar-field-background-color, rgba(127, 127, 127, 0.14))) 78%,
+    transparent
+  ) !important;
+  color: inherit !important;
+  overflow: hidden !important;
+  font-variant-numeric: tabular-nums !important;
+  transition: border-color 140ms ease, background-color 140ms ease !important;
+}
+
+#zentral-sidebar-widgets .zw-card:hover {
+  border-color: color-mix(in srgb, currentColor 20%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--zen-colors-tertiary, var(--toolbar-field-background-color, rgba(127, 127, 127, 0.2))) 88%,
+    transparent
+  ) !important;
+}
+
+#zentral-sidebar-widgets[data-zw-density="compact"] {
+  gap: 5px !important;
+  padding: 3px 3px 5px !important;
+}
+
+#zentral-sidebar-widgets[data-zw-density="compact"] .zw-card {
+  padding: 6px 8px !important;
+  border-radius: var(--zw-radius, 8px) !important;
+}
+
+#zentral-sidebar-widgets .zw-card-head {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 6px !important;
+  min-width: 0 !important;
+}
+
+#zentral-sidebar-widgets .zw-card-title {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+  opacity: 0.68 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+#zentral-sidebar-widgets .zw-card-body {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+#zentral-sidebar-widgets .zw-card-meta {
+  font-size: 11px !important;
+  line-height: 1.3 !important;
+  opacity: 0.72 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+#zentral-sidebar-widgets .zw-card-stale {
+  opacity: 0.78 !important;
+}
+
+#zentral-sidebar-widgets .zw-card-error {
+  font-size: 11px !important;
+  color: color-mix(in srgb, #e5534b 85%, currentColor) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #zentral-sidebar-widgets .zw-card {
+    transition: none !important;
+  }
+}

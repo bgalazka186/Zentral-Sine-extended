@@ -469,6 +469,34 @@
     "def": 250
   },
   {
+    "key": "zen.workspace.zentral.widgets.max_height_share",
+    "text": "zen.workspace.zentral.widgets.max_height_share_text",
+    "min": 15,
+    "max": 80,
+    "def": 45
+  },
+  {
+    "key": "zen.workspace.zentral.widgets.min_free_height",
+    "text": "zen.workspace.zentral.widgets.min_free_height_text",
+    "min": 60,
+    "max": 400,
+    "def": 140
+  },
+  {
+    "key": "zen.workspace.zentral.widgets.min_sidebar_width",
+    "text": "zen.workspace.zentral.widgets.min_sidebar_width_text",
+    "min": 80,
+    "max": 320,
+    "def": 120
+  },
+  {
+    "key": "zen.workspace.zentral.widgets.tabs_reserve_px",
+    "text": "zen.workspace.zentral.widgets.tabs_reserve_px_text",
+    "min": 0,
+    "max": 200,
+    "def": 24
+  },
+  {
     "key": "zen.workspace.zentral.hybrid.dock_push_px",
     "text": "zen.workspace.zentral.hybrid.dock_push_px_text",
     "min": 4,

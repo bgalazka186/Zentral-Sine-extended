@@ -265,6 +265,13 @@
         description:
           "Independent preview. Its normal enabled preference still controls playback.",
       },
+      {
+        id: "widgets",
+        name: "Sidebar widgets",
+        file: "additional/widgets/ZentralWidgets.uc.js",
+        description:
+          "Opt-in sidebar widget tray with automatic free-area sizing, video-player avoidance, pause-when-hidden, and cached values.",
+      },
     ];
     const CSS_MANIFEST = [
       {
@@ -409,6 +416,11 @@
         id: "RssDisplay",
         file: "additional/rss/ZentralRssDisplay.css",
         owners: ["rss"],
+      },
+      {
+        id: "Widgets",
+        file: "additional/widgets/ZentralWidgets.css",
+        owners: ["widgets"],
       },
       {
         id: "TabDensity",

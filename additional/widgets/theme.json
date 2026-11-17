@@ -1,0 +1,31 @@
+{
+  "id": "zentral-widgets",
+  "name": "Zentral Sidebar Widgets",
+  "description": "New-tab-page-style sidebar widgets with automatic free-area sizing, video-player avoidance, pause-when-hidden, and cached values. Standalone part of Zentral Extended.",
+  "homepage": "https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/widgets",
+  "supportsUnload": true,
+  "style": {
+    "chrome": "ZentralWidgets.css",
+    "content": ""
+  },
+  "scripts": {
+    "ZentralWidgets.standalone.uc.js": {
+      "include": [
+        "chrome://browser/content/browser.xhtml"
+      ],
+      "loadOrder": 2
+    }
+  },
+  "author": "bgalazka186",
+  "version": "3.3.223",
+  "preferences": "preferences.json",
+  "tags": [
+    "widgets",
+    "sidebar",
+    "zen"
+  ],
+  "fork": [
+    "zen"
+  ],
+  "readme": "https://raw.githubusercontent.com/bgalazka186/Zentral-Sine-extended/main/additional/widgets/README.md"
+}

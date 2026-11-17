@@ -1,0 +1,31 @@
+# Sidebar widgets
+
+Start at `ZentralWidgets.uc.js`. Independent sidebar widget tray shell, free-area measurement, sidebar video-player avoidance, per-widget toggles, per-widget refresh scheduling (no permanent polling), pause-when-hidden, and last-value caching.
+
+## Sharing this area for a review
+
+Send this folder for a change confined to sidebar widgets. Each source header explains its callers, contracts, and cleanup.
+
+| File                  | Responsibility                                                                                       |
+| --------------------- | ---------------------------------------------------------------------------------------------------- |
+| `ZentralWidgets.css`  | New-tab-page-style widget tray and card styling in normal sidebar flex flow (zero overlay conflict). |
+| `ZentralWidgets.uc.js`| Widget tray shell, free-area calculation, video-player avoidance, registry, scheduler, and cache.    |
+| `settings.json`       | Settings schema and category/section metadata owned by `widgets`.                                    |
+
+Full installation uses root `theme.json` and `preferences.json`, plus `loader/`; Sine loads `loader/Zentral.uc.js`. Per-feature `settings.json` is metadata, not an activation script.
+
+## Design rules
+
+- **Video-player avoidance:** `#zentral-sidebar-widgets` mounts cleanly above `#zen-media-controls-toolbar` / `#zen-sidebar-bottom-buttons` without disturbing `#zentral-video-preview` or its anchor adjacency. The tray reads `#zentral-video-preview`'s live measured height (never a fixed aspect ratio, and `0` while hidden or popped out to Big Preview) and subtracts it directly from available free height.
+- **Room for tabs, folders, and Essentials:** Free height excludes top/bottom chrome, Essentials, the sidebar video player, and occupied tabs/folders height. The tray height is capped by `max_height_share` (%) minus `tabs_reserve_px` (px) and hides automatically whenever free height drops below `min_free_height` (px) or sidebar width drops below `min_sidebar_width` (px).
+- **No permanent polling:** No `setInterval`. Each widget defines its own refresh interval and optional boundary alignment, caches its last good value, and pauses all timers whenever the window or sidebar is hidden.
+
+## Install as a standalone Sine feature
+
+In Sine, add this folder as a mod using:
+
+`https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/widgets`
+
+Enable `sine.allow-unsafe-js` and restart Zen after the first install. Sine pulls later updates from this folder, loads the module stylesheet itself, and exposes this feature's settings in Sine preferences. When the full pack is also installed, Zentral Extended owns the feature and the standalone copy stays inactive; both use the same preference keys.
+
+`ZentralWidgets.standalone.uc.js`, `theme.json`, `preferences.json` and `standalone.lock.json` are **generated** by `node tools/build-standalone.cjs` from `ZentralWidgets.uc.js`; edit the source and rebuild, never the generated files.

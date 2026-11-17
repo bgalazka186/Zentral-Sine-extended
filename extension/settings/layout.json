@@ -219,6 +219,22 @@
       "icon": "rss"
     },
     {
+      "id": "widgets",
+      "label": "Sidebar Widgets",
+      "group": "Apps & Tabs",
+      "owner": "widgets",
+      "description": "New-tab-page-style widgets placed in the free area of the Zen sidebar without touching the sidebar video player or crowding tabs, folders, and Essentials.",
+      "sections": [
+        {
+          "label": "Sidebar widgets"
+        },
+        {
+          "label": "Layout & visibility"
+        }
+      ],
+      "icon": "grid"
+    },
+    {
       "id": "panel-layout",
       "label": "Panel Layout",
       "group": "Panels",
@@ -932,6 +948,23 @@
     "zen.workspace.bgalazka.rss.card_retarget",
     "zen.workspace.bgalazka.rss.card_confirm_all",
     "zen.workspace.bgalazka.rss.card_replace_tooltip",
+    {
+      "type": "text",
+      "label": "**Sidebar Widgets · Sidebar widgets**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.widgets.enabled",
+    "zen.workspace.zentral.widgets.disabled_ids",
+    {
+      "type": "text",
+      "label": "**Sidebar Widgets · Layout & visibility**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.widgets.max_height_share",
+    "zen.workspace.zentral.widgets.min_free_height",
+    "zen.workspace.zentral.widgets.min_sidebar_width",
+    "zen.workspace.zentral.widgets.tabs_reserve_px",
+    "zen.workspace.zentral.widgets.pause_when_hidden",
     {
       "type": "text",
       "label": "**Panels**",
