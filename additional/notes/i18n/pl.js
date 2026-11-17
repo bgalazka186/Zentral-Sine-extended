@@ -376,6 +376,10 @@
       "toast.agenda.convertedToEvent": "Przypomnienie zamienione na wydarzenie",
       "toast.agenda.convertedToReminder": "Wydarzenie zamienione na przypomnienie",
       "toast.agenda.duplicated": "Utworzono niezale\u017cn\u0105 kopi\u0119",
+      "toast.agenda.sourceNoteInTrash": "Notatka \u017ar\u00f3d\u0142owa znajduje si\u0119 w Koszu",
+      "toast.agenda.sourceNoteRestored": "Przywr\u00f3cono notatk\u0119 \u017ar\u00f3d\u0142ow\u0105 z Kosza",
+      "toast.agenda.sourceNoteTrashedAgain": "Przeniesiono notatk\u0119 \u017ar\u00f3d\u0142ow\u0105 z powrotem do Kosza",
+      "toast.agenda.restoreFailed": "Nie uda\u0142o si\u0119 przywr\u00f3ci\u0107 notatki \u017ar\u00f3d\u0142owej",
 
       // Area 2: Calendar composer
       "compose.title.create": "Utw\u00f3rz element kalendarza",
@@ -497,6 +501,9 @@
       "hover.snooze1h": "Drzemka +1 godz.",
       "hover.snooze1d": "Drzemka +1 dzie\u0144",
       "hover.dismiss": "Odrzu\u0107",
+      "hover.sourceInTrash": "Notatka \u017ar\u00f3d\u0142owa w Koszu",
+      "hover.sourceInTrashNamed": "Notatka \u017ar\u00f3d\u0142owa w Koszu: {title}",
+      "hover.restoreNote": "Przywr\u00f3\u0107 notatk\u0119",
       "hover.overduePrefix": "Po terminie \u00b7 {when}{extra}",
       "hover.reminderPrefix": "Przypomnienie \u00b7 {when}{extra}",
       "hover.extraMore": " (+{count} wi\u0119cej)",
@@ -694,6 +701,7 @@
       "settings.opt.agendaOverdue": "Pokazuj zaleg\u0142e przypomnienia w Agendzie",
       "settings.opt.agendaOverdueDays": "Zakres zaleg\u0142ych wstecz",
       "settings.opt.agendaOverdueCap": "Zaleg\u0142e elementy pokazywane przed przyciskiem Wi\u0119cej",
+      "settings.opt.agendaHideTrashed": "Ukryj elementy Agendy, kt\u00f3rych notatka \u017ar\u00f3d\u0142owa jest w Koszu",
       "settings.opt.perf": "Pr\u00f3bkuj czasy uk\u0142adu i przeci\u0105gania (odczyt: __zentralNotesPerf.report())",
       "settings.choice.blank.collapse": "Zwi\u0144",
       "settings.choice.blank.keep": "Zachowaj",

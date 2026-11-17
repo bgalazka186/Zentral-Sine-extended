@@ -363,6 +363,10 @@
       "toast.agenda.convertedToEvent": "Reminder converted to an event",
       "toast.agenda.convertedToReminder": "Event converted to a reminder",
       "toast.agenda.duplicated": "Independent copy created",
+      "toast.agenda.sourceNoteInTrash": "Source note is in Trash",
+      "toast.agenda.sourceNoteRestored": "Source note restored from Trash",
+      "toast.agenda.sourceNoteTrashedAgain": "Source note moved back to Trash",
+      "toast.agenda.restoreFailed": "Could not restore source note",
 
       // Area 2: Calendar composer
       "compose.title.create": "Create calendar item",
@@ -484,6 +488,9 @@
       "hover.snooze1h": "Snooze +1h",
       "hover.snooze1d": "Snooze +1d",
       "hover.dismiss": "Dismiss",
+      "hover.sourceInTrash": "Source note in Trash",
+      "hover.sourceInTrashNamed": "Source note in Trash: {title}",
+      "hover.restoreNote": "Restore note",
       "hover.overduePrefix": "Overdue · {when}{extra}",
       "hover.reminderPrefix": "Reminder · {when}{extra}",
       "hover.extraMore": " (+{count} more)",
@@ -681,6 +688,7 @@
       "settings.opt.agendaOverdue": "Show overdue reminders in the Agenda",
       "settings.opt.agendaOverdueDays": "Overdue look-back",
       "settings.opt.agendaOverdueCap": "Overdue items shown before More",
+      "settings.opt.agendaHideTrashed": "Hide Agenda items whose source note is in Trash",
       "settings.opt.perf": "Sample layout / drag timings (read __zentralNotesPerf.report())",
       "settings.choice.blank.collapse": "Collapse",
       "settings.choice.blank.keep": "Keep",

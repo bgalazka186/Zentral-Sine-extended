@@ -3148,6 +3148,12 @@
     "unit": "items"
   },
   {
+    "property": "zen.workspace.zentral.notes.agenda_hide_trashed",
+    "label": "Hide Agenda items whose source note is in Trash",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
     "type": "text",
     "label": "**Notes appearance · Size & shape**",
     "size": "16px"

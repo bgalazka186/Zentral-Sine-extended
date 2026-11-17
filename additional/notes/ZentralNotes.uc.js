@@ -215,6 +215,7 @@
       AGENDA_OVERDUE: "zen.workspace.zentral.notes.agenda_overdue",
       AGENDA_OVERDUE_DAYS: "zen.workspace.zentral.notes.agenda_overdue_days",
       AGENDA_OVERDUE_CAP: "zen.workspace.zentral.notes.agenda_overdue_cap",
+      AGENDA_HIDE_TRASHED: "zen.workspace.zentral.notes.agenda_hide_trashed",
       SPACE_MODE: "zen.workspace.zentral.notes.space_mode",
       MISSED_DAYS: "zen.workspace.zentral.notes.missed_reminder_days",
       CAPTURE_FORMAT: "zen.workspace.zentral.notes.quick_capture_format",
@@ -4964,6 +4965,7 @@
           { id: "agendaOverdue", label: "Show overdue reminders in the Agenda", pref: PREF.AGENDA_OVERDUE, kind: "bool", def: true },
           S("agendaOverdueDays", "Overdue look-back", PREF.AGENDA_OVERDUE_DAYS, 1, 31, "days", 7),
           S("agendaOverdueCap", "Overdue items shown before More", PREF.AGENDA_OVERDUE_CAP, 1, 100, "items", 10),
+          { id: "agendaHideTrashed", label: "Hide Agenda items whose source note is in Trash", pref: PREF.AGENDA_HIDE_TRASHED, kind: "bool", def: true },
           { kind: "heading", i18nKey: "settings.heading.diagnostics", label: "Diagnostics" },
           { id: "perf", label: "Sample layout / drag timings (read __zentralNotesPerf.report())", pref: PREF.DEBUG_PERF, kind: "bool", def: false },
         ],
@@ -6135,10 +6137,22 @@
       const noteId = String(item?.x?.noteId || identity?.noteId || tab?.getAttribute?.("bgalazka-notes-agenda-note-id") || "").trim();
       const heading = String(item?.x?.heading || tab?.getAttribute?.("bgalazka-notes-agenda-heading") || "").trim();
       const linkedNote = noteId && store?.get ? store.get(noteId) : null;
+      const isSourceTrashed = !!(linkedNote?.trashed || item?.x?.sourceNoteTrashed || tab?.hasAttribute?.("bgalazka-notes-agenda-source-trashed"));
       const sourceTitle = (linkedNote && !linkedNote.trashed)
         ? (titleOf(linkedNote.body) || tr("hover.untitled"))
         : String(item?.x?.sourceNoteTitle || "").trim();
-      const sourceNote = (noteId && sourceTitle) ? { id: noteId, title: sourceTitle, heading } : null;
+      const sourceNote = (!isSourceTrashed && noteId && sourceTitle) ? { id: noteId, title: sourceTitle, heading } : null;
+      const trashedTitle = isSourceTrashed
+        ? ((linkedNote ? titleOf(linkedNote.body) : "") || String(item?.x?.sourceNoteTrashedTitle || "").trim())
+        : "";
+      const sourceTrashed = isSourceTrashed
+        ? {
+            id: noteId,
+            title: trashedTitle,
+            label: trashedTitle ? tr("hover.sourceInTrashNamed", { title: trashedTitle }) : tr("hover.sourceInTrash"),
+            canRestore: !!(noteId && linkedNote?.trashed && !linkedNote._sharedFromOtherSpace && typeof store?.restore === "function"),
+          }
+        : null;
       const rawNotes = [];
       for (const text of [item?.x?.calNote, item?.description]) {
         const cleaned = String(text || "").replace(HOVER_COMMENT_RE, "").replace(MARKERS_RE, "").trim();
@@ -6147,6 +6161,7 @@
       const descLines = rawNotes.join("\n").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 4);
       const description = descLines.map((l) => (l.length > 140 ? l.slice(0, 139) + "\u2026" : l)).join("\n");
       const actions = [{ id: "open", label: tr(sourceNote ? "hover.openNote" : "hover.open"), primary: true }];
+      if (sourceTrashed?.canRestore) actions.push({ id: "restore-source", label: tr("hover.restoreNote") });
       if (item && C?.calendarItemMenuModel) {
         const historyWritable = !!hist && !hist.storageState?.()?.writeBlocked;
         const currentId = String(item.x?.series || item.id || "");
@@ -6160,7 +6175,7 @@
         if (can("snooze-1d")) actions.push({ id: "snooze-1d", label: tr("hover.snooze1d") });
         if (can("dismiss")) actions.push({ id: "dismiss", label: tr("hover.dismiss") });
       }
-      return { title, kind, timeText, status, category, sourceNote, description, actions };
+      return { title, kind, timeText, status, category, sourceNote, sourceTrashed, description, actions };
     }
     // One timer, armed for the next future reminder. `onDue(notes)` receives every overdue, unannounced
     // reminder as one batch AFTER the store has recorded them as announced (claim), so nothing repeats.
@@ -28238,6 +28253,8 @@
           srcBtn.setAttribute("data-action", "open-source");
           srcBtn.dataset.action = "open-source";
           node.append(srcBtn);
+        } else if (model.sourceTrashed) {
+          node.append(hoverEl("div", "zn-hc-source-trashed", model.sourceTrashed.label));
         }
         if (model.description) {
           node.append(hoverEl("div", "zn-hc-body", model.description));
@@ -28254,11 +28271,51 @@
           node.append(bar);
         }
       }
+      function restoreAgendaSourceNote(noteId, { openAfter = false, heading = "", itemId = "", showToast = true } = {}) {
+        if (disposed || !noteId) return false;
+        const note = store.get(noteId);
+        if (!note || !note.trashed || note._sharedFromOtherSpace) return false;
+        store.restore(noteId);
+        const restored = store.get(noteId);
+        if (!restored || restored.trashed) {
+          if (showToast) agendaActionToast.show({ message: t("toast.agenda.restoreFailed"), durationMs: 3500 });
+          return false;
+        }
+        try { agendaController.invalidate?.(); agendaController.runNow(); } catch (_) {}
+        if (openAfter) {
+          openReminderNote(noteId, { heading, itemId }).catch?.(warn);
+        }
+        if (showToast) {
+          agendaActionToast.show({
+            message: t("toast.agenda.sourceNoteRestored"),
+            undoLabel: t("common.undo"),
+            undo: () => {
+              const current = store.get(noteId);
+              if (!current || current.trashed) return { ok: false };
+              store.trash(noteId);
+              try { agendaController.invalidate?.(); agendaController.runNow(); } catch (_) {}
+              return { ok: true, message: t("toast.agenda.sourceNoteTrashedAgain") };
+            },
+            durationMs: 5500,
+          });
+        }
+        return true;
+      }
       function handleAgendaCardAction(tab, action, { viaPointer = false } = {}) {
         if (!tab || !action) return;
         if (action === "open" || action === "open-source") {
           agendaHoverCard.hide();
           activateAgendaTab(tab);
+          return;
+        }
+        if (action === "restore-source") {
+          const identity = agendaTabIdentity(tab);
+          const noteId = tab.getAttribute("bgalazka-notes-agenda-note-id") || identity.noteId || "";
+          if (restoreAgendaSourceNote(noteId)) {
+            const refreshed = agendaValidTab(tab) ? tab : agendaTabFor(agendaTabKey(tab));
+            if (refreshed) agendaHoverCard.show(refreshed);
+            else agendaHoverCard.hide();
+          }
           return;
         }
         if (!CALENDAR_PART?.isHeadlessAgendaCommand?.(action)) return;
@@ -28590,6 +28647,8 @@
           agendaSetAttr(tab, "bgalazka-notes-agenda-heading", entry.heading || "");
           if (entry.ended) agendaSetAttr(tab, "bgalazka-notes-agenda-ended", "true");
           else agendaDelAttr(tab, "bgalazka-notes-agenda-ended");
+          if (entry.sourceNoteTrashed) agendaSetAttr(tab, "bgalazka-notes-agenda-source-trashed", "true");
+          else agendaDelAttr(tab, "bgalazka-notes-agenda-source-trashed");
           setAgendaTabIcon(tab, color, kind, { gBrowser: window.gBrowser, on: zenFaviconsOn(), warn });
           agendaTitleCard.updated(tab);
         } finally {
@@ -28767,16 +28826,38 @@
       const agendaLegacyIds = new Set();
       const agendaItems = () => {
         const unique = new Map();
-        const stored = store.items?.list?.() || [];
+        const hideTrashed = prefBool(PREF.AGENDA_HIDE_TRASHED, true);
+        const visible = store.items?.list?.() || [];
+        const visibleIds = new Set(visible.map((it) => it.id));
+        const stored = hideTrashed
+          ? visible
+          : (store.items?.list?.({ includeHidden: true }) || visible).filter((it) => {
+              if (visibleIds.has(it.id)) return true;
+              const n = it.x?.noteId ? store.get(it.x.noteId) : null;
+              return !!(n && n.trashed && !n._sharedFromOtherSpace);
+            });
         const legacy = CALENDAR_PART?.itemsFromNoteReminders?.(store.list({ trashed: false }), titleOf) || [];
         agendaLegacyIds.clear(); for (const item of legacy) if (item.x?.noteId) agendaLegacyIds.add(item.x.noteId);
         for (const item of [...stored, ...legacy]) {
           const note = item.x?.noteId ? store.get(item.x.noteId) : null;
+          const sourceTrashed = !!(note && note.trashed);
+          if (hideTrashed && sourceTrashed) continue;
           const noteColor = note && !note.trashed ? note.color : "";
           const catColor = item.x?.category ? (store.items?.category?.(item.x.category)?.color || "") : "";
           const resolvedColor = CALENDAR_PART?.resolveItemColor?.(noteColor, catColor) || noteColor || catColor || "";
           const color = colorHex(resolvedColor) || "";
-          unique.set(item.id, { ...item, x: { ...(item.x || {}), sourceNoteTitle: note && !note.trashed ? titleOf(note.body) : "", noteColor, categoryColor: catColor, color } });
+          unique.set(item.id, {
+            ...item,
+            x: {
+              ...(item.x || {}),
+              sourceNoteTitle: note && !note.trashed ? titleOf(note.body) : "",
+              sourceNoteTrashed: sourceTrashed,
+              sourceNoteTrashedTitle: sourceTrashed ? (titleOf(note.body) || "") : "",
+              noteColor,
+              categoryColor: catColor,
+              color,
+            },
+          });
         }
         return [...unique.values()];
       };
@@ -29284,7 +29365,19 @@
           const noteId = noteIdAttr || entry?.noteId || entry?.x?.noteId || "";
           const heading = headingAttr || entry?.heading || entry?.x?.heading || "";
           const date = dateAttr || agendaDateFromKey(key);
-          if (noteId && store.get(noteId) && !store.get(noteId).trashed) return openReminderNote(noteId, { heading, itemId });
+          const sourceNote = noteId ? store.get(noteId) : null;
+          if (sourceNote && !sourceNote.trashed) return openReminderNote(noteId, { heading, itemId });
+          if (sourceNote && sourceNote.trashed && !sourceNote._sharedFromOtherSpace) {
+            agendaActionToast.show({
+              message: t("toast.agenda.sourceNoteInTrash"),
+              undoLabel: t("hover.restoreNote"),
+              undo: () => {
+                const ok = restoreAgendaSourceNote(noteId, { openAfter: true, heading, itemId, showToast: false });
+                return { ok, message: t(ok ? "toast.agenda.sourceNoteRestored" : "toast.agenda.restoreFailed") };
+              },
+              durationMs: 6000,
+            });
+          }
           return openCalendarDayFromHost(date);
         }).catch(warn);
       }
@@ -30817,7 +30910,7 @@
             if (zenMode() !== "off") zenSoon();
             if (agendaEnabled()) agendaSoon();
           }
-          else if (name === PREF.AGENDA_ENABLED || name === PREF.AGENDA_POSITION || name === PREF.AGENDA_DAYS || name === PREF.AGENDA_OVERDUE || name === PREF.AGENDA_OVERDUE_DAYS || name === PREF.AGENDA_OVERDUE_CAP) agendaSoon();
+          else if (name === PREF.AGENDA_ENABLED || name === PREF.AGENDA_POSITION || name === PREF.AGENDA_DAYS || name === PREF.AGENDA_OVERDUE || name === PREF.AGENDA_OVERDUE_DAYS || name === PREF.AGENDA_OVERDUE_CAP || name === PREF.AGENDA_HIDE_TRASHED) agendaSoon();
           else if (name === PREF.ZEN_ROOT_COLOR || name === PREF.ZEN_ROOT_ICON || name === PREF.ZEN_ROOT_PARTS || name === PREF.ZEN_ROOT_PART_OPACITY) {
             if (zenMode() !== "off") zenSoon(); // the NOTES folder is restyled at once
             window.dispatchEvent?.(new Event("zentral-notes-folder-style-changed"));

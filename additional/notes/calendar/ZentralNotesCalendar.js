@@ -4786,13 +4786,18 @@
   }
   // Projection for the virtual Zen Agenda folder. Keys are occurrence-scoped, not
   // display strings or formatted dates, so duplicate summaries remain independent.
-  function agendaZenItem(item, bucketKey, now) {
+  function agendaZenItem(item, bucketKey, now, lang = DEFAULT_NOTES_LANGUAGE) {
     const clock = (ms) => { const d = new Date(ms); return p2(d.getHours()) + ":" + p2(d.getMinutes()); };
     const [start, end] = itemRange(item);
     const summary = String(item.summary || "Untitled").replace(/[\r\n]+/g, " ").trim();
     const label = isAllDay(item) ? "All day · " + summary : (isReminder(item) ? clock(start) : clock(start) + "–" + clock(end)) + "  " + summary;
     const identity = reminderIdentity(item) || { itemId: item.id, occurrenceId: String(item.x?.recurrenceId || item.id), noteId: item.x?.noteId || "" };
-    const details = [item.description, item.x?.calNote, item.x?.sourceNoteTitle ? "Source note: " + item.x.sourceNoteTitle : "", item.x?.heading ? "Heading: " + item.x.heading : "", item.x?.category ? "Category: " + item.x.category : "", item.x?.tz ? "Time zone: " + item.x.tz : ""].filter(Boolean).join("\n");
+    const sourceLine = item.x?.sourceNoteTrashed
+      ? (item.x?.sourceNoteTrashedTitle
+        ? t("hover.sourceInTrashNamed", { title: item.x.sourceNoteTrashedTitle }, lang)
+        : t("hover.sourceInTrash", null, lang))
+      : (item.x?.sourceNoteTitle ? "Source note: " + item.x.sourceNoteTitle : "");
+    const details = [item.description, item.x?.calNote, sourceLine, item.x?.heading ? "Heading: " + item.x.heading : "", item.x?.category ? "Category: " + item.x.category : "", item.x?.tz ? "Time zone: " + item.x.tz : ""].filter(Boolean).join("\n");
     return {
       key: "item:" + identity.itemId + ":" + identity.occurrenceId + "@" + bucketKey,
       itemId: identity.itemId,
@@ -4807,6 +4812,7 @@
       end,
       allDay: isAllDay(item),
       reminder: isReminder(item),
+      sourceNoteTrashed: !!item.x?.sourceNoteTrashed,
       color: String(item.x?.color || resolveItemColor(item.x?.noteColor || "", item.x?.categoryColor || "") || ""),
       ended: !isReminder(item) && end > start && end <= Number(now),
     };
@@ -4878,7 +4884,7 @@
       date: bucket.key,
       label: bucket.label,
       count: bucket.count,
-      items: bucket.items.map((item) => agendaZenItem(item, bucket.key, now)),
+      items: bucket.items.map((item) => agendaZenItem(item, bucket.key, now, options?.lang)),
     }));
   }
   // Separate, occurrence-scoped overdue bucket. Civil-day look-back excludes
@@ -4892,7 +4898,7 @@
     const overdue = expandRange(masters, from, today).filter((item) => !isDone(item));
     if (!overdue.length) return null;
     const shown = overdue.slice(0, limit).map((item) => {
-      const entry = agendaZenItem(item, "overdue", now);
+      const entry = agendaZenItem(item, "overdue", now, lang);
       entry.openDate = localDateKey(itemRange(item)[0]);
       return entry;
     });

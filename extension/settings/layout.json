@@ -1175,6 +1175,7 @@
     "zen.workspace.zentral.notes.agenda_overdue",
     "zen.workspace.zentral.notes.agenda_overdue_days",
     "zen.workspace.zentral.notes.agenda_overdue_cap",
+    "zen.workspace.zentral.notes.agenda_hide_trashed",
     {
       "type": "text",
       "label": "**Notes appearance · Size & shape**",

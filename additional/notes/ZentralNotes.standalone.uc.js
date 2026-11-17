@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.216
+// @version 3.3.217
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.216, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.217, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.216";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.217";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2054,6 +2054,10 @@ const __zentralEmbeddedLoader = (function () {
       "toast.agenda.convertedToEvent": "Reminder converted to an event",
       "toast.agenda.convertedToReminder": "Event converted to a reminder",
       "toast.agenda.duplicated": "Independent copy created",
+      "toast.agenda.sourceNoteInTrash": "Source note is in Trash",
+      "toast.agenda.sourceNoteRestored": "Source note restored from Trash",
+      "toast.agenda.sourceNoteTrashedAgain": "Source note moved back to Trash",
+      "toast.agenda.restoreFailed": "Could not restore source note",
 
       // Area 2: Calendar composer
       "compose.title.create": "Create calendar item",
@@ -2175,6 +2179,9 @@ const __zentralEmbeddedLoader = (function () {
       "hover.snooze1h": "Snooze +1h",
       "hover.snooze1d": "Snooze +1d",
       "hover.dismiss": "Dismiss",
+      "hover.sourceInTrash": "Source note in Trash",
+      "hover.sourceInTrashNamed": "Source note in Trash: {title}",
+      "hover.restoreNote": "Restore note",
       "hover.overduePrefix": "Overdue · {when}{extra}",
       "hover.reminderPrefix": "Reminder · {when}{extra}",
       "hover.extraMore": " (+{count} more)",
@@ -2372,6 +2379,7 @@ const __zentralEmbeddedLoader = (function () {
       "settings.opt.agendaOverdue": "Show overdue reminders in the Agenda",
       "settings.opt.agendaOverdueDays": "Overdue look-back",
       "settings.opt.agendaOverdueCap": "Overdue items shown before More",
+      "settings.opt.agendaHideTrashed": "Hide Agenda items whose source note is in Trash",
       "settings.opt.perf": "Sample layout / drag timings (read __zentralNotesPerf.report())",
       "settings.choice.blank.collapse": "Collapse",
       "settings.choice.blank.keep": "Keep",
@@ -2821,6 +2829,10 @@ const __zentralEmbeddedLoader = (function () {
       "toast.agenda.convertedToEvent": "Przypomnienie zamienione na wydarzenie",
       "toast.agenda.convertedToReminder": "Wydarzenie zamienione na przypomnienie",
       "toast.agenda.duplicated": "Utworzono niezale\u017cn\u0105 kopi\u0119",
+      "toast.agenda.sourceNoteInTrash": "Notatka \u017ar\u00f3d\u0142owa znajduje si\u0119 w Koszu",
+      "toast.agenda.sourceNoteRestored": "Przywr\u00f3cono notatk\u0119 \u017ar\u00f3d\u0142ow\u0105 z Kosza",
+      "toast.agenda.sourceNoteTrashedAgain": "Przeniesiono notatk\u0119 \u017ar\u00f3d\u0142ow\u0105 z powrotem do Kosza",
+      "toast.agenda.restoreFailed": "Nie uda\u0142o si\u0119 przywr\u00f3ci\u0107 notatki \u017ar\u00f3d\u0142owej",
 
       // Area 2: Calendar composer
       "compose.title.create": "Utw\u00f3rz element kalendarza",
@@ -2942,6 +2954,9 @@ const __zentralEmbeddedLoader = (function () {
       "hover.snooze1h": "Drzemka +1 godz.",
       "hover.snooze1d": "Drzemka +1 dzie\u0144",
       "hover.dismiss": "Odrzu\u0107",
+      "hover.sourceInTrash": "Notatka \u017ar\u00f3d\u0142owa w Koszu",
+      "hover.sourceInTrashNamed": "Notatka \u017ar\u00f3d\u0142owa w Koszu: {title}",
+      "hover.restoreNote": "Przywr\u00f3\u0107 notatk\u0119",
       "hover.overduePrefix": "Po terminie \u00b7 {when}{extra}",
       "hover.reminderPrefix": "Przypomnienie \u00b7 {when}{extra}",
       "hover.extraMore": " (+{count} wi\u0119cej)",
@@ -3139,6 +3154,7 @@ const __zentralEmbeddedLoader = (function () {
       "settings.opt.agendaOverdue": "Pokazuj zaleg\u0142e przypomnienia w Agendzie",
       "settings.opt.agendaOverdueDays": "Zakres zaleg\u0142ych wstecz",
       "settings.opt.agendaOverdueCap": "Zaleg\u0142e elementy pokazywane przed przyciskiem Wi\u0119cej",
+      "settings.opt.agendaHideTrashed": "Ukryj elementy Agendy, kt\u00f3rych notatka \u017ar\u00f3d\u0142owa jest w Koszu",
       "settings.opt.perf": "Pr\u00f3bkuj czasy uk\u0142adu i przeci\u0105gania (odczyt: __zentralNotesPerf.report())",
       "settings.choice.blank.collapse": "Zwi\u0144",
       "settings.choice.blank.keep": "Zachowaj",
@@ -7998,13 +8014,18 @@ const __zentralEmbeddedLoader = (function () {
   }
   // Projection for the virtual Zen Agenda folder. Keys are occurrence-scoped, not
   // display strings or formatted dates, so duplicate summaries remain independent.
-  function agendaZenItem(item, bucketKey, now) {
+  function agendaZenItem(item, bucketKey, now, lang = DEFAULT_NOTES_LANGUAGE) {
     const clock = (ms) => { const d = new Date(ms); return p2(d.getHours()) + ":" + p2(d.getMinutes()); };
     const [start, end] = itemRange(item);
     const summary = String(item.summary || "Untitled").replace(/[\r\n]+/g, " ").trim();
     const label = isAllDay(item) ? "All day · " + summary : (isReminder(item) ? clock(start) : clock(start) + "–" + clock(end)) + "  " + summary;
     const identity = reminderIdentity(item) || { itemId: item.id, occurrenceId: String(item.x?.recurrenceId || item.id), noteId: item.x?.noteId || "" };
-    const details = [item.description, item.x?.calNote, item.x?.sourceNoteTitle ? "Source note: " + item.x.sourceNoteTitle : "", item.x?.heading ? "Heading: " + item.x.heading : "", item.x?.category ? "Category: " + item.x.category : "", item.x?.tz ? "Time zone: " + item.x.tz : ""].filter(Boolean).join("\n");
+    const sourceLine = item.x?.sourceNoteTrashed
+      ? (item.x?.sourceNoteTrashedTitle
+        ? t("hover.sourceInTrashNamed", { title: item.x.sourceNoteTrashedTitle }, lang)
+        : t("hover.sourceInTrash", null, lang))
+      : (item.x?.sourceNoteTitle ? "Source note: " + item.x.sourceNoteTitle : "");
+    const details = [item.description, item.x?.calNote, sourceLine, item.x?.heading ? "Heading: " + item.x.heading : "", item.x?.category ? "Category: " + item.x.category : "", item.x?.tz ? "Time zone: " + item.x.tz : ""].filter(Boolean).join("\n");
     return {
       key: "item:" + identity.itemId + ":" + identity.occurrenceId + "@" + bucketKey,
       itemId: identity.itemId,
@@ -8019,6 +8040,7 @@ const __zentralEmbeddedLoader = (function () {
       end,
       allDay: isAllDay(item),
       reminder: isReminder(item),
+      sourceNoteTrashed: !!item.x?.sourceNoteTrashed,
       color: String(item.x?.color || resolveItemColor(item.x?.noteColor || "", item.x?.categoryColor || "") || ""),
       ended: !isReminder(item) && end > start && end <= Number(now),
     };
@@ -8090,7 +8112,7 @@ const __zentralEmbeddedLoader = (function () {
       date: bucket.key,
       label: bucket.label,
       count: bucket.count,
-      items: bucket.items.map((item) => agendaZenItem(item, bucket.key, now)),
+      items: bucket.items.map((item) => agendaZenItem(item, bucket.key, now, options?.lang)),
     }));
   }
   // Separate, occurrence-scoped overdue bucket. Civil-day look-back excludes
@@ -8104,7 +8126,7 @@ const __zentralEmbeddedLoader = (function () {
     const overdue = expandRange(masters, from, today).filter((item) => !isDone(item));
     if (!overdue.length) return null;
     const shown = overdue.slice(0, limit).map((item) => {
-      const entry = agendaZenItem(item, "overdue", now);
+      const entry = agendaZenItem(item, "overdue", now, lang);
       entry.openDate = localDateKey(itemRange(item)[0]);
       return entry;
     });
@@ -10121,6 +10143,7 @@ __zentralShim.register = function (def) {
       AGENDA_OVERDUE: "zen.workspace.zentral.notes.agenda_overdue",
       AGENDA_OVERDUE_DAYS: "zen.workspace.zentral.notes.agenda_overdue_days",
       AGENDA_OVERDUE_CAP: "zen.workspace.zentral.notes.agenda_overdue_cap",
+      AGENDA_HIDE_TRASHED: "zen.workspace.zentral.notes.agenda_hide_trashed",
       SPACE_MODE: "zen.workspace.zentral.notes.space_mode",
       MISSED_DAYS: "zen.workspace.zentral.notes.missed_reminder_days",
       CAPTURE_FORMAT: "zen.workspace.zentral.notes.quick_capture_format",
@@ -14870,6 +14893,7 @@ __zentralShim.register = function (def) {
           { id: "agendaOverdue", label: "Show overdue reminders in the Agenda", pref: PREF.AGENDA_OVERDUE, kind: "bool", def: true },
           S("agendaOverdueDays", "Overdue look-back", PREF.AGENDA_OVERDUE_DAYS, 1, 31, "days", 7),
           S("agendaOverdueCap", "Overdue items shown before More", PREF.AGENDA_OVERDUE_CAP, 1, 100, "items", 10),
+          { id: "agendaHideTrashed", label: "Hide Agenda items whose source note is in Trash", pref: PREF.AGENDA_HIDE_TRASHED, kind: "bool", def: true },
           { kind: "heading", i18nKey: "settings.heading.diagnostics", label: "Diagnostics" },
           { id: "perf", label: "Sample layout / drag timings (read __zentralNotesPerf.report())", pref: PREF.DEBUG_PERF, kind: "bool", def: false },
         ],
@@ -16041,10 +16065,22 @@ __zentralShim.register = function (def) {
       const noteId = String(item?.x?.noteId || identity?.noteId || tab?.getAttribute?.("bgalazka-notes-agenda-note-id") || "").trim();
       const heading = String(item?.x?.heading || tab?.getAttribute?.("bgalazka-notes-agenda-heading") || "").trim();
       const linkedNote = noteId && store?.get ? store.get(noteId) : null;
+      const isSourceTrashed = !!(linkedNote?.trashed || item?.x?.sourceNoteTrashed || tab?.hasAttribute?.("bgalazka-notes-agenda-source-trashed"));
       const sourceTitle = (linkedNote && !linkedNote.trashed)
         ? (titleOf(linkedNote.body) || tr("hover.untitled"))
         : String(item?.x?.sourceNoteTitle || "").trim();
-      const sourceNote = (noteId && sourceTitle) ? { id: noteId, title: sourceTitle, heading } : null;
+      const sourceNote = (!isSourceTrashed && noteId && sourceTitle) ? { id: noteId, title: sourceTitle, heading } : null;
+      const trashedTitle = isSourceTrashed
+        ? ((linkedNote ? titleOf(linkedNote.body) : "") || String(item?.x?.sourceNoteTrashedTitle || "").trim())
+        : "";
+      const sourceTrashed = isSourceTrashed
+        ? {
+            id: noteId,
+            title: trashedTitle,
+            label: trashedTitle ? tr("hover.sourceInTrashNamed", { title: trashedTitle }) : tr("hover.sourceInTrash"),
+            canRestore: !!(noteId && linkedNote?.trashed && !linkedNote._sharedFromOtherSpace && typeof store?.restore === "function"),
+          }
+        : null;
       const rawNotes = [];
       for (const text of [item?.x?.calNote, item?.description]) {
         const cleaned = String(text || "").replace(HOVER_COMMENT_RE, "").replace(MARKERS_RE, "").trim();
@@ -16053,6 +16089,7 @@ __zentralShim.register = function (def) {
       const descLines = rawNotes.join("\n").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 4);
       const description = descLines.map((l) => (l.length > 140 ? l.slice(0, 139) + "\u2026" : l)).join("\n");
       const actions = [{ id: "open", label: tr(sourceNote ? "hover.openNote" : "hover.open"), primary: true }];
+      if (sourceTrashed?.canRestore) actions.push({ id: "restore-source", label: tr("hover.restoreNote") });
       if (item && C?.calendarItemMenuModel) {
         const historyWritable = !!hist && !hist.storageState?.()?.writeBlocked;
         const currentId = String(item.x?.series || item.id || "");
@@ -16066,7 +16103,7 @@ __zentralShim.register = function (def) {
         if (can("snooze-1d")) actions.push({ id: "snooze-1d", label: tr("hover.snooze1d") });
         if (can("dismiss")) actions.push({ id: "dismiss", label: tr("hover.dismiss") });
       }
-      return { title, kind, timeText, status, category, sourceNote, description, actions };
+      return { title, kind, timeText, status, category, sourceNote, sourceTrashed, description, actions };
     }
     // One timer, armed for the next future reminder. `onDue(notes)` receives every overdue, unannounced
     // reminder as one batch AFTER the store has recorded them as announced (claim), so nothing repeats.
@@ -38144,6 +38181,8 @@ __zentralShim.register = function (def) {
           srcBtn.setAttribute("data-action", "open-source");
           srcBtn.dataset.action = "open-source";
           node.append(srcBtn);
+        } else if (model.sourceTrashed) {
+          node.append(hoverEl("div", "zn-hc-source-trashed", model.sourceTrashed.label));
         }
         if (model.description) {
           node.append(hoverEl("div", "zn-hc-body", model.description));
@@ -38160,11 +38199,51 @@ __zentralShim.register = function (def) {
           node.append(bar);
         }
       }
+      function restoreAgendaSourceNote(noteId, { openAfter = false, heading = "", itemId = "", showToast = true } = {}) {
+        if (disposed || !noteId) return false;
+        const note = store.get(noteId);
+        if (!note || !note.trashed || note._sharedFromOtherSpace) return false;
+        store.restore(noteId);
+        const restored = store.get(noteId);
+        if (!restored || restored.trashed) {
+          if (showToast) agendaActionToast.show({ message: t("toast.agenda.restoreFailed"), durationMs: 3500 });
+          return false;
+        }
+        try { agendaController.invalidate?.(); agendaController.runNow(); } catch (_) {}
+        if (openAfter) {
+          openReminderNote(noteId, { heading, itemId }).catch?.(warn);
+        }
+        if (showToast) {
+          agendaActionToast.show({
+            message: t("toast.agenda.sourceNoteRestored"),
+            undoLabel: t("common.undo"),
+            undo: () => {
+              const current = store.get(noteId);
+              if (!current || current.trashed) return { ok: false };
+              store.trash(noteId);
+              try { agendaController.invalidate?.(); agendaController.runNow(); } catch (_) {}
+              return { ok: true, message: t("toast.agenda.sourceNoteTrashedAgain") };
+            },
+            durationMs: 5500,
+          });
+        }
+        return true;
+      }
       function handleAgendaCardAction(tab, action, { viaPointer = false } = {}) {
         if (!tab || !action) return;
         if (action === "open" || action === "open-source") {
           agendaHoverCard.hide();
           activateAgendaTab(tab);
+          return;
+        }
+        if (action === "restore-source") {
+          const identity = agendaTabIdentity(tab);
+          const noteId = tab.getAttribute("bgalazka-notes-agenda-note-id") || identity.noteId || "";
+          if (restoreAgendaSourceNote(noteId)) {
+            const refreshed = agendaValidTab(tab) ? tab : agendaTabFor(agendaTabKey(tab));
+            if (refreshed) agendaHoverCard.show(refreshed);
+            else agendaHoverCard.hide();
+          }
           return;
         }
         if (!CALENDAR_PART?.isHeadlessAgendaCommand?.(action)) return;
@@ -38496,6 +38575,8 @@ __zentralShim.register = function (def) {
           agendaSetAttr(tab, "bgalazka-notes-agenda-heading", entry.heading || "");
           if (entry.ended) agendaSetAttr(tab, "bgalazka-notes-agenda-ended", "true");
           else agendaDelAttr(tab, "bgalazka-notes-agenda-ended");
+          if (entry.sourceNoteTrashed) agendaSetAttr(tab, "bgalazka-notes-agenda-source-trashed", "true");
+          else agendaDelAttr(tab, "bgalazka-notes-agenda-source-trashed");
           setAgendaTabIcon(tab, color, kind, { gBrowser: window.gBrowser, on: zenFaviconsOn(), warn });
           agendaTitleCard.updated(tab);
         } finally {
@@ -38673,16 +38754,38 @@ __zentralShim.register = function (def) {
       const agendaLegacyIds = new Set();
       const agendaItems = () => {
         const unique = new Map();
-        const stored = store.items?.list?.() || [];
+        const hideTrashed = prefBool(PREF.AGENDA_HIDE_TRASHED, true);
+        const visible = store.items?.list?.() || [];
+        const visibleIds = new Set(visible.map((it) => it.id));
+        const stored = hideTrashed
+          ? visible
+          : (store.items?.list?.({ includeHidden: true }) || visible).filter((it) => {
+              if (visibleIds.has(it.id)) return true;
+              const n = it.x?.noteId ? store.get(it.x.noteId) : null;
+              return !!(n && n.trashed && !n._sharedFromOtherSpace);
+            });
         const legacy = CALENDAR_PART?.itemsFromNoteReminders?.(store.list({ trashed: false }), titleOf) || [];
         agendaLegacyIds.clear(); for (const item of legacy) if (item.x?.noteId) agendaLegacyIds.add(item.x.noteId);
         for (const item of [...stored, ...legacy]) {
           const note = item.x?.noteId ? store.get(item.x.noteId) : null;
+          const sourceTrashed = !!(note && note.trashed);
+          if (hideTrashed && sourceTrashed) continue;
           const noteColor = note && !note.trashed ? note.color : "";
           const catColor = item.x?.category ? (store.items?.category?.(item.x.category)?.color || "") : "";
           const resolvedColor = CALENDAR_PART?.resolveItemColor?.(noteColor, catColor) || noteColor || catColor || "";
           const color = colorHex(resolvedColor) || "";
-          unique.set(item.id, { ...item, x: { ...(item.x || {}), sourceNoteTitle: note && !note.trashed ? titleOf(note.body) : "", noteColor, categoryColor: catColor, color } });
+          unique.set(item.id, {
+            ...item,
+            x: {
+              ...(item.x || {}),
+              sourceNoteTitle: note && !note.trashed ? titleOf(note.body) : "",
+              sourceNoteTrashed: sourceTrashed,
+              sourceNoteTrashedTitle: sourceTrashed ? (titleOf(note.body) || "") : "",
+              noteColor,
+              categoryColor: catColor,
+              color,
+            },
+          });
         }
         return [...unique.values()];
       };
@@ -39190,7 +39293,19 @@ __zentralShim.register = function (def) {
           const noteId = noteIdAttr || entry?.noteId || entry?.x?.noteId || "";
           const heading = headingAttr || entry?.heading || entry?.x?.heading || "";
           const date = dateAttr || agendaDateFromKey(key);
-          if (noteId && store.get(noteId) && !store.get(noteId).trashed) return openReminderNote(noteId, { heading, itemId });
+          const sourceNote = noteId ? store.get(noteId) : null;
+          if (sourceNote && !sourceNote.trashed) return openReminderNote(noteId, { heading, itemId });
+          if (sourceNote && sourceNote.trashed && !sourceNote._sharedFromOtherSpace) {
+            agendaActionToast.show({
+              message: t("toast.agenda.sourceNoteInTrash"),
+              undoLabel: t("hover.restoreNote"),
+              undo: () => {
+                const ok = restoreAgendaSourceNote(noteId, { openAfter: true, heading, itemId, showToast: false });
+                return { ok, message: t(ok ? "toast.agenda.sourceNoteRestored" : "toast.agenda.restoreFailed") };
+              },
+              durationMs: 6000,
+            });
+          }
           return openCalendarDayFromHost(date);
         }).catch(warn);
       }
@@ -40723,7 +40838,7 @@ __zentralShim.register = function (def) {
             if (zenMode() !== "off") zenSoon();
             if (agendaEnabled()) agendaSoon();
           }
-          else if (name === PREF.AGENDA_ENABLED || name === PREF.AGENDA_POSITION || name === PREF.AGENDA_DAYS || name === PREF.AGENDA_OVERDUE || name === PREF.AGENDA_OVERDUE_DAYS || name === PREF.AGENDA_OVERDUE_CAP) agendaSoon();
+          else if (name === PREF.AGENDA_ENABLED || name === PREF.AGENDA_POSITION || name === PREF.AGENDA_DAYS || name === PREF.AGENDA_OVERDUE || name === PREF.AGENDA_OVERDUE_DAYS || name === PREF.AGENDA_OVERDUE_CAP || name === PREF.AGENDA_HIDE_TRASHED) agendaSoon();
           else if (name === PREF.ZEN_ROOT_COLOR || name === PREF.ZEN_ROOT_ICON || name === PREF.ZEN_ROOT_PARTS || name === PREF.ZEN_ROOT_PART_OPACITY) {
             if (zenMode() !== "off") zenSoon(); // the NOTES folder is restyled at once
             window.dispatchEvent?.(new Event("zentral-notes-folder-style-changed"));

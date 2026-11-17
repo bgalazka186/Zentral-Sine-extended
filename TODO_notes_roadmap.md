@@ -77,7 +77,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
 |    12 | `T2.9`      | `PARTIAL` | Med-High            | M      | none              | Daily-note lifecycle and archive policy inside Agenda                                                    |
-|    21 | `SB6.7`     | `OPEN`    | Med                 | S      | UI4.7             | Items whose source note is in Trash                                                                      |
 |    22 | `SB6.4`     | `PARTIAL` | Med                 | S      | TM3.3             | Cap the number of Agenda tabs ('+N more')                                                                |
 |    23 | `T2.6`      | `OPEN`    | Med                 | S-M    | —                 | Big Picture popup for the calendar                                                                       |
 |    24 | `SB6.5`     | `OPEN`    | Med                 | S-M    | F0.1              | Agenda Doctor (diagnostics and repair)                                                                   |
@@ -130,18 +129,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 **Full specification (original row):** **OPEN.** Depends on `T2.2c`, `T2.8`. Migrate existing Daily notes/folder and preserve links. Past daily notes move to Trash the next day and stay 30 days, then live only in the 48-hour rolling backup. Setting _always archive, never trash_ keeps compressed copies in a separate archive folder. No duplicate Daily pseudo-folder beside Agenda.
 
 **Owner decision needed first (2026-11-16):** past date notes that are not blank are never cleaned up today. Decide whether they may ever go to Trash automatically (the safe default is never; only the archive setting moves them).
-
-#### `SB6.7` — Items whose source note is in Trash
-
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Depends on:** UI4.7 · **Source:** Audit R1 B13
-
-**Problem:** `getItems` blanks the source title for a trashed note but still projects the item; clicking silently falls back to Day view.
-
-**Plan (do in this order):**
-
-1. Show 'source note in Trash' in the tooltip/card with a Restore action, or hide those items (setting).
-
-**Tests / done when:** Projection + click tests.
 
 #### `SB6.4` — Cap the number of Agenda tabs ('+N more')
 
@@ -497,14 +484,15 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.216, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.217, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.216.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.8`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.8b`, `T2.19`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`174/174` test files) passes in Node/fake-Zen at 3.3.216. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.217.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.7`, `SB6.8`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.8b`, `T2.19`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`175/175` test files) passes in Node/fake-Zen at 3.3.217. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
-Completed this session (3.3.163–3.3.216), every finished item archived in `docs/LEGACY_done_rows.md`:
+Completed this session (3.3.163–3.3.217), every finished item archived in `docs/LEGACY_done_rows.md`:
 
+- `SB6.7` (3.3.217) — added `zen.workspace.zentral.notes.agenda_hide_trashed` (bool, default `true`, Settings → Zen / Agenda + `settings.json`/`standalone.json`/`layout.json`) with live `prefObserver` refresh; by default trashed-source items stay cleanly hidden from Agenda, and when shown (`agenda_hide_trashed = false`) local trashed-source items display a localized `'Source note in Trash'` tooltip and `.zn-hc-source-trashed` hover card notice with a one-click `'Restore note'` action (+ Undo toast) and an informative `'Source note is in Trash'` toast with one-click Restore when clicked (never resurrecting permanently deleted or cross-space notes) (`tests/notes-agenda-trashed-source.test.cjs`, `175/175` suite).
 - `T2.19` (3.3.216) — completed recurring snooze: enabled `snooze-1h`, `snooze-1d`, `snooze-3d`, `snooze-monday`, and `snooze-custom` for expanded recurring occurrences in `calendarItemMenuModel` (removing the old unsupported-recurring disabled reason while still gating unexpanded masters and read-only history), wired `snooze-1h` in the sheet context menu, wired headless `store.runAgendaCommand` recurring snooze (`"this"` exception + occurrence-scoped `"snoozed"` history + conflict-safe Undo), and wired `snoozeReminderItem` + `askCustomReminderSnooze` with the localized recurrence scope selector (`"this"` / `"following"` / `"series"`) backed by `moveOccurrence` (`tests/notes-recurring-snooze.test.cjs`, `174/174` suite).
 - `SB6.2` (3.3.215) — added pure `AGENDA_ROOT_MENU_COMMANDS` and `agendaRootMenuModel` in `additional/notes/calendar/ZentralNotesCalendar.js` with EN/PL strings (`sidebar.agenda.root.*`), exposed `sheet.openCalendar()` and `sheet.openAgendaSettings()` (`askAllSettings("zen")`) in `additional/notes/ZentralNotes.uc.js`, and wired the Agenda root folder branch of `onAgendaFolderMenuShowing` with `'Open calendar'`, `'Refresh Agenda'`, `'Agenda settings'`, and `'Hide Agenda'` while preserving foreign menu items from other mods and clearing owned items on ordinary folders (`tests/notes-agenda-root-menu.test.cjs`, `173/173` suite).
 
