@@ -3162,6 +3162,15 @@
     "unit": "days"
   },
   {
+    "property": "zen.workspace.zentral.notes.reminder_history_days",
+    "label": "Keep reminder alert history for",
+    "type": "number",
+    "defaultValue": 30,
+    "min": 1,
+    "max": 3650,
+    "unit": "days"
+  },
+  {
     "label": "Find in a note: how matches are shown",
     "type": "dropdown",
     "defaultValue": "selection",

@@ -2075,9 +2075,87 @@
   // own additions (src "manual") and the extras on a listed item (calendar note, reminders, status, a moved time) survive.
   const ITEMS_FILE = "calendar.json";
   // Reminder lifecycle is intentionally separate from Google Calendar's `status` field. Records are
-  // immutable snapshots in their own versioned file; history is retained indefinitely (no silent pruning).
+  // immutable snapshots in their own versioned file; older alerts/snoozes/superseded transitions are
+  // compacted into an append-only JSONL archive (ST7.2) without losing lifecycle state or history.
   const REMINDER_HISTORY_FILE = "reminder-history.json";
+  const REMINDER_HISTORY_ARCHIVE_FILE = "reminder-history.archive.jsonl";
+  const REMINDER_HISTORY_RETENTION_DEFAULT = 30;
   const REMINDER_HISTORY_ACTIONS = Object.freeze(["alerted", "skipped", "done", "dismissed", "reopened", "snoozed", "rescheduled"]);
+  function cleanReminderHistoryRetentionDays(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return REMINDER_HISTORY_RETENTION_DEFAULT;
+    return Math.max(1, Math.min(3650, Math.floor(n)));
+  }
+  function compactReminderHistory(rawRecords, nowMs, { retentionDays = REMINDER_HISTORY_RETENTION_DEFAULT } = {}) {
+    const list = Array.isArray(rawRecords) ? rawRecords : [];
+    const days = cleanReminderHistoryRetentionDays(retentionDays);
+    const stamp = Number.isFinite(Number(nowMs)) ? Math.floor(Number(nowMs)) : Date.now();
+    const cutoff = stamp - days * 86400000;
+    const isTransition = (action) => action === "done" || action === "dismissed" || action === "reopened";
+    const keyOf = (record) => String(record.itemId) + "\u0000" + String(record.occurrenceId);
+    const latestByOcc = new Map();
+    for (let i = 0; i < list.length; i++) {
+      const record = list[i];
+      if (!record || !isTransition(record.action)) continue;
+      const key = keyOf(record), prev = latestByOcc.get(key);
+      if (!prev || record.at > prev.record.at || (record.at === prev.record.at && (record.seq > prev.record.seq || (record.seq === prev.record.seq && i > prev.index)))) {
+        latestByOcc.set(key, { record, index: i });
+      }
+    }
+    const scheduledStartMs = (record) => {
+      if (!record?.start) return NaN;
+      if (record.start.dateTime) return Date.parse(record.start.dateTime);
+      if (record.start.date) {
+        const parsed = parseYmd(record.start.date);
+        return parsed ? new Date(parsed.y, parsed.m - 1, parsed.d).getTime() : NaN;
+      }
+      return NaN;
+    };
+    const kept = [], archived = [];
+    for (let i = 0; i < list.length; i++) {
+      const record = list[i];
+      if (!record) continue;
+      if (isTransition(record.action) && latestByOcc.get(keyOf(record))?.record === record) {
+        kept.push(record);
+        continue;
+      }
+      if (record.at >= cutoff) {
+        kept.push(record);
+        continue;
+      }
+      if (record.action === "alerted" || record.action === "skipped") {
+        const startMs = scheduledStartMs(record);
+        if (Number.isFinite(startMs) && startMs >= cutoff) {
+          kept.push(record);
+          continue;
+        }
+      }
+      archived.push(record);
+    }
+    return { kept, archived, cutoff, retentionDays: days };
+  }
+  function formatHistoryArchiveLines(records) {
+    if (!Array.isArray(records) || !records.length) return "";
+    return records.map((record) => JSON.stringify({ ...record, start: record.start ? { ...record.start } : null })).join("\n") + "\n";
+  }
+  function parseHistoryArchiveLines(text) {
+    const records = [], ids = new Set();
+    let malformed = 0;
+    for (const rawLine of String(text || "").split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      try {
+        const parsed = JSON.parse(line);
+        const clean = cleanReminderHistoryRecord(parsed, parsed?.at || 0);
+        if (!clean) { malformed++; continue; }
+        if (!ids.has(clean.id)) {
+          ids.add(clean.id);
+          records.push(clean);
+        }
+      } catch (_) { malformed++; }
+    }
+    return { records, ids, malformed };
+  }
   function cleanReminderHistoryRecord(raw, fallbackAt = 0) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
     const action = REMINDER_HISTORY_ACTIONS.includes(raw.action) ? raw.action : "";
@@ -2251,13 +2329,14 @@
       }
     };
   }
-  function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400, onWrite = () => {}, perf = null, withHistoryLock = createHistoryCoordinator() }) {
+  function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400, onWrite = () => {}, perf = null, withHistoryLock = createHistoryCoordinator(), getRetentionDays = () => REMINDER_HISTORY_RETENTION_DEFAULT }) {
     const records = [], unsaved = new Set();
     const listeners = new Set();
     const emit = (event) => { for (const fn of [...listeners]) { try { fn(event); } catch (error) { safeWarn(error); } } };
     const lifecycle = new Map();
     let nextSeq = 1;
     let dirty = false, timer = null, chain = Promise.resolve(), writeBlocked = false, retryCount = 0;
+    let lastDiskText = null;
     const transitionAction = (action) => ["done", "dismissed", "reopened"].includes(action);
     const lifecycleKey = (itemId, occurrenceId) => String(itemId) + "\u0000" + String(occurrenceId);
     const indexTransition = (record) => {
@@ -2296,9 +2375,49 @@
       if (!dirty && timer !== null) { clearTimer(timer); timer = null; }
       emit({ kind: "refresh", count: removed.length, identities: removed.map(({ itemId, occurrenceId }) => ({ itemId, occurrenceId })) });
     }
-    let storage = { state: "unopened", error: "", backupPath: "" }, protectedText = null;
+    let storage = { state: "unopened", error: "", backupPath: "", archivePath: "", archivedCount: 0 }, protectedText = null;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
     const state = () => ({ ...storage, dirty: dirty || unsaved.size > 0, writeBlocked, retryCount, count: records.length });
+    const retentionDaysNow = () => {
+      try { return cleanReminderHistoryRetentionDays(typeof getRetentionDays === "function" ? getRetentionDays() : REMINDER_HISTORY_RETENTION_DEFAULT); }
+      catch (_) { return REMINDER_HISTORY_RETENTION_DEFAULT; }
+    };
+    const isMissingError = (error) => {
+      const message = String(error?.message || error || "");
+      return error?.code === "ENOENT" || error?.name === "NotFoundError" || /(?:^|\b)(?:nf|not found|no such file|does not exist|NS_ERROR_FILE_NOT_FOUND)(?:\b|$)/i.test(message);
+    };
+    // Crash-safe compaction: append archived records to JSONL archive FIRST,
+    // verify the main file has not changed concurrently, and ONLY THEN shrink
+    // reminder-history.json. Any failure aborts cleanly with zero data loss.
+    async function writeCompactedHistory(dir, file, expectedDiskText, kept, archived) {
+      if (!archived.length) return { ok: false, archivedCount: 0, text: expectedDiskText, archivePath: "" };
+      const archivePath = io.join(dir, REMINDER_HISTORY_ARCHIVE_FILE);
+      let existingArchive = "";
+      try { existingArchive = await io.readUTF8(archivePath); }
+      catch (error) {
+        let missing = isMissingError(error);
+        if (!missing && typeof io.exists === "function") { try { missing = !(await io.exists(archivePath)); } catch (_) {} }
+        if (!missing) throw error;
+      }
+      const existingIds = existingArchive ? parseHistoryArchiveLines(existingArchive).ids : new Set();
+      const freshArchive = archived.filter((record) => record && !existingIds.has(record.id));
+      if (freshArchive.length) {
+        const prefix = existingArchive && !existingArchive.endsWith("\n") ? existingArchive + "\n" : existingArchive;
+        const nextArchiveText = prefix + formatHistoryArchiveLines(freshArchive);
+        await io.writeUTF8(archivePath, nextArchiveText, { tmpPath: archivePath + ".tmp" });
+      }
+      // TOCTOU guard: abort without overwriting if another window updated the main file.
+      if (expectedDiskText !== null) {
+        const currentDisk = await io.readUTF8(file);
+        if (currentDisk !== expectedDiskText) {
+          return { ok: false, conflict: true, archivedCount: 0, text: currentDisk, archivePath };
+        }
+      }
+      const compactedText = JSON.stringify({ v: 1, records: kept.map((record) => ({ ...record, start: record.start ? { ...record.start } : null })) });
+      perf?.recordBytes?.("history.bytes", compactedText);
+      await io.writeUTF8(file, compactedText, { tmpPath: file + ".tmp" });
+      return { ok: true, archivedCount: archived.length, text: compactedText, archivePath };
+    }
     const scheduleTimer = (ms = delayMs) => {
       if (timer !== null) clearTimer(timer);
       timer = setTimer(() => { timer = null; writeNow().catch(() => {}); }, ms);
@@ -2352,6 +2471,7 @@
         if (missing || !strict) return 0;
         throw badHistory(message);
       }
+      if (lastDiskText !== null && text === lastDiskText) return 0;
       let parsed;
       try { parsed = JSON.parse(text); } catch (error) { if (strict) throw badHistory(String(error?.message || error), String(text)); return 0; }
       if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.records)) {
@@ -2365,6 +2485,7 @@
           storage = { ...storage, ...paths };
         } catch (error) { throw badHistory(String(error?.message || error), String(text)); }
       }
+      if (!rejected.length) lastDiskText = text;
       const known = new Set(records.map((record) => record.id));
       let added = 0;
       const changed = new Map();
@@ -2389,6 +2510,7 @@
         const text = JSON.stringify({ v: 1, records: records.map((record) => ({ ...record, start: record.start ? { ...record.start } : null })) });
         perf?.recordBytes?.("history.bytes", text);
         await io.writeUTF8(io.join(dir, REMINDER_HISTORY_FILE), text, { tmpPath: io.join(dir, REMINDER_HISTORY_FILE + ".tmp") });
+        lastDiskText = text;
         for (const record of includedUnsaved) unsaved.delete(record);
         dirty = unsaved.size > 0;
         try { onWrite(dir); } catch (error) { safeWarn(error); }
@@ -2444,7 +2566,8 @@
             }
             return state();
           }
-          let parsed, backupPath = "", rejectedPath = "";
+          let parsed, backupPath = "", rejectedPath = "", archivePath = "", archivedCount = 0, diskText = String(text);
+          let loaded = null;
           try {
             parsed = JSON.parse(text);
             if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.v !== 1 || !Array.isArray(parsed.records)) throw new Error("Reminder history has an unsupported or damaged structure.");
@@ -2452,21 +2575,41 @@
             if (rejected.length) {
               // Save both the original and every rejected raw record before replacing anything.
               ({ backupPath, rejectedPath } = await preserveRejected(dir, file, String(text), rejected));
-              await io.writeUTF8(file, JSON.stringify({ v: 1, records: clean }), { tmpPath: file + ".tmp" });
+              diskText = JSON.stringify({ v: 1, records: clean });
+              await io.writeUTF8(file, diskText, { tmpPath: file + ".tmp" });
             }
             if (unsaved.size) return state();
-            records.splice(0, records.length, ...clean); clearIndexes();
+            loaded = clean;
+            // ST7.2: compact aged alerts/snoozes/superseded transitions into JSONL archive
+            // while keeping the latest transition per occurrence and recent records.
+            const { kept, archived } = compactReminderHistory(clean, now(), { retentionDays: retentionDaysNow() });
+            if (archived.length) {
+              try {
+                const res = await writeCompactedHistory(dir, file, diskText, kept, archived);
+                if (res.ok) {
+                  loaded = kept;
+                  diskText = res.text;
+                  archivePath = res.archivePath;
+                  archivedCount = res.archivedCount;
+                }
+              } catch (compactError) { safeWarn(compactError); }
+            }
+            if (unsaved.size) return state();
+            records.splice(0, records.length, ...loaded); clearIndexes();
             for (const record of records) indexRecord(record);
             nextSeq = records.reduce((max, record) => Math.max(max, record.seq), 0) + 1;
+            lastDiskText = diskText;
           } catch (error) {
             if (!backupPath) { try { backupPath = await backupHistory(dir, text); } catch (backupError) { safeWarn(backupError); } }
             protectedText = backupPath ? String(text) : null;
-            writeBlocked = true; storage = { state: "corrupt", error: String(error?.message || error), backupPath, rejectedPath }; safeWarn(error);
+            lastDiskText = null;
+            writeBlocked = true; storage = { state: "corrupt", error: String(error?.message || error), backupPath, rejectedPath, archivePath, archivedCount }; safeWarn(error);
             return state();
           }
           dirty = false; writeBlocked = false; retryCount = 0; protectedText = null;
-          storage = { state: "ready", error: "", backupPath, rejectedPath };
+          storage = { state: "ready", error: "", backupPath, rejectedPath, archivePath, archivedCount };
           if (rejectedPath) { try { onWrite(dir); } catch (error) { safeWarn(error); } emit({ kind: "recovery", count: records.length }); }
+          if (archivedCount > 0) { try { onWrite(dir); } catch (error) { safeWarn(error); } emit({ kind: "compact", archived: archivedCount, kept: records.length, archivePath }); }
           return state();
         });
       },
@@ -2478,7 +2621,9 @@
           const file = io.join(dir, REMINDER_HISTORY_FILE);
           try {
             if (await io.readUTF8(file) !== protectedText) throw new Error("Reminder history changed since it was backed up; reopen before recovering.");
-            await io.writeUTF8(file, JSON.stringify({ v: 1, records }), { tmpPath: file + ".tmp" });
+            const freshText = JSON.stringify({ v: 1, records });
+            await io.writeUTF8(file, freshText, { tmpPath: file + ".tmp" });
+            lastDiskText = freshText;
             unsaved.clear(); dirty = false; writeBlocked = false; retryCount = 0; protectedText = null;
             storage = { ...storage, state: "ready", error: "" };
             try { onWrite(dir); } catch (error) { safeWarn(error); }
@@ -2546,7 +2691,37 @@
           if (!changed) return { ok: true, changed: false };
           const text = JSON.stringify({ v: 1, records: existing.map((record) => ({ ...record, start: record.start ? { ...record.start } : null })) });
           await io.writeUTF8(file, text, { tmpPath: file + ".tmp" });
+          lastDiskText = null;
           return { ok: true, changed: true };
+        });
+      },
+      async compact({ retentionDays } = {}) {
+        const dir = getDir();
+        if (writeBlocked || !dir) return { ok: false, archived: 0, kept: records.length, archivePath: "" };
+        if (dirty || unsaved.size) {
+          try { await writeNow(); } catch (_) { return { ok: false, archived: 0, kept: records.length, archivePath: "" }; }
+        }
+        return queueHistory(dir, async () => {
+          if (writeBlocked || unsaved.size) return { ok: false, archived: 0, kept: records.length, archivePath: "" };
+          try { await mergeStored(dir, true); } catch (error) { safeWarn(error); return { ok: false, archived: 0, kept: records.length, archivePath: "" }; }
+          const days = retentionDays === undefined ? retentionDaysNow() : cleanReminderHistoryRetentionDays(retentionDays);
+          const { kept, archived } = compactReminderHistory(records, now(), { retentionDays: days });
+          if (!archived.length) return { ok: true, archived: 0, kept: records.length, archivePath: storage.archivePath || "" };
+          const file = io.join(dir, REMINDER_HISTORY_FILE);
+          let expectedDiskText = null;
+          try { expectedDiskText = await io.readUTF8(file); } catch (_) { expectedDiskText = null; }
+          try {
+            const res = await writeCompactedHistory(dir, file, expectedDiskText, kept, archived);
+            if (!res.ok) return { ok: false, archived: 0, kept: records.length, archivePath: res.archivePath || "" };
+            records.splice(0, records.length, ...kept); clearIndexes();
+            for (const record of records) indexRecord(record);
+            nextSeq = Math.max(nextSeq, records.reduce((max, record) => Math.max(max, record.seq), 0) + 1);
+            lastDiskText = res.text;
+            storage = { ...storage, archivePath: res.archivePath, archivedCount: (storage.archivedCount || 0) + res.archivedCount };
+            try { onWrite(dir); } catch (error) { safeWarn(error); }
+            emit({ kind: "compact", archived: res.archivedCount, kept: records.length, archivePath: res.archivePath });
+            return { ok: true, archived: res.archivedCount, kept: records.length, archivePath: res.archivePath };
+          } catch (error) { safeWarn(error); return { ok: false, archived: 0, kept: records.length, archivePath: "" }; }
         });
       },
       // Check and persist while holding the same per-file lock as ordinary writes.
@@ -2622,9 +2797,9 @@
 
   // `beforeWrite` (optional, async) runs before every calendar write, outside the calendar lock. The note store uses it to
   // put pending note text on disk first, so `calendar.json` never refers to a note line that was not saved (UI4.7).
-  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, onItemsWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null, beforeWrite = null, noteFileState = null, getParseOptions = () => ({}) }) {
+  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, onItemsWrite = () => {}, perf = null, withHistoryLock, isNoteVisible = null, beforeWrite = null, noteFileState = null, getParseOptions = () => ({}), getHistoryRetentionDays = () => REMINDER_HISTORY_RETENTION_DEFAULT }) {
     const items = new Map();
-    const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite, perf, withHistoryLock });
+    const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite, perf, withHistoryLock, getRetentionDays: getHistoryRetentionDays });
     const categoryDefs = new Map();
     const hidden = new Set(); // noteIds whose items stay stored but are not shown (note in Trash, or its file is missing)
     const listeners = new Set();
@@ -6879,7 +7054,7 @@
   const api = {
     KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, translate, t, pluralCategory, tCount, translationKeys, missingTranslationKeys, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, lineScheduleSignature, cleanTextSchedule, scheduleSignatureFromItem, scheduleFromParsedLine, reconcileListItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
     cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };

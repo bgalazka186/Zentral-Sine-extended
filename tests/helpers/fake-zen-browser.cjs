@@ -164,7 +164,7 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     disconnect() { this.target = null; this.options = null; mutationObservers.delete(this); }
   }
   class ResizeObserver { observe() {} unobserve() {} disconnect() {} }
-  const vmGlobals = { window: win, document, globalThis: { Services }, ChromeUtils: { importESModule: (uri) => esModules[uri] || {} }, PathUtils, IOUtils, MutationObserver, ResizeObserver, Event: Ev, Uint8Array,
+  const vmGlobals = { window: win, document, globalThis: { Services }, ChromeUtils: { importESModule: (uri) => esModules[uri] || {} }, PathUtils, IOUtils, MutationObserver, ResizeObserver, Event: Ev, Uint8Array, TextEncoder, TextDecoder,
     navigator: { platform: "Linux" }, console, URL, Date: FakeDate, JSON, Math, Promise, RegExp, Number, Map, Set, WeakMap, setTimeout, clearTimeout, queueMicrotask };
   const ctx = vm.createContext(vmGlobals);
   const sharedHoverCard = loadRuntimeHoverCard(ctx);

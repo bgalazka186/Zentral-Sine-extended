@@ -709,6 +709,7 @@
       "settings.opt.histCap": "Nie tw\u00f3rz wersji dla notatek wi\u0119kszych ni\u017c",
       "settings.opt.histWarn": "Ostrzegaj, gdy ca\u0142a historia przekracza",
       "settings.opt.missedDays": "Zakres wstecz dla pomini\u0119tych przypomnie\u0144",
+      "settings.opt.remHistDays": "Przechowuj histori\u0119 powiadomie\u0144 przypomnie\u0144 przez",
       "settings.opt.findHl": "Wyszukiwanie w notatce pokazuje trafienia przez",
       "settings.opt.trashDays": "Usuwaj notatki z Kosza po (0 = nigdy)",
       "settings.opt.spell": "Sprawdzanie pisowni podczas pisania",

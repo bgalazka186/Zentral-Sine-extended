@@ -696,6 +696,7 @@
       "settings.opt.histCap": "Do not version notes bigger than",
       "settings.opt.histWarn": "Warn when all history is bigger than",
       "settings.opt.missedDays": "Missed reminder digest look-back",
+      "settings.opt.remHistDays": "Keep reminder alert history for",
       "settings.opt.findHl": "Find in a note shows matches by",
       "settings.opt.trashDays": "Delete notes from the Trash after (0 = never)",
       "settings.opt.spell": "Spell-check while typing",

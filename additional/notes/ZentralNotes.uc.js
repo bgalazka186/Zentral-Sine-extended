@@ -219,6 +219,7 @@
       AGENDA_MAX_ITEMS: "zen.workspace.zentral.notes.agenda_max_items",
       SPACE_MODE: "zen.workspace.zentral.notes.space_mode",
       MISSED_DAYS: "zen.workspace.zentral.notes.missed_reminder_days",
+      REMINDER_HISTORY_DAYS: "zen.workspace.zentral.notes.reminder_history_days",
       CAPTURE_FORMAT: "zen.workspace.zentral.notes.quick_capture_format",
       DEBUG_PERF: "zen.workspace.zentral.notes.debug_perf",
     });
@@ -5117,6 +5118,7 @@
           S("histWarn", "Warn when all history is bigger than", PREF.HISTORY_WARN_MB, 5, 2000, "MB", 100),
           { kind: "heading", i18nKey: "settings.heading.reminders", label: "Reminders" },
           S("missedDays", "Missed reminder digest look-back", PREF.MISSED_DAYS, 1, 31, "days", 7),
+          S("remHistDays", "Keep reminder alert history for", PREF.REMINDER_HISTORY_DAYS, 1, 3650, "days", 30),
           { kind: "heading", i18nKey: "settings.heading.performance", label: "Performance" },
           { id: "findHl", label: "Find in a note shows matches by", pref: PREF.FIND_HL, kind: "choice", def: "selection", choices: [["selection", "Selecting the match"], ["backdrop", "Highlighting every match"]] },
           S("trashDays", "Delete notes from the Trash after (0 = never)", PREF.TRASH_DAYS, 0, 3650, "days", 30),
@@ -7107,6 +7109,7 @@
       clearTimer,
       warn = () => {},
       getHistory = () => ({ on: true, ...HISTORY_DEFAULTS }),
+      getHistoryRetentionDays = () => CALENDAR_PART?.REMINDER_HISTORY_RETENTION_DEFAULT || 30,
       getDateFormat = () => "",
       getParseOptions = () => { try { return { lang: Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en"), acceptAll: Services.prefs.getBoolPref(PREF.NOTES_LANGUAGE_ACCEPT_ALL, true) }; } catch (_) { return { lang: "en", acceptAll: true }; } },
     }) {
@@ -7168,7 +7171,7 @@
       const historyListeners = new Set();
       const emitItem = (kind, id, detail) => { for (const fn of [...itemListeners]) { try { fn(kind, id, detail); } catch (e) { warn(e); } } };
       const emitHistory = (ev) => { for (const fn of [...historyListeners]) { try { fn(ev); } catch (e) { warn(e); } } };
-      const localItems = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, withHistoryLock, getParseOptions,
+      const localItems = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, withHistoryLock, getParseOptions, getHistoryRetentionDays,
         isNoteVisible: (id) => !!notes.get(id) && !notes.get(id).trashed && !notes.get(id)._sharedFromOtherSpace,
         // The two files are not one transaction, so the order is fixed: note text first, then the calendar record that
         // refers to it. A crash in between leaves a line the next start rebuilds, never a record without its line.
@@ -7290,6 +7293,11 @@
         async refresh() {
           const res = await localItems.history.refresh();
           for (const entry of sharedOwnerItemStores.values()) await entry.store.history?.refresh?.().catch(warn);
+          return res;
+        },
+        async compact(opts) {
+          const res = await localItems.history.compact?.(opts);
+          for (const entry of sharedOwnerItemStores.values()) await entry.store.history?.compact?.(opts).catch(warn);
           return res;
         },
         flush() {
@@ -7594,6 +7602,7 @@
               perf: PERF,
               withHistoryLock,
               getParseOptions,
+              getHistoryRetentionDays,
               isNoteVisible: () => true,
               beforeWrite: () => notesFlush || (dirty.size ? flushDirty() : chain),
               noteFileState: (id) => { const n = notes.get(id); return !n ? "saved" : !n._onDisk ? "absent" : dirty.has(id) ? "stale" : "saved"; },
@@ -8982,6 +8991,14 @@
           const histFile = CALENDAR_PART?.REMINDER_HISTORY_FILE || "reminder-history.json";
           const histBytes = await readJsonEntry(histFile);
           if (histBytes) { entries.push({ path: histFile, bytes: histBytes, mtime: stamp }); hasHistory = true; }
+          const histArchiveFile = CALENDAR_PART?.REMINDER_HISTORY_ARCHIVE_FILE || "reminder-history.archive.jsonl";
+          try {
+            const p = io.join(dir, histArchiveFile);
+            if (!io.exists || (await io.exists(p))) {
+              const text = await io.readUTF8(p);
+              if (text) { entries.push({ path: histArchiveFile, bytes: enc.encode(text), mtime: stamp }); hasHistory = true; }
+            }
+          } catch (_) {}
           const manifest = buildBackupManifest({ notes: localNotes, assets: backedAssets, hasMeta, hasCalendar, hasHistory, spaceMode: activeSpaceMode, createdAt: stamp });
           entries.unshift({ path: "manifest.json", bytes: enc.encode(JSON.stringify(manifest, null, 2) + "\n"), mtime: stamp });
           return { manifest, entries, counts: manifest.counts };
@@ -9089,6 +9106,22 @@
               if (seenHist.has(key)) continue;
               if (localItems.history.append?.(rec)) { seenHist.add(key); restoredHistoryRecords++; }
             }
+          }
+          if (Array.isArray(parsed.historyArchive) && parsed.historyArchive.length && CALENDAR_PART?.formatHistoryArchiveLines) {
+            try {
+              const archivePath = io.join(dir, CALENDAR_PART.REMINDER_HISTORY_ARCHIVE_FILE || "reminder-history.archive.jsonl");
+              let existingArchive = "";
+              try {
+                if (!io.exists || (await io.exists(archivePath))) existingArchive = await io.readUTF8(archivePath);
+              } catch (_) {}
+              const seenIds = existingArchive ? CALENDAR_PART.parseHistoryArchiveLines(existingArchive).ids : new Set();
+              const fresh = parsed.historyArchive.filter((rec) => rec && !seenIds.has(rec.id));
+              if (fresh.length) {
+                const prefix = existingArchive && !existingArchive.endsWith("\n") ? existingArchive + "\n" : existingArchive;
+                await io.writeUTF8(archivePath, prefix + CALENDAR_PART.formatHistoryArchiveLines(fresh), { tmpPath: archivePath + ".tmp" });
+                restoredHistoryRecords += fresh.length;
+              }
+            } catch (error) { warn(error); }
           }
           await api.flush();
           emit("reset", "");
@@ -11583,6 +11616,7 @@
       if (clean === "meta.json") return { kind: "meta", path: clean };
       if (clean === (CALENDAR_PART?.ITEMS_FILE || "calendar.json")) return { kind: "calendar", path: clean };
       if (clean === (CALENDAR_PART?.REMINDER_HISTORY_FILE || "reminder-history.json")) return { kind: "history", path: clean };
+      if (clean === (CALENDAR_PART?.REMINDER_HISTORY_ARCHIVE_FILE || "reminder-history.archive.jsonl")) return { kind: "historyArchive", path: clean };
       const noteMatch = /^notes\/([^/]+)\.md$/.exec(clean);
       if (noteMatch) {
         const id = noteMatch[1];
@@ -11627,7 +11661,7 @@
       const dec = new TextDecoder("utf-8", { fatal: false });
       const skipped = [];
       const seenPaths = new Set();
-      let totalBytes = 0, manifest = null, meta = null, calendar = null, history = null;
+      let totalBytes = 0, manifest = null, meta = null, calendar = null, history = null, historyArchive = null;
       const notes = [], assets = [];
       for (const raw of rawEntries) {
         const bytes = raw?.bytes instanceof Uint8Array ? raw.bytes : null;
@@ -11667,6 +11701,13 @@
           else if (entry.kind === "history") history = parsedJson;
           continue;
         }
+        if (entry.kind === "historyArchive") {
+          if (bytes.length > BACKUP_MAX_JSON_BYTES) { skipped.push({ path: entry.path, reason: "too-big" }); continue; }
+          const parsedArchive = CALENDAR_PART?.parseHistoryArchiveLines?.(dec.decode(bytes));
+          if (!parsedArchive || !parsedArchive.records.length) { skipped.push({ path: entry.path, reason: "corrupt-json" }); continue; }
+          historyArchive = parsedArchive.records;
+          continue;
+        }
         if (entry.kind === "note") {
           if (bytes.length > Math.max(MAX_IMPORT_BYTES, 5 * 1024 * 1024)) { skipped.push({ path: entry.path, reason: "too-big" }); continue; }
           const text = dec.decode(bytes);
@@ -11681,7 +11722,7 @@
           assets.push({ rel: entry.rel, noteId: entry.noteId, file: entry.file, assetKind: entry.assetKind, bytes, path: entry.path });
         }
       }
-      if (!notes.length && !assets.length && !meta && !calendar && !history) {
+      if (!notes.length && !assets.length && !meta && !calendar && !history && !historyArchive) {
         return { ok: false, error: "This ZIP does not contain any Zentral Notes backup data." };
       }
       let liveCount = 0, trashedCount = 0;
@@ -11695,8 +11736,9 @@
         meta,
         calendar,
         history,
+        historyArchive,
         skipped,
-        counts: { notes: liveCount, trashed: trashedCount, assets: assets.length, hasMeta: !!meta, hasCalendar: !!calendar, hasHistory: !!history, skipped: skipped.length },
+        counts: { notes: liveCount, trashed: trashedCount, assets: assets.length, hasMeta: !!meta, hasCalendar: !!calendar, hasHistory: !!(history || historyArchive), skipped: skipped.length },
       };
     }
     function planBackupRestore(parsed, existingState = {}, { mode = "merge" } = {}) {
@@ -28077,6 +28119,7 @@
           on: prefBool(PREF.HISTORY_ON, true),
           ...historyOptions({ keep: prefInt(PREF.HISTORY_KEEP, HISTORY_DEFAULTS.keep), minutes: prefInt(PREF.HISTORY_MINUTES, HISTORY_DEFAULTS.minutes), capKB: prefInt(PREF.HISTORY_CAP_KB, HISTORY_DEFAULTS.capKB), warnMB: prefInt(PREF.HISTORY_WARN_MB, HISTORY_DEFAULTS.warnMB) }),
         }),
+        getHistoryRetentionDays: () => CALENDAR_PART?.cleanReminderHistoryRetentionDays?.(prefInt(PREF.REMINDER_HISTORY_DAYS, 30)) || 30,
         getDateFormat: () => CALENDAR_PART?.cleanDateFormat?.(prefStr(PREF.DATE_DISPLAY, "DD-MM-YYYY")) || "DD-MM-YYYY",
         setTimer: (fn, ms) => window.setTimeout(fn, ms),
         clearTimer: (id) => window.clearTimeout(id),
