@@ -72,7 +72,11 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     const event = new Ev(type, { target, bubbles: true, ...extra });
     event.stopImmediatePropagation = () => { event.stopped = true; event.immediateStopped = true; };
     events.push(event);
-    for (const listener of [...(listeners.get(type) || [])]) { listener(event); if (event.immediateStopped) break; }
+    // `emit` is a whole dispatch at the window: capture listeners first, then the rest, as a real window would see
+    // them. (Target-side dispatch is the fake DOM's job: it calls `__fakeWindowPropagate` for its capture phase.)
+    const set = [...(listeners.get(type) || [])];
+    for (const { fn } of set.filter((entry) => entry.capture)) { fn(event); if (event.immediateStopped) break; }
+    if (!event.immediateStopped) for (const { fn } of set.filter((entry) => !entry.capture)) { fn(event); if (event.immediateStopped) break; }
     return event;
   };
   const win = {
@@ -90,10 +94,23 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     }, innerWidth: 1200, innerHeight: 800,
     setTimeout(fn, ms) { const id = ++timerId; timers.set(id, { fn, ms }); return id; },
     clearTimeout(id) { timers.delete(id); }, requestAnimationFrame(fn) { return this.setTimeout(fn, 16); }, cancelAnimationFrame(id) { this.clearTimeout(id); },
-    addEventListener(type, fn) { if (!listeners.has(type)) listeners.set(type, new Set()); listeners.get(type).add(fn); },
-    removeEventListener(type, fn) { listeners.get(type)?.delete(fn); }, dispatchEvent(event) { return emit(event.type, event.target || win, event); },
+    // Window listeners see what a real window sees: capture listeners first, then the ones on the path to the target.
+    addEventListener(type, fn, opts) { if (!listeners.has(type)) listeners.set(type, new Set()); listeners.get(type).add({ fn, capture: opts === true || opts?.capture === true }); },
+    removeEventListener(type, fn) { const set = listeners.get(type); if (!set) return; for (const entry of [...set]) if (entry.fn === fn) set.delete(entry); },
+    dispatchEvent(event) { return emit(event.type, event.target || win, event); },
   };
   win.window = win;
+  // Fake DOM events reach the window through this hook; only the capture phase is ours to run (see `emit`).
+  globalThis.__fakeWindowPropagate = (event, phase) => {
+    if (phase !== "capture") return;
+    for (const { fn, capture } of [...(listeners.get(event.type) || [])]) {
+      if (!capture) continue;
+      fn(event);
+      if (event.immediateStopped) break;
+    }
+  };
+  // Real Gecko exposes XULMenuAnchorElement/AnchorElement; popups positioned from a pointer need one to open at all.
+  win.XULMenuAnchorElement = win.AnchorElement = class AnchorElement { constructor(x, y) { this.x = x; this.y = y; } };
   win.gBrowser = {
     get tabs() { return document.querySelectorAll("tab"); }, selectedTab: null,
     addTab(url, options = {}) { const tab = sidebar.tab(url); tab.id = `fake-${id}-${++tabId}`; tab._addTabOptions = { ...options }; tab.linkedBrowser = { currentURI: { spec: url } }; const ws = win.gZenWorkspaces.activeWorkspace; tab.setAttribute("zen-workspace-id", ws); (workspaces.get(ws)?.pinnedTabsContainer || sidebar.pinned).append(tab); if (!options.deferTabOpen) emit("TabOpen", tab); return tab; },
@@ -164,7 +181,10 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     disconnect() { this.target = null; this.options = null; mutationObservers.delete(this); }
   }
   class ResizeObserver { observe() {} unobserve() {} disconnect() {} }
-  const vmGlobals = { window: win, document, globalThis: { Services }, ChromeUtils: { importESModule: (uri) => esModules[uri] || {} }, PathUtils, IOUtils, MutationObserver, ResizeObserver, Event: Ev, Uint8Array, TextEncoder, TextDecoder,
+  // `globalThis` inside the module mirrors the page's global: the window's own members plus Services, which is how the
+  // real userscript sees it. (It used to be Services alone, so `globalThis.window` and `globalThis.document` were
+  // undefined inside the module while the browser has them.)
+  const vmGlobals = { window: win, document, globalThis: { ...win, Services }, ChromeUtils: { importESModule: (uri) => esModules[uri] || {} }, PathUtils, IOUtils, MutationObserver, ResizeObserver, Event: Ev, Uint8Array, TextEncoder, TextDecoder,
     navigator: { platform: "Linux" }, console, URL, Date: FakeDate, JSON, Math, Promise, RegExp, Number, Map, Set, WeakMap, setTimeout, clearTimeout, queueMicrotask };
   const ctx = vm.createContext(vmGlobals);
   const sharedHoverCard = loadRuntimeHoverCard(ctx);

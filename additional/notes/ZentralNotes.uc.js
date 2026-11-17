@@ -32472,6 +32472,39 @@
         if (event.target?.id === "zenFolderActions") document.documentElement.removeAttribute("zentral-agenda-folder-ctx");
         if (event.target?.id === "tabContextMenu") document.documentElement.removeAttribute("zentral-agenda-ctx");
       }
+      // SB6.11: one model for an Agenda row's menu, shared by Zen's tab menu and by our own panel menu so the two entry
+      // points can never disagree. Every row also carries a `run` that re-checks the tab, its key and its identity, and
+      // that runs a headless command without opening the sheet (SB6.3).
+      function agendaTabMenuModel(tab) {
+        const key = agendaTabKey(tab);
+        const projected = agendaEntryForKey(key);
+        const identity = agendaTabIdentity(tab);
+        const item = key.startsWith("item:") && CALENDAR_PART?.resolveAgendaOccurrence?.(agendaItems(), identity) || projected;
+        const history = store.items?.history, historyId = item && CALENDAR_PART.reminderIdentity(item);
+        const state = historyId ? history?.stateFor?.(historyId.itemId, historyId.occurrenceId) || "pending" : "pending";
+        const writable = !!history && !history.storageState().writeBlocked;
+        const model = item ? CALENDAR_PART.calendarItemMenuModel(item, { state, historyWritable: writable, agendaVisible: agendaWindowForItem(item, store).enabled, agendaWritable: item.x?.src !== "note", lang: notesLang() }) : [];
+        return { key, identity, model };
+      }
+      function agendaItemMenuRows(tab) {
+        const { key, identity, model } = agendaTabMenuModel(tab);
+        const stillLive = () => !disposed && agendaEnabled() && tab.isConnected !== false && agendaOwnTab(tab) &&
+          agendaTabKey(tab) === key && JSON.stringify(agendaTabIdentity(tab)) === JSON.stringify(identity);
+        const bind = (rows) => rows.map((row) => {
+          if (!row || row.sep || row.heading) return row;
+          if (Array.isArray(row.group)) return { ...row, group: bind(row.group) };
+          if (!row.enabled || !row.command) return row;
+          return { ...row, run: () => {
+            if (!stillLive()) return;
+            if (CALENDAR_PART.isHeadlessAgendaCommand?.(row.command)) { runHeadlessAgendaAction(identity, row.command); return; }
+            showNotes("").then((handle) => {
+              if (!stillLive()) return;
+              sheetOf(handle)?.runAgendaItemAction?.(identity, row.command);
+            }).catch(warn);
+          } };
+        });
+        return bind(model);
+      }
       function onAgendaTabMenuShowing(event) {
         const menu = event.target;
         if (menu?.id !== "tabContextMenu") return;
@@ -32480,15 +32513,7 @@
         const tab = window.TabContextMenu?.contextTab;
         if (!agendaEnabled() || !tab || !agendaOwnTab(tab)) return;
         document.documentElement.setAttribute("zentral-agenda-ctx", "item");
-        const key = agendaTabKey(tab);
-        const projected = agendaEntryForKey(key);
-        const snapshot = () => agendaTabIdentity(tab);
-        const identity = snapshot();
-        const item = key.startsWith("item:") && CALENDAR_PART?.resolveAgendaOccurrence?.(agendaItems(), identity) || projected;
-        const history = store.items?.history, historyId = item && CALENDAR_PART.reminderIdentity(item);
-        const state = historyId ? history?.stateFor?.(historyId.itemId, historyId.occurrenceId) || "pending" : "pending";
-        const writable = !!history && !history.storageState().writeBlocked;
-        const model = item ? CALENDAR_PART.calendarItemMenuModel(item, { state, historyWritable: writable, agendaVisible: agendaWindowForItem(item, store).enabled, agendaWritable: item.x?.src !== "note", lang: notesLang() }) : [];
+        const model = agendaItemMenuRows(tab);
         const addRows = (parent, rows, top = false) => {
           for (const row of rows) {
             if (row.sep) { const separator = document.createXULElement("menuseparator"); if (top) separator.setAttribute("zentral-agenda-own", "separator"); parent.append(separator); continue; }
@@ -32502,17 +32527,7 @@
             if (top) action.setAttribute("zentral-agenda-own", row.id || "heading");
             if (row.heading || !row.enabled) action.setAttribute("disabled", "true");
             if (row.reason) action.setAttribute("tooltiptext", row.reason);
-            if (!row.heading && row.enabled) action.addEventListener("command", () => {
-              if (disposed || !agendaEnabled() || tab.isConnected === false || !agendaOwnTab(tab) || agendaTabKey(tab) !== key || JSON.stringify(snapshot()) !== JSON.stringify(identity)) return;
-              if (CALENDAR_PART.isHeadlessAgendaCommand?.(row.command)) {
-                runHeadlessAgendaAction(identity, row.command);
-                return;
-              }
-              showNotes("").then((handle) => {
-                if (disposed || !agendaEnabled() || tab.isConnected === false || !agendaOwnTab(tab) || agendaTabKey(tab) !== key || JSON.stringify(snapshot()) !== JSON.stringify(identity)) return;
-                sheetOf(handle)?.runAgendaItemAction?.(identity, row.command);
-              }).catch(warn);
-            });
+            if (!row.heading && row.enabled) action.addEventListener("command", () => { if (typeof row.run === "function") row.run(); });
             parent.append(action);
           }
         };
@@ -33512,6 +33527,146 @@
         }
       };
       // Right-click menus: our own items are added once; for our targets every native item is hidden with CSS (never removed).
+      // SB6.11: our own menu for our own sidebar rows. Zen's tab menu is native, versioned and different for every
+      // Zen release; ours is built from the same rows the rest of Notes already uses, and the native actions stay one
+      // submenu away so nothing the person had before disappears.
+      const ZEN_NATIVE_MENU_COMMAND = "zentral-notes-native-tab-actions";
+      function zenNativeTabActions(tab) {
+        // The escape hatch: open Zen's own tab menu for this row, exactly as a plain right-click would.
+        try {
+          const menu = document.getElementById("tabContextMenu");
+          const context = window.TabContextMenu;
+          if (!menu || !context) return false;
+          if ("contextTab" in context) context.contextTab = tab;
+          if (typeof context.openPopup === "function") { context.openPopup(); return true; }
+          if (typeof menu.openPopup === "function") {
+            menu.openPopup(tab, "after_start", 0, 0, false, false);
+            return true;
+          }
+          return false;
+        } catch (_) { return false; }
+      }
+      function zenOwnMenuAnchor(event) {
+        const win = window;
+        const x = Number.isFinite(event?.clientX) ? Math.round(event.clientX) : 0;
+        const y = Number.isFinite(event?.clientY) ? Math.round(event.clientY) : 0;
+        try {
+          if (win.XULMenuAnchorElement) return new win.XULMenuAnchorElement(x, y);
+          if (win.AnchorElement) return new win.AnchorElement(x, y);
+        } catch (_) {}
+        return null;
+      }
+      // Rows that mean "this is ours": a Note projection tab or an Agenda projection tab.
+      function ownRowOf(event) {
+        const tab = pseudoEventClosest(event, "tab");
+        if (!tab) return null;
+        const noteId = zenNoteIdFromTab(tab);
+        if (noteId && zenManagedTab(tab)) return { kind: "note", tab, noteId };
+        if (agendaEnabled() && agendaOwnTab(tab)) return { kind: "agenda", tab, key: agendaTabKey(tab) };
+        return null;
+      }
+      // The menu rows are the same objects the Zen path uses: the Notes rows (open, out, hide, trash) or the Agenda
+      // model, so a click means the same thing in both places.
+      function ownRowMenuRows(own) {
+        if (own.kind === "note") {
+          return ZEN_MENU_ITEMS.map(([id, labelKey, fn]) => ({ id, label: t(labelKey), run: () => fn(own.tab) }));
+        }
+        const rows = agendaItemMenuRows(own.tab);
+        return rows.length ? rows : [{ id: "unavailable", label: t("sidebar.agenda.itemUnavailable"), enabled: false }];
+      }
+      let ownRowMenu = null;
+      // Closing is ours to decide: a hidden popup may also fire `popuphidden` on its own, and replacing one menu with
+      // the next must not leave two of them (or a stray focus hand-back) behind.
+      function closeOwnRowMenu({ refocus = false } = {}) {
+        const menu = ownRowMenu;
+        if (!menu) return;
+        ownRowMenu = null;
+        try { menu.hidePopup?.(); } catch (_) {}
+        menu.remove?.();
+        if (refocus) returnFocusToRow(menu._znOwnRowTab);
+      }
+      function openOwnRowMenu(event, own) {
+        if (!own) return false;
+        const anchor = zenOwnMenuAnchor(event);
+        if (!anchor) return false; // No anchor: let the native menu open, so a right-click never does nothing.
+        closeOwnRowMenu();
+        const menu = document.createXULElement("menupopup");
+        menu.id = "zentral-notes-row-menu";
+        menu.setAttribute("class", "zentral-notes-row-menu");
+        const rows = ownRowMenuRows(own);
+        const add = (parent, list) => {
+          for (const row of list) {
+            if (row.sep) { parent.append(document.createXULElement("menuseparator")); continue; }
+            if (row.heading) {
+              const heading = document.createXULElement("menuitem");
+              heading.setAttribute("label", row.label || ""); heading.setAttribute("disabled", "true");
+              parent.append(heading); continue;
+            }
+            if (Array.isArray(row.group)) {
+              const group = document.createXULElement("menu"), popup = document.createXULElement("menupopup");
+              group.setAttribute("label", row.label || "");
+              add(popup, row.group); group.append(popup); parent.append(group); continue;
+            }
+            const item = document.createXULElement("menuitem");
+            item.setAttribute("label", row.label || "");
+            if (row.enabled === false) item.setAttribute("disabled", "true");
+            if (row.reason) item.setAttribute("tooltiptext", row.reason);
+            if (row.enabled !== false) item.addEventListener("command", () => {
+              // Close first, then act: the row takes the focus back even when the action removes or moves it.
+              closeOwnRowMenu({ refocus: true });
+              if (typeof row.run === "function") row.run();
+            });
+            parent.append(item);
+          }
+        };
+        add(menu, rows);
+        // The native actions stay reachable; they are the one thing we cannot rebuild ourselves.
+        menu.append(document.createXULElement("menuseparator"));
+        const native = document.createXULElement("menuitem");
+        native.setAttribute("label", t("sidebar.row.zenActions"));
+        native.setAttribute("zentral-notes-row-native", "true");
+        native.addEventListener("command", () => {
+          closeOwnRowMenu();
+          zenNativeTabActions(own.tab);
+        });
+        menu.append(native);
+        menu.setAttribute("anchor", own.tab.id || "");
+        menu._znOwnRowTab = own.tab;
+        menu.addEventListener("popuphidden", () => {
+          // Escape or a click outside closes the menu; the row keeps the focus (UI4.11).
+          if (ownRowMenu !== menu) return;
+          ownRowMenu = null;
+          menu.remove?.();
+          returnFocusToRow(own.tab);
+        });
+        // A hidden popup is attached while it opens and lives in the popup set afterwards, which is where a real
+        // menupopup is (not in the page body). Attaching it this way also means a test can find it.
+        menu.setAttribute("hidden", "true");
+        document.documentElement.append(menu);
+        ownRowMenu = menu;
+        try {
+          menu.openPopupAtScreen(anchor.x, anchor.y, true);
+          menu.removeAttribute("hidden");
+        } catch (_) { closeOwnRowMenu(); return false; }
+        return true;
+      }
+      function returnFocusToRow(tab) {
+        const focus = () => { try { tab?.focus?.(); } catch (_) {} };
+        if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(focus);
+        else focus();
+      }
+      // One place decides whether a right-click gets our menu: only our own rows, and only when nothing else took it.
+      function onOwnRowContextMenu(event) {
+        // Clicks inside one of our own menus, and `popupshowing` alone, never arrive here.
+        if (disposed || event.defaultPrevented) return;
+        const own = ownRowOf(event);
+        if (!own || (own.kind === "note" && zenMode() === "off")) return;
+        // Ctrl/Meta keep Zen's native menu reachable for one click without hunting a submenu.
+        if (event.ctrlKey || event.metaKey) return;
+        if (!openOwnRowMenu(event, own)) return;
+        event.preventDefault?.();
+        event.stopImmediatePropagation?.();
+      }
       const ZEN_MENU_ITEMS = [
         ["open", "sidebar.note.open", (tab) => activateZenTab(tab)],
         ["out", "sidebar.note.removeFromFolder", (tab) => { const id = zenNoteIdFromTab(tab); if (id && zenMode() === "selected") withStore(() => { store.setFolder(id, ""); zen.schedule(0); }); }],
@@ -33706,12 +33861,17 @@
         window[act]("popuphidden", onTabMenuHidden, true);
         if (!on) {
           notesHoverCard.hide();
+          closeOwnRowMenu();
           document.documentElement.removeAttribute("zentral-notes-ctx");
           document.documentElement.removeAttribute("zentral-notes-folder-ctx");
           document.querySelectorAll?.("[zentral-notes-own],[zentral-notes-folder-own]").forEach((n) => n.remove());
         }
       }
       onCleanup(() => bindZen(false));
+      // SB6.11: one listener serves both projections, so it cannot live in bindZen (the Notes folder and the Agenda
+      // folder can be switched on independently). It costs one early return while nobody right-clicks our rows.
+      window.addEventListener("contextmenu", onOwnRowContextMenu, true);
+      onCleanup(() => window.removeEventListener("contextmenu", onOwnRowContextMenu, true));
       // Turning the feature off unloads it completely: listeners, pending work, flags, menu leftovers, and every tab and
       // folder it made, even when the sync object was killed or never found its root. Safe to call repeatedly.
       function zenTeardown() {

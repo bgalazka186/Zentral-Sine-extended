@@ -299,6 +299,7 @@
       "menu.agendaLegacyReason": "This legacy note reminder is not stored as an Agenda item",
       "toast.itemColorSet": "Colour set to {colour}",
       "toast.itemColorCleared": "The item uses the note or category colour again",
+      "sidebar.row.zenActions": "Zen tab actions…",
       "menu.color": "Colour",
       "menu.colorCustom": "Custom colour…",
       "menu.colorInherit": "Use the note or category colour",

@@ -147,12 +147,20 @@ class El {
   removeEventListener(type, fn) { this.listeners = this.listeners.filter((l) => !(l.type === type && l.fn === fn)); }
   dispatchEvent(ev) {
     ev.target = ev.target || this;
+    // A real event reaches the window as well: capture listeners there run first, before the target's own. Window
+    // listeners are registered through the host (`fake-zen-browser.cjs`), which owns the listener list.
+    const propagate = (phase) => {
+      try { globalThis.__fakeWindowPropagate?.(ev, phase); } catch (_) {}
+    };
+    propagate("capture");
+    if (ev.immediateStopped) return !ev.defaultPrevented;
     const path = []; for (let x = this; x; x = x.parent) path.unshift(x);
     for (const n of path) { for (const l of [...n.listeners]) if (l.type === ev.type && l.capture) l.fn(ev); if (ev.stopped) return true; }
     for (const n of [...path].reverse()) {
       for (const l of [...n.listeners]) if (l.type === ev.type && !l.capture) l.fn(ev);
       if (ev.stopped || (n === this && !ev.bubbles && !["keydown", "click", "mousedown", "pointerdown"].includes(ev.type))) break;
     }
+    if (!ev.immediateStopped) propagate("bubble");
     return !ev.defaultPrevented;
   }
   click() { this.dispatchEvent(new Ev("click", { bubbles: true })); }
@@ -164,6 +172,10 @@ class El {
   getClientRects() { return [{}]; }
   get offsetParent() { return null; }
   get isConnected() { let x = this; while (x.parent) x = x.parent; return x === document.documentElement; }
+  // Real popups expose their open state; tests dismiss a menu by hiding it, exactly as Escape or a click outside does.
+  get state() { return this.attrs.get("state") ?? "closed"; }
+  openPopupAtScreen() { this.setAttribute("state", "open"); }
+  hidePopup() { if (this.state === "open") { this.setAttribute("state", "closed"); this.dispatchEvent(new Ev("popuphidden")); } }
   get id() { return this.attrs.get("id") ?? ""; }
   set id(v) { this.attrs.set("id", String(v)); }
   get firstChild() { return this.children[0] || null; }

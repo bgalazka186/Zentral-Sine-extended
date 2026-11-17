@@ -101,7 +101,7 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 |    57 | `DOC-1`     | `DONE`    | Low                 | S      | 3.3.268           | README documents a split view that does not exist                                                        |
 |    58 | `TM3.7`     | `DONE`    | Low                 | S      | 3.3.269           | Day range keeps the wall clock on the day the clocks go forward at midnight                              |
 |    59 | `F0.16`     | `OPEN`    | Low                 | S-M    | —                 | Sweep tests that build fixtures around the real clock                                                    |
-|    60 | `SB6.11`    | `OPEN`    | Med                 | S      | SB6.6             | Right-click a Notes or Agenda row in the sidebar for its own menu, not Zen's tab menu |
+|    60 | `SB6.11`    | `DONE`    | Med                 | S      | 3.3.272           | Right-click a Notes or Agenda row in the sidebar for its own menu, not Zen's tab menu |
 |    61 | `ST7.8`     | `DONE`    | Med                 | S      | 3.3.271           | Give one reminder or event its own colour, not only through its note or category          |
 
 ---
@@ -244,21 +244,6 @@ _Not blocked by the calendar work._
 **Problem:** `tests/notes-agenda-projection.test.cjs` measures a time budget inside the parallel batch (75.6 ms against a ceiling of 55.7 ms, once in five full runs) because its name has no `perf`, so `run-all.cjs` does not isolate it.
 **Plan:** Move the timing assertion to `tests/notes-agenda-projection-perf.test.cjs`; keep the behaviour assertions where they are.
 
-#### `SB6.11` — A row's own menu in the sidebar
-
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Depends on:** SB6.6 · **Source:** owner 2026-11-17
-
-**Problem:** a Notes or Agenda row in Zen's sidebar gets our items bolted onto Zen's tab menu (`tabContextMenu`), so the person sees "Pinned tab" actions above and below our work. On an Agenda row the menu is readable but long, and on a Notes row it is short enough that the native rows are most of it. The native menu also changes with the Zen version, and our additions look like they belong to Zen.
-
-**Plan (do in this order):**
-
-1. Open our own panel menu for a right-click on one of our rows: the same rows the tab menu shows today (Notes: open, move out of the folder, hide from Zen, Trash; Agenda: the shared `calendarItemMenuModel`), built once so both entry points agree.
-2. Suppress the native tab menu for our rows only, and keep every native row it does not replace reachable from ours (a "Zen tab actions…" submenu or the same native menu on a modifier click) so nothing disappears.
-3. Keep the exact same actions headless: the Agenda rows must still run without the Notes sheet (SB6.3), and the Notes rows must still go through `withStore`.
-4. Escape returns the focus to the row (UI4.11 already does this for sheet menus; the row must do the same).
-
-**Tests / done when:** A harness test opens the menu on each kind of row, presses Escape, and finds the focus back on the row; a test proves the native menu is untouched for a foreign tab.
-
 #### `F0.16` — Sweep tests that build fixtures around the real clock
 
 **Status:** `OPEN` · **Impact:** Low · **Effort:** S-M · **Source:** handoff test noise, accepted 2026-11-16
@@ -332,7 +317,7 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.271.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9`, `SB6.6`, `UI4.11`, `DOC-1`, `TM3.7` and `ST7.8` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`218/218` test files) passes in Node/fake-Zen at 3.3.271; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.272.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9`, `SB6.6`, `UI4.11`, `DOC-1`, `TM3.7`, `ST7.8` and `SB6.11` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`219/219` test files) passes in Node/fake-Zen at 3.3.272; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
 Completed this session (3.3.163–3.3.244), every finished item archived in `docs/LEGACY_done_rows.md`:
 
@@ -476,4 +461,4 @@ Known debts / owner requirements: LIMITS of `OW-04`: the pointer is held to the 
 
 Planning only, no code (2026-11-17, version 3.3.244): the owner's holiday list added as `OW-43` (holiday sets split from the interface language, any language picks any set, first sets `PL` + `US`), `OW-44` (any number of sets at once), `OW-45` (one-place year table for movable/one-off dates such as the Polish election day and `niedziela handlowa`), `OW-46` (one master off switch) and `T2.13a` (how holidays behave when the `T2.13` ICS/Google groundwork is built: local sets are never imported or synced). They sit at the top of the Master Order; `T3.3` follows them.
 
-Next action: `SB6.11` (a row's own sidebar menu, the other 2026-11-17 owner report) is next, with Escape returning focus to the row as in `UI4.11`; `ST7.3` (calendar UI state out of notes metadata) stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.
+Next action: both 2026-11-17 owner reports are shipped (`ST7.8` 3.3.271, `SB6.11` 3.3.272), so the queue returns to the earlier rows, starting with `ST7.5`; `ST7.3` (calendar UI state out of notes metadata) stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.

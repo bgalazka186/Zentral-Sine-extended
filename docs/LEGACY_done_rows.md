@@ -159,6 +159,19 @@
   and `Use the note or category colour` to clear — so the calendar and the Agenda tab menu get it together; a palette pick
   is a headless one-write action with Undo, and only the custom dialog needs the Notes sheet. `tests/notes-item-color.test.cjs`
   (7 tests) and `tests/notes-agenda-item-color.test.cjs` (4 tests). Full suite 218/218.
+
+- `SB6.11` DONE (3.3.272) — Our own sidebar rows now open our own right-click menu instead of Zen's tab menu. A single
+  capture listener on the window decides: a Note projection tab or an Agenda projection tab gets
+  `#zentral-notes-row-menu`, built from exactly the rows the rest of Notes uses (`ZEN_MENU_ITEMS` for a note, the shared
+  `calendarItemMenuModel` for an Agenda item, both bound through the new `agendaItemMenuRows`), while a foreign tab is
+  left completely alone. Nothing is appended to Zen's `tabContextMenu` any more, so the versioned native wording cannot
+  drift from ours; the native actions stay one row away (`sidebar.row.zenActions`) and a Ctrl/Cmd right-click still
+  reaches Zen's own menu in one gesture. A palette pick runs headlessly, a sheet action opens the sheet, and the row
+  takes the focus back when the menu closes (Escape included) as in `UI4.11`. The listener is bound once at start-up
+  rather than inside `bindZen`, because the Notes folder and the Agenda folder can be switched on independently. The
+  test host grew three things a real browser has and it did not: window capture listeners now see fake-DOM events, a
+  popup has `state`/`openPopupAtScreen`/`hidePopup`, and the module's `globalThis` mirrors the page's global.
+  `tests/notes-sidebar-row-menu.test.cjs` (6 tests). Full suite 219/219.
 | #   | Track ID | Ref           | Item                                                         | Impact   | Effort | Implementation Plan & Dependencies                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | :-- | :------- | :------------ | :----------------------------------------------------------- | :------- | :----- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 20  | `T1.14`  | `Cycle G #37` | Inline `#tag` index & front-matter `tags:` unification       | Med      | M      | **DONE in 3.3.47.** Unified `inlineTags`, `noteTags` and `tagSummary` index YAML and inline tags case-insensitively; the Tags chip opens a counted menu, supports clearing/selection, and filters All and Recent views. Headings, code, URLs, HTML attributes/comments, hidden comments, inequalities and hex colours are excluded. Covered by `notes-audit-bugfixes.test.cjs` and existing list-view tests.                                                                                        |

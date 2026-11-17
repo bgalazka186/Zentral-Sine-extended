@@ -312,6 +312,7 @@
       "menu.agendaLegacyReason": "To starsze przypomnienie notatki nie jest zapisane jako element Agendy",
       "toast.itemColorSet": "Ustawiono kolor: {colour}",
       "toast.itemColorCleared": "Element zn\u00f3w u\u017cywa koloru notatki lub kategorii",
+      "sidebar.row.zenActions": "Dzia\u0142ania karty Zen\u2026",
       "menu.color": "Kolor",
       "menu.colorCustom": "Kolor niestandardowy…",
       "menu.colorInherit": "U\u017cyj koloru notatki lub kategorii",
