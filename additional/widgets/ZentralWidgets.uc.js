@@ -3901,9 +3901,6 @@
       // list. Its state lives here (not in prefs): a stopwatch is a moment, not a setting.
       const timerState = { stopwatch: stopwatchReset(), timer: timerReset(), lapsOpen: false };
       // The Clock line's small badge; the timer panel writes into it so a running countdown survives a closed panel.
-      // Ids revealed by a Clock click even though their own pref is off: a glance, not a setting.
-      const transientCards = new Set();
-      const clockClickState = { timer: null };
 
       // OW-56: the two halves of "a countdown that ends". Both are best-effort and silent on a platform that has
       // neither; a missing alert must never make the timer fail to end.
