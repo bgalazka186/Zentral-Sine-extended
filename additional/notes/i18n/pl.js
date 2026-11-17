@@ -385,6 +385,7 @@
       "menu.deleteReminderMirrored": "Usu\u0144 przypomnienie i jego wiersz w Agendzie\u2026",
       "menu.deleteEventMirrored": "Usu\u0144 wydarzenie i jego wiersz w Agendzie\u2026",
       "menu.deleteSourceReason": "Usu\u0144 ten element z notatki \u017ar\u00f3d\u0142owej zamiast usuwa\u0107 tylko jego kopi\u0119 w kalendarzu",
+      "menu.deleteUnavailableReason": "Usuwanie nie jest dost\u0119pne dla tego elementu",
       "menu.reminderHeading.pending": "Przypomnienie \u00b7 oczekuj\u0105ce",
       "menu.reminderHeading.done": "Przypomnienie \u00b7 uko\u0144czone",
       "menu.reminderHeading.dismissed": "Przypomnienie \u00b7 odrzucone",

@@ -1183,3 +1183,16 @@ the click-off rule, one alert per end, both choices, the red state and its
 token, the three settings in schema and Sine's page, "nothing stored", the
 toast, the chime fallback; the live case mounts the real host and flips the
 real card twice, asserting the pref and the face both follow.
+
+`OW-58` DONE (3.3.285) — an imported `.ics` item can be deleted.
+One predicate now answers "does this item own text in a note?": `itemOwnsNoteText` /
+`itemIsFreeStanding` in `ZentralNotesCalendar.js`. A `%%calendar%%` line, a dated list line and an Agenda mirror do;
+a hand-made item and an imported one do not. `calendarItemMenuModel` uses it for Delete and Convert (so only an item
+with a real note is told "delete it in its note"), `askDeleteCalendarItem` uses it for its confirmation (and says
+plainly that re-importing the file brings it back), and `deleteCalendarItem` uses it to choose between "remove the
+record" and "edit the note line" — that store branch is where the bug actually lived: `src === "manual"` meant an
+imported item fell through to the mirror path and was refused. The new `menu.deleteUnavailableReason` has an EN and a
+PL string, so a refusal never borrows the note wording. Tests: `tests/notes-calendar-ics-delete.test.cjs` (5 cases) —
+the predicate, the menu for every source, Convert, both translations, the real store delete of an imported and of a
+hand-made item, the refusal of a note-backed item with no note body, delete + re-import adding it back once, and a
+mirror still removing its own Agenda line.

@@ -10098,7 +10098,9 @@
               }).catch(warn);
             }
           };
-          if (item.x?.src === "manual") {
+          // OW-58: an item that owns no note text (hand-made, or imported from an .ics file) is simply removed from the
+          // store. Only a mirrored Agenda line owns text in a note, and only that case edits the note.
+          if (CALENDAR_PART.itemIsFreeStanding?.(item)) {
             const removed = items.remove(item.id);
             if (removed) pruneItemShare();
             return removed;
@@ -18941,16 +18943,22 @@
         const current = currentCalendarItem(item);
         if (!current) return flash("That calendar item is no longer available");
         const mirrored = CALENDAR_PART.isMirroredAgendaItem(current);
-        if (current.x?.src !== "manual" && !mirrored) return flash("Remove this item from its source note instead");
+        // OW-58: an imported item has no note body to edit either, so it is deleted right here like a hand-made one.
+        const source = current.x?.src === "ics" ? "ics" : "manual";
+        if (!CALENDAR_PART.itemIsFreeStanding?.(current) && !mirrored) return flash("Remove this item from its source note instead");
         const kind = CALENDAR_PART.isReminder(current) ? "reminder" : "event";
         const cancel = chip("Cancel"), remove = chip("Delete " + kind, true);
-        const detail = mirrored ? "This removes the calendar " + kind + " and its Agenda line from the Daily Note." : "This removes the independent calendar " + kind + ".";
+        const detail = mirrored
+          ? "This removes the calendar " + kind + " and its Agenda line from the Daily Note."
+          : source === "ics"
+            ? "This removes the imported calendar " + kind + ". Importing the same file again would bring it back."
+            : "This removes the independent calendar " + kind + ".";
         openCalendarCard("Delete calendar item?", h("p", { class: "zn-empty" }, `Delete “${current.summary || "Untitled item"}”? ${detail} This cannot be undone.`), h("div", { class: "zn-dialog-actions" }, cancel, remove));
         remove.addEventListener("click", () => {
           const latest = currentCalendarItem(current);
           // A changed ownership identity while the confirmation was open is not
           // consent to remove a different kind of source content.
-          if (!latest || CALENDAR_PART.isMirroredAgendaItem(latest) !== mirrored || (!mirrored && latest.x?.src !== "manual")) { closeDialog(); return flash("That calendar item is no longer available"); }
+          if (!latest || CALENDAR_PART.isMirroredAgendaItem(latest) !== mirrored || (!mirrored && !CALENDAR_PART.itemIsFreeStanding?.(latest))) { closeDialog(); return flash("That calendar item is no longer available"); }
           if (latest.rev !== current.rev || latest.updated !== current.updated) return flash("The item changed; cancel and review it before deleting");
           if (!store.deleteCalendarItem(latest.id)) return flash("Could not safely delete the calendar item or its Agenda line");
           closeDialog();

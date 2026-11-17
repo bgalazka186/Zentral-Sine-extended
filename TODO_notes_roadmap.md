@@ -108,37 +108,12 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 |    64 | `OW-55`     | `DONE`    | Med                 | S-M    | 3.3.282           | —                 | Settings: choose what free days, weekends and holidays look like (tint and how visible)                    |
 |    65 | `OW-56`     | `DONE`    | High                | M      | 3.3.284           | —                 | Clock and stopwatch as ONE widget: click switches mode, countdown alerts, a finished countdown turns the clock red |
 |    66 | `OW-57`     | `DONE`    | Med                 | S-M    | 3.3.283           | —                 | Weather: two or three saved places, cycled by a click                                                      |
-|    67 | `OW-58`     | `OPEN`    | High                | S      | —                 | An imported `.ics` event or reminder cannot be deleted: the menu says "delete it in its linked note" and there is none |
+|    67 | `OW-58`     | `DONE`    | High                | S      | 3.3.285           | —                 | An imported `.ics` event or reminder cannot be deleted: the menu says "delete it in its linked note" and there is none |
 |    68 | `OW-59`     | `OPEN`    | High                | S-M    | —                 | Reminders/events linked to a note cannot be unlinked there, and a date in a note has no way to list what is linked |
 
 ---
 
 ## Task blocks (same order as the Master Order)
-
-#### `OW-58` — An imported `.ics` item cannot be deleted, and says so wrongly
-
-**Status:** `OPEN` · **Impact:** High · **Effort:** S · **Source:** owner report 2026-11-17 (2nd batch)
-
-**Problem:** right-clicking an event or reminder that came from an `.ics` file shows Delete disabled with the reason
-"Remove this item from its source note instead of deleting only its calendar copy" — but an imported item has no source
-note, so it can be edited and coloured and then never removed. The cause is one line in `calendarItemMenuModel`
-(`ZentralNotesCalendar.js` ~6520): the comment above it says OW-53 made `ics` a deletable source, but the rule is still
-`enabled: manual || mirrored`, so `ics` falls into the note-backed branch.
-
-**Plan (do in this order):**
-
-1. Delete is enabled for every source that has no note body to edit: `manual`, `ics` and a mirrored Agenda line all get
-   `menu.deleteEvent` / `menu.deleteReminder`; only `list`, `note` (and the mirrored case) keep the "its note owns it"
-   wording, because those really do live in a note. `deleteSourceReason` must name the reason for those two only.
-2. The delete path itself already works for an imported item (`icsUid` rides in `x`, nothing else points at a note), so
-   this is a menu-model fix plus a test — do not add a second delete code path.
-3. A re-import must not resurrect a deleted item: the import plan replaces by `icsUid`, so confirm that deleting the
-   item and importing the same file again adds it back (that is correct and should be said in the toast), while
-   importing an unchanged file twice without deleting still updates instead of duplicating.
-
-**Tests / done when:** `tests/notes-calendar-ics-delete.test.cjs` (or the existing `notes-calendar-ics*` file) — the
-menu model for all five sources (delete enabled for manual/ics, disabled for list/note with that reason), a mirrored
-imported item deletes its Agenda line, and a delete + re-import round trip leaves one item, not two.
 
 #### `OW-59` — Unlink a reminder or event from its note, and list what a date has linked
 
@@ -348,7 +323,7 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.284.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9`, `SB6.6`, `UI4.11`, `DOC-1`, `TM3.7`, `ST7.8`, `SB6.11`, `ST7.5`, `UI4.10`, the 'left' half of `SB6.9`, `OW-53`, `F0.15`, `F0.16`, `OW-54`, `OW-55`, `OW-56` and `OW-57` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`228/228` test files) passes in Node/fake-Zen at 3.3.284; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.285.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9`, `SB6.6`, `UI4.11`, `DOC-1`, `TM3.7`, `ST7.8`, `SB6.11`, `ST7.5`, `UI4.10`, the 'left' half of `SB6.9`, `OW-53`, `F0.15`, `F0.16`, `OW-54`, `OW-55`, `OW-56`, `OW-57` and `OW-58` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`229/229` test files) passes in Node/fake-Zen at 3.3.285; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
 Completed this session (3.3.163–3.3.244), every finished item archived in `docs/LEGACY_done_rows.md`:
 
@@ -492,4 +467,4 @@ Known debts / owner requirements: LIMITS of `OW-04`: the pointer is held to the 
 
 Planning only, no code (2026-11-17, version 3.3.244): the owner's holiday list added as `OW-43` (holiday sets split from the interface language, any language picks any set, first sets `PL` + `US`), `OW-44` (any number of sets at once), `OW-45` (one-place year table for movable/one-off dates such as the Polish election day and `niedziela handlowa`), `OW-46` (one master off switch) and `T2.13a` (how holidays behave when the `T2.13` ICS/Google groundwork is built: local sets are never imported or synced). They sit at the top of the Master Order; `T3.3` follows them.
 
-Next action: the owner reports, the reminder-history card, the text-size follow-up, the Agenda 'left' counts and the owner's `.ics` import are shipped (`ST7.8` 3.3.271, `SB6.11` 3.3.272, `ST7.5` 3.3.274, `UI4.10` 3.3.275, `SB6.9` 3.3.278, `OW-53` 3.3.280), so the queue takes the owner's 2026-11-17 bug reports next (`OW-58` an imported `.ics` item that cannot be deleted, then `OW-59` unlinking an item from its note and listing a date's items), with `ST7.4` and `T2.13` behind them; `ST7.3` (calendar UI state out of notes metadata) stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.
+Next action: the owner reports, the reminder-history card, the text-size follow-up, the Agenda 'left' counts and the owner's `.ics` import are shipped (`ST7.8` 3.3.271, `SB6.11` 3.3.272, `ST7.5` 3.3.274, `UI4.10` 3.3.275, `SB6.9` 3.3.278, `OW-53` 3.3.280), so the queue takes the second of the owner's 2026-11-17 bug reports next (`OW-59` unlinking an item from its note and listing a date's items), with `ST7.4` and `T2.13` behind it; `ST7.3` (calendar UI state out of notes metadata) stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.

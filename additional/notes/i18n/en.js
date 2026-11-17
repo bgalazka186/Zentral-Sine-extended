@@ -372,6 +372,7 @@
       "menu.deleteReminderMirrored": "Delete reminder and its Agenda line…",
       "menu.deleteEventMirrored": "Delete event and its Agenda line…",
       "menu.deleteSourceReason": "Remove this item from its source note instead of deleting only its calendar copy",
+      "menu.deleteUnavailableReason": "Delete is not available for this item",
       "menu.reminderHeading.pending": "Reminder · pending",
       "menu.reminderHeading.done": "Reminder · done",
       "menu.reminderHeading.dismissed": "Reminder · dismissed",
