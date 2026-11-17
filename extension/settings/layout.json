@@ -1425,6 +1425,7 @@
       "size": "16px"
     },
     "zen.workspace.bgalazka.addon_tab_id_bridge",
+    "zen.workspace.bgalazka.hide_addon_hosts_ctrl_tab",
     "zen.workspace.bgalazka.zen_internet_panel_css",
     "zen.workspace.bgalazka.show_addon_host_folder",
     "zen.workspace.zentral.compat.external_tab_groups",

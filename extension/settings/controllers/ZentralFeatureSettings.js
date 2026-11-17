@@ -1069,6 +1069,15 @@
               (enabled) => ctx.setAddonTabIdBridgeEnabled(enabled),
             );
             content.appendChild(tAddonTabIdBridge.row);
+            const tHideAddonHostsCtrlTab = createToggleRow(
+              "Hide Web Panel Host Tabs from Ctrl+Tab Menu",
+              "Keep web panel add-on host tabs out of the Ctrl+Tab switcher and sequential Ctrl+Tab cycling while keeping their real Firefox tab IDs intact for extensions.",
+              ctx.BGALAZKA_EXT_PREFS.HIDE_ADDON_HOSTS_CTRL_TAB,
+              null,
+              true,
+              ctx.PREF_ICONS.PIN,
+            );
+            content.appendChild(tHideAddonHostsCtrlTab.row);
             const tZenInternetCss = createToggleRow(
               "Use Zen Internet CSS in Web Panels (experimental)",
               "Read Zen Internet's locally stored styles and its global, per-site, skip-list, and feature settings. Apply them only inside Zentral web panels. Zentral makes no network requests for styles and never selects tabs or changes Zen Internet's storage. Real Tab IDs are optional.",
@@ -2237,6 +2246,11 @@
                     "bgalazka-addon-tab-id-bridge",
                     v ? "true" : "false",
                   ),
+              },
+              {
+                input: tHideAddonHostsCtrlTab.input,
+                pref: ctx.BGALAZKA_EXT_PREFS.HIDE_ADDON_HOSTS_CTRL_TAB,
+                def: true,
               },
               {
                 input: tZenInternetCss.input,

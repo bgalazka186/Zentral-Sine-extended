@@ -18,6 +18,12 @@
       "label": "Show Web Panel Tab ID Folder in Sidebar (requires Real Tab IDs)",
       "type": "checkbox",
       "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.hide_addon_hosts_ctrl_tab",
+      "label": "Hide Web Panel Host Tabs from Ctrl+Tab Menu (requires Real Tab IDs)",
+      "type": "checkbox",
+      "defaultValue": true
     }
   ],
   "settings": {
@@ -27,6 +33,11 @@
       "owner": "browser-integrations"
     },
     "zen.workspace.bgalazka.show_addon_host_folder": {
+      "category": "compatibility",
+      "section": "Browser hosts & website styles",
+      "owner": "browser-integrations"
+    },
+    "zen.workspace.bgalazka.hide_addon_hosts_ctrl_tab": {
       "category": "compatibility",
       "section": "Browser hosts & website styles",
       "owner": "browser-integrations"

@@ -284,6 +284,7 @@
     "zen.workspace.zentral.video_preview.renderer_retry_backoff": true,
     "zen.workspace.zentral.video_preview.suspend_when_source_visible": true,
     "zen.workspace.bgalazka.addon_tab_id_bridge": true,
+    "zen.workspace.bgalazka.hide_addon_hosts_ctrl_tab": true,
     "zen.workspace.bgalazka.zen_internet_panel_css": true,
     "zen.workspace.bgalazka.show_addon_host_folder": false,
     "zen.workspace.bgalazka.show_triple_style_repair": false,

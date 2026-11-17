@@ -316,6 +316,8 @@
         PANEL_INPUT_SHIELD: "zen.workspace.bgalazka.panel_input_shield",
         ADDON_TAB_ID_BRIDGE: "zen.workspace.bgalazka.addon_tab_id_bridge",
         SHOW_ADDON_HOST_FOLDER: "zen.workspace.bgalazka.show_addon_host_folder",
+        HIDE_ADDON_HOSTS_CTRL_TAB:
+          "zen.workspace.bgalazka.hide_addon_hosts_ctrl_tab",
         ZEN_INTERNET_PANEL_CSS: "zen.workspace.bgalazka.zen_internet_panel_css",
         SHOW_TRIPLE_STYLE_REPAIR:
           "zen.workspace.bgalazka.show_triple_style_repair",
@@ -493,6 +495,7 @@
         [EXT_PREFS.ALL_TAB_PANELS]: true,
         [EXT_PREFS.PANEL_INPUT_SHIELD]: true,
         [EXT_PREFS.ADDON_TAB_ID_BRIDGE]: true,
+        [EXT_PREFS.HIDE_ADDON_HOSTS_CTRL_TAB]: true,
         [EXT_PREFS.SMART_SLEEP]: true,
         [EXT_PREFS.AUDIO_INDICATOR]: true,
         "zen.workspace.bgalazka.push_page": true,
@@ -1423,6 +1426,8 @@
         // genuine tabId. See architecture note 27 and the bridge implementation.
         ADDON_TAB_ID_BRIDGE: "zen.workspace.bgalazka.addon_tab_id_bridge",
         SHOW_ADDON_HOST_FOLDER: "zen.workspace.bgalazka.show_addon_host_folder",
+        HIDE_ADDON_HOSTS_CTRL_TAB:
+          "zen.workspace.bgalazka.hide_addon_hosts_ctrl_tab",
         ZEN_INTERNET_PANEL_CSS: "zen.workspace.bgalazka.zen_internet_panel_css",
         SHOW_TRIPLE_STYLE_REPAIR:
           "zen.workspace.bgalazka.show_triple_style_repair",

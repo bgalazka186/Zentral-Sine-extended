@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.235
+// @version 3.3.236
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.235, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.236, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.235";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.236";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -25782,6 +25782,217 @@ __zentralShim.register = function (def) {
       }
       return true;
     }
+    // Shared, reference-counted Ctrl+Tab filter registry coordinated with
+    // ZentralBrowserIntegrations via Symbol.for("zentral/ctrl-tab-filter/v1").
+    // Filters Notes/Agenda pseudo-tabs (and optionally webpanel host tabs) out
+    // of ctrlTab MRU previews and sequential advanceSelectedTab without ever
+    // mutating gBrowser.tabs or breaking real WebExtension host tabIds.
+    const CTRL_TAB_FILTER_KEY = Symbol.for("zentral/ctrl-tab-filter/v1");
+    function registerCtrlTabFilter(win, id, predicate) {
+      if (!win || !id || typeof predicate !== "function") return { prune: () => 0, refresh: () => {}, dispose: () => {} };
+      let state = win[CTRL_TAB_FILTER_KEY];
+      if (!state) {
+        const filters = new Map();
+        const undos = [];
+        let ctrlTabInstalled = false;
+        let advanceInstalled = false;
+        const shouldHide = (tab) => {
+          if (!tab) return false;
+          for (const fn of filters.values()) {
+            try { if (fn(tab)) return true; } catch (_) {}
+          }
+          return false;
+        };
+        const readBoolPref = (name, fallback) => {
+          try {
+            const prefs = win.Services?.prefs || (typeof Services !== "undefined" ? Services.prefs : null);
+            return prefs?.getBoolPref ? prefs.getBoolPref(name, fallback) : fallback;
+          } catch (_) { return fallback; }
+        };
+        const wrapDescriptor = (obj, prop, makeDescriptor) => {
+          if (!obj) return false;
+          const own = Object.getOwnPropertyDescriptor(obj, prop);
+          if (own?.configurable === false) return false;
+          let owner = obj;
+          let desc = null;
+          while (owner && !(desc = Object.getOwnPropertyDescriptor(owner, prop))) owner = Object.getPrototypeOf(owner);
+          if (!desc) return false;
+          const next = makeDescriptor(desc);
+          if (!next) return false;
+          try { Object.defineProperty(obj, prop, next); } catch (_) { return false; }
+          undos.push(() => {
+            try {
+              const cur = Object.getOwnPropertyDescriptor(obj, prop);
+              if (next.get && cur?.get !== next.get) return;
+              if (next.value && cur?.value !== next.value) return;
+              if (own) Object.defineProperty(obj, prop, own);
+              else delete obj[prop];
+            } catch (_) {}
+          });
+          return true;
+        };
+        const ensureInstalled = () => {
+          const ct = win.ctrlTab;
+          if (ct && !ctrlTabInstalled) {
+            ctrlTabInstalled = true;
+            wrapDescriptor(ct, "tabList", (desc) => {
+              if (typeof desc.get !== "function") return null;
+              return {
+                configurable: true,
+                enumerable: desc.enumerable,
+                get() {
+                  const raw = desc.get.call(this);
+                  return Array.isArray(raw) ? raw.filter((tab) => !shouldHide(tab)) : raw;
+                },
+                set: desc.set,
+              };
+            });
+            for (const methodName of ["start", "open", "setupGUI", "updatePreviews"]) {
+              wrapDescriptor(ct, methodName, (desc) => {
+                if (typeof desc.value !== "function") return null;
+                const orig = desc.value;
+                return {
+                  configurable: true,
+                  enumerable: desc.enumerable,
+                  writable: true,
+                  value: function (...args) {
+                    if (Array.isArray(this._tabList)) this._tabList = this._tabList.filter((tab) => !shouldHide(tab));
+                    if (methodName === "open" || methodName === "start") {
+                      const rawList = Array.isArray(this.recentlyUsedTabs) ? this.recentlyUsedTabs.filter((tab) => tab && !tab.hidden && !tab.closing) : null;
+                      const filtered = Array.isArray(this.tabList) ? this.tabList : null;
+                      if (filtered && filtered.length < 2 && rawList && rawList.some((tab) => shouldHide(tab))) return;
+                    }
+                    const out = orig.apply(this, args);
+                    if (Array.isArray(this._tabList)) this._tabList = this._tabList.filter((tab) => !shouldHide(tab));
+                    return out;
+                  },
+                };
+              });
+            }
+            wrapDescriptor(ct, "pick", (desc) => {
+              if (typeof desc.value !== "function") return null;
+              const orig = desc.value;
+              return {
+                configurable: true,
+                enumerable: desc.enumerable,
+                writable: true,
+                value: function (aPreview, ...rest) {
+                  const targetTab = aPreview?._tab || null;
+                  if (targetTab && shouldHide(targetTab)) {
+                    if (typeof this.close === "function") this.close();
+                    return;
+                  }
+                  return orig.call(this, aPreview, ...rest);
+                },
+              };
+            });
+          }
+          const tc = win.gBrowser?.tabContainer;
+          if (tc && !advanceInstalled) {
+            advanceInstalled = true;
+            wrapDescriptor(tc, "advanceSelectedTab", (desc) => {
+              if (typeof desc.value !== "function") return null;
+              const orig = desc.value;
+              return {
+                configurable: true,
+                enumerable: desc.enumerable,
+                writable: true,
+                value: function (aDir, aWrap, ...rest) {
+                  const dir = Number(aDir);
+                  if (!dir || !Number.isFinite(dir) || !filters.size) return orig.call(this, aDir, aWrap, ...rest);
+                  const rawTabs = Array.from(win.gBrowser?.visibleTabs || win.gBrowser?.tabs || []);
+                  if (!rawTabs.length || !rawTabs.some((tab) => shouldHide(tab))) return orig.call(this, aDir, aWrap, ...rest);
+                  const current = win.gBrowser?.selectedTab || this.selectedItem || null;
+                  const curIdx = rawTabs.indexOf(current);
+                  if (curIdx < 0) return orig.call(this, aDir, aWrap, ...rest);
+                  const step = dir > 0 ? 1 : -1;
+                  const steps = Math.max(1, Math.abs(Math.trunc(dir)));
+                  const ignoreEssentials = readBoolPref("zen.tabs.ctrl-tab.ignore-essential-tabs", false);
+                  const ignorePending = readBoolPref("zen.tabs.ctrl-tab.ignore-pending-tabs", false);
+                  const isBaseNavigable = (t) => !!(
+                    t && t.isConnected !== false && !t.hidden && !t.closing &&
+                    !t.hasAttribute?.("zen-empty-tab") &&
+                    !(ignoreEssentials && t.hasAttribute?.("zen-essential")) &&
+                    !(ignorePending && (t.hasAttribute?.("pending") || t.discarded))
+                  );
+                  const findNext = (fromIdx, skipHidden) => {
+                    let idx = fromIdx;
+                    for (let visited = 0; visited < rawTabs.length; visited++) {
+                      idx += step;
+                      if (idx < 0 || idx >= rawTabs.length) {
+                        if (!aWrap) return null;
+                        idx = (idx + rawTabs.length) % rawTabs.length;
+                      }
+                      if (idx === curIdx) return null;
+                      const cand = rawTabs[idx];
+                      if (!isBaseNavigable(cand)) continue;
+                      if (skipHidden && shouldHide(cand)) continue;
+                      return { tab: cand, index: idx };
+                    }
+                    return null;
+                  };
+                  if (steps === 1) {
+                    const immediate = findNext(curIdx, false);
+                    if (!immediate) return;
+                    if (!shouldHide(immediate.tab)) return orig.call(this, aDir, aWrap, ...rest);
+                  }
+                  let cursor = curIdx;
+                  let target = null;
+                  for (let s = 0; s < steps; s++) {
+                    const next = findNext(cursor, true);
+                    if (!next) break;
+                    target = next.tab;
+                    cursor = next.index;
+                  }
+                  if (target && target !== current && win.gBrowser) win.gBrowser.selectedTab = target;
+                },
+              };
+            });
+          }
+        };
+        const pruneRecentlyUsed = (predicateFn) => {
+          const list = win.ctrlTab?.recentlyUsedTabs;
+          if (!Array.isArray(list)) return 0;
+          let removed = 0;
+          for (let i = list.length - 1; i >= 0; i--) {
+            let match = false;
+            try { match = !!predicateFn(list[i]); } catch (_) {}
+            if (match) { list.splice(i, 1); removed++; }
+          }
+          return removed;
+        };
+        state = {
+          version: 1,
+          filters,
+          shouldHide,
+          ensureInstalled,
+          pruneRecentlyUsed,
+          teardownIfEmpty() {
+            if (filters.size > 0) return;
+            while (undos.length) { try { undos.pop()(); } catch (_) {} }
+            ctrlTabInstalled = false;
+            advanceInstalled = false;
+            if (win[CTRL_TAB_FILTER_KEY] === state) {
+              try { delete win[CTRL_TAB_FILTER_KEY]; } catch (_) { win[CTRL_TAB_FILTER_KEY] = undefined; }
+            }
+          },
+        };
+        win[CTRL_TAB_FILTER_KEY] = state;
+      }
+      state.filters.set(id, predicate);
+      state.ensureInstalled();
+      let disposed = false;
+      return {
+        prune(fn = predicate) { return state.pruneRecentlyUsed(fn); },
+        refresh() { state.ensureInstalled(); },
+        dispose() {
+          if (disposed) return;
+          disposed = true;
+          if (state.filters.get(id) === predicate) state.filters.delete(id);
+          state.teardownIfEmpty();
+        },
+      };
+    }
     // Tree -> flat ordered entries. mode "all": everything; "selected": only the tabbar folder's content, whose direct
     // children sit right inside the Zen NOTES folder (parent ""); "off": nothing. Parents always come before children.
     function projectZen(notes, folders, mode = "all", order = "folders-first") {
@@ -26432,7 +26643,7 @@ __zentralShim.register = function (def) {
         hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_FOLDER_LABEL, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
         DATE_TITLE_RE, dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
         HISTORY_DIR, HISTORY_DEFAULTS, HISTORY_RANGE, BACKUP_DIR, BACKUP_HOURS, backupEntryName, parseBackupName, backupPlan, backupLeft, UNLOAD_RECOVERY_DIR, UNLOAD_KINDS, unloadEntryStem, parseUnloadEntryName, planUnloadWrites, decideNoteRecovery, historyOptions, historyStamp, historyFileName, parseHistoryName, shouldSnapshot, pruneHistory, historyWarning,
-        orderPlan, childSequence, wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, pseudoTabCleanupKind, sweepRestoredPseudoTabs, filterSessionStoreState, filterZenSidebarState, filterSessionFilePayload, acquireZenSidebarShield, acquireSessionFileShield, isPseudoPinRecord, planSyncedPseudoRecordCleanup, prunePreviouslySyncedPseudoRecords, acquirePinnedTabsStorageShield, restoredPseudoFolderKind, retireRestoredPseudoFolder, projectZen,
+        orderPlan, childSequence, wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, pseudoTabCleanupKind, sweepRestoredPseudoTabs, filterSessionStoreState, filterZenSidebarState, filterSessionFilePayload, acquireZenSidebarShield, acquireSessionFileShield, isPseudoPinRecord, planSyncedPseudoRecordCleanup, prunePreviouslySyncedPseudoRecords, acquirePinnedTabsStorageShield, restoredPseudoFolderKind, retireRestoredPseudoFolder, CTRL_TAB_FILTER_KEY, registerCtrlTabFilter, projectZen,
         utf8Bytes, createPerfSampler, createResourceRegistry, ACTIVE_RESOURCE_INVENTORY, createZenFolder,
       };
     }
@@ -41152,6 +41363,7 @@ __zentralShim.register = function (def) {
         if (tab.closest?.("zen-folder") !== parentEl) { try { window.gBrowser.moveTabToExistingGroup?.(tab, parentEl); } catch (_) {} }
         return tab.closest?.("zen-folder") === parentEl;
       }
+      let notesCtrlTabFilter = null;
       function addManagedPseudoTab(url) {
         pseudoTabCreationDepth++;
         try {
@@ -41160,6 +41372,7 @@ __zentralShim.register = function (def) {
             internalPseudoTabs.add(tab);
             tab.setAttribute?.(EPHEMERAL_TAB_ATTR, "true");
             tab.setAttribute?.(SKIP_SESSION_ATTR, "true");
+            notesCtrlTabFilter?.prune?.((candidate) => candidate === tab);
           }
           return tab;
         } finally { pseudoTabCreationDepth--; }
@@ -42994,6 +43207,22 @@ __zentralShim.register = function (def) {
       let lastRealTab = null;
       const isPlaceholderTab = (tab) => !!tab && (zenManagedTab(tab) || agendaOwnTab(tab) ||
         internalPseudoTabs.has(tab) || !!currentPseudoTabUrl(tab));
+      const isNotesCtrlTabHidden = (tab) => {
+        if (!tab) return false;
+        if (isPlaceholderTab(tab)) return true;
+        if (tab.hasAttribute?.(EPHEMERAL_TAB_ATTR)) {
+          let live = "";
+          try { live = tab.linkedBrowser?.currentURI?.spec || ""; } catch (_) {}
+          if (!live || live === "about:blank" || isZentralPseudoUrl(live)) return true;
+        }
+        return false;
+      };
+      notesCtrlTabFilter = registerCtrlTabFilter(window, "zentral-notes-pseudo-tabs", isNotesCtrlTabHidden);
+      notesCtrlTabFilter.prune();
+      onCleanup(() => {
+        notesCtrlTabFilter?.dispose?.();
+        notesCtrlTabFilter = null;
+      });
       // Any real, shown tab qualifies, unloaded / pinned / Essential ones included: the user was on it a moment ago,
       // so returning there is not a guess. Only closed, hidden, placeholder or empty-space tabs are refused.
       const isReturnTab = (tab) => !!tab && tab.localName === "tab" && tab.isConnected !== false && !tab.closing && !tab.hidden &&

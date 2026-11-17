@@ -4223,6 +4223,12 @@
     "defaultValue": true
   },
   {
+    "property": "zen.workspace.bgalazka.hide_addon_hosts_ctrl_tab",
+    "label": "Hide Web Panel Host Tabs from Ctrl+Tab Menu (requires Real Tab IDs)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
     "property": "zen.workspace.bgalazka.zen_internet_panel_css",
     "label": "Use Zen Internet CSS in Web Panels (experimental)",
     "type": "checkbox",
