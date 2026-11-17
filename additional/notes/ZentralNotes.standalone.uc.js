@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.248
+// @version 3.3.249
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.248, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.249, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.248";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.249";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -16917,7 +16917,7 @@ __zentralShim.register = function (def) {
       {
         id: "markdown", label: "Markdown", items: [
           { kind: "heading", i18nKey: "settings.heading.markdownSyntax", label: "Which syntax is read (a note can choose its own in its More menu)" },
-          { id: "mdFlavor", label: "Markdown mode (a note can set its own in its menu)", pref: PREF.MD_FLAVOR, kind: "choice", def: "mixed", choices: FLAVORS_PART ? FLAVORS_PART.MODES.map((m) => [m, FLAVORS_PART.MODE_LABELS[m]]) : [["mixed", "Mixed"]] },
+          { id: "mdFlavor", label: "Markdown mode for every note (a single note sets its own in its More menu)", pref: PREF.MD_FLAVOR, kind: "choice", def: "mixed", choices: FLAVORS_PART ? FLAVORS_PART.MODES.map((m) => [m, FLAVORS_PART.MODE_LABELS[m]]) : [["mixed", "Mixed"]] },
           { id: "singleTilde", label: "One tilde, ~a~, in the mixed modes", pref: PREF.TILDE, kind: "choice", def: "sub", choices: [["sub", "Subscript (H~2~O)"], ["strike", "Strikethrough (as on GitHub)"]] },
           { id: "ignoreSyntax", label: "Show as plain text (spaces between): >[!info] <mark> == or a rule id such as A10", pref: PREF.IGNORE_SYNTAX, kind: "text", def: "" },
           { id: "textShortcuts", label: "Typing shortcuts: {{date}}  @today  /tomorrow  @+3d  @monday", pref: PREF.TEXT_SHORTCUTS, kind: "choice", def: "all", choices: [["all", "All: {{ }}, @ and /"], ["braces", "Only {{date}} style"], ["off", "Off"]] },
@@ -35592,6 +35592,49 @@ __zentralShim.register = function (def) {
         flash("Saved as a template: " + (titleOf(c.body) || "Untitled"));
         if (view === "list") scheduleList();
       }
+      // T2.11b1: one read-only help note that says where every function is (full list: docs/NOTES_DISCOVERABILITY.md).
+      const DISCOVERABILITY_NOTE_ID = "zn-help-where-is-a-function";
+      const DISCOVERABILITY_LINES = [
+        "# Where is a function?",
+        "",
+        "One place per function. The complete list of every control is in the repository (docs/NOTES_DISCOVERABILITY.md).",
+        "",
+        "## While writing a note",
+        "- **Toolbar**: bold, italic, strike, highlight, code, headings, lists, checklist (hold: task states), quote, callout, nest in/out, rule, link, image, table, table of contents.",
+        "- **Caret menu at the end of the toolbar**: pictures, callouts, more text styles, math, collapsible section, footnote, hub list, date and time.",
+        "- **More (three dots)**: import and export, labels, reminder, templates, version history, calendar-only, birthday entries, duplicate, move to folder, Markdown mode of this note, window, settings and help.",
+        "- **Quick settings (sliders)**: text size, line height, wrapping, blank lines, line breaks, scroll sync, copy format, Markdown mode, theme.",
+        "",
+        "## Settings (All settings)",
+        "Writing, Markdown, Window, Appearance, Capture, Links & history, Zen sidebar. Reminders, version history, the Trash lifetime, find-highlighting and spell-check are rows of Links & history; the Keyboard shortcuts dialog opens from the bottom of that tab.",
+        "",
+        "## All notes",
+        "- The `+` control creates a note, folder, reminder, event or date note; right-click it for the full menu.",
+        "- A row: right-click for rename, move, colour, label, exclusion, calendar-only, trash and share; drag it onto a calendar day to add it to the calendar.",
+        "- Shift or Ctrl click rows for the batch bar (move, tag, label, category, export, trash).",
+        "",
+        "## Calendar",
+        "- **Toolbar**: view, Prev/Next/Today, size, visible hours, display zone, filters.",
+        "- **Tools**: create, reminder history, sounds and quiet hours, Agenda visibility, week settings, holidays and days off, free slots, big picture, week as Markdown, print.",
+        "- **A day**: click selects it; right-click for Day view, create, and a personal day off.",
+        "- **An item**: click opens it; right-click for edit, move, snooze, done, dismiss, colour, calendar note and delete.",
+        "",
+        "## Zen sidebar",
+        "The Notes folder mirrors the tree (hover a tab for a preview); the Agenda folder lists items inside their display window with hover actions and headless Done, Dismiss, Snooze and Open. The Agenda root menu has Open calendar, Refresh, Agenda settings and Hide Agenda.",
+        "",
+        "## Holidays",
+        "Tools > Holidays & days off: choose any number of public holiday sets (independent of the interface language), weekends, personal days off, and see the newest year each set covers. A trading Sunday is shown but is not a day off. One switch turns every holiday feature off.",
+        "",
+      ];
+      function openDiscoverabilityNote() {
+        const body = DISCOVERABILITY_LINES.join("\n");
+        const existing = store.get(DISCOVERABILITY_NOTE_ID);
+        const id = existing ? existing.id : store.create(body).id;
+        // The help note follows the shipped text (a stale copy would be worse than none); it stays a normal note
+        // so a person may edit or trash it, and a later visit recreates it.
+        if (existing && existing.body !== body && !existing.trashed) store.update(existing.id, body, null);
+        openNote(id);
+      }
       function installDemoNotes() {
         let made = 0;
         const folder = store.meta.folders.some((f) => f.id === DEMO_FOLDER) ? DEMO_FOLDER : store.addFolder("Help") || "";
@@ -37763,6 +37806,7 @@ __zentralShim.register = function (def) {
             { icon: "sliders", label: "Quick settings\u2026", action: () => askSettings() },
             { icon: "sliders", label: "All settings\u2026", action: () => askAllSettings() },
             { icon: "note", label: "Install demo notes", action: () => installDemoNotes() },
+            { icon: "search", label: "Where is a function? (discoverability list)", action: () => openDiscoverabilityNote() },
           ] },
           { sep: true },
         ];
