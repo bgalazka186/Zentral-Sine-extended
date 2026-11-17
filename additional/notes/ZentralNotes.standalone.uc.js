@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.212
+// @version 3.3.213
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.212, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.213, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.212";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.213";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2854,6 +2854,10 @@ const __zentralEmbeddedLoader = (function () {
     };
     if (x.src === "list" && typeof x.categoryOverride === "string") item.x.categoryOverride = cleanCategoryName(x.categoryOverride);
     if (x.src === "list" && x.categoryInNote === true) item.x.categoryInNote = true;
+    if (x.src === "list") {
+      const textSchedule = cleanTextSchedule(x.textSchedule);
+      if (textSchedule) item.x.textSchedule = textSchedule;
+    }
     if (end) item.end = end;
     if (typeof raw.created === "string" && Number.isFinite(Date.parse(raw.created))) item.created = iso(Date.parse(raw.created));
     item.etag = typeof raw.etag === "string" && raw.etag ? raw.etag : etagOf(item);
@@ -2867,24 +2871,189 @@ const __zentralEmbeddedLoader = (function () {
   }
   const isReminder = (it) => it.x.kind === "reminder";
   const isAllDay = (it) => !!it.start.date;
+
+  // OW-29: Canonical schedule signature parsed from a Markdown calendar list line:
+  // "YYYY-MM-DD|startMin|endMin|yearless(0|1)". Stored on src:"list" items as x.textSchedule so syncNote
+  // moves an item only when the line's parsed schedule actually changed, while unrelated text edits keep
+  // calendar moves intact.
+  function lineScheduleSignature(parsed) {
+    if (!parsed || !Number.isFinite(parsed.day)) return "";
+    const dateKey = ymd(new Date(parsed.day));
+    if (!parseYmd(dateKey)) return "";
+    const s = Number.isInteger(parsed.startMin) && parsed.startMin >= 0 && parsed.startMin <= 1439 ? parsed.startMin : -1;
+    const e = Number.isInteger(parsed.endMin) && parsed.endMin >= 0 && parsed.endMin <= 1439 ? parsed.endMin : -1;
+    const y = parsed.yearless ? 1 : 0;
+    return `${dateKey}|${s}|${e}|${y}`;
+  }
+  function cleanTextSchedule(value) {
+    const m = /^(\d{4}-\d{2}-\d{2})\|(-?\d{1,4})\|(-?\d{1,4})\|([01])$/.exec(String(value || "").trim());
+    if (!m || !parseYmd(m[1])) return "";
+    const s = Number(m[2]), e = Number(m[3]);
+    if (!Number.isInteger(s) || s < -1 || s > 1439) return "";
+    if (!Number.isInteger(e) || e < -1 || e > 1439) return "";
+    return `${m[1]}|${s}|${e}|${m[4]}`;
+  }
+  function scheduleSignatureFromItem(item, fallbackSig = "") {
+    if (!item || !item.start) return "";
+    const yearless = fallbackSig.endsWith("|1") ? 1 : 0;
+    if (isAllDay(item)) return `${item.start.date}|-1|-1|${yearless}`;
+    const [startMs, endMs] = itemRange(item);
+    if (!Number.isFinite(startMs)) return "";
+    const tz = cleanZone(item.x?.tz);
+    const sp = zoneParts(startMs, tz);
+    if (!sp) return "";
+    const dateKey = `${sp.year}-${p2(sp.month)}-${p2(sp.day)}`;
+    const startMin = sp.hour * 60 + sp.minute;
+    let endMin = -1;
+    if (item.end && item.x?.kind === "event" && Number.isFinite(endMs) && endMs > startMs) {
+      const ep = zoneParts(endMs, tz);
+      if (ep) endMin = ep.hour * 60 + ep.minute;
+    }
+    return `${dateKey}|${startMin}|${endMin}|${yearless}`;
+  }
+  // Build DST-safe { start, end, kind } from a parsed Markdown line, honoring an explicit IANA/fixed tz when set.
+  function scheduleFromParsedLine(parsed, { tz = "", existing = null, defaultKind = "" } = {}) {
+    if (!parsed || !Number.isFinite(parsed.day)) return null;
+    const dateKey = ymd(new Date(parsed.day));
+    if (!parseYmd(dateKey)) return null;
+    const zone = cleanZone(tz);
+    if (parsed.startMin < 0) {
+      const keepAllDayEvent = (existing?.x?.kind === "event" && !!existing.start?.date) || defaultKind === "event";
+      if (keepAllDayEvent) {
+        const spanDays = existing?.start?.date && existing?.end?.date
+          ? Math.max(1, localDayOrdinal(whenMs(existing.end)) - localDayOrdinal(whenMs(existing.start)))
+          : 1;
+        return { start: { date: dateKey }, end: { date: ymd(new Date(addDays(parsed.day, spanDays))) }, kind: "event" };
+      }
+      return { start: { date: dateKey }, end: undefined, kind: "reminder" };
+    }
+    const startMs = zonedDateTimeToMs(dateKey, clockOfMinutes(parsed.startMin), zone);
+    if (!Number.isFinite(startMs)) return null;
+    const start = { dateTime: iso(startMs) };
+    if (parsed.endMin >= 0) {
+      // A range that ends at or before its start crosses midnight. Equal clocks mean a full 24-hour event.
+      const endDateKey = parsed.endMin <= parsed.startMin ? ymd(new Date(addDays(parsed.day, 1))) : dateKey;
+      let endMs = zonedDateTimeToMs(endDateKey, clockOfMinutes(parsed.endMin), zone);
+      if (!Number.isFinite(endMs) || endMs <= startMs) {
+        const fallbackMin = ((parsed.endMin - parsed.startMin + 1440) % 1440) || 60;
+        endMs = startMs + fallbackMin * MIN;
+      }
+      return { start, end: { dateTime: iso(endMs) }, kind: "event" };
+    }
+    return { start, end: undefined, kind: "reminder" };
+  }
+  const sameItemSchedule = (a, b) => Boolean(
+    a && b &&
+    JSON.stringify(a.start || null) === JSON.stringify(b.start || null) &&
+    JSON.stringify(a.end || null) === JSON.stringify(b.end || null) &&
+    (a.kind || a.x?.kind) === (b.kind || b.x?.kind)
+  );
+  // Pure OW-29 reconciliation of an existing list item `old` against freshly parsed line item `fresh`.
+  function reconcileListItem(old, fresh, { sourceEdit = false, updatedAt = 0, calendarSync = false, remote = false } = {}) {
+    const freshSig = cleanTextSchedule(fresh.x?.textSchedule || lineScheduleSignature(fresh._parsed));
+    const storedSig = cleanTextSchedule(old.x?.textSchedule || "");
+    const priorSig = storedSig || (!old.x?.moved ? scheduleSignatureFromItem(old, freshSig) : freshSig);
+    const scheduleChanged = !calendarSync && Boolean(freshSig && priorSig && freshSig !== priorSig);
+
+    const hasStamp = Number.isFinite(Number(updatedAt)) && Number(updatedAt) > 0;
+    const editMs = hasStamp ? Number(updatedAt) : 0;
+    const oldMs = Number.isFinite(Date.parse(old.updated)) ? Date.parse(old.updated) : 0;
+    const stamp = hasStamp && (sourceEdit || scheduleChanged) ? iso(editMs) : old.updated;
+    const shouldBumpRev = sourceEdit && !remote && (!hasStamp || editMs >= oldMs);
+    const revision = shouldBumpRev
+      ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, old.rev || 0) + 1)
+      : Math.max(0, old.rev || 0);
+
+    const noteCategory = fresh.x?.categoryInNote === true;
+    const priorNoteCategory = old.x?.categoryInNote === true;
+    const override = noteCategory ? fresh.x.categoryOverride : (!priorNoteCategory ? old.x.categoryOverride : undefined);
+
+    let nextStart = old.start;
+    let nextEnd = old.end;
+    let nextKind = old.x.kind;
+    let nextMoved = old.x.moved;
+    let nextExceptions = old.x.recurrenceExceptions;
+
+    if (scheduleChanged) {
+      const parsedSched = fresh._parsed
+        ? scheduleFromParsedLine(fresh._parsed, { tz: old.x.tz, existing: old })
+        : { start: fresh.start, end: fresh.end, kind: fresh.x.kind };
+      if (parsedSched) {
+        if (sameItemSchedule(old, parsedSched)) {
+          nextMoved = "";
+        } else {
+          const modeFlipped = Boolean(parsedSched.start?.date) !== Boolean(old.start?.date);
+          nextStart = parsedSched.start;
+          nextEnd = parsedSched.end;
+          nextKind = parsedSched.kind;
+          nextMoved = "";
+          if (modeFlipped) nextExceptions = [];
+          else if (Array.isArray(old.x.recurrenceExceptions) && old.x.recurrenceExceptions.length) {
+            // Master start itself moved in text: drop stale whole-series shifts so they do not stack on top.
+            nextExceptions = old.x.recurrenceExceptions.filter((entry) => entry.scope !== "series");
+          }
+        }
+      }
+    }
+
+    const candidateRaw = {
+      ...fresh,
+      start: nextStart,
+      status: old.status,
+      reminders: old.reminders,
+      recurrence: old.recurrence.length ? old.recurrence : fresh.recurrence,
+      updated: stamp,
+      rev: revision,
+      etag: "",
+      description: fresh.description || old.description,
+      x: {
+        ...fresh.x,
+        kind: nextKind,
+        tz: old.x.tz,
+        calNote: old.x.calNote,
+        moved: nextMoved,
+        notify: old.x.notify,
+        agendaWindow: old.x.agendaWindow,
+        recurrenceExceptions: nextExceptions,
+        historyId: old.x.historyId,
+        ...(freshSig ? { textSchedule: freshSig } : {}),
+        ...(typeof override === "string" ? { categoryOverride: override } : {}),
+        ...(noteCategory ? { categoryInNote: true } : {}),
+      },
+    };
+    if (nextEnd) candidateRaw.end = nextEnd;
+    else delete candidateRaw.end;
+
+    const candidate = cleanItem(candidateRaw, 0);
+    candidate.x.heading = fresh.x.heading;
+    candidate.x.category = typeof override === "string" ? override : fresh.x.category;
+    const winner = lwwPick(old, candidate);
+    if (winner === old) {
+      // Keep the winning calendar record untouched, only syncing x.textSchedule to the current note line so a
+      // later unrelated text edit does not mistake the stale line text for a fresh schedule retype.
+      if (freshSig && old.x.textSchedule !== freshSig) {
+        const syncedOld = cleanItem({ ...old, x: { ...old.x, textSchedule: freshSig }, etag: "" }, 0);
+        syncedOld.etag = etagOf(syncedOld);
+        return syncedOld;
+      }
+      return old;
+    }
+    winner.etag = etagOf(winner);
+    return winner;
+  }
+
   // Build an item from a parsed list line (parseLine).
   function itemFromLine(parsed, extra = {}, now = 0) {
     if (!parsed) return null;
-    const startMs = parsed.startMin < 0 ? parsed.day : addDays(parsed.day, 0) + parsed.startMin * MIN;
-    const base = { summary: parsed.summary, x: { ...extra } };
-    if (parsed.startMin < 0) {
-      base.start = { date: ymd(new Date(parsed.day)) };
-      if (extra.kind === "event") base.end = { date: ymd(new Date(addDays(parsed.day, 1))) };
-      else base.x.kind = "reminder";
-    } else {
-      base.start = { dateTime: iso(startMs) };
-      if (parsed.endMin >= 0) {
-        // A range that ends at or before its start crosses midnight. Equal clocks mean a full 24-hour event.
-        const endDay = parsed.endMin <= parsed.startMin ? addDays(parsed.day, 1) : parsed.day;
-        base.end = { dateTime: iso(endDay + parsed.endMin * MIN) };
-        base.x.kind = "event";
-      } else base.x.kind = "reminder";
-    }
+    const sched = scheduleFromParsedLine(parsed, { tz: extra?.tz || "", defaultKind: extra?.kind || "" });
+    if (!sched) return null;
+    const textSchedule = lineScheduleSignature(parsed);
+    const base = {
+      summary: parsed.summary,
+      start: sched.start,
+      ...(sched.end ? { end: sched.end } : {}),
+      x: { ...extra, kind: sched.kind, ...(textSchedule ? { textSchedule } : {}) },
+    };
     return cleanItem(base, now);
   }
 
@@ -3785,6 +3954,7 @@ const __zentralEmbeddedLoader = (function () {
       it.id = lineId ? "l" + hashText(noteId) + "-" + lineId : "l" + hashText(noteId) + legacyKey;
       it._legacyKey = legacyKey;
       it._lineId = !!lineId;
+      it._parsed = parsed;
       if (parsed.yearless) it.recurrence = ["RRULE:FREQ=YEARLY"];
       it.etag = etagOf(it);
       out.push(it);
@@ -4739,7 +4909,7 @@ const __zentralEmbeddedLoader = (function () {
       // Rebuild the note-derived items. During upgrade, migrate extras from legacy IDs using the old content/ordinal key.
       // Thereafter exact line IDs win; unique legacy matches are safe, while an unidentified duplicate never inherits
       // another duplicate's metadata.
-      syncNote(noteId, body, { sourceEdit = false, updatedAt = 0 } = {}) {
+      syncNote(noteId, body, { sourceEdit = false, updatedAt = 0, calendarSync = false, remote = false } = {}) {
         const had = [...items.values()].filter((it) => it.x.noteId === noteId && it.x.src === "list");
         if (!had.length && !/%%\s*calendar/i.test(String(body || ""))) return false;
         const fresh = extractNoteItems(body, noteId, now(), getParseOptions());
@@ -4771,19 +4941,7 @@ const __zentralEmbeddedLoader = (function () {
           // `f.etag` was computed for the parsed revision. Recompute it after applying the store's revision.
           let next = cleanItem({ ...f, rev: 1, etag: "", updated: Number.isFinite(Number(updatedAt)) && Number(updatedAt) > 0 ? iso(Number(updatedAt)) : f.updated }, 0);
           if (old) {
-            const revision = sourceEdit ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, old.rev || 0) + 1) : Math.max(0, old.rev || 0);
-            const stamp = sourceEdit && Number.isFinite(Number(updatedAt)) && Number(updatedAt) > 0 ? iso(Number(updatedAt)) : old.updated;
-            const noteCategory = f.x.categoryInNote === true;
-            const priorNoteCategory = old.x.categoryInNote === true;
-            const override = noteCategory ? f.x.categoryOverride : (!priorNoteCategory ? old.x.categoryOverride : undefined);
-            next = cleanItem({ ...f, start: old.start, end: old.end, status: old.status, reminders: old.reminders, recurrence: old.recurrence.length ? old.recurrence : f.recurrence, updated: stamp, rev: revision, etag: "",
-              description: f.description || old.description, x: { ...f.x, tz: old.x.tz, calNote: old.x.calNote, moved: old.x.moved, notify: old.x.notify, agendaWindow: old.x.agendaWindow, recurrenceExceptions: old.x.recurrenceExceptions, historyId: old.x.historyId, ...(typeof override === "string" ? { categoryOverride: override } : {}), ...(noteCategory ? { categoryInNote: true } : {}) } }, 0);
-            next.x.heading = f.x.heading; next.x.category = typeof override === "string" ? override : f.x.category;
-            // The text writer is a newer logical version whenever a body edit triggered this sync. Otherwise
-            // lwwPick provides the documented equal-version remote-wins tie break while preserving old extras above.
-            const winner = lwwPick(old, next);
-            next = winner;
-            next.etag = etagOf(next);
+            next = reconcileListItem(old, f, { sourceEdit, updatedAt, calendarSync, remote });
             if (old.id === next.id) retainedOld.add(old.id);
           }
           if (old?.created) next.created = old.created;
@@ -7854,7 +8012,7 @@ const __zentralEmbeddedLoader = (function () {
   }
 
   const api = {
-    KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, itemFromLine,
+    KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, lineScheduleSignature, cleanTextSchedule, scheduleSignatureFromItem, scheduleFromParsedLine, reconcileListItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
@@ -15794,7 +15952,7 @@ __zentralShim.register = function (def) {
         await loadSpaceShares();
         await mountSharedEntities({ emitChanges: true });
       }
-      function syncItems(id, stabilize = false, sourceEdit = false) {
+      function syncItems(id, stabilize = false, sourceEdit = false, opts = {}) {
         if (!items) return;
         try {
           const n = notes.get(id);
@@ -15810,7 +15968,7 @@ __zentralShim.register = function (def) {
               if (n.body.trim() || n._onDisk) markDirty(id);
             }
           }
-          items.syncNote(id, n.body, { sourceEdit, updatedAt: n.updated });
+          items.syncNote(id, n.body, { sourceEdit, updatedAt: n.updated, calendarSync: !!opts.calendarSync, remote: !!opts.remote });
         } catch (e) {
           warn(e);
         }
@@ -16277,7 +16435,7 @@ __zentralShim.register = function (def) {
           decorateNoteOwnership(fresh, { ownerSpaceId: activeSpaceId, ownerDir: dir, foreign: false });
         }
         notes.set(id, fresh);
-        syncItems(id, true, true);
+        syncItems(id, true, true, { remote: true });
         emit("change", id, { remote: true });
       }
 
@@ -17453,7 +17611,7 @@ __zentralShim.register = function (def) {
           note.touched = true;
           if (body.trim() || note._onDisk) markDirty(id);
           else dirty.delete(id);
-          syncItems(id, false, true);
+          syncItems(id, false, true, { calendarSync: source === "checkbox" || source === "agenda" });
           if (boxesBefore) reflectCheckboxEdits(id, boxesBefore, body);
           emit("change", id, { source });
         },

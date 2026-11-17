@@ -7379,7 +7379,7 @@
         await loadSpaceShares();
         await mountSharedEntities({ emitChanges: true });
       }
-      function syncItems(id, stabilize = false, sourceEdit = false) {
+      function syncItems(id, stabilize = false, sourceEdit = false, opts = {}) {
         if (!items) return;
         try {
           const n = notes.get(id);
@@ -7395,7 +7395,7 @@
               if (n.body.trim() || n._onDisk) markDirty(id);
             }
           }
-          items.syncNote(id, n.body, { sourceEdit, updatedAt: n.updated });
+          items.syncNote(id, n.body, { sourceEdit, updatedAt: n.updated, calendarSync: !!opts.calendarSync, remote: !!opts.remote });
         } catch (e) {
           warn(e);
         }
@@ -7862,7 +7862,7 @@
           decorateNoteOwnership(fresh, { ownerSpaceId: activeSpaceId, ownerDir: dir, foreign: false });
         }
         notes.set(id, fresh);
-        syncItems(id, true, true);
+        syncItems(id, true, true, { remote: true });
         emit("change", id, { remote: true });
       }
 
@@ -9038,7 +9038,7 @@
           note.touched = true;
           if (body.trim() || note._onDisk) markDirty(id);
           else dirty.delete(id);
-          syncItems(id, false, true);
+          syncItems(id, false, true, { calendarSync: source === "checkbox" || source === "agenda" });
           if (boxesBefore) reflectCheckboxEdits(id, boxesBefore, body);
           emit("change", id, { source });
         },
