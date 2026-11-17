@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.301
+// @version 3.3.302
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.301, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.302, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.301";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.302";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -18361,6 +18361,54 @@ __zentralShim.register = function (def) {
       const i = matches.findIndex((m) => m.end > caret);
       return matches.length ? (i < 0 ? 0 : i) : -1;
     }
+    // OW-22: finding the next match that is NOT already on screen. The whole point is that a person can read every
+    // match in view at once instead of pressing Enter through the ones they can see, so "visible" is asked of the
+    // matches themselves, not guessed from the scroll position.
+    //   - a band is `{ top, height }` in the pane's own scroll coordinates;
+    //   - a match is visible only when its WHOLE line is inside the band. A match half under the edge of the pane is
+    //     one the person cannot read, so it does not count as seen — and the same choice makes the plain jump land on
+    //     it afterwards rather than skipping it forever.
+    const VISIBLE_EDGE = 1; // a line exactly on the edge counts as inside; rounding must not hide a readable match
+    // True when the line of `match` is entirely inside the band. Vertical only: a match scrolled off sideways is still
+    // readable, and horizontal scrolling is not what this feature is about.
+    function matchIsVisible(match, line, band) {
+      if (!match || !line) return false;
+      const top = Number(band?.top) || 0;
+      const height = Number(band?.height) || 0;
+      if (!(height > 0)) return false; // nothing is on screen, so nothing has been seen
+      const y0 = Number(line.y) || 0;
+      const y1 = y0 + (Number(line.h) || 0);
+      return y0 >= top - VISIBLE_EDGE && y1 <= top + height + VISIBLE_EDGE;
+    }
+    // Which indices are visible, in one pass (the caller has already measured the lines).
+    function visibleMatchIndices(matches, band, lineOf) {
+      const out = [];
+      if (!Array.isArray(matches)) return out;
+      matches.forEach((m, i) => { if (matchIsVisible(m, lineOf(m), band)) out.push(i); });
+      return out;
+    }
+    // The next match OUTSIDE the band, searching from `from` in `dir`, wrapped once around the whole list.
+    //   -> { index, wrapped, any }: `index` is -1 when there is nothing outside the band at all;
+    //      `wrapped` says the search passed the end of the list (or the start, for dir < 0) before finding it;
+    //      `any` says there ARE matches, so the caller can tell "all of them are on screen" from "no matches".
+    // A match that is already the current one is skipped: pressing again must move, never sit still.
+    function stepOutsideViewport(matches, from, dir, isVisible) {
+      const total = Array.isArray(matches) ? matches.length : 0;
+      const any = total > 0;
+      if (!any) return { index: -1, wrapped: false, any: false };
+      const step = dir < 0 ? -1 : 1;
+      const start = Number.isInteger(from) && from >= 0 && from < total ? from : step > 0 ? -1 : 0;
+      for (let k = 1; k <= total; k++) {
+        const i = ((start + step * k) % total + total) % total;
+        if (i === from) continue; // never "find" the match we are already on
+        if (!isVisible(i)) {
+          const raw = start + step * k;
+          return { index: i, wrapped: raw < 0 || raw >= total, any: true };
+        }
+      }
+      return { index: -1, wrapped: false, any: true };
+    }
+
     const lineOfOffset = (text, offset) => {
       let n = 0;
       for (let i = text.indexOf("\n"); i !== -1 && i < offset; i = text.indexOf("\n", i + 1)) n++;
@@ -28543,7 +28591,8 @@ __zentralShim.register = function (def) {
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,
-        FIND_MAX_MATCHES, FIND_MAX_QUERY, REPLACE_MAX, cleanReplaceText, replacePlan, replaceOne, replaceAll, replaceSummary, sniffImageMime, checkAssetBytes, assetFileName, parseAssetLink, buildAssetLink, buildAssetImage,
+        FIND_MAX_MATCHES, FIND_MAX_QUERY, REPLACE_MAX, cleanReplaceText, replacePlan, replaceOne, replaceAll, replaceSummary,
+        VISIBLE_EDGE, matchIsVisible, visibleMatchIndices, stepOutsideViewport, sniffImageMime, checkAssetBytes, assetFileName, parseAssetLink, buildAssetLink, buildAssetImage,
         insertAssetImage, assetImageAt, restyleAssetImage, assetRefs, assetIntegrityReport, isAssetNoteId, ASSET_MAX_BYTES, ASSET_VIDEO_MAX_BYTES, ASSET_FILE_MAX_BYTES, ASSET_MAX_PER_NOTE, ASSET_MIME, VIDEO_EXT_MIME, cleanAssetFileName, uniqueAssetFileName, parseFileAssetLink, droppedAssetMarkup, insertDroppedAssetLinks, droppedFiles,
         cleanRemind, ceilStep, dueReminders, nextReminderAt, reminderDelay, reminderPresets, parseRemindInput, remindPreview, remindDateText, remindTimeText,
         createTimeTickService, createReminderScheduler, createReminderAlertActions, createReminderAlertStack, createAgendaActionToast, notePreviewLines, buildNoteHoverModel, buildAgendaHoverModel, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
@@ -29691,12 +29740,17 @@ __zentralShim.register = function (def) {
       const btnFindPrev = iconButton("caret", "Previous match (Shift+Enter)", "zn-find-prev");
       const btnFindNext = iconButton("caret", "Next match (Enter)", "zn-find-next");
       const findOthers = h("button", { type: "button", class: "zn-find-others", title: "Open another note that contains this text" });
+      // OW-22: the same jump, but it skips everything already readable on screen — so a person can look at all the
+      // matches in view at once instead of pressing Enter through them. Separate buttons, not a mode: the plain ones
+      // keep meaning exactly what they always did.
+      const btnFindNextOff = h("button", { type: "button", class: "zn-find-btn zn-find-off", title: "Next match not on screen (Ctrl+Alt+Down)", "aria-label": "Next match not on screen" }, "\u21b3");
+      const btnFindPrevOff = h("button", { type: "button", class: "zn-find-btn zn-find-off", title: "Previous match not on screen (Ctrl+Alt+Up)", "aria-label": "Previous match not on screen" }, "\u21b0");
       const btnFindClose = iconButton("x", "Close find (Esc)", "zn-find-close");
       // OW-21: replace lives on the find bar, one disclosure below it, so it is discoverable from where finding already
       // is and cannot be pressed by someone who only meant to find. Both buttons are DISABLED until the words would
       // change something, and the row says how many matches there are before either is used.
       const btnFindReplace = h("button", { type: "button", class: "zn-find-replace-toggle", title: "Replace…", "aria-expanded": "false" }, "Replace");
-      const findBarToggle = h("div", { class: "zn-find-row" }, icon("search", 13), findInput, findCount, btnFindPrev, btnFindNext, findOthers, btnFindReplace, btnFindClose);
+      const findBarToggle = h("div", { class: "zn-find-row" }, icon("search", 13), findInput, findCount, btnFindPrev, btnFindNext, btnFindPrevOff, btnFindNextOff, findOthers, btnFindReplace, btnFindClose);
       const replaceInput = h("input", { type: "text", class: "zn-find-replace-input", placeholder: "Replace with", "aria-label": "Replace with", spellcheck: "false" });
       const btnReplaceOne = h("button", { type: "button", class: "zn-find-btn zn-find-replace-one", title: "Replace this match", disabled: "" }, "Replace");
       const btnReplaceAll = h("button", { type: "button", class: "zn-find-btn zn-find-replace-all", title: "Replace every match in this note", disabled: "" }, "All");
@@ -31022,7 +31076,19 @@ __zentralShim.register = function (def) {
         findOthers.textContent = n ? `found in ${n} other ${n === 1 ? "note" : "notes"}` : "not found in other notes";
         findOthers.disabled = !n;
         btnFindPrev.disabled = btnFindNext.disabled = !findList.length;
+        paintOffscreenState();
         paintReplaceState(q);
+      }
+      // OW-22: the pair stays quiet while everything is already readable, and says why in its title, so a disabled
+      // button never looks broken. Cheap enough to run on every scroll frame: one pass over the matches.
+      function paintOffscreenState() {
+        const fwd = findList.length ? outsideViewport(1) : { any: false, index: -1 };
+        const back = findList.length ? outsideViewport(-1) : { any: false, index: -1 };
+        btnFindNextOff.disabled = fwd.index < 0;
+        btnFindPrevOff.disabled = back.index < 0;
+        const idle = !fwd.any;
+        btnFindNextOff.title = idle ? "Next match not on screen (Ctrl+Alt+Down)" : fwd.index < 0 ? "All matches are on screen" : "Next match not on screen (Ctrl+Alt+Down)";
+        btnFindPrevOff.title = idle ? "Previous match not on screen (Ctrl+Alt+Up)" : back.index < 0 ? "All matches are on screen" : "Previous match not on screen (Ctrl+Alt+Up)";
       }
       // OW-21: what the replace row says, and whether its buttons may be pressed at all. A read-only view, the Trash
       // and a note being loaded all mean the same thing here: the text cannot be written, so nothing pretends it can.
@@ -31159,6 +31225,19 @@ __zentralShim.register = function (def) {
         if (jump) showFindMatch();
         paintFindState();
       }
+      // OW-22: repaint only what the scroll can change, once per frame.
+      let offscreenFrame = 0;
+      function scheduleOffscreenState() {
+        if (!findOpen || offscreenFrame) return;
+        const raf = typeof window.requestAnimationFrame === "function"
+          ? window.requestAnimationFrame
+          : (fn) => window.setTimeout(fn, 16);
+        offscreenFrame = raf(() => {
+          offscreenFrame = 0;
+          if (!findOpen || destroyed) return;
+          paintOffscreenState();
+        });
+      }
       function scheduleFindRefresh() {
         if (!findOpen) return;
         window.clearTimeout(findTimer);
@@ -31166,6 +31245,61 @@ __zentralShim.register = function (def) {
           findTimer = 0;
           refreshFind();
         }, 120);
+      }
+      // OW-22: where each match sits vertically, in the coordinates of the pane that shows it.
+      // The editor is plain text, so every line is exactly one line high and the line a match starts on is the line
+      // that has to be readable; the read view wraps, so there the anchors are measured from the real nodes.
+      function matchLineInEditor(m) {
+        const lh = editorLineHeight();
+        if (!(lh > 0)) return null;
+        return { y: lineOfOffset(ta.value, m.start) * lh, h: lh };
+      }
+      function editorLineHeight() {
+        let lh = 18;
+        try { lh = parseFloat(window.getComputedStyle(ta).lineHeight) || 18; } catch (_) {}
+        return lh;
+      }
+      function matchLineInRead(m) {
+        if (!readAnch.length) return null;
+        readAnchY = readAnchY || measureRead();
+        const y = mapPosition(readAnchY, lineOfOffset(ta.value, m.start), "line", "y");
+        let h = editorLineHeight();
+        try {
+          const nd = findRuns?.[m.run];
+          if (nd && typeof nd.getBoundingClientRect === "function") {
+            const r = nd.getBoundingClientRect();
+            if (r?.height > 0) h = r.height;
+          }
+        } catch (_) {}
+        return { y, h };
+      }
+      // The band a person can actually read: the pane's own scroll window.
+      const editorBand = () => ({ top: ta.scrollTop || 0, height: ta.clientHeight || 0 });
+      const readBand = () => ({ top: readEl.scrollTop || 0, height: readEl.clientHeight || 0 });
+      // Is match `i` fully readable in the pane that is showing? Its line must be wholly inside the pane's window.
+      function paneMatchVisible(i) {
+        const m = findList[i];
+        if (!m) return false;
+        if (findRuns || mode === "read") {
+          const band = readBand();
+          return matchIsVisible(m, matchLineInRead(m), band);
+        }
+        return matchIsVisible(m, matchLineInEditor(m), editorBand());
+      }
+      // -> { index, wrapped, any } from the pure rule, with the pane's own geometry.
+      const outsideViewport = (dir) => stepOutsideViewport(findList, findIdx, dir, paneMatchVisible);
+      // OW-22: jump to the next/previous match that is NOT already on screen. When everything left is visible, the
+      // person needs to be told that instead of being silently moved nowhere or thrown back to the first match.
+      function goFindOutside(dir) {
+        if (!findList.length) return;
+        const res = outsideViewport(dir);
+        if (res.index < 0) {
+          if (res.any) flash(notesLang() === "pl" ? "Wszystkie trafienia są na ekranie" : "All matches are on screen");
+          return;
+        }
+        findIdx = res.index;
+        showFindMatch();
+        paintFindState();
       }
       function goFind(dir) {
         if (!findList.length) return;
@@ -31231,6 +31365,16 @@ __zentralShim.register = function (def) {
       });
       listen(btnFindNext, "click", () => goFind(1));
       listen(btnFindPrev, "click", () => goFind(-1));
+      // OW-22: the off-screen pair. Enter and Shift+Enter keep their old meaning, so the new move gets its own keys:
+      // Ctrl+Alt+Down / Ctrl+Alt+Up inside the find field, and also from the editor while the bar is open.
+      listen(btnFindNextOff, "click", () => goFindOutside(1));
+      listen(btnFindPrevOff, "click", () => goFindOutside(-1));
+      listen(findInput, "keydown", (e) => {
+        if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+        if (!e.ctrlKey || !e.altKey) return;
+        e.preventDefault();
+        goFindOutside(e.key === "ArrowUp" ? -1 : 1);
+      });
       listen(btnFindClose, "click", () => closeFind());
       listen(findOthers, "click", () => {
         const items = findOtherIds.slice(0, 12).map((id) => {
@@ -37240,6 +37384,11 @@ __zentralShim.register = function (def) {
       listen(ta, "scroll", linkScroll(ta, readEl));
       listen(ta, "scroll", syncBackdropScroll);
       listen(ta, "scroll", scheduleOutline);
+      // OW-22: which matches are readable changes with the scroll, so the off-screen pair must follow it — otherwise
+      // the button offers a jump to something that has just come into view, or stays greyed while nothing is visible.
+      // Throttled to one update per frame: scrolling must not paint the whole bar on every pixel.
+      listen(ta, "scroll", scheduleOffscreenState);
+      listen(readEl, "scroll", scheduleOffscreenState);
       listen(readEl, "scroll", linkScroll(readEl, ta));
       listen(readEl, "scroll", () => scheduleOutline(true));
       listen(tSync, "click", () => {

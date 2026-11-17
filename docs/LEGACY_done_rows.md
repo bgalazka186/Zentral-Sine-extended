@@ -1389,6 +1389,21 @@ second card still showed. Tests: `widgets-clock-timer` +1 live (the owner's exac
 harness's new `notes: true` opener), `widgets-status` and `widgets-timer` re-pointed at the accepted shape. Suite
 `236/236`.
 
+**`OW-22` DONE (3.3.302)** — next/previous match that is **not already on screen**. Beside the ordinary next/previous
+the find bar gained a second pair (`Ctrl+Alt+Down` / `Ctrl+Alt+Up`, or the two arrow buttons), which moves past every
+match the person can already read — so all the visible matches can be read at once instead of being pressed through.
+The ordinary Enter and Shift+Enter are untouched: a second door, not a mode. One pure rule decides what "readable"
+means (`matchIsVisible`): the match's **whole line** must be inside the pane's own scroll window. A match cut by the
+bottom edge is not seen — the person cannot read it — and the same rule then lands on it rather than skipping it
+forever. `stepOutsideViewport` searches from the current match in either direction, wraps exactly once, never returns
+the match it started on (pressing again always moves), and reports `any` separately from `index` so **"no matches"** and
+**"all matches are on screen"** are different answers — the second one is said, not silently ignored. The editor
+measures its lines arithmetically (plain text, `lineOfOffset` × the real line height); the read view goes through the
+existing anchors, so its wrapping is measured rather than assumed. The pair disables itself, with the reason in its
+title, whenever there is nowhere to go. Found while testing and fixed: the pair's state follows the scroll, so both
+panes report scrolling to a once-per-frame repaint — without it the button kept offering a jump to a match that had
+just come into view. Tests: `tests/notes-find-offscreen.test.cjs` (13). Suite `237/237`.
+
 ## The Master Order rows that were finished (moved out of the TODO table, 2026-11-17)
 
 The owner asked for the finished rows to leave the TODO list: the working table now holds only what is still

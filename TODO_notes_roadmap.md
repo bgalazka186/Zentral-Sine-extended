@@ -82,7 +82,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 |    42 | `T4.3b`     | `OPEN`    | Med                 | M      | T4.3a             | Extract parser/wiki graph and import/export                                                              |
 |    43 | `T4.3c`     | `OPEN`    | Med                 | M      | T4.3b             | Extract Zen sidebar UI; single build entry                                                               |
 
-|    45 | `OW-22`     | `OPEN`    | Med                 | M      | —                 | [new, lower priority] Find next/previous match outside the visible viewport                              |
 |    54 | `ST7.4`     | `OPEN`    | Low-Med (long term) | L      | ST7.1             | Render Agenda rows without real tabs (research)                                                          |
 |    88 | `OW-63`     | `DONE`    | High                | M      | 3.3.297           | Stopwatch face: clicking the running stopwatch does not go back to the clock, and on a narrow widget its text fields push the buttons out of view |
 |    89 | `OW-64`     | `DONE`    | Med                 | M      | 3.3.299           | One language selector for every widget, following the Notes language until the person overrides it |
@@ -141,16 +140,6 @@ uses while a tab is being dragged cannot be reproduced in the fake sidebar; it n
 **Status:** `OPEN` · **Impact:** Med · **Effort:** M each · **Source:** previous roadmap
 
 `a`: calendar UI out of the monolith (module `api`, test seam unchanged). `b`: parser/wiki graph and import/export. `c`: Zen sidebar UI and one build entry. After each step all tests and the standalone build must pass unchanged.
-
-#### `OW-22` — Find next or previous match outside the visible viewport (lower priority)
-
-**Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Depends on:** none · **Source:** Owner request
-
-**Plan:** Extend Ctrl+F with next/previous actions that skip all matches currently visible in the note viewport and move to the next not-displayed match, letting the user read all visible matches at once. Preserve existing single-match navigation, wrap behavior, selection and scroll; handle partially visible matches, no offscreen match, both directions, editable/read/split layouts and resizing.
-
-**Tests / done when:** Geometry and real-sheet tests include several visible matches, offscreen matches in both directions, wrap/no-offscreen cases and accessible controls; verify live layout where possible.
-
-_Not blocked by the calendar work._
 
 #### `ST7.3` — Move calendar UI state out of notes metadata
 
@@ -282,7 +271,27 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.301.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9`, `SB6.6`, `UI4.11`, `DOC-1`, `TM3.7`, `ST7.8`, `SB6.11`, `ST7.5`, `UI4.10`, `OW-53`, `F0.15`, `F0.16`, `OW-54`, `OW-55`, `OW-56`, `OW-57`, `OW-58`, `OW-59`, `OW-60`, `OW-61`, `T3.5`, `SB6.9`, `ST7.3`, `OW-63`, `OW-62`, `OW-64`, `OW-21` and `OW-65` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`236/236` test files) passes in Node/fake-Zen at 3.3.301; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.302.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9`, `SB6.6`, `UI4.11`, `DOC-1`, `TM3.7`, `ST7.8`, `SB6.11`, `ST7.5`, `UI4.10`, `OW-53`, `F0.15`, `F0.16`, `OW-54`, `OW-55`, `OW-56`, `OW-57`, `OW-58`, `OW-59`, `OW-60`, `OW-61`, `T3.5`, `SB6.9`, `ST7.3`, `OW-63`, `OW-62`, `OW-64`, `OW-21`, `OW-65` and `OW-22` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`237/237` test files) passes in Node/fake-Zen at 3.3.302; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+
+`OW-22` DONE (3.3.302) — "next match not on screen". `Ctrl+F` grew a second pair of controls beside the ordinary
+next/previous: **Ctrl+Alt+Down / Ctrl+Alt+Up** (or the two ↩ / ↲ buttons in the bar) move to the next or previous
+match that is **not already readable**, so a person can look at every match in view at once instead of pressing Enter
+through the ones in front of them. The ordinary keys keep their old meaning exactly — this is a second door, not a
+mode. What counts as "readable" is decided by one pure rule (`matchIsVisible`): a match is seen only when its **whole
+line** is inside the pane's own window. A match half under the bottom edge is one the person cannot read, so it is not
+counted as seen — and because of that the same jump lands on it rather than skipping it forever. `stepOutsideViewport`
+walks the list from the current match in either direction, wraps **once**, never returns the match it started on (so
+pressing again always moves), and distinguishes **"no matches"** from **"all matches are on screen"** — two different
+sentences, and `any` is what lets the bar say the right one instead of going silently nowhere. The editor measures
+lines arithmetically (plain text, one line height each, `lineOfOffset`); the read view goes through the existing
+anchors so its wrapping is measured rather than guessed. The pair is disabled, with the reason in its title, whenever
+there is nowhere to go. FOUND AND FIXED while testing it: the pair's state depends on the scroll position, so both
+panes now report scrolling to a throttled (one-per-frame) repaint — otherwise the button kept offering a jump to a
+match that had just scrolled into view. Tests: `tests/notes-find-offscreen.test.cjs` (13) — the rule (whole line, empty
+pane, no measurement), visible indices, both directions, wrap, the current match never returned, the buttons and their
+`aria-label`s, several visible matches skipped, the "all on screen" answer with the plain jump still working, the
+half-visible bottom edge, the read view, Ctrl+Alt+Down/Up, the scroll repaint, and the old controls still present
+exactly once. Suite `237/237`.
 
 `OW-65` DONE (3.3.301) — the Clock card took the shape the owner described. He said the clock was coming out as a
 secondary element drawn *above* the stopwatch, that a button like "Wyzeruj" could be cut off by the edge of the
@@ -481,4 +490,4 @@ Known debts / owner requirements: LIMITS of `OW-04`: the pointer is held to the 
 
 Planning only, no code (2026-11-17, version 3.3.244): the owner's holiday list added as `OW-43` (holiday sets split from the interface language, any language picks any set, first sets `PL` + `US`), `OW-44` (any number of sets at once), `OW-45` (one-place year table for movable/one-off dates such as the Polish election day and `niedziela handlowa`), `OW-46` (one master off switch) and `T2.13a` (how holidays behave when the `T2.13` ICS/Google groundwork is built: local sets are never imported or synced). They sit at the top of the Master Order; `T3.3` follows them.
 
-Next action: `OW-22` — next/previous match that skips everything already visible in the viewport (the find bar it extends replaced in `OW-21`, 3.3.300). `OW-65` (the Clock card's shape, 3.3.301) came first because the owner asked for it directly. Then `T2.13`, then `ST7.4` and the `T4.3a`→`c` chain. `OW-66` is the owner's live check of `OW-58`–`OW-65` in the real sidebar, which needs no code from a session. Earlier, the owner's 2026-11-17 bug reports were all shipped — `OW-58` 3.3.285, `OW-59` 3.3.287, `OW-61` 3.3.288, `OW-60` 3.3.290, `OW-62` 3.3.298 and `OW-64` 3.3.299. `ST7.3` stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.
+Next action: `T2.13` — ICS export/import and the Google-sync groundwork, the last Track 2 item. Then `ST7.4`, then the `T4.3a`→`b`→`c` extraction chain. `OW-66` is the owner's live check of `OW-58`–`OW-65` in the real sidebar and needs no code from a session. Finished in this run of sessions: `OW-21` (find and replace, 3.3.300), `OW-65` (the Clock card's shape, 3.3.301) and `OW-22` (next match not on screen, 3.3.302); before them `OW-58`–`OW-64` (3.3.285–3.3.299). `ST7.3` stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.

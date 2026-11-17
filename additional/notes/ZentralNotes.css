@@ -1455,6 +1455,22 @@
 }
 .zentral-notes-sheet .zn-find-input:focus { outline: none; border-color: var(--zn-accent); }
 .zentral-notes-sheet .zn-find-count { font-size: 0.9em; white-space: nowrap; }
+/* OW-22: the off-screen pair sits beside the ordinary next/previous and reads as the same family of control, one step
+   quieter — a toggle-like `zn-find-btn` rather than an icon button, so it is clear these are not the same key. */
+.zentral-notes-sheet .zn-find-off {
+  padding: 1px 5px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.1;
+  cursor: pointer;
+}
+.zentral-notes-sheet .zn-find-off:not(:disabled):hover { background: var(--zn-hover); border-color: var(--zn-line); }
+.zentral-notes-sheet .zn-find-off:disabled { opacity: 0.35; cursor: default; }
+.zentral-notes-sheet .zn-find-off:focus-visible { outline: 2px solid var(--zn-accent); outline-offset: 1px; }
 .zentral-notes-sheet .zn-find-prev svg { transform: rotate(180deg); }
 .zentral-notes-sheet .zn-find .zn-btn:disabled { opacity: 0.35; cursor: default; }
 .zentral-notes-sheet .zn-find-others {
