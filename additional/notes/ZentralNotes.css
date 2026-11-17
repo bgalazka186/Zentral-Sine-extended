@@ -535,16 +535,19 @@
 .zentral-notes-sheet .zn-new-menu:hover { opacity: 1; }
 .zentral-notes-sheet .zn-chips { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 4px; min-width: 0; padding: 0 6px 4px; }
 .zentral-notes-sheet .zn-chips .zn-chip { flex: 0 0 auto; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* UI4.10: a chip is a control, so it follows the text size with its label instead of staying at 12px (at 28px text the
+   label was large and the On / Off chips beside it small). The em sizes keep the old look at the default 13px and grow
+   with it; the padding and the line height are shares of the same text, so the pill never becomes tighter than its text. */
 .zentral-notes-sheet .zn-chip {
   appearance: none;
-  padding: 0 8px;
-  line-height: 18px;
+  padding: 0 0.62em;
+  line-height: 1.4;
   border: 1px solid var(--zn-line);
   border-radius: 999px;
   background: transparent;
   color: var(--zn-muted);
   font: inherit;
-  font-size: 12px;
+  font-size: 0.92em;
   cursor: pointer;
 }
 .zentral-notes-sheet .zn-chip[hidden] { display: none; }
@@ -858,7 +861,7 @@
 .zentral-notes-sheet .zn-dialog-card.zn-folder-style-card .zn-dialog-actions { flex-wrap: wrap; }
 .zentral-notes-sheet .zn-dialog-card p { margin: 6px 0 10px; color: var(--zn-muted); line-height: 1.45; overflow-wrap: anywhere; }
 .zentral-notes-sheet .zn-dialog-card > strong { overflow-wrap: anywhere; }
-.zentral-notes-sheet .zn-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.zentral-notes-sheet .zn-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 0.6em; }
 .zentral-notes-sheet .zn-share-list { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 12px; max-height: 220px; overflow-y: auto; }
 .zentral-notes-sheet .zn-share-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
 .zentral-notes-sheet .zn-share-row:hover { background: color-mix(in srgb, currentColor 7%, transparent); }
@@ -1040,13 +1043,18 @@
 .zentral-notes-sheet[data-dialog-spill="true"],
 .zentral-notes-sheet[popover][data-dialog-spill="true"] { overflow: visible; }
 .zentral-notes-sheet .zn-dialog[data-spill="true"] .zn-dialog-card { position: absolute; }
-.zentral-notes-sheet .zn-field-row { display: grid; gap: 3px; margin: 8px 0; color: var(--zn-muted); font-size: 0.9em; }
+/* UI4.10: the field inside its label follows the column it was given. A grid item's default `min-width: auto` is its
+   content, so a text field held its width and took the card past the sheet; `minmax(0, 1fr)` lets it shrink instead. */
+.zentral-notes-sheet .zn-field-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; margin: 8px 0; color: var(--zn-muted); font-size: 0.9em; }
 .zentral-notes-sheet .zn-field {
   padding: 5px 8px; border: 1px solid var(--zn-line); border-radius: 6px; background: transparent; color: var(--zn-text); font: inherit; outline: none;
+  min-width: 0; max-width: 100%; box-sizing: border-box;
 }
 .zentral-notes-sheet .zn-field:focus { border-color: var(--zn-accent); }
 .zentral-notes-sheet .zn-field[data-bad="true"] { border-color: #ff6b6b; }
-.zentral-notes-sheet .zn-field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+/* UI4.10: two number fields side by side shrink with a narrow card instead of holding their width and taking the card
+   past the sheet (which a classic scrollbar then showed). `minmax(0, 1fr)` lets the fields go below their content. */
+.zentral-notes-sheet .zn-field-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .zentral-notes-sheet .zn-calendar-note-field { display: block; width: 100%; min-height: 7em; box-sizing: border-box; resize: vertical; }
 .zentral-notes-sheet .zn-recurrence-editor { display: grid; gap: 4px; margin: 12px 0; padding-top: 8px; border-top: 1px solid var(--zn-line); }
 .zentral-notes-sheet .zn-recurrence-interval { grid-template-columns: auto minmax(4em, 7em) auto; align-items: center; justify-content: start; }
@@ -1088,8 +1096,10 @@
 .zentral-notes-sheet .zn-zone-detail { color: var(--zn-muted); font-size: 0.85em; }
 .zentral-notes-sheet .zn-zone-none { padding: 6px 8px; color: var(--zn-muted); font-size: 0.9em; }
 
-.zentral-notes-sheet .zn-grid { display: grid; grid-template-columns: repeat(var(--cols, 8), 1fr); gap: 3px; margin: 6px 0; }
-.zentral-notes-sheet .zn-gcell { aspect-ratio: 1; min-width: 18px; padding: 0; border: 1px solid var(--zn-line); border-radius: 3px; background: transparent; cursor: pointer; }
+/* UI4.10: the grid was as wide as the card, so on a wide card its cells grew with it (and the card grew taller with
+   every pixel of width). The cells are now limited to a comfortable square: the grid stops growing past them. */
+.zentral-notes-sheet .zn-grid { display: grid; grid-template-columns: repeat(var(--cols, 8), minmax(0, 26px)); justify-content: start; gap: 3px; margin: 6px 0; }
+.zentral-notes-sheet .zn-gcell { aspect-ratio: 1; min-width: 0; padding: 0; border: 1px solid var(--zn-line); border-radius: 3px; background: transparent; cursor: pointer; }
 .zentral-notes-sheet .zn-gcell.is-on { background: color-mix(in srgb, var(--zn-accent) 40%, transparent); border-color: var(--zn-accent); }
 /* A list of setting rows: one row a line, never wider than the card. Loose items (the quick colours, the code
    languages) carry zn-flow and run on like words. Both were `.zn-quick` once and the later rule won for the lists too:
@@ -1254,13 +1264,15 @@
 
 /* ---- Settings view: wide card with tabs, sliders and the in-card colour picker -------------------------- */
 .zentral-notes-sheet .zn-dialog-card.zn-settings { width: 100%; max-width: none; height: 100%; max-height: none; display: flex; flex-direction: column; box-sizing: border-box; }
-.zentral-notes-sheet .zn-set-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+.zentral-notes-sheet .zn-set-tabs { display: flex; flex-wrap: wrap; gap: 4px 0.5em; margin: 8px 0; }
 /* Rows of max-content: with `auto` rows, a body that has to scroll gave every row only its 28px min-height (for an item
    with a min-height that is all an `auto` row must give), and whatever was taller lay over the next row. One column
    that never grows past the card. */
 .zentral-notes-sheet .zn-set-body { flex: 1 1 0; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; align-content: start; gap: 6px; padding-right: 4px; }
 .zentral-notes-sheet .zn-set-heading { margin-top: 8px; color: var(--zn-muted); font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; overflow-wrap: anywhere; }
-.zentral-notes-sheet .zn-set-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 28px; }
+/* UI4.10: the floor is a share of the text (a comfortable target) rather than 28px, which at a large text size was
+   smaller than one line of the row and let a wrapped control spill over its neighbour. */
+.zentral-notes-sheet .zn-set-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 2em; }
 /* The label keeps at least 9em (about 18 letters a line). A control that does not fit beside that goes below the label. */
 .zentral-notes-sheet .zn-set-row .zn-quick-label { flex: 1 1 9em; min-width: min(100%, 9em); }
 /* Dropdown choice rows (settings window and quick settings): label on its own line, the select below it at full width. */

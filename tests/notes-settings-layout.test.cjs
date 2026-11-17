@@ -296,7 +296,8 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
         const label = elements(row)[0].textContent;
         const what = `Settings, ${name}, ${label}`;
         const unit = expectRowShape(row, what);
-        expectStyle(row, { display: "flex", "flex-wrap": "wrap", "align-items": "center", "min-height": "28px" }, what);
+        // UI4.10: the floor is a share of the text, not a fixed 28px that a large text size outgrows.
+        expectStyle(row, { display: "flex", "flex-wrap": "wrap", "align-items": "center", "min-height": "2em" }, what);
         expectStyle(elements(row)[0], { "flex-grow": "1", "flex-shrink": "1", "flex-basis": unitKind(unit) === "zn-select" ? "100%" : "9em", "min-width": "min(100%, 9em)", "overflow-wrap": "anywhere" }, what + " (label)");
         const kind = unitKind(unit) + (has(unit, "zn-ctl-fill") ? " slider" : has(unit, "zn-ctl") ? (elements(unit).some((k) => has(k, "zn-swatch")) ? " colour" : " stepper") : "");
         assert.ok(checks[kind], what + ": a known kind of control, found " + kind);
@@ -371,6 +372,51 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(dialog().dataset.spill, "true", "one pixel more does not");
     assert.equal(card().style.height, "577px");
     await closeDialogs();
+    natural = { width: 300, height: 300 };
+  });
+
+  await test("UI4.10: chips, tabs and dialog buttons are sized from the text, not a fixed 12px", async () => {
+    // The style sheet: a chip follows the text size with its label, so the pill never stays small beside big text.
+    const chipRule = sheetCss.rules?.find?.((r) => r.selector === ".zentral-notes-sheet .zn-chip");
+    assert.ok(chipRule, "the chip rule is in the style sheet");
+    const declared = (prop) => chipRule.declarations.filter((d) => d.prop === prop).pop()?.value;
+    assert.equal(declared("font-size"), "0.92em", "the chip takes its size from its label");
+    assert.equal(declared("line-height"), "1.4", "and its line height from the same text");
+    // The settings row floor is a share of the text too: 28px is smaller than one 28px line of text.
+    assert.match(fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.css"), "utf8"), /\.zn-set-row \{[^}]*min-height: 2em/);
+    // The table creator's grid stops growing with a wide card, and its number fields can shrink.
+    const css = fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.css"), "utf8");
+    assert.match(css, /\.zn-field-pair \{[^}]*repeat\(2, minmax\(0, 1fr\)\)/);
+    assert.match(css, /\.zn-grid \{[^}]*minmax\(0, 26px\)/);
+    // And the host re-measures the open card when the text size changes.
+    // The observer is in the module and inside its vm copy of the source, so the checked text is the real file.
+    const host = fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.uc.js"), "utf8");
+    assert.match(host, /VIEW_PREFS\.has\(name\)\) \{[\s\S]{0,400}refitDialog/);
+    assert.match(source, /refitDialog\(\) \{/);
+  });
+
+  await test("UI4.10: the text size and the sheet change, and the open card is measured again at once", async () => {
+    // A card whose content needs more room at the larger text size: at 574 it fits, at 700 it grows past the sheet.
+    natural = { width: 298, height: 574 };
+    await openQuick();
+    assert.notEqual(dialog().dataset.spill, "true", "it fits at first");
+    // The text grows while the card is open: the same content now needs 700.
+    natural = { width: 298, height: 700 };
+    assert.equal(sheet.refitDialog(), true, "an open card can be measured again");
+    await flush();
+    assert.equal(dialog().dataset.spill, "true", "the card grew with the text instead of scrolling its body");
+    assert.equal(card().style.height, "702px", "and at the size its content needs now");
+    // And back: a smaller text size fits again, with every inline size cleared.
+    natural = { width: 298, height: 300 };
+    sheet.refitDialog();
+    await flush();
+    assert.notEqual(dialog().dataset.spill, "true");
+    assert.equal(card().style.height || "", "", "the card takes the sheet again");
+    // A settings card lives in the sheet and cannot grow: it is laid out again, not fitted.
+    await openSettings();
+    assert.equal(sheet.refitDialog(), true, "the settings card is laid out again");
+    await closeDialogs();
+    assert.equal(sheet.refitDialog(), false, "with no card open there is nothing to measure");
     natural = { width: 300, height: 300 };
   });
 

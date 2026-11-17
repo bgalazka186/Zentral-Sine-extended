@@ -187,6 +187,16 @@
   gained `openReminderHistory()` so a host (or a test) can open the card without imitating the Tools menu.
   `tests/notes-reminder-history-ui.test.cjs` (5 pure tests) and `tests/notes-reminder-history-card.test.cjs` (3 harness
   tests). Full suite 221/221.
+- `UI4.10` DONE (3.3.275) — The Settings card now follows the text size instead of taking its size once. A chip was
+  pinned at `font-size: 12px` on an 18px line, so at 28px text the labels were large and the On / Off chips beside them
+  small; it is `0.92em` on a `1.4` line with em padding, which keeps the old look at the default 13px and grows with it.
+  The settings row floor was a fixed 28px — smaller than one 28px line, so a wrapped control lay over its neighbour —
+  and is now `2em`. An open card is re-measured when the text size changes (the host observer calls a new
+  `refitDialog()` on every sheet) and when the sheet itself changes size (the layout pass fits any open non-calendar
+  card in the same frame), so it grows instead of letting its body scroll. The table creator's number fields can now
+  shrink (`zn-field-pair` is `repeat(2, minmax(0, 1fr))`, the field a shrinking grid item) and its size grid stops
+  growing past 26px a cell on a wide card, which is what showed both scrollbars. `tests/notes-settings-layout.test.cjs`
+  grew to 8 cases, including a text-size change and a sheet resize while a card is open. Full suite 221/221.
 | #   | Track ID | Ref           | Item                                                         | Impact   | Effort | Implementation Plan & Dependencies                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | :-- | :------- | :------------ | :----------------------------------------------------------- | :------- | :----- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 20  | `T1.14`  | `Cycle G #37` | Inline `#tag` index & front-matter `tags:` unification       | Med      | M      | **DONE in 3.3.47.** Unified `inlineTags`, `noteTags` and `tagSummary` index YAML and inline tags case-insensitively; the Tags chip opens a counted menu, supports clearing/selection, and filters All and Recent views. Headings, code, URLs, HTML attributes/comments, hidden comments, inequalities and hex colours are excluded. Covered by `notes-audit-bugfixes.test.cjs` and existing list-view tests.                                                                                        |

@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.274
+// @version 3.3.275
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.274, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.275, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.274";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.275";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -39991,7 +39991,15 @@ __zentralShim.register = function (def) {
         placeReveal();
         applyPush(left, w);
         placePill(left, top, w, hgt);
-        if (dialog?.dataset.calendarLayer === "true") scheduleFit();
+        // UI4.10: a calendar card is fitted to the new box at once; any other card was measured against the old one, so
+        // it is fitted again in the same frame instead of keeping a size the sheet no longer has.
+        if (dialog?.dataset.calendarLayer === "true") {
+          scheduleFit();
+        } else if (dialog) {
+          appliedFitKey = "";
+          appliedFitBox = null;
+          fitCard();
+        }
         // Autohide just switched on (or the card was just docked): start counting down to folding away.
         if (adapter.cardMode && hoverMode() && !graceTimer) armGrace();
       }
@@ -40873,6 +40881,19 @@ __zentralShim.register = function (def) {
         close,
         destroy,
         refreshRead,
+        // UI4.10: the text size (or the sheet) changed while a card is open, so the card is measured again: the old
+        // box was worked out around text of the old size, and holding it only made the body scroll. A settings card
+        // takes the sheet it lives in, so it is laid out again rather than fitted.
+        refitDialog() {
+          if (!isOpen || destroyed || !dialog) return false;
+          const card = dialog.querySelector(".zn-dialog-card");
+          if (!card) return false;
+          if (card.classList.contains("zn-settings")) { layout(); return true; }
+          appliedFitKey = "";
+          appliedFitBox = null;
+          fitCard();
+          return true;
+        },
         openCalendarBigPicture,
         closeCalendarBigPicture,
         isCalendarBigPictureOpen: () => !!bigPicture,
@@ -46594,7 +46615,12 @@ __zentralShim.register = function (def) {
           if (READ_PREFS.has(name)) {
             for (const b of [...bindings.values(), floating]) b?.sheet?.()?.refreshRead?.();
             floating?.sheet?.refreshRead?.();
-          } else if (VIEW_PREFS.has(name)) applyViewPrefs();
+          } else if (VIEW_PREFS.has(name)) {
+            applyViewPrefs();
+            // UI4.10: the text size is one of these; an open card was measured at the old size and its body would
+            // scroll instead of it growing. Every sheet re-fits its open dialog.
+            for (const b of [...bindings.values(), floating]) b?.sheet?.()?.refitDialog?.();
+          }
           else if (name === PREF.SHORTCUT) shortcut = parseShortcut(prefStr(PREF.SHORTCUT, "Alt+Shift+N"));
           else if (name === PREF.DEBUG_PERF) PERF_ON = prefBool(PREF.DEBUG_PERF, false);
           else if (name === PREF.ZEN_MODE) {
