@@ -69,6 +69,32 @@
   ) !important;
 }
 
+#zentral-sidebar-widgets .zw-card[data-zw-clickable="true"] {
+  cursor: pointer !important;
+}
+
+#zentral-sidebar-widgets .zw-card[data-zw-clickable="true"]:hover {
+  border-color: color-mix(in srgb, var(--zen-primary-color, currentColor) 42%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, var(--zen-colors-tertiary, rgba(127, 127, 127, 0.2))) 14%,
+    var(--zen-colors-tertiary, var(--toolbar-field-background-color, rgba(127, 127, 127, 0.16)))
+  ) !important;
+}
+
+#zentral-sidebar-widgets .zw-card[data-zw-clickable="true"]:active {
+  transform: scale(0.985) !important;
+}
+
+#zentral-sidebar-widgets .zw-card[data-zw-clickable="true"]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--zen-primary-color, #4c8bf5) 75%, transparent) !important;
+  outline-offset: 1px !important;
+}
+
+#zentral-sidebar-widgets .zw-date[data-zw-clickable="true"] {
+  cursor: pointer !important;
+}
+
 #zentral-sidebar-widgets[data-zw-density="compact"] {
   gap: 5px !important;
   padding: 3px 3px 5px !important;

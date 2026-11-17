@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.238
+// @version 3.3.239
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.238, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.239, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.238";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.239";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -41086,6 +41086,44 @@ __zentralShim.register = function (def) {
       function openCalendarDayFromHost(key) {
         return showNotes("").then((handle) => sheetOf(handle)?.openCalendarDay?.(key)).catch(warn);
       }
+      async function openCalendarFromHost() {
+        if (disposed || !enabledNow() || !CALENDAR_PART) return false;
+        try {
+          if (panelsHidden()) {
+            try { await ensurePanelShown(); } catch (_) {}
+            if (disposed) return false;
+          }
+          const handle = await showNotes("");
+          if (disposed) return false;
+          return Boolean(sheetOf(handle)?.openCalendar?.());
+        } catch (error) {
+          warn(error);
+          return false;
+        }
+      }
+      const CALENDAR_OPENER_SYM = Symbol.for("zentral/notes-calendar-opener/v1");
+      const CALENDAR_AVAILABILITY_EVENT = "zentral-notes-calendar-availability";
+      function notifyCalendarAvailability() {
+        try {
+          if (typeof window.dispatchEvent !== "function") return;
+          const ev = typeof window.CustomEvent === "function"
+            ? new window.CustomEvent(CALENDAR_AVAILABILITY_EVENT)
+            : { type: CALENDAR_AVAILABILITY_EVENT };
+          window.dispatchEvent(ev);
+        } catch (_) {}
+      }
+      const calendarOpener = {
+        isAvailable: () => !disposed && enabledNow() && Boolean(CALENDAR_PART),
+        openCalendar: () => openCalendarFromHost(),
+      };
+      window[CALENDAR_OPENER_SYM] = calendarOpener;
+      notifyCalendarAvailability();
+      onCleanup(() => {
+        if (window[CALENDAR_OPENER_SYM] === calendarOpener) {
+          delete window[CALENDAR_OPENER_SYM];
+        }
+        notifyCalendarAvailability();
+      });
       function showDayPlan() {
         if (disposed || !enabledNow() || !CALENDAR_PART || !store.items?.list) return;
         try {
@@ -45077,7 +45115,10 @@ __zentralShim.register = function (def) {
           } else if (name === PREF.ENABLED || name === PREF.SHOW_BUTTON) {
             attachObservers();
             syncBars();
-            if (name === PREF.ENABLED) enabledNow() ? claimWidget() : releaseWidget();
+            if (name === PREF.ENABLED) {
+              enabledNow() ? claimWidget() : releaseWidget();
+              notifyCalendarAvailability();
+            }
           } else if (name === PREF.DOCK_SIDEBAR) {
             syncSidebarButton();
             floating?.refresh();

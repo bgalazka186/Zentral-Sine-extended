@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Widgets
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.238
+// @version 3.3.239
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.238, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.239, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.238";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.239";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1173,6 +1173,8 @@ function nativeSidebarSide() {
 
   const VIDEO_PLAYER_ID = "zentral-video-preview";
   const TRAY_ID = "zentral-sidebar-widgets";
+  const CALENDAR_OPENER_SYM = Symbol.for("zentral/notes-calendar-opener/v1");
+  const CALENDAR_AVAILABILITY_EVENT = "zentral-notes-calendar-availability";
   const VIDEO_ANCHOR_IDS = new Set([
     "zen-media-controls-toolbar",
     "zen-sidebar-bottom-buttons",
@@ -2448,6 +2450,19 @@ function nativeSidebarSide() {
     };
   }
 
+  function resolveCalendarOpener(win) {
+    try {
+      const opener = win?.[CALENDAR_OPENER_SYM];
+      if (!opener || typeof opener.openCalendar !== "function") return null;
+      if (typeof opener.isAvailable === "function" && !opener.isAvailable()) {
+        return null;
+      }
+      return opener;
+    } catch (_) {
+      return null;
+    }
+  }
+
   const core = Object.freeze({
     WIDGET_PREFS,
     DEFAULTS,
@@ -2456,11 +2471,14 @@ function nativeSidebarSide() {
     DATE_FORMATS,
     VIDEO_PLAYER_ID,
     TRAY_ID,
+    CALENDAR_OPENER_SYM,
+    CALENDAR_AVAILABILITY_EVENT,
     clampInt,
     normalizeWidgetId,
     parseDisabledIds,
     serializeDisabledIds,
     isVideoPlayerElement,
+    resolveCalendarOpener,
     cleanClockFormat,
     cleanDateFormat,
     isoWeekNumber,
@@ -2781,6 +2799,13 @@ function nativeSidebarSide() {
         body.className = "zw-card-body";
         if (instance?.element) body.appendChild(instance.element);
         card.appendChild(body);
+        if (typeof instance?.onMountCard === "function") {
+          try {
+            instance.onMountCard(card);
+          } catch (err) {
+            console.warn("[ZentralWidgets] widget onMountCard failed:", def.id, err);
+          }
+        }
         return { card, body };
       }
 
@@ -3219,8 +3244,108 @@ function nativeSidebarSide() {
           wrap.appendChild(badge);
           wrap.appendChild(info);
 
+          let cardEl = null;
+          let lastAriaDate = "Date";
+          const localCleanups = [];
+
+          const bindInteractiveTarget = (el) => {
+            if (!el || typeof el.addEventListener !== "function") return;
+            const onClick = (event) => {
+              if (
+                event &&
+                ((event.button != null && event.button !== 0) ||
+                  event.ctrlKey ||
+                  event.metaKey ||
+                  event.altKey ||
+                  event.shiftKey)
+              ) {
+                return;
+              }
+              const opener = resolveCalendarOpener(window);
+              if (!opener) return;
+              event?.preventDefault?.();
+              event?.stopPropagation?.();
+              try {
+                opener.openCalendar();
+              } catch (err) {
+                console.warn("[ZentralWidgets] openCalendar failed:", err);
+              }
+            };
+            const onKeyDown = (event) => {
+              const key = event?.key;
+              if (key !== "Enter" && key !== " " && key !== "Spacebar") return;
+              const opener = resolveCalendarOpener(window);
+              if (!opener) return;
+              event?.preventDefault?.();
+              event?.stopPropagation?.();
+              try {
+                opener.openCalendar();
+              } catch (err) {
+                console.warn("[ZentralWidgets] openCalendar failed:", err);
+              }
+            };
+            el.addEventListener("click", onClick);
+            el.addEventListener("keydown", onKeyDown);
+            localCleanups.push(() => {
+              try {
+                el.removeEventListener("click", onClick);
+                el.removeEventListener("keydown", onKeyDown);
+              } catch (_) {}
+            });
+          };
+
+          const syncInteractiveState = () => {
+            const target = cardEl || wrap;
+            const available = Boolean(resolveCalendarOpener(window));
+            if (available) {
+              target.setAttribute("role", "button");
+              target.setAttribute("tabindex", "0");
+              target.setAttribute("data-zw-clickable", "true");
+              target.setAttribute("title", "Open Calendar");
+              target.setAttribute("aria-label", `${lastAriaDate} — Open Calendar`);
+              wrap.setAttribute("data-zw-clickable", "true");
+            } else {
+              target.removeAttribute("role");
+              target.removeAttribute("tabindex");
+              target.removeAttribute("data-zw-clickable");
+              target.removeAttribute("title");
+              target.setAttribute("aria-label", cardEl ? "Date" : lastAriaDate);
+              wrap.removeAttribute("data-zw-clickable");
+            }
+          };
+
+          const onAvailabilityChange = () => syncInteractiveState();
+          if (typeof window.addEventListener === "function") {
+            window.addEventListener(
+              CALENDAR_AVAILABILITY_EVENT,
+              onAvailabilityChange,
+            );
+            localCleanups.push(() => {
+              try {
+                window.removeEventListener(
+                  CALENDAR_AVAILABILITY_EVENT,
+                  onAvailabilityChange,
+                );
+              } catch (_) {}
+            });
+          }
+
           return {
             element: wrap,
+            onMountCard(card) {
+              cardEl = card;
+              bindInteractiveTarget(card);
+              syncInteractiveState();
+            },
+            dispose() {
+              while (localCleanups.length) {
+                const fn = localCleanups.pop();
+                try {
+                  fn();
+                } catch (_) {}
+              }
+              cardEl = null;
+            },
             fetch({ now }) {
               return formatDateParts(now, readDateOpts());
             },
@@ -3243,8 +3368,10 @@ function nativeSidebarSide() {
                 weekEl.textContent = "";
                 weekEl.hidden = true;
               }
+              lastAriaDate = value.text || "Date";
               wrap.setAttribute("data-zw-date-key", value.key || "");
-              wrap.setAttribute("aria-label", value.text || "Date");
+              wrap.setAttribute("aria-label", lastAriaDate);
+              syncInteractiveState();
             },
           };
         },

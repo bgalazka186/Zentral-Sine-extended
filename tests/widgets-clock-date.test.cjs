@@ -45,6 +45,7 @@ function createClockDateHarness(initialPrefs = {}, startMs = Date.UTC(2026, 10, 
       this.parentNode = null;
       this.children = [];
       this.attrs = new Map();
+      this._listeners = [];
       this._rect = { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
       this.style = {
         _props: new Map(),
@@ -97,6 +98,33 @@ function createClockDateHarness(initialPrefs = {}, startMs = Date.UTC(2026, 10, 
       this.parentNode = null;
     }
     contains(other) { let c = other; while (c) { if (c === this) return true; c = c.parentNode; } return false; }
+    addEventListener(type, fn) { this._listeners.push([type, fn]); }
+    removeEventListener(type, fn) {
+      const i = this._listeners.findIndex((x) => x[0] === type && x[1] === fn);
+      if (i >= 0) this._listeners.splice(i, 1);
+    }
+    dispatchEvent(ev) {
+      const event = {
+        type: ev?.type || "",
+        target: ev?.target || this,
+        bubbles: ev?.bubbles !== false,
+        defaultPrevented: false,
+        _stopped: false,
+        preventDefault() { this.defaultPrevented = true; },
+        stopPropagation() { this._stopped = true; },
+        ...ev,
+      };
+      let cur = this;
+      while (cur) {
+        event.currentTarget = cur;
+        for (const [t, fn] of [...(cur._listeners || [])]) {
+          if (t === event.type) fn(event);
+        }
+        if (!event.bubbles || event._stopped) break;
+        cur = cur.parentNode;
+      }
+      return !event.defaultPrevented;
+    }
     matches(sel) {
       return sel.split(",").some((part) => {
         const s = part.trim();
@@ -185,6 +213,11 @@ function createClockDateHarness(initialPrefs = {}, startMs = Date.UTC(2026, 10, 
     cancelAnimationFrame: (id) => { rafs.delete(id); },
     addEventListener: (t, fn) => winListeners.push([t, fn]),
     removeEventListener: (t, fn) => { const i = winListeners.findIndex((x) => x[0] === t && x[1] === fn); if (i >= 0) winListeners.splice(i, 1); },
+    dispatchEvent: (ev) => {
+      const type = ev?.type || "";
+      for (const [t, fn] of [...winListeners]) if (t === type) fn(ev);
+      return true;
+    },
   };
 
   const RealDate = Date;
@@ -227,11 +260,13 @@ function createClockDateHarness(initialPrefs = {}, startMs = Date.UTC(2026, 10, 
   return {
     api,
     core: window.__zentralWidgetsTestSeam.core,
+    window,
     Services,
     document,
     toolbox,
     video,
     timers,
+    winListeners,
     flushRaf,
     advanceTime,
     fireDoc,
@@ -408,6 +443,114 @@ function createClockDateHarness(initialPrefs = {}, startMs = Date.UTC(2026, 10, 
 
     h.api.destroy();
     assert.equal(h.timers.size, 0);
+  });
+
+  await test("OW-41: Date widget opens Zentral Calendar when installed, adapts dynamically, and stays inert standalone", () => {
+    const h = createClockDateHarness({
+      "zen.workspace.zentral.widgets.enabled": true,
+    });
+    const { CALENDAR_OPENER_SYM, CALENDAR_AVAILABILITY_EVENT, resolveCalendarOpener } = h.core;
+    const tray = h.api.getTray();
+    const dateCard = tray.children.find((c) => c.getAttribute("data-zw-widget") === "date");
+    const dateWrap = dateCard.querySelector(".zw-date");
+    assert.ok(dateCard && dateWrap, "date card and inner wrapper exist");
+
+    // 1. Standalone without Notes: completely inert, zero errors on click/keys
+    assert.equal(resolveCalendarOpener(h.window), null);
+    assert.equal(dateCard.getAttribute("role"), null);
+    assert.equal(dateCard.getAttribute("tabindex"), null);
+    assert.equal(dateCard.getAttribute("data-zw-clickable"), null);
+    assert.equal(dateCard.getAttribute("title"), null);
+    assert.equal(dateWrap.getAttribute("data-zw-clickable"), null);
+    dateWrap.dispatchEvent({ type: "click", button: 0 });
+    dateCard.dispatchEvent({ type: "keydown", key: "Enter" });
+
+    // 2. Notes loads AFTER Widgets and announces availability
+    let openCalls = 0;
+    let available = true;
+    h.window[CALENDAR_OPENER_SYM] = {
+      isAvailable: () => available,
+      openCalendar: () => { openCalls++; return true; },
+    };
+    h.window.dispatchEvent({ type: CALENDAR_AVAILABILITY_EVENT });
+
+    assert.ok(resolveCalendarOpener(h.window) !== null, "resolveCalendarOpener detects installed opener");
+    assert.equal(dateCard.getAttribute("role"), "button");
+    assert.equal(dateCard.getAttribute("tabindex"), "0");
+    assert.equal(dateCard.getAttribute("data-zw-clickable"), "true");
+    assert.equal(dateCard.getAttribute("title"), "Open Calendar");
+    assert.equal(dateWrap.getAttribute("data-zw-clickable"), "true");
+
+    // Primary click (bubbles from inner .zw-date to .zw-card) -> opens Calendar
+    dateWrap.dispatchEvent({ type: "click", button: 0 });
+    assert.equal(openCalls, 1);
+
+    // Direct click on card padding -> opens Calendar
+    dateCard.dispatchEvent({ type: "click", button: 0 });
+    assert.equal(openCalls, 2);
+
+    // Right-click & modifier-click -> ignored
+    dateCard.dispatchEvent({ type: "click", button: 2 });
+    dateCard.dispatchEvent({ type: "click", button: 0, ctrlKey: true });
+    dateCard.dispatchEvent({ type: "click", button: 0, metaKey: true });
+    dateCard.dispatchEvent({ type: "click", button: 0, shiftKey: true });
+    assert.equal(openCalls, 2);
+
+    // Keyboard Enter & Space -> opens Calendar; other keys ignored
+    dateCard.dispatchEvent({ type: "keydown", key: "Enter" });
+    dateCard.dispatchEvent({ type: "keydown", key: " " });
+    dateCard.dispatchEvent({ type: "keydown", key: "Escape" });
+    assert.equal(openCalls, 4);
+
+    // 3. Notes toggled disabled -> card reverts to inert and clicks do nothing
+    available = false;
+    h.window.dispatchEvent({ type: CALENDAR_AVAILABILITY_EVENT });
+    assert.equal(resolveCalendarOpener(h.window), null);
+    assert.equal(dateCard.getAttribute("role"), null);
+    assert.equal(dateCard.getAttribute("tabindex"), null);
+    assert.equal(dateCard.getAttribute("data-zw-clickable"), null);
+    dateCard.dispatchEvent({ type: "click", button: 0 });
+    dateCard.dispatchEvent({ type: "keydown", key: "Enter" });
+    assert.equal(openCalls, 4);
+
+    // 4. Re-enabled then destroyed -> listeners cleanly removed (zero leaks)
+    available = true;
+    h.window.dispatchEvent({ type: CALENDAR_AVAILABILITY_EVENT });
+    assert.equal(dateCard.getAttribute("data-zw-clickable"), "true");
+
+    h.api.destroy();
+    const leaked = h.winListeners.filter(([t]) => t === CALENDAR_AVAILABILITY_EVENT);
+    assert.equal(leaked.length, 0, "availability listener must be removed on destroy");
+  });
+
+  await test("OW-41 cross-module: real ZentralNotes registers calendar opener and opens Calendar on click", async () => {
+    const { createFakeZen } = require("./helpers/fake-zen-browser.cjs");
+    const zen = createFakeZen();
+    try {
+      const sym = Symbol.for("zentral/notes-calendar-opener/v1");
+      const opener = zen.window[sym];
+      assert.ok(opener && typeof opener.openCalendar === "function", "ZentralNotes must register calendar opener symbol");
+      assert.equal(opener.isAvailable(), true, "opener must report available when Notes is enabled");
+
+      // Disabling Notes flips availability off
+      zen.setPref("zen.workspace.zentral.notes.enabled", false);
+      assert.equal(opener.isAvailable(), false, "opener must report unavailable when Notes is disabled");
+
+      // Re-enabling Notes restores availability and openCalendar() opens the real Calendar pane
+      zen.setPref("zen.workspace.zentral.notes.enabled", true);
+      assert.equal(opener.isAvailable(), true);
+      const opened = await opener.openCalendar();
+      assert.equal(opened, true, "openCalendar() must open the real Notes Calendar pane");
+      const meta = zen.seam.store.meta;
+      assert.equal(meta.calendarTab, "calendar");
+      assert.equal(meta.calendarPaneCollapsed, false);
+
+      // Destroy removes the symbol cleanly
+      zen.destroy();
+      assert.equal(zen.window[sym], undefined, "ZentralNotes destroy must remove calendar opener symbol");
+    } finally {
+      try { zen.destroy(); } catch (_) {}
+    }
   });
 
   console.log(`\nPASS widgets-clock-date (${passed} tests)`);
