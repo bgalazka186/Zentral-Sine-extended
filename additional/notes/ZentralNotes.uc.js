@@ -2198,6 +2198,15 @@
       });
     }
     const labelsEndWith = (labels, path) => path.length <= labels.length && path.every((p, i) => labels[labels.length - path.length + i].toLowerCase() === p.toLowerCase());
+    // The generated Date Notes folder kept the stable "daily" id when its visible label changed from Daily to Agenda.
+    // Resolve old [[Daily/...]] links against that same id without aliasing an unrelated user folder.
+    function folderPathMatchesNote(note, folders, path) {
+      const labels = folderLabels(folders, note?.folder);
+      if (labelsEndWith(labels, path)) return true;
+      const id = cleanFolder(note?.folder);
+      if (!id || (id !== "daily" && !id.startsWith("daily/")) || !Array.isArray(path) || !path.length || String(path[0]).toLowerCase() !== "daily") return false;
+      return labelsEndWith(labels.slice(1), path.slice(1));
+    }
     // Target of a wiki link: { id, ambiguous, heading } or null. `heading` is the slug of the heading in the target note
     // ("" = the whole note; a heading that does not exist keeps its slug so the broken-link check can report it).
     function resolveWikiTarget(notes, folders, parts, { allow = {} } = {}) {
@@ -2207,7 +2216,7 @@
       if (parts.whole) {
         const byTitle = (t) => notes.filter((n) => !n.trashed && titleOf(n.body).toLowerCase() === t.toLowerCase());
         let hits = byTitle(parts.whole);
-        if (!hits.length && parts.path.length) hits = byTitle(parts.title).filter((n) => labelsEndWith(folderLabels(folders, n.folder), parts.path));
+        if (!hits.length && parts.path.length) hits = byTitle(parts.title).filter((n) => folderPathMatchesNote(n, folders, parts.path));
         hits.sort((x, y) => y.updated - x.updated || (x.id < y.id ? -1 : 1));
         if (hits.length) hit = { id: hits[0].id, ambiguous: hits.length > 1, note: hits[0] };
       }
@@ -15190,7 +15199,7 @@
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, SHOWCASE_NOTE_ID, buildShowcaseNote, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, SPELL_MAX_SUGGESTIONS, wordRangeAtOffset, replaceWordRange, cleanSpellLanguages, toggleSpellLanguage, formatSpellLanguageLabel, collectSpellSuggestions, buildEditorSpellMenuModel, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
         makeFolderUid, ensureFolderUids, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_STYLE, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, SPACE_MODES, cleanSpaceMode, SPACES_DIR, SPACE_REGISTRY_FILE, SPACE_SHARES_FILE, cleanWorkspaceId, workspaceDirKey, readZenWorkspaces, resolveActiveWorkspaceIdentity, cleanSpaceRegistry, reconcileSpaceRegistry, cleanShareTargets, cleanShareRecord, cleanSpaceShares, mergeSpaceShares, isSharedWithSpace, planSpaceSharesForSpace, resolveSpaceStorageTarget, canShareCalendarItemWithoutNote, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
-        projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
+        projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, folderPathMatchesNote, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         FOLDER_ZEN_SIDEBAR_VALUES, cleanFolderZenSidebar, resolveFolderZenSidebar, folderZenSidebarMenuAction,
         BIRTHDAY_CATEGORY, BIRTHDAY_FOLDER_ID, resolveNoteZenSidebar, parseBirthdayDate, cleanBirthdayTime, formatBirthdayLine, buildBirthdayNoteBody, appendBirthdayEntry,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition, calendarMenuPosition, normalizeContextMenuItems,
