@@ -76,7 +76,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
-|    62 | `OW-33`     | `OPEN`    | High                | S      | none              | Small-window All notes chrome & non-calendar toolbar overflow safety                                     |
 |    63 | `OW-34`     | `OPEN`    | Med-High            | S      | none              | Quick-hide toggle for Calendar filter/controls bar in small windows                                      |
 |    64 | `OW-35`     | `OPEN`    | Med-High            | S      | none              | Independent filter state for regular Calendar pane vs Big Picture popup                                  |
 |    65 | `OW-36`     | `OPEN`    | Med-High            | M      | none              | Spell-check right-click menu: spelling suggestions, add to dictionary / ignore, and language picker      |
@@ -114,17 +113,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 ---
 
 ## Task blocks (same order as the Master Order)
-
-#### `OW-33` — Small-window All notes chrome & non-calendar toolbar overflow safety
-
-**Status:** `OPEN` · **Impact:** High · **Effort:** S · **Source:** owner live test 2026-11-16
-
-**Problem:** In All notes view on a small window, non-calendar toolbars, search/filter chips, folder bar, and header menus can get squeezed out of reach or take up more space than needed.
-
-**Plan:**
-1. Audit `.zn-all-head`, `.zn-all-tools`, `.zn-all-search`, filter chips, batch bar, and action buttons in `additional/notes/ZentralNotes.css` and `ZentralNotes.uc.js` at narrow widths (`240–420 px`) and short heights (`300–450 px`).
-2. Make All notes chrome compact in small windows: compact padding/gaps, graceful wrapping or overflow-accessible controls so no button/menu becomes unreachable, and zero wasted vertical bloat.
-3. Add narrow/short-window tests verifying every non-calendar All notes control remains accessible and compact without overflowing or clipping.
 
 #### `OW-34` — Quick-hide toggle for Calendar filter/controls bar in small windows
 
@@ -449,13 +437,15 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.230, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.231, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.230.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`188/188` test files) passes in Node/fake-Zen at 3.3.230. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.231.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`189/189` test files) passes in Node/fake-Zen at 3.3.231. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
-Completed this session (3.3.163–3.3.230), every finished item archived in `docs/LEGACY_done_rows.md`:
+Completed this session (3.3.163–3.3.231), every finished item archived in `docs/LEGACY_done_rows.md`:
+
+- `OW-33` (3.3.231) — hardened small-window All notes chrome & non-calendar toolbars against clipping and vertical bloat (`additional/notes/calendar/ZentralNotesCalendar.js`, `additional/notes/ZentralNotes.uc.js`, `additional/notes/ZentralNotes.css`): added pure `ALL_NOTES_CHROME_THRESHOLDS` / `allNotesChromeDensity(w, h)` driving `data-all-chrome` (`normal`/`compact`/`tight`) and `data-short-window` on All notes layout & sheet root; hid editor-only `Pin note` and `Note color` buttons from `.zn-head` while in `view="list"`; enabled safe `flex-wrap: wrap` + `min-width: 0` across `.zn-head[data-view="list"]`, `.zn-all-toolbar`, `.zn-list-head`, `.zn-chips`, and `.zn-calendar-pane-head` so `Trash`, `Tags`, `Empty Trash`, and create/window controls never clip at `240–420px` widths; and tightened small-window padding/button/chip sizing while collapsing the `.zn-chips .zn-grow` spacer. Verified in `tests/notes-small-window-chrome.test.cjs` (`189/189` suite).
 
 - `OW-32` (3.3.230) — fixed All notes tree pane squeeze priority (`additional/notes/calendar/ZentralNotesCalendar.js`, `additional/notes/ZentralNotes.uc.js`, `additional/notes/ZentralNotes.css`): removed the `max-width: 70%` title cap that squeezed `.zn-item-title` before `.zn-item-snippet` collapsed, gave `.zn-item-snippet` `flex: 1 999 0` so note contents collapse first to `0px`, made non-interactive badges (`.zn-item-label`, `.zn-frow-zen-badge`) and `.zn-item-time` shrink before titles, locked interactable controls (`.zn-item-actions`, `.zn-chev`, `.zn-newfolder`, `.zn-new-split`) at `flex: 0 0 auto`, and added pure `treePaneSqueezeState` + live `data-tree-squeeze` (`full`/`compact`/`narrow`/`tight`, updated on layout and splitter drag with zero layout reads) backed by `@container zn-tree` queries so snippets hide first (`< 320px`), then timestamps (`< 245px`), then non-interactive badges (`< 170px`), while titles and interactable controls stay visible. Verified in `tests/notes-tree-squeeze.test.cjs` (`188/188` suite).
 

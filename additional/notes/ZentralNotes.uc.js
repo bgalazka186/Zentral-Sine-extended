@@ -16162,6 +16162,16 @@
         root.dataset.allNotesActive = active ? "true" : "false";
         const mode = CALENDAR_PART?.cleanCalendarLayout?.(store.meta.calendarLayout) || "auto";
         const dims = allLayoutDimensions();
+        const chrome = CALENDAR_PART?.allNotesChromeDensity?.(dims.width, dims.height) || { density: "normal", compact: false, narrow: false, tight: false, short: false };
+        if (view === "list") {
+          root.dataset.allChrome = chrome.density;
+          root.dataset.shortWindow = chrome.short ? "true" : "false";
+        } else {
+          delete root.dataset.allChrome;
+          delete root.dataset.shortWindow;
+        }
+        allLayout.dataset.allChrome = chrome.density;
+        allLayout.dataset.shortWindow = chrome.short ? "true" : "false";
         const picked = CALENDAR_PART?.calendarLayoutFor?.(mode, dims.width, dims.height) || { orientation: "lr", tabs: false };
         const treeCollapsed = active && store.meta.calendarTreeCollapsed === true;
         const calendarCollapsed = active && store.meta.calendarPaneCollapsed === true;
@@ -16325,6 +16335,8 @@
         titleEl.textContent =
           view === "list" ? (filter === "trash" ? "Trash" : "All notes") : titleOf(n?.body || "") || "Untitled note";
         titleEl.title = view === "list" ? "Back to note" : "All notes";
+        btnPin.hidden = view === "list";
+        btnColor.hidden = view === "list";
         btnPin.classList.toggle("is-on", !!n?.pinned);
         btnPin.title = n?.pinned ? "Unpin note" : "Pin note to the top of the list";
         btnPin.setAttribute("aria-pressed", n?.pinned ? "true" : "false");
