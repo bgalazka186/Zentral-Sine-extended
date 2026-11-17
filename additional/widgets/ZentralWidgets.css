@@ -153,6 +153,7 @@
 /* ---- Built-in Clock widget (T3.9b) ---- */
 
 #zentral-sidebar-widgets .zw-clock {
+  contain: layout style paint !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: flex-start !important;
@@ -177,6 +178,8 @@
 }
 
 #zentral-sidebar-widgets .zw-clock-seconds {
+  contain: layout style paint !important;
+  font-variant-numeric: tabular-nums !important;
   font-size: 14px !important;
   font-weight: 600 !important;
   opacity: 0.66 !important;

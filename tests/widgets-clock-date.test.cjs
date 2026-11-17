@@ -445,6 +445,41 @@ function createClockDateHarness(initialPrefs = {}, startMs = Date.UTC(2026, 10, 
     assert.equal(h.timers.size, 0);
   });
 
+  await test("OW-42 hidden and minimized surfaces pause clock refresh timers", () => {
+    const h = createClockDateHarness({
+      "zen.workspace.zentral.widgets.enabled": true,
+      "zen.workspace.zentral.widgets.clock.show_seconds": true,
+      "zen.workspace.zentral.widgets.pause_when_hidden": true,
+    });
+    assert.equal(h.api.isPaused(), false);
+    assert.equal(h.api.activeTimerCount(), 2, "clock and date each own one boundary timer");
+
+    // Minimized/occluded browser window: no per-second work while hidden.
+    h.window.windowState = h.window.STATE_MINIMIZED;
+    let area = h.api.remeasure();
+    assert.equal(area.reason, "window-hidden");
+    assert.equal(h.api.isPaused(), true);
+    assert.equal(h.api.activeTimerCount(), 0);
+
+    // A collapsed Zen sidebar pauses the same timers.
+    h.window.windowState = 1;
+    h.document.documentElement.setAttribute("zen-sidebar-hidden", "true");
+    area = h.api.remeasure();
+    assert.equal(area.reason, "sidebar-hidden");
+    assert.equal(h.api.isPaused(), true);
+    assert.equal(h.api.activeTimerCount(), 0);
+    h.document.documentElement.removeAttribute("zen-sidebar-hidden");
+
+    // Low available height hides the tray and pauses all widget refreshes.
+    h.toolbox.setRect({ width: 179, height: 160 });
+    area = h.api.remeasure();
+    assert.equal(area.reason, "low-free-height");
+    assert.equal(h.api.isPaused(), true);
+    assert.equal(h.api.activeTimerCount(), 0);
+    h.api.destroy();
+    assert.equal(h.timers.size, 0);
+  });
+
   await test("OW-41: Date widget opens Zentral Calendar when installed, adapts dynamically, and stays inert standalone", () => {
     const h = createClockDateHarness({
       "zen.workspace.zentral.widgets.enabled": true,
