@@ -76,7 +76,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
-|    61 | `OW-32`     | `OPEN`    | High                | S      | none              | All notes pane squeeze priority: protect interactable areas first, then titles, collapse contents first  |
 |    62 | `OW-33`     | `OPEN`    | High                | S      | none              | Small-window All notes chrome & non-calendar toolbar overflow safety                                     |
 |    63 | `OW-34`     | `OPEN`    | Med-High            | S      | none              | Quick-hide toggle for Calendar filter/controls bar in small windows                                      |
 |    64 | `OW-35`     | `OPEN`    | Med-High            | S      | none              | Independent filter state for regular Calendar pane vs Big Picture popup                                  |
@@ -115,17 +114,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 ---
 
 ## Task blocks (same order as the Master Order)
-
-#### `OW-32` — All notes pane squeeze priority: protect interactable areas first, then titles, collapse contents first
-
-**Status:** `OPEN` · **Impact:** High · **Effort:** S · **Source:** owner live test 2026-11-16
-
-**Problem:** In the All notes view beside Calendar, squeezing the notes list/pane narrow squeezes or hides note titles before note contents/snippets/metadata, and can squeeze interactable buttons/controls.
-
-**Plan:**
-1. Audit `.zn-item`, `.zn-item-main`, `.zn-item-title`, `.zn-item-meta`/preview/badges, `.zn-item-actions`, and `.zn-frow` flex/grid rules in `additional/notes/ZentralNotes.css` and `ZentralNotes.uc.js`.
-2. Enforce strict squeeze priority via flex-shrink, `min-width`, and container/width breakpoints: (a) interactable areas/controls never shrink to 0 or get clipped (`flex-shrink: 0`), (b) note titles stay visible with high shrink resistance and clean ellipsis rather than disappearing, (c) secondary note contents/previews/meta/badges collapse and hide FIRST when space gets tight.
-3. Add layout/cascade tests verifying interactable controls, title visibility, and progressive content collapse across narrow widths.
 
 #### `OW-33` — Small-window All notes chrome & non-calendar toolbar overflow safety
 
@@ -461,13 +449,15 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.229, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.230, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.229.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`187/187` test files) passes in Node/fake-Zen at 3.3.229. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.230.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`188/188` test files) passes in Node/fake-Zen at 3.3.230. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
-Completed this session (3.3.163–3.3.229), every finished item archived in `docs/LEGACY_done_rows.md`:
+Completed this session (3.3.163–3.3.230), every finished item archived in `docs/LEGACY_done_rows.md`:
+
+- `OW-32` (3.3.230) — fixed All notes tree pane squeeze priority (`additional/notes/calendar/ZentralNotesCalendar.js`, `additional/notes/ZentralNotes.uc.js`, `additional/notes/ZentralNotes.css`): removed the `max-width: 70%` title cap that squeezed `.zn-item-title` before `.zn-item-snippet` collapsed, gave `.zn-item-snippet` `flex: 1 999 0` so note contents collapse first to `0px`, made non-interactive badges (`.zn-item-label`, `.zn-frow-zen-badge`) and `.zn-item-time` shrink before titles, locked interactable controls (`.zn-item-actions`, `.zn-chev`, `.zn-newfolder`, `.zn-new-split`) at `flex: 0 0 auto`, and added pure `treePaneSqueezeState` + live `data-tree-squeeze` (`full`/`compact`/`narrow`/`tight`, updated on layout and splitter drag with zero layout reads) backed by `@container zn-tree` queries so snippets hide first (`< 320px`), then timestamps (`< 245px`), then non-interactive badges (`< 170px`), while titles and interactable controls stay visible. Verified in `tests/notes-tree-squeeze.test.cjs` (`188/188` suite).
 
 - `OW-31` (3.3.229) — fixed NOTES and Agenda folders jumping to the bottom of pinned tabs on Zen workspace switch (`additional/notes/ZentralNotes.uc.js`): replaced hardcoded `target.insertBefore(root, target.lastChild || null)` in `syncSharedWorkspace` with canonical anchor placement (`managedRootAnchors`, `desiredManagedRootBefore`, `isAlreadyBefore`, `repositionManagedRoots`) that honours `PREF.ZEN_TOP` and `PREF.AGENDA_POSITION` (`above`/`below`) across both shared and space-local workspace switches, preserves trailing non-tab separators, performs zero repeated DOM moves when already in position, and reacts live to `PREF.ZEN_TOP` changes in `prefObserver`. Verified in `tests/notes-workspace-root-position.test.cjs` (`187/187` suite).
 

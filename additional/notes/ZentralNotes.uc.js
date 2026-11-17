@@ -16192,6 +16192,7 @@
           ? CALENDAR_PART?.cleanCalendarShare?.(store.meta.calendarSplitLR, 0.36) ?? 0.36
           : CALENDAR_PART?.cleanCalendarShare?.(store.meta.calendarSplitTB, 0.42) ?? 0.42;
         treePane.style.flexBasis = `${Math.round(share * 1000) / 10}%`;
+        applyTreePaneSqueeze(treePaneEffectiveWidth(dims, picked.orientation, share, active, tabs, calendarCollapsed));
         allSplitter.setAttribute("aria-orientation", picked.orientation === "lr" ? "vertical" : "horizontal");
         allSplitter.setAttribute("aria-valuenow", String(Math.round(share * 100)));
         allSplitter.setAttribute("aria-valuetext", t("tree.layout.splitterText", { percent: Math.round(share * 100) }));
@@ -16244,6 +16245,22 @@
         // every px of a resize drew it again.
         if (active && !calendarPane.hidden) { if (resized && !calendarWasHidden) refitCalendar(); else requestCalendarBackground(); }
       }
+      function treePaneEffectiveWidth(dims, orientation, share, active, tabs, calendarCollapsed) {
+        const layoutW = Math.max(0, Number(dims?.width) || 0);
+        if (layoutW > 0) {
+          if (!active || tabs || calendarCollapsed || orientation !== "lr") return layoutW;
+          return Math.max(0, Math.round(layoutW * share - 7));
+        }
+        try {
+          const r = treePane.getBoundingClientRect?.();
+          return Math.max(Number(treePane.clientWidth) || 0, Number(r?.width) || 0);
+        } catch (_) { return 0; }
+      }
+      function applyTreePaneSqueeze(widthPx) {
+        const squeeze = CALENDAR_PART?.treePaneSqueezeState?.(widthPx) || { tier: "full", hideSnippet: false, hideTime: false, hideBadges: false, compactIndent: false };
+        treePane.dataset.treeSqueeze = squeeze.tier;
+        return squeeze;
+      }
       function scheduleAllLayout() {
         if (rafAllLayout) return;
         rafAllLayout = window.requestAnimationFrame(() => { rafAllLayout = 0; updateAllLayout(true); });
@@ -16253,6 +16270,10 @@
         const clean = CALENDAR_PART.cleanCalendarShare(share, calendarSplitDrag.startShare);
         calendarSplitDrag.share = clean;
         treePane.style.flexBasis = `${Math.round(clean * 1000) / 10}%`;
+        const dragTreeW = calendarSplitDrag.orientation === "lr"
+          ? Math.max(0, Math.round(calendarSplitDrag.width * clean - 7))
+          : calendarSplitDrag.width;
+        applyTreePaneSqueeze(dragTreeW);
         allSplitter.setAttribute("aria-valuenow", String(Math.round(clean * 100)));
         allSplitter.setAttribute("aria-valuetext", `${Math.round(clean * 100)} percent for folder tree`);
       }

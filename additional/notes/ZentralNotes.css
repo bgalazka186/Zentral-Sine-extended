@@ -1239,11 +1239,42 @@
 .zentral-notes-sheet .zn-tree-head .zn-item-time { margin-left: auto; }
 .zentral-notes-sheet .zn-item-folder { opacity: 0.8; }
 
-/* ---- compact list: one line per note, folders tight, so a long tree fits ------------------------------ */
-.zentral-notes-sheet .zn-item-main { flex-direction: row; align-items: baseline; gap: 6px; }
-.zentral-notes-sheet .zn-item-main .zn-item-title { flex: 0 1 auto; min-width: 0; max-width: 70%; }
-.zentral-notes-sheet .zn-item-main .zn-item-snippet { flex: 1 1 0; min-width: 0; opacity: 0.75; }
-.zentral-notes-sheet .zn-item-main .zn-item-label { flex: 0 0 auto; margin-left: 0; line-height: 1.2; }
+/* ---- compact list & OW-32 squeeze priority: protect interactable areas -> keep titles -> collapse contents first ---- */
+.zentral-notes-sheet .zn-tree-pane { container-type: inline-size; container-name: zn-tree; }
+.zentral-notes-sheet .zn-item { min-width: 0; overflow: hidden; }
+.zentral-notes-sheet .zn-item-main { flex-direction: row; align-items: baseline; gap: 6px; overflow: hidden; }
+/* Never cap title below 100% while snippet/badges take space: snippet has basis 0 and collapses first. */
+.zentral-notes-sheet .zn-item-main .zn-item-title { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+.zentral-notes-sheet .zn-item-main .zn-item-snippet { flex: 1 999 0; min-width: 0; opacity: 0.75; }
+.zentral-notes-sheet .zn-item-main .zn-item-label,
+.zentral-notes-sheet .zn-frow-zen-badge { flex: 0 20 auto; min-width: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: 0; line-height: 1.2; }
+.zentral-notes-sheet .zn-item-time { flex: 0 10 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zentral-notes-sheet .zn-item-actions,
+.zentral-notes-sheet .zn-frow .zn-chev,
+.zentral-notes-sheet .zn-list-head .zn-newfolder,
+.zentral-notes-sheet .zn-list-head .zn-new-split { flex: 0 0 auto; }
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="compact"] .zn-item-snippet,
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="narrow"] .zn-item-snippet,
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="tight"] .zn-item-snippet { display: none; }
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="narrow"] .zn-item-time,
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="tight"] .zn-item-time { display: none; }
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="narrow"] .zn-items[role="tree"] .zn-item,
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="tight"] .zn-items[role="tree"] .zn-item { padding-left: calc(4px + var(--d, 0) * 0.7em); }
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="tight"] .zn-item-label,
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="tight"] .zn-frow-zen-badge { display: none; }
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="tight"] .zn-item { gap: 4px; padding-right: 4px; }
+@container zn-tree (max-width: 319px) {
+  .zentral-notes-sheet .zn-tree-pane .zn-item-snippet { display: none; }
+}
+@container zn-tree (max-width: 244px) {
+  .zentral-notes-sheet .zn-tree-pane .zn-item-time { display: none; }
+  .zentral-notes-sheet .zn-tree-pane .zn-items[role="tree"] .zn-item { padding-left: calc(4px + var(--d, 0) * 0.7em); }
+}
+@container zn-tree (max-width: 169px) {
+  .zentral-notes-sheet .zn-tree-pane .zn-item-label,
+  .zentral-notes-sheet .zn-tree-pane .zn-frow-zen-badge { display: none; }
+  .zentral-notes-sheet .zn-tree-pane .zn-item { gap: 4px; padding-right: 4px; }
+}
 .zentral-notes-sheet .zn-items[role="tree"] .zn-item { min-height: 22px; padding-top: 1px; padding-bottom: 1px; }
 .zentral-notes-sheet .zn-items[role="tree"] .zn-frow { min-height: 22px; font-size: 0.96em; }
 .zentral-notes-sheet .zn-items[role="tree"] .zn-frow .zn-item-actions svg,
@@ -3013,7 +3044,11 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
   min-width: 0;
 }
 .zentral-notes-sheet .zn-frow-zen-badge {
-  flex: 0 0 auto;
+  flex: 0 20 auto;
+  min-width: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 0 5px;
   border-radius: 999px;
   border: 1px solid var(--zn-line);
