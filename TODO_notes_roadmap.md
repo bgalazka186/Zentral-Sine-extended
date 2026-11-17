@@ -76,12 +76,11 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
-|     8 | `T1.19a`    | `OPEN`    | High                | M      | —                 | Full ZIP backup of notes + assets                                                                        |
 |     9 | `T3.4`      | `PARTIAL` | Med-High            | S-M    | —                 | Context menu on Notes & Agenda folders/pseudo-tabs in Zen tab bar                                        |
 |    10 | `T2.4c4`    | `PARTIAL` | Med-High            | M      | —                 | Time-zone and DST correctness in time grid                                                               |
 |    11 | `T2.5`      | `PARTIAL` | Med-High            | M      | —                 | Drag, resize and create items in the calendar                                                            |
 |    12 | `T2.9`      | `PARTIAL` | Med-High            | M      | none              | Daily-note lifecycle and archive policy inside Agenda                                                    |
-|    13 | `T1.19b`    | `OPEN`    | Med-High            | M      | T1.19a            | Obsidian vault export                                                                                    |
+|    13 | `T1.19b`    | `OPEN`    | Med-High            | M      | —                 | Obsidian vault export                                                                                    |
 |    14 | `T1.19c`    | `OPEN`    | Med-High            | M      | T1.19b            | Obsidian vault import                                                                                    |
 |    15 | `T3.2`      | `OPEN`    | Med-High            | M      | —                 | Multi-select notes & folders in tree view                                                                |
 |    16 | `T4.2`      | `OPEN`    | Med-High            | M      | —                 | Performance audit & active timer/listener registry table                                                 |
@@ -133,11 +132,11 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 ## Task blocks (same order as the Master Order)
 
-#### `T1.19a` / `T1.19b` / `T1.19c` — ZIP backup, Obsidian export, Obsidian import
+#### `T1.19b` / `T1.19c` — Obsidian export, Obsidian import
 
-**Status:** `OPEN` · **Impact:** High · **Effort:** M each · **Depends on:** none (a), then a to b to c · **Source:** split of T1.19 (must run last in Track 1)
+**Status:** `OPEN` · **Impact:** Med-High · **Effort:** M each · **Depends on:** none (b), then b to c · **Source:** split of T1.19 (`T1.19a` DONE in `docs/LEGACY_done_rows.md`)
 
-`a`: bundle notes + `assets/` into a ZIP and restore it. `b`: export a vault folder mapping YAML front matter, `[[Note#Heading|alias]]`, `![[embeds]]`, callouts, tags. `c`: import such a vault, with a re-import that does not duplicate notes.
+`b`: export a vault folder mapping YAML front matter, `[[Note#Heading|alias]]`, `![[embeds]]`, callouts, tags. `c`: import such a vault, with a re-import that does not duplicate notes.
 
 #### `T3.4` — Context menu on Notes & Agenda folders/pseudo-tabs in Zen tab bar
 

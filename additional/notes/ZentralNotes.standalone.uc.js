@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.204
+// @version 3.3.205
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.204, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.205, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.204";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.205";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -16677,6 +16677,175 @@ __zentralShim.register = function (def) {
           await api.refresh();
           return assetIntegrityReport([...notes.values()], await api.assetInventory());
         },
+        // ---- Full ZIP backup & restore (T1.19a) ------------------------------------------------------
+        async buildBackupArchive() {
+          if (!dir) throw new Error("Notes storage folder is unavailable");
+          await api.flush();
+          const enc = new TextEncoder();
+          const localNotes = [...notes.values()].filter((n) => n && !n._sharedFromOtherSpace);
+          const entries = [];
+          const stamp = now();
+          for (const n of localNotes) {
+            entries.push({ path: "notes/" + n.id + ".md", bytes: enc.encode(serializeNote(n)), mtime: n.updated || stamp });
+          }
+          const assetRels = await api.assetInventory().catch(() => []);
+          const backedAssets = [];
+          for (const rel of assetRels) {
+            const entry = classifyBackupEntry(rel);
+            if (!entry || entry.kind !== "asset" || !io.readBytes) continue;
+            try {
+              const bytes = await io.readBytes(io.join(dir, ASSET_DIR, entry.noteId, entry.file));
+              if (!validateBackupAssetBytes(entry, bytes).ok) continue;
+              entries.push({ path: entry.rel, bytes, mtime: stamp });
+              backedAssets.push(entry.rel);
+            } catch (error) {
+              warn(error);
+            }
+          }
+          let hasMeta = false, hasCalendar = false, hasHistory = false;
+          const readJsonEntry = async (filename) => {
+            try {
+              const p = io.join(dir, filename);
+              if (io.exists && !(await io.exists(p))) return null;
+              const text = await io.readUTF8(p);
+              JSON.parse(text);
+              return enc.encode(text);
+            } catch (_) {
+              return null;
+            }
+          };
+          const metaBytes = await readJsonEntry("meta.json");
+          if (metaBytes) { entries.push({ path: "meta.json", bytes: metaBytes, mtime: stamp }); hasMeta = true; }
+          const calFile = CALENDAR_PART?.ITEMS_FILE || "calendar.json";
+          const calBytes = await readJsonEntry(calFile);
+          if (calBytes) { entries.push({ path: calFile, bytes: calBytes, mtime: stamp }); hasCalendar = true; }
+          const histFile = CALENDAR_PART?.REMINDER_HISTORY_FILE || "reminder-history.json";
+          const histBytes = await readJsonEntry(histFile);
+          if (histBytes) { entries.push({ path: histFile, bytes: histBytes, mtime: stamp }); hasHistory = true; }
+          const manifest = buildBackupManifest({ notes: localNotes, assets: backedAssets, hasMeta, hasCalendar, hasHistory, spaceMode: activeSpaceMode, createdAt: stamp });
+          entries.unshift({ path: "manifest.json", bytes: enc.encode(JSON.stringify(manifest, null, 2) + "\n"), mtime: stamp });
+          return { manifest, entries, counts: manifest.counts };
+        },
+        async restoreBackupArchive(rawEntries, { mode = "merge" } = {}) {
+          if (!dir) return { ok: false, error: "Notes storage folder is unavailable." };
+          const parsed = inspectBackupEntries(rawEntries);
+          if (!parsed.ok) return { ok: false, error: parsed.error };
+          await api.flush();
+          const existingSavedCatKeys = new Set();
+          try {
+            const calPath = io.join(dir, CALENDAR_PART?.ITEMS_FILE || "calendar.json");
+            if (!io.exists || (await io.exists(calPath))) {
+              const curCal = JSON.parse(await io.readUTF8(calPath));
+              for (const cat of Array.isArray(curCal?.categories) ? curCal.categories : []) {
+                const key = String(cat?.name || "").trim().toLowerCase();
+                if (key) existingSavedCatKeys.add(key);
+              }
+            }
+          } catch (_) {}
+          const existingAssets = new Set(await api.assetInventory().catch(() => []));
+          const plan = planBackupRestore(parsed, { notes, assets: existingAssets, folders: meta.folders }, { mode });
+          let restoredAssets = 0;
+          for (const asset of plan.assetsToWrite) {
+            if (!io.makeDir || !io.writeBytes) break;
+            try {
+              const folder = io.join(dir, ASSET_DIR, asset.noteId);
+              await io.makeDir(folder);
+              await io.writeBytes(io.join(folder, asset.file), asset.bytes);
+              restoredAssets++;
+            } catch (error) {
+              warn(error);
+            }
+          }
+          let restoredNotes = 0, overwrittenNotes = 0, skippedNotes = plan.notesSkipped.length;
+          const applyRestoredNote = async (entry, isOverwrite) => {
+            if (isOverwrite) {
+              const existing = notes.get(entry.id);
+              if (existing) {
+                try {
+                  const backupPath = await backupConflictText(existing.id, serializeNote(existing));
+                  if (!backupPath) { skippedNotes++; return; }
+                } catch (error) {
+                  warn(error);
+                  skippedNotes++;
+                  return;
+                }
+              }
+            }
+            const restored = decorateNoteOwnership({ ...entry.note, _onDisk: false, _mtime: entry.note.updated || now() }, { ownerSpaceId: activeSpaceId, ownerDir: dir, foreign: false });
+            notes.set(restored.id, restored);
+            markDirty(restored.id);
+            if (isOverwrite) overwrittenNotes++;
+            else restoredNotes++;
+          };
+          for (const entry of plan.notesToCreate) await applyRestoredNote(entry, false);
+          for (const entry of plan.notesToOverwrite) await applyRestoredNote(entry, true);
+          // Flush note text to disk before calendar items (UI4.7).
+          await flushDirty();
+          for (const entry of [...plan.notesToCreate, ...plan.notesToOverwrite]) {
+            const liveNote = notes.get(entry.id);
+            if (!liveNote) continue;
+            if (liveNote.trashed) localItems?.hideNote?.(liveNote.id);
+            else syncItems(liveNote.id, false, false);
+          }
+          if (plan.foldersChanged) {
+            const withUids = ensureFolderUids(plan.mergedFolders, [...notes.values()]);
+            setMeta({ folders: withUids.folders });
+          } else {
+            const withUids = ensureFolderUids(meta.folders, [...notes.values()]);
+            if (withUids.changed) setMeta({ folders: withUids.folders });
+          }
+          let restoredCalendarItems = 0, restoredHistoryRecords = 0;
+          if (localItems && parsed.calendar) {
+            for (const cat of Array.isArray(parsed.calendar.categories) ? parsed.calendar.categories : []) {
+              const key = String(cat?.name || "").trim().toLowerCase();
+              if (!key) continue;
+              if (plan.mode === "overwrite" || !existingSavedCatKeys.has(key)) {
+                localItems.upsertCategory?.(cat);
+                existingSavedCatKeys.add(key);
+              }
+            }
+            const calItems = Array.isArray(parsed.calendar.items) ? parsed.calendar.items : [];
+            for (const rawItem of calItems) {
+              if (!rawItem || typeof rawItem !== "object" || !rawItem.id) continue;
+              const existing = localItems.get?.(rawItem.id);
+              if (existing && plan.mode !== "overwrite") continue;
+              const payload = existing
+                ? { ...rawItem, updated: new Date(Math.max(now(), Date.parse(existing.updated || "") + 1000)).toISOString(), rev: (existing.rev || 0) + 1 }
+                : rawItem;
+              if (localItems.upsert?.(payload)) restoredCalendarItems++;
+            }
+            for (const entry of [...plan.notesToCreate, ...plan.notesToOverwrite]) {
+              const liveNote = notes.get(entry.id);
+              if (liveNote?.trashed) localItems.hideNote?.(liveNote.id);
+            }
+          }
+          if (localItems?.history && parsed.history) {
+            const existingHistory = localItems.history.list?.() || [];
+            const seenHist = new Set(existingHistory.map((r) => r.id || [r.itemId, r.occurrenceId, r.action, r.stage || "", r.at].join("|")));
+            const histRecords = Array.isArray(parsed.history.records) ? parsed.history.records : [];
+            for (const rec of histRecords) {
+              if (!rec || typeof rec !== "object") continue;
+              const key = rec.id || [rec.itemId, rec.occurrenceId, rec.action, rec.stage || "", rec.at].join("|");
+              if (seenHist.has(key)) continue;
+              if (localItems.history.append?.(rec)) { seenHist.add(key); restoredHistoryRecords++; }
+            }
+          }
+          await api.flush();
+          emit("reset", "");
+          emit("tree", "");
+          return {
+            ok: true,
+            mode: plan.mode,
+            restoredNotes,
+            overwrittenNotes,
+            skippedNotes,
+            restoredAssets,
+            skippedAssets: plan.assetsSkipped.length,
+            restoredCalendarItems,
+            restoredHistoryRecords,
+            skippedEntries: parsed.skipped.length,
+          };
+        },
         // The UI calls this only after an explicit confirmation. Recheck references at deletion time;
         // includes Trash and all open windows' latest in-memory note set in this store instance.
         async removeAsset(rel) {
@@ -18904,6 +19073,186 @@ __zentralShim.register = function (def) {
     function markdownExportFile(note, notes = [], names = new Map(), folders = [], mode = "", readOptions = {}) {
       return serializeNote({ ...note, body: markdownExportBody(note, notes, names, folders, mode, readOptions) });
     }
+    // ---- Full ZIP backup & restore (T1.19a) --------------------------------------------------------
+    // Pure validation, manifest building and restore planning. Nothing here touches disk or XPCOM.
+    const BACKUP_FORMAT = "zentral-notes-backup";
+    const BACKUP_VERSION = 1;
+    const BACKUP_MAX_ENTRIES = 10000;
+    const BACKUP_MAX_TOTAL_BYTES = 250 * 1024 * 1024;
+    const BACKUP_MAX_JSON_BYTES = 20 * 1024 * 1024;
+    function cleanBackupZipPath(raw) {
+      const s = String(raw ?? "").replace(/\\/g, "/");
+      if (!s || s.length > 240 || /[\u0000-\u001f\u007f]/.test(s)) return "";
+      if (s.startsWith("/") || s.endsWith("/") || /^[A-Za-z]:/.test(s)) return "";
+      const parts = s.split("/");
+      if (parts.some((p) => !p || p === "." || p === "..")) return "";
+      return parts.join("/");
+    }
+    function classifyBackupEntry(rawPath) {
+      const clean = cleanBackupZipPath(rawPath);
+      if (!clean) return null;
+      if (clean === "manifest.json") return { kind: "manifest", path: clean };
+      if (clean === "meta.json") return { kind: "meta", path: clean };
+      if (clean === (CALENDAR_PART?.ITEMS_FILE || "calendar.json")) return { kind: "calendar", path: clean };
+      if (clean === (CALENDAR_PART?.REMINDER_HISTORY_FILE || "reminder-history.json")) return { kind: "history", path: clean };
+      const noteMatch = /^notes\/([^/]+)\.md$/.exec(clean);
+      if (noteMatch) {
+        const id = noteMatch[1];
+        if (!NOTE_ID_RE.test(id) || id.includes("..")) return null;
+        return { kind: "note", id, path: clean };
+      }
+      const image = parseAssetLink(clean);
+      const video = image ? null : parseVideoAssetLink(clean);
+      const file = image || video ? null : parseFileAssetLink(clean);
+      const parsed = image || video || file;
+      if (parsed && parsed.rel === clean) {
+        return { kind: "asset", rel: parsed.rel, noteId: parsed.noteId, file: parsed.file, mime: parsed.mime, assetKind: image ? "image" : video ? "video" : "file", path: clean };
+      }
+      return null;
+    }
+    function validateBackupAssetBytes(entry, bytes) {
+      if (!entry || entry.kind !== "asset" || !(bytes instanceof Uint8Array)) return { ok: false, reason: "invalid" };
+      const maxBytes = entry.assetKind === "video" ? ASSET_VIDEO_MAX_BYTES : entry.assetKind === "file" ? ASSET_FILE_MAX_BYTES : ASSET_MAX_BYTES;
+      if (bytes.length > maxBytes) return { ok: false, reason: "too-big" };
+      if (entry.assetKind === "image") {
+        const mime = sniffImageMime(bytes);
+        if (!mime || mime !== entry.mime) return { ok: false, reason: "type" };
+      } else if (entry.assetKind === "video") {
+        if (!sniffVideoMime(bytes, entry.mime)) return { ok: false, reason: "type" };
+      }
+      return { ok: true };
+    }
+    function buildBackupManifest({ notes = [], assets = [], hasMeta = false, hasCalendar = false, hasHistory = false, spaceMode = "shared", createdAt = Date.now() } = {}) {
+      let live = 0, trashed = 0;
+      for (const n of notes) { if (n?.trashed) trashed++; else live++; }
+      return {
+        format: BACKUP_FORMAT,
+        version: BACKUP_VERSION,
+        createdAt: Math.max(0, Number(createdAt) || 0),
+        spaceMode: cleanSpaceMode(spaceMode),
+        counts: { notes: live, trashed, assets: assets.length, meta: !!hasMeta, calendar: !!hasCalendar, history: !!hasHistory },
+      };
+    }
+    function inspectBackupEntries(rawEntries = []) {
+      if (!Array.isArray(rawEntries)) return { ok: false, error: "Invalid backup archive." };
+      if (rawEntries.length > BACKUP_MAX_ENTRIES) return { ok: false, error: "Backup archive has too many entries." };
+      const dec = new TextDecoder("utf-8", { fatal: false });
+      const skipped = [];
+      const seenPaths = new Set();
+      let totalBytes = 0, manifest = null, meta = null, calendar = null, history = null;
+      const notes = [], assets = [];
+      for (const raw of rawEntries) {
+        const bytes = raw?.bytes instanceof Uint8Array ? raw.bytes : null;
+        const rawPath = String(raw?.path ?? "");
+        if (!bytes) { skipped.push({ path: rawPath, reason: "unreadable" }); continue; }
+        totalBytes += bytes.length;
+        if (totalBytes > BACKUP_MAX_TOTAL_BYTES) return { ok: false, error: "Backup archive exceeds the maximum supported size." };
+        const entry = classifyBackupEntry(rawPath);
+        if (!entry) { skipped.push({ path: rawPath, reason: "unsupported" }); continue; }
+        if (seenPaths.has(entry.path)) { skipped.push({ path: rawPath, reason: "duplicate" }); continue; }
+        seenPaths.add(entry.path);
+        if (entry.kind === "manifest" || entry.kind === "meta" || entry.kind === "calendar" || entry.kind === "history") {
+          if (bytes.length > BACKUP_MAX_JSON_BYTES) {
+            if (entry.kind === "manifest") return { ok: false, error: "Backup manifest is too large." };
+            skipped.push({ path: entry.path, reason: "too-big" });
+            continue;
+          }
+          let parsedJson = null;
+          try { parsedJson = JSON.parse(dec.decode(bytes)); } catch (_) {
+            if (entry.kind === "manifest") return { ok: false, error: "Backup manifest is damaged." };
+            skipped.push({ path: entry.path, reason: "corrupt-json" });
+            continue;
+          }
+          if (!parsedJson || typeof parsedJson !== "object" || Array.isArray(parsedJson)) {
+            if (entry.kind === "manifest") return { ok: false, error: "Backup manifest is invalid." };
+            skipped.push({ path: entry.path, reason: "corrupt-json" });
+            continue;
+          }
+          if (entry.kind === "manifest") {
+            if (parsedJson.format !== BACKUP_FORMAT) return { ok: false, error: "This ZIP is not a Zentral Notes backup." };
+            if (!Number.isInteger(parsedJson.version) || parsedJson.version < 1 || parsedJson.version > BACKUP_VERSION) {
+              return { ok: false, error: "Unsupported backup version (" + String(parsedJson.version) + ")." };
+            }
+            manifest = parsedJson;
+          } else if (entry.kind === "meta") meta = parsedJson;
+          else if (entry.kind === "calendar") calendar = parsedJson;
+          else if (entry.kind === "history") history = parsedJson;
+          continue;
+        }
+        if (entry.kind === "note") {
+          if (bytes.length > Math.max(MAX_IMPORT_BYTES, 5 * 1024 * 1024)) { skipped.push({ path: entry.path, reason: "too-big" }); continue; }
+          const text = dec.decode(bytes);
+          if (text.includes("\u0000")) { skipped.push({ path: entry.path, reason: "binary" }); continue; }
+          const note = noteFromFile(entry.id, text, Number(raw?.mtime) || Date.now());
+          notes.push({ id: entry.id, text, note, path: entry.path });
+          continue;
+        }
+        if (entry.kind === "asset") {
+          const chk = validateBackupAssetBytes(entry, bytes);
+          if (!chk.ok) { skipped.push({ path: entry.path, reason: chk.reason }); continue; }
+          assets.push({ rel: entry.rel, noteId: entry.noteId, file: entry.file, assetKind: entry.assetKind, bytes, path: entry.path });
+        }
+      }
+      if (!notes.length && !assets.length && !meta && !calendar && !history) {
+        return { ok: false, error: "This ZIP does not contain any Zentral Notes backup data." };
+      }
+      let liveCount = 0, trashedCount = 0;
+      for (const n of notes) { if (n.note.trashed) trashedCount++; else liveCount++; }
+      return {
+        ok: true,
+        error: "",
+        manifest,
+        notes,
+        assets,
+        meta,
+        calendar,
+        history,
+        skipped,
+        counts: { notes: liveCount, trashed: trashedCount, assets: assets.length, hasMeta: !!meta, hasCalendar: !!calendar, hasHistory: !!history, skipped: skipped.length },
+      };
+    }
+    function planBackupRestore(parsed, existingState = {}, { mode = "merge" } = {}) {
+      const overwrite = mode === "overwrite";
+      const existingNotes = existingState.notes instanceof Map
+        ? existingState.notes
+        : new Map((Array.isArray(existingState.notes) ? existingState.notes : []).filter(Boolean).map((n) => [n.id, n]));
+      const existingAssets = existingState.assets instanceof Set
+        ? existingState.assets
+        : new Set(Array.isArray(existingState.assets) ? existingState.assets : []);
+      const existingFolders = Array.isArray(existingState.folders) ? existingState.folders : [];
+      const notesToCreate = [], notesToOverwrite = [], notesSkipped = [];
+      for (const entry of parsed?.notes || []) {
+        const have = existingNotes.get(entry.id);
+        if (!have) { notesToCreate.push(entry); continue; }
+        if (have._sharedFromOtherSpace) { notesSkipped.push({ ...entry, reason: "shared" }); continue; }
+        const same = serializeNote(have) === serializeNote(entry.note);
+        if (same || !overwrite) notesSkipped.push({ ...entry, reason: same ? "identical" : "exists" });
+        else notesToOverwrite.push({ ...entry, existing: have });
+      }
+      const assetsToWrite = [], assetsSkipped = [];
+      for (const asset of parsed?.assets || []) {
+        if (existingAssets.has(asset.rel) && !overwrite) assetsSkipped.push(asset);
+        else assetsToWrite.push(asset);
+      }
+      const backupFolders = cleanFolders(parsed?.meta?.folders || []);
+      const folderById = new Map(existingFolders.map((f) => [f.id, { ...f }]));
+      const mergedFolders = existingFolders.map((f) => ({ ...f }));
+      for (const bf of backupFolders) {
+        const idx = mergedFolders.findIndex((f) => f.id === bf.id);
+        if (idx < 0) mergedFolders.push({ ...bf });
+        else if (overwrite) mergedFolders[idx] = { ...mergedFolders[idx], ...bf, uid: mergedFolders[idx].uid || bf.uid };
+      }
+      return {
+        mode: overwrite ? "overwrite" : "merge",
+        notesToCreate,
+        notesToOverwrite,
+        notesSkipped,
+        assetsToWrite,
+        assetsSkipped,
+        mergedFolders: cleanFolders(mergedFolders),
+        foldersChanged: JSON.stringify(cleanFolders(existingFolders)) !== JSON.stringify(cleanFolders(mergedFolders)),
+      };
+    }
     // Rebuilds the block (or expands a [TOC] line). Returns { body, changed, found }.
     function updateToc(body) {
       const text = String(body ?? "");
@@ -20381,7 +20730,7 @@ __zentralShim.register = function (def) {
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, cleanSlotPx, cleanCardPx, cleanCardShare, resolveSlotHeight, resolveCardHeight, hasStartupPanelPref, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, gapPageFloor, gapMaxPx, clampGapPx, GAP_PANEL_MIN_PX, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
-        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, mergeFolders, mergeMeta, META_SHARED_KEYS, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
+        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, BACKUP_FORMAT, BACKUP_VERSION, BACKUP_MAX_ENTRIES, BACKUP_MAX_TOTAL_BYTES, cleanBackupZipPath, classifyBackupEntry, validateBackupAssetBytes, buildBackupManifest, inspectBackupEntries, planBackupRestore, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, mergeFolders, mergeMeta, META_SHARED_KEYS, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,
@@ -27781,6 +28130,55 @@ __zentralShim.register = function (def) {
         portable.addEventListener("click", () => choose("portable"));
         cancel.focus({ preventScroll: true });
       }
+      function askRestoreBackup() {
+        if (typeof env.pickBackupZip !== "function" || typeof env.restoreBackupZip !== "function") {
+          flash("ZIP backup restore is unavailable");
+          return;
+        }
+        Promise.resolve(env.pickBackupZip()).then((picked) => {
+          if (destroyed || !picked) return;
+          if (!picked.parsed?.ok) {
+            flash(picked.parsed?.error || "Could not read ZIP backup");
+            return;
+          }
+          const c = picked.parsed.counts || {};
+          const parts = [
+            `${c.notes || 0} note${c.notes === 1 ? "" : "s"}` + (c.trashed ? ` (${c.trashed} in Trash)` : ""),
+            `${c.assets || 0} attached file${c.assets === 1 ? "" : "s"}`,
+          ];
+          if (c.hasMeta) parts.push("folders/settings");
+          if (c.hasCalendar) parts.push("calendar");
+          if (c.hasHistory) parts.push("reminder history");
+          const cancel = chip("Cancel");
+          const overwrite = chip("Overwrite matching");
+          const merge = chip("Merge (keep existing)", true);
+          openCard(
+            "Restore from ZIP backup",
+            h("p", {}, "Backup contains: " + parts.join(", ") + "." + (c.skipped ? ` (${c.skipped} unsupported archive entries skipped.)` : "")),
+            h("p", {}, "Merge adds only missing notes and files without changing existing ones. Overwrite matching copies displaced notes to the 48-hour recovery folder first and leaves newer local notes untouched."),
+            h("div", { class: "zn-dialog-actions" }, cancel, overwrite, merge),
+          );
+          const runRestore = (mode) => {
+            closeDialog();
+            Promise.resolve(env.restoreBackupZip(picked.entries, { mode })).then((res) => {
+              if (destroyed) return;
+              if (!res?.ok) { flash(res?.error || "Restore failed"); return; }
+              const total = (res.restoredNotes || 0) + (res.overwrittenNotes || 0);
+              const details = [];
+              if (total) details.push(`${total} note${total === 1 ? "" : "s"}`);
+              if (res.restoredAssets) details.push(`${res.restoredAssets} file${res.restoredAssets === 1 ? "" : "s"}`);
+              if (res.skippedNotes) details.push(`${res.skippedNotes} kept`);
+              flash(details.length ? "Restored " + details.join(", ") : "Backup already up to date");
+              scheduleList();
+              applyState();
+            }).catch((error) => { console.warn("[ZentralNotes] backup restore failed", error); flash("Restore failed"); });
+          };
+          cancel.addEventListener("click", closeDialog);
+          overwrite.addEventListener("click", () => runRestore("overwrite"));
+          merge.addEventListener("click", () => runRestore("merge"));
+          merge.focus({ preventScroll: true });
+        }).catch((error) => { console.warn("[ZentralNotes] backup pick failed", error); flash("Could not open ZIP backup"); });
+      }
 
       // ---- small dialogs: link, table, quick settings, shortcuts ---------------------------------------
       function openCard(label, ...kids) {
@@ -29415,6 +29813,8 @@ __zentralShim.register = function (def) {
             { sep: true },
             { icon: "save", label: "Export all notes\u2026", action: () => { const list = markdownExportSnapshot(store.list()); askMarkdownExport(list, (options) => env.exportAll(list, options)); } },
             { icon: "save", label: "Export all as zip\u2026", action: () => { const list = markdownExportSnapshot(store.list()); askMarkdownExport(list, (options) => askExport("zip", async () => { const k = await env.exportZip(list, options); if (k) flash(`Zipped ${k} notes`); })); } },
+            { icon: "save", label: "Backup all (ZIP with assets)\u2026", action: async () => { const res = await env.exportBackupZip?.(); if (res?.ok) { const c = res.counts || {}; flash(`Backed up ${(c.notes || 0) + (c.trashed || 0)} notes and ${c.assets || 0} files`); } } },
+            { icon: "restore", label: "Restore from ZIP backup\u2026", action: () => askRestoreBackup() },
             { icon: "folder", label: "Import .md folder\u2026", action: async () => { const k = await env.importFolder(store); flash(k ? `Imported ${k} notes` : "Nothing imported"); if (view === "list") scheduleList(); } },
             { sep: true },
             { icon: "paperclip", label: "Check attached files…", action: () => queueMicrotask(askAssetIntegrity) },
@@ -32378,11 +32778,11 @@ __zentralShim.register = function (def) {
             const fp = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
             fp.init(window.browsingContext, title, mode);
             if (defaultName) fp.defaultString = defaultName;
-            if (mode === Ci.nsIFilePicker.modeSave) {
+            if (mode === Ci.nsIFilePicker.modeSave || (mode === Ci.nsIFilePicker.modeOpen && format)) {
               const info = EXPORT_FORMATS[format] || EXPORT_FORMATS.md;
               fp.appendFilter(`${info.label} (*.${info.ext})`, "*." + info.ext);
               fp.appendFilters(Ci.nsIFilePicker.filterAll);
-              fp.defaultExtension = info.ext;
+              if (mode === Ci.nsIFilePicker.modeSave) fp.defaultExtension = info.ext;
             }
             fp.open((rv) =>
               resolve(
@@ -32480,6 +32880,105 @@ __zentralShim.register = function (def) {
           }
         }
       }
+      function writeZipEntries(file, entries) {
+        const zw = Cc["@mozilla.org/zipwriter;1"].createInstance(Ci.nsIZipWriter);
+        try {
+          zw.open(file, 0x04 | 0x08 | 0x20); // read/write, create, truncate
+          for (const entry of entries) {
+            const bytes = entry.bytes instanceof Uint8Array ? entry.bytes : new Uint8Array(entry.bytes || []);
+            let bin = "";
+            for (let j = 0; j < bytes.length; j += 8192) bin += String.fromCharCode(...bytes.subarray(j, j + 8192));
+            const stream = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(Ci.nsIStringInputStream);
+            stream.setData(bin, bin.length);
+            const precompressed = /\.(?:png|jpe?g|webp|gif|mp4|m4v|webm|ogv|ogg|zip)$/i.test(entry.path);
+            const level = precompressed ? Ci.nsIZipWriter.COMPRESSION_NONE : Ci.nsIZipWriter.COMPRESSION_DEFAULT;
+            zw.addEntryStream(entry.path, (entry.mtime || Date.now()) * 1000, level, stream, false);
+          }
+          return true;
+        } finally {
+          try { zw.close(); } catch (_) {}
+        }
+      }
+      function readZipEntries(file) {
+        const zr = Cc["@mozilla.org/libjar/zip-reader;1"].createInstance(Ci.nsIZipReader);
+        const entries = [];
+        let totalSize = 0;
+        try {
+          zr.open(file);
+          const enumerator = zr.findEntries(null);
+          while (enumerator.hasMore()) {
+            const name = enumerator.getNext();
+            const info = zr.getEntry(name);
+            if (!info || info.isDirectory) continue;
+            if (entries.length >= BACKUP_MAX_ENTRIES) throw new Error("Backup archive has too many entries.");
+            const expectedSize = Number(info.realSize) || 0;
+            if (expectedSize < 0 || totalSize + expectedSize > BACKUP_MAX_TOTAL_BYTES) {
+              throw new Error("Backup archive exceeds the maximum supported size.");
+            }
+            const rawStream = zr.getInputStream(name);
+            const bis = Cc["@mozilla.org/binaryinputstream;1"].createInstance(Ci.nsIBinaryInputStream);
+            const chunks = [];
+            let entrySize = 0;
+            try {
+              bis.setInputStream(rawStream);
+              for (;;) {
+                const avail = bis.available();
+                if (!avail) break;
+                const readLen = Math.min(avail, 65536);
+                entrySize += readLen;
+                if (totalSize + entrySize > BACKUP_MAX_TOTAL_BYTES) {
+                  throw new Error("Backup archive exceeds the maximum supported size.");
+                }
+                chunks.push(new Uint8Array(bis.readByteArray(readLen)));
+              }
+            } finally {
+              try { bis.close(); } catch (_) {}
+              try { rawStream.close(); } catch (_) {}
+            }
+            totalSize += entrySize;
+            const out = new Uint8Array(entrySize);
+            let offset = 0;
+            for (const chunk of chunks) { out.set(chunk, offset); offset += chunk.length; }
+            entries.push({ path: name, bytes: out, mtime: Math.floor((Number(info.lastModifiedTime) || 0) / 1000) || Date.now() });
+          }
+          return entries;
+        } finally {
+          try { zr.close(); } catch (_) {}
+        }
+      }
+      async function exportBackupZip() {
+        try {
+          const archive = await store.buildBackupArchive();
+          const d = new Date();
+          const day = CALENDAR_PART?.ymd ? CALENDAR_PART.ymd(d) : d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+          const file = await pick(Ci.nsIFilePicker.modeSave, "Save full Notes backup (ZIP)", "zentral-notes-backup-" + day + ".zip", "zip");
+          if (!file) return { ok: false, cancelled: true };
+          writeZipEntries(file, archive.entries);
+          return { ok: true, counts: archive.counts };
+        } catch (error) {
+          warn(error);
+          return { ok: false, error: String(error?.message || error) };
+        }
+      }
+      async function pickBackupZip() {
+        const file = await pick(Ci.nsIFilePicker.modeOpen, "Choose a Zentral Notes ZIP backup", "", "zip");
+        if (!file) return null;
+        try {
+          const entries = readZipEntries(file);
+          return { entries, parsed: inspectBackupEntries(entries) };
+        } catch (error) {
+          warn(error);
+          return { entries: [], parsed: { ok: false, error: String(error?.message || "Could not read ZIP backup.") } };
+        }
+      }
+      async function restoreBackupZip(entries, opts = {}) {
+        const res = await store.restoreBackupArchive(entries, opts);
+        if (res?.ok && !disposed && agendaEnabled()) {
+          agendaController.invalidate?.();
+          agendaController.schedule();
+        }
+        return res;
+      }
       async function exportZip(list, { markdownMode = "", markdownReadOpts = readOpts() } = {}) {
         const live = list.filter((n) => !n.trashed);
         if (!live.length) return 0;
@@ -32488,26 +32987,18 @@ __zentralShim.register = function (def) {
         const names = uniqueFileNames(live);
         const byId = new Map(live.map((x, i) => [x.id, names[i]]));
         const everything = allNotesForExport();
-        const zw = Cc["@mozilla.org/zipwriter;1"].createInstance(Ci.nsIZipWriter);
         try {
-          zw.open(file, 0x04 | 0x08 | 0x20); // read/write, create, truncate
           const enc = new TextEncoder();
-          for (let i = 0; i < live.length; i++) {
-            const bytes = enc.encode(withNewline(markdownBody(live[i], everything, byId, markdownMode, markdownReadOpts)));
-            let bin = "";
-            for (let j = 0; j < bytes.length; j += 8192) bin += String.fromCharCode(...bytes.subarray(j, j + 8192));
-            const stream = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(Ci.nsIStringInputStream);
-            stream.setData(bin, bin.length);
-            zw.addEntryStream(names[i], (live[i].updated || Date.now()) * 1000, Ci.nsIZipWriter.COMPRESSION_DEFAULT, stream, false);
-          }
+          const entries = live.map((item, i) => ({
+            path: names[i],
+            bytes: enc.encode(withNewline(markdownBody(item, everything, byId, markdownMode, markdownReadOpts))),
+            mtime: item.updated || Date.now(),
+          }));
+          writeZipEntries(file, entries);
           return live.length;
         } catch (error) {
           warn(error);
           return 0;
-        } finally {
-          try {
-            zw.close();
-          } catch (_) {}
         }
       }
       // Import: every .md file of one folder (not its subfolders) becomes a new note. Files that are
@@ -32571,7 +33062,7 @@ __zentralShim.register = function (def) {
       }
       const tick = createTimeTickService({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), warn });
       onCleanup(() => tick.destroy());
-      const env = { openLink, copyText, exportNote, exportAll, exportZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now(),
+      const env = { openLink, copyText, exportNote, exportAll, exportZip, exportBackupZip, pickBackupZip, restoreBackupZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now(),
         // Visibility rules live in meta.json, which raises no store event: the sheet asks for the Zen Agenda refresh.
         refreshAgenda: () => { if (!disposed && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); } },
         // For a sheet that was opened before the notes could be read: when they are there, and a write that must wait for them.
