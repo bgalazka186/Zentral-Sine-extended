@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.217
+// @version 3.3.218
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.217, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.218, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.217";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.218";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2158,6 +2158,9 @@ const __zentralEmbeddedLoader = (function () {
       "sidebar.agenda.root.hide": "Hide Agenda",
       "sidebar.agenda.itemUnavailable": "Agenda item no longer available",
       "sidebar.agenda.previewAria": "Agenda preview",
+      "sidebar.agenda.moreLabel": "+{count} more\u2026",
+      "sidebar.agenda.moreSummary": "Open Agenda calendar view",
+      "sidebar.agenda.moreTooltip": "{count} more items not shown in sidebar (click to open calendar)",
       "sidebar.note.open": "Open note",
       "sidebar.note.removeFromFolder": "Remove from sidebar folder",
       "sidebar.note.moveToTrash": "Move note to trash",
@@ -2380,6 +2383,7 @@ const __zentralEmbeddedLoader = (function () {
       "settings.opt.agendaOverdueDays": "Overdue look-back",
       "settings.opt.agendaOverdueCap": "Overdue items shown before More",
       "settings.opt.agendaHideTrashed": "Hide Agenda items whose source note is in Trash",
+      "settings.opt.agendaMaxItems": "Max items in sidebar",
       "settings.opt.perf": "Sample layout / drag timings (read __zentralNotesPerf.report())",
       "settings.choice.blank.collapse": "Collapse",
       "settings.choice.blank.keep": "Keep",
@@ -2933,6 +2937,9 @@ const __zentralEmbeddedLoader = (function () {
       "sidebar.agenda.root.hide": "Ukryj Agend\u0119",
       "sidebar.agenda.itemUnavailable": "Element Agendy nie jest ju\u017c dost\u0119pny",
       "sidebar.agenda.previewAria": "Podgl\u0105d Agendy",
+      "sidebar.agenda.moreLabel": "+{count} wi\u0119cej\u2026",
+      "sidebar.agenda.moreSummary": "Otw\u00f3rz widok kalendarza Agendy",
+      "sidebar.agenda.moreTooltip": "Jeszcze {count} element\u00f3w ukrytych na pasku bocznym (kliknij, aby otworzy\u0107 kalendarz)",
       "sidebar.note.open": "Otw\u00f3rz notatk\u0119",
       "sidebar.note.removeFromFolder": "Usu\u0144 z folderu paska bocznego",
       "sidebar.note.moveToTrash": "Przenie\u015b notatk\u0119 do kosza",
@@ -3155,6 +3162,7 @@ const __zentralEmbeddedLoader = (function () {
       "settings.opt.agendaOverdueDays": "Zakres zaleg\u0142ych wstecz",
       "settings.opt.agendaOverdueCap": "Zaleg\u0142e elementy pokazywane przed przyciskiem Wi\u0119cej",
       "settings.opt.agendaHideTrashed": "Ukryj elementy Agendy, kt\u00f3rych notatka \u017ar\u00f3d\u0142owa jest w Koszu",
+      "settings.opt.agendaMaxItems": "Maksymalna liczba element\u00f3w na pasku bocznym",
       "settings.opt.perf": "Pr\u00f3bkuj czasy uk\u0142adu i przeci\u0105gania (odczyt: __zentralNotesPerf.report())",
       "settings.choice.blank.collapse": "Zwi\u0144",
       "settings.choice.blank.keep": "Zachowaj",
@@ -8148,10 +8156,51 @@ const __zentralEmbeddedLoader = (function () {
   function agendaVisibleDays(projection) {
     return (projection || []).filter((day) => day && day.count > 0);
   }
+  // SB6.4: cap the total number of non-overdue Agenda sidebar tabs across day folders,
+  // distributing budget earliest-first and collapsing overflow into a single '+N more…' node.
+  const AGENDA_MAX_ITEMS_DEFAULT = 40;
+  function applyAgendaItemCap(days, maxItems = 0, { lang = DEFAULT_NOTES_LANGUAGE } = {}) {
+    const list = (days || []).filter((day) => day && Array.isArray(day.items) && day.items.length > 0);
+    const rawLimit = Math.floor(Number(maxItems));
+    if (!(rawLimit > 0)) return { days: list, hiddenCount: 0, more: null };
+    const limit = Math.max(1, Math.min(200, rawLimit));
+    let total = 0;
+    for (const day of list) total += day.items.length;
+    if (total <= limit) return { days: list, hiddenCount: 0, more: null };
+    const keptDays = [];
+    let remaining = limit;
+    let firstHiddenDate = "";
+    for (const day of list) {
+      if (remaining > 0) {
+        if (day.items.length <= remaining) {
+          keptDays.push(day);
+          remaining -= day.items.length;
+        } else {
+          if (!firstHiddenDate) firstHiddenDate = day.date || "";
+          keptDays.push({ ...day, items: day.items.slice(0, remaining) });
+          remaining = 0;
+        }
+      } else if (!firstHiddenDate) {
+        firstHiddenDate = day.date || "";
+      }
+    }
+    const hiddenCount = total - limit;
+    const more = {
+      key: "more:agenda",
+      kind: "item",
+      parent: "",
+      label: t("sidebar.agenda.moreLabel", { count: hiddenCount }, lang),
+      summary: t("sidebar.agenda.moreSummary", null, lang),
+      details: t("sidebar.agenda.moreTooltip", { count: hiddenCount }, lang),
+      openDate: firstHiddenDate || list[0]?.date || "",
+      hiddenCount,
+    };
+    return { days: keptDays, hiddenCount, more };
+  }
   // Coalesced, store-change-driven controller for the virtual Zen Agenda folder. The host
   // supplies DOM/Zen operations through `api`; this controller owns no browser globals.
-  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getReady = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), getLanguage = () => undefined, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
-    let dead = false, timer = null, timerAt = Infinity, last = [], busy = false, consecutiveChanges = 0, blockedUntil = 0;
+  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getMaxItems = () => 0, getEnabled = () => true, getReady = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), getLanguage = () => undefined, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
+    let dead = false, timer = null, timerAt = Infinity, last = [], lastMore = null, busy = false, consecutiveChanges = 0, blockedUntil = 0;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
     function armAt(due) {
       if (dead || !Number.isFinite(due)) return;
@@ -8183,18 +8232,20 @@ const __zentralEmbeddedLoader = (function () {
       let sourceItems = [], policies = null, fullProjection = null, overdue = null, operations = 0;
       const revision = api.mutationCount?.() || 0;
       try {
-        if (!getEnabled()) { api.removeAll?.(); last = []; clearScheduled(); return []; }
+        if (!getEnabled()) { api.removeAll?.(); last = []; lastMore = null; clearScheduled(); return []; }
         // The items are not loaded yet (startup, before the store has opened). An empty list now would not mean that
         // nothing is due: reconciling against it would remove the entries that session restore just brought back. The
         // host schedules a run when the store is ready.
         if (!getReady()) return last;
         sourceItems = getItems?.() || [];
         policies = getWindowIsMasterPolicy ? prepareAgendaWindows(sourceItems, getWindow) : null;
-        fullProjection = agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow, policies, { lang: getLanguage() });
-        overdue = agendaOverdueProjection(sourceItems, now(), { ...getOverdue(), isDone, getWindow, policies, lang: getLanguage() });
-        const projection = [...(overdue ? [overdue] : []), ...agendaVisibleDays(fullProjection)];
-        if (!projection.length) {
-          api.removeAll?.(); last = projection; scheduleBoundary(sourceItems, policies, fullProjection, overdue); return projection;
+        const lang = getLanguage();
+        fullProjection = agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow, policies, { lang });
+        overdue = agendaOverdueProjection(sourceItems, now(), { ...getOverdue(), isDone, getWindow, policies, lang });
+        const capped = applyAgendaItemCap(agendaVisibleDays(fullProjection), getMaxItems?.(), { lang });
+        const projection = [...(overdue ? [overdue] : []), ...capped.days];
+        if (!projection.length && !capped.more) {
+          api.removeAll?.(); last = projection; lastMore = null; scheduleBoundary(sourceItems, policies, fullProjection, overdue); return projection;
         }
         if (api.ensureRoot?.(getPosition() === "below" ? "below" : "above") === false) { scheduleBoundary(sourceItems, policies, fullProjection, overdue); return last; }
         const desired = [];
@@ -8202,6 +8253,7 @@ const __zentralEmbeddedLoader = (function () {
           desired.push({ key: day.key, kind: "day", label: day.label, date: day.date, count: day.count, parent: "" });
           for (const item of day.items) desired.push({ ...item, kind: "item", parent: day.key, tooltip: item.details });
         }
+        if (capped.more) desired.push({ ...capped.more, kind: "item", parent: "", tooltip: capped.more.details });
         const current = api.list?.() || [], currentByKey = new Map();
         for (const entry of current) if (entry?.key && !currentByKey.has(entry.key)) currentByKey.set(entry.key, entry);
         const desiredByKey = new Map(desired.map((entry) => [entry.key, entry]));
@@ -8214,10 +8266,11 @@ const __zentralEmbeddedLoader = (function () {
             if (api.add?.(entry) === false) safeWarn("Zen Agenda: could not add " + entry.key);
           } else api.update?.(entry);
         }
-        api.reorder?.("", desired.filter((entry) => entry.kind === "day").map((entry) => entry.key));
+        api.reorder?.("", desired.filter((entry) => entry.parent === "").map((entry) => entry.key));
         for (const day of desired.filter((entry) => entry.kind === "day"))
           api.reorder?.(day.key, desired.filter((entry) => entry.kind === "item" && entry.parent === day.key).map((entry) => entry.key));
         last = projection;
+        lastMore = capped.more;
         scheduleBoundary(sourceItems, policies, fullProjection, overdue);
         if (operations || (api.mutationCount?.() || 0) !== revision) consecutiveChanges++;
         else consecutiveChanges = 0;
@@ -8246,6 +8299,7 @@ const __zentralEmbeddedLoader = (function () {
       refreshClock() { if (dead) return []; clearScheduled(); consecutiveChanges = 0; blockedUntil = 0; return runNow(); },
       get busy() { return busy; },
       get projection() { return last; },
+      get more() { return lastMore; },
       destroy() { dead = true; clearScheduled(); try { api.removeAll?.(); } catch (error) { safeWarn(error); } },
     };
   }
@@ -9371,7 +9425,7 @@ const __zentralEmbeddedLoader = (function () {
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -10144,6 +10198,7 @@ __zentralShim.register = function (def) {
       AGENDA_OVERDUE_DAYS: "zen.workspace.zentral.notes.agenda_overdue_days",
       AGENDA_OVERDUE_CAP: "zen.workspace.zentral.notes.agenda_overdue_cap",
       AGENDA_HIDE_TRASHED: "zen.workspace.zentral.notes.agenda_hide_trashed",
+      AGENDA_MAX_ITEMS: "zen.workspace.zentral.notes.agenda_max_items",
       SPACE_MODE: "zen.workspace.zentral.notes.space_mode",
       MISSED_DAYS: "zen.workspace.zentral.notes.missed_reminder_days",
       CAPTURE_FORMAT: "zen.workspace.zentral.notes.quick_capture_format",
@@ -14894,6 +14949,7 @@ __zentralShim.register = function (def) {
           S("agendaOverdueDays", "Overdue look-back", PREF.AGENDA_OVERDUE_DAYS, 1, 31, "days", 7),
           S("agendaOverdueCap", "Overdue items shown before More", PREF.AGENDA_OVERDUE_CAP, 1, 100, "items", 10),
           { id: "agendaHideTrashed", label: "Hide Agenda items whose source note is in Trash", pref: PREF.AGENDA_HIDE_TRASHED, kind: "bool", def: true },
+          S("agendaMaxItems", "Max items in sidebar", PREF.AGENDA_MAX_ITEMS, 1, 200, "items", 40),
           { kind: "heading", i18nKey: "settings.heading.diagnostics", label: "Diagnostics" },
           { id: "perf", label: "Sample layout / drag timings (read __zentralNotesPerf.report())", pref: PREF.DEBUG_PERF, kind: "bool", def: false },
         ],
@@ -38062,8 +38118,10 @@ __zentralShim.register = function (def) {
         return true;
       }
       function agendaTabFor(key, parentKey = null) {
-        const root = agendaRootEl(), parent = parentKey ? agendaDayEl(parentKey) : null;
-        return [...(root?.querySelectorAll?.("tab") || [])].find((tab) => agendaTabKey(tab) === key && (!parentKey || (parent && tab.closest?.("zen-folder") === parent))) || null;
+        const root = agendaRootEl();
+        if (!root) return null;
+        const parent = parentKey === "" ? root : (parentKey ? agendaDayEl(parentKey) : null);
+        return [...(root.querySelectorAll?.("tab") || [])].find((tab) => agendaTabKey(tab) === key && (parentKey === null || (parent && tab.closest?.("zen-folder") === parent))) || null;
       }
       // T3.4a + AU-B2: shared top-layer hover preview cards for Agenda and Notes
       // pseudo-tabs, powered by runtime.createSidebarHoverCard (same engine as RSS,
@@ -38546,9 +38604,10 @@ __zentralShim.register = function (def) {
         }
       }
       onCleanup(() => { for (const id of agendaIconTimers) window.clearTimeout(id); agendaIconTimers.clear(); });
+      const isAgendaMoreKey = (key) => key === "more:overdue" || key === "more:agenda";
       function agendaApplyTabEntry(tab, entry) {
         if (!tab || !entry) return false;
-        const kind = entry.key === "more:overdue" ? "more" : entry.reminder ? "reminder" : "event";
+        const kind = isAgendaMoreKey(entry.key) ? "more" : entry.reminder ? "reminder" : "event";
         const color = colorHex(entry.color || entry.x?.color || "") || "";
         const label = String(entry.label || entry.summary || tab.getAttribute("label") || "");
         const summary = String(entry.summary || "");
@@ -38672,7 +38731,9 @@ __zentralShim.register = function (def) {
             // A restored day folder has no attribute yet (it gets one further down). Read by attribute alone, each of its
             // entries looked misplaced and the first run after a restart closed and re-created every Agenda tab.
             const actualDay = agendaDayOf(actualFolder);
-            const actualParent = actualDay && agendaDayEl("day:" + actualDay) === actualFolder ? "day:" + actualDay : "?misplaced";
+            const actualParent = (actualFolder === root && key === "more:agenda")
+              ? ""
+              : (actualDay && agendaDayEl("day:" + actualDay) === actualFolder ? "day:" + actualDay : "?misplaced");
             out.push({ key, kind: "item", parent: actualParent });
           }
           if (root.isConnected === false) return [];
@@ -38692,7 +38753,7 @@ __zentralShim.register = function (def) {
             if (made) this.update(entry);
             return made;
           }
-          const folder = agendaDayEl(entry.parent); if (!folder) return false;
+          const folder = entry.parent ? agendaDayEl(entry.parent) : agendaRootEl(); if (!folder) return false;
           const tab = agendaNewTab(entry.key);
           if (!zenPlace(tab, folder)) { zenRemoveTab(tab); return false; }
           this.update(entry);
@@ -38793,6 +38854,7 @@ __zentralShim.register = function (def) {
         api: agendaApi, perf: PERF,
         getItems: agendaItems,
         getDays: agendaDays,
+        getMaxItems: () => Math.max(1, Math.min(200, prefInt(PREF.AGENDA_MAX_ITEMS, 40))),
         getLanguage: () => { try { return CALENDAR_PART.cleanNotesLanguage(Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en")); } catch (_) { return "en"; } },
         getOverdue: () => ({ enabled: prefBool(PREF.AGENDA_OVERDUE, true), days: Math.max(1, Math.min(31, prefInt(PREF.AGENDA_OVERDUE_DAYS, 7))), cap: Math.max(1, Math.min(100, prefInt(PREF.AGENDA_OVERDUE_CAP, 10))) }),
         getEnabled: agendaEnabled,
@@ -39056,6 +39118,7 @@ __zentralShim.register = function (def) {
         return "";
       }
       function agendaEntryForKey(key) {
+        if (key === "more:agenda" && agendaController.more) return agendaController.more;
         const projected = (agendaController.projection || []).flatMap((day) => day?.items || []).find((entry) => entry?.key === key);
         if (projected) return projected;
         for (const item of agendaItems()) {
@@ -39077,7 +39140,7 @@ __zentralShim.register = function (def) {
         const at = String(key || "").lastIndexOf("@");
         const date = at >= 0 ? String(key).slice(at + 1) : "";
         if (CALENDAR_PART?.parseYmd?.(date)) return date;
-        if (key === "more:overdue") return CALENDAR_PART?.localDateKey?.(Date.now()) || "";
+        if (isAgendaMoreKey(key)) return CALENDAR_PART?.localDateKey?.(Date.now()) || "";
         return "";
       }
       // The blank about:blank#zn-* placeholder must never stay on screen: whenever one of our placeholders is
@@ -39120,7 +39183,7 @@ __zentralShim.register = function (def) {
         const agendaMatch = /^about:blank#zn-agenda-([A-Za-z0-9%._~-]{1,600})$/.exec(url);
         let agendaKey = "";
         if (agendaMatch) try { agendaKey = decodeURIComponent(agendaMatch[1]); } catch (_) {}
-        if (!noteTarget && !(agendaKey.startsWith("item:") || agendaKey === "more:overdue")) return false;
+        if (!noteTarget && !(agendaKey.startsWith("item:") || isAgendaMoreKey(agendaKey))) return false;
 
         // A markerless tab restored inside its owning folder is still a projection
         // entry. Restore its marker; a link-created tab elsewhere is a navigation request.
@@ -39321,7 +39384,7 @@ __zentralShim.register = function (def) {
         // when Zen moves a managed tab outside the Agenda root.
         const key = agendaTabKey(candidate);
         const tab = candidate && key ? candidate : null;
-        const owned = tab && (key.startsWith("item:") || key === "more:overdue");
+        const owned = tab && (key.startsWith("item:") || isAgendaMoreKey(key));
         const modified = ev.ctrlKey || ev.shiftKey || ev.altKey || ev.metaKey;
         const inButton = !!pseudoEventClosest(ev, ".tab-close-button, .tab-reset-button, .tab-icon-overlay");
         if (ev.type === "blur") { if (ev.target === window) clearAgendaPress(); return; }
@@ -39401,7 +39464,7 @@ __zentralShim.register = function (def) {
         if (candidate && routePseudoTab(candidate)) { ev.preventDefault(); ev.stopImmediatePropagation(); return; }
         const key = agendaTabKey(candidate);
         const tab = candidate && agendaOwnTab(candidate) && key ? candidate : null;
-        if (!tab || !(key.startsWith("item:") || key === "more:overdue") || ev.target?.closest?.(".tab-close-button, .tab-reset-button, .tab-icon-overlay")) return;
+        if (!tab || !(key.startsWith("item:") || isAgendaMoreKey(key)) || ev.target?.closest?.(".tab-close-button, .tab-reset-button, .tab-icon-overlay")) return;
         ev.preventDefault(); ev.stopImmediatePropagation();
         if (!ev.repeat) activateAgendaTab(tab);
       }
@@ -40838,7 +40901,7 @@ __zentralShim.register = function (def) {
             if (zenMode() !== "off") zenSoon();
             if (agendaEnabled()) agendaSoon();
           }
-          else if (name === PREF.AGENDA_ENABLED || name === PREF.AGENDA_POSITION || name === PREF.AGENDA_DAYS || name === PREF.AGENDA_OVERDUE || name === PREF.AGENDA_OVERDUE_DAYS || name === PREF.AGENDA_OVERDUE_CAP || name === PREF.AGENDA_HIDE_TRASHED) agendaSoon();
+          else if (name === PREF.AGENDA_ENABLED || name === PREF.AGENDA_POSITION || name === PREF.AGENDA_DAYS || name === PREF.AGENDA_OVERDUE || name === PREF.AGENDA_OVERDUE_DAYS || name === PREF.AGENDA_OVERDUE_CAP || name === PREF.AGENDA_HIDE_TRASHED || name === PREF.AGENDA_MAX_ITEMS) agendaSoon();
           else if (name === PREF.ZEN_ROOT_COLOR || name === PREF.ZEN_ROOT_ICON || name === PREF.ZEN_ROOT_PARTS || name === PREF.ZEN_ROOT_PART_OPACITY) {
             if (zenMode() !== "off") zenSoon(); // the NOTES folder is restyled at once
             window.dispatchEvent?.(new Event("zentral-notes-folder-style-changed"));

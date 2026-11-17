@@ -1122,6 +1122,15 @@
     "defaultValue": true
   },
   {
+    "property": "zen.workspace.zentral.notes.agenda_max_items",
+    "label": "Max items in sidebar",
+    "type": "number",
+    "defaultValue": 40,
+    "min": 1,
+    "max": 200,
+    "unit": "items"
+  },
+  {
     "property": "zen.workspace.zentral.notes.debug_perf",
     "label": "DEBUG: sample how long Notes layout, drag and read-view work take (performance.now). Read the result with __zentralNotesPerf.report() in the Browser Console",
     "type": "checkbox",

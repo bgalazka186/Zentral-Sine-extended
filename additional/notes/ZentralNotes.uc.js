@@ -216,6 +216,7 @@
       AGENDA_OVERDUE_DAYS: "zen.workspace.zentral.notes.agenda_overdue_days",
       AGENDA_OVERDUE_CAP: "zen.workspace.zentral.notes.agenda_overdue_cap",
       AGENDA_HIDE_TRASHED: "zen.workspace.zentral.notes.agenda_hide_trashed",
+      AGENDA_MAX_ITEMS: "zen.workspace.zentral.notes.agenda_max_items",
       SPACE_MODE: "zen.workspace.zentral.notes.space_mode",
       MISSED_DAYS: "zen.workspace.zentral.notes.missed_reminder_days",
       CAPTURE_FORMAT: "zen.workspace.zentral.notes.quick_capture_format",
@@ -4966,6 +4967,7 @@
           S("agendaOverdueDays", "Overdue look-back", PREF.AGENDA_OVERDUE_DAYS, 1, 31, "days", 7),
           S("agendaOverdueCap", "Overdue items shown before More", PREF.AGENDA_OVERDUE_CAP, 1, 100, "items", 10),
           { id: "agendaHideTrashed", label: "Hide Agenda items whose source note is in Trash", pref: PREF.AGENDA_HIDE_TRASHED, kind: "bool", def: true },
+          S("agendaMaxItems", "Max items in sidebar", PREF.AGENDA_MAX_ITEMS, 1, 200, "items", 40),
           { kind: "heading", i18nKey: "settings.heading.diagnostics", label: "Diagnostics" },
           { id: "perf", label: "Sample layout / drag timings (read __zentralNotesPerf.report())", pref: PREF.DEBUG_PERF, kind: "bool", def: false },
         ],
@@ -28134,8 +28136,10 @@
         return true;
       }
       function agendaTabFor(key, parentKey = null) {
-        const root = agendaRootEl(), parent = parentKey ? agendaDayEl(parentKey) : null;
-        return [...(root?.querySelectorAll?.("tab") || [])].find((tab) => agendaTabKey(tab) === key && (!parentKey || (parent && tab.closest?.("zen-folder") === parent))) || null;
+        const root = agendaRootEl();
+        if (!root) return null;
+        const parent = parentKey === "" ? root : (parentKey ? agendaDayEl(parentKey) : null);
+        return [...(root.querySelectorAll?.("tab") || [])].find((tab) => agendaTabKey(tab) === key && (parentKey === null || (parent && tab.closest?.("zen-folder") === parent))) || null;
       }
       // T3.4a + AU-B2: shared top-layer hover preview cards for Agenda and Notes
       // pseudo-tabs, powered by runtime.createSidebarHoverCard (same engine as RSS,
@@ -28618,9 +28622,10 @@
         }
       }
       onCleanup(() => { for (const id of agendaIconTimers) window.clearTimeout(id); agendaIconTimers.clear(); });
+      const isAgendaMoreKey = (key) => key === "more:overdue" || key === "more:agenda";
       function agendaApplyTabEntry(tab, entry) {
         if (!tab || !entry) return false;
-        const kind = entry.key === "more:overdue" ? "more" : entry.reminder ? "reminder" : "event";
+        const kind = isAgendaMoreKey(entry.key) ? "more" : entry.reminder ? "reminder" : "event";
         const color = colorHex(entry.color || entry.x?.color || "") || "";
         const label = String(entry.label || entry.summary || tab.getAttribute("label") || "");
         const summary = String(entry.summary || "");
@@ -28744,7 +28749,9 @@
             // A restored day folder has no attribute yet (it gets one further down). Read by attribute alone, each of its
             // entries looked misplaced and the first run after a restart closed and re-created every Agenda tab.
             const actualDay = agendaDayOf(actualFolder);
-            const actualParent = actualDay && agendaDayEl("day:" + actualDay) === actualFolder ? "day:" + actualDay : "?misplaced";
+            const actualParent = (actualFolder === root && key === "more:agenda")
+              ? ""
+              : (actualDay && agendaDayEl("day:" + actualDay) === actualFolder ? "day:" + actualDay : "?misplaced");
             out.push({ key, kind: "item", parent: actualParent });
           }
           if (root.isConnected === false) return [];
@@ -28764,7 +28771,7 @@
             if (made) this.update(entry);
             return made;
           }
-          const folder = agendaDayEl(entry.parent); if (!folder) return false;
+          const folder = entry.parent ? agendaDayEl(entry.parent) : agendaRootEl(); if (!folder) return false;
           const tab = agendaNewTab(entry.key);
           if (!zenPlace(tab, folder)) { zenRemoveTab(tab); return false; }
           this.update(entry);
@@ -28865,6 +28872,7 @@
         api: agendaApi, perf: PERF,
         getItems: agendaItems,
         getDays: agendaDays,
+        getMaxItems: () => Math.max(1, Math.min(200, prefInt(PREF.AGENDA_MAX_ITEMS, 40))),
         getLanguage: () => { try { return CALENDAR_PART.cleanNotesLanguage(Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en")); } catch (_) { return "en"; } },
         getOverdue: () => ({ enabled: prefBool(PREF.AGENDA_OVERDUE, true), days: Math.max(1, Math.min(31, prefInt(PREF.AGENDA_OVERDUE_DAYS, 7))), cap: Math.max(1, Math.min(100, prefInt(PREF.AGENDA_OVERDUE_CAP, 10))) }),
         getEnabled: agendaEnabled,
@@ -29128,6 +29136,7 @@
         return "";
       }
       function agendaEntryForKey(key) {
+        if (key === "more:agenda" && agendaController.more) return agendaController.more;
         const projected = (agendaController.projection || []).flatMap((day) => day?.items || []).find((entry) => entry?.key === key);
         if (projected) return projected;
         for (const item of agendaItems()) {
@@ -29149,7 +29158,7 @@
         const at = String(key || "").lastIndexOf("@");
         const date = at >= 0 ? String(key).slice(at + 1) : "";
         if (CALENDAR_PART?.parseYmd?.(date)) return date;
-        if (key === "more:overdue") return CALENDAR_PART?.localDateKey?.(Date.now()) || "";
+        if (isAgendaMoreKey(key)) return CALENDAR_PART?.localDateKey?.(Date.now()) || "";
         return "";
       }
       // The blank about:blank#zn-* placeholder must never stay on screen: whenever one of our placeholders is
@@ -29192,7 +29201,7 @@
         const agendaMatch = /^about:blank#zn-agenda-([A-Za-z0-9%._~-]{1,600})$/.exec(url);
         let agendaKey = "";
         if (agendaMatch) try { agendaKey = decodeURIComponent(agendaMatch[1]); } catch (_) {}
-        if (!noteTarget && !(agendaKey.startsWith("item:") || agendaKey === "more:overdue")) return false;
+        if (!noteTarget && !(agendaKey.startsWith("item:") || isAgendaMoreKey(agendaKey))) return false;
 
         // A markerless tab restored inside its owning folder is still a projection
         // entry. Restore its marker; a link-created tab elsewhere is a navigation request.
@@ -29393,7 +29402,7 @@
         // when Zen moves a managed tab outside the Agenda root.
         const key = agendaTabKey(candidate);
         const tab = candidate && key ? candidate : null;
-        const owned = tab && (key.startsWith("item:") || key === "more:overdue");
+        const owned = tab && (key.startsWith("item:") || isAgendaMoreKey(key));
         const modified = ev.ctrlKey || ev.shiftKey || ev.altKey || ev.metaKey;
         const inButton = !!pseudoEventClosest(ev, ".tab-close-button, .tab-reset-button, .tab-icon-overlay");
         if (ev.type === "blur") { if (ev.target === window) clearAgendaPress(); return; }
@@ -29473,7 +29482,7 @@
         if (candidate && routePseudoTab(candidate)) { ev.preventDefault(); ev.stopImmediatePropagation(); return; }
         const key = agendaTabKey(candidate);
         const tab = candidate && agendaOwnTab(candidate) && key ? candidate : null;
-        if (!tab || !(key.startsWith("item:") || key === "more:overdue") || ev.target?.closest?.(".tab-close-button, .tab-reset-button, .tab-icon-overlay")) return;
+        if (!tab || !(key.startsWith("item:") || isAgendaMoreKey(key)) || ev.target?.closest?.(".tab-close-button, .tab-reset-button, .tab-icon-overlay")) return;
         ev.preventDefault(); ev.stopImmediatePropagation();
         if (!ev.repeat) activateAgendaTab(tab);
       }
@@ -30910,7 +30919,7 @@
             if (zenMode() !== "off") zenSoon();
             if (agendaEnabled()) agendaSoon();
           }
-          else if (name === PREF.AGENDA_ENABLED || name === PREF.AGENDA_POSITION || name === PREF.AGENDA_DAYS || name === PREF.AGENDA_OVERDUE || name === PREF.AGENDA_OVERDUE_DAYS || name === PREF.AGENDA_OVERDUE_CAP || name === PREF.AGENDA_HIDE_TRASHED) agendaSoon();
+          else if (name === PREF.AGENDA_ENABLED || name === PREF.AGENDA_POSITION || name === PREF.AGENDA_DAYS || name === PREF.AGENDA_OVERDUE || name === PREF.AGENDA_OVERDUE_DAYS || name === PREF.AGENDA_OVERDUE_CAP || name === PREF.AGENDA_HIDE_TRASHED || name === PREF.AGENDA_MAX_ITEMS) agendaSoon();
           else if (name === PREF.ZEN_ROOT_COLOR || name === PREF.ZEN_ROOT_ICON || name === PREF.ZEN_ROOT_PARTS || name === PREF.ZEN_ROOT_PART_OPACITY) {
             if (zenMode() !== "off") zenSoon(); // the NOTES folder is restyled at once
             window.dispatchEvent?.(new Event("zentral-notes-folder-style-changed"));

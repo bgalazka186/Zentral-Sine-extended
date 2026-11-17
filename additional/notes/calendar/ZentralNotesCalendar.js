@@ -4920,10 +4920,51 @@
   function agendaVisibleDays(projection) {
     return (projection || []).filter((day) => day && day.count > 0);
   }
+  // SB6.4: cap the total number of non-overdue Agenda sidebar tabs across day folders,
+  // distributing budget earliest-first and collapsing overflow into a single '+N more…' node.
+  const AGENDA_MAX_ITEMS_DEFAULT = 40;
+  function applyAgendaItemCap(days, maxItems = 0, { lang = DEFAULT_NOTES_LANGUAGE } = {}) {
+    const list = (days || []).filter((day) => day && Array.isArray(day.items) && day.items.length > 0);
+    const rawLimit = Math.floor(Number(maxItems));
+    if (!(rawLimit > 0)) return { days: list, hiddenCount: 0, more: null };
+    const limit = Math.max(1, Math.min(200, rawLimit));
+    let total = 0;
+    for (const day of list) total += day.items.length;
+    if (total <= limit) return { days: list, hiddenCount: 0, more: null };
+    const keptDays = [];
+    let remaining = limit;
+    let firstHiddenDate = "";
+    for (const day of list) {
+      if (remaining > 0) {
+        if (day.items.length <= remaining) {
+          keptDays.push(day);
+          remaining -= day.items.length;
+        } else {
+          if (!firstHiddenDate) firstHiddenDate = day.date || "";
+          keptDays.push({ ...day, items: day.items.slice(0, remaining) });
+          remaining = 0;
+        }
+      } else if (!firstHiddenDate) {
+        firstHiddenDate = day.date || "";
+      }
+    }
+    const hiddenCount = total - limit;
+    const more = {
+      key: "more:agenda",
+      kind: "item",
+      parent: "",
+      label: t("sidebar.agenda.moreLabel", { count: hiddenCount }, lang),
+      summary: t("sidebar.agenda.moreSummary", null, lang),
+      details: t("sidebar.agenda.moreTooltip", { count: hiddenCount }, lang),
+      openDate: firstHiddenDate || list[0]?.date || "",
+      hiddenCount,
+    };
+    return { days: keptDays, hiddenCount, more };
+  }
   // Coalesced, store-change-driven controller for the virtual Zen Agenda folder. The host
   // supplies DOM/Zen operations through `api`; this controller owns no browser globals.
-  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getReady = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), getLanguage = () => undefined, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
-    let dead = false, timer = null, timerAt = Infinity, last = [], busy = false, consecutiveChanges = 0, blockedUntil = 0;
+  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getMaxItems = () => 0, getEnabled = () => true, getReady = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), getLanguage = () => undefined, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
+    let dead = false, timer = null, timerAt = Infinity, last = [], lastMore = null, busy = false, consecutiveChanges = 0, blockedUntil = 0;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
     function armAt(due) {
       if (dead || !Number.isFinite(due)) return;
@@ -4955,18 +4996,20 @@
       let sourceItems = [], policies = null, fullProjection = null, overdue = null, operations = 0;
       const revision = api.mutationCount?.() || 0;
       try {
-        if (!getEnabled()) { api.removeAll?.(); last = []; clearScheduled(); return []; }
+        if (!getEnabled()) { api.removeAll?.(); last = []; lastMore = null; clearScheduled(); return []; }
         // The items are not loaded yet (startup, before the store has opened). An empty list now would not mean that
         // nothing is due: reconciling against it would remove the entries that session restore just brought back. The
         // host schedules a run when the store is ready.
         if (!getReady()) return last;
         sourceItems = getItems?.() || [];
         policies = getWindowIsMasterPolicy ? prepareAgendaWindows(sourceItems, getWindow) : null;
-        fullProjection = agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow, policies, { lang: getLanguage() });
-        overdue = agendaOverdueProjection(sourceItems, now(), { ...getOverdue(), isDone, getWindow, policies, lang: getLanguage() });
-        const projection = [...(overdue ? [overdue] : []), ...agendaVisibleDays(fullProjection)];
-        if (!projection.length) {
-          api.removeAll?.(); last = projection; scheduleBoundary(sourceItems, policies, fullProjection, overdue); return projection;
+        const lang = getLanguage();
+        fullProjection = agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow, policies, { lang });
+        overdue = agendaOverdueProjection(sourceItems, now(), { ...getOverdue(), isDone, getWindow, policies, lang });
+        const capped = applyAgendaItemCap(agendaVisibleDays(fullProjection), getMaxItems?.(), { lang });
+        const projection = [...(overdue ? [overdue] : []), ...capped.days];
+        if (!projection.length && !capped.more) {
+          api.removeAll?.(); last = projection; lastMore = null; scheduleBoundary(sourceItems, policies, fullProjection, overdue); return projection;
         }
         if (api.ensureRoot?.(getPosition() === "below" ? "below" : "above") === false) { scheduleBoundary(sourceItems, policies, fullProjection, overdue); return last; }
         const desired = [];
@@ -4974,6 +5017,7 @@
           desired.push({ key: day.key, kind: "day", label: day.label, date: day.date, count: day.count, parent: "" });
           for (const item of day.items) desired.push({ ...item, kind: "item", parent: day.key, tooltip: item.details });
         }
+        if (capped.more) desired.push({ ...capped.more, kind: "item", parent: "", tooltip: capped.more.details });
         const current = api.list?.() || [], currentByKey = new Map();
         for (const entry of current) if (entry?.key && !currentByKey.has(entry.key)) currentByKey.set(entry.key, entry);
         const desiredByKey = new Map(desired.map((entry) => [entry.key, entry]));
@@ -4986,10 +5030,11 @@
             if (api.add?.(entry) === false) safeWarn("Zen Agenda: could not add " + entry.key);
           } else api.update?.(entry);
         }
-        api.reorder?.("", desired.filter((entry) => entry.kind === "day").map((entry) => entry.key));
+        api.reorder?.("", desired.filter((entry) => entry.parent === "").map((entry) => entry.key));
         for (const day of desired.filter((entry) => entry.kind === "day"))
           api.reorder?.(day.key, desired.filter((entry) => entry.kind === "item" && entry.parent === day.key).map((entry) => entry.key));
         last = projection;
+        lastMore = capped.more;
         scheduleBoundary(sourceItems, policies, fullProjection, overdue);
         if (operations || (api.mutationCount?.() || 0) !== revision) consecutiveChanges++;
         else consecutiveChanges = 0;
@@ -5018,6 +5063,7 @@
       refreshClock() { if (dead) return []; clearScheduled(); consecutiveChanges = 0; blockedUntil = 0; return runNow(); },
       get busy() { return busy; },
       get projection() { return last; },
+      get more() { return lastMore; },
       destroy() { dead = true; clearScheduled(); try { api.removeAll?.(); } catch (error) { safeWarn(error); } },
     };
   }
@@ -6143,7 +6189,7 @@
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

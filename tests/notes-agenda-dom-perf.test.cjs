@@ -6,7 +6,7 @@ const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
 const { scaleBudget } = require("./helpers/perf-budget.cjs");
 (async () => {
   for (const n of [50, 150]) {
-    const h = createFakeZen({ prefs: { "zen.workspace.zentral.notes.agenda_folder": true } }); await h.seam.ensureStore(); h.fireTimer(6500); await Promise.resolve();
+    const h = createFakeZen({ prefs: { "zen.workspace.zentral.notes.agenda_folder": true, "zen.workspace.zentral.notes.agenda_max_items": 200 } }); await h.seam.ensureStore(); h.fireTimer(6500); await Promise.resolve();
     const start = C.addDays(C.dayStart(Date.now()), 1) + 12 * 3600000;
     for (let i = 0; i < n; i++) h.seam.store.items.upsert(C.makeItem({ id: "perf-" + i, summary: "Item " + i, start: { dateTime: new Date(start + i * 1000).toISOString() }, x: { src: "manual", kind: "reminder" } }));
     h.seam.agendaController.runNow(); h.seam.agendaApi.list();

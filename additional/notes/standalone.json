@@ -3,7 +3,7 @@
   "themeId": "zentral-notes",
   "name": "Zentral Notes",
   "description": "Quick notes as plain Markdown files: multiple notes, highlights, checklists, tables, split-view preview, search, trash, export (Markdown, HTML, text, PDF, zip). Opens from a shortcut anywhere and adds a Notes button to Zentral panel bars when the full pack's panels are present. Standalone part of Zentral Extended.",
-  "version": "3.3.217",
+  "version": "3.3.218",
   "entry": "ZentralNotes.uc.js",
   "output": "ZentralNotes.standalone.uc.js",
   "loader": "__zentralNotesLoader",
@@ -164,6 +164,7 @@
     "zen.workspace.zentral.notes.agenda_overdue_days",
     "zen.workspace.zentral.notes.agenda_overdue_cap",
     "zen.workspace.zentral.notes.agenda_hide_trashed",
+    "zen.workspace.zentral.notes.agenda_max_items",
     "zen.workspace.zentral.notes.debug_perf"
   ],
   "externalPrefs": [
