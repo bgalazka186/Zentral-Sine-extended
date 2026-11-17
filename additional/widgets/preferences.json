@@ -99,6 +99,62 @@
   },
   {
     "type": "text",
+    "label": "**Weather**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.weather.enabled",
+    "label": "Show Weather widget (Open-Meteo, no account)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.weather.place",
+    "label": "Weather place (a city name, looked up once)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.weather.latitude",
+    "label": "Weather latitude (filled by the place lookup)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.weather.longitude",
+    "label": "Weather longitude (filled by the place lookup)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.weather.units",
+    "label": "Weather units",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "options": [
+      {
+        "label": "Automatic (the place's country)",
+        "value": "auto"
+      },
+      {
+        "label": "Celsius and km/h",
+        "value": "metric"
+      },
+      {
+        "label": "Fahrenheit and mph",
+        "value": "imperial"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.weather.refresh_minutes_text",
+    "label": "Weather refresh interval (minutes) [15 to 180 min]",
+    "type": "string",
+    "defaultValue": "30",
+    "placeholder": "30"
+  },
+  {
+    "type": "text",
     "label": "**Layout & visibility**",
     "size": "16px"
   },

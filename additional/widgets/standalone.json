@@ -3,7 +3,7 @@
   "themeId": "zentral-widgets",
   "name": "Zentral Sidebar Widgets",
   "description": "New-tab-page-style sidebar widgets with automatic free-area sizing, video-player avoidance, pause-when-hidden, and cached values. Standalone part of Zentral Extended.",
-  "version": "3.3.252",
+  "version": "3.3.253",
   "entry": "ZentralWidgets.uc.js",
   "output": "ZentralWidgets.standalone.uc.js",
   "settings": "settings.json",
@@ -37,6 +37,17 @@
     "zen.workspace.zentral.widgets.date.format",
     "zen.workspace.zentral.widgets.date.show_year",
     "zen.workspace.zentral.widgets.date.show_week_number",
+    {
+      "type": "text",
+      "label": "**Weather**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.widgets.weather.enabled",
+    "zen.workspace.zentral.widgets.weather.place",
+    "zen.workspace.zentral.widgets.weather.latitude",
+    "zen.workspace.zentral.widgets.weather.longitude",
+    "zen.workspace.zentral.widgets.weather.units",
+    "zen.workspace.zentral.widgets.weather.refresh_minutes",
     {
       "type": "text",
       "label": "**Layout & visibility**",

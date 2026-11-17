@@ -469,6 +469,13 @@
     "def": 250
   },
   {
+    "key": "zen.workspace.zentral.widgets.weather.refresh_minutes",
+    "text": "zen.workspace.zentral.widgets.weather.refresh_minutes_text",
+    "min": 15,
+    "max": 180,
+    "def": 30
+  },
+  {
     "key": "zen.workspace.zentral.widgets.max_height_share",
     "text": "zen.workspace.zentral.widgets.max_height_share_text",
     "min": 15,

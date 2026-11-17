@@ -150,6 +150,63 @@
   color: color-mix(in srgb, #e5534b 85%, currentColor) !important;
 }
 
+/* ---- Built-in Weather widget (T3.9c) ---- */
+
+#zentral-sidebar-widgets .zw-weather {
+  contain: layout style paint !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  min-width: 0 !important;
+}
+
+#zentral-sidebar-widgets .zw-weather-main {
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+  line-height: 1.1 !important;
+}
+
+#zentral-sidebar-widgets .zw-weather-icon {
+  font-size: 18px !important;
+  line-height: 1 !important;
+  opacity: 0.9 !important;
+}
+
+#zentral-sidebar-widgets .zw-weather-temp {
+  font-size: 24px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  font-variant-numeric: tabular-nums !important;
+  white-space: nowrap !important;
+}
+
+#zentral-sidebar-widgets .zw-weather-label {
+  font-size: 11px !important;
+  opacity: 0.78 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  min-width: 0 !important;
+}
+
+#zentral-sidebar-widgets .zw-weather-meta {
+  display: flex !important;
+  gap: 6px !important;
+  font-size: 10px !important;
+}
+
+/* A reading from the cache is drawn dimmer: the person can see it is the last known value. */
+#zentral-sidebar-widgets .zw-weather[data-zw-weather="cached"] .zw-weather-temp {
+  opacity: 0.72 !important;
+}
+
+#zentral-sidebar-widgets .zw-weather-place {
+  font-size: 10px !important;
+  opacity: 0.62 !important;
+}
+
 /* ---- Built-in Clock widget (T3.9b) ---- */
 
 #zentral-sidebar-widgets .zw-clock {

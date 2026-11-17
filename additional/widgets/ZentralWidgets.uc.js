@@ -43,6 +43,12 @@
     DATE_FORMAT: "zen.workspace.zentral.widgets.date.format",
     DATE_SHOW_YEAR: "zen.workspace.zentral.widgets.date.show_year",
     DATE_SHOW_WEEK: "zen.workspace.zentral.widgets.date.show_week_number",
+    WEATHER_ENABLED: "zen.workspace.zentral.widgets.weather.enabled",
+    WEATHER_PLACE: "zen.workspace.zentral.widgets.weather.place",
+    WEATHER_LATITUDE: "zen.workspace.zentral.widgets.weather.latitude",
+    WEATHER_LONGITUDE: "zen.workspace.zentral.widgets.weather.longitude",
+    WEATHER_UNITS: "zen.workspace.zentral.widgets.weather.units",
+    WEATHER_REFRESH_MINUTES: "zen.workspace.zentral.widgets.weather.refresh_minutes",
   });
 
   const DEFAULTS = Object.freeze({
@@ -61,10 +67,23 @@
     DATE_FORMAT: "long",
     DATE_SHOW_YEAR: false,
     DATE_SHOW_WEEK: false,
+    // T3.9c: weather is off until a place is set; it only asks the network then.
+    WEATHER_ENABLED: false,
+    WEATHER_PLACE: "",
+    WEATHER_LATITUDE: "",
+    WEATHER_LONGITUDE: "",
+    WEATHER_UNITS: "auto",
+    WEATHER_REFRESH_MINUTES: 30,
   });
 
   const CLOCK_FORMATS = Object.freeze(["auto", "24h", "12h"]);
   const DATE_FORMATS = Object.freeze(["long", "short", "iso"]);
+  const WEATHER_UNITS = Object.freeze(["auto", "metric", "imperial"]);
+  const WEATHER_REFRESH_MIN = 15;
+  const WEATHER_REFRESH_MAX = 180;
+  // The one host the weather widget talks to. Open-Meteo needs no key and no account, which keeps the widget
+  // inside the "no cloud inside the mod" rule: nothing is synced, one place name goes out per refresh.
+  const WEATHER_ENDPOINT = "https://api.open-meteo.com/v1/forecast";
 
   const LIMITS = Object.freeze({
     MAX_HEIGHT_SHARE: [15, 80],
@@ -1437,6 +1456,197 @@
     };
   }
 
+  // ---- T3.9c: weather (Open-Meteo, no key, one request per refresh) -------------------------------------------
+  // WMO weather codes, as Open-Meteo reports them. The table is the whole vocabulary: a code nobody knows is drawn
+  // as "unknown", never guessed.
+  const WMO_CODES = Object.freeze({
+    0: ["Clear sky", "sun"],
+    1: ["Mainly clear", "sun"],
+    2: ["Partly cloudy", "cloud-sun"],
+    3: ["Overcast", "cloud"],
+    45: ["Fog", "fog"],
+    48: ["Depositing rime fog", "fog"],
+    51: ["Light drizzle", "drizzle"],
+    53: ["Drizzle", "drizzle"],
+    55: ["Dense drizzle", "drizzle"],
+    56: ["Light freezing drizzle", "sleet"],
+    57: ["Freezing drizzle", "sleet"],
+    61: ["Light rain", "rain"],
+    63: ["Rain", "rain"],
+    65: ["Heavy rain", "rain"],
+    66: ["Light freezing rain", "sleet"],
+    67: ["Freezing rain", "sleet"],
+    71: ["Light snow", "snow"],
+    73: ["Snow", "snow"],
+    75: ["Heavy snow", "snow"],
+    77: ["Snow grains", "snow"],
+    80: ["Light showers", "rain"],
+    81: ["Showers", "rain"],
+    82: ["Violent showers", "rain"],
+    85: ["Light snow showers", "snow"],
+    86: ["Snow showers", "snow"],
+    95: ["Thunderstorm", "storm"],
+    96: ["Thunderstorm with hail", "storm"],
+    99: ["Heavy thunderstorm with hail", "storm"],
+  });
+
+  // Plain text glyphs, not pictures: they follow the widget font and never load a remote asset.
+  const WEATHER_ICON_GLYPHS = Object.freeze({
+    sun: "\u2600",
+    "cloud-sun": "\u26c5",
+    cloud: "\u2601",
+    fog: "\u2592",
+    drizzle: "\u2614",
+    rain: "\u2614",
+    sleet: "\u2745",
+    snow: "\u2744",
+    storm: "\u26a1",
+    unknown: "\u2601",
+  });
+
+  function weatherCodeInfo(code) {
+    const entry = WMO_CODES[Math.round(Number(code))];
+    return entry ? { code: Math.round(Number(code)), label: entry[0], icon: entry[1] } : { code: -1, label: "Unknown", icon: "unknown" };
+  }
+
+  function cleanWeatherUnits(raw) {
+    const value = String(raw ?? "").trim().toLowerCase();
+    return WEATHER_UNITS.includes(value) ? value : "auto";
+  }
+
+  // Metric unless the place is in the United States (and the person did not choose): the setting is "auto".
+  function resolveWeatherUnits(units, countryCode) {
+    const chosen = cleanWeatherUnits(units);
+    if (chosen !== "auto") return chosen;
+    return String(countryCode || "").trim().toUpperCase() === "US" ? "imperial" : "metric";
+  }
+
+  function cleanRefreshMinutes(raw) {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return DEFAULTS.WEATHER_REFRESH_MINUTES;
+    return Math.round(Math.max(WEATHER_REFRESH_MIN, Math.min(WEATHER_REFRESH_MAX, n)));
+  }
+
+  // A place needs both numbers, in their real ranges: no request is made from half a place.
+  function cleanWeatherPlace(latitude, longitude) {
+    const rawLat = String(latitude ?? "").trim();
+    const rawLon = String(longitude ?? "").trim();
+    if (!rawLat || !rawLon) return null;
+    const lat = Number(rawLat);
+    const lon = Number(rawLon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+    if (lat === 0 && lon === 0) return null; // the null island is never a place somebody chose
+    return { latitude: Math.round(lat * 10000) / 10000, longitude: Math.round(lon * 10000) / 10000 };
+  }
+
+  function weatherRequestUrl(place, units) {
+    const p = cleanWeatherPlace(place?.latitude, place?.longitude);
+    if (!p) return "";
+    const params = [
+      "latitude=" + p.latitude,
+      "longitude=" + p.longitude,
+      "current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
+      "daily=weather_code,temperature_2m_max,temperature_2m_min",
+      "forecast_days=1",
+      "timeformat=unixtime",
+      "timezone=auto",
+      resolveWeatherUnits(units) === "imperial" ? "temperature_unit=fahrenheit&wind_speed_unit=mph" : "temperature_unit=celsius&wind_speed_unit=kmh",
+    ];
+    return WEATHER_ENDPOINT + "?" + params.join("&");
+  }
+
+  const roundWeather = (value, digits = 0) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    const f = 10 ** digits;
+    return Math.round(n * f) / f;
+  };
+
+  // The response is reduced to what is drawn, once: the cache then holds a tiny object, not the raw payload.
+  function readWeatherPayload(payload, units) {
+    if (!payload || typeof payload !== "object") return null;
+    const cur = payload.current;
+    if (!cur || typeof cur !== "object") return null;
+    const info = weatherCodeInfo(cur.weather_code);
+    const day = payload.daily || {};
+    const high = Array.isArray(day.temperature_2m_max) ? roundWeather(day.temperature_2m_max[0]) : null;
+    const low = Array.isArray(day.temperature_2m_min) ? roundWeather(day.temperature_2m_min[0]) : null;
+    return {
+      units: cleanWeatherUnits(units),
+      temperature: roundWeather(cur.temperature_2m, 1),
+      humidity: roundWeather(cur.relative_humidity_2m),
+      wind: roundWeather(cur.wind_speed_10m, 1),
+      code: info.code,
+      label: info.label,
+      icon: info.icon,
+      high,
+      low,
+      countryCode: typeof payload.countryCode === "string" ? payload.countryCode : "",
+      observedAt: Number.isFinite(Number(cur.time)) ? Number(cur.time) * 1000 : 0,
+      timezone: typeof payload.timezone === "string" ? payload.timezone : "",
+    };
+  }
+
+  // "auto" is settled by the country the geocoder reported; without one the metric world is assumed.
+  function weatherUnitLabels(units, countryCode) {
+    const imperial = resolveWeatherUnits(units, countryCode) === "imperial";
+    return { temperature: imperial ? "\u00b0F" : "\u00b0C", wind: imperial ? "mph" : "km/h" };
+  }
+
+  // What the card says, as plain parts so the DOM code stays a dumb painter.
+  function formatWeatherParts(value, units) {
+    if (!value) return null;
+    const labels = weatherUnitLabels(value.units, value.countryCode);
+    const temp = value.temperature == null ? "\u2014" : Math.round(value.temperature) + labels.temperature;
+    const range = value.high == null || value.low == null ? "" : Math.round(value.high) + "\u00b0 / " + Math.round(value.low) + "\u00b0";
+    const details = [];
+    if (value.wind != null) details.push(Math.round(value.wind) + " " + labels.wind);
+    if (value.humidity != null) details.push(Math.round(value.humidity) + "%");
+    return {
+      temperature: temp,
+      label: value.label || "Unknown",
+      icon: value.icon || "unknown",
+      range,
+      details: details.join(" \u00b7 "),
+      text: [temp, value.label || "Unknown", range, details.join(", ")].filter(Boolean).join(", "),
+    };
+  }
+
+  // The cache is good for as long as the refresh interval; a value written by another setting set is not ours.
+  function isWeatherCacheFresh(nowMs, cached, refreshMinutes) {
+    if (!cached?.value) return false;
+    const age = Number(nowMs) - Number(cached.updatedAt || 0);
+    if (!Number.isFinite(age) || age < 0) return false;
+    return age < cleanRefreshMinutes(refreshMinutes) * 60000;
+  }
+
+  // How far the next automatic refresh is: aligned to the refresh interval, never faster than a minute.
+  function nextWeatherDelayMs(nowMs, refreshMinutes, updatedAt) {
+    const span = cleanRefreshMinutes(refreshMinutes) * 60000;
+    // A value written by this cycle (originAt) is fresh; only an older write shortens the wait.
+    const written = Number(updatedAt);
+    const since = Number.isFinite(written) && written > 0 && written >= Number(nowMs) - span ? Number(nowMs) - written : span;
+    return Math.max(60000, span - Math.max(0, since));
+  }
+
+  // "Warsaw, Poland" is not geocoded behind the person's back: the settings dialog asks the same host once, and
+  // this only picks the first usable hit.
+  function readGeocodePayload(payload) {
+    const hit = payload?.results?.[0];
+    if (!hit) return null;
+    const place = cleanWeatherPlace(hit.latitude, hit.longitude);
+    if (!place) return null;
+    const name = [hit.name, hit.admin1, hit.country].filter((x) => typeof x === "string" && x.trim()).join(", ");
+    return { ...place, name, countryCode: typeof hit.country_code === "string" ? hit.country_code : "" };
+  }
+
+  function geocodeUrl(query) {
+    const q = String(query ?? "").trim().slice(0, 80);
+    if (!q) return "";
+    return "https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name=" + encodeURIComponent(q);
+  }
+
   function resolveCalendarOpener(win) {
     try {
       const opener = win?.[CALENDAR_OPENER_SYM];
@@ -1476,6 +1686,24 @@
     formatDateParts,
     nextClockDelayMs,
     nextLocalMidnightDelayMs,
+    WMO_CODES,
+    WEATHER_UNITS,
+    WEATHER_ENDPOINT,
+    WEATHER_REFRESH_MIN,
+    WEATHER_REFRESH_MAX,
+    weatherCodeInfo,
+    cleanWeatherUnits,
+    resolveWeatherUnits,
+    cleanRefreshMinutes,
+    cleanWeatherPlace,
+    weatherRequestUrl,
+    readWeatherPayload,
+    weatherUnitLabels,
+    formatWeatherParts,
+    isWeatherCacheFresh,
+    nextWeatherDelayMs,
+    readGeocodePayload,
+    geocodeUrl,
     isClockCacheStale,
     isDateCacheStale,
     resolveWidgetRefreshMs,
@@ -2105,6 +2333,19 @@
         };
       }
 
+      // T3.9c: everything the weather card needs, read once per refresh.
+      function readWeatherOpts() {
+        return {
+          place: String(getString(WIDGET_PREFS.WEATHER_PLACE, "") || "").trim(),
+          place_: cleanWeatherPlace(
+            getString(WIDGET_PREFS.WEATHER_LATITUDE, ""),
+            getString(WIDGET_PREFS.WEATHER_LONGITUDE, ""),
+          ),
+          units: cleanWeatherUnits(getString(WIDGET_PREFS.WEATHER_UNITS, "auto")),
+          refreshMinutes: cleanRefreshMinutes(getInt(WIDGET_PREFS.WEATHER_REFRESH_MINUTES, DEFAULTS.WEATHER_REFRESH_MINUTES)),
+        };
+      }
+
       registerWidget({
         id: "clock",
         title: "Clock",
@@ -2349,6 +2590,147 @@
         },
       });
 
+      // ---- T3.9c: weather -------------------------------------------------------------------------------------
+      // One request per refresh to Open-Meteo (no key, no account, no sync). The scheduler owns the timer, pauses it
+      // with the sidebar, and paints the cached value first, so a cold sidebar shows the last reading immediately.
+      registerWidget({
+        id: "weather",
+        title: "Weather",
+        showHeader: false,
+        order: 30,
+        pref: WIDGET_PREFS.WEATHER_ENABLED,
+        defaultEnabled: false,
+        refreshPref: WIDGET_PREFS.WEATHER_REFRESH_MINUTES,
+        refreshScale: 60000,
+        minRefreshMs: WEATHER_REFRESH_MIN * 60000,
+        maxRefreshMs: WEATHER_REFRESH_MAX * 60000,
+        refreshMs: DEFAULTS.WEATHER_REFRESH_MINUTES * 60000,
+        watchPrefs: [
+          WIDGET_PREFS.WEATHER_PLACE,
+          WIDGET_PREFS.WEATHER_LATITUDE,
+          WIDGET_PREFS.WEATHER_LONGITUDE,
+          WIDGET_PREFS.WEATHER_UNITS,
+          WIDGET_PREFS.WEATHER_REFRESH_MINUTES,
+        ],
+        create({ document: doc }) {
+          const wrap = doc.createElement("div");
+          wrap.className = "zw-weather";
+
+          const main = doc.createElement("div");
+          main.className = "zw-weather-main";
+          const iconEl = doc.createElement("span");
+          iconEl.className = "zw-weather-icon";
+          iconEl.setAttribute("aria-hidden", "true");
+          const tempEl = doc.createElement("span");
+          tempEl.className = "zw-weather-temp";
+          const labelEl = doc.createElement("span");
+          labelEl.className = "zw-weather-label";
+          main.appendChild(iconEl);
+          main.appendChild(tempEl);
+          main.appendChild(labelEl);
+
+          const metaEl = doc.createElement("div");
+          metaEl.className = "zw-card-meta zw-weather-meta";
+          const rangeEl = doc.createElement("span");
+          rangeEl.className = "zw-weather-range";
+          const detailsEl = doc.createElement("span");
+          detailsEl.className = "zw-weather-details";
+          metaEl.appendChild(rangeEl);
+          metaEl.appendChild(detailsEl);
+
+          const placeEl = doc.createElement("div");
+          placeEl.className = "zw-card-meta zw-weather-place";
+
+          wrap.appendChild(main);
+          wrap.appendChild(metaEl);
+          wrap.appendChild(placeEl);
+
+          const paint = (value, info = {}) => {
+            const opts = readWeatherOpts();
+            placeEl.textContent = opts.place || "Set a place in Settings";
+            wrap.setAttribute("data-zw-weather", value ? (info.cached ? "cached" : "live") : info.error ? "error" : "empty");
+            if (!value) {
+              iconEl.textContent = "\u2601";
+              tempEl.textContent = info.error ? "\u2014" : "";
+              labelEl.textContent = info.error ? "Weather unavailable" : "";
+              rangeEl.textContent = "";
+              detailsEl.textContent = "";
+              wrap.setAttribute("aria-label", info.error ? "Weather unavailable" : "Weather: no place set");
+              return;
+            }
+            const parts = formatWeatherParts(value, opts.units);
+            iconEl.textContent = WEATHER_ICON_GLYPHS[parts.icon] || WEATHER_ICON_GLYPHS.unknown;
+            tempEl.textContent = parts.temperature;
+            labelEl.textContent = parts.label;
+            rangeEl.textContent = parts.range;
+            detailsEl.textContent = parts.details;
+            wrap.setAttribute("aria-label", (opts.place ? opts.place + ": " : "") + parts.text);
+          };
+
+          return {
+            element: wrap,
+            fetch({ now, cachedValue }) {
+              const opts = readWeatherOpts();
+              if (!opts.place_) return null; // no place, no request, no network
+              if (cachedValue && isWeatherCacheFresh(now, { value: cachedValue, updatedAt: now }, opts.refreshMinutes)) return undefined;
+              const url = weatherRequestUrl(opts.place_, opts.units);
+              if (!url) return null;
+              return fetch(url, { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" })
+                .then((res) => (res && res.ok ? res.json() : null))
+                .then((payload) => (payload ? readWeatherPayload(payload, opts.units) : null))
+                .catch(() => null);
+            },
+            isStale(now, cached) {
+              return !cached?.value || !isWeatherCacheFresh(now, cached, readWeatherOpts().refreshMinutes);
+            },
+            nextDelayMs(now, cached) {
+              return nextWeatherDelayMs(now, readWeatherOpts().refreshMinutes, cached?.updatedAt);
+            },
+            render(value, info) {
+              try {
+                paint(value, info || {});
+              } catch (err) {
+                console.warn("[ZentralWidgets] weather render failed:", err);
+              }
+            },
+          };
+        },
+      });
+
+      // A place name is looked up once, when the person types it (a setting change, never a poll) and on load if a
+      // name is stored without numbers. The answer only fills the two numeric prefs; the card never sees a name-only place.
+      let placeLookupToken = 0;
+      function resolveWeatherPlaceFromName() {
+        const name = String(getString(WIDGET_PREFS.WEATHER_PLACE, "") || "").trim();
+        if (!name) return Promise.resolve(false);
+        if (cleanWeatherPlace(getString(WIDGET_PREFS.WEATHER_LATITUDE, ""), getString(WIDGET_PREFS.WEATHER_LONGITUDE, ""))) {
+          return Promise.resolve(false);
+        }
+        const url = geocodeUrl(name);
+        if (!url || typeof fetch !== "function") return Promise.resolve(false);
+        const token = ++placeLookupToken;
+        return fetch(url, { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" })
+          .then((res) => (res && res.ok ? res.json() : null))
+          .then((payload) => {
+            if (disposed || token !== placeLookupToken) return false;
+            const hit = readGeocodePayload(payload);
+            if (!hit) return false;
+            try {
+              Services.prefs.setStringPref(WIDGET_PREFS.WEATHER_LATITUDE, String(hit.latitude));
+              Services.prefs.setStringPref(WIDGET_PREFS.WEATHER_LONGITUDE, String(hit.longitude));
+              if (hit.name && hit.name !== name) Services.prefs.setStringPref(WIDGET_PREFS.WEATHER_PLACE, hit.name);
+            } catch (_) {
+              return false;
+            }
+            return true;
+          })
+          .catch(() => false);
+      }
+      watchPref(WIDGET_PREFS.WEATHER_PLACE, () => {
+        resolveWeatherPlaceFromName();
+      });
+      if (getBool(WIDGET_PREFS.WEATHER_ENABLED, DEFAULTS.WEATHER_ENABLED)) resolveWeatherPlaceFromName();
+
       const onVisibilityOrResize = () => scheduleMeasure();
       const listen = (target, type, fn, opts) => {
         if (!target || typeof target.addEventListener !== "function") return;
@@ -2434,6 +2816,7 @@
         isPaused: () => scheduler.isPaused(),
         activeTimerCount: () => scheduler.activeTimerCount(),
         remeasure: () => syncWidgetsAndLayout(),
+        resolveWeatherPlace: () => resolveWeatherPlaceFromName(),
         destroy() {
           if (disposed) return;
           disposed = true;

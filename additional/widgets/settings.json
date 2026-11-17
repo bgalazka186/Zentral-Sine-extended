@@ -144,6 +144,61 @@
       "label": "Show ISO week number on Date widget",
       "type": "checkbox",
       "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.weather.enabled",
+      "label": "Show Weather widget (Open-Meteo, no account)",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.weather.place",
+      "label": "Weather place (a city name, looked up once)",
+      "type": "input",
+      "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.weather.latitude",
+      "label": "Weather latitude (filled by the place lookup)",
+      "type": "input",
+      "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.weather.longitude",
+      "label": "Weather longitude (filled by the place lookup)",
+      "type": "input",
+      "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.weather.units",
+      "label": "Weather units",
+      "type": "dropdown",
+      "defaultValue": "auto",
+      "options": [
+        {
+          "label": "Automatic (the place's country)",
+          "value": "auto"
+        },
+        {
+          "label": "Celsius and km/h",
+          "value": "metric"
+        },
+        {
+          "label": "Fahrenheit and mph",
+          "value": "imperial"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.weather.refresh_minutes",
+      "label": "Weather refresh interval (minutes)",
+      "type": "input",
+      "defaultValue": 30,
+      "numeric": {
+        "min": 15,
+        "max": 180,
+        "unit": "min"
+      }
     }
   ],
   "settings": {
@@ -220,6 +275,36 @@
     "zen.workspace.zentral.widgets.pause_when_hidden": {
       "category": "widgets",
       "section": "Layout & visibility",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.weather.enabled": {
+      "category": "widgets",
+      "section": "Weather",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.weather.place": {
+      "category": "widgets",
+      "section": "Weather",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.weather.latitude": {
+      "category": "widgets",
+      "section": "Weather",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.weather.longitude": {
+      "category": "widgets",
+      "section": "Weather",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.weather.units": {
+      "category": "widgets",
+      "section": "Weather",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.weather.refresh_minutes": {
+      "category": "widgets",
+      "section": "Weather",
       "owner": "widgets"
     }
   }
