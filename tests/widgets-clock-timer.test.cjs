@@ -212,6 +212,61 @@ test("the end sound has a real tone behind the beep, and falls back to the beep"
   await new Promise((r) => setTimeout(r, 20));
   const face = clock.querySelector(".zw-clock-timer-face");
   assert.ok(face, "the timer face is part of the clock card");
+  // ---- OW-63: clicking the stopwatch goes BACK to the clock, and the fields cannot push the buttons out ----
+  // The owner: "clicking on stopwatch doesnt revert it to clock". The cause was the timer face swallowing every click,
+  // so the card's own handler never ran while that face was up.
+  {
+    // The FACE answers a click: its numbers, its kind line and its empty space all lead to the card's own flip.
+    const faceUp = clock.querySelector(".zw-clock-timer-face");
+    assert.ok(faceUp, "the timer face is up");
+    const stops = faceUp._listeners.filter(([type]) => type === "click");
+    assert.equal(stops.length, 1, "the timer face answers a click itself");
+    stops[0][1]({ stopPropagation() {} });
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(h.prefs.get("zen.workspace.zentral.widgets.clock.mode"), "clock",
+      "clicking the stopwatch goes back to the clock");
+    assert.equal(body.getAttribute("data-zw-clock-face"), "clock", "and the clock is what is shown");
+    // Back to the timer face for the rest of the checks.
+    cardClicks[0][1]({ button: 0, stopPropagation() {}, preventDefault() {} });
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(body.getAttribute("data-zw-clock-face"), "timer");
+  }
+  {
+    // A CONTROL keeps its own click: pressing Start must not also turn the card over. (Put the face up first: the
+    // flip above left the card on the clock, which is the whole point of OW-63.)
+    assert.equal(body.getAttribute("data-zw-clock-face"), "timer", "the timer face is up");
+    const face2 = clock.querySelector(".zw-clock-timer-face");
+    const startBtn = face2.querySelectorAll(".zw-timer-btn").find((b) => /Start|Stop|Resume/.test(b.textContent));
+    assert.ok(startBtn, "the Start control is on the face");
+    startBtn._listeners.filter(([t]) => t === "click").forEach(([, fn]) => fn({ stopPropagation() {} }));
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(body.getAttribute("data-zw-clock-face"), "timer", "pressing a control does not flip the card");
+    // The control DID its work (the stopwatch state changed) — that is what "kept its own click" means here. The
+    // badge/attribute can lag by a render, so the button's own label is the honest thing to check.
+    assert.equal(startBtn.textContent, "Stop", "and it does start the stopwatch");
+    // Leave the card as this block found it: the OW-60 checks below start from an idle stopwatch.
+    startBtn._listeners.filter(([t]) => t === "click").forEach(([, fn]) => fn({ stopPropagation() {} }));
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(startBtn.textContent, "Start", "and the second press stops it");
+  }
+  {
+    // The source rule itself: only CONTROLS may swallow a click. The face is not in that list any more, and the face
+    // does answer clicks — by turning the card over (which is what the owner asked for).
+    const swallow = SRC.slice(SRC.indexOf("for (const el of [timerActions, presets, fieldRow])"), SRC.indexOf("for (const { ms, button } of presetButtons)"));
+    assert.ok(!/timerActions, presets, fieldRow, timerFace/.test(swallow), "the face is not among the swallowers");
+    assert.match(swallow, /\[timerFace, readout, timerKindEl, laps\]/, "the face turns the card over like the clock does");
+    assert.match(swallow, /flipFace\(\)/, "and it is the same flip the card uses");
+  }
+  {
+    // OW-63 layout: the field row wraps instead of overflowing, and the field is allowed to shrink.
+    const fieldRule = CSS.slice(CSS.indexOf(".zw-timer-field-row,"), CSS.indexOf(".zw-timer-field,"));
+    assert.match(fieldRule, /flex-wrap: wrap !important/, "the field row wraps");
+    assert.match(CSS, /\.zw-timer-field-row \.zw-timer-field \{[^}]*flex: 1 1 64px !important/, "the field shrinks to a floor");
+    assert.match(CSS, /\.zw-timer-field-row \.zw-timer-field \{[^}]*min-width: 48px !important/, "and has a floor");
+    assert.match(CSS, /\.zw-timer-field-row \.zw-timer-btn \{[^}]*flex: 0 0 auto !important/, "the button keeps its size");
+    assert.match(CSS, /\.zw-timer-field-row \.zw-timer-btn \{[^}]*white-space: nowrap !important/, "and its words stay on one line");
+  }
+
   // 1a. the controls are here, not on another card
   const startBtn = face.querySelector(".zw-timer-btn");
   assert.ok(startBtn, "Start/Stop is on the face");

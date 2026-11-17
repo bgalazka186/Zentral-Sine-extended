@@ -1302,6 +1302,21 @@ bare object. Tests: `tests/notes-ui-state.test.cjs` (12) plus the reworked `note
 `calendarDaysForward` and friends no longer reach `meta.json`. The property the owner cares about is now a test:
 moving the calendar writes `ui.json` once and `meta.json` zero times.
 
+**`OW-63` DONE (3.3.297)** — the stopwatch face answers a click again, and a narrow widget keeps its buttons. The owner
+reported two things after OW-60: "clicking on stopwatch doesnt revert it to clock", and the timer face's text field
+pushing the buttons out of the card at small widths. The first had a single cause, and it was a good one to have written
+down: OW-60 gave the timer face a `stopPropagation()` on every click so that "a click inside the panel is not a click on
+the card" — which was true of the BUTTONS and false of the face, because the card's own handler, the one that flips it
+back, never saw those clicks. Only the actual controls (the action row, the presets, the field row) keep their clicks to
+themselves now; the numbers, the kind line, the lap list and the empty part of the face call the same `flipFace()` the
+clock face uses. A press on Start still starts the stopwatch and does not turn the card over, which is the distinction
+that had been lost. The layout half is one rule: the field row wraps, the field is `flex: 1 1 64px` with a 48 px floor
+so it gives ground first, and the button is `flex: 0 0 auto` with `white-space: nowrap` so its words never break — below
+a sensible width the button drops to a second line instead of being clipped. Tests: four new cases in
+`tests/widgets-clock-timer.test.cjs` (the face flips the card back, a control does not, the source rule that only
+controls may swallow a click, and the four CSS declarations), plus the card left in the state the OW-60 checks expect.
+Suite `233/233`.
+
 
 ## The Master Order rows that were finished (moved out of the TODO table, 2026-11-17)
 

@@ -3307,9 +3307,16 @@
           field.addEventListener("keydown", (e) => {
             if (e.key === "Enter") { e.preventDefault(); startFromField(); }
           });
-          // A click inside the panel is not a click on the card: it must not turn the panel over.
-          for (const el of [timerFace, fieldRow, presets, timerActions, laps]) {
+          // OW-63: only a CONTROL keeps its click to itself. The timer FACE used to swallow every click here, which is
+          // exactly why clicking the stopwatch never went back to the clock: the card's own handler never saw it. The
+          // face itself now behaves like the clock face and turns the card over; the buttons and the field stop their
+          // own clicks below, where each one already does its work.
+          for (const el of [timerActions, presets, fieldRow]) {
             el.addEventListener?.("click", (e) => e?.stopPropagation?.());
+          }
+          // A click on the numbers, the kind line or the empty part of the face is a click on the card.
+          for (const el of [timerFace, readout, timerKindEl, laps]) {
+            el?.addEventListener?.("click", (e) => { e?.stopPropagation?.(); flipFace(); });
           }
           for (const { ms, button } of presetButtons) {
             button.addEventListener("click", (e) => {

@@ -247,8 +247,24 @@
 #zentral-sidebar-widgets .zw-timer-field-row,
 #zentral-sidebar-widgets .zw-timer-note-row {
   display: flex !important;
+  /* OW-63: a narrow sidebar must not push the button out of the card. The field gives ground first (`flex: 1 1 0` with
+     `min-width: 0` below) and, below a sensible width, the button drops to its own line instead of being clipped. */
+  flex-wrap: wrap !important;
   gap: 4px !important;
   min-width: 0 !important;
+}
+
+/* OW-63: the field and the button in one row while there is room, two rows when there is not. `flex-basis: 0` plus a
+   `min-width` floor means the field shrinks to that floor and then wraps, rather than overflowing the card. */
+#zentral-sidebar-widgets .zw-timer-field-row .zw-timer-field {
+  flex: 1 1 64px !important;
+  min-width: 48px !important;
+  max-width: 100% !important;
+}
+
+#zentral-sidebar-widgets .zw-timer-field-row .zw-timer-btn {
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
 }
 
 #zentral-sidebar-widgets .zw-timer-field,
