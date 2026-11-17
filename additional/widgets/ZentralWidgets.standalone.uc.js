@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Widgets
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.280
+// @version 3.3.281
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.280, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.281, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.280";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.281";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2999,13 +2999,17 @@ function nativeSidebarSide() {
     const tomorrowText = tomorrow
       ? "Tomorrow " + temp(tomorrow.high) + " / " + temp(tomorrow.low) + (tomorrow.icon && tomorrow.icon !== "sun" ? " " + tomorrow.icon : "")
       : "";
+    // OW-54: the two halves are two lines, never one that a narrow card shortens. A whole answer that wraps onto a
+    // second row is read at a glance; a fragment of it is not read at all.
+    const lines = [tomorrowText, wetText].filter(Boolean);
     return {
       tomorrow: tomorrowText,
       wet: wetText,
       wetDay: wet ? { ...wet } : null,
-      // The swap on a narrow card alternates between these two; an empty one is skipped.
-      faces: [tomorrowText, wetText].filter(Boolean),
-      text: [tomorrowText, wetText].filter(Boolean).join(" \u00b7 "),
+      lines,
+      // Kept for callers that want the old pair (and for an older card that swapped between them).
+      faces: lines.slice(),
+      text: lines.join(" \u00b7 "),
     };
   }
 
@@ -4197,7 +4201,6 @@ function nativeSidebarSide() {
           const outlookEl = doc.createElement("div");
           outlookEl.className = "zw-card-meta zw-weather-outlook";
           outlookEl.hidden = true;
-          let outlookFace = 0;
           let outlookFaces = [];
 
           wrap.appendChild(main);
@@ -4213,41 +4216,33 @@ function nativeSidebarSide() {
               return null;
             }
           };
+          // OW-54: every half of the outlook is drawn, each on its own line. A narrow card wraps; it never hides one half
+          // behind a click. This used to swap the two on a click when the card was under 200px, which was a workaround
+          // for the line being cut (white-space: nowrap + ellipsis) — the cut is gone, so the workaround is too.
           const paintOutlook = (parts, opts) => {
-            if (!parts || !parts.text) {
+            const lines = (parts && (parts.lines || parts.faces)) || [];
+            if (!parts || !lines.length) {
               outlookEl.hidden = true;
-              outlookEl.textContent = "";
+              outlookEl.replaceChildren();
+              outlookEl.removeAttribute("data-zw-outlook-face");
               outlookFaces = [];
               return;
             }
-            const width = areaWidth();
-            const narrow = typeof width === "number" && width < 200;
-            const faces = parts.faces || [];
-            if (narrow && faces.length > 1) {
-              if (outlookFace >= faces.length) outlookFace = 0;
-              outlookEl.textContent = faces[outlookFace];
-              outlookEl.title = "Click to see the other day";
-              outlookEl.setAttribute("data-zw-outlook-face", String(outlookFace));
-            } else {
-              outlookEl.textContent = parts.text;
-              outlookEl.title = parts.text;
-              outlookEl.removeAttribute("data-zw-outlook-face");
+            outlookEl.replaceChildren();
+            for (const line of lines) {
+              const row = doc.createElement("span");
+              row.className = "zw-weather-outlook-line";
+              row.textContent = line;
+              outlookEl.appendChild(row);
             }
-            outlookFaces = faces;
+            outlookEl.title = lines.join(" \u00b7 ");
+            outlookEl.removeAttribute("data-zw-outlook-face");
+            outlookFaces = lines.slice();
             outlookEl.hidden = false;
-            outlookEl.setAttribute("aria-label", (opts?.place ? opts.place + ": " : "") + parts.text);
+            outlookEl.setAttribute("aria-label", (opts?.place ? opts.place + ": " : "") + lines.join(", "));
           };
-          // A click on the outlook line swaps the two days when the card had to hide one.
-          outlookEl.addEventListener("click", (e) => {
-            if (!outlookFaces || outlookFaces.length < 2) return;
-            e.preventDefault();
-            e.stopPropagation();
-            outlookFace = (outlookFace + 1) % outlookFaces.length;
-            const width = areaWidth();
-            if (typeof width !== "number" || width >= 200) return;
-            outlookEl.textContent = outlookFaces[outlookFace];
-            outlookEl.setAttribute("data-zw-outlook-face", String(outlookFace));
-          });
+          // The card's own click is not the outlook's business any more; OW-57 owns a click on the card (place cycling).
+          outlookEl.addEventListener("click", (e) => e.stopPropagation());
 
           const paint = (value, info = {}) => {
             const opts = readWeatherOpts();

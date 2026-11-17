@@ -1104,3 +1104,15 @@ Resolved note/category colours (`resolveItemColor` + `colorHex`) flow from `agen
 - `T2.11b2` (3.3.250) — rebuilt the DEMO notes from the audit: nine notes, with `Where is a function?` and a `Calendar and Agenda tour` whose calendar section is proven to parse into real items (event range, reminder, all-day line), the control table, holidays and the Agenda folder; the syntax tour and the shortcuts note link into them.
 
 - `T3.8` (3.3.252) — Split View as an equal-sized companion pane. A note other than the one being edited can stand in a second pane: `splitCompanion {id, share, side}` in `meta.json` with `cleanSplitCompanion` refusing anything unknown, `nearestSplitShare` snapping to 25/33/50/67/75 %, `splitCompanionAxis` choosing side by side or stacked from the sheet's own shape (an explicit choice wins), `splitCompanionReady` allowing only a living, different note. The pane is rendered by one function, read-only, and repaints only when that note's own store event lands (idle-coalesced) — typing in the main pane never touches it. It offers Open here, Turn (flip the axis) and Close, and the shared note menu gained `Open beside this note` / `Close the second pane`. In split mode the main area becomes a grid so editor + preview never squeeze the reference out. `tests/notes-split-companion.test.cjs` (7 tests). Also: `.gitignore` whitelisted `docs/NOTES_DISCOVERABILITY.md`, which had been silently excluded from the repository.
+
+`OW-54` DONE (3.3.281) — Weather outlook wraps instead of being cut.
+`weatherOutlookParts` now returns `lines` (both halves as rows) alongside the
+legacy `faces` copy; `paintOutlook` draws one `.zw-weather-outlook-line` span
+per row with `replaceChildren()`, so a narrow card puts "rain tomorrow" on the
+next row instead of clipping it at the window edge. `.zw-weather-outlook`
+dropped `nowrap`/`ellipsis` for `white-space: normal` + `overflow-wrap: anywhere`
+and stopped looking clickable; the dotted-underline cue is gone with the swap.
+The card click is now free, which `OW-57` will use for cycling places.
+Tests: 2 cases in `tests/widgets-weather.test.cjs` (both halves drawn, styled to
+wrap) — the removal assertion is anchored to `setAttribute`, not a raw token,
+because the code legitimately still *clears* a stale attribute.

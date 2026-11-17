@@ -317,17 +317,27 @@
   opacity: 1 !important;
 }
 
-/* OW-50: the weather's second line — tomorrow and the next wet day. */
+/* OW-50 / OW-54: the weather's second line — tomorrow and the next wet day.
+   The line used to be `white-space: nowrap` with an ellipsis, so on a sidebar that is not very wide it was simply cut
+   ("Rain tomor…"). It now wraps: each half is its own row, and a narrow card grows one row instead of losing the answer.
+   The old dotted underline marked a click-to-swap; there is nothing to click any more, so it is gone with the swap. */
 #zentral-sidebar-widgets .zw-weather-outlook {
-  cursor: pointer !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  overflow-wrap: anywhere !important;
+  cursor: inherit !important;
 }
 
-#zentral-sidebar-widgets .zw-weather-outlook[data-zw-outlook-face] {
-  text-decoration: underline dotted !important;
-  text-underline-offset: 2px !important;
+#zentral-sidebar-widgets .zw-weather-outlook .zw-weather-outlook-line {
+  display: block !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+/* A line of its own only when there is more than one: one half stays as compact as the line beside it. */
+#zentral-sidebar-widgets .zw-weather-outlook .zw-weather-outlook-line + .zw-weather-outlook-line {
+  margin-top: 1px !important;
 }
 
 /* The default face is one line, and a narrow card must not wrap it into three. */

@@ -232,13 +232,33 @@ test("a week of days survives the payload reduction, and the raw payload never d
   assert.equal(c.nextWetDay(bare.week, 1), null);
 });
 
-test("the card shows the outlook, and a narrow card swaps the hidden day on click", () => {
+test("OW-54: every half of the outlook is drawn, and a narrow card wraps instead of hiding one", () => {
   const card = SRC.slice(SRC.indexOf('id: "weather"'), SRC.indexOf('id: "weather"') + 9000);
   assert.match(card, /zw-weather-outlook/, "the second line has its own element");
   assert.match(card, /weatherOutlookParts\(/, "and is filled from the pure rule");
-  assert.match(card, /addEventListener\("click"/, "the swap is a click, not a setting");
-  assert.match(card, /areaWidth\(\)/, "the swap only happens when the card really is narrow");
-  assert.match(card, /data-zw-outlook-face/, "the face is visible to CSS so the swap can be styled");
+  // One row per half, always both.
+  assert.match(card, /zw-weather-outlook-line/, "each half gets its own row");
+  assert.ok(!/outlookFace\b/.test(card), "there is no swapped face any more: nothing is hidden behind a click");
+  assert.ok(!/Click to see the other day/.test(card), "and no click is offered for it");
+  // The attribute is only ever *removed* now: an older render may have set it, and clearing it is the whole point.
+  assert.ok(!/setAttribute\("data-zw-outlook-face"/.test(card), "the swap attribute is never set any more");
+  assert.match(card, /removeAttribute\("data-zw-outlook-face"\)/, "and is cleared if an older render left it");
+  // The pure rule hands the renderer its lines, and keeps the old pair for anyone still asking for it.
+  const parts = c.weatherOutlookParts([day({ high: 8, low: 1 }), day({ high: 11, low: 3 }), rain()], { units: "metric" });
+  assert.deepEqual(JSON.parse(JSON.stringify(parts.lines)), [parts.tomorrow, parts.wet]);
+  assert.equal(parts.lines.length, 2, "both halves are lines of their own");
+});
+
+test("OW-54: the outlook is styled to wrap, never to be cut", () => {
+  const css = fs.readFileSync(path.resolve(__dirname, "../additional/widgets/ZentralWidgets.css"), "utf8");
+  const rule = css.slice(css.indexOf(".zw-weather-outlook {"), css.indexOf(".zw-weather-outlook {") + 420);
+  assert.match(rule, /white-space:\s*normal/, "the line may wrap");
+  assert.match(rule, /text-overflow:\s*clip/, "and is never shortened with an ellipsis");
+  assert.ok(!/white-space:\s*nowrap/.test(rule), "nowrap is what cut the answer");
+  assert.ok(!/ellipsis/.test(rule), "so is the ellipsis");
+  assert.match(css, /\.zw-weather-outlook \.zw-weather-outlook-line \{[^}]*display:\s*block/, "each half is a block of its own");
+  // The click-to-swap styling went with the swap.
+  assert.ok(!/zw-weather-outlook\[data-zw-outlook-face\]/.test(css), "no dotted underline for a click that no longer exists");
 });
 
 /* OW-51: typing a name used to look like a failure, because the name is only a label and the numbers did the work.
