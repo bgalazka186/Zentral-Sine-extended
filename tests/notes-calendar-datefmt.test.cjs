@@ -141,11 +141,16 @@ test("zonedDateTimeToMs rejects malformed dates, times and zones", () => {
 });
 test("T2.19 exposes quick snooze choices only for supported reminder occurrences", () => {
   const source = require("node:fs").readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.uc.js"), "utf8");
-  const calendarSource = require("node:fs").readFileSync(path.resolve(__dirname, "../additional/notes/calendar/ZentralNotesCalendar.js"), "utf8");
-  assert.match(calendarSource, /action\("snooze-1d",\s*"Snooze \+1 day",\s*writable && !recurring/);
-  assert.match(calendarSource, /action\("snooze-3d",\s*"Snooze \+3 days",\s*writable && !recurring/);
-  assert.match(calendarSource, /action\("snooze-monday",\s*"Snooze until next Monday",\s*writable && !recurring/);
-  assert.match(calendarSource, /action\("snooze-custom",\s*"Custom date and time…",\s*writable && !recurring/);
+  const reminder = { id: "r1", summary: "Pay", start: { dateTime: "2026-11-16T09:00:00.000Z" }, x: { kind: "reminder", src: "manual" } };
+  const flat = (rows) => rows.flatMap((r) => (Array.isArray(r?.group) ? [r, ...r.group] : [r]));
+  const enRows = flat(cal.calendarItemMenuModel(reminder, { state: "pending", historyWritable: true, agendaWritable: true, lang: "en" }));
+  assert.equal(enRows.find((r) => r.command === "snooze-1d")?.label, "Snooze +1 day");
+  assert.equal(enRows.find((r) => r.command === "snooze-1d")?.enabled, true);
+  assert.equal(enRows.find((r) => r.command === "snooze-3d")?.label, "Snooze +3 days");
+  assert.equal(enRows.find((r) => r.command === "snooze-monday")?.label, "Snooze until next Monday");
+  assert.equal(enRows.find((r) => r.command === "snooze-custom")?.label, "Custom date and time…");
+  const recRows = flat(cal.calendarItemMenuModel({ ...reminder, recurrence: ["RRULE:FREQ=DAILY"] }, { state: "pending", historyWritable: true, agendaWritable: true, lang: "en" }));
+  assert.equal(recRows.find((r) => r.command === "snooze-1d")?.enabled, false);
   assert.match(source, /"snooze-1d":\s*\(\)\s*=>\s*snoozeReminderItem\(item,\s*1\)/);
   assert.match(source, /"snooze-3d":\s*\(\)\s*=>\s*snoozeReminderItem\(item,\s*3\)/);
   assert.match(source, /"snooze-monday":\s*\(\)\s*=>\s*snoozeReminderItem\(item,\s*nextMonday\)/);

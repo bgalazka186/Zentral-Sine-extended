@@ -77,7 +77,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
 |    12 | `T2.9`      | `PARTIAL` | Med-High            | M      | none              | Daily-note lifecycle and archive policy inside Agenda                                                    |
-|    18 | `AU-B4b`    | `OPEN`    | Med-High            | L      | AU-B4a            | [new] Notes language: interface strings (English/Polish)                                                 |
 |    19 | `SB6.2`     | `OPEN`    | Med                 | S      | none              | Agenda root folder right-click menu                                                                      |
 |    20 | `T2.19`     | `PARTIAL` | Med                 | S      | —                 | Quick snooze on a reminder (+1 day / +3 days / next week)                                                |
 |    21 | `SB6.7`     | `OPEN`    | Med                 | S      | UI4.7             | Items whose source note is in Trash                                                                      |
@@ -133,14 +132,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 **Full specification (original row):** **OPEN.** Depends on `T2.2c`, `T2.8`. Migrate existing Daily notes/folder and preserve links. Past daily notes move to Trash the next day and stay 30 days, then live only in the 48-hour rolling backup. Setting _always archive, never trash_ keeps compressed copies in a separate archive folder. No duplicate Daily pseudo-folder beside Agenda.
 
 **Owner decision needed first (2026-11-16):** past date notes that are not blank are never cleaned up today. Decide whether they may ever go to Trash automatically (the safe default is never; only the archive setting moves them).
-
-#### `AU-B4b` — [new] Notes language: interface strings
-
-**Status:** `OPEN` · **Impact:** Med-High · **Effort:** L · **Depends on:** AU-B4a · **Source:** Owner 2026-11-14
-
-**Problem:** All buttons, menus, dialogs, alerts and settings text of Notes and the calendar are hard-coded English literals in `ZentralNotes.uc.js` and the calendar module.
-**Plan:** 1. One `t(key, params)` helper with the language table from `AU-B4a` and English fallback per key. 2. Convert area by area, one chunk each: calendar toolbar/views, composer, context menus, reminder alerts, Agenda/sidebar menus, All notes tree, settings. 3. A test that fails on a new hard-coded user-visible literal in converted areas and on a key missing from a language. 4. Polish translation for every converted area.
-**Tests / done when:** Per converted area: renders in Polish and English, no `undefined` keys.
 
 #### `SB6.2` — Agenda root folder right-click menu
 
@@ -528,13 +519,15 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.211, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.214, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.211.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B5`, `SB6.1`, `SB6.3`, `SB6.8`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.8b`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T4.1`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-30`, `AU-B4a`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`169/169` test files) passes in Node/fake-Zen at 3.3.211. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.214.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.3`, `SB6.8`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.8b`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`172/172` test files) passes in Node/fake-Zen at 3.3.214. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
-Completed this session (3.3.163–3.3.213), every finished item archived in `docs/LEGACY_done_rows.md`:
+Completed this session (3.3.163–3.3.214), every finished item archived in `docs/LEGACY_done_rows.md`:
+
+- `AU-B4b` (3.3.214) — completed full EN + PL interface localization across all 7 roadmap areas with 603 strict-parity keys in `additional/notes/i18n/en.js` and `additional/notes/i18n/pl.js`: added `translate`/`t`, `pluralCategory` (EN & PL `one`/`few`/`other`), `tCount`, `translationKeys`, and `missingTranslationKeys` with per-key English fallback in `additional/notes/calendar/ZentralNotesCalendar.js` (plus calendar-absent fallback against `window.__zentralNotesLangTables` in `ZentralNotes.uc.js`), converted all 7 pure calendar UI functions and all 7 UI areas in `ZentralNotes.uc.js` (Area 1 Calendar toolbar/views/week settings, Area 2 Calendar composer, Area 3 context menus & headless actions, Area 4 reminder alerts/missed digest/toasts, Area 5 Agenda & Zen sidebar menus & hover cards keeping canonical `data-status` tokens, Area 6 All notes tree/chips/batch bar/layout/empty states, Area 7 Settings & Quick settings with `notesLanguage`/`notesLanguageAcceptAll` controls and live UI + Settings dialog refresh on `PREF.NOTES_LANGUAGE` change), and tracked `docs/NOTES_PERFORMANCE_AUDIT.md` in `.gitignore` (`tests/notes-i18n-ui.test.cjs`, `172/172` suite).
 
 - `OW-29` (3.3.213) — added canonical per-line parsed schedule tracking (`x.textSchedule`, `lineScheduleSignature`, `cleanTextSchedule`, `scheduleSignatureFromItem`, DST-safe `scheduleFromParsedLine`, and `reconcileListItem`) in `additional/notes/calendar/ZentralNotesCalendar.js` and wired `calendarSync` / `remote` flags in `additional/notes/ZentralNotes.uc.js` so retyping a date, time, range, or all-day state on a calendar line with `%%zn-item-id%%` moves the stored item (keeping all hidden markers, ID, extras, category, recurrence, and DST wall-clock accuracy), unrelated text edits preserve calendar UI moves, stale whole-series shift exceptions clear when master start is retyped in text, and cross-window conflicts between calendar moves and text edits resolve strictly via `lwwPick` (`tests/notes-calendar-retype-schedule.test.cjs`, `171/171` suite).
 

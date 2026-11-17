@@ -294,6 +294,59 @@
   function notesLocaleFor(lang) {
     return notesLanguageTable(lang)?.locale || "en-GB";
   }
+  // AU-B4b: interface string lookup with per-key English fallback and `{param}` interpolation.
+  function translate(key, params = null, lang = DEFAULT_NOTES_LANGUAGE) {
+    const k = String(key ?? "");
+    if (!k) return "";
+    const resolvedLang = cleanNotesLanguage(lang);
+    const primary = notesLanguageTable(resolvedLang)?.strings;
+    const fallback = notesLanguageTable(DEFAULT_NOTES_LANGUAGE)?.strings;
+    let template = primary && Object.prototype.hasOwnProperty.call(primary, k) && typeof primary[k] === "string"
+      ? primary[k]
+      : (fallback && Object.prototype.hasOwnProperty.call(fallback, k) && typeof fallback[k] === "string" ? fallback[k] : k);
+    if (params && typeof params === "object") {
+      template = template.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, name) => (
+        Object.prototype.hasOwnProperty.call(params, name) && params[name] !== undefined && params[name] !== null
+          ? String(params[name])
+          : match
+      ));
+    }
+    return template;
+  }
+  const t = translate;
+  function pluralCategory(count, lang = DEFAULT_NOTES_LANGUAGE) {
+    const n = Math.abs(Math.trunc(Number(count) || 0));
+    const code = cleanNotesLanguage(lang);
+    if (code === "pl") {
+      if (n === 1) return "one";
+      const mod10 = n % 10, mod100 = n % 100;
+      if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "few";
+      return "other";
+    }
+    return n === 1 ? "one" : "other";
+  }
+  function tCount(baseKey, count, params = null, lang = DEFAULT_NOTES_LANGUAGE) {
+    const n = Math.trunc(Number(count) || 0);
+    const resolvedLang = cleanNotesLanguage(lang);
+    const cat = pluralCategory(n, resolvedLang);
+    const primary = notesLanguageTable(resolvedLang)?.strings || {};
+    const fallback = notesLanguageTable(DEFAULT_NOTES_LANGUAGE)?.strings || {};
+    let chosen = baseKey + "." + cat;
+    if (!Object.prototype.hasOwnProperty.call(primary, chosen) || typeof primary[chosen] !== "string") {
+      const enCat = pluralCategory(n, DEFAULT_NOTES_LANGUAGE);
+      chosen = Object.prototype.hasOwnProperty.call(fallback, baseKey + "." + enCat) ? baseKey + "." + enCat : baseKey + ".other";
+    }
+    return translate(chosen, { ...(params && typeof params === "object" ? params : {}), count: n }, resolvedLang);
+  }
+  function translationKeys(lang = DEFAULT_NOTES_LANGUAGE) {
+    const strings = notesLanguageTable(lang)?.strings;
+    return strings && typeof strings === "object" ? Object.keys(strings) : [];
+  }
+  function missingTranslationKeys(lang) {
+    const base = translationKeys(DEFAULT_NOTES_LANGUAGE);
+    const target = notesLanguageTable(lang)?.strings || {};
+    return base.filter((k) => !Object.prototype.hasOwnProperty.call(target, k) || typeof target[k] !== "string" || !target[k].length);
+  }
   function normalizeDateParseOptions(opts) {
     if (!opts) return { lang: DEFAULT_NOTES_LANGUAGE, acceptAll: true };
     if (typeof opts === "string") return { lang: cleanNotesLanguage(opts), acceptAll: true };
@@ -741,20 +794,20 @@
     const googleLead = (item.reminders?.overrides || []).reduce((max, override) => Math.max(max, Number(override?.minutes) || 0), 0);
     return start - googleLead * MIN;
   }
-  function reminderPreCountdownText(dueAt, now = Date.now()) {
+  function reminderPreCountdownText(dueAt, now = Date.now(), lang = DEFAULT_NOTES_LANGUAGE) {
     const due = Number(dueAt), at = Number(now);
     if (!Number.isFinite(due) || due <= 0 || !Number.isFinite(at)) return "";
     const remaining = due - at;
-    if (remaining <= 0) return "Due now";
+    if (remaining <= 0) return t("alert.countdown.dueNow", null, lang);
     const totalSec = Math.max(1, Math.ceil(remaining / 1000));
     if (totalSec >= 3600) {
       const h = Math.floor(totalSec / 3600);
       const m = Math.floor((totalSec % 3600) / 60);
-      return `Due in ${h}h ${m}m`;
+      return t("alert.countdown.hoursMin", { h, m }, lang);
     }
     const m = Math.floor(totalSec / 60);
     const s = totalSec % 60;
-    return `Due in ${m}:${String(s).padStart(2, "0")}`;
+    return t("alert.countdown.minSec", { m, s: String(s).padStart(2, "0") }, lang);
   }
   function reminderCountdownDelayMs(dueAt, now = Date.now()) {
     const due = Number(dueAt), at = Number(now);
@@ -2045,7 +2098,7 @@
   }
   const REMINDER_STACK_LIMIT = 3;
   // Display and cross-window retirement rules for occurrence-scoped reminder cards.
-  function reminderAlertPresentation(stage, alertSettings = null) {
+  function reminderAlertPresentation(stage, alertSettings = null, lang = DEFAULT_NOTES_LANGUAGE) {
     const value = ["pre", "due", "followup"].includes(stage) ? stage : "followup";
     const defaultLayout = value === "pre" ? "corner" : value === "due" ? "large" : "centred";
     const configured = alertSettings ? cleanAlertSettings(alertSettings).stages[value]?.layout : "";
@@ -2053,7 +2106,7 @@
     return {
       stage: value,
       rank: value === "pre" ? 1 : value === "due" ? 2 : 3,
-      label: value === "pre" ? "Coming up" : value === "due" ? "Due now" : "Reminder overdue",
+      label: t("alert.stage." + value, null, lang),
       layout,
       overlay: layout === "centred",
       persistent: value !== "pre" || layout !== "corner",
@@ -2074,10 +2127,10 @@
       .sort((a, b) => (a.order - b.order) || (a.index - b.index))
       .map((entry) => entry.action);
   }
-  function reminderStackMoreLabel(hiddenCount, expanded = false) {
-    if (expanded === true) return "Show fewer";
+  function reminderStackMoreLabel(hiddenCount, expanded = false, lang = DEFAULT_NOTES_LANGUAGE) {
+    if (expanded === true) return t("alert.stack.showFewer", null, lang);
     const count = Math.trunc(Number(hiddenCount));
-    return count > 0 ? "+" + count + " more" : "";
+    return count > 0 ? t("alert.stack.more", { count }, lang) : "";
   }
   function reminderSnoozeTomorrowMinutes(at, zone = "") {
     const stamp = Number(at);
@@ -4990,39 +5043,51 @@
 
   // Per-target context menu model for calendar rows. This stays pure so every calendar surface can
   // render the same capabilities and reasons without duplicating lifecycle/source rules.
-  function calendarItemMenuModel(item, { state = "pending", historyWritable = false, agendaVisible, agendaWritable = true } = {}) {
+  function calendarItemMenuModel(item, { state = "pending", historyWritable = false, agendaVisible, agendaWritable = true, lang = DEFAULT_NOTES_LANGUAGE } = {}) {
     if (!item || typeof item !== "object" || !String(item.id || "")) return [];
+    const tr = (key, params = null) => t(key, params, lang);
     const reminder = isReminder(item);
     const source = ["list", "note", "manual"].includes(item.x?.src) ? item.x.src : "manual";
     const manual = source === "manual", mirrored = isMirroredAgendaItem(item);
     const recurring = !!item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length > 0);
     const lifecycle = ["pending", "done", "dismissed"].includes(state) ? state : "pending";
-    const action = (id, label, enabled = true, reason = "") => ({ id, command: id, label, enabled: !!enabled, reason: enabled ? "" : String(reason || "Unavailable in the current state") });
+    const action = (id, label, enabled = true, reason = "") => ({ id, command: id, label, enabled: !!enabled, reason: enabled ? "" : String(reason || tr("menu.unavailable")) });
+    const deleteKey = reminder
+      ? (mirrored ? "menu.deleteReminderMirrored" : "menu.deleteReminder")
+      : (mirrored ? "menu.deleteEventMirrored" : "menu.deleteEvent");
     const rows = [
-      action("open", item.x?.noteId ? "Open source note" : "Show details"),
-      action("edit", "Edit details…"),
-      action("change-time", recurring ? "Change occurrence time…" : "Change time…", source !== "note" && (!recurring || !!item.x?.recurrenceId), source === "note" ? "This note reminder is scheduled in its source note" : "Choose an expanded recurrence occurrence before moving it"),
-      action("convert", reminder ? "Convert to event" : "Convert to reminder", manual, "Items parsed from a note keep the type defined by their source text"),
+      action("open", tr(item.x?.noteId ? "menu.openSourceNote" : "menu.showDetails")),
+      action("edit", tr("menu.editDetails")),
+      action("change-time", tr(recurring ? "menu.changeOccurrenceTime" : "menu.changeTime"), source !== "note" && (!recurring || !!item.x?.recurrenceId), tr(source === "note" ? "menu.changeTimeNoteReason" : "menu.changeTimeRecurringReason")),
+      action("convert", tr(reminder ? "menu.convertToEvent" : "menu.convertToReminder"), manual, tr("menu.convertParsedReason")),
       { sep: true },
-      action("duplicate", "Duplicate as independent item"),
-      action("delete", "Delete " + (reminder ? "reminder" : "event") + (mirrored ? " and its Agenda line…" : "…"), manual || mirrored, "Remove this item from its source note instead of deleting only its calendar copy"),
+      action("duplicate", tr("menu.duplicate")),
+      action("delete", tr(deleteKey), manual || mirrored, tr("menu.deleteSourceReason")),
     ];
-    if (typeof agendaVisible === "boolean") rows.splice(4, 0,
-      action("agenda-visibility", agendaWritable ? (agendaVisible ? "Hide in Zen Agenda" : "Show in Zen Agenda") + (recurring ? " (series)" : "") : "Zen Agenda visibility unavailable", agendaWritable, "This legacy note reminder is not stored as an Agenda item"));
+    if (typeof agendaVisible === "boolean") {
+      const agendaKey = !agendaWritable
+        ? "menu.agendaUnavailable"
+        : agendaVisible
+          ? (recurring ? "menu.agendaHideSeries" : "menu.agendaHide")
+          : (recurring ? "menu.agendaShowSeries" : "menu.agendaShow");
+      rows.splice(4, 0, action("agenda-visibility", tr(agendaKey), agendaWritable, tr("menu.agendaLegacyReason")));
+    }
     if (reminder) {
       const writable = !!historyWritable;
+      const historyReason = tr("menu.historyProtectedReason");
+      const recurringReason = tr("menu.snoozeRecurringReason");
       rows.push(
         { sep: true },
-        { heading: true, label: "Reminder · " + lifecycle },
-        action("mark-done", "Mark as done", writable && lifecycle !== "done", !writable ? "Reminder history storage is protected or unavailable" : "Already done"),
-        action("dismiss", "Dismiss", writable && lifecycle !== "dismissed", !writable ? "Reminder history storage is protected or unavailable" : "Already dismissed"),
-        action("reopen", "Reopen", writable && lifecycle !== "pending", !writable ? "Reminder history storage is protected or unavailable" : "Already pending"),
-        { id: "snooze", command: "snooze", label: "Snooze", group: [
-          action("snooze-1h", "Snooze +1 hour", writable && !recurring && !item.start?.date, !writable ? "Reminder history storage is protected or unavailable" : recurring ? "Recurring occurrences need exception support before they can be snoozed" : "All-day reminders snooze by day"),
-          action("snooze-1d", "Snooze +1 day", writable && !recurring, !writable ? "Reminder history storage is protected or unavailable" : "Recurring occurrences need exception support before they can be snoozed"),
-          action("snooze-3d", "Snooze +3 days", writable && !recurring, !writable ? "Reminder history storage is protected or unavailable" : "Recurring occurrences need exception support before they can be snoozed"),
-          action("snooze-monday", "Snooze until next Monday", writable && !recurring, !writable ? "Reminder history storage is protected or unavailable" : "Recurring occurrences need exception support before they can be snoozed"),
-          action("snooze-custom", "Custom date and time…", writable && !recurring, !writable ? "Reminder history storage is protected or unavailable" : "Recurring occurrences need exception support before they can be snoozed"),
+        { heading: true, label: tr("menu.reminderHeading." + lifecycle) },
+        action("mark-done", tr("menu.markDone"), writable && lifecycle !== "done", !writable ? historyReason : tr("menu.alreadyDone")),
+        action("dismiss", tr("menu.dismiss"), writable && lifecycle !== "dismissed", !writable ? historyReason : tr("menu.alreadyDismissed")),
+        action("reopen", tr("menu.reopen"), writable && lifecycle !== "pending", !writable ? historyReason : tr("menu.alreadyPending")),
+        { id: "snooze", command: "snooze", label: tr("menu.snooze"), group: [
+          action("snooze-1h", tr("menu.snooze1h"), writable && !recurring && !item.start?.date, !writable ? historyReason : recurring ? recurringReason : tr("menu.snoozeAllDayReason")),
+          action("snooze-1d", tr("menu.snooze1d"), writable && !recurring, !writable ? historyReason : recurringReason),
+          action("snooze-3d", tr("menu.snooze3d"), writable && !recurring, !writable ? historyReason : recurringReason),
+          action("snooze-monday", tr("menu.snoozeMonday"), writable && !recurring, !writable ? historyReason : recurringReason),
+          action("snooze-custom", tr("menu.snoozeCustom"), writable && !recurring, !writable ? historyReason : recurringReason),
         ] },
       );
     }
@@ -5060,18 +5125,18 @@
   }
   const undoLifecycleAction = (previousState) =>
     previousState === "done" ? "done" : previousState === "dismissed" ? "dismissed" : "reopened";
-  function agendaActionMessage(command, { enabled = false, wasReminder = false } = {}) {
+  function agendaActionMessage(command, { enabled = false, wasReminder = false, lang = DEFAULT_NOTES_LANGUAGE } = {}) {
     switch (String(command || "")) {
-      case "mark-done": return "Reminder marked done";
-      case "dismiss": return "Reminder dismissed";
-      case "reopen": return "Reminder reopened";
-      case "snooze-1h": return "Reminder snoozed +1 hour";
-      case "snooze-1d": return "Reminder snoozed +1 day";
-      case "snooze-3d": return "Reminder snoozed +3 days";
-      case "snooze-monday": return "Reminder snoozed until next Monday";
-      case "agenda-visibility": return enabled ? "Shown in Zen Agenda" : "Hidden from Zen Agenda";
-      case "convert": return wasReminder ? "Reminder converted to an event" : "Event converted to a reminder";
-      case "duplicate": return "Independent copy created";
+      case "mark-done": return t("toast.agenda.markDone", null, lang);
+      case "dismiss": return t("toast.agenda.dismiss", null, lang);
+      case "reopen": return t("toast.agenda.reopen", null, lang);
+      case "snooze-1h": return t("toast.agenda.snooze1h", null, lang);
+      case "snooze-1d": return t("toast.agenda.snooze1d", null, lang);
+      case "snooze-3d": return t("toast.agenda.snooze3d", null, lang);
+      case "snooze-monday": return t("toast.agenda.snoozeMonday", null, lang);
+      case "agenda-visibility": return t(enabled ? "toast.agenda.shown" : "toast.agenda.hidden", null, lang);
+      case "convert": return t(wasReminder ? "toast.agenda.convertedToEvent" : "toast.agenda.convertedToReminder", null, lang);
+      case "duplicate": return t("toast.agenda.duplicated", null, lang);
       default: return "";
     }
   }
@@ -5375,26 +5440,27 @@
     if ((choice === "reminder" || choice === "event") && !calendarAvailable) return "note";
     return choice;
   }
-  function allNotesNewMenuModel({ choice = "note", agendaEnabled = false, calendarAvailable = true } = {}) {
+  function allNotesNewMenuModel({ choice = "note", agendaEnabled = false, calendarAvailable = true, lang = DEFAULT_NOTES_LANGUAGE } = {}) {
     const activeChoice = cleanAllNotesNewChoice(choice, { agendaEnabled, calendarAvailable });
-    const unavailableReason = calendarAvailable ? "" : "Calendar item storage is unavailable";
+    const unavailableReason = calendarAvailable ? "" : t("menu.new.unavailableReason", null, lang);
     const entries = [
-      { id: "note", icon: "plus", label: "New note", active: activeChoice === "note", enabled: true, reason: "" },
-      { id: "folder", icon: "folder", label: "New folder", active: activeChoice === "folder", enabled: true, reason: "" },
-      { id: "reminder", icon: "bell", label: "New reminder", active: activeChoice === "reminder", enabled: !!calendarAvailable, reason: unavailableReason },
-      { id: "event", icon: "calendar-plus", label: "New event", active: activeChoice === "event", enabled: !!calendarAvailable, reason: unavailableReason },
+      { id: "note", icon: "plus", label: t("menu.new.note", null, lang), active: activeChoice === "note", enabled: true, reason: "" },
+      { id: "folder", icon: "folder", label: t("menu.new.folder", null, lang), active: activeChoice === "folder", enabled: true, reason: "" },
+      { id: "reminder", icon: "bell", label: t("menu.new.reminder", null, lang), active: activeChoice === "reminder", enabled: !!calendarAvailable, reason: unavailableReason },
+      { id: "event", icon: "calendar-plus", label: t("menu.new.event", null, lang), active: activeChoice === "event", enabled: !!calendarAvailable, reason: unavailableReason },
     ];
     if (!agendaEnabled)
-      entries.push({ id: "date", icon: "calendar", label: "Date note", active: activeChoice === "date", enabled: true, reason: "" });
+      entries.push({ id: "date", icon: "calendar", label: t("menu.new.date", null, lang), active: activeChoice === "date", enabled: true, reason: "" });
     return entries;
   }
   function allNotesNewButtonLabel(choice, opts = {}) {
+    const lang = opts?.lang || DEFAULT_NOTES_LANGUAGE;
     const clean = cleanAllNotesNewChoice(choice, opts);
-    if (clean === "folder") return "New folder";
-    if (clean === "reminder") return "New reminder";
-    if (clean === "event") return "New event";
-    if (clean === "date") return "Date note";
-    return "New note (Ctrl+N)";
+    if (clean === "folder") return t("menu.new.folder", null, lang);
+    if (clean === "reminder") return t("menu.new.reminder", null, lang);
+    if (clean === "event") return t("menu.new.event", null, lang);
+    if (clean === "date") return t("menu.new.date", null, lang);
+    return t("menu.new.noteShortcut", null, lang);
   }
 
   // OW-10: analog + digital Clock modes, locale 12h/24h detection, angle<->time math, snapping, and hand stepping.
@@ -6056,7 +6122,7 @@
   }
 
   const api = {
-    KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, lineScheduleSignature, cleanTextSchedule, scheduleSignatureFromItem, scheduleFromParsedLine, reconcileListItem, itemFromLine,
+    KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, translate, t, pluralCategory, tCount, translationKeys, missingTranslationKeys, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, lineScheduleSignature, cleanTextSchedule, scheduleSignatureFromItem, scheduleFromParsedLine, reconcileListItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,

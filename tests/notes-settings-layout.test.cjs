@@ -30,6 +30,7 @@ const { El, Ev, document, raf } = dom;
 const observers = [];
 const win = {
   document, ZentralRuntime: { register() {} }, __zentralNotesTestSeam: {},
+  __zentralNotesLangTables: { en: require("../additional/notes/i18n/en.js"), pl: require("../additional/notes/i18n/pl.js") },
   requestAnimationFrame: (fn) => raf.push(fn), cancelAnimationFrame() {},
   setTimeout, clearTimeout, innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {},
   ResizeObserver: class { constructor(cb) { this.cb = cb; this.targets = []; observers.push(this); } observe(el) { this.targets.push(el); } disconnect() { const i = observers.indexOf(this); if (i >= 0) observers.splice(i, 1); } },

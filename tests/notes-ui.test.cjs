@@ -13,6 +13,7 @@ const { El, Ev, document, raf } = dom;
 El.prototype.ownerDocument = document; // browsers expose ownerDocument on every real element; needed for menu positioning.
 const win = {
   document, ZentralRuntime: { register() {} }, __zentralNotesTestSeam: {},
+  __zentralNotesLangTables: { en: require("../additional/notes/i18n/en.js"), pl: require("../additional/notes/i18n/pl.js") },
   requestAnimationFrame: (fn) => raf.push(fn), cancelAnimationFrame() {},
   setTimeout, clearTimeout, innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {},
 };

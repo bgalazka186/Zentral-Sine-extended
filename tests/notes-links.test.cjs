@@ -7,7 +7,7 @@ const source = fs.readFileSync(path.resolve(__dirname, "../additional/notes/Zent
 const dom = require("./helpers/fake-dom.cjs")();
 const { Ev, El, document, raf } = dom;
 const fetches = [];
-const win = { document, ZentralRuntime: { register() {} }, __zentralNotesTestSeam: {}, requestAnimationFrame: (fn) => raf.push(fn), cancelAnimationFrame() {}, setTimeout, clearTimeout, innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {}, fetch: (u) => fetches.push(u) };
+const win = { document, ZentralRuntime: { register() {} }, __zentralNotesTestSeam: {}, __zentralNotesLangTables: { en: require("../additional/notes/i18n/en.js"), pl: require("../additional/notes/i18n/pl.js") }, requestAnimationFrame: (fn) => raf.push(fn), cancelAnimationFrame() {}, setTimeout, clearTimeout, innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {}, fetch: (u) => fetches.push(u) };
 win.window = win;
 vm.runInNewContext(source, { window: win, document, Event: Ev, globalThis: { Services: {} }, ChromeUtils: {}, console, URL, Date, JSON, Math, Promise, RegExp, Number, Map, Set, setTimeout, clearTimeout, navigator: { platform: "Linux" }, Uint8Array, queueMicrotask, fetch: (u) => fetches.push(u) });
 const c = win.__zentralNotesTestSeam.core;

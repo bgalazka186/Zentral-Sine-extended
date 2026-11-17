@@ -595,13 +595,16 @@ const BODY = "# Plan\n\n## Shifts\n%%calendar: Work%%\n- 2026-11-12 06:00-14:00 
     assert.match(source, /"mark-done":\s*\(\)\s*=>\s*recordReminderLifecycle\(item,\s*["']done["']\)/);
     assert.match(source, /dismiss:\s*\(\)\s*=>\s*recordReminderLifecycle\(item,\s*["']dismissed["']\)/);
     assert.match(source, /reopen:\s*\(\)\s*=>\s*recordReminderLifecycle\(item,\s*["']reopened["']\)/);
-    assert.match(calendarSource, /action\("mark-done",\s*"Mark as done"/);
-    assert.match(calendarSource, /action\("dismiss",\s*"Dismiss"/);
-    assert.match(calendarSource, /action\("reopen",\s*"Reopen"/);
+    const sampleRem = { id: "r1", summary: "Pay", start: { dateTime: "2026-11-16T09:00:00.000Z" }, x: { kind: "reminder", src: "manual" } };
+    const pendingMenu = cal.calendarItemMenuModel(sampleRem, { state: "pending", historyWritable: true, agendaWritable: true, lang: "en" });
+    const doneMenu = cal.calendarItemMenuModel(sampleRem, { state: "done", historyWritable: true, agendaWritable: true, lang: "en" });
+    assert.equal(pendingMenu.find((r) => r.command === "mark-done")?.label, "Mark as done");
+    assert.equal(pendingMenu.find((r) => r.command === "dismiss")?.label, "Dismiss");
+    assert.equal(doneMenu.find((r) => r.command === "reopen")?.label, "Reopen");
     assert.match(source, /function\s+openReminderHistory\s*\([\s\S]*?history\?\.list\(\{\s*limit:\s*pageSize,\s*offset\s*\}\)/);
     assert.ok(source.includes('Load older entries'));
     assert.ok(source.includes('Showing ${offset} of ${total} entries'));
-    assert.match(source, /label:\s*["']Reminder history…["']/);
+    assert.ok(source.includes('cal.toolsMenu.reminderHistory'));
   });
 
   await test("T2.7a recurring note-derived occurrences receive independent history identities", () => {

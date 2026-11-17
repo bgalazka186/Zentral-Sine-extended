@@ -17,7 +17,15 @@ for (const id of ["context_zenFolderRename", "context_zenFolderDelete", "context
 assert.match(source, /window\[act\]\("popupshowing", onAgendaFolderMenuShowing, true\)/);
 assert.match(source, /window\[act\]\("popuphidden", onAgendaFolderMenuHidden, true\)/);
 assert.match(source, /onCleanup\(\(\) => bindAgenda\(false\)\)/, "Agenda menu listeners are removed on teardown");
-for (const label of ["Open Day view", "Create reminder for this day", "Create event for this day"]) assert.ok(source.includes(label));
+const enTable = require("../additional/notes/i18n/en.js");
+for (const [key, expected] of [
+  ["sidebar.agenda.openDayView", "Open Day view"],
+  ["sidebar.agenda.createReminderDay", "Create reminder for this day"],
+  ["sidebar.agenda.createEventDay", "Create event for this day"],
+]) {
+  assert.ok(source.includes(key), `sidebar menu uses i18n key ${key}`);
+  assert.ok(String(enTable.strings[key] || "").includes(expected), `English table defines ${key}`);
+}
 assert.match(css, /:root\[zentral-agenda-ctx="item"\] #tabContextMenu > :not\(\[zentral-agenda-own\]\) \{ display: none !important; \}/);
 assert.match(source, /window\[act\]\("popupshowing", onAgendaTabMenuShowing, true\)/);
 assert.match(source, /runAgendaItemAction\?\.\(identity, row\.command\)/);

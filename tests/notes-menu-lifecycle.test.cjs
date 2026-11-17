@@ -12,6 +12,7 @@ const win = {
   document,
   ZentralRuntime: { register() {} },
   __zentralNotesTestSeam: {},
+  __zentralNotesLangTables: { en: require("../additional/notes/i18n/en.js"), pl: require("../additional/notes/i18n/pl.js") },
   innerWidth: 1200,
   innerHeight: 800,
   requestAnimationFrame: (fn) => raf.push(fn),

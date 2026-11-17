@@ -45,6 +45,7 @@ Object.defineProperty(El.prototype, "offsetParent", { get() { return this.parent
 document.dispatchEvent = document.dispatchEvent || (() => true);
 const win = {
   document,
+  __zentralNotesLangTables: { en: require("../additional/notes/i18n/en.js"), pl: require("../additional/notes/i18n/pl.js") },
   ZentralRuntime: {
     register: (def) => (registered = def),
     nativeSidebarSide: () => {
