@@ -2060,6 +2060,10 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 /* T2.4b: month, forward-days and agenda calendar views. */
 .zentral-notes-sheet .zn-calendar-pane-head { flex: 0 0 auto; }
 .zentral-notes-sheet .zn-calendar-controls { display: flex; flex: 0 0 auto; align-items: center; flex-wrap: wrap; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--zn-line); }
+.zentral-notes-sheet .zn-calendar-controls[hidden] { display: none !important; }
+.zentral-notes-sheet .zn-calendar-controls-toggle { position: relative; flex: 0 0 auto; }
+.zentral-notes-sheet .zn-calendar-controls-dot { position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 999px; background: var(--zn-accent); pointer-events: none; }
+.zentral-notes-sheet .zn-calendar-controls-dot[hidden] { display: none !important; }
 .zentral-notes-sheet .zn-calendar-controls .zn-chip { flex: 0 1 auto; max-width: 100%; min-width: 0; padding: 4px 7px; white-space: nowrap; }
 .zentral-notes-sheet .zn-calendar-view-select { min-width: 90px; }
 .zentral-notes-sheet .zn-calendar-kind-filter,

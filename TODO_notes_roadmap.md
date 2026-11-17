@@ -76,7 +76,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
-|    63 | `OW-34`     | `OPEN`    | Med-High            | S      | none              | Quick-hide toggle for Calendar filter/controls bar in small windows                                      |
 |    64 | `OW-35`     | `OPEN`    | Med-High            | S      | none              | Independent filter state for regular Calendar pane vs Big Picture popup                                  |
 |    65 | `OW-36`     | `OPEN`    | Med-High            | M      | none              | Spell-check right-click menu: spelling suggestions, add to dictionary / ignore, and language picker      |
 |    12 | `T2.9`      | `PARTIAL` | Med-High            | M      | none              | Daily-note lifecycle and archive policy inside Agenda                                                    |
@@ -113,17 +112,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 ---
 
 ## Task blocks (same order as the Master Order)
-
-#### `OW-34` — Quick-hide toggle for Calendar filter/controls bar in small windows
-
-**Status:** `OPEN` · **Impact:** Med-High · **Effort:** S · **Source:** owner live test 2026-11-16
-
-**Problem:** The Calendar toolbar/filter bar (views, kind/category filters, density/size, days, tools) takes too much vertical space in a small window.
-
-**Plan:**
-1. Add a one-click compact toggle button (e.g. `Hide filters` / `Show filters`, with active-filter indicator dot when filters are non-default while hidden) to collapse the secondary Calendar filter/controls row cleanly.
-2. Persist collapsed state per window in `meta.calendarFiltersCollapsed` (cleanly validated in `metaFromRaw`) and wire EN/PL i18n keys.
-3. Add tests verifying toggle, active-filter badge visibility while collapsed, persistence, keyboard accessibility, and EN/PL localization.
 
 #### `OW-35` — Independent filter state for regular Calendar pane vs Big Picture popup
 
@@ -437,13 +425,15 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.231, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.232, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.231.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`189/189` test files) passes in Node/fake-Zen at 3.3.231. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.232.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`190/190` test files) passes in Node/fake-Zen at 3.3.232. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
-Completed this session (3.3.163–3.3.231), every finished item archived in `docs/LEGACY_done_rows.md`:
+Completed this session (3.3.163–3.3.232), every finished item archived in `docs/LEGACY_done_rows.md`:
+
+- `OW-34` (3.3.232) — added one-click quick-hide toggle (`.zn-calendar-controls-toggle`) for the Calendar filter/controls bar (`additional/notes/calendar/ZentralNotesCalendar.js`, `additional/notes/ZentralNotes.uc.js`, `additional/notes/ZentralNotes.css`, `additional/notes/i18n/en.js`, `additional/notes/i18n/pl.js`): collapses `.zn-calendar-controls` and immediately refits the calendar grid (`refitCalendar()`) to reclaim vertical height in small windows; persists per-window `meta.calendarFiltersCollapsed` (validated in `metaFromRaw`); displays an accent active-filter indicator dot (`.zn-calendar-controls-dot`) and active filter count tooltip/aria-label (`calendarActiveFilterCount`) whenever non-default kind or category filters are active while collapsed; and localizes cleanly in EN/PL (`cal.controls.hide`/`show`/`showActive`). Verified in `tests/notes-calendar-controls-toggle.test.cjs` (`190/190` suite).
 
 - `OW-33` (3.3.231) — hardened small-window All notes chrome & non-calendar toolbars against clipping and vertical bloat (`additional/notes/calendar/ZentralNotesCalendar.js`, `additional/notes/ZentralNotes.uc.js`, `additional/notes/ZentralNotes.css`): added pure `ALL_NOTES_CHROME_THRESHOLDS` / `allNotesChromeDensity(w, h)` driving `data-all-chrome` (`normal`/`compact`/`tight`) and `data-short-window` on All notes layout & sheet root; hid editor-only `Pin note` and `Note color` buttons from `.zn-head` while in `view="list"`; enabled safe `flex-wrap: wrap` + `min-width: 0` across `.zn-head[data-view="list"]`, `.zn-all-toolbar`, `.zn-list-head`, `.zn-chips`, and `.zn-calendar-pane-head` so `Trash`, `Tags`, `Empty Trash`, and create/window controls never clip at `240–420px` widths; and tightened small-window padding/button/chip sizing while collapsing the `.zn-chips .zn-grow` spacer. Verified in `tests/notes-small-window-chrome.test.cjs` (`189/189` suite).
 

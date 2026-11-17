@@ -7123,7 +7123,7 @@
       const backedUp = new Set();
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, dockPx: 0, gapPx: 0, cardDock: "", cardW: 0, cardH: 0, cardHShare: 0,
         allNewChoice: "note", calendarClockMode: "both",
-        calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarTab: "tree",
+        calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarFiltersCollapsed: false, calendarTab: "tree",
         calendarBigPictureSize: CALENDAR_PART ? CALENDAR_PART.DEFAULT_CALENDAR_BIG_PICTURE_SIZE : 90,
         calendarView: "month", calendarWeekStart: 1, calendarWeekNumbers: false, calendarWeekSpan: { days: 7, anchor: "weekStart" }, calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
         // The hours Week and Day show ({ on, startMin, endMin }; off = the whole day). Replaced as a whole, never changed in place.
@@ -7871,6 +7871,7 @@
             meta.calendarTreeCollapsed = raw.calendarTreeCollapsed === true;
             meta.calendarPaneCollapsed = raw.calendarPaneCollapsed === true;
             if (meta.calendarTreeCollapsed && meta.calendarPaneCollapsed) meta.calendarTreeCollapsed = meta.calendarPaneCollapsed = false;
+            meta.calendarFiltersCollapsed = raw.calendarFiltersCollapsed === true;
             meta.calendarTab = raw.calendarTab === "calendar" ? "calendar" : "tree";
             meta.calendarBigPictureSize = CALENDAR_PART.cleanCalendarBigPictureSize(raw.calendarBigPictureSize);
             meta.calendarView = ["month", "upcoming", "agenda", "week", "day"].includes(raw.calendarView) ? raw.calendarView : "month";
@@ -14788,6 +14789,7 @@
       chevron: "m9 6 6 6-6 6",
       chevronLeft: "m15 6-6 6 6 6",
       chevronRight: "m9 6 6 6-6 6",
+      sliders: "M4 6h16 M7 12h10 M10 18h4",
       columns: "M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M12 3v18",
       image: "M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z M21 15l-5-5L5 21",
       rule: "M4 12h16",
@@ -15811,9 +15813,18 @@
       const treePane = h("section", { class: "zn-tree-pane", "aria-label": t("tree.pane.aria") }, listEl);
       const calendarPeriod = h("span", { class: "zn-calendar-pane-hint", "aria-live": "polite" }, "");
       const calendarHeadingEl = h("strong", {}, t("cal.heading"));
+      const btnCalendarControlsDot = h("span", { class: "zn-calendar-controls-dot", "aria-hidden": "true", hidden: true });
+      const btnCalendarControlsToggle = h("button", {
+        type: "button",
+        class: "zn-btn zn-calendar-controls-toggle",
+        title: t("cal.controls.hide"),
+        "aria-label": t("cal.controls.hide"),
+        "aria-expanded": "true",
+        "aria-pressed": "false",
+      }, icon("sliders", 13), btnCalendarControlsDot);
       const btnCalendarBigPicture = iconButton("maximize", t("cal.bigPicture.open"), "zn-calendar-bigpicture-btn");
       btnCalendarBigPicture.setAttribute("aria-pressed", "false");
-      const calendarHeadRight = h("div", { class: "zn-calendar-pane-head-right" }, calendarPeriod, btnCalendarBigPicture);
+      const calendarHeadRight = h("div", { class: "zn-calendar-pane-head-right" }, calendarPeriod, btnCalendarControlsToggle, btnCalendarBigPicture);
       const calendarHeader = h("div", { class: "zn-calendar-pane-head" }, calendarHeadingEl, calendarHeadRight);
       // Zen can close a panel when a native <select> opens its platform popup. Calendar controls therefore use
       // the same accessible in-sheet menu as the rest of Notes; the selectors remain buttons, never native selects.
@@ -16150,10 +16161,37 @@
         }
         return true;
       }
+      listen(btnCalendarControlsToggle, "click", () => {
+        const next = store.meta.calendarFiltersCollapsed !== true;
+        store.setMeta({ calendarFiltersCollapsed: next });
+        syncCalendarControlsToggle();
+        if (!calendarPane.hidden) refitCalendar();
+      });
       listen(btnCalendarBigPicture, "click", () => {
         if (bigPicture) closeCalendarBigPicture({ restoreFocus: true });
         else openCalendarBigPicture();
       });
+      function syncCalendarControlsToggle() {
+        const collapsed = store.meta.calendarFiltersCollapsed === true;
+        const kind = ["all", "event", "reminder"].includes(store.meta.calendarFilterKind) ? store.meta.calendarFilterKind : "all";
+        const categories = store.items?.categoryList?.() || [];
+        const requestedCategory = typeof store.meta.calendarFilterCategory === "string" ? store.meta.calendarFilterCategory : "";
+        const category = categories.some((entry) => entry.name === requestedCategory) ? requestedCategory : "";
+        const activeFilters = CALENDAR_PART?.calendarActiveFilterCount?.(kind, category) || 0;
+        calendarControls.hidden = collapsed;
+        calendarPane.dataset.controlsCollapsed = collapsed ? "true" : "false";
+        btnCalendarControlsToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+        btnCalendarControlsToggle.setAttribute("aria-pressed", collapsed ? "true" : "false");
+        btnCalendarControlsToggle.classList.toggle("is-on", collapsed);
+        btnCalendarControlsToggle.classList.toggle("has-active-filters", collapsed && activeFilters > 0);
+        btnCalendarControlsToggle.dataset.activeFilters = String(activeFilters);
+        btnCalendarControlsDot.hidden = !(collapsed && activeFilters > 0);
+        const label = collapsed
+          ? (activeFilters > 0 ? t("cal.controls.showActive", { count: activeFilters }) : t("cal.controls.show"))
+          : t("cal.controls.hide");
+        btnCalendarControlsToggle.title = label;
+        btnCalendarControlsToggle.setAttribute("aria-label", label);
+      }
       function updateAllLayout(resized = false) {
         const active = view === "list" && filter === "all" && !!CALENDAR_PART;
         const calendarWasHidden = calendarPane.hidden;
@@ -16250,6 +16288,7 @@
         calendarToolsSelect.setAttribute("aria-label", t("cal.tools.aria"));
         calendarToolsSelect.textContent = t("cal.tools");
         syncCalendarBigPictureButton();
+        syncCalendarControlsToggle();
         syncCalendarDaysControl(calendarViewName);
         // A change of size alone draws the calendar again only when it would come out differently (OW-03); before,
         // every px of a resize drew it again.
@@ -17499,6 +17538,7 @@
         calendarCategorySelect.dataset.value = category;
         calendarCategorySelect.textContent = category || t("cal.filter.allCategories");
         if (category !== requestedCategory) store.setMeta({ calendarFilterCategory: category });
+        syncCalendarControlsToggle();
       }
       function calendarChoiceMenu(anchor, entries, current, choose) {
         showMenu(anchor, entries.map((entry) => ({
