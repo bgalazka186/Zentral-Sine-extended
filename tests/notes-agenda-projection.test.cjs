@@ -1,7 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict");
 const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
-const { scaleBudget } = require("./helpers/perf-budget.cjs");
 const now = new Date(2026, 10, 13, 9, 0).getTime();
 const today = C.localDateKey(now), tomorrow = C.localDateKey(C.addDays(C.dayStart(now), 1));
 const make = (id, summary, start, end, x = {}) => { const { description = "", ...meta } = x; return C.makeItem({ id, summary, description, start, ...(end ? { end } : {}), x: { kind: end ? "event" : "reminder", src: "manual", ...meta } }, now); };
@@ -47,15 +46,14 @@ test("Agenda projection filters completed occurrences independently", () => {
   assert.equal(plan[1].count, 1);
 });
 
-test("Agenda projection handles 5,000 items within the 50 ms CI budget", () => {
+// F0.15: the 5,000-item shape and what it produces stay here; the time it takes is measured in
+// `tests/notes-agenda-projection-perf.test.cjs`, which the runner keeps out of the parallel batch. A clock read in the
+// batch measured the machine's other work as much as this projection.
+test("Agenda projection places all 5,000 items of a full day", () => {
   const items = Array.from({ length: 5000 }, (_, i) => make("bulk-" + i, "Item " + i, { dateTime: new Date(new Date(2026, 10, 13, 9, 0).getTime() + i * 1000).toISOString() }, null));
-  const start = process.hrtime.bigint();
   const result = C.agendaZenProjection(items, now, 4);
-  const elapsed = Number(process.hrtime.bigint() - start) / 1e6;
   assert.equal(result[0].count, 5000);
-  const ceiling = scaleBudget(50);
-  assert.ok(elapsed < ceiling, `5,000 item projection took ${elapsed.toFixed(2)} ms (ceiling ${ceiling.toFixed(1)} ms)`);
-  console.log("ok - 5,000 item projection took " + elapsed.toFixed(2) + " ms");
+  assert.equal(result[1].count, 0, "nothing spills into the next day");
 });
 
 test("Zen Agenda controller diffs virtual day/item entries and coalesces store-change updates", () => {
