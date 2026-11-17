@@ -24080,9 +24080,14 @@
               return b;
             }),
           );
-          body.replaceChildren(
-            ...tab.items.map((o) => (o.kind === "heading" ? h("strong", { class: "zn-set-heading" }, settingsHeadingLabel(o)) : o.kind === "slider" ? sliderRow(o) : o.kind === "color" ? colorRow(o) : simpleRow(o))),
-          );
+          const rows = tab.items.map((o) => (o.kind === "heading" ? h("strong", { class: "zn-set-heading" }, settingsHeadingLabel(o)) : o.kind === "slider" ? sliderRow(o) : o.kind === "color" ? colorRow(o) : simpleRow(o)));
+          if (tab.id === "zen" && typeof env.inspectAgenda === "function") {
+            const checkBtn = chip(t("settings.doctor.checkBtn"));
+            checkBtn.classList.add("zn-doctor-check-btn");
+            checkBtn.addEventListener("click", () => askAgendaDoctor());
+            rows.push(h("div", { class: "zn-set-row zn-doctor-entry-row" }, h("span", { class: "zn-quick-label" }, t("settings.doctor.label")), controlGroup(checkBtn)));
+          }
+          body.replaceChildren(...rows);
           body.scrollTop = 0;
         }
         drawTab();
@@ -24104,6 +24109,111 @@
         const card = openCard(t("settings.title"), tabs, body, h("div", { class: "zn-dialog-actions" }, reset, toolsChip, keys, done));
         card.classList.add("zn-settings");
         done.focus({ preventScroll: true });
+      }
+      // SB6.5: Agenda Doctor — inspect Zen Agenda DOM & reminder history state and run safe one-click repairs.
+      function askAgendaDoctor() {
+        const body = h("div", { class: "zn-doctor-body" });
+        const banner = h("div", { class: "zn-doctor-banner", role: "status", "aria-live": "polite" });
+        const repairNotice = h("div", { class: "zn-doctor-notice", role: "status", "aria-live": "polite", hidden: true });
+        const backBtn = chip(t("doctor.backBtn"));
+        const recheckBtn = chip(t("doctor.recheckBtn"));
+        const repairBtn = chip(t("doctor.repairBtnEmpty"), true);
+        repairBtn.classList.add("zn-doctor-repair-btn");
+        const closeBtn = chip(t("common.close"));
+        const MAX_LIST = 8;
+        const renderSection = (key, title, count, items, { hint = "", severity = "" } = {}) => {
+          const sec = h("section", { class: "zn-doctor-sec", "data-doctor-section": key });
+          const badgeCls = "zn-doctor-badge" + (severity === "error" ? " is-error" : (count > 0 || severity === "warning" ? " is-warn" : " is-ok"));
+          sec.append(h("div", { class: "zn-doctor-sec-head" }, h("strong", {}, title), h("span", { class: badgeCls }, String(count))));
+          if (hint) sec.append(h("p", { class: "zn-doctor-hint" }, hint));
+          if (items.length) {
+            const list = h("ul", { class: "zn-doctor-list" });
+            for (const text of items.slice(0, MAX_LIST)) list.append(h("li", {}, text));
+            if (items.length > MAX_LIST) list.append(h("li", { class: "zn-doctor-more" }, t("doctor.moreItems", { count: items.length - MAX_LIST })));
+            sec.append(list);
+          } else {
+            sec.append(h("div", { class: "zn-doctor-none" }, t("doctor.none")));
+          }
+          return sec;
+        };
+        const renderReport = (report, noticeText = "") => {
+          body.replaceChildren();
+          if (noticeText) {
+            repairNotice.textContent = noticeText;
+            repairNotice.hidden = false;
+          } else {
+            repairNotice.textContent = "";
+            repairNotice.hidden = true;
+          }
+          if (!report) {
+            banner.dataset.state = "warn";
+            banner.textContent = t("doctor.unavailable");
+            repairBtn.disabled = true;
+            repairBtn.textContent = t("doctor.repairBtnEmpty");
+            repairBtn.classList.remove("is-on");
+            return;
+          }
+          const plan = CALENDAR_PART?.planAgendaDoctorRepair ? CALENDAR_PART.planAgendaDoctorRepair(report) : { safeCount: 0, hasSafeRepairs: false };
+          const total = Number(report.counts?.totalIssues) || 0;
+          banner.dataset.state = report.healthy ? "ok" : (report.history?.severity === "error" ? "error" : "warn");
+          const parts = [report.healthy ? t("doctor.healthy") : tCount("doctor.issuesFound", total)];
+          if (!report.enabled) parts.push(t("doctor.agendaDisabled"));
+          banner.textContent = parts.join(" ");
+
+          const dupLabels = [
+            ...(report.duplicateRoots || []).map((r) => t("doctor.duplicateRootEntry", { label: r.label })),
+            ...(report.duplicateKeys || []).map((d) => t("doctor.duplicateEntry", { key: d.key, count: d.count })),
+          ];
+          const dupCount = (report.duplicateRoots?.length || 0) + (report.duplicateKeys?.length || 0);
+          body.append(
+            renderSection("orphanSeeds", t("doctor.sec.orphanSeeds"), report.orphanSeeds.length, report.orphanSeeds.map((s) => `${s.label} (${s.key})`)),
+            renderSection("duplicateKeys", t("doctor.sec.duplicateKeys"), dupCount, dupLabels),
+            renderSection("tabsOutsideRoot", t("doctor.sec.tabsOutsideRoot"), report.tabsOutsideRoot.length, report.tabsOutsideRoot.map((x) => `${x.label} (${x.key})`)),
+            renderSection("foreignTabs", t("doctor.sec.foreignTabs"), report.foreignTabs.length, report.foreignTabs.map((f) => f.label + (f.folderLabel ? ` — ${f.folderLabel}` : "")), { hint: report.foreignTabs.length ? t("doctor.sec.foreignHint") : "" }),
+            renderSection("releasedFolders", t("doctor.sec.releasedFolders"), report.releasedFolders.length, report.releasedFolders.map((f) => `${f.label} (${f.tabCount})`), { hint: report.releasedFolders.length ? t("doctor.sec.releasedHint") : "" }),
+          );
+
+          const hist = report.history || {};
+          const stateLabel = t("doctor.history.state." + (hist.stateKey || "unopened"));
+          const histDetails = [t("doctor.history.summary", { state: stateLabel, count: hist.count || 0, size: hist.sizeText || "0 B" })];
+          if (hist.retryCount > 0) histDetails.push(t("doctor.history.retries", { count: hist.retryCount }));
+          if (hist.backupPath) histDetails.push(t("doctor.history.backup", { path: hist.backupPath }));
+          if (hist.error) histDetails.push(hist.error);
+          const histSec = h("section", { class: "zn-doctor-sec", "data-doctor-section": "history" });
+          const histBadgeCls = "zn-doctor-badge" + (hist.severity === "error" ? " is-error" : hist.severity === "warning" ? " is-warn" : " is-ok");
+          histSec.append(h("div", { class: "zn-doctor-sec-head" }, h("strong", {}, t("doctor.sec.history")), h("span", { class: histBadgeCls }, stateLabel)));
+          const histList = h("ul", { class: "zn-doctor-list" });
+          for (const line of histDetails) histList.append(h("li", {}, line));
+          histSec.append(histList);
+          body.append(histSec);
+
+          repairBtn.disabled = !plan.hasSafeRepairs || typeof env.repairAgenda !== "function";
+          repairBtn.textContent = plan.hasSafeRepairs ? t("doctor.repairBtn", { count: plan.safeCount }) : t("doctor.repairBtnEmpty");
+          repairBtn.classList.toggle("is-on", plan.hasSafeRepairs && !repairBtn.disabled);
+        };
+        const runCheck = (notice = "") => {
+          const report = typeof env.inspectAgenda === "function" ? env.inspectAgenda() : null;
+          renderReport(report, notice);
+        };
+        backBtn.addEventListener("click", () => askAllSettings("zen"));
+        recheckBtn.addEventListener("click", () => runCheck(""));
+        repairBtn.addEventListener("click", () => {
+          if (typeof env.repairAgenda !== "function") return;
+          const res = env.repairAgenda();
+          const fixed = Number(res?.repaired?.total) || 0;
+          const skipped = Number(res?.repaired?.skipped) || 0;
+          const parts = [fixed > 0 ? tCount("doctor.repaired", fixed) : t("doctor.nothingToRepair")];
+          if (skipped > 0) parts.push(t("doctor.repairedSkipped", { skipped }));
+          renderReport(res?.after || (typeof env.inspectAgenda === "function" ? env.inspectAgenda() : null), parts.join(" "));
+        });
+        closeBtn.addEventListener("click", () => {
+          closeDialog();
+          focusEditor();
+        });
+        const card = openCard(t("doctor.title"), banner, repairNotice, body, h("div", { class: "zn-dialog-actions" }, backBtn, recheckBtn, repairBtn, closeBtn));
+        card.classList.add("zn-doctor-card");
+        runCheck("");
+        (repairBtn.disabled ? closeBtn : repairBtn).focus({ preventScroll: true });
       }
       // Shortcut assignment: click a shortcut, press the new keys. Backspace clears, Esc cancels.
       function askShortcuts() {
@@ -26300,6 +26410,12 @@
           askAllSettings("zen");
           return true;
         },
+        openAgendaDoctor: () => {
+          if (!isOpen || destroyed) return false;
+          outsideClaim = false;
+          askAgendaDoctor();
+          return true;
+        },
         openNote: (id, opts) => {
           if (!isOpen || destroyed || !store.get(id)) return false;
           openNote(id, opts);
@@ -27599,6 +27715,9 @@
       const env = { openLink, copyText, exportNote, exportAll, exportZip, exportBackupZip, exportObsidianVault, pickObsidianVault, importObsidianVault, pickBackupZip, restoreBackupZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now(),
         // Visibility rules live in meta.json, which raises no store event: the sheet asks for the Zen Agenda refresh.
         refreshAgenda: () => { if (!disposed && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); } },
+        // SB6.5: Agenda Doctor diagnostics & safe one-click repair (wired to live host DOM + reminder history).
+        inspectAgenda: () => inspectAgenda(),
+        repairAgenda: () => repairAgenda(),
         // For a sheet that was opened before the notes could be read: when they are there, and a write that must wait for them.
         storeWhenReady, withStore };
 
@@ -29223,6 +29342,210 @@
         if (!agendaEnabled()) { agendaController.runNow(); return; }
         storeWhenReady().then(() => { if (!disposed && agendaEnabled()) agendaController.schedule(); }).catch(warn);
       };
+      // SB6.5: Agenda Doctor — read-only DOM + reminder history scan, plus safe one-click repair.
+      function peekAgendaTabKey(tab) {
+        if (!tab) return "";
+        let live = "";
+        try { live = tab.linkedBrowser?.currentURI?.spec || ""; } catch (_) {}
+        if (live && live !== "about:blank" && !/^about:blank#zn-agenda-/.test(live)) return "";
+        let sessionUrl = "";
+        if ((!live || live === "about:blank") && typeof sessionCurrentTabUrl === "function") {
+          const remembered = String(tab._zentralNotesUrl || "");
+          if (tab.hasAttribute?.(AGENDA_ATTR) || /^about:blank#zn-agenda-/.test(remembered) || tab.pinned || tab.hasAttribute?.("pending")) {
+            sessionUrl = sessionCurrentTabUrl(tab) || "";
+            if (sessionUrl && sessionUrl !== "about:blank" && !/^about:blank#zn-agenda-/.test(sessionUrl)) return "";
+          }
+        }
+        const attr = tab.getAttribute?.(AGENDA_ATTR) || "";
+        if (attr) return attr;
+        const raw = /^about:blank#zn-agenda-/.test(live)
+          ? live
+          : (/^about:blank#zn-agenda-/.test(sessionUrl)
+            ? sessionUrl
+            : (typeof tab._zentralNotesUrl === "string" ? tab._zentralNotesUrl : ""));
+        const match = /^about:blank#zn-agenda-([A-Za-z0-9%._~-]{1,600})$/.exec(raw);
+        if (!match) return "";
+        try { return decodeURIComponent(match[1]); } catch (_) { return ""; }
+      }
+      function countForeignInFolder(folder) {
+        if (!folder || folder.isConnected === false) return 0;
+        const foreignFolders = [...(folder.querySelectorAll?.("zen-folder") || [])].filter((child) => !agendaOwnedDay(child));
+        const foreignSet = new Set(foreignFolders);
+        const insideForeign = (node) => {
+          for (let p = node.parentElement; p && p !== folder; p = p.parentElement) if (foreignSet.has(p)) return true;
+          return false;
+        };
+        const outerFolders = foreignFolders.filter((child) => !insideForeign(child));
+        const outerTabs = [...(folder.querySelectorAll?.("tab") || [])].filter((tab) => !peekAgendaTabKey(tab) && !insideForeign(tab));
+        return outerFolders.length + outerTabs.length;
+      }
+      function scanAgendaLive() {
+        const allFolders = [...(document.querySelectorAll?.("zen-folder") || [])];
+        const agendaRoots = allFolders.filter((f) => f.id === AGENDA_ROOT_ID || f.getAttribute?.("bgalazka-notes-agenda-folder") === "true");
+        const canonicalRoot = agendaRoots.find((f) => f.id === AGENDA_ROOT_ID) || agendaRoots[0] || null;
+        const refs = { roots: new Map(), tabs: new Map(), agendaRoots };
+        const roots = agendaRoots.map((f, idx) => {
+          const refId = `root:${idx}:${f.id || "unnamed"}`;
+          refs.roots.set(refId, f);
+          return {
+            id: refId,
+            label: f.getAttribute?.("label") || f.id || "Agenda",
+            canonical: f === canonicalRoot,
+            foreignCount: countForeignInFolder(f),
+          };
+        });
+        const tabs = [];
+        const allTabs = [...(document.querySelectorAll?.("tab") || [])];
+        allTabs.forEach((tab, idx) => {
+          const key = peekAgendaTabKey(tab);
+          if (!key) return;
+          const refId = `tab:${idx}:${key}`;
+          refs.tabs.set(refId, tab);
+          const insideRoot = !!(canonicalRoot && canonicalRoot.contains?.(tab));
+          const isFallbackSeed = tab.getAttribute?.("bgalazka-notes-agenda-fallback-seed") === "true";
+          const parentFolder = tab.closest?.("zen-folder") || null;
+          let parentHasNonSeed = false;
+          if (parentFolder) {
+            const otherOwnTab = [...(parentFolder.querySelectorAll?.("tab") || [])].some((other) => {
+              if (other === tab) return false;
+              const oKey = peekAgendaTabKey(other);
+              return !!oKey && !/^seed:/.test(oKey);
+            });
+            const hasOwnedSubfolder = parentFolder === canonicalRoot && [...(parentFolder.querySelectorAll?.("zen-folder") || [])].some((f) => agendaOwnedDay(f));
+            parentHasNonSeed = otherOwnTab || hasOwnedSubfolder;
+          }
+          tabs.push({
+            id: refId,
+            key,
+            label: tab.getAttribute?.("bgalazka-notes-label") || tab.getAttribute?.("label") || key,
+            insideRoot,
+            isSeed: key.startsWith("seed:"),
+            isFallbackSeed,
+            fallbackRequired: isFallbackSeed && (parentFolder === canonicalRoot ? agendaKeepSeed.root : (parentFolder ? agendaKeepSeed.day : false)),
+            parentId: parentFolder?.id || parentFolder?.getAttribute?.("bgalazka-notes-agenda-key") || "",
+            parentHasNonSeed,
+          });
+        });
+        const foreignTabs = [];
+        let foreignSeq = 0;
+        for (const root of agendaRoots) {
+          const foreignFolders = [...(root.querySelectorAll?.("zen-folder") || [])].filter((child) => !agendaOwnedDay(child));
+          const foreignSet = new Set(foreignFolders);
+          const insideForeign = (node) => {
+            for (let p = node.parentElement; p && p !== root; p = p.parentElement) if (foreignSet.has(p)) return true;
+            return false;
+          };
+          for (const folder of foreignFolders.filter((child) => !insideForeign(child))) {
+            const parentFolder = folder.parentElement?.closest?.("zen-folder") || root;
+            foreignTabs.push({
+              id: `foreign-folder:${foreignSeq++}`,
+              kind: "folder",
+              label: folder.getAttribute?.("label") || folder.id || "Folder",
+              folderId: parentFolder?.id || "",
+              folderLabel: parentFolder?.getAttribute?.("label") || parentFolder?.id || "Agenda",
+              url: "",
+            });
+          }
+          for (const tab of [...(root.querySelectorAll?.("tab") || [])].filter((tab) => !peekAgendaTabKey(tab) && !insideForeign(tab))) {
+            const parentFolder = tab.closest?.("zen-folder") || root;
+            let url = "";
+            try { url = tab.linkedBrowser?.currentURI?.spec || ""; } catch (_) {}
+            foreignTabs.push({
+              id: `foreign-tab:${foreignSeq++}`,
+              kind: "tab",
+              label: tab.getAttribute?.("label") || url || "Tab",
+              folderId: parentFolder?.id || "",
+              folderLabel: parentFolder?.getAttribute?.("label") || parentFolder?.id || "Agenda",
+              url,
+            });
+          }
+        }
+        const releasedFolders = allFolders
+          .filter((f) => f.id?.startsWith("zentral-released-") || f.hasAttribute?.("bgalazka-notes-released"))
+          .map((f, idx) => ({
+            id: f.id || `released:${idx}`,
+            label: f.getAttribute?.("label") || f.id || "Released folder",
+            tabCount: [...(f.querySelectorAll?.("tab") || [])].length,
+            foreignCount: [...(f.querySelectorAll?.("tab") || [])].filter((t) => !peekAgendaTabKey(t)).length,
+            kind: f.id?.includes("agenda") ? "agenda" : "notes",
+          }));
+        const hs = store.items?.history?.storageState?.() || null;
+        let historyBytes = 0;
+        if (hs && (hs.count > 0 || hs.state === "ready" || hs.state === "degraded")) {
+          try {
+            const records = store.items?.history?.list?.() || [];
+            const raw = JSON.stringify({ v: 1, records });
+            historyBytes = typeof TextEncoder === "function" ? new TextEncoder().encode(raw).length : raw.length;
+          } catch (_) { historyBytes = 0; }
+        }
+        const snapshot = {
+          enabled: agendaEnabled(),
+          roots,
+          tabs,
+          foreignTabs,
+          releasedFolders,
+          history: { ...(hs || {}), bytes: historyBytes },
+        };
+        return { snapshot, refs };
+      }
+      function inspectAgenda() {
+        if (!CALENDAR_PART?.diagnoseAgenda) return null;
+        return CALENDAR_PART.diagnoseAgenda(scanAgendaLive().snapshot);
+      }
+      function repairAgenda() {
+        if (!CALENDAR_PART?.diagnoseAgenda || !CALENDAR_PART?.planAgendaDoctorRepair) {
+          return { before: null, plan: null, repaired: { duplicateRoots: 0, foreignEvacuated: 0, orphanSeeds: 0, duplicateTabs: 0, tabsOutsideRoot: 0, skipped: 0, reconciled: false, total: 0 }, after: null };
+        }
+        const { snapshot, refs } = scanAgendaLive();
+        const before = CALENDAR_PART.diagnoseAgenda(snapshot);
+        const plan = CALENDAR_PART.planAgendaDoctorRepair(before);
+        const actions = plan.actions || {};
+        const repaired = { duplicateRoots: 0, foreignEvacuated: 0, orphanSeeds: 0, duplicateTabs: 0, tabsOutsideRoot: 0, skipped: 0, reconciled: false, total: 0 };
+        // 1. Retire duplicate Agenda roots (evacuating foreign tabs/folders first; never deleting user content).
+        for (const rootRefId of (actions.retireDuplicateRoots || [])) {
+          const dup = refs.roots.get(rootRefId);
+          if (!dup || dup.isConnected === false) continue;
+          const foreignBefore = countForeignInFolder(dup);
+          const ok = agendaRetireFolder(dup);
+          const foreignAfter = dup.isConnected === false ? 0 : countForeignInFolder(dup);
+          if (foreignBefore > foreignAfter) repaired.foreignEvacuated += (foreignBefore - foreignAfter);
+          if (ok) repaired.duplicateRoots++;
+          else repaired.skipped++;
+        }
+        // 2. Evacuate foreign user tabs/folders out of any remaining Agenda roots (never deleting them).
+        if ((actions.evacuateForeignTabs || []).length > 0) {
+          for (const root of refs.agendaRoots) {
+            if (!root || root.isConnected === false) continue;
+            const foreignBefore = countForeignInFolder(root);
+            if (!foreignBefore) continue;
+            agendaEvacuateForeign(root);
+            const foreignAfter = root.isConnected === false ? 0 : countForeignInFolder(root);
+            if (foreignBefore > foreignAfter) repaired.foreignEvacuated += (foreignBefore - foreignAfter);
+            if (foreignAfter > 0) repaired.skipped += foreignAfter;
+          }
+        }
+        // 3. Remove safe own Agenda pseudo-tabs: orphan seeds, duplicate extra tabs, and tabs outside the canonical root.
+        const removeOwnTab = (refId) => {
+          const tab = refs.tabs.get(refId);
+          if (!tab || tab.isConnected === false || !peekAgendaTabKey(tab)) return false;
+          zenRemoveTab(tab);
+          return tab.isConnected === false;
+        };
+        for (const id of (actions.removeOrphanSeeds || [])) if (removeOwnTab(id)) repaired.orphanSeeds++;
+        for (const id of (actions.removeDuplicateTabs || [])) if (removeOwnTab(id)) repaired.duplicateTabs++;
+        for (const id of (actions.removeTabsOutsideRoot || [])) if (removeOwnTab(id)) repaired.tabsOutsideRoot++;
+        repaired.total = repaired.duplicateRoots + repaired.foreignEvacuated + repaired.orphanSeeds + repaired.duplicateTabs + repaired.tabsOutsideRoot;
+        // 4. Reconcile the Zen Agenda projection when enabled (or invalidate cache if disabled).
+        if (actions.reconcile && agendaEnabled()) {
+          agendaController.invalidate?.();
+          agendaController.runNow?.();
+          repaired.reconciled = true;
+        } else if (repaired.total > 0) {
+          agendaController.invalidate?.();
+        }
+        const after = inspectAgenda();
+        return { before, plan, repaired, after };
+      }
       const agendaItemUnsub = store.items?.on?.((ev) => {
         if (CALENDAR_PART?.agendaItemEventAffectsProjection(ev) && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); }
       });
@@ -31447,7 +31770,7 @@
         const sidebar = { store, ensureStore, storeWhenReady, withStore, zenApi, zen, agendaApi, agendaController, tick, reminders,
           onAgendaMouse, onAgendaSelect, onAgendaTabEvent, onAgendaAttr, agendaEnsureVisuals, onAgendaFolderMenuShowing,
           onAgendaFolderMenuHidden, onAgendaTabMenuShowing, runAgendaAction: runHeadlessAgendaAction, agendaToast: agendaActionToast,
-          agendaHoverCard, notesHoverCard, nextAgendaItem, nextNotesItem };
+          agendaHoverCard, notesHoverCard, nextAgendaItem, nextNotesItem, inspectAgenda, repairAgenda };
         window.__zentralNotesTestSeam.sidebar = sidebar;
         onCleanup(() => {
           if (window.__zentralNotesTestSeam?.sidebar === sidebar) delete window.__zentralNotesTestSeam.sidebar;

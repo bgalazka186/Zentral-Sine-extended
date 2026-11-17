@@ -5087,6 +5087,195 @@
       destroy() { dead = true; clearScheduled(); try { api.removeAll?.(); } catch (error) { safeWarn(error); } },
     };
   }
+  // SB6.5: Pure Agenda Doctor diagnostics & safe-repair planner.
+  // Classifies DOM and reminder-history snapshots without touching browser objects.
+  function formatAgendaDoctorBytes(bytes) {
+    const n = Math.max(0, Math.round(Number(bytes) || 0));
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1).replace(/\.0$/, "") + " KB";
+    return (n / (1024 * 1024)).toFixed(2).replace(/\.00$/, "") + " MB";
+  }
+  function diagnoseAgenda(snapshot = {}) {
+    const enabled = snapshot?.enabled === true;
+    const rawRoots = Array.isArray(snapshot?.roots) ? snapshot.roots : [];
+    const rawTabs = Array.isArray(snapshot?.tabs) ? snapshot.tabs : [];
+    const rawForeign = Array.isArray(snapshot?.foreignTabs) ? snapshot.foreignTabs : [];
+    const rawReleased = Array.isArray(snapshot?.releasedFolders) ? snapshot.releasedFolders : [];
+    const rawHist = snapshot?.history && typeof snapshot.history === "object" ? snapshot.history : {};
+
+    const duplicateRoots = rawRoots
+      .filter((r) => r && !r.canonical)
+      .map((r, i) => ({
+        id: String(r.id || `root-${i}`),
+        label: String(r.label || "Agenda"),
+        foreignCount: Math.max(0, Math.floor(Number(r.foreignCount) || 0)),
+      }));
+
+    // Track seeds per parent folder so an intentional single fallback seed in an empty folder
+    // (when Zen deletes empty folders) is treated as healthy rather than an orphan.
+    const seedsByParent = new Map();
+    for (const tab of rawTabs) {
+      if (!tab) continue;
+      const key = String(tab.key || "");
+      const isSeed = tab.isSeed === true || key.startsWith("seed:");
+      if (!isSeed) continue;
+      const parentId = String(tab.parentId || (tab.insideRoot ? "__root__" : "__outside__"));
+      if (!seedsByParent.has(parentId)) seedsByParent.set(parentId, []);
+      seedsByParent.get(parentId).push(tab);
+    }
+
+    const orphanSeeds = [];
+    const tabsOutsideRoot = [];
+    const nonSeedByKey = new Map();
+    for (let i = 0; i < rawTabs.length; i++) {
+      const tab = rawTabs[i];
+      if (!tab) continue;
+      const id = String(tab.id ?? `tab-${i}`);
+      const key = String(tab.key || "");
+      const label = String(tab.label || key || "Agenda");
+      const insideRoot = tab.insideRoot === true;
+      const isSeed = tab.isSeed === true || key.startsWith("seed:");
+      if (isSeed) {
+        const parentId = String(tab.parentId || (insideRoot ? "__root__" : "__outside__"));
+        const siblings = seedsByParent.get(parentId) || [];
+        const isPrimaryFallback = enabled && insideRoot && tab.isFallbackSeed === true && (tab.fallbackRequired === true || !tab.parentHasNonSeed) && siblings[0] === tab;
+        if (!isPrimaryFallback) {
+          const reason = !enabled ? "disabled" : !insideRoot ? "outside-root" : (tab.parentHasNonSeed && !tab.fallbackRequired) ? "has-siblings" : siblings[0] !== tab ? "duplicate-seed" : "stale-seed";
+          orphanSeeds.push({ id, key, label, insideRoot, reason });
+        }
+        continue;
+      }
+      if (!insideRoot || !enabled) {
+        tabsOutsideRoot.push({ id, key, label, insideRoot, reason: !enabled ? "disabled" : "outside-root" });
+      }
+      if (key) {
+        if (!nonSeedByKey.has(key)) nonSeedByKey.set(key, []);
+        nonSeedByKey.get(key).push({ id, key, label, insideRoot });
+      }
+    }
+
+    const duplicateKeys = [];
+    const outsideSet = new Set(tabsOutsideRoot.map((t) => t.id));
+    for (const [key, list] of nonSeedByKey.entries()) {
+      if (list.length < 2) continue;
+      // Prefer keeping the first copy that is already inside the canonical root.
+      const keep = list.find((entry) => entry.insideRoot) || list[0];
+      const extras = list.filter((entry) => entry !== keep);
+      duplicateKeys.push({
+        key,
+        count: list.length,
+        keepId: keep.id,
+        extraIds: extras.map((entry) => entry.id),
+        extraInRootIds: extras.filter((entry) => !outsideSet.has(entry.id)).map((entry) => entry.id),
+        labels: list.map((entry) => entry.label),
+      });
+    }
+
+    const foreignTabs = rawForeign
+      .filter(Boolean)
+      .map((f, i) => ({
+        id: String(f.id ?? `foreign-${i}`),
+        kind: f.kind === "folder" ? "folder" : "tab",
+        label: String(f.label || f.url || "Tab"),
+        url: String(f.url || ""),
+        folderId: String(f.folderId || ""),
+        folderLabel: String(f.folderLabel || "Agenda"),
+      }));
+
+    const releasedFolders = rawReleased
+      .filter(Boolean)
+      .map((f, i) => ({
+        id: String(f.id ?? `released-${i}`),
+        label: String(f.label || f.id || "Folder"),
+        tabCount: Math.max(0, Math.floor(Number(f.tabCount) || 0)),
+        foreignCount: Math.max(0, Math.floor(Number(f.foreignCount) || 0)),
+        kind: f.kind === "agenda" ? "agenda" : "notes",
+      }));
+
+    const histStateRaw = String(rawHist.state || "unopened");
+    const histWriteBlocked = rawHist.writeBlocked === true;
+    const histDirty = rawHist.dirty === true;
+    const histRetryCount = Math.max(0, Math.floor(Number(rawHist.retryCount) || 0));
+    const histCount = Math.max(0, Math.floor(Number(rawHist.count) || 0));
+    const histBytes = Math.max(0, Math.round(Number(rawHist.bytes) || 0));
+    const histError = String(rawHist.error || "");
+    const histBackupPath = String(rawHist.backupPath || "");
+    const histSeverity = histWriteBlocked || histStateRaw === "corrupt" || histStateRaw === "unreadable"
+      ? "error"
+      : (histStateRaw === "partial" || histRetryCount > 0 || histDirty ? "warning" : "ok");
+    const histStateKey = histWriteBlocked && histStateRaw !== "corrupt" && histStateRaw !== "unreadable"
+      ? "blocked"
+      : (["ready", "partial", "corrupt", "unreadable", "unopened"].includes(histStateRaw)
+        ? (histStateRaw === "ready" && histDirty ? "dirty" : histStateRaw)
+        : (histWriteBlocked ? "blocked" : "unopened"));
+
+    const history = {
+      state: histStateRaw,
+      stateKey: histStateKey,
+      severity: histSeverity,
+      count: histCount,
+      bytes: histBytes,
+      sizeText: formatAgendaDoctorBytes(histBytes),
+      dirty: histDirty,
+      writeBlocked: histWriteBlocked,
+      retryCount: histRetryCount,
+      error: histError,
+      backupPath: histBackupPath,
+    };
+
+    const duplicateExtraCount = duplicateKeys.reduce((sum, entry) => sum + entry.extraInRootIds.length, 0);
+    const safeIssueCount = orphanSeeds.length + duplicateExtraCount + duplicateRoots.length + tabsOutsideRoot.length + foreignTabs.length;
+    const totalIssues = safeIssueCount + releasedFolders.length + (history.severity === "error" ? 1 : 0);
+
+    return {
+      enabled,
+      rootCount: rawRoots.length,
+      orphanSeeds,
+      duplicateKeys,
+      duplicateRoots,
+      tabsOutsideRoot,
+      foreignTabs,
+      releasedFolders,
+      history,
+      counts: {
+        orphanSeeds: orphanSeeds.length,
+        duplicateKeys: duplicateKeys.length,
+        duplicateTabs: duplicateExtraCount,
+        duplicateRoots: duplicateRoots.length,
+        tabsOutsideRoot: tabsOutsideRoot.length,
+        foreignTabs: foreignTabs.length,
+        releasedFolders: releasedFolders.length,
+        safeRepairable: safeIssueCount,
+        totalIssues,
+      },
+      healthy: totalIssues === 0 && history.severity !== "error",
+    };
+  }
+  function planAgendaDoctorRepair(report) {
+    const r = report && typeof report === "object" ? report : diagnoseAgenda({});
+    const removeOrphanSeeds = (r.orphanSeeds || []).map((entry) => entry.id);
+    const removeTabsOutsideRoot = (r.tabsOutsideRoot || []).map((entry) => entry.id);
+    const removeDuplicateTabs = (r.duplicateKeys || []).flatMap((entry) => entry.extraInRootIds || []);
+    const retireDuplicateRoots = (r.duplicateRoots || []).map((entry) => entry.id);
+    const evacuateForeignTabs = (r.foreignTabs || []).map((entry) => entry.id);
+    const safeCount = removeOrphanSeeds.length + removeTabsOutsideRoot.length + removeDuplicateTabs.length + retireDuplicateRoots.length + evacuateForeignTabs.length;
+    return {
+      safeCount,
+      hasSafeRepairs: safeCount > 0,
+      actions: {
+        removeOrphanSeeds,
+        removeDuplicateTabs,
+        removeTabsOutsideRoot,
+        retireDuplicateRoots,
+        evacuateForeignTabs,
+        reconcile: safeCount > 0 && r.enabled === true,
+      },
+      manualOnly: {
+        releasedFolders: (r.releasedFolders || []).map((entry) => entry.id),
+        historyBlocked: r.history?.writeBlocked === true || r.history?.severity === "error",
+      },
+    };
+  }
   // Resolve a projected sidebar identity against current records, not against
   // a stale tab label. Recurring identities refer to the expanded occurrence;
   // the displayed start/end bounds keep lookup local even for old series.
@@ -6209,7 +6398,7 @@
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

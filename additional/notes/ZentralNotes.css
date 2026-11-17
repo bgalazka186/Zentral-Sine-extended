@@ -2902,4 +2902,108 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
   z-index: 2147483645;
 }
 
+/* SB6.5: Agenda Doctor diagnostic & repair dialog */
+.zentral-notes-sheet .zn-doctor-card {
+  width: min(560px, 92vw);
+  max-height: min(82vh, 660px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.zentral-notes-sheet .zn-doctor-banner {
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--zn-line);
+  background: color-mix(in srgb, var(--zn-hover) 32%, transparent);
+  font-size: 0.9em;
+  font-weight: 600;
+}
+.zentral-notes-sheet .zn-doctor-banner[data-state="ok"] {
+  border-color: color-mix(in srgb, #2e9e5b 45%, var(--zn-line));
+  background: color-mix(in srgb, #2e9e5b 14%, transparent);
+}
+.zentral-notes-sheet .zn-doctor-banner[data-state="warn"] {
+  border-color: color-mix(in srgb, #d9822b 50%, var(--zn-line));
+  background: color-mix(in srgb, #d9822b 15%, transparent);
+}
+.zentral-notes-sheet .zn-doctor-banner[data-state="error"] {
+  border-color: color-mix(in srgb, #d94c4c 55%, var(--zn-line));
+  background: color-mix(in srgb, #d94c4c 16%, transparent);
+}
+.zentral-notes-sheet .zn-doctor-notice {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--zn-accent) 45%, var(--zn-line));
+  background: color-mix(in srgb, var(--zn-accent) 14%, transparent);
+  font-size: 0.85em;
+}
+.zentral-notes-sheet .zn-doctor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+}
+.zentral-notes-sheet .zn-doctor-sec {
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--zn-line);
+  background: color-mix(in srgb, var(--zn-surface) 84%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.zentral-notes-sheet .zn-doctor-sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.88em;
+}
+.zentral-notes-sheet .zn-doctor-badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.82em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--zn-line);
+  background: color-mix(in srgb, var(--zn-hover) 35%, transparent);
+}
+.zentral-notes-sheet .zn-doctor-badge.is-ok {
+  border-color: color-mix(in srgb, #2e9e5b 45%, var(--zn-line));
+  background: color-mix(in srgb, #2e9e5b 14%, transparent);
+}
+.zentral-notes-sheet .zn-doctor-badge.is-warn {
+  border-color: color-mix(in srgb, #d9822b 50%, var(--zn-line));
+  background: color-mix(in srgb, #d9822b 16%, transparent);
+}
+.zentral-notes-sheet .zn-doctor-badge.is-error {
+  border-color: color-mix(in srgb, #d94c4c 55%, var(--zn-line));
+  background: color-mix(in srgb, #d94c4c 18%, transparent);
+}
+.zentral-notes-sheet .zn-doctor-hint {
+  margin: 0;
+  font-size: 0.8em;
+  color: var(--zn-muted);
+}
+.zentral-notes-sheet .zn-doctor-list {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.82em;
+}
+.zentral-notes-sheet .zn-doctor-list li {
+  overflow-wrap: anywhere;
+}
+.zentral-notes-sheet .zn-doctor-more,
+.zentral-notes-sheet .zn-doctor-none {
+  font-size: 0.8em;
+  color: var(--zn-muted);
+}
+
+
 
