@@ -6705,7 +6705,7 @@
       }
       const catName = String(item?.x?.category || "").trim();
       const catColor = catName
-        ? String(item?.x?.categoryColor || store?.items?.category?.(catName)?.color || item?.x?.color || "").trim()
+        ? String(item?.x?.categoryColor || store?.items?.category?.(catName)?.color || "").trim()
         : "";
       const category = catName ? { name: catName, color: catColor } : null;
       const noteId = String(item?.x?.noteId || identity?.noteId || tab?.getAttribute?.("bgalazka-notes-agenda-note-id") || "").trim();
@@ -10421,6 +10421,31 @@
                 }
                 const removed = items.remove(saved.id);
                 return { ok: !!removed, message: removed ? "Duplicate removed" : "Could not undo duplicate" };
+              },
+            };
+          }
+
+          // ST7.8: one item's own colour. It is one store write, so this runs headless with an Undo, and the note's
+          // and the category's colours stay what shows when this item has none.
+          if (cmd.startsWith("color-") || cmd === "color-none") {
+            if (!currentItem) return { ok: false, command: cmd, reason: "That calendar item is no longer available" };
+            const next = cmd === "color-none" ? "" : C.cleanItemColor(cmd.slice("color-".length));
+            if (cmd !== "color-none" && !next) return { ok: false, command: cmd, reason: "That colour is not recognised" };
+            const before = C.cleanItemColor(currentItem.x?.color);
+            if (before === next) return { ok: false, command: cmd, reason: next ? "That is already its colour" : "It already uses the note or category colour" };
+            const saved = items.upsert({ ...currentItem, x: { ...currentItem.x, color: next } });
+            if (!saved) return { ok: false, command: cmd, reason: "The colour could not be saved" };
+            const afterRev = saved.rev, afterEtag = saved.etag;
+            const message = next ? t("toast.itemColorSet", { colour: next }, lang) : t("toast.itemColorCleared", null, lang);
+            return {
+              ok: true, command: cmd, message, undoLabel: t("common.undo", null, lang),
+              undo() {
+                const latest = items?.get?.(saved.id);
+                if (!latest || latest.rev !== afterRev || latest.etag !== afterEtag) {
+                  return { ok: false, message: "Cannot undo: the item changed" };
+                }
+                const restored = items.upsert({ ...latest, x: { ...latest.x, color: before } });
+                return { ok: !!restored, message: t(restored ? "toast.undone" : "toast.undoFailed", null, lang) };
               },
             };
           }
@@ -18554,7 +18579,8 @@
       function calendarItemColor(item) {
         const linked = item?.x?.noteId ? store.get(item.x.noteId) : null;
         const category = item?.x?.category ? store.items?.category?.(item.x.category)?.color || "" : "";
-        const resolved = CALENDAR_PART.resolveItemColor(linked?.color || "", category);
+        // ST7.8: the item's own colour wins, then its note's, then its category's.
+        const resolved = CALENDAR_PART.resolveItemColor(item?.x?.color || "", linked?.color || "", category);
         return colorHex(resolved) || resolved;
       }
       function calendarItemTime(item) {
@@ -18973,6 +18999,22 @@
           event.preventDefault(); event.stopPropagation(); showCalendarDayMenu(null, day, anchor);
         });
       }
+      // ST7.8: one item's own colour. The note's and the category's stay the fallback, so "" means "inherit".
+      function settableCalendarItem(item) {
+        const latest = currentCalendarItem(item);
+        return latest && typeof store.items?.upsert === "function" ? latest : null;
+      }
+      function setCalendarItemColor(item, value) {
+        const current = settableCalendarItem(item);
+        if (!current) return flash("That calendar item is no longer available");
+        const next = value ? CALENDAR_PART.cleanItemColor(value) : "";
+        if (value && !next) return flash("That colour is not recognised");
+        if ((CALENDAR_PART.cleanItemColor(current.x?.color) || "") === next) return;
+        const saved = store.items.upsert({ ...current, x: { ...current.x, color: next } });
+        if (!saved) return flash("The colour could not be saved");
+        renderCalendar();
+        flash(next ? t("toast.itemColorSet", { colour: next }) : t("toast.itemColorCleared"));
+      }
       function calendarItemMenuRows(item) {
         const reminder = CALENDAR_PART.isReminder(item), history = reminderHistoryStore();
         const lifecycle = reminder ? reminderLifecycleState(item) : "pending";
@@ -19011,6 +19053,11 @@
           "snooze-3d": () => snoozeReminderItem(item, 3),
           "snooze-monday": () => snoozeReminderItem(item, nextMonday),
           "snooze-custom": () => queueMicrotask(() => askCustomReminderSnooze(item)),
+          // ST7.8: the sheet applies the same colour writes as the headless path; only "Custom colour…" needs the
+          // dialog that lives here.
+          "color-custom": () => queueMicrotask(() => askCustomColor(t("menu.colorCustom"), cleanHex(settableCalendarItem(item)?.x?.color), (value) => setCalendarItemColor(item, value))),
+          ...Object.fromEntries(CALENDAR_PART.ITEM_COLOR_CHOICES.map((name) => ["color-" + name, () => setCalendarItemColor(item, name)])),
+          "color-none": () => setCalendarItemColor(item, ""),
         };
         const bind = (rows) => rows.map((row) => {
           if (!row || row.sep || row.heading) return row;
@@ -32055,7 +32102,8 @@
           if (hideTrashed && sourceTrashed) continue;
           const noteColor = note && !note.trashed ? note.color : "";
           const catColor = item.x?.category ? (store.items?.category?.(item.x.category)?.color || "") : "";
-          const resolvedColor = CALENDAR_PART?.resolveItemColor?.(noteColor, catColor) || noteColor || catColor || "";
+          // ST7.8: the item's own colour comes first, then its note's, then its category's.
+          const resolvedColor = CALENDAR_PART?.resolveItemColor?.(item.x?.color || "", noteColor, catColor) || noteColor || catColor || "";
           const color = colorHex(resolvedColor) || "";
           unique.set(item.id, {
             ...item,

@@ -145,6 +145,20 @@
   range. `tests/notes-calendar-midnight-dst.test.cjs` runs itself again under `TZ=America/Santiago` (as
   `notes-calendar-hours.test.cjs` does) and checks the 23-hour day, its first hour in the Agenda projection and day heat,
   and a full working week of free slots.
+
+- `ST7.8` DONE (3.3.271) — One reminder or event can carry its own colour. The colour was already read but never stored:
+  `cleanItem` rebuilt `x` without `color`, so every write dropped it. `cleanItem` now keeps it — only when the item has
+  one, so an item that was never colourised serialises and hashes exactly as before (no etag churn, and the recurrence
+  baseline fixtures stay byte-identical). `resolveItemColor` is three layers now — the item's own, else its source note's,
+  else its category's, an empty or `none` layer never masking a useful one below — and its old two-argument form still
+  means note-then-category, so nothing shifts meaning. New `cleanItemColor` stores a palette name or a `#rrggbb` (short
+  hex expanded) and drops anything else rather than painting a row invisible. Every reader follows the same order: the
+  Agenda projection, the sidebar rows, the calendar cells, the hover card's Inheritance line (which names the item's own
+  colour first) and the category chip, which no longer borrows the item's colour. `calendarItemMenuModel` gained a Colour
+  group — the twelve palette colours with the current one ticked, `Custom colour…` through the existing `askCustomColor`,
+  and `Use the note or category colour` to clear — so the calendar and the Agenda tab menu get it together; a palette pick
+  is a headless one-write action with Undo, and only the custom dialog needs the Notes sheet. `tests/notes-item-color.test.cjs`
+  (7 tests) and `tests/notes-agenda-item-color.test.cjs` (4 tests). Full suite 218/218.
 | #   | Track ID | Ref           | Item                                                         | Impact   | Effort | Implementation Plan & Dependencies                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | :-- | :------- | :------------ | :----------------------------------------------------------- | :------- | :----- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 20  | `T1.14`  | `Cycle G #37` | Inline `#tag` index & front-matter `tags:` unification       | Med      | M      | **DONE in 3.3.47.** Unified `inlineTags`, `noteTags` and `tagSummary` index YAML and inline tags case-insensitively; the Tags chip opens a counted menu, supports clearing/selection, and filters All and Recent views. Headings, code, URLs, HTML attributes/comments, hidden comments, inequalities and hex colours are excluded. Covered by `notes-audit-bugfixes.test.cjs` and existing list-view tests.                                                                                        |

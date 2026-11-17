@@ -10,7 +10,7 @@ const find = (rows, id) => rows.flatMap((row) => row.group ? [row, ...row.group]
   const manualEvent = cal.makeItem({ id: "manual-event", summary: "Manual event", start: { dateTime: "2026-11-12T10:00:00Z" }, end: { dateTime: "2026-11-12T11:00:00Z" }, x: { kind: "event", src: "manual" } }, 0);
   const before = JSON.stringify(manualEvent);
   const eventMenu = cal.calendarItemMenuModel(manualEvent);
-  assert.deepEqual(menuLabels(eventMenu), ["Show details", "Edit details…", "Change time…", "Convert to reminder", "Duplicate as independent item", "Delete event…"]);
+  assert.deepEqual(menuLabels(eventMenu), ["Show details", "Edit details…", "Change time…", "Convert to reminder", "Colour", "Duplicate as independent item", "Delete event…"]);
   for (const id of ["edit", "change-time", "convert", "duplicate", "delete"]) assert.equal(find(eventMenu, id).enabled, true, id + " is available for a manual event");
   assert.equal(JSON.stringify(manualEvent), before, "building a menu never mutates the stored item");
 

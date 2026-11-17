@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.269
+// @version 3.3.271
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.269, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.271, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.269";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.271";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1988,6 +1988,12 @@ const __zentralEmbeddedLoader = (function () {
       "menu.agendaShowSeries": "Show in Zen Agenda (series)",
       "menu.agendaUnavailable": "Zen Agenda visibility unavailable",
       "menu.agendaLegacyReason": "This legacy note reminder is not stored as an Agenda item",
+      "toast.itemColorSet": "Colour set to {colour}",
+      "toast.itemColorCleared": "The item uses the note or category colour again",
+      "menu.color": "Colour",
+      "menu.colorCustom": "Custom colour…",
+      "menu.colorInherit": "Use the note or category colour",
+      "menu.colorUnavailable": "This item cannot be colourised",
       "menu.duplicate": "Duplicate as independent item",
       "menu.deleteReminder": "Delete reminder…",
       "menu.deleteEvent": "Delete event…",
@@ -2928,6 +2934,12 @@ const __zentralEmbeddedLoader = (function () {
       "menu.agendaShowSeries": "Poka\u017c w Zen Agendzie (seria)",
       "menu.agendaUnavailable": "Widoczno\u015b\u0107 w Zen Agendzie niedost\u0119pna",
       "menu.agendaLegacyReason": "To starsze przypomnienie notatki nie jest zapisane jako element Agendy",
+      "toast.itemColorSet": "Ustawiono kolor: {colour}",
+      "toast.itemColorCleared": "Element zn\u00f3w u\u017cywa koloru notatki lub kategorii",
+      "menu.color": "Kolor",
+      "menu.colorCustom": "Kolor niestandardowy…",
+      "menu.colorInherit": "U\u017cyj koloru notatki lub kategorii",
+      "menu.colorUnavailable": "Tego elementu nie mo\u017cna pokolorowa\u0107",
       "menu.duplicate": "Duplikuj jako niezale\u017cny element",
       "menu.deleteReminder": "Usu\u0144 przypomnienie\u2026",
       "menu.deleteEvent": "Usu\u0144 wydarzenie\u2026",
@@ -4517,6 +4529,10 @@ const __zentralEmbeddedLoader = (function () {
         category: cleanCategoryName(x.category), tz: cleanZone(x.tz), historyId: String(x.historyId ?? "").slice(0, 120), src: ["list", "note", "manual"].includes(x.src) ? x.src : "manual", key: String(x.key ?? "").slice(0, 60), legacyKey: String(x.legacyKey ?? "").slice(0, 60), moved: x.moved ? "1" : "", calNote: String(x.calNote ?? "").slice(0, MAX_DESC), notify: cleanNotifyOverrides(x.notify), agendaWindow: cleanAgendaWindow(x.agendaWindow), recurrenceExceptions: cleanRecurrenceExceptions(x.recurrenceExceptions, allDay),
       },
     };
+    // ST7.8: an item's own colour is kept only when it has one, so items that were never colourised serialise (and
+    // hash) exactly as they did before this field existed — no etag churn, no needless syncs.
+    const itemColor = cleanItemColor(x.color);
+    if (itemColor) item.x.color = itemColor;
     if (x.src === "list" && typeof x.categoryOverride === "string") item.x.categoryOverride = cleanCategoryName(x.categoryOverride);
     if (x.src === "list" && x.categoryInNote === true) item.x.categoryInNote = true;
     if (x.src === "list") {
@@ -8635,7 +8651,7 @@ const __zentralEmbeddedLoader = (function () {
       allDay: isAllDay(item),
       reminder: isReminder(item),
       sourceNoteTrashed: !!item.x?.sourceNoteTrashed,
-      color: String(item.x?.color || resolveItemColor(item.x?.noteColor || "", item.x?.categoryColor || "") || ""),
+      color: String(resolveItemColor(item.x?.color || "", item.x?.noteColor || "", item.x?.categoryColor || "") || ""),
       ended: !isReminder(item) && end > start && end <= Number(now),
     };
   }
@@ -9626,7 +9642,10 @@ const __zentralEmbeddedLoader = (function () {
       { id: "hide-agenda", label: t("sidebar.agenda.root.hide", null, lang) },
     ];
   }
-  function calendarItemMenuModel(item, { state = "pending", historyWritable = false, agendaVisible, agendaWritable = true, lang = DEFAULT_NOTES_LANGUAGE } = {}) {
+  // ST7.8: the colours an item can be given, in the order the palette already uses. "none" clears the item's own
+  // colour so the note's or the category's shows again.
+  const ITEM_COLOR_CHOICES = Object.freeze(["yellow", "green", "blue", "pink", "purple", "orange", "red", "teal", "gray", "brown", "lime", "cyan"]);
+  function calendarItemMenuModel(item, { state = "pending", historyWritable = false, agendaVisible, agendaWritable = true, lang = DEFAULT_NOTES_LANGUAGE, writable = true } = {}) {
     if (!item || typeof item !== "object" || !String(item.id || "")) return [];
     const tr = (key, params = null) => t(key, params, lang);
     const reminder = isReminder(item);
@@ -9644,6 +9663,19 @@ const __zentralEmbeddedLoader = (function () {
       action("change-time", tr(recurring ? "menu.changeOccurrenceTime" : "menu.changeTime"), source !== "note" && (!recurring || !!item.x?.recurrenceId), tr(source === "note" ? "menu.changeTimeNoteReason" : "menu.changeTimeRecurringReason")),
       action("convert", tr(reminder ? "menu.convertToEvent" : "menu.convertToReminder"), manual, tr("menu.convertParsedReason")),
       { sep: true },
+      {
+        id: "color", command: "color", label: tr("menu.color"), enabled: !!writable,
+        reason: writable ? "" : tr("menu.colorUnavailable"),
+        group: [
+          ...ITEM_COLOR_CHOICES.map((name) => ({
+            id: "color-" + name, command: "color-" + name, label: name,
+            enabled: !!writable, reason: writable ? "" : tr("menu.colorUnavailable"),
+            checked: cleanItemColor(item.x?.color) === name,
+          })),
+          { id: "color-custom", command: "color-custom", label: tr("menu.colorCustom"), enabled: !!writable, reason: writable ? "" : tr("menu.colorUnavailable") },
+          { id: "color-none", command: "color-none", label: tr("menu.colorInherit"), enabled: !!writable, reason: writable ? "" : tr("menu.colorUnavailable") },
+        ],
+      },
       action("duplicate", tr("menu.duplicate")),
       action("delete", tr(deleteKey), manual || mirrored, tr("menu.deleteSourceReason")),
     ];
@@ -9692,8 +9724,12 @@ const __zentralEmbeddedLoader = (function () {
     "agenda-visibility",
     "convert",
     "duplicate",
+    // ST7.8: a colour is one store write; the custom-colour dialog stays in the sheet.
+    ...ITEM_COLOR_CHOICES.map((name) => "color-" + name),
+    "color-none",
   ]);
-  const SHEET_AGENDA_COMMANDS = Object.freeze(["open", "edit", "change-time", "snooze-custom", "delete"]);
+  // "color-custom" opens the sheet's own colour dialog, so it belongs to the sheet side of the split.
+  const SHEET_AGENDA_COMMANDS = Object.freeze(["open", "edit", "change-time", "snooze-custom", "delete", "color-custom"]);
   const isHeadlessAgendaCommand = (command) => HEADLESS_AGENDA_COMMANDS.includes(String(command || ""));
   function snoozeMondayDays(item) {
     if (!item || typeof item !== "object") return 0;
@@ -9824,12 +9860,29 @@ const __zentralEmbeddedLoader = (function () {
     return value.replace(/\s+/g, " ").trim().slice(0, MAX_TEXT);
   }
 
-  // Source-note colour is authoritative for linked items; category colour is only the fallback.
-  // An empty/"none" note colour deliberately does not mask a useful category colour.
-  function resolveItemColor(noteColor, categoryColor) {
-    const note = typeof noteColor === "string" ? noteColor.trim() : "";
-    const category = typeof categoryColor === "string" ? categoryColor.trim() : "";
-    return note && note !== "none" ? note : category;
+  // ST7.8: three layers, closest first — the item's own colour, else its source note's, else its category's.
+  // An empty/"none" layer deliberately does not mask a useful one below it. The one-argument form is the old
+  // (note, category) call and keeps working, so a stored value never means something different after an upgrade.
+  function resolveItemColor(itemColor, noteColor, categoryColor) {
+    const layers = categoryColor === undefined ? [itemColor, noteColor] : [itemColor, noteColor, categoryColor];
+    for (const layer of layers) {
+      const value = typeof layer === "string" ? layer.trim() : "";
+      if (value && value !== "none") return value;
+    }
+    return "";
+  }
+  // What a colour value looks like once stored: a palette name, a #rrggbb, or "" to inherit. Anything else is dropped
+  // rather than stored, so a typo cannot paint a row invisible.
+  function cleanItemColor(value) {
+    const raw = String(value ?? "").trim();
+    if (!raw || raw === "none") return "";
+    const lower = raw.toLowerCase();
+    if (PALETTE_COLOR_HEX[lower]) return lower;
+    const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(raw);
+    if (!hex) return "";
+    return raw.length === 4
+      ? ("#" + raw[1] + raw[1] + raw[2] + raw[2] + raw[3] + raw[3]).toLowerCase()
+      : lower;
   }
 
   // Build a complete calendar item from composer fields. Dates are civil YYYY-MM-DD values;
@@ -10599,8 +10652,18 @@ const __zentralEmbeddedLoader = (function () {
     }
 
     if (k === "color" || k === "colour") {
+      const rawItem = cleanItemColor(item?.x?.color ?? srcLayers.itemColor);
       const rawNote = String(noteObj.color ?? srcLayers.noteColor ?? "").trim();
       const rawCat = String(catObj.color ?? srcLayers.categoryColor ?? "").trim();
+      // ST7.8: the layer this item set itself comes first, so "Inherit" names the note or the category only when
+      // this item has no colour of its own.
+      if (rawItem) {
+        const lower = rawItem.toLowerCase();
+        const hex = PALETTE_COLOR_HEX[lower] || resolveCssColor(rawItem) || rawItem;
+        const valLabel = PALETTE_COLOR_HEX[lower] ? (lower + " " + hex) : hex;
+        const inherited = resolveItemColor("", rawNote === "none" ? "" : rawNote, rawCat === "none" ? "" : rawCat);
+        return pack(hex, "item", "", valLabel, "this item", "Inherit (this item: " + valLabel + ")" + (inherited ? " elsewhere: " + inherited : ""));
+      }
       const resolved = resolveItemColor(rawNote, rawCat);
       if (resolved && rawNote && rawNote !== "none") {
         const lower = rawNote.toLowerCase();
@@ -11118,7 +11181,7 @@ const __zentralEmbeddedLoader = (function () {
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_TABLE, HOLIDAY_TABLE_KINDS, holidayTableEntries, holidayTableYears, holidaySetCoverage, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, holidaySetsOf, NO_WORK_FREE, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -18380,7 +18443,7 @@ __zentralShim.register = function (def) {
       }
       const catName = String(item?.x?.category || "").trim();
       const catColor = catName
-        ? String(item?.x?.categoryColor || store?.items?.category?.(catName)?.color || item?.x?.color || "").trim()
+        ? String(item?.x?.categoryColor || store?.items?.category?.(catName)?.color || "").trim()
         : "";
       const category = catName ? { name: catName, color: catColor } : null;
       const noteId = String(item?.x?.noteId || identity?.noteId || tab?.getAttribute?.("bgalazka-notes-agenda-note-id") || "").trim();
@@ -22096,6 +22159,31 @@ __zentralShim.register = function (def) {
                 }
                 const removed = items.remove(saved.id);
                 return { ok: !!removed, message: removed ? "Duplicate removed" : "Could not undo duplicate" };
+              },
+            };
+          }
+
+          // ST7.8: one item's own colour. It is one store write, so this runs headless with an Undo, and the note's
+          // and the category's colours stay what shows when this item has none.
+          if (cmd.startsWith("color-") || cmd === "color-none") {
+            if (!currentItem) return { ok: false, command: cmd, reason: "That calendar item is no longer available" };
+            const next = cmd === "color-none" ? "" : C.cleanItemColor(cmd.slice("color-".length));
+            if (cmd !== "color-none" && !next) return { ok: false, command: cmd, reason: "That colour is not recognised" };
+            const before = C.cleanItemColor(currentItem.x?.color);
+            if (before === next) return { ok: false, command: cmd, reason: next ? "That is already its colour" : "It already uses the note or category colour" };
+            const saved = items.upsert({ ...currentItem, x: { ...currentItem.x, color: next } });
+            if (!saved) return { ok: false, command: cmd, reason: "The colour could not be saved" };
+            const afterRev = saved.rev, afterEtag = saved.etag;
+            const message = next ? t("toast.itemColorSet", { colour: next }, lang) : t("toast.itemColorCleared", null, lang);
+            return {
+              ok: true, command: cmd, message, undoLabel: t("common.undo", null, lang),
+              undo() {
+                const latest = items?.get?.(saved.id);
+                if (!latest || latest.rev !== afterRev || latest.etag !== afterEtag) {
+                  return { ok: false, message: "Cannot undo: the item changed" };
+                }
+                const restored = items.upsert({ ...latest, x: { ...latest.x, color: before } });
+                return { ok: !!restored, message: t(restored ? "toast.undone" : "toast.undoFailed", null, lang) };
               },
             };
           }
@@ -30229,7 +30317,8 @@ __zentralShim.register = function (def) {
       function calendarItemColor(item) {
         const linked = item?.x?.noteId ? store.get(item.x.noteId) : null;
         const category = item?.x?.category ? store.items?.category?.(item.x.category)?.color || "" : "";
-        const resolved = CALENDAR_PART.resolveItemColor(linked?.color || "", category);
+        // ST7.8: the item's own colour wins, then its note's, then its category's.
+        const resolved = CALENDAR_PART.resolveItemColor(item?.x?.color || "", linked?.color || "", category);
         return colorHex(resolved) || resolved;
       }
       function calendarItemTime(item) {
@@ -30648,6 +30737,22 @@ __zentralShim.register = function (def) {
           event.preventDefault(); event.stopPropagation(); showCalendarDayMenu(null, day, anchor);
         });
       }
+      // ST7.8: one item's own colour. The note's and the category's stay the fallback, so "" means "inherit".
+      function settableCalendarItem(item) {
+        const latest = currentCalendarItem(item);
+        return latest && typeof store.items?.upsert === "function" ? latest : null;
+      }
+      function setCalendarItemColor(item, value) {
+        const current = settableCalendarItem(item);
+        if (!current) return flash("That calendar item is no longer available");
+        const next = value ? CALENDAR_PART.cleanItemColor(value) : "";
+        if (value && !next) return flash("That colour is not recognised");
+        if ((CALENDAR_PART.cleanItemColor(current.x?.color) || "") === next) return;
+        const saved = store.items.upsert({ ...current, x: { ...current.x, color: next } });
+        if (!saved) return flash("The colour could not be saved");
+        renderCalendar();
+        flash(next ? t("toast.itemColorSet", { colour: next }) : t("toast.itemColorCleared"));
+      }
       function calendarItemMenuRows(item) {
         const reminder = CALENDAR_PART.isReminder(item), history = reminderHistoryStore();
         const lifecycle = reminder ? reminderLifecycleState(item) : "pending";
@@ -30686,6 +30791,11 @@ __zentralShim.register = function (def) {
           "snooze-3d": () => snoozeReminderItem(item, 3),
           "snooze-monday": () => snoozeReminderItem(item, nextMonday),
           "snooze-custom": () => queueMicrotask(() => askCustomReminderSnooze(item)),
+          // ST7.8: the sheet applies the same colour writes as the headless path; only "Custom colour…" needs the
+          // dialog that lives here.
+          "color-custom": () => queueMicrotask(() => askCustomColor(t("menu.colorCustom"), cleanHex(settableCalendarItem(item)?.x?.color), (value) => setCalendarItemColor(item, value))),
+          ...Object.fromEntries(CALENDAR_PART.ITEM_COLOR_CHOICES.map((name) => ["color-" + name, () => setCalendarItemColor(item, name)])),
+          "color-none": () => setCalendarItemColor(item, ""),
         };
         const bind = (rows) => rows.map((row) => {
           if (!row || row.sep || row.heading) return row;
@@ -43730,7 +43840,8 @@ __zentralShim.register = function (def) {
           if (hideTrashed && sourceTrashed) continue;
           const noteColor = note && !note.trashed ? note.color : "";
           const catColor = item.x?.category ? (store.items?.category?.(item.x.category)?.color || "") : "";
-          const resolvedColor = CALENDAR_PART?.resolveItemColor?.(noteColor, catColor) || noteColor || catColor || "";
+          // ST7.8: the item's own colour comes first, then its note's, then its category's.
+          const resolvedColor = CALENDAR_PART?.resolveItemColor?.(item.x?.color || "", noteColor, catColor) || noteColor || catColor || "";
           const color = colorHex(resolvedColor) || "";
           unique.set(item.id, {
             ...item,
