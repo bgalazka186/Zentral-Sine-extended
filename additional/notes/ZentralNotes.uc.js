@@ -19195,7 +19195,7 @@
               button.setAttribute("aria-selected", active ? "true" : "false");
               button.setAttribute("aria-pressed", active ? "true" : "false");
             }
-            const entries = CALENDAR_PART.itemsInRange(pickerExpanded, selectedDay, CALENDAR_PART.addDays(selectedDay, 1));
+            const entries = CALENDAR_PART.itemsInRange(pickerExpanded, selectedDay, CALENDAR_PART.nextDayStart(selectedDay));
             selection.replaceChildren(calendarDayGroup(selectedDay, entries, { selected: true }));
           };
           const buildPickerCells = () => {
@@ -19255,7 +19255,7 @@
               visibleYear = date.getFullYear();
               visibleMonth = date.getMonth();
               const weeks = CALENDAR_PART.monthGrid(visibleYear, visibleMonth, weekStart);
-              pickerExpanded = CALENDAR_PART.expandRange(items, weeks[0][0], CALENDAR_PART.addDays(weeks[5][6], 1));
+              pickerExpanded = CALENDAR_PART.expandRange(items, weeks[0][0], CALENDAR_PART.nextDayStart(weeks[5][6]));
               buildPickerCells();
             } else {
               for (const button of [...cells.querySelectorAll(".zn-cal-picker-day")]) {
@@ -19278,7 +19278,7 @@
               visibleYear = date.getFullYear();
               visibleMonth = date.getMonth();
               const weeks = CALENDAR_PART.monthGrid(visibleYear, visibleMonth, weekStart);
-              pickerExpanded = CALENDAR_PART.expandRange(items, weeks[0][0], CALENDAR_PART.addDays(weeks[5][6], 1));
+              pickerExpanded = CALENDAR_PART.expandRange(items, weeks[0][0], CALENDAR_PART.nextDayStart(weeks[5][6]));
               focusedDay = day;
               buildPickerCells();
             }
@@ -19321,7 +19321,7 @@
             c.setAttribute("aria-selected", active ? "true" : "false");
             c.querySelector(".zn-cal-month-date")?.setAttribute("aria-pressed", active ? "true" : "false");
           }
-          const entries = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.addDays(day, 1));
+          const entries = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.nextDayStart(day));
           selection.replaceChildren(calendarDayGroup(day, entries, { selected: true }));
         };
         for (const week of grid) {
@@ -19331,7 +19331,7 @@
           }
           for (const day of week) {
           const inMonth = new Date(day).getMonth() === month;
-          const dayItems = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.addDays(day, 1));
+          const dayItems = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.nextDayStart(day));
           const dayText = calendarDayLabel(day, { year: true });
           const wf = calendarWorkFreeInfo(day);
           const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", tabindex: "0", "aria-selected": day === selected ? "true" : "false", "aria-label": t("cal.month.dayAria", { day: dayText }) + (wf.tooltip ? ", " + wf.tooltip : ""), "data-day": CALENDAR_PART.ymd(new Date(day)) });
@@ -19388,7 +19388,7 @@
         }
         monthWrap.append(dows, cells);
         calendarContent.append(monthWrap);
-        const selectedItems = CALENDAR_PART.itemsInRange(expanded, selected, CALENDAR_PART.addDays(selected, 1));
+        const selectedItems = CALENDAR_PART.itemsInRange(expanded, selected, CALENDAR_PART.nextDayStart(selected));
         selection.append(calendarDayGroup(selected, selectedItems, { selected: true }));
         calendarContent.append(selection);
         // Now that the grid is in the document, what it shows is fitted to the height of its weeks (OW-03).
@@ -19886,12 +19886,12 @@
         if (!patch && calendarFit && mode === "week") calendarFit.weekDays = days.length;
         const workDays = patch ? days.filter((day) => patch.days.has(C.localDateKey(day))) : days;
         const firstDay = workDays[0], firstBounds = C.zonedDayBounds(C.localDateKey(firstDay), zone) || [firstDay, C.addDays(firstDay, 1)];
-        const lastDay = workDays[workDays.length - 1], lastBounds = C.zonedDayBounds(C.localDateKey(lastDay), zone) || [lastDay, C.addDays(lastDay, 1)];
+        const lastDay = workDays[workDays.length - 1], lastBounds = C.zonedDayBounds(C.localDateKey(lastDay), zone) || [lastDay, C.nextDayStart(lastDay)];
         // Timed items belong to the days of the display zone, all-day items to the dates as written: the range holds
         // both. With the zone's days alone an all-day reminder of the first day shown was left out wherever the
         // display zone is behind the computer's (the reminder begins at the computer's midnight, hours before that
         // day begins in the zone); in Day view that is every all-day reminder.
-        const from = Math.min(firstBounds[0], firstDay), until = Math.max(lastBounds[1], C.addDays(lastDay, 1));
+        const from = Math.min(firstBounds[0], firstDay), until = Math.max(lastBounds[1], C.nextDayStart(lastDay));
         const expanded = C.expandRange(items, from, until);
         // OW-04, OW-03, T2.4c4. Build the real 23/24/25-hour DST timeline for the visible days first so
         // repeated fall-back hours get distinct rows and skipped spring-forward hours are represented honestly.
@@ -20869,7 +20869,7 @@
           if (!Number.isInteger(min) || min < 15 || min > 1440) { duration.dataset.bad = "true"; duration.focus(); return; }
           const work = workOnly.checked ? C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK) : null;
           const zone = calendarDisplayZone();
-          const slots = C.freeSlots(calendarBaseItems(), fromDay, C.addDays(throughDay, 1), min, { work, hours: shownHours.on && hoursOnly.checked ? shownHours : null, blockAllDay: allDayBusy.checked, zone });
+          const slots = C.freeSlots(calendarBaseItems(), fromDay, C.nextDayStart(throughDay), min, { work, hours: shownHours.on && hoursOnly.checked ? shownHours : null, blockAllDay: allDayBusy.checked, zone });
           results.replaceChildren();
           if (!slots.length) { results.append(h("p", { class: "zn-empty" }, "No matching free time was found in this range.")); return; }
           results.append(h("p", { class: "zn-empty" }, `${slots.length} free slot${slots.length === 1 ? "" : "s"} found · showing up to 20`));

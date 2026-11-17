@@ -136,6 +136,15 @@
   later extended with the companion pane. The standalone README test stays green and the bundles are rebuilt.
 ## Track 1 (DONE rows)
 
+- `TM3.7` DONE (3.3.269) — A day whose clocks go forward at midnight (Chile, Egypt, Lebanon, Cuba) is 23 hours long, and
+  the day arithmetic `addDays` uses on purpose (it keeps the wall clock, so a 09:00 reminder stays at 09:00) made
+  `addDays(dayStart(ms), 1)` land on 01:00 of the next day: everything between 00:00 and 01:00 belonged to no day, and
+  the day that begins at 01:00 kept that hour for every later day. New pure `nextDayStart`, `civilDayStart` and
+  `dayRange` in `ZentralNotesCalendar.js` now build every day range, day bucket, day-heat window, all-day strip,
+  work-hours walk, Agenda boundary and overdue look-back, and the host's month cells, date picker, week grid and free-slot
+  range. `tests/notes-calendar-midnight-dst.test.cjs` runs itself again under `TZ=America/Santiago` (as
+  `notes-calendar-hours.test.cjs` does) and checks the 23-hour day, its first hour in the Agenda projection and day heat,
+  and a full working week of free slots.
 | #   | Track ID | Ref           | Item                                                         | Impact   | Effort | Implementation Plan & Dependencies                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | :-- | :------- | :------------ | :----------------------------------------------------------- | :------- | :----- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 20  | `T1.14`  | `Cycle G #37` | Inline `#tag` index & front-matter `tags:` unification       | Med      | M      | **DONE in 3.3.47.** Unified `inlineTags`, `noteTags` and `tagSummary` index YAML and inline tags case-insensitively; the Tags chip opens a counted menu, supports clearing/selection, and filters All and Recent views. Headings, code, URLs, HTML attributes/comments, hidden comments, inequalities and hex colours are excluded. Covered by `notes-audit-bugfixes.test.cjs` and existing list-view tests.                                                                                        |

@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.268
+// @version 3.3.269
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.268, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.269, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.268";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.269";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -3607,6 +3607,16 @@ const __zentralEmbeddedLoader = (function () {
   }
   const dayStart = (ms) => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
   const addDays = (ms, n) => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, d.getHours(), d.getMinutes()).getTime(); };
+  // TM3.7: the start of a civil day `n` days after `ms`. `addDays` keeps the hour, so a day that begins at 01:00
+  // (midnight does not exist that day) stayed at 01:00 for every later day too; flooring after the move fixes that.
+  const civilDayStart = (ms, n = 0) => dayStart(addDays(ms, n));
+  // TM3.7: the day after a day boundary. `addDays` deliberately keeps the wall clock (a reminder at 09:00 stays at
+  // 09:00), which is wrong for a range that runs to the next midnight: in a zone whose clocks go forward at midnight
+  // (Chile, Egypt, Lebanon, Cuba) `addDays(dayStart(ms), 1)` lands on 01:00 of the next day, and the first hour of that
+  // day belongs to nobody. This one moves the calendar date and reads the new midnight back.
+  const nextDayStart = (ms) => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime(); };
+  // A civil day as [from, to), both real midnights. Used wherever a day range is built from a day boundary.
+  const dayRange = (ms) => { const from = dayStart(ms); return [from, nextDayStart(from)]; };
   const iso = (ms) => new Date(ms).toISOString();
 
   // ---------- language registry & parsing (AU-B4a) ----------
@@ -4840,7 +4850,7 @@ const __zentralEmbeddedLoader = (function () {
     const out = [];
     for (let i = 0; i < n; i++) {
       const d = addDays(from, i);
-      out.push({ day: d, items: itemsInRange(items, d, addDays(d, 1)) });
+      out.push({ day: d, items: itemsInRange(items, d, nextDayStart(d)) });
     }
     return out;
   }
@@ -4848,7 +4858,7 @@ const __zentralEmbeddedLoader = (function () {
   // Returns [{ item, lane, lanes, startMin, endMin }]: `lanes` = columns in the item's overlap cluster (width = 1/lanes).
   // startMin / endMin are minutes on the clock of that day (in `zone`, or the computer's zone), cut off at its ends.
   function layoutDay(items, day, zone = "") {
-    const dateKey = localDateKey(day), bounds = zone ? zonedDayBounds(dateKey, zone) : [day, addDays(day, 1)];
+    const dateKey = localDateKey(day), bounds = zone ? zonedDayBounds(dateKey, zone) : [day, nextDayStart(day)];
     const d0 = bounds[0], d1 = bounds[1];
     const rows = itemsInRange(items, d0, d1).filter((it) => !isReminder(it) && !isAllDay(it)).map((it) => {
       const [s, e] = itemRange(it);
@@ -6998,7 +7008,7 @@ const __zentralEmbeddedLoader = (function () {
 
   // ---------- all-day strip ----------
   // Items that sit in the strip above the time grid on `day`: all-day events and all-day reminders.
-  const allDayOf = (items, day) => itemsInRange(items, day, addDays(day, 1)).filter((it) => isAllDay(it) || (isReminder(it) && isAllDay(it)));
+  const allDayOf = (items, day) => itemsInRange(items, day, nextDayStart(day)).filter((it) => isAllDay(it) || (isReminder(it) && isAllDay(it)));
 
   // ---------- recurrence (RRULE subset: FREQ DAILY/WEEKLY/MONTHLY/YEARLY, INTERVAL, COUNT, UNTIL, BYDAY for weekly) ----------
   const DAY_CODES = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
@@ -7416,7 +7426,7 @@ const __zentralEmbeddedLoader = (function () {
     const hours = opts.hours ? cleanCalendarHours({ ...opts.hours, on: true }) : null;
     const hoursOf = (d) => workRange(d, { days: [0, 1, 2, 3, 4, 5, 6], startMin: hours.startMin, endMin: hours.endMin }, zone);
     if (opts.work || hours) {
-      for (let d = dayStart(from); d < to; d = addDays(d, 1)) {
+      for (let d = civilDayStart(from, 0); d < to; d = civilDayStart(d, 1)) {
         let r = opts.work ? workRange(d, opts.work, zone) : hoursOf(d);
         if (r && opts.work && hours) { const h = hoursOf(d); r = h ? [Math.max(r[0], h[0]), Math.min(r[1], h[1])] : null; }
         if (r) windows.push([Math.max(r[0], rangeFrom), Math.min(r[1], rangeTo)]);
@@ -7713,10 +7723,10 @@ const __zentralEmbeddedLoader = (function () {
   function zonedDayBounds(dateKey, zone = "") {
     const date = parseYmd(dateKey);
     if (!date) return null;
-    if (!zone) return [date.getTime(), addDays(date.getTime(), 1)];
+    if (!zone) return [date.getTime(), nextDayStart(date.getTime())];
     const valid = cleanZone(zone);
     if (!valid) return null;
-    const nextKey = localDateKey(addDays(date.getTime(), 1));
+    const nextKey = localDateKey(nextDayStart(date.getTime()));
     const start = zonedDateTimeToMs(dateKey, "00:00", valid), end = zonedDateTimeToMs(nextKey, "00:00", valid);
     return Number.isFinite(start) && Number.isFinite(end) && end > start ? [start, end] : null;
   }
@@ -8268,7 +8278,7 @@ const __zentralEmbeddedLoader = (function () {
     const parsed = typeof day === "string" ? parseYmd(day) : null;
     const value = parsed ? parsed.getTime() : Number(day);
     if (!Number.isFinite(value)) return { day: 0, count: 0, level: 0, dominantCategory: "" };
-    const from = dayStart(value), to = addDays(from, 1);
+    const from = dayStart(value), to = nextDayStart(from);
     const categories = new Map();
     const entries = expandRange(Array.isArray(items) ? items : [], from, to);
     for (const item of entries) {
@@ -8496,7 +8506,8 @@ const __zentralEmbeddedLoader = (function () {
     const start = whenMs(item.start), end = item.end ? whenMs(item.end) : start;
     if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
     const lastVisibleItemDay = dayStart(end > start ? end - 1 : start);
-    return { from: addDays(dayStart(start), -policy.leadDays), to: addDays(lastVisibleItemDay, policy.tailDays + 1) };
+    // TM3.7: the `to` edge is the next midnight after the last visible day, so it must not keep the wall clock.
+    return { from: civilDayStart(start, -policy.leadDays), to: civilDayStart(lastVisibleItemDay, policy.tailDays + 1) };
   }
   // Return local-midnight [from, to) boundaries. Offsets are civil days rather than
   // 24-hour durations, so spring/fall DST changes never shift the visible date.
@@ -8511,7 +8522,7 @@ const __zentralEmbeddedLoader = (function () {
     const stamp = Number(now);
     if (!Number.isFinite(stamp)) return null;
     const today = dayStart(stamp), count = Math.max(1, Math.min(31, Math.floor(Number(days)) || 4));
-    const tomorrow = addDays(today, 1), horizon = addDays(today, count);
+    const tomorrow = civilDayStart(today, 1), horizon = civilDayStart(today, count);
     let next = Infinity;
     for (const item of items || []) {
       const policy = preparedAgendaWindow(item, getWindow, policies);
@@ -8538,7 +8549,7 @@ const __zentralEmbeddedLoader = (function () {
     const base = dayStart(now);
     const out = [];
     for (let i = 0; i < n; i++) {
-      const from = addDays(base, i), to = addDays(base, i + 1);
+      const from = civilDayStart(base, i), to = civilDayStart(base, i + 1);
       const list = expandRange(items, from, to).filter((it) => !isDone(it));
       out.push({ offset: i, key: localDateKey(from), label: agendaDayLabel(i, from, locale), from, to, count: list.length, items: list });
     }
@@ -8556,7 +8567,7 @@ const __zentralEmbeddedLoader = (function () {
       return "- " + range + " · " + (item.summary || "Untitled");
     };
     const today = buckets[0] || { key: localDateKey(dayStart(now)), items: [], count: 0 };
-    const tomorrow = buckets[1] || { key: localDateKey(addDays(dayStart(now), 1)), items: [], count: 0 };
+    const tomorrow = buckets[1] || { key: localDateKey(civilDayStart(now, 1)), items: [], count: 0 };
     return {
       today: { ...today, lines: today.items.map(line) },
       tomorrow: { ...tomorrow, lines: tomorrow.items.map(line) },
@@ -8652,7 +8663,7 @@ const __zentralEmbeddedLoader = (function () {
     const candidateFrom = fastDefault ? base : addDays(base, -maxTail);
     const candidateTo = fastDefault ? windowEnd : addDays(windowEnd, maxLead);
     const buckets = Array.from({ length: n }, (_, offset) => {
-      const from = addDays(base, offset), to = addDays(base, offset + 1);
+      const from = civilDayStart(base, offset), to = civilDayStart(base, offset + 1);
       return { offset, key: localDateKey(from), label: agendaDayLabel(offset, from, options?.lang), from, to, count: 0, items: [] };
     });
     let candidates;
@@ -9283,7 +9294,7 @@ const __zentralEmbeddedLoader = (function () {
     }
     function scheduleBoundary(items, policies, projection, overdue) {
       let due = nextAgendaVisibilityBoundary(items, now(), getDays(), getWindow, policies, projection);
-      if (overdue) { const tomorrow = addDays(dayStart(now()), 1); if (due === null || tomorrow < due) due = tomorrow; }
+      if (overdue) { const tomorrow = civilDayStart(now(), 1); if (due === null || tomorrow < due) due = tomorrow; }
       if (due === null) clearScheduled(); else armAt(due);
     }
     function runNow() {
@@ -11103,7 +11114,7 @@ const __zentralEmbeddedLoader = (function () {
   }
 
   const api = {
-    KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, translate, t, pluralCategory, tCount, translationKeys, missingTranslationKeys, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, lineScheduleSignature, cleanTextSchedule, scheduleSignatureFromItem, scheduleFromParsedLine, reconcileListItem, itemFromLine,
+    KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, translate, t, pluralCategory, tCount, translationKeys, missingTranslationKeys, ymd, parseYmd, dayStart, addDays, nextDayStart, dayRange, civilDayStart, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, lineScheduleSignature, cleanTextSchedule, scheduleSignatureFromItem, scheduleFromParsedLine, reconcileListItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_TABLE, HOLIDAY_TABLE_KINDS, holidayTableEntries, holidayTableYears, holidaySetCoverage, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, holidaySetsOf, NO_WORK_FREE, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
@@ -30859,7 +30870,7 @@ __zentralShim.register = function (def) {
               button.setAttribute("aria-selected", active ? "true" : "false");
               button.setAttribute("aria-pressed", active ? "true" : "false");
             }
-            const entries = CALENDAR_PART.itemsInRange(pickerExpanded, selectedDay, CALENDAR_PART.addDays(selectedDay, 1));
+            const entries = CALENDAR_PART.itemsInRange(pickerExpanded, selectedDay, CALENDAR_PART.nextDayStart(selectedDay));
             selection.replaceChildren(calendarDayGroup(selectedDay, entries, { selected: true }));
           };
           const buildPickerCells = () => {
@@ -30919,7 +30930,7 @@ __zentralShim.register = function (def) {
               visibleYear = date.getFullYear();
               visibleMonth = date.getMonth();
               const weeks = CALENDAR_PART.monthGrid(visibleYear, visibleMonth, weekStart);
-              pickerExpanded = CALENDAR_PART.expandRange(items, weeks[0][0], CALENDAR_PART.addDays(weeks[5][6], 1));
+              pickerExpanded = CALENDAR_PART.expandRange(items, weeks[0][0], CALENDAR_PART.nextDayStart(weeks[5][6]));
               buildPickerCells();
             } else {
               for (const button of [...cells.querySelectorAll(".zn-cal-picker-day")]) {
@@ -30942,7 +30953,7 @@ __zentralShim.register = function (def) {
               visibleYear = date.getFullYear();
               visibleMonth = date.getMonth();
               const weeks = CALENDAR_PART.monthGrid(visibleYear, visibleMonth, weekStart);
-              pickerExpanded = CALENDAR_PART.expandRange(items, weeks[0][0], CALENDAR_PART.addDays(weeks[5][6], 1));
+              pickerExpanded = CALENDAR_PART.expandRange(items, weeks[0][0], CALENDAR_PART.nextDayStart(weeks[5][6]));
               focusedDay = day;
               buildPickerCells();
             }
@@ -30985,7 +30996,7 @@ __zentralShim.register = function (def) {
             c.setAttribute("aria-selected", active ? "true" : "false");
             c.querySelector(".zn-cal-month-date")?.setAttribute("aria-pressed", active ? "true" : "false");
           }
-          const entries = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.addDays(day, 1));
+          const entries = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.nextDayStart(day));
           selection.replaceChildren(calendarDayGroup(day, entries, { selected: true }));
         };
         for (const week of grid) {
@@ -30995,7 +31006,7 @@ __zentralShim.register = function (def) {
           }
           for (const day of week) {
           const inMonth = new Date(day).getMonth() === month;
-          const dayItems = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.addDays(day, 1));
+          const dayItems = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.nextDayStart(day));
           const dayText = calendarDayLabel(day, { year: true });
           const wf = calendarWorkFreeInfo(day);
           const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", tabindex: "0", "aria-selected": day === selected ? "true" : "false", "aria-label": t("cal.month.dayAria", { day: dayText }) + (wf.tooltip ? ", " + wf.tooltip : ""), "data-day": CALENDAR_PART.ymd(new Date(day)) });
@@ -31052,7 +31063,7 @@ __zentralShim.register = function (def) {
         }
         monthWrap.append(dows, cells);
         calendarContent.append(monthWrap);
-        const selectedItems = CALENDAR_PART.itemsInRange(expanded, selected, CALENDAR_PART.addDays(selected, 1));
+        const selectedItems = CALENDAR_PART.itemsInRange(expanded, selected, CALENDAR_PART.nextDayStart(selected));
         selection.append(calendarDayGroup(selected, selectedItems, { selected: true }));
         calendarContent.append(selection);
         // Now that the grid is in the document, what it shows is fitted to the height of its weeks (OW-03).
@@ -31550,12 +31561,12 @@ __zentralShim.register = function (def) {
         if (!patch && calendarFit && mode === "week") calendarFit.weekDays = days.length;
         const workDays = patch ? days.filter((day) => patch.days.has(C.localDateKey(day))) : days;
         const firstDay = workDays[0], firstBounds = C.zonedDayBounds(C.localDateKey(firstDay), zone) || [firstDay, C.addDays(firstDay, 1)];
-        const lastDay = workDays[workDays.length - 1], lastBounds = C.zonedDayBounds(C.localDateKey(lastDay), zone) || [lastDay, C.addDays(lastDay, 1)];
+        const lastDay = workDays[workDays.length - 1], lastBounds = C.zonedDayBounds(C.localDateKey(lastDay), zone) || [lastDay, C.nextDayStart(lastDay)];
         // Timed items belong to the days of the display zone, all-day items to the dates as written: the range holds
         // both. With the zone's days alone an all-day reminder of the first day shown was left out wherever the
         // display zone is behind the computer's (the reminder begins at the computer's midnight, hours before that
         // day begins in the zone); in Day view that is every all-day reminder.
-        const from = Math.min(firstBounds[0], firstDay), until = Math.max(lastBounds[1], C.addDays(lastDay, 1));
+        const from = Math.min(firstBounds[0], firstDay), until = Math.max(lastBounds[1], C.nextDayStart(lastDay));
         const expanded = C.expandRange(items, from, until);
         // OW-04, OW-03, T2.4c4. Build the real 23/24/25-hour DST timeline for the visible days first so
         // repeated fall-back hours get distinct rows and skipped spring-forward hours are represented honestly.
@@ -32533,7 +32544,7 @@ __zentralShim.register = function (def) {
           if (!Number.isInteger(min) || min < 15 || min > 1440) { duration.dataset.bad = "true"; duration.focus(); return; }
           const work = workOnly.checked ? C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK) : null;
           const zone = calendarDisplayZone();
-          const slots = C.freeSlots(calendarBaseItems(), fromDay, C.addDays(throughDay, 1), min, { work, hours: shownHours.on && hoursOnly.checked ? shownHours : null, blockAllDay: allDayBusy.checked, zone });
+          const slots = C.freeSlots(calendarBaseItems(), fromDay, C.nextDayStart(throughDay), min, { work, hours: shownHours.on && hoursOnly.checked ? shownHours : null, blockAllDay: allDayBusy.checked, zone });
           results.replaceChildren();
           if (!slots.length) { results.append(h("p", { class: "zn-empty" }, "No matching free time was found in this range.")); return; }
           results.append(h("p", { class: "zn-empty" }, `${slots.length} free slot${slots.length === 1 ? "" : "s"} found · showing up to 20`));
