@@ -7382,6 +7382,7 @@
         // The size of each calendar view ("auto" = fitted to the pane, or px; OW-03). Replaced as a whole, never changed in place.
         calendarScale: CALENDAR_PART ? CALENDAR_PART.cleanCalendarScale(null) : { month: "auto", week: "auto", day: "auto", upcoming: "auto", agenda: "auto" },
         calendarPicker: CALENDAR_PART ? CALENDAR_PART.cleanCalendarPicker(null) : { mode: "auto", minWidth: 470, minHeight: 360, colorMode: "count" },
+        calendarHolidays: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHolidays(null) : { enabled: true, region: "none", weekend: "auto", personalDays: [] },
         calendarAlertSettings: CALENDAR_PART ? CALENDAR_PART.cleanAlertSettings(null) : {}, calendarNoteAlertOverrides: {},
         calendarAgendaDefaults: {}, calendarNoteAgendaOverrides: {} };
       let meta = { ...DEFAULT_META };
@@ -8134,6 +8135,7 @@
             // `calendarDensity` (one of three steps for all views, until 3.3.175) is read only where no size is stored yet.
             meta.calendarScale = CALENDAR_PART.cleanCalendarScale(raw.calendarScale, raw.calendarDensity);
             meta.calendarPicker = CALENDAR_PART.cleanCalendarPicker(raw.calendarPicker);
+            meta.calendarHolidays = CALENDAR_PART.cleanCalendarHolidays(raw.calendarHolidays);
             meta.calendarSnap = CALENDAR_PART.cleanCalendarSnap(raw.calendarSnap);
             meta.calendarHours = CALENDAR_PART.cleanCalendarHours(raw.calendarHours);
             const daysForward = Number(raw.calendarDaysForward);
@@ -18193,10 +18195,43 @@
         });
         cancel.addEventListener("click", closeDialog);
       }
+      // T2.10: Work-free day tint & holiday tooltips across Month, Week, Day, Upcoming, and Agenda views.
+      const calendarHolidayPrefs = () => CALENDAR_PART?.cleanCalendarHolidays?.(store.meta.calendarHolidays) || { enabled: true, region: "none", weekend: "auto", personalDays: [] };
+      const calendarWorkFreeInfo = (day) => CALENDAR_PART?.isWorkFree?.(day, calendarHolidayPrefs(), notesLang()) || { workFree: false, weekend: false, holiday: null, personal: null, reasons: [], tooltip: "" };
+      function applyWorkFreeAttrs(el, wf, { appendTitle = false } = {}) {
+        if (!el || !wf || !wf.workFree) return;
+        el.classList.add("is-workfree");
+        if (wf.weekend) el.classList.add("is-weekend");
+        if (wf.holiday) el.classList.add("is-holiday");
+        if (wf.personal) el.classList.add("is-personal-off");
+        el.dataset.workFree = "true";
+        el.setAttribute("data-work-free", "true");
+        if (wf.holiday) {
+          el.dataset.holiday = wf.holiday.name;
+          el.setAttribute("data-holiday", wf.holiday.name);
+        }
+        if (wf.personal) {
+          const pl = wf.personal.label || "true";
+          el.dataset.personalOff = pl;
+          el.setAttribute("data-personal-off", pl);
+        }
+        if (wf.tooltip) {
+          el.title = appendTitle && el.title ? `${el.title}\n${wf.tooltip}` : wf.tooltip;
+        }
+      }
+      function toggleCalendarPersonalDayOff(dayKey) {
+        const cur = calendarHolidayPrefs();
+        const exists = cur.personalDays.some((p) => p.date === dayKey);
+        const next = exists ? CALENDAR_PART.removePersonalDayOff(cur, dayKey) : CALENDAR_PART.addPersonalDayOff(cur, dayKey, "");
+        store.setMeta({ calendarHolidays: next });
+        renderCalendar();
+        flash(t(exists ? "cal.holidays.removedFlash" : "cal.holidays.markedFlash", { date: displayDateKey(dayKey) }));
+      }
       function showCalendarDayMenu(event, day, anchor = null) {
         event?.preventDefault?.();
         event?.stopPropagation?.();
         const key = CALENDAR_PART.ymd(new Date(day));
+        const isPersonalOff = calendarHolidayPrefs().personalDays.some((p) => p.date === key);
         const chooseView = () => { store.setMeta({ calendarCursor: key, calendarView: "day" }); renderCalendar(); };
         const pointer = event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY) && (event.clientX || event.clientY);
         showMenu(pointer ? pointAnchor(event) : (anchor || root), [
@@ -18208,6 +18243,7 @@
           { icon: "calendar-plus", label: "New all-day event…", action: () => askCalendarComposer({ date: key, kind: "event", allDay: true, linkCurrent: false }) },
           { icon: "calendar-plus", label: t("cal.menu.newBirthdayNote"), action: () => queueMicrotask(() => askNewBirthdayNote("", { date: key })) },
           { icon: "note", label: "Open or create date note", action: () => openDay(day, key, true) },
+          { id: "toggle-personal-day-off", icon: isPersonalOff ? "x" : "calendar", label: t(isPersonalOff ? "cal.dayMenu.removeDayOff" : "cal.dayMenu.markDayOff"), action: () => toggleCalendarPersonalDayOff(key) },
           { sep: true },
           ...[[-1, "Previous day"], [1, "Next day"]].map(([offset, label]) => ({ icon: "calendar", label, action: () => { store.setMeta({ calendarCursor: CALENDAR_PART.localDateKey(CALENDAR_PART.addDays(day, offset)), calendarView: "day" }); renderCalendar(); } })),
         ], { calendar: true });
@@ -18347,9 +18383,11 @@
       }
       function calendarDayGroup(day, dayItems, { selected = false, compact = false } = {}) {
         const isToday = CALENDAR_PART.localDateKey(day) === CALENDAR_PART.localDateKey(nowMs());
+        const wf = calendarWorkFreeInfo(day);
         const section = h("section", { class: "zn-cal-day-group" + (selected ? " is-selected" : "") + (isToday ? " is-today" : ""), tabindex: "0", "aria-label": calendarDayLabel(day, { year: true }) });
+        applyWorkFreeAttrs(section, wf);
         bindCalendarDayContext(section, day);
-        const head = h("div", { class: "zn-cal-day-head" }, h("strong", {}, calendarDayLabel(day, { year: true })), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), h("span", {}, tCount("cal.items", dayItems.length)));
+        const head = h("div", { class: "zn-cal-day-head" }, h("strong", {}, calendarDayLabel(day, { year: true })), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), ...(wf.tooltip ? [h("span", { class: "zn-cal-holiday-pill", title: wf.tooltip }, wf.tooltip)] : []), h("span", {}, tCount("cal.items", dayItems.length)));
         section.append(head);
         const allDay = dayItems.filter((item) => CALENDAR_PART.isAllDay(item));
         const timed = dayItems.filter((item) => !CALENDAR_PART.isAllDay(item));
@@ -18471,6 +18509,7 @@
                 if (cell.today) button.classList.add("is-today");
                 if (cell.day === selectedDay) button.classList.add("is-selected");
                 if (cell.day === focusedDay) button.classList.add("is-cursor");
+                applyWorkFreeAttrs(button, calendarWorkFreeInfo(cell.day), { appendTitle: true });
                 const tint = tintFor(cell.dominantCategory);
                 if (tint) {
                   button.style.setProperty("--zn-cal-picker-tint", tint);
@@ -18576,11 +18615,14 @@
           const inMonth = new Date(day).getMonth() === month;
           const dayItems = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.addDays(day, 1));
           const dayText = calendarDayLabel(day, { year: true });
-          const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", tabindex: "0", "aria-selected": day === selected ? "true" : "false", "aria-label": t("cal.month.dayAria", { day: dayText }), "data-day": CALENDAR_PART.ymd(new Date(day)) });
+          const wf = calendarWorkFreeInfo(day);
+          const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", tabindex: "0", "aria-selected": day === selected ? "true" : "false", "aria-label": t("cal.month.dayAria", { day: dayText }) + (wf.tooltip ? ", " + wf.tooltip : ""), "data-day": CALENDAR_PART.ymd(new Date(day)) });
+          applyWorkFreeAttrs(cell, wf);
           const openDayView = () => { store.setMeta({ calendarCursor: CALENDAR_PART.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); };
-          const dayButton = h("button", { type: "button", class: "zn-cal-month-date", "aria-label": t("cal.month.openDayAria", { day: dayText }), "aria-pressed": day === selected ? "true" : "false" }, String(new Date(day).getDate()));
+          const dayButton = h("button", { type: "button", class: "zn-cal-month-date", "aria-label": t("cal.month.openDayAria", { day: dayText }), "aria-pressed": day === selected ? "true" : "false", title: wf.tooltip || null }, String(new Date(day).getDate()));
           dayButton.addEventListener("click", (event) => { event.stopPropagation(); openDayView(); });
           cell.append(dayButton);
+          if (wf.tooltip) cell.append(h("span", { class: "zn-cal-month-holiday", title: wf.tooltip }, wf.tooltip));
           const allDay = dayItems.filter((item) => CALENDAR_PART.isAllDay(item));
           const timed = dayItems.filter((item) => !CALENDAR_PART.isAllDay(item));
           const mini = h("div", { class: "zn-cal-month-items" });
@@ -18672,7 +18714,9 @@
           if (page.count >= 160) break;
           const itemDay = CALENDAR_PART.itemRange(item)[0];
           const isToday = CALENDAR_PART.localDateKey(itemDay) === calendarTodayKey();
-          const row = h("div", { class: "zn-cal-agenda-row" + (isToday ? " is-today" : "") }, h("span", { class: "zn-cal-agenda-date" }, calendarDayLabel(itemDay, { year: true }), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : [])), calendarItemButton(item, true));
+          const wf = calendarWorkFreeInfo(itemDay);
+          const row = h("div", { class: "zn-cal-agenda-row" + (isToday ? " is-today" : "") }, h("span", { class: "zn-cal-agenda-date" }, calendarDayLabel(itemDay, { year: true }), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), ...(wf.tooltip ? [h("span", { class: "zn-cal-holiday-pill", title: wf.tooltip }, wf.tooltip)] : [])), calendarItemButton(item, true));
+          applyWorkFreeAttrs(row, wf);
           page.list.append(row); page.count++;
         }
         page.offset = limit;
@@ -19176,7 +19220,9 @@
         );
         for (const day of days) {
           const isToday = C.localDateKey(day) === todayKey;
-          const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", " + calendarTodayLabel() : "") }, h("strong", {}, new Date(day).toLocaleDateString(notesLocale(), { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []));
+          const wf = calendarWorkFreeInfo(day);
+          const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", " + calendarTodayLabel() : "") + (wf.tooltip ? ", " + wf.tooltip : "") }, h("strong", {}, new Date(day).toLocaleDateString(notesLocale(), { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), ...(wf.tooltip ? [h("span", { class: "zn-cal-holiday-pill", title: wf.tooltip }, wf.tooltip)] : []));
+          applyWorkFreeAttrs(dayHead, wf);
           dayHead.addEventListener("click", () => { store.setMeta({ calendarCursor: C.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); });
           bindCalendarDayContext(dayHead, day);
           header.append(dayHead);
@@ -19188,6 +19234,7 @@
         for (const day of workDays) {
           const isToday = C.localDateKey(day) === todayKey;
           const cell = h("div", { class: "zn-cal-time-allday-cell" + (isToday ? " is-today" : ""), tabindex: "0", "aria-label": t("cal.allDayFor.aria", { day: fmt(day) }), "data-day": C.ymd(new Date(day)) });
+          applyWorkFreeAttrs(cell, calendarWorkFreeInfo(day));
           bindCalendarDayContext(cell, day);
           for (const item of C.allDayOf(expanded, day)) {
             const button = calendarItemButton(item, true);
@@ -19395,7 +19442,9 @@
               }
             }
           }
-          columns.append(h("div", { class: "zn-cal-time-column" + (isToday ? " is-today" : "") }, track));
+          const col = h("div", { class: "zn-cal-time-column" + (isToday ? " is-today" : "") }, track);
+          applyWorkFreeAttrs(col, calendarWorkFreeInfo(day));
+          columns.append(col);
         }
         gridRow.append(columns);
         scroll.append(gridRow);
@@ -20582,7 +20631,110 @@
         close.addEventListener("click", closeDialog);
         openCalendarCard("Reminder history", rows, note, h("div", { class: "zn-dialog-actions" }, close));
       }
-      listen(calendarToolsSelect, "click", () => showMenu(calendarToolsSelect, [
+      function askCalendarHolidaysDialog() {
+        const C = CALENDAR_PART;
+        if (!C) return;
+        let state = calendarHolidayPrefs();
+        const save = (next) => {
+          state = C.cleanCalendarHolidays(next);
+          store.setMeta({ calendarHolidays: state });
+          renderCalendar();
+        };
+        const enableCheck = h("input", { type: "checkbox", class: "zn-cal-holidays-enable" });
+        enableCheck.checked = state.enabled !== false;
+        enableCheck.addEventListener("change", () => save({ ...state, enabled: enableCheck.checked }));
+        const enableRow = h("label", { class: "zn-check-row" }, enableCheck, h("span", {}, t("cal.holidays.enableTint")));
+
+        const regionSelect = h("select", { class: "zn-field zn-cal-holidays-region", "aria-label": t("cal.holidays.regionLabel") });
+        for (const code of C.HOLIDAY_REGIONS) {
+          const opt = h("option", { value: code }, t("cal.holidays.region." + code));
+          if (code === state.region) opt.selected = true;
+          regionSelect.append(opt);
+        }
+        regionSelect.value = state.region;
+        regionSelect.addEventListener("change", () => save({ ...state, region: regionSelect.value }));
+
+        const weekendSelect = h("select", { class: "zn-field zn-cal-holidays-weekend", "aria-label": t("cal.holidays.weekendLabel") });
+        for (const preset of C.WEEKEND_PRESETS) {
+          const opt = h("option", { value: preset }, t("cal.holidays.weekend." + preset));
+          if (preset === state.weekend) opt.selected = true;
+          weekendSelect.append(opt);
+        }
+        weekendSelect.value = state.weekend;
+        weekendSelect.addEventListener("change", () => save({ ...state, weekend: weekendSelect.value }));
+
+        const personalList = h("div", { class: "zn-cal-holidays-personal-list" });
+        const errEl = h("p", { class: "zn-cal-holidays-err", hidden: true }, "");
+        const renderPersonal = () => {
+          personalList.replaceChildren();
+          if (!state.personalDays.length) {
+            personalList.append(h("p", { class: "zn-empty" }, t("cal.holidays.personalEmpty")));
+            return;
+          }
+          for (const entry of state.personalDays) {
+            const rm = h("button", { type: "button", class: "zn-chip zn-cal-holidays-remove", "aria-label": t("cal.holidays.personalRemoveAria", { date: entry.date }), "data-date": entry.date }, "\u00d7");
+            rm.addEventListener("click", () => {
+              save(C.removePersonalDayOff(state, entry.date));
+              renderPersonal();
+            });
+            personalList.append(h("div", { class: "zn-cal-holidays-personal-row", "data-date": entry.date },
+              h("strong", {}, displayDateKey(entry.date)),
+              ...(entry.label ? [h("span", { class: "zn-cal-holidays-personal-label" }, entry.label)] : []),
+              h("span", { class: "zn-grow" }),
+              rm,
+            ));
+          }
+        };
+        renderPersonal();
+
+        const dateInput = h("input", {
+          type: "text",
+          class: "zn-field zn-cal-holidays-date",
+          value: C.parseYmd(store.meta.calendarCursor) ? store.meta.calendarCursor : C.localDateKey(nowMs()),
+          placeholder: "YYYY-MM-DD",
+          "aria-label": t("cal.holidays.personalDateAria"),
+        });
+        const labelInput = h("input", {
+          type: "text",
+          class: "zn-field zn-cal-holidays-label",
+          placeholder: t("cal.holidays.personalLabelPlaceholder"),
+          "aria-label": t("cal.holidays.personalLabelPlaceholder"),
+        });
+        const addBtn = chip(t("cal.holidays.personalAdd"), true);
+        addBtn.classList.add("zn-cal-holidays-add");
+        addBtn.addEventListener("click", () => {
+          const rawDate = String(dateInput.value || "").trim();
+          const parsedKey = C.parseYmd(rawDate) ? rawDate : (C.parseDateKeyText?.(rawDate, notesLang()) || "");
+          if (!parsedKey || !C.parseYmd(parsedKey)) {
+            errEl.textContent = t("cal.holidays.personalInvalidDate");
+            errEl.hidden = false;
+            return;
+          }
+          errEl.hidden = true;
+          save(C.addPersonalDayOff(state, parsedKey, labelInput.value));
+          labelInput.value = "";
+          renderPersonal();
+        });
+        const addRow = h("div", { class: "zn-cal-holidays-add-row" }, dateInput, labelInput, addBtn);
+        const close = chip(t("common.close"), true);
+        close.addEventListener("click", closeDialog);
+        openCalendarCard(
+          t("cal.holidays.title"),
+          enableRow,
+          h("label", { class: "zn-dialog-label" }, t("cal.holidays.regionLabel"), regionSelect),
+          h("label", { class: "zn-dialog-label" }, t("cal.holidays.weekendLabel"), weekendSelect),
+          h("div", { class: "zn-cal-holidays-section" },
+            h("strong", { class: "zn-cal-holidays-heading" }, t("cal.holidays.personalHeading")),
+            personalList,
+            addRow,
+            errEl,
+          ),
+          h("div", { class: "zn-dialog-actions" }, close),
+        );
+      }
+      listen(calendarToolsSelect, "click", () => {
+        const holPrefs = calendarHolidayPrefs();
+        return showMenu(calendarToolsSelect, [
         { heading: true, label: t("cal.toolsMenu.create") },
         { icon: "calendar", label: t("cal.toolsMenu.createTimedEvent"), action: () => queueMicrotask(() => askCreateCalendarItem("event", false)) },
         { icon: "calendar", label: t("cal.toolsMenu.createAllDayEvent"), action: () => queueMicrotask(() => askCreateCalendarItem("event", true)) },
@@ -20594,6 +20746,7 @@
         { id: "agenda-visibility-defaults", label: t("cal.toolsMenu.agendaVisibility"), icon: "calendar-check", run: askAgendaVisibilityDefaults },
         { sep: true },
         { id: "calendar-week-settings", icon: "calendar", label: t("cal.toolsMenu.weekSettings", { day: t(calendarWeekStartDay() === 0 ? "common.sunday" : "common.monday"), weeks: calendarShowWeekNumbers() ? ", " + t("cal.weekNumber.short") : "" }), run: askCalendarWeekSettings },
+        { id: "calendar-holidays", icon: "calendar", label: holPrefs.region !== "none" ? t("cal.toolsMenu.holidaysRegion", { region: holPrefs.region }) : t("cal.toolsMenu.holidays"), run: () => queueMicrotask(askCalendarHolidaysDialog) },
         { icon: "clock", label: t("cal.toolsMenu.visibleHours", { hours: CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours).on ? calendarHoursText(store.meta.calendarHours).long : t("cal.toolsMenu.all24") }), action: () => queueMicrotask(askCalendarHours) },
         { icon: "globe", label: t("cal.toolsMenu.displayZone", { zone: calendarDisplayZone() || t("cal.toolsMenu.zoneLocal") }), action: () => queueMicrotask(askCalendarDisplayZone) },
         { icon: "clock", label: t("cal.toolsMenu.freeSlots"), action: () => queueMicrotask(askCalendarFreeSlots) },
@@ -20602,7 +20755,8 @@
         { icon: "copy", label: t("cal.toolsMenu.copyWeekMd"), action: () => { const out = calendarWeekMarkdown(); env.copyText?.(out.text); flash(t("cal.toolsMenu.weekCopied")); } },
         { icon: "download", label: t("cal.toolsMenu.saveWeekMd"), action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.exportCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((saved) => { if (saved) flash(t("cal.toolsMenu.weekExported")); }).catch((error) => flash(t("cal.toolsMenu.weekExportFailed", { error: String(error?.message || error) }))); } },
         { icon: "printer", label: t("cal.toolsMenu.printWeek"), action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.printCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((printed) => { if (printed) flash(t("cal.toolsMenu.weekPrinted")); }).catch((error) => flash(t("cal.toolsMenu.weekPrintFailed", { error: String(error?.message || error) }))); } },
-      ]));
+      ]);
+      });
       // OW-10: shared Clock with analog face (draggable/clickable hour then minute hand, locale 12h/24h, fixed 5-min
       // resolution delinked from Week/Day calendarSnap, wheel & keyboard role=slider), digital hour/minute selectors,
       // Analog/Digital/Both toggle, and Start/End range reuse.

@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.234
+// @version 3.3.235
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.234, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.235, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.234";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.235";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2560,6 +2560,34 @@ const __zentralEmbeddedLoader = (function () {
       "spell.edit.copy": "Copy",
       "spell.edit.paste": "Paste",
       "spell.edit.selectAll": "Select all",
+      "cal.toolsMenu.holidays": "Holidays & days off\u2026",
+      "cal.toolsMenu.holidaysRegion": "Holidays & days off ({region})\u2026",
+      "cal.dayMenu.markDayOff": "Mark as personal day off",
+      "cal.dayMenu.removeDayOff": "Remove personal day off",
+      "cal.holidays.title": "Holidays & work-free days",
+      "cal.holidays.enableTint": "Tint weekends, public holidays and personal days off",
+      "cal.holidays.regionLabel": "Public holiday calendar",
+      "cal.holidays.region.none": "None (weekends only)",
+      "cal.holidays.region.PL": "Poland (PL)",
+      "cal.holidays.region.DE": "Germany (DE)",
+      "cal.holidays.region.GB": "England & Wales (GB)",
+      "cal.holidays.region.US": "United States (US)",
+      "cal.holidays.region.EG": "Egypt (EG)",
+      "cal.holidays.weekendLabel": "Weekend days",
+      "cal.holidays.weekend.auto": "Region default",
+      "cal.holidays.weekend.sat-sun": "Saturday & Sunday",
+      "cal.holidays.weekend.fri-sat": "Friday & Saturday",
+      "cal.holidays.weekend.none": "None",
+      "cal.holidays.personalHeading": "Personal days off",
+      "cal.holidays.personalEmpty": "No personal days off yet.",
+      "cal.holidays.personalDateAria": "Personal day off date (YYYY-MM-DD)",
+      "cal.holidays.personalLabelPlaceholder": "Optional label (e.g. Vacation)",
+      "cal.holidays.personalAdd": "Add day off",
+      "cal.holidays.personalRemoveAria": "Remove {date}",
+      "cal.holidays.personalInvalidDate": "Enter a valid date (YYYY-MM-DD).",
+      "cal.holidays.personalDayOff": "Personal day off",
+      "cal.holidays.markedFlash": "Marked {date} as a personal day off.",
+      "cal.holidays.removedFlash": "Removed {date} from personal days off.",
     }),
   });
 
@@ -3459,6 +3487,34 @@ const __zentralEmbeddedLoader = (function () {
       "spell.edit.copy": "Kopiuj",
       "spell.edit.paste": "Wklej",
       "spell.edit.selectAll": "Zaznacz wszystko",
+      "cal.toolsMenu.holidays": "\u015awi\u0119ta i dni wolne\u2026",
+      "cal.toolsMenu.holidaysRegion": "\u015awi\u0119ta i dni wolne ({region})\u2026",
+      "cal.dayMenu.markDayOff": "Oznacz jako dzie\u0144 wolny",
+      "cal.dayMenu.removeDayOff": "Usu\u0144 w\u0142asny dzie\u0144 wolny",
+      "cal.holidays.title": "\u015awi\u0119ta i dni wolne od pracy",
+      "cal.holidays.enableTint": "Wyr\u00f3\u017cniaj weekendy, \u015bwi\u0119ta i w\u0142asne dni wolne",
+      "cal.holidays.regionLabel": "Kalendarz \u015bwi\u0105t pa\u0144stwowych",
+      "cal.holidays.region.none": "Brak (tylko weekendy)",
+      "cal.holidays.region.PL": "Polska (PL)",
+      "cal.holidays.region.DE": "Niemcy (DE)",
+      "cal.holidays.region.GB": "Anglia i Walia (GB)",
+      "cal.holidays.region.US": "Stany Zjednoczone (US)",
+      "cal.holidays.region.EG": "Egipt (EG)",
+      "cal.holidays.weekendLabel": "Dni weekendu",
+      "cal.holidays.weekend.auto": "Domy\u015blne dla regionu",
+      "cal.holidays.weekend.sat-sun": "Sobota i niedziela",
+      "cal.holidays.weekend.fri-sat": "Pi\u0105tek i sobota",
+      "cal.holidays.weekend.none": "Brak",
+      "cal.holidays.personalHeading": "W\u0142asne dni wolne",
+      "cal.holidays.personalEmpty": "Brak w\u0142asnych dni wolnych.",
+      "cal.holidays.personalDateAria": "Data dnia wolnego (RRRR-MM-DD)",
+      "cal.holidays.personalLabelPlaceholder": "Opcjonalny opis (np. Urlop)",
+      "cal.holidays.personalAdd": "Dodaj dzie\u0144 wolny",
+      "cal.holidays.personalRemoveAria": "Usu\u0144 {date}",
+      "cal.holidays.personalInvalidDate": "Podaj poprawn\u0105 dat\u0119 (RRRR-MM-DD).",
+      "cal.holidays.personalDayOff": "W\u0142asny dzie\u0144 wolny",
+      "cal.holidays.markedFlash": "Oznaczono {date} jako dzie\u0144 wolny.",
+      "cal.holidays.removedFlash": "Usuni\u0119to {date} z w\u0142asnych dni wolnych.",
     }),
   });
 
@@ -10585,10 +10641,233 @@ const __zentralEmbeddedLoader = (function () {
     return pack(null, "none", "", "", "none", "Inherit");
   }
 
+  // ---- T2.10: Work-free-day tint + offline selectable holiday calendars ----
+  const HOLIDAY_REGIONS = Object.freeze(["none", "PL", "DE", "GB", "US", "EG"]);
+  const WEEKEND_PRESETS = Object.freeze(["auto", "sat-sun", "fri-sat", "none"]);
+  const HOLIDAY_PERSONAL_MAX = 200;
+  const holidayYearCache = new Map();
+
+  function pad2(n) { return String(Math.max(0, Math.floor(Number(n) || 0))).padStart(2, "0"); }
+  function ymdParts(year, month, day) { return `${year}-${pad2(month)}-${pad2(day)}`; }
+  function weekdayOfYmd(key) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key || ""));
+    if (!m) return -1;
+    return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0)).getUTCDay();
+  }
+  function shiftYmd(key, deltaDays) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key || ""));
+    if (!m) return "";
+    const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + Math.trunc(Number(deltaDays) || 0), 12, 0, 0));
+    return ymdParts(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
+  }
+  // Anonymous Gregorian Easter Sunday algorithm (Meeus/Jones/Butcher).
+  function easterSundayYmd(year) {
+    const y = Math.trunc(Number(year));
+    if (!Number.isFinite(y) || y < 1583 || y > 9999) return "";
+    const a = y % 19;
+    const b = Math.floor(y / 100);
+    const c = y % 100;
+    const d = Math.floor(b / 4);
+    const e = b % 4;
+    const f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4);
+    const k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const month = Math.floor((h + l - 7 * m + 114) / 31);
+    const day = ((h + l - 7 * m + 114) % 31) + 1;
+    return ymdParts(y, month, day);
+  }
+  // nth > 0: 1st..5th occurrence of weekday (0=Sun..6=Sat) in month (1..12); nth < 0: last (-1).
+  function nthWeekdayYmd(year, month, weekday, nth) {
+    const y = Math.trunc(Number(year)), mo = Math.trunc(Number(month)), wd = Math.trunc(Number(weekday)), n = Math.trunc(Number(nth));
+    if (!Number.isFinite(y) || mo < 1 || mo > 12 || wd < 0 || wd > 6 || !n) return "";
+    if (n > 0) {
+      const firstWd = new Date(Date.UTC(y, mo - 1, 1, 12, 0, 0)).getUTCDay();
+      const day = 1 + ((wd - firstWd + 7) % 7) + (n - 1) * 7;
+      const dt = new Date(Date.UTC(y, mo - 1, day, 12, 0, 0));
+      return dt.getUTCMonth() + 1 === mo ? ymdParts(y, mo, day) : "";
+    }
+    const lastDay = new Date(Date.UTC(y, mo, 0, 12, 0, 0)).getUTCDate();
+    const lastWd = new Date(Date.UTC(y, mo - 1, lastDay, 12, 0, 0)).getUTCDay();
+    const day = lastDay - ((lastWd - wd + 7) % 7) + (n + 1) * 7;
+    return day >= 1 ? ymdParts(y, mo, day) : "";
+  }
+  function regionWeekendDays(region) {
+    const code = HOLIDAY_REGIONS.includes(region) ? region : "none";
+    return code === "EG" ? [5, 6] : [6, 0];
+  }
+  function weekendDaysFor(prefs) {
+    const clean = cleanCalendarHolidays(prefs);
+    if (clean.weekend === "none") return [];
+    if (clean.weekend === "fri-sat") return [5, 6];
+    if (clean.weekend === "sat-sun") return [6, 0];
+    return regionWeekendDays(clean.region);
+  }
+  function cleanCalendarHolidays(raw) {
+    const src = raw && typeof raw === "object" ? raw : {};
+    const enabled = src.enabled !== false;
+    const region = HOLIDAY_REGIONS.includes(src.region) ? src.region : "none";
+    const weekend = WEEKEND_PRESETS.includes(src.weekend) ? src.weekend : "auto";
+    const personalMap = new Map();
+    const list = Array.isArray(src.personalDays) ? src.personalDays : [];
+    for (const entry of list) {
+      if (personalMap.size >= HOLIDAY_PERSONAL_MAX) break;
+      const date = typeof entry === "string" ? entry.trim() : String(entry?.date || "").trim();
+      if (!parseYmd(date)) continue;
+      const label = typeof entry === "string" ? "" : String(entry?.label || "").replace(/[\r\n\t]+/g, " ").trim().slice(0, 80);
+      personalMap.set(date, { date, label });
+    }
+    const personalDays = [...personalMap.values()].sort((a, b) => a.date.localeCompare(b.date));
+    return { enabled, region, weekend, personalDays };
+  }
+  function addPersonalDayOff(prefs, dateKey, label = "") {
+    const clean = cleanCalendarHolidays(prefs);
+    const key = typeof dateKey === "string" ? dateKey.trim() : localDateKey(dateKey);
+    if (!parseYmd(key)) return clean;
+    const nextLabel = String(label || "").replace(/[\r\n\t]+/g, " ").trim().slice(0, 80);
+    const filtered = clean.personalDays.filter((entry) => entry.date !== key);
+    if (filtered.length >= HOLIDAY_PERSONAL_MAX) return clean;
+    return cleanCalendarHolidays({ ...clean, personalDays: [...filtered, { date: key, label: nextLabel }] });
+  }
+  function removePersonalDayOff(prefs, dateKey) {
+    const clean = cleanCalendarHolidays(prefs);
+    const key = typeof dateKey === "string" ? dateKey.trim() : localDateKey(dateKey);
+    return cleanCalendarHolidays({ ...clean, personalDays: clean.personalDays.filter((entry) => entry.date !== key) });
+  }
+  function holidaysFor(region, year, lang = "en") {
+    const code = HOLIDAY_REGIONS.includes(region) ? region : "none";
+    const y = Math.trunc(Number(year));
+    const lc = cleanNotesLanguage(lang);
+    if (code === "none" || !Number.isFinite(y) || y < 1900 || y > 2100) return [];
+    const cacheKey = `${code}:${y}:${lc}`;
+    if (holidayYearCache.has(cacheKey)) return holidayYearCache.get(cacheKey);
+    const pl = lc === "pl";
+    const pick = (enName, plName) => (pl ? plName : enName);
+    const out = [];
+    const add = (date, name) => { if (date && name) out.push({ date, name, kind: "holiday" }); };
+    const easter = easterSundayYmd(y);
+    const observedSuffix = pl ? " (dzie\u0144 zast\u0119pczy)" : " (Observed)";
+    const substituteSuffix = pl ? " (dzie\u0144 zast\u0119pczy)" : " (Substitute)";
+
+    if (code === "PL") {
+      add(ymdParts(y, 1, 1), pick("New Year's Day", "Nowy Rok"));
+      add(ymdParts(y, 1, 6), pick("Epiphany", "\u015awi\u0119to Trzech Kr\u00f3li"));
+      add(easter, pick("Easter Sunday", "Wielkanoc"));
+      add(shiftYmd(easter, 1), pick("Easter Monday", "Poniedzia\u0142ek Wielkanocny"));
+      add(ymdParts(y, 5, 1), pick("Labour Day", "\u015awi\u0119to Pracy"));
+      add(ymdParts(y, 5, 3), pick("Constitution Day", "\u015awi\u0119to Konstytucji 3 Maja"));
+      add(shiftYmd(easter, 49), pick("Pentecost Sunday", "Zielone \u015awi\u0105tki"));
+      add(shiftYmd(easter, 60), pick("Corpus Christi", "Bo\u017ce Cia\u0142o"));
+      add(ymdParts(y, 8, 15), pick("Assumption of Mary", "Wniebowzi\u0119cie NMP"));
+      add(ymdParts(y, 11, 1), pick("All Saints' Day", "Wszystkich \u015awi\u0119tych"));
+      add(ymdParts(y, 11, 11), pick("National Independence Day", "Narodowe \u015awi\u0119to Niepodleg\u0142o\u015bci"));
+      if (y >= 2025) add(ymdParts(y, 12, 24), pick("Christmas Eve", "Wigilia Bo\u017cego Narodzenia"));
+      add(ymdParts(y, 12, 25), pick("Christmas Day", "Bo\u017ce Narodzenie (pierwszy dzie\u0144)"));
+      add(ymdParts(y, 12, 26), pick("Second Day of Christmas", "Bo\u017ce Narodzenie (drugi dzie\u0144)"));
+    } else if (code === "DE") {
+      add(ymdParts(y, 1, 1), pick("New Year's Day", "Nowy Rok"));
+      add(shiftYmd(easter, -2), pick("Good Friday", "Wielki Pi\u0105tek"));
+      add(shiftYmd(easter, 1), pick("Easter Monday", "Poniedzia\u0142ek Wielkanocny"));
+      add(ymdParts(y, 5, 1), pick("Labour Day", "\u015awi\u0119to Pracy"));
+      add(shiftYmd(easter, 39), pick("Ascension Day", "Wniebowst\u0105pienie Pa\u0144skie"));
+      add(shiftYmd(easter, 50), pick("Whit Monday", "Poniedzia\u0142ek Zielono\u015bwi\u0105tkowy"));
+      add(ymdParts(y, 10, 3), pick("German Unity Day", "Dzie\u0144 Jedno\u015bci Niemiec"));
+      add(ymdParts(y, 12, 25), pick("Christmas Day", "Bo\u017ce Narodzenie (pierwszy dzie\u0144)"));
+      add(ymdParts(y, 12, 26), pick("Boxing Day", "Bo\u017ce Narodzenie (drugi dzie\u0144)"));
+    } else if (code === "GB") {
+      const ny = ymdParts(y, 1, 1);
+      const nyWd = weekdayOfYmd(ny);
+      add(ny, pick("New Year's Day", "Nowy Rok"));
+      if (nyWd === 6) add(ymdParts(y, 1, 3), pick("New Year's Day", "Nowy Rok") + substituteSuffix);
+      else if (nyWd === 0) add(ymdParts(y, 1, 2), pick("New Year's Day", "Nowy Rok") + substituteSuffix);
+      add(shiftYmd(easter, -2), pick("Good Friday", "Wielki Pi\u0105tek"));
+      add(shiftYmd(easter, 1), pick("Easter Monday", "Poniedzia\u0142ek Wielkanocny"));
+      add(nthWeekdayYmd(y, 5, 1, 1), pick("Early May Bank Holiday", "Wczesnomajowe \u015bwi\u0119to bankowe"));
+      add(nthWeekdayYmd(y, 5, 1, -1), pick("Spring Bank Holiday", "Wiosenne \u015bwi\u0119to bankowe"));
+      add(nthWeekdayYmd(y, 8, 1, -1), pick("Summer Bank Holiday", "Letnie \u015bwi\u0119to bankowe"));
+      const xmas = ymdParts(y, 12, 25), boxing = ymdParts(y, 12, 26);
+      const xWd = weekdayOfYmd(xmas);
+      add(xmas, pick("Christmas Day", "Bo\u017ce Narodzenie"));
+      add(boxing, pick("Boxing Day", "Drugi dzie\u0144 \u015awi\u0105t"));
+      if (xWd === 5) { // Fri Dec 25, Sat Dec 26 -> substitute Mon Dec 28
+        add(ymdParts(y, 12, 28), pick("Boxing Day", "Drugi dzie\u0144 \u015awi\u0105t") + substituteSuffix);
+      } else if (xWd === 6) { // Sat Dec 25, Sun Dec 26 -> Mon Dec 27 & Tue Dec 28
+        add(ymdParts(y, 12, 27), pick("Christmas Day", "Bo\u017ce Narodzenie") + substituteSuffix);
+        add(ymdParts(y, 12, 28), pick("Boxing Day", "Drugi dzie\u0144 \u015awi\u0105t") + substituteSuffix);
+      } else if (xWd === 0) { // Sun Dec 25, Mon Dec 26 -> Tue Dec 27
+        add(ymdParts(y, 12, 27), pick("Christmas Day", "Bo\u017ce Narodzenie") + substituteSuffix);
+      }
+    } else if (code === "US") {
+      const addUsFixed = (mo, da, enName, plName) => {
+        const key = ymdParts(y, mo, da);
+        const name = pick(enName, plName);
+        add(key, name);
+        const wd = weekdayOfYmd(key);
+        if (wd === 6 && !(mo === 1 && da === 1)) add(shiftYmd(key, -1), name + observedSuffix);
+        else if (wd === 0) add(shiftYmd(key, 1), name + observedSuffix);
+      };
+      addUsFixed(1, 1, "New Year's Day", "Nowy Rok");
+      add(nthWeekdayYmd(y, 1, 1, 3), pick("Martin Luther King Jr. Day", "Dzie\u0144 Martina Luthera Kinga Jr."));
+      add(nthWeekdayYmd(y, 2, 1, 3), pick("Presidents' Day", "Dzie\u0144 Prezydent\u00f3w"));
+      add(nthWeekdayYmd(y, 5, 1, -1), pick("Memorial Day", "Dzie\u0144 Pami\u0119ci"));
+      if (y >= 2021) addUsFixed(6, 19, "Juneteenth National Independence Day", "Juneteenth");
+      addUsFixed(7, 4, "Independence Day", "Dzie\u0144 Niepodleg\u0142o\u015bci USA");
+      add(nthWeekdayYmd(y, 9, 1, 1), pick("Labor Day", "\u015awi\u0119to Pracy USA"));
+      add(nthWeekdayYmd(y, 10, 1, 2), pick("Columbus Day", "Dzie\u0144 Kolumba"));
+      addUsFixed(11, 11, "Veterans Day", "Dzie\u0144 Weteran\u00f3w");
+      add(nthWeekdayYmd(y, 11, 4, 4), pick("Thanksgiving Day", "\u015awi\u0119to Dzi\u0119kczynienia"));
+      addUsFixed(12, 25, "Christmas Day", "Bo\u017ce Narodzenie");
+      // If next year's Jan 1 falls on Saturday, Dec 31 of this year is the US federal observed New Year's Day.
+      if (weekdayOfYmd(ymdParts(y + 1, 1, 1)) === 6) {
+        add(ymdParts(y, 12, 31), pick("New Year's Day", "Nowy Rok") + observedSuffix);
+      }
+    } else if (code === "EG") {
+      add(ymdParts(y, 1, 7), pick("Coptic Christmas Day", "Bo\u017ce Narodzenie koptyjskie"));
+      add(ymdParts(y, 1, 25), pick("Revolution Day (25 January)", "Dzie\u0144 Rewolucji (25 stycznia)"));
+      add(ymdParts(y, 4, 25), pick("Sinai Liberation Day", "Dzie\u0144 Wyzwolenia Synaju"));
+      add(ymdParts(y, 5, 1), pick("Labour Day", "\u015awi\u0119to Pracy"));
+      add(ymdParts(y, 6, 30), pick("June 30 Revolution Day", "Dzie\u0144 Rewolucji 30 czerwca"));
+      add(ymdParts(y, 7, 23), pick("Revolution Day (23 July)", "Dzie\u0144 Rewolucji (23 lipca)"));
+      add(ymdParts(y, 10, 6), pick("Armed Forces Day", "Dzie\u0144 Si\u0142 Zbrojnych"));
+    }
+
+    const sorted = Object.freeze(out.sort((a, b) => a.date.localeCompare(b.date)).map((entry) => Object.freeze(entry)));
+    if (holidayYearCache.size > 120) holidayYearCache.clear();
+    holidayYearCache.set(cacheKey, sorted);
+    return sorted;
+  }
+  function isWorkFree(day, prefs, lang = "en") {
+    const clean = cleanCalendarHolidays(prefs);
+    const key = typeof day === "string" && parseYmd(day.trim()) ? day.trim() : localDateKey(day);
+    if (!clean.enabled || !key) {
+      return { workFree: false, weekend: false, holiday: null, personal: null, reasons: [], tooltip: "" };
+    }
+    const wd = weekdayOfYmd(key);
+    const weekend = weekendDaysFor(clean).includes(wd);
+    const year = Number(key.slice(0, 4));
+    const holiday = clean.region !== "none" ? (holidaysFor(clean.region, year, lang).find((h) => h.date === key) || null) : null;
+    const personal = clean.personalDays.find((p) => p.date === key) || null;
+    const reasons = [];
+    if (holiday) reasons.push(holiday.name);
+    if (personal) reasons.push(personal.label ? personal.label : t("cal.holidays.personalDayOff", null, lang));
+    const tooltip = reasons.join(" \u00b7 ");
+    return {
+      workFree: Boolean(weekend || holiday || personal),
+      weekend,
+      holiday,
+      personal,
+      reasons,
+      tooltip,
+    };
+  }
+
   const api = {
     KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, translate, t, pluralCategory, tCount, translationKeys, missingTranslationKeys, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, lineScheduleSignature, cleanTextSchedule, scheduleSignatureFromItem, scheduleFromParsedLine, reconcileListItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, WEEKEND_PRESETS, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
     cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
@@ -18529,6 +18808,7 @@ __zentralShim.register = function (def) {
         // The size of each calendar view ("auto" = fitted to the pane, or px; OW-03). Replaced as a whole, never changed in place.
         calendarScale: CALENDAR_PART ? CALENDAR_PART.cleanCalendarScale(null) : { month: "auto", week: "auto", day: "auto", upcoming: "auto", agenda: "auto" },
         calendarPicker: CALENDAR_PART ? CALENDAR_PART.cleanCalendarPicker(null) : { mode: "auto", minWidth: 470, minHeight: 360, colorMode: "count" },
+        calendarHolidays: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHolidays(null) : { enabled: true, region: "none", weekend: "auto", personalDays: [] },
         calendarAlertSettings: CALENDAR_PART ? CALENDAR_PART.cleanAlertSettings(null) : {}, calendarNoteAlertOverrides: {},
         calendarAgendaDefaults: {}, calendarNoteAgendaOverrides: {} };
       let meta = { ...DEFAULT_META };
@@ -19281,6 +19561,7 @@ __zentralShim.register = function (def) {
             // `calendarDensity` (one of three steps for all views, until 3.3.175) is read only where no size is stored yet.
             meta.calendarScale = CALENDAR_PART.cleanCalendarScale(raw.calendarScale, raw.calendarDensity);
             meta.calendarPicker = CALENDAR_PART.cleanCalendarPicker(raw.calendarPicker);
+            meta.calendarHolidays = CALENDAR_PART.cleanCalendarHolidays(raw.calendarHolidays);
             meta.calendarSnap = CALENDAR_PART.cleanCalendarSnap(raw.calendarSnap);
             meta.calendarHours = CALENDAR_PART.cleanCalendarHours(raw.calendarHours);
             const daysForward = Number(raw.calendarDaysForward);
@@ -29340,10 +29621,43 @@ __zentralShim.register = function (def) {
         });
         cancel.addEventListener("click", closeDialog);
       }
+      // T2.10: Work-free day tint & holiday tooltips across Month, Week, Day, Upcoming, and Agenda views.
+      const calendarHolidayPrefs = () => CALENDAR_PART?.cleanCalendarHolidays?.(store.meta.calendarHolidays) || { enabled: true, region: "none", weekend: "auto", personalDays: [] };
+      const calendarWorkFreeInfo = (day) => CALENDAR_PART?.isWorkFree?.(day, calendarHolidayPrefs(), notesLang()) || { workFree: false, weekend: false, holiday: null, personal: null, reasons: [], tooltip: "" };
+      function applyWorkFreeAttrs(el, wf, { appendTitle = false } = {}) {
+        if (!el || !wf || !wf.workFree) return;
+        el.classList.add("is-workfree");
+        if (wf.weekend) el.classList.add("is-weekend");
+        if (wf.holiday) el.classList.add("is-holiday");
+        if (wf.personal) el.classList.add("is-personal-off");
+        el.dataset.workFree = "true";
+        el.setAttribute("data-work-free", "true");
+        if (wf.holiday) {
+          el.dataset.holiday = wf.holiday.name;
+          el.setAttribute("data-holiday", wf.holiday.name);
+        }
+        if (wf.personal) {
+          const pl = wf.personal.label || "true";
+          el.dataset.personalOff = pl;
+          el.setAttribute("data-personal-off", pl);
+        }
+        if (wf.tooltip) {
+          el.title = appendTitle && el.title ? `${el.title}\n${wf.tooltip}` : wf.tooltip;
+        }
+      }
+      function toggleCalendarPersonalDayOff(dayKey) {
+        const cur = calendarHolidayPrefs();
+        const exists = cur.personalDays.some((p) => p.date === dayKey);
+        const next = exists ? CALENDAR_PART.removePersonalDayOff(cur, dayKey) : CALENDAR_PART.addPersonalDayOff(cur, dayKey, "");
+        store.setMeta({ calendarHolidays: next });
+        renderCalendar();
+        flash(t(exists ? "cal.holidays.removedFlash" : "cal.holidays.markedFlash", { date: displayDateKey(dayKey) }));
+      }
       function showCalendarDayMenu(event, day, anchor = null) {
         event?.preventDefault?.();
         event?.stopPropagation?.();
         const key = CALENDAR_PART.ymd(new Date(day));
+        const isPersonalOff = calendarHolidayPrefs().personalDays.some((p) => p.date === key);
         const chooseView = () => { store.setMeta({ calendarCursor: key, calendarView: "day" }); renderCalendar(); };
         const pointer = event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY) && (event.clientX || event.clientY);
         showMenu(pointer ? pointAnchor(event) : (anchor || root), [
@@ -29355,6 +29669,7 @@ __zentralShim.register = function (def) {
           { icon: "calendar-plus", label: "New all-day event…", action: () => askCalendarComposer({ date: key, kind: "event", allDay: true, linkCurrent: false }) },
           { icon: "calendar-plus", label: t("cal.menu.newBirthdayNote"), action: () => queueMicrotask(() => askNewBirthdayNote("", { date: key })) },
           { icon: "note", label: "Open or create date note", action: () => openDay(day, key, true) },
+          { id: "toggle-personal-day-off", icon: isPersonalOff ? "x" : "calendar", label: t(isPersonalOff ? "cal.dayMenu.removeDayOff" : "cal.dayMenu.markDayOff"), action: () => toggleCalendarPersonalDayOff(key) },
           { sep: true },
           ...[[-1, "Previous day"], [1, "Next day"]].map(([offset, label]) => ({ icon: "calendar", label, action: () => { store.setMeta({ calendarCursor: CALENDAR_PART.localDateKey(CALENDAR_PART.addDays(day, offset)), calendarView: "day" }); renderCalendar(); } })),
         ], { calendar: true });
@@ -29494,9 +29809,11 @@ __zentralShim.register = function (def) {
       }
       function calendarDayGroup(day, dayItems, { selected = false, compact = false } = {}) {
         const isToday = CALENDAR_PART.localDateKey(day) === CALENDAR_PART.localDateKey(nowMs());
+        const wf = calendarWorkFreeInfo(day);
         const section = h("section", { class: "zn-cal-day-group" + (selected ? " is-selected" : "") + (isToday ? " is-today" : ""), tabindex: "0", "aria-label": calendarDayLabel(day, { year: true }) });
+        applyWorkFreeAttrs(section, wf);
         bindCalendarDayContext(section, day);
-        const head = h("div", { class: "zn-cal-day-head" }, h("strong", {}, calendarDayLabel(day, { year: true })), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), h("span", {}, tCount("cal.items", dayItems.length)));
+        const head = h("div", { class: "zn-cal-day-head" }, h("strong", {}, calendarDayLabel(day, { year: true })), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), ...(wf.tooltip ? [h("span", { class: "zn-cal-holiday-pill", title: wf.tooltip }, wf.tooltip)] : []), h("span", {}, tCount("cal.items", dayItems.length)));
         section.append(head);
         const allDay = dayItems.filter((item) => CALENDAR_PART.isAllDay(item));
         const timed = dayItems.filter((item) => !CALENDAR_PART.isAllDay(item));
@@ -29618,6 +29935,7 @@ __zentralShim.register = function (def) {
                 if (cell.today) button.classList.add("is-today");
                 if (cell.day === selectedDay) button.classList.add("is-selected");
                 if (cell.day === focusedDay) button.classList.add("is-cursor");
+                applyWorkFreeAttrs(button, calendarWorkFreeInfo(cell.day), { appendTitle: true });
                 const tint = tintFor(cell.dominantCategory);
                 if (tint) {
                   button.style.setProperty("--zn-cal-picker-tint", tint);
@@ -29723,11 +30041,14 @@ __zentralShim.register = function (def) {
           const inMonth = new Date(day).getMonth() === month;
           const dayItems = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.addDays(day, 1));
           const dayText = calendarDayLabel(day, { year: true });
-          const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", tabindex: "0", "aria-selected": day === selected ? "true" : "false", "aria-label": t("cal.month.dayAria", { day: dayText }), "data-day": CALENDAR_PART.ymd(new Date(day)) });
+          const wf = calendarWorkFreeInfo(day);
+          const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", tabindex: "0", "aria-selected": day === selected ? "true" : "false", "aria-label": t("cal.month.dayAria", { day: dayText }) + (wf.tooltip ? ", " + wf.tooltip : ""), "data-day": CALENDAR_PART.ymd(new Date(day)) });
+          applyWorkFreeAttrs(cell, wf);
           const openDayView = () => { store.setMeta({ calendarCursor: CALENDAR_PART.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); };
-          const dayButton = h("button", { type: "button", class: "zn-cal-month-date", "aria-label": t("cal.month.openDayAria", { day: dayText }), "aria-pressed": day === selected ? "true" : "false" }, String(new Date(day).getDate()));
+          const dayButton = h("button", { type: "button", class: "zn-cal-month-date", "aria-label": t("cal.month.openDayAria", { day: dayText }), "aria-pressed": day === selected ? "true" : "false", title: wf.tooltip || null }, String(new Date(day).getDate()));
           dayButton.addEventListener("click", (event) => { event.stopPropagation(); openDayView(); });
           cell.append(dayButton);
+          if (wf.tooltip) cell.append(h("span", { class: "zn-cal-month-holiday", title: wf.tooltip }, wf.tooltip));
           const allDay = dayItems.filter((item) => CALENDAR_PART.isAllDay(item));
           const timed = dayItems.filter((item) => !CALENDAR_PART.isAllDay(item));
           const mini = h("div", { class: "zn-cal-month-items" });
@@ -29819,7 +30140,9 @@ __zentralShim.register = function (def) {
           if (page.count >= 160) break;
           const itemDay = CALENDAR_PART.itemRange(item)[0];
           const isToday = CALENDAR_PART.localDateKey(itemDay) === calendarTodayKey();
-          const row = h("div", { class: "zn-cal-agenda-row" + (isToday ? " is-today" : "") }, h("span", { class: "zn-cal-agenda-date" }, calendarDayLabel(itemDay, { year: true }), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : [])), calendarItemButton(item, true));
+          const wf = calendarWorkFreeInfo(itemDay);
+          const row = h("div", { class: "zn-cal-agenda-row" + (isToday ? " is-today" : "") }, h("span", { class: "zn-cal-agenda-date" }, calendarDayLabel(itemDay, { year: true }), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), ...(wf.tooltip ? [h("span", { class: "zn-cal-holiday-pill", title: wf.tooltip }, wf.tooltip)] : [])), calendarItemButton(item, true));
+          applyWorkFreeAttrs(row, wf);
           page.list.append(row); page.count++;
         }
         page.offset = limit;
@@ -30323,7 +30646,9 @@ __zentralShim.register = function (def) {
         );
         for (const day of days) {
           const isToday = C.localDateKey(day) === todayKey;
-          const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", " + calendarTodayLabel() : "") }, h("strong", {}, new Date(day).toLocaleDateString(notesLocale(), { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []));
+          const wf = calendarWorkFreeInfo(day);
+          const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", " + calendarTodayLabel() : "") + (wf.tooltip ? ", " + wf.tooltip : "") }, h("strong", {}, new Date(day).toLocaleDateString(notesLocale(), { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), ...(wf.tooltip ? [h("span", { class: "zn-cal-holiday-pill", title: wf.tooltip }, wf.tooltip)] : []));
+          applyWorkFreeAttrs(dayHead, wf);
           dayHead.addEventListener("click", () => { store.setMeta({ calendarCursor: C.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); });
           bindCalendarDayContext(dayHead, day);
           header.append(dayHead);
@@ -30335,6 +30660,7 @@ __zentralShim.register = function (def) {
         for (const day of workDays) {
           const isToday = C.localDateKey(day) === todayKey;
           const cell = h("div", { class: "zn-cal-time-allday-cell" + (isToday ? " is-today" : ""), tabindex: "0", "aria-label": t("cal.allDayFor.aria", { day: fmt(day) }), "data-day": C.ymd(new Date(day)) });
+          applyWorkFreeAttrs(cell, calendarWorkFreeInfo(day));
           bindCalendarDayContext(cell, day);
           for (const item of C.allDayOf(expanded, day)) {
             const button = calendarItemButton(item, true);
@@ -30542,7 +30868,9 @@ __zentralShim.register = function (def) {
               }
             }
           }
-          columns.append(h("div", { class: "zn-cal-time-column" + (isToday ? " is-today" : "") }, track));
+          const col = h("div", { class: "zn-cal-time-column" + (isToday ? " is-today" : "") }, track);
+          applyWorkFreeAttrs(col, calendarWorkFreeInfo(day));
+          columns.append(col);
         }
         gridRow.append(columns);
         scroll.append(gridRow);
@@ -31729,7 +32057,110 @@ __zentralShim.register = function (def) {
         close.addEventListener("click", closeDialog);
         openCalendarCard("Reminder history", rows, note, h("div", { class: "zn-dialog-actions" }, close));
       }
-      listen(calendarToolsSelect, "click", () => showMenu(calendarToolsSelect, [
+      function askCalendarHolidaysDialog() {
+        const C = CALENDAR_PART;
+        if (!C) return;
+        let state = calendarHolidayPrefs();
+        const save = (next) => {
+          state = C.cleanCalendarHolidays(next);
+          store.setMeta({ calendarHolidays: state });
+          renderCalendar();
+        };
+        const enableCheck = h("input", { type: "checkbox", class: "zn-cal-holidays-enable" });
+        enableCheck.checked = state.enabled !== false;
+        enableCheck.addEventListener("change", () => save({ ...state, enabled: enableCheck.checked }));
+        const enableRow = h("label", { class: "zn-check-row" }, enableCheck, h("span", {}, t("cal.holidays.enableTint")));
+
+        const regionSelect = h("select", { class: "zn-field zn-cal-holidays-region", "aria-label": t("cal.holidays.regionLabel") });
+        for (const code of C.HOLIDAY_REGIONS) {
+          const opt = h("option", { value: code }, t("cal.holidays.region." + code));
+          if (code === state.region) opt.selected = true;
+          regionSelect.append(opt);
+        }
+        regionSelect.value = state.region;
+        regionSelect.addEventListener("change", () => save({ ...state, region: regionSelect.value }));
+
+        const weekendSelect = h("select", { class: "zn-field zn-cal-holidays-weekend", "aria-label": t("cal.holidays.weekendLabel") });
+        for (const preset of C.WEEKEND_PRESETS) {
+          const opt = h("option", { value: preset }, t("cal.holidays.weekend." + preset));
+          if (preset === state.weekend) opt.selected = true;
+          weekendSelect.append(opt);
+        }
+        weekendSelect.value = state.weekend;
+        weekendSelect.addEventListener("change", () => save({ ...state, weekend: weekendSelect.value }));
+
+        const personalList = h("div", { class: "zn-cal-holidays-personal-list" });
+        const errEl = h("p", { class: "zn-cal-holidays-err", hidden: true }, "");
+        const renderPersonal = () => {
+          personalList.replaceChildren();
+          if (!state.personalDays.length) {
+            personalList.append(h("p", { class: "zn-empty" }, t("cal.holidays.personalEmpty")));
+            return;
+          }
+          for (const entry of state.personalDays) {
+            const rm = h("button", { type: "button", class: "zn-chip zn-cal-holidays-remove", "aria-label": t("cal.holidays.personalRemoveAria", { date: entry.date }), "data-date": entry.date }, "\u00d7");
+            rm.addEventListener("click", () => {
+              save(C.removePersonalDayOff(state, entry.date));
+              renderPersonal();
+            });
+            personalList.append(h("div", { class: "zn-cal-holidays-personal-row", "data-date": entry.date },
+              h("strong", {}, displayDateKey(entry.date)),
+              ...(entry.label ? [h("span", { class: "zn-cal-holidays-personal-label" }, entry.label)] : []),
+              h("span", { class: "zn-grow" }),
+              rm,
+            ));
+          }
+        };
+        renderPersonal();
+
+        const dateInput = h("input", {
+          type: "text",
+          class: "zn-field zn-cal-holidays-date",
+          value: C.parseYmd(store.meta.calendarCursor) ? store.meta.calendarCursor : C.localDateKey(nowMs()),
+          placeholder: "YYYY-MM-DD",
+          "aria-label": t("cal.holidays.personalDateAria"),
+        });
+        const labelInput = h("input", {
+          type: "text",
+          class: "zn-field zn-cal-holidays-label",
+          placeholder: t("cal.holidays.personalLabelPlaceholder"),
+          "aria-label": t("cal.holidays.personalLabelPlaceholder"),
+        });
+        const addBtn = chip(t("cal.holidays.personalAdd"), true);
+        addBtn.classList.add("zn-cal-holidays-add");
+        addBtn.addEventListener("click", () => {
+          const rawDate = String(dateInput.value || "").trim();
+          const parsedKey = C.parseYmd(rawDate) ? rawDate : (C.parseDateKeyText?.(rawDate, notesLang()) || "");
+          if (!parsedKey || !C.parseYmd(parsedKey)) {
+            errEl.textContent = t("cal.holidays.personalInvalidDate");
+            errEl.hidden = false;
+            return;
+          }
+          errEl.hidden = true;
+          save(C.addPersonalDayOff(state, parsedKey, labelInput.value));
+          labelInput.value = "";
+          renderPersonal();
+        });
+        const addRow = h("div", { class: "zn-cal-holidays-add-row" }, dateInput, labelInput, addBtn);
+        const close = chip(t("common.close"), true);
+        close.addEventListener("click", closeDialog);
+        openCalendarCard(
+          t("cal.holidays.title"),
+          enableRow,
+          h("label", { class: "zn-dialog-label" }, t("cal.holidays.regionLabel"), regionSelect),
+          h("label", { class: "zn-dialog-label" }, t("cal.holidays.weekendLabel"), weekendSelect),
+          h("div", { class: "zn-cal-holidays-section" },
+            h("strong", { class: "zn-cal-holidays-heading" }, t("cal.holidays.personalHeading")),
+            personalList,
+            addRow,
+            errEl,
+          ),
+          h("div", { class: "zn-dialog-actions" }, close),
+        );
+      }
+      listen(calendarToolsSelect, "click", () => {
+        const holPrefs = calendarHolidayPrefs();
+        return showMenu(calendarToolsSelect, [
         { heading: true, label: t("cal.toolsMenu.create") },
         { icon: "calendar", label: t("cal.toolsMenu.createTimedEvent"), action: () => queueMicrotask(() => askCreateCalendarItem("event", false)) },
         { icon: "calendar", label: t("cal.toolsMenu.createAllDayEvent"), action: () => queueMicrotask(() => askCreateCalendarItem("event", true)) },
@@ -31741,6 +32172,7 @@ __zentralShim.register = function (def) {
         { id: "agenda-visibility-defaults", label: t("cal.toolsMenu.agendaVisibility"), icon: "calendar-check", run: askAgendaVisibilityDefaults },
         { sep: true },
         { id: "calendar-week-settings", icon: "calendar", label: t("cal.toolsMenu.weekSettings", { day: t(calendarWeekStartDay() === 0 ? "common.sunday" : "common.monday"), weeks: calendarShowWeekNumbers() ? ", " + t("cal.weekNumber.short") : "" }), run: askCalendarWeekSettings },
+        { id: "calendar-holidays", icon: "calendar", label: holPrefs.region !== "none" ? t("cal.toolsMenu.holidaysRegion", { region: holPrefs.region }) : t("cal.toolsMenu.holidays"), run: () => queueMicrotask(askCalendarHolidaysDialog) },
         { icon: "clock", label: t("cal.toolsMenu.visibleHours", { hours: CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours).on ? calendarHoursText(store.meta.calendarHours).long : t("cal.toolsMenu.all24") }), action: () => queueMicrotask(askCalendarHours) },
         { icon: "globe", label: t("cal.toolsMenu.displayZone", { zone: calendarDisplayZone() || t("cal.toolsMenu.zoneLocal") }), action: () => queueMicrotask(askCalendarDisplayZone) },
         { icon: "clock", label: t("cal.toolsMenu.freeSlots"), action: () => queueMicrotask(askCalendarFreeSlots) },
@@ -31749,7 +32181,8 @@ __zentralShim.register = function (def) {
         { icon: "copy", label: t("cal.toolsMenu.copyWeekMd"), action: () => { const out = calendarWeekMarkdown(); env.copyText?.(out.text); flash(t("cal.toolsMenu.weekCopied")); } },
         { icon: "download", label: t("cal.toolsMenu.saveWeekMd"), action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.exportCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((saved) => { if (saved) flash(t("cal.toolsMenu.weekExported")); }).catch((error) => flash(t("cal.toolsMenu.weekExportFailed", { error: String(error?.message || error) }))); } },
         { icon: "printer", label: t("cal.toolsMenu.printWeek"), action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.printCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((printed) => { if (printed) flash(t("cal.toolsMenu.weekPrinted")); }).catch((error) => flash(t("cal.toolsMenu.weekPrintFailed", { error: String(error?.message || error) }))); } },
-      ]));
+      ]);
+      });
       // OW-10: shared Clock with analog face (draggable/clickable hour then minute hand, locale 12h/24h, fixed 5-min
       // resolution delinked from Week/Day calendarSnap, wheel & keyboard role=slider), digital hour/minute selectors,
       // Analog/Digital/Both toggle, and Start/End range reuse.

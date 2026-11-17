@@ -7109,10 +7109,233 @@
     return pack(null, "none", "", "", "none", "Inherit");
   }
 
+  // ---- T2.10: Work-free-day tint + offline selectable holiday calendars ----
+  const HOLIDAY_REGIONS = Object.freeze(["none", "PL", "DE", "GB", "US", "EG"]);
+  const WEEKEND_PRESETS = Object.freeze(["auto", "sat-sun", "fri-sat", "none"]);
+  const HOLIDAY_PERSONAL_MAX = 200;
+  const holidayYearCache = new Map();
+
+  function pad2(n) { return String(Math.max(0, Math.floor(Number(n) || 0))).padStart(2, "0"); }
+  function ymdParts(year, month, day) { return `${year}-${pad2(month)}-${pad2(day)}`; }
+  function weekdayOfYmd(key) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key || ""));
+    if (!m) return -1;
+    return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0)).getUTCDay();
+  }
+  function shiftYmd(key, deltaDays) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key || ""));
+    if (!m) return "";
+    const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + Math.trunc(Number(deltaDays) || 0), 12, 0, 0));
+    return ymdParts(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
+  }
+  // Anonymous Gregorian Easter Sunday algorithm (Meeus/Jones/Butcher).
+  function easterSundayYmd(year) {
+    const y = Math.trunc(Number(year));
+    if (!Number.isFinite(y) || y < 1583 || y > 9999) return "";
+    const a = y % 19;
+    const b = Math.floor(y / 100);
+    const c = y % 100;
+    const d = Math.floor(b / 4);
+    const e = b % 4;
+    const f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4);
+    const k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const month = Math.floor((h + l - 7 * m + 114) / 31);
+    const day = ((h + l - 7 * m + 114) % 31) + 1;
+    return ymdParts(y, month, day);
+  }
+  // nth > 0: 1st..5th occurrence of weekday (0=Sun..6=Sat) in month (1..12); nth < 0: last (-1).
+  function nthWeekdayYmd(year, month, weekday, nth) {
+    const y = Math.trunc(Number(year)), mo = Math.trunc(Number(month)), wd = Math.trunc(Number(weekday)), n = Math.trunc(Number(nth));
+    if (!Number.isFinite(y) || mo < 1 || mo > 12 || wd < 0 || wd > 6 || !n) return "";
+    if (n > 0) {
+      const firstWd = new Date(Date.UTC(y, mo - 1, 1, 12, 0, 0)).getUTCDay();
+      const day = 1 + ((wd - firstWd + 7) % 7) + (n - 1) * 7;
+      const dt = new Date(Date.UTC(y, mo - 1, day, 12, 0, 0));
+      return dt.getUTCMonth() + 1 === mo ? ymdParts(y, mo, day) : "";
+    }
+    const lastDay = new Date(Date.UTC(y, mo, 0, 12, 0, 0)).getUTCDate();
+    const lastWd = new Date(Date.UTC(y, mo - 1, lastDay, 12, 0, 0)).getUTCDay();
+    const day = lastDay - ((lastWd - wd + 7) % 7) + (n + 1) * 7;
+    return day >= 1 ? ymdParts(y, mo, day) : "";
+  }
+  function regionWeekendDays(region) {
+    const code = HOLIDAY_REGIONS.includes(region) ? region : "none";
+    return code === "EG" ? [5, 6] : [6, 0];
+  }
+  function weekendDaysFor(prefs) {
+    const clean = cleanCalendarHolidays(prefs);
+    if (clean.weekend === "none") return [];
+    if (clean.weekend === "fri-sat") return [5, 6];
+    if (clean.weekend === "sat-sun") return [6, 0];
+    return regionWeekendDays(clean.region);
+  }
+  function cleanCalendarHolidays(raw) {
+    const src = raw && typeof raw === "object" ? raw : {};
+    const enabled = src.enabled !== false;
+    const region = HOLIDAY_REGIONS.includes(src.region) ? src.region : "none";
+    const weekend = WEEKEND_PRESETS.includes(src.weekend) ? src.weekend : "auto";
+    const personalMap = new Map();
+    const list = Array.isArray(src.personalDays) ? src.personalDays : [];
+    for (const entry of list) {
+      if (personalMap.size >= HOLIDAY_PERSONAL_MAX) break;
+      const date = typeof entry === "string" ? entry.trim() : String(entry?.date || "").trim();
+      if (!parseYmd(date)) continue;
+      const label = typeof entry === "string" ? "" : String(entry?.label || "").replace(/[\r\n\t]+/g, " ").trim().slice(0, 80);
+      personalMap.set(date, { date, label });
+    }
+    const personalDays = [...personalMap.values()].sort((a, b) => a.date.localeCompare(b.date));
+    return { enabled, region, weekend, personalDays };
+  }
+  function addPersonalDayOff(prefs, dateKey, label = "") {
+    const clean = cleanCalendarHolidays(prefs);
+    const key = typeof dateKey === "string" ? dateKey.trim() : localDateKey(dateKey);
+    if (!parseYmd(key)) return clean;
+    const nextLabel = String(label || "").replace(/[\r\n\t]+/g, " ").trim().slice(0, 80);
+    const filtered = clean.personalDays.filter((entry) => entry.date !== key);
+    if (filtered.length >= HOLIDAY_PERSONAL_MAX) return clean;
+    return cleanCalendarHolidays({ ...clean, personalDays: [...filtered, { date: key, label: nextLabel }] });
+  }
+  function removePersonalDayOff(prefs, dateKey) {
+    const clean = cleanCalendarHolidays(prefs);
+    const key = typeof dateKey === "string" ? dateKey.trim() : localDateKey(dateKey);
+    return cleanCalendarHolidays({ ...clean, personalDays: clean.personalDays.filter((entry) => entry.date !== key) });
+  }
+  function holidaysFor(region, year, lang = "en") {
+    const code = HOLIDAY_REGIONS.includes(region) ? region : "none";
+    const y = Math.trunc(Number(year));
+    const lc = cleanNotesLanguage(lang);
+    if (code === "none" || !Number.isFinite(y) || y < 1900 || y > 2100) return [];
+    const cacheKey = `${code}:${y}:${lc}`;
+    if (holidayYearCache.has(cacheKey)) return holidayYearCache.get(cacheKey);
+    const pl = lc === "pl";
+    const pick = (enName, plName) => (pl ? plName : enName);
+    const out = [];
+    const add = (date, name) => { if (date && name) out.push({ date, name, kind: "holiday" }); };
+    const easter = easterSundayYmd(y);
+    const observedSuffix = pl ? " (dzie\u0144 zast\u0119pczy)" : " (Observed)";
+    const substituteSuffix = pl ? " (dzie\u0144 zast\u0119pczy)" : " (Substitute)";
+
+    if (code === "PL") {
+      add(ymdParts(y, 1, 1), pick("New Year's Day", "Nowy Rok"));
+      add(ymdParts(y, 1, 6), pick("Epiphany", "\u015awi\u0119to Trzech Kr\u00f3li"));
+      add(easter, pick("Easter Sunday", "Wielkanoc"));
+      add(shiftYmd(easter, 1), pick("Easter Monday", "Poniedzia\u0142ek Wielkanocny"));
+      add(ymdParts(y, 5, 1), pick("Labour Day", "\u015awi\u0119to Pracy"));
+      add(ymdParts(y, 5, 3), pick("Constitution Day", "\u015awi\u0119to Konstytucji 3 Maja"));
+      add(shiftYmd(easter, 49), pick("Pentecost Sunday", "Zielone \u015awi\u0105tki"));
+      add(shiftYmd(easter, 60), pick("Corpus Christi", "Bo\u017ce Cia\u0142o"));
+      add(ymdParts(y, 8, 15), pick("Assumption of Mary", "Wniebowzi\u0119cie NMP"));
+      add(ymdParts(y, 11, 1), pick("All Saints' Day", "Wszystkich \u015awi\u0119tych"));
+      add(ymdParts(y, 11, 11), pick("National Independence Day", "Narodowe \u015awi\u0119to Niepodleg\u0142o\u015bci"));
+      if (y >= 2025) add(ymdParts(y, 12, 24), pick("Christmas Eve", "Wigilia Bo\u017cego Narodzenia"));
+      add(ymdParts(y, 12, 25), pick("Christmas Day", "Bo\u017ce Narodzenie (pierwszy dzie\u0144)"));
+      add(ymdParts(y, 12, 26), pick("Second Day of Christmas", "Bo\u017ce Narodzenie (drugi dzie\u0144)"));
+    } else if (code === "DE") {
+      add(ymdParts(y, 1, 1), pick("New Year's Day", "Nowy Rok"));
+      add(shiftYmd(easter, -2), pick("Good Friday", "Wielki Pi\u0105tek"));
+      add(shiftYmd(easter, 1), pick("Easter Monday", "Poniedzia\u0142ek Wielkanocny"));
+      add(ymdParts(y, 5, 1), pick("Labour Day", "\u015awi\u0119to Pracy"));
+      add(shiftYmd(easter, 39), pick("Ascension Day", "Wniebowst\u0105pienie Pa\u0144skie"));
+      add(shiftYmd(easter, 50), pick("Whit Monday", "Poniedzia\u0142ek Zielono\u015bwi\u0105tkowy"));
+      add(ymdParts(y, 10, 3), pick("German Unity Day", "Dzie\u0144 Jedno\u015bci Niemiec"));
+      add(ymdParts(y, 12, 25), pick("Christmas Day", "Bo\u017ce Narodzenie (pierwszy dzie\u0144)"));
+      add(ymdParts(y, 12, 26), pick("Boxing Day", "Bo\u017ce Narodzenie (drugi dzie\u0144)"));
+    } else if (code === "GB") {
+      const ny = ymdParts(y, 1, 1);
+      const nyWd = weekdayOfYmd(ny);
+      add(ny, pick("New Year's Day", "Nowy Rok"));
+      if (nyWd === 6) add(ymdParts(y, 1, 3), pick("New Year's Day", "Nowy Rok") + substituteSuffix);
+      else if (nyWd === 0) add(ymdParts(y, 1, 2), pick("New Year's Day", "Nowy Rok") + substituteSuffix);
+      add(shiftYmd(easter, -2), pick("Good Friday", "Wielki Pi\u0105tek"));
+      add(shiftYmd(easter, 1), pick("Easter Monday", "Poniedzia\u0142ek Wielkanocny"));
+      add(nthWeekdayYmd(y, 5, 1, 1), pick("Early May Bank Holiday", "Wczesnomajowe \u015bwi\u0119to bankowe"));
+      add(nthWeekdayYmd(y, 5, 1, -1), pick("Spring Bank Holiday", "Wiosenne \u015bwi\u0119to bankowe"));
+      add(nthWeekdayYmd(y, 8, 1, -1), pick("Summer Bank Holiday", "Letnie \u015bwi\u0119to bankowe"));
+      const xmas = ymdParts(y, 12, 25), boxing = ymdParts(y, 12, 26);
+      const xWd = weekdayOfYmd(xmas);
+      add(xmas, pick("Christmas Day", "Bo\u017ce Narodzenie"));
+      add(boxing, pick("Boxing Day", "Drugi dzie\u0144 \u015awi\u0105t"));
+      if (xWd === 5) { // Fri Dec 25, Sat Dec 26 -> substitute Mon Dec 28
+        add(ymdParts(y, 12, 28), pick("Boxing Day", "Drugi dzie\u0144 \u015awi\u0105t") + substituteSuffix);
+      } else if (xWd === 6) { // Sat Dec 25, Sun Dec 26 -> Mon Dec 27 & Tue Dec 28
+        add(ymdParts(y, 12, 27), pick("Christmas Day", "Bo\u017ce Narodzenie") + substituteSuffix);
+        add(ymdParts(y, 12, 28), pick("Boxing Day", "Drugi dzie\u0144 \u015awi\u0105t") + substituteSuffix);
+      } else if (xWd === 0) { // Sun Dec 25, Mon Dec 26 -> Tue Dec 27
+        add(ymdParts(y, 12, 27), pick("Christmas Day", "Bo\u017ce Narodzenie") + substituteSuffix);
+      }
+    } else if (code === "US") {
+      const addUsFixed = (mo, da, enName, plName) => {
+        const key = ymdParts(y, mo, da);
+        const name = pick(enName, plName);
+        add(key, name);
+        const wd = weekdayOfYmd(key);
+        if (wd === 6 && !(mo === 1 && da === 1)) add(shiftYmd(key, -1), name + observedSuffix);
+        else if (wd === 0) add(shiftYmd(key, 1), name + observedSuffix);
+      };
+      addUsFixed(1, 1, "New Year's Day", "Nowy Rok");
+      add(nthWeekdayYmd(y, 1, 1, 3), pick("Martin Luther King Jr. Day", "Dzie\u0144 Martina Luthera Kinga Jr."));
+      add(nthWeekdayYmd(y, 2, 1, 3), pick("Presidents' Day", "Dzie\u0144 Prezydent\u00f3w"));
+      add(nthWeekdayYmd(y, 5, 1, -1), pick("Memorial Day", "Dzie\u0144 Pami\u0119ci"));
+      if (y >= 2021) addUsFixed(6, 19, "Juneteenth National Independence Day", "Juneteenth");
+      addUsFixed(7, 4, "Independence Day", "Dzie\u0144 Niepodleg\u0142o\u015bci USA");
+      add(nthWeekdayYmd(y, 9, 1, 1), pick("Labor Day", "\u015awi\u0119to Pracy USA"));
+      add(nthWeekdayYmd(y, 10, 1, 2), pick("Columbus Day", "Dzie\u0144 Kolumba"));
+      addUsFixed(11, 11, "Veterans Day", "Dzie\u0144 Weteran\u00f3w");
+      add(nthWeekdayYmd(y, 11, 4, 4), pick("Thanksgiving Day", "\u015awi\u0119to Dzi\u0119kczynienia"));
+      addUsFixed(12, 25, "Christmas Day", "Bo\u017ce Narodzenie");
+      // If next year's Jan 1 falls on Saturday, Dec 31 of this year is the US federal observed New Year's Day.
+      if (weekdayOfYmd(ymdParts(y + 1, 1, 1)) === 6) {
+        add(ymdParts(y, 12, 31), pick("New Year's Day", "Nowy Rok") + observedSuffix);
+      }
+    } else if (code === "EG") {
+      add(ymdParts(y, 1, 7), pick("Coptic Christmas Day", "Bo\u017ce Narodzenie koptyjskie"));
+      add(ymdParts(y, 1, 25), pick("Revolution Day (25 January)", "Dzie\u0144 Rewolucji (25 stycznia)"));
+      add(ymdParts(y, 4, 25), pick("Sinai Liberation Day", "Dzie\u0144 Wyzwolenia Synaju"));
+      add(ymdParts(y, 5, 1), pick("Labour Day", "\u015awi\u0119to Pracy"));
+      add(ymdParts(y, 6, 30), pick("June 30 Revolution Day", "Dzie\u0144 Rewolucji 30 czerwca"));
+      add(ymdParts(y, 7, 23), pick("Revolution Day (23 July)", "Dzie\u0144 Rewolucji (23 lipca)"));
+      add(ymdParts(y, 10, 6), pick("Armed Forces Day", "Dzie\u0144 Si\u0142 Zbrojnych"));
+    }
+
+    const sorted = Object.freeze(out.sort((a, b) => a.date.localeCompare(b.date)).map((entry) => Object.freeze(entry)));
+    if (holidayYearCache.size > 120) holidayYearCache.clear();
+    holidayYearCache.set(cacheKey, sorted);
+    return sorted;
+  }
+  function isWorkFree(day, prefs, lang = "en") {
+    const clean = cleanCalendarHolidays(prefs);
+    const key = typeof day === "string" && parseYmd(day.trim()) ? day.trim() : localDateKey(day);
+    if (!clean.enabled || !key) {
+      return { workFree: false, weekend: false, holiday: null, personal: null, reasons: [], tooltip: "" };
+    }
+    const wd = weekdayOfYmd(key);
+    const weekend = weekendDaysFor(clean).includes(wd);
+    const year = Number(key.slice(0, 4));
+    const holiday = clean.region !== "none" ? (holidaysFor(clean.region, year, lang).find((h) => h.date === key) || null) : null;
+    const personal = clean.personalDays.find((p) => p.date === key) || null;
+    const reasons = [];
+    if (holiday) reasons.push(holiday.name);
+    if (personal) reasons.push(personal.label ? personal.label : t("cal.holidays.personalDayOff", null, lang));
+    const tooltip = reasons.join(" \u00b7 ");
+    return {
+      workFree: Boolean(weekend || holiday || personal),
+      weekend,
+      holiday,
+      personal,
+      reasons,
+      tooltip,
+    };
+  }
+
   const api = {
     KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, translate, t, pluralCategory, tCount, translationKeys, missingTranslationKeys, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, lineScheduleSignature, cleanTextSchedule, scheduleSignatureFromItem, scheduleFromParsedLine, reconcileListItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, WEEKEND_PRESETS, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
     cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };

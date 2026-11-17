@@ -2066,6 +2066,76 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-calendar-controls-toggle { position: relative; flex: 0 0 auto; }
 .zentral-notes-sheet .zn-calendar-controls-dot { position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 999px; background: var(--zn-accent); pointer-events: none; }
 .zentral-notes-sheet .zn-calendar-controls-dot[hidden] { display: none !important; }
+/* T2.10: Subtle greenish tint for weekends, public holidays and personal days off. */
+.zentral-notes-sheet .zn-cal-month-cell.is-workfree,
+.zentral-notes-sheet .zn-cal-time-day-head.is-workfree,
+.zentral-notes-sheet .zn-cal-time-allday-cell.is-workfree,
+.zentral-notes-sheet .zn-cal-time-column.is-workfree,
+.zentral-notes-sheet .zn-cal-day-group.is-workfree,
+.zentral-notes-sheet .zn-cal-agenda-row.is-workfree {
+  background: color-mix(in srgb, #38b87c 8%, transparent);
+}
+.zentral-notes-sheet .zn-cal-month-cell.is-holiday,
+.zentral-notes-sheet .zn-cal-month-cell.is-personal-off,
+.zentral-notes-sheet .zn-cal-time-day-head.is-holiday,
+.zentral-notes-sheet .zn-cal-time-day-head.is-personal-off,
+.zentral-notes-sheet .zn-cal-time-allday-cell.is-holiday,
+.zentral-notes-sheet .zn-cal-time-allday-cell.is-personal-off,
+.zentral-notes-sheet .zn-cal-time-column.is-holiday,
+.zentral-notes-sheet .zn-cal-time-column.is-personal-off,
+.zentral-notes-sheet .zn-cal-day-group.is-holiday,
+.zentral-notes-sheet .zn-cal-day-group.is-personal-off,
+.zentral-notes-sheet .zn-cal-agenda-row.is-holiday,
+.zentral-notes-sheet .zn-cal-agenda-row.is-personal-off {
+  background: color-mix(in srgb, #38b87c 15%, transparent);
+}
+.zentral-notes-sheet .zn-cal-picker-day.is-workfree {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #38b87c 42%, transparent);
+  background: color-mix(in srgb, #38b87c 11%, transparent);
+}
+.zentral-notes-sheet .zn-cal-picker-day.is-holiday,
+.zentral-notes-sheet .zn-cal-picker-day.is-personal-off {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #38b87c 68%, transparent);
+  background: color-mix(in srgb, #38b87c 20%, transparent);
+}
+.zentral-notes-sheet .zn-cal-month-holiday {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  max-width: calc(100% - 28px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  line-height: 1.25;
+  padding: 0 3px;
+  border-radius: 3px;
+  color: color-mix(in srgb, #38b87c 75%, var(--zn-text));
+  background: color-mix(in srgb, #38b87c 16%, transparent);
+  pointer-events: none;
+}
+.zentral-notes-sheet .zn-cal-holiday-pill {
+  display: inline-block;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: .72em;
+  font-weight: 600;
+  color: color-mix(in srgb, #38b87c 78%, var(--zn-text));
+  background: color-mix(in srgb, #38b87c 18%, transparent);
+}
+.zentral-notes-sheet .zn-cal-holidays-section { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.zentral-notes-sheet .zn-cal-holidays-heading { font-size: .92em; }
+.zentral-notes-sheet .zn-cal-holidays-personal-list { display: flex; flex-direction: column; gap: 4px; max-height: 150px; overflow: auto; }
+.zentral-notes-sheet .zn-cal-holidays-personal-row { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border: 1px solid var(--zn-line); border-radius: 6px; font-size: .88em; }
+.zentral-notes-sheet .zn-cal-holidays-personal-label { color: var(--zn-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zentral-notes-sheet .zn-cal-holidays-add-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.zentral-notes-sheet .zn-cal-holidays-add-row .zn-cal-holidays-date { flex: 0 1 115px; min-width: 100px; }
+.zentral-notes-sheet .zn-cal-holidays-add-row .zn-cal-holidays-label { flex: 1 1 130px; min-width: 110px; }
+.zentral-notes-sheet .zn-cal-holidays-err { margin: 2px 0 0; color: #ff6b6b; font-size: .85em; }
 .zentral-notes-sheet .zn-calendar-controls .zn-chip { flex: 0 1 auto; max-width: 100%; min-width: 0; padding: 4px 7px; white-space: nowrap; }
 .zentral-notes-sheet .zn-calendar-view-select { min-width: 90px; }
 .zentral-notes-sheet .zn-calendar-kind-filter,
