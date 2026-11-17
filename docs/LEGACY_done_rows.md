@@ -1354,6 +1354,25 @@ through its options so its pure part stays pure. Verified live in the fake panel
 Kliknij, aby otworzyć minutnik." and an explicit `en` keeps English. Suite `235/235`.
 
 
+**`OW-21` DONE (3.3.300)** — find and replace within a note. `Ctrl+F` still opens the one-line bar; a new toggle at its
+right unfolds a second row with the replacement text, **Replace**, **Replace all** and a live count ("2 matches", or
+"2 trafienia" in Polish). It is folded away until asked for, so finding stays one line and replacing is a deliberate
+step; the toggle carries `aria-expanded` and the hidden row is out of the tab order. Matching is find's own rule, not a
+second one: literal (`a.c` finds `a.c`, not `abc`), case- and accent-folded, non-overlapping, never spanning two
+rendered runs, and `$1` in a replacement is the two characters it looks like. Replace writes the match under the cursor
+and re-checks the matched slice against the live text first, so a change made in another window between the count and
+the click is refused (`reason:"stale"`) instead of writing the wrong words. Replace all builds the note from pieces in
+a single pass — the replacement is never re-scanned, so `a`→`aa` terminates, the classic way this feature goes wrong —
+and it stops at `REPLACE_MAX` (500) matches and says `truncated`, because "replaced 500" and "replaced everything" are
+different sentences. Both go through `setBody`, the door the editor's own typing uses: one store write, one undo step,
+one repaint. They act on the open note only; other notes and the Trash are never touched. The read view, a trashed note
+and a note that is not loaded are refused **in words**, with both buttons disabled, rather than silently doing nothing.
+`Enter` in the replacement field replaces one, `Alt+Enter` replaces all, `Escape` closes as it did. Tests:
+`tests/notes-find-replace.test.cjs` (11) — plan/one/all/summary, the cap and the truncation flag, the stale refusal,
+the literal `$`, then the real sheet: the disclosure and its aria state, replace one, replace all, the read-view
+refusal, Enter and Alt+Enter, and two non-target notes (one live, one in the Trash) unchanged throughout. Suite
+`236/236`.
+
 ## The Master Order rows that were finished (moved out of the TODO table, 2026-11-17)
 
 The owner asked for the finished rows to leave the TODO list: the working table now holds only what is still

@@ -5877,6 +5877,61 @@
       for (let i = text.indexOf("\n"); i !== -1 && i < offset; i = text.indexOf("\n", i + 1)) n++;
       return n;
     };
+    // OW-21: replacing is a PLAN, never a side effect of typing. One function decides what would change, so the sheet
+    // can show "3 of 12" before anything moves, and so the same rules are tested once.
+    //   - matching is the find's matching (`findMatches`): folded case and accents, literal text, never overlapping;
+    //   - a range is `{ start, end }` in the note's text, the same coordinates the matches use;
+    //   - anything outside `range` is untouched, which is what makes "this note only" true by construction;
+    //   - a replacement is literal text: `$1` in it is a dollar sign and a one, because nothing here is a regex.
+    const REPLACE_MAX = 500;
+    const cleanReplaceText = (raw) => String(raw ?? "").replace(/[\r\n]+/g, " ").slice(0, FIND_MAX_QUERY);
+    // -> { matches, next, total }: the matches inside the range (a whole-note or a selection replace) and which one
+    // "replace this one" would take — the first that starts at or after the selection start.
+    function replacePlan(text, query, { from = 0, to = null, limit = REPLACE_MAX } = {}) {
+      const body = String(text ?? "");
+      const start = Math.max(0, Math.min(body.length, Math.round(Number(from) || 0)));
+      const end = to === null || to === undefined ? body.length : Math.max(start, Math.min(body.length, Math.round(Number(to) || 0)));
+      const capped = findMatches(body.slice(start, end), query, limit);
+      const all = capped.map((m) => ({ start: m.start + start, end: m.end + start }));
+      // `more` is asked for one past the cap so a plan that stopped early can say so instead of claiming the lot.
+      const more = capped.length >= limit && findMatches(body.slice(start, end), query, limit + 1).length > capped.length;
+      return { matches: all, total: all.length, more, next: all.length ? all[all.length - 1].end : null };
+    }
+    // Replace ONE match (the one `match` names) and say what happened. A stale range — the text changed since the plan
+    // was made — is refused rather than written: replacing the wrong words is worse than asking again.
+    function replaceOne(text, match, replacement, query) {
+      const body = String(text ?? "");
+      const m = match && typeof match === "object" ? match : null;
+      if (!m || !(m.end > m.start) || m.start < 0 || m.end > body.length) return { ok: false, reason: "stale", text: body, replaced: 0 };
+      const was = body.slice(m.start, m.end);
+      const expected = findMatches(was, query, 1)[0];
+      if (!expected || expected.start !== 0 || expected.end !== was.length || was.length !== m.end - m.start) {
+        return { ok: false, reason: "stale", text: body, replaced: 0 };
+      }
+      const piece = cleanReplaceText(replacement);
+      return { ok: true, reason: "", text: body.slice(0, m.start) + piece + body.slice(m.end), replaced: 1, at: m.start, inserted: piece.length };
+    }
+    // Replace EVERY match inside the range, in one pass. Building the result from the pieces means overlapping or
+    // colliding edits cannot happen by construction, and the replacement text is never re-scanned (so replacing "a"
+    // with "aa" does not loop forever — the classic way this feature goes wrong).
+    function replaceAll(text, query, replacement, { from = 0, to = null, limit = REPLACE_MAX } = {}) {
+      const plan = replacePlan(text, query, { from, to, limit });
+      const body = String(text ?? "");
+      if (!plan.matches.length) return { ok: false, reason: "none", text: body, replaced: 0, truncated: false };
+      const piece = cleanReplaceText(replacement);
+      let out = "", at = 0;
+      for (const m of plan.matches) { out += body.slice(at, m.start) + piece; at = m.end; }
+      out += body.slice(at);
+      // `truncated` says the plan stopped at the cap: the caller must not report "everything was replaced".
+      const stopped = plan.more;
+      return { ok: true, reason: "", text: out, replaced: plan.matches.length, truncated: stopped };
+    }
+    // "3 of 12" and the words for a button that cannot be pressed. Pure, so the sheet and the tests agree.
+    function replaceSummary(plan, { lang = "en" } = {}) {
+      const total = Math.max(0, Number(plan?.total) || 0);
+      if (!total) return lang === "pl" ? "Brak trafień" : "No matches";
+      return lang === "pl" ? total + (total === 1 ? " trafienie" : " trafień") : total + (total === 1 ? " match" : " matches");
+    }
     // New scrollTop that reveals an item, or null when it is already comfortably inside the view.
     function revealScroll({ y = 0, h = 0, top = 0, height = 0, margin = 24 } = {}) {
       if (!(height > 0)) return null;
@@ -15999,7 +16054,7 @@
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,
-        FIND_MAX_MATCHES, FIND_MAX_QUERY, sniffImageMime, checkAssetBytes, assetFileName, parseAssetLink, buildAssetLink, buildAssetImage,
+        FIND_MAX_MATCHES, FIND_MAX_QUERY, REPLACE_MAX, cleanReplaceText, replacePlan, replaceOne, replaceAll, replaceSummary, sniffImageMime, checkAssetBytes, assetFileName, parseAssetLink, buildAssetLink, buildAssetImage,
         insertAssetImage, assetImageAt, restyleAssetImage, assetRefs, assetIntegrityReport, isAssetNoteId, ASSET_MAX_BYTES, ASSET_VIDEO_MAX_BYTES, ASSET_FILE_MAX_BYTES, ASSET_MAX_PER_NOTE, ASSET_MIME, VIDEO_EXT_MIME, cleanAssetFileName, uniqueAssetFileName, parseFileAssetLink, droppedAssetMarkup, insertDroppedAssetLinks, droppedFiles,
         cleanRemind, ceilStep, dueReminders, nextReminderAt, reminderDelay, reminderPresets, parseRemindInput, remindPreview, remindDateText, remindTimeText,
         createTimeTickService, createReminderScheduler, createReminderAlertActions, createReminderAlertStack, createAgendaActionToast, notePreviewLines, buildNoteHoverModel, buildAgendaHoverModel, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
@@ -17148,7 +17203,18 @@
       const btnFindNext = iconButton("caret", "Next match (Enter)", "zn-find-next");
       const findOthers = h("button", { type: "button", class: "zn-find-others", title: "Open another note that contains this text" });
       const btnFindClose = iconButton("x", "Close find (Esc)", "zn-find-close");
-      const findBar = h("div", { class: "zn-find", role: "search" }, icon("search", 13), findInput, findCount, btnFindPrev, btnFindNext, findOthers, btnFindClose);
+      // OW-21: replace lives on the find bar, one disclosure below it, so it is discoverable from where finding already
+      // is and cannot be pressed by someone who only meant to find. Both buttons are DISABLED until the words would
+      // change something, and the row says how many matches there are before either is used.
+      const btnFindReplace = h("button", { type: "button", class: "zn-find-replace-toggle", title: "Replace…", "aria-expanded": "false" }, "Replace");
+      const findBarToggle = h("div", { class: "zn-find-row" }, icon("search", 13), findInput, findCount, btnFindPrev, btnFindNext, findOthers, btnFindReplace, btnFindClose);
+      const replaceInput = h("input", { type: "text", class: "zn-find-replace-input", placeholder: "Replace with", "aria-label": "Replace with", spellcheck: "false" });
+      const btnReplaceOne = h("button", { type: "button", class: "zn-find-btn zn-find-replace-one", title: "Replace this match", disabled: "" }, "Replace");
+      const btnReplaceAll = h("button", { type: "button", class: "zn-find-btn zn-find-replace-all", title: "Replace every match in this note", disabled: "" }, "All");
+      const replaceNote = h("span", { class: "zn-find-replace-note", "aria-live": "polite" });
+      const replaceRow = h("div", { class: "zn-find-row zn-find-replace-row" }, replaceInput, btnReplaceOne, btnReplaceAll, replaceNote);
+      replaceRow.hidden = true;
+      const findBar = h("div", { class: "zn-find", role: "search" }, findBarToggle, replaceRow);
       findBar.hidden = true;
       // "[[" completion: a short strip of matching notes under the toolbar while the caret is inside an open [[.
       const wikiBar = h("div", { class: "zn-wikibar", role: "listbox", "aria-label": "Notes to link" });
@@ -18467,7 +18533,77 @@
         findOthers.textContent = n ? `found in ${n} other ${n === 1 ? "note" : "notes"}` : "not found in other notes";
         findOthers.disabled = !n;
         btnFindPrev.disabled = btnFindNext.disabled = !findList.length;
+        paintReplaceState(q);
       }
+      // OW-21: what the replace row says, and whether its buttons may be pressed at all. A read-only view, the Trash
+      // and a note being loaded all mean the same thing here: the text cannot be written, so nothing pretends it can.
+      function paintReplaceState(q) {
+        // A closed bar has nothing to act on, and a replace row folded away must not leave its buttons live.
+        btnReplaceOne.disabled = btnReplaceAll.disabled = true;
+        if (findBar.hidden || replaceRow.hidden !== false) return;
+        const n = q ? findList.length : 0;
+        const blocked = replaceBlockedReason();
+        btnReplaceOne.disabled = btnReplaceAll.disabled = !n || !!blocked;
+        btnReplaceOne.title = blocked || "Replace this match";
+        btnReplaceAll.title = blocked || "Replace every match in this note";
+        replaceNote.textContent = blocked || (q ? replaceSummary({ total: n }, { lang: notesLang() }) : "");
+      }
+      // Why a replacement would be refused, in the words the person needs. Empty = it may go ahead. A read-only view,
+      // the Trash and a note that is not loaded all mean the same thing: the text cannot be written here.
+      function replaceBlockedReason() {
+        if (view !== "editor" || mode === "read") return notesLang() === "pl" ? "Widok do czytania — przełącz na edycję" : "Reading view — switch to Edit";
+        const n = note();
+        if (!n) return notesLang() === "pl" ? "Brak notatki" : "No note";
+        if (n.trashed) return notesLang() === "pl" ? "Notatka jest w koszu" : "This note is in the Trash";
+        return "";
+      }
+      const canReplaceNow = () => replaceBlockedReason() === "";
+      // One replace. The match is re-checked against the live text first (`replaceOne` refuses a stale range), so a
+      // change made elsewhere between the plan and the click cannot make this write the wrong words. The write goes
+      // through `setBody`, the same door the editor's own edits use — one store write, one undo step, one repaint.
+      function doReplaceOne() {
+        const q = findQuery();
+        if (!q || !canReplaceNow()) return flash(replaceBlockedReason() || "Nothing to replace");
+        const match = findList[findIdx >= 0 ? findIdx : 0];
+        if (!note() || !match) return;
+        const plan = replaceOne(ta.value, match, replaceInput.value, q);
+        if (!plan.ok) return flash(notesLang() === "pl" ? "Tekst się zmienił — spróbuj ponownie" : "The text changed — try again");
+        setBody(plan.text);
+        try { ta.setSelectionRange(plan.at, plan.at + plan.inserted); } catch (_) {}
+        refreshFind();
+        flash(notesLang() === "pl" ? "Zastąpiono" : "Replaced");
+      }
+      // Replace every match in THIS note, in one write, so it is one undo step and never a series of half-done edits.
+      // It never crosses notes: the range is this note's text, by construction.
+      function doReplaceAll() {
+        const q = findQuery();
+        if (!q || !canReplaceNow()) return flash(replaceBlockedReason() || "Nothing to replace");
+        if (!note()) return;
+        const plan = replaceAll(ta.value, q, replaceInput.value, {});
+        if (!plan.ok) return flash(notesLang() === "pl" ? "Brak trafień" : "No matches");
+        setBody(plan.text);
+        refreshFind();
+        const n = plan.replaced;
+        const tail = plan.truncated ? (notesLang() === "pl" ? " (limit)" : " (limit)") : "";
+        flash(notesLang() === "pl" ? "Zastąpiono " + n + (n === 1 ? " trafienie" : " trafień") + tail : "Replaced " + n + (n === 1 ? " match" : " matches") + tail);
+      }
+      // OW-21: the row is disclosed, not always there — finding is common, replacing is deliberate.
+      btnFindReplace.addEventListener("click", () => {
+        const open = replaceRow.hidden;
+        replaceRow.hidden = !open;
+        btnFindReplace.setAttribute("aria-expanded", String(!!open));
+        if (open) { try { replaceInput.focus({ preventScroll: true }); } catch (_) {} }
+        paintFindState();
+      });
+      replaceInput.addEventListener("input", () => paintReplaceState(findQuery()));
+      btnReplaceOne.addEventListener("click", doReplaceOne);
+      btnReplaceAll.addEventListener("click", doReplaceAll);
+      // Enter in the replacement field replaces the current match; Tab order stays inside the row.
+      replaceInput.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        if (e.altKey) doReplaceAll(); else doReplaceOne();
+      });
       function measureCaretY(offset) {
         if (!measureEditor()) return null;
         const marker = h("span", {}, "\u200b");

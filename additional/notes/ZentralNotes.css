@@ -1471,6 +1471,59 @@
 .zentral-notes-sheet .zn-find-others:disabled { text-decoration: none; cursor: default; }
 .zentral-notes-sheet .zn-find-others:not(:disabled):hover { background: var(--zn-hover); color: var(--zn-text); }
 .zentral-notes-sheet .zn-find-others[hidden] { display: none; }
+/* ---- replace (OW-21): a folded second row, so finding stays one line and replacing is a deliberate step ---- */
+.zentral-notes-sheet .zn-find-row {
+  display: flex;
+  align-items: center;
+  gap: 4px 6px;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+}
+.zentral-notes-sheet .zn-find-replace-row {
+  display: flex;
+  align-items: center;
+  gap: 4px 6px;
+  flex: 1 1 100%;
+  padding-top: 2px;
+}
+.zentral-notes-sheet .zn-find-replace-row[hidden] { display: none; }
+.zentral-notes-sheet .zn-find-replace-input {
+  flex: 1 1 110px;
+  min-width: 80px;
+  padding: 3px 6px;
+  border: 1px solid var(--zn-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--zn-text);
+  font: inherit;
+}
+.zentral-notes-sheet .zn-find-replace-input:focus { outline: none; border-color: var(--zn-accent); }
+/* The toggle reads as part of the bar, not as a loud button: it is a door, not a commit. */
+.zentral-notes-sheet .zn-find-replace-toggle { opacity: 0.75; }
+.zentral-notes-sheet .zn-find-replace-toggle[aria-expanded="true"] { opacity: 1; background: var(--zn-hover); color: var(--zn-text); }
+.zentral-notes-sheet .zn-find-replace-one,
+.zentral-notes-sheet .zn-find-replace-all {
+  padding: 2px 8px;
+  border: 1px solid var(--zn-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--zn-text);
+  font: inherit;
+  font-size: 0.9em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.zentral-notes-sheet .zn-find-replace-one:not(:disabled):hover,
+.zentral-notes-sheet .zn-find-replace-all:not(:disabled):hover { background: var(--zn-hover); }
+.zentral-notes-sheet .zn-find-replace-one:disabled,
+.zentral-notes-sheet .zn-find-replace-all:disabled { opacity: 0.35; cursor: default; }
+.zentral-notes-sheet .zn-find-replace-note {
+  font-size: 0.9em;
+  color: var(--zn-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ---- pasted pictures (P2) ------------------------------------------------------ */
 .zentral-notes-sheet .zn-read .zn-pic { display: inline-block; max-width: 100%; }
