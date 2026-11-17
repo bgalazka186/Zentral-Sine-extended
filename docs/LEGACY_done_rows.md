@@ -1248,3 +1248,19 @@ availability listener is now one module-level registration with a `registerClean
 Tests: `tests/widgets-clock-timer.test.cjs` (10 + 1 live) drives the real mounted card — the stopwatch starts, its
 numbers advance, it stops keeping its elapsed time, a preset starts a countdown, and the note chip on the clock face
 reveals its row — plus the migration assertions; suite `230/230`.
+
+**`T3.5` DONE (3.3.293)** — the callout toolbar button, finished. Two things were LEFT from the audit and both are now
+in: the picker offers every kind the parser reads (it gained `bingo` and `poll`, which the flavors table has carried as
+F26/F27 all along but the toolbar never listed, so the menu and the parser disagreed), and a plain click inserts the
+last-used callout. The one design trap this slice hit is worth keeping: the natural home for that click is the Quote
+button, and putting it there **broke a proven invariant** — `tests/notes-writing-ui.test.cjs` requires a toolbar button
+and its shortcut to produce identical text, and the shortcut still ran a plain quote. The click therefore lives on its
+own More-menu entry ("Callout warning (last used)") directly below the picker's "Callout…", which keeps the Quote
+button's promise and the invariant intact; Quote's long press still lists the kinds. The memory is a plain per-window
+object (`calloutMemory`), never a preference, and an existing callout under the caret wins over it. Fold markers are now
+offered on every kind that reads one (`CALLOUT_FOLDABLE`) instead of only `note`, which is also how the old spec's
+`[!faq]-` is spelled: `faq` parses as `question` keeping its own name, so it is offered as Question-with-a-fold rather
+than as a second kind that would round-trip as something else. Tests: `tests/notes-callout-toolbar.test.cjs` (6 cases —
+every offered kind round-trips through `calloutKind`, the fold set matches the kinds that read a fold, the memory moves
+with what was inserted and is never stored, the toolbar tap prefers the caret, the picker honours hidden tools, and the
+extended kinds are hideable), plus `notes-writing-ui` (10) and `notes-flavors` (34) unchanged. Suite `231/231`.

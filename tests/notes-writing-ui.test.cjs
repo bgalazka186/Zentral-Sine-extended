@@ -38,6 +38,9 @@ const WRITING_UI = {
   calloutImportant: { at: "insert", via: "Callout", label: "Important" }, calloutCaution: { at: "insert", via: "Callout", label: "Caution" }, calloutInfo: { at: "insert", via: "Callout", label: "Info" },
   pastePicture: { at: "insert", label: "Paste picture from clipboard" }, pictureOptions: { at: "insert", label: "Picture options" },
   footnote: { at: "insert", via: "Blocks and notes", label: "Footnote" }, hubList: { at: "insert", via: "Blocks and notes", label: "Hub list of notes" },
+  // T3.5: the two extended kinds the picker gained. The UI path is the same one every callout has: More > Callout,
+  // plus a hold on the Quote button. Naming it here is what keeps "an action exists" and "a person can reach it" equal.
+  calloutBingo: { at: "insert", via: "Callout", label: "Bingo" }, calloutPoll: { at: "insert", via: "Callout", label: "Poll" },
   dateToday: { at: "more", via: "Links & dates", label: "Notes by date" }, dateTomorrow: { at: "more", via: "Links & dates", label: "Notes by date" }, dateNext: { at: "more", via: "Links & dates", label: "Notes by date" }, dateList: { at: "more", via: "Links & dates", label: "Notes by date" },
   history: { at: "more", label: "Version history" }, calendarReminder: bar("Create reminder"), outline: bar("Table of contents"),
   find: { at: "more", label: "Find in notes" }, remind: { at: "more", label: "Remind me" }, newNote: { at: "more", label: "New note" },

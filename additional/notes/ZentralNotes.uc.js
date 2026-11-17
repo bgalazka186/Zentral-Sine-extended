@@ -5174,15 +5174,30 @@
     ]);
     // Callouts (> [!NOTE]): kind -> label. The selected lines (or the current line) become the body;
     // on a block that already starts with a callout line only the kind changes.
+    // T3.5: every kind the parser reads is offered here. `bingo` and `poll` were in the flavors table (F26/F27) and
+    // could be typed by hand, but the toolbar never listed them, so the menu and the parser disagreed.
     const CALLOUT_KINDS = Object.freeze([
       ["note", "Note"], ["tip", "Tip"], ["important", "Important"], ["warning", "Warning"], ["caution", "Caution"], ["info", "Info"],
       ["abstract", "Abstract"], ["todo", "Todo"], ["success", "Success"], ["question", "Question"], ["failure", "Failure"],
       ["danger", "Danger"], ["bug", "Bug"], ["example", "Example"], ["quote", "Quote"],
+      ["bingo", "Bingo"], ["poll", "Poll"],
     ]);
+    // The kinds whose header can carry a fold marker (`[!FAQ]-`). Obsidian folds any callout; this keeps the list to
+    // the ones the old spec named, so a person is not offered a fold on a kind that does not read one.
+    // `faq` is a foldable spelling of `question` in the flavors table, so the picker offers "Question" with a fold
+    // rather than a second kind that would parse back as something else.
+    const CALLOUT_FOLDABLE = Object.freeze(["note", "tip", "important", "warning", "caution", "info", "question"]);
+    // T3.5: the kind a primary click uses. In memory per window (a habit, not a setting); restored from the note text
+    // when a callout is already under the caret. `faq` is the foldable question kind the old spec asked for.
+    const calloutMemory = { kind: "note", fold: "" };
+    const calloutLabel = (kind) => (CALLOUT_KINDS.find(([k]) => k === kind) || [kind, kind])[1];
     const calloutId = (kind) => "callout" + kind[0].toUpperCase() + kind.slice(1);
     function insertCallout(value, s, e, kind, fold = "") {
       kind = CALLOUT_KINDS.some((k) => k[0] === kind) ? kind : "note";
       fold = fold === "-" || fold === "+" ? fold : ""; // F22: "-" starts closed, "+" starts open
+      // T3.5: what a person picked last is what a plain click picks next time. Memory only — nothing is stored.
+      calloutMemory.kind = kind;
+      calloutMemory.fold = fold;
       const head = "> [!" + kind.toUpperCase() + "]" + fold;
       const ls = value.lastIndexOf("\n", s - 1) + 1;
       let le = value.indexOf("\n", e > s ? e - 1 : e);
@@ -15657,7 +15672,7 @@
         pastedLink, richPaste, repairPastedTable, PASTE_HTML_PART, fragmentLabel, insertImage, makeTable, insertTable, SHORTCUT_ACTIONS, formatCombo,
         normalizeCombo, comboFromEvent, parseShortcutMap, effectiveShortcuts, findShortcutConflict,
         matchShortcutAction, assignShortcut, QUICK_OPTIONS, stepOption, PREF,
-        alignDelim, buildImage, insertImageMd, pastedWebAddress, CODE_LANGS, CALLOUT_KINDS, calloutId, insertCallout,
+        alignDelim, buildImage, insertImageMd, pastedWebAddress, CODE_LANGS, CALLOUT_KINDS, CALLOUT_FOLDABLE, calloutMemory, calloutId, insertCallout,
         HIDEABLE_TOOLS, parseHidden, serializeHidden, applyTreeSelection, resolveTreeSelection, cleanBatchTag, appendTagToBody,
         normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, clearOfRect, sideOf, createHoldAction,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
@@ -24130,6 +24145,30 @@
       };
       fmt.outline = () => showOutline(); // reachable from "Hidden tools" too
       for (const [kind] of CALLOUT_KINDS) fmt[calloutId(kind)] = () => applyEdit(insertCallout(ta.value, ...sel(), kind));
+      // T3.5: a plain click on the Quote button inserts the LAST-USED callout. A callout already under the caret wins,
+      // because the person is looking at it and "same kind again" is the only sensible reading of a click there.
+      const calloutAtCaret = () => {
+        const [s0, e0] = sel();
+        const value = ta.value;
+        const ls = value.lastIndexOf("\n", Math.max(0, s0 - 1)) + 1;
+        let le = value.indexOf("\n", e0 > s0 ? e0 - 1 : e0);
+        if (le === -1) le = value.length;
+        const first = value.slice(ls, le).split("\n")[0] || "";
+        const m = /^>\s*\[!([a-z][\w-]*)\]\s*([+-])?/i.exec(first);
+        if (!m) return null;
+        const kind = CALLOUT_KINDS.some(([k]) => k === m[1].toLowerCase()) ? m[1].toLowerCase() : "";
+        return { kind: kind || calloutMemory.kind, fold: m[2] === "-" || m[2] === "+" ? m[2] : "" };
+      };
+      const insertLastCallout = () => applyEdit(insertCallout(ta.value, ...sel(), calloutMemory.kind, calloutMemory.fold));
+      calloutMemory.insertLast = insertLastCallout;
+      calloutMemory.atCaret = calloutAtCaret;
+      // T3.5's one-click action: a callout already under the caret decides the kind (the person is looking at it),
+      // otherwise the remembered one. Its call sites wrap it in `needEdit`, so it never changes the mode itself.
+      const insertCalloutFromToolbar = () => {
+        const at = calloutAtCaret();
+        if (at) return applyEdit(insertCallout(ta.value, ...sel(), at.kind, at.fold || calloutMemory.fold));
+        return insertLastCallout();
+      };
       const needEdit = (fn) => () => {
         if (mode === "read") setMode("edit");
         if (note()?.trashed) return;
@@ -24143,7 +24182,8 @@
       // Hold-to-pick variants: a tap keeps the old action, a long press opens the choices (task states, heading levels).
       const calloutVariants = () => CALLOUT_KINDS.filter(([k]) => !hiddenTools().has(calloutId(k))).map(([k, label]) => ({ label, action: needEdit(fmt[calloutId(k)]) }));
       for (const [btn, tap, variants, noEdit] of [
-        // Quote and the "More" caret: a tap is what it always was, holding lists the callout kinds (a callout is a quote with a marker).
+        // A tap on Quote is a plain quote and always will be: the toolbar button and its shortcut must give the same
+        // text (the writing-UI invariant), so T3.5's one-click callout lives on its own menu entry instead.
         [tQuote, fmt.quote, calloutVariants],
         [tInsert, () => showInsertMenu(), calloutVariants, true],
         [tCheck, fmt.check, () => TASK_PICKER.map(([ch, name]) => ({ icon: "check", label: "[" + ch + "]  " + name, action: needEdit(() => applyEdit(setTaskStatus(ta.value, ...sel(), ch))) }))],
@@ -24296,7 +24336,12 @@
           { icon: "image", label: "Paste picture from clipboard", action: needEdit(pastePictureFromClipboard) },
           { icon: "image", label: "Picture options\u2026 (size, alignment)", action: needEdit(askPictureOptions) },
           { sep: true },
-          ...(CALLOUT_KINDS.some(([k]) => !hiddenTools().has(calloutId(k))) ? [{ icon: "quote", label: "Callout\u2026", action: () => queueMicrotask(showCalloutMenu) }] : []),
+          // T3.5: the picker keeps its old name and place (other menus and the tests reach it by that name), and the
+          // one-click entry sits directly above it. The label names the kind, so the click is known before it happens.
+          ...(CALLOUT_KINDS.some(([k]) => !hiddenTools().has(calloutId(k)))
+            ? [{ icon: "quote", label: "Callout\u2026", action: () => queueMicrotask(showCalloutMenu) },
+               { icon: "quote", label: "Callout " + calloutLabel(calloutMemory.kind).toLowerCase() + (calloutMemory.fold ? ", folded" : "") + " (last used)", action: needEdit(insertCalloutFromToolbar) }]
+            : []),
           group("bold", "More text styles", [
             { label: "Underline  <u>", action: needEdit(fmt.underline), id: "underline" },
             { label: "Spoiler  ||text||", action: needEdit(fmt.spoiler), id: "spoiler" },
@@ -24325,8 +24370,15 @@
         showMenu(tInsert, [
           ...CALLOUT_KINDS.filter(([k]) => !hiddenTools().has(calloutId(k))).map(([k, label]) => ({ label, action: needEdit(fmt[calloutId(k)]) })),
           { sep: true },
-          { label: "Foldable, closed  [!note]-", action: needEdit(() => applyEdit(insertCallout(ta.value, ...sel(), "note", "-"))) },
-          { label: "Foldable, open  [!note]+", action: needEdit(() => applyEdit(insertCallout(ta.value, ...sel(), "note", "+"))) },
+          // T3.5: a fold on any kind that reads one, not only on `note`. The old spec's `[!FAQ]-` is the `question`
+          // kind with a fold marker, which is how the flavors table spells it (`faq` -> `question`).
+          ...CALLOUT_FOLDABLE.filter((k) => !hiddenTools().has(calloutId(k))).flatMap((k) => {
+            const label = (CALLOUT_KINDS.find(([x]) => x === k) || [k, k])[1];
+            return [
+              { label: "Foldable, closed  [!" + label.toLowerCase() + "]-", action: needEdit(() => applyEdit(insertCallout(ta.value, ...sel(), k, "-"))) },
+              { label: "Foldable, open  [!" + label.toLowerCase() + "]+", action: needEdit(() => applyEdit(insertCallout(ta.value, ...sel(), k, "+"))) },
+            ];
+          }),
         ]);
       }
       listen(tSettings, "click", () => askSettings());
