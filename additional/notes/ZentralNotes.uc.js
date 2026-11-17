@@ -4511,7 +4511,15 @@
     // ======================================================================
     // Pure core: export (HTML and plain text are built from the parsed blocks, never from raw input)
     // ======================================================================
+    // OW-53: a Google export is a text file of a few hundred kilobytes; a ceiling keeps a wrong pick (a video, an
+    // archive) from being read into memory. 8 MB is a calendar of tens of thousands of events.
+    const MAX_ICS_BYTES = 8 * 1024 * 1024;
     const EXPORT_FORMATS = Object.freeze({
+      ics: {
+        label: "Calendar file (.ics)",
+        ext: "ics",
+        loses: "",
+      },
       md: {
         label: "Markdown",
         ext: "md",
@@ -21635,6 +21643,8 @@
         { icon: "bell", label: t("cal.toolsMenu.createAllDayReminder"), action: () => queueMicrotask(() => askCreateCalendarItem("reminder", true)) },
         { sep: true },
         { id: "reminder-history", label: t("cal.toolsMenu.reminderHistory"), icon: "history", run: openReminderHistoryCard },
+        // OW-53: a calendar file from another app, next to the tools that read and write the calendar.
+        { id: "calendar-import-ics", label: t("cal.toolsMenu.importIcs"), icon: "download", run: () => queueMicrotask(askCalendarIcsImport) },
         { id: "reminder-alert-settings", label: t("cal.toolsMenu.alertSettings"), icon: "volume-2", run: askCalendarAlertSettings },
         { id: "agenda-visibility-defaults", label: t("cal.toolsMenu.agendaVisibility"), icon: "calendar-check", run: askAgendaVisibilityDefaults },
         { sep: true },
@@ -26186,6 +26196,104 @@
         });
         ok.focus({ preventScroll: true });
       }
+      // OW-53: bring a Google Calendar (or any other calendar's) .ics file in. Nothing is written before the person
+      // sees what would happen: the card names the events, the reminders, the date range and everything it skips, and
+      // only the Import button writes. A second import of the same file updates what it brought in, by the file's UID.
+      // The picker and the read live in `env` beside every other file the module opens, so a host (and a test) can
+      // answer with a file without a real file dialog.
+      function pickIcsFile() {
+        if (typeof env.pickIcs !== "function") return Promise.resolve({ error: t("cal.ics.unavailable") });
+        return Promise.resolve(env.pickIcs()).then((picked) => {
+          if (!picked) return null;
+          if (picked.error) return picked;
+          if (picked.size > MAX_ICS_BYTES) return { error: t("cal.ics.tooBig", { mb: Math.ceil(MAX_ICS_BYTES / 1048576) }) };
+          return picked;
+        }).catch((error) => { warn(error); return { error: t("cal.ics.readFailed") }; });
+      }
+      function askCalendarIcsImport() {
+        const C = CALENDAR_PART;
+        if (!C?.parseIcs || !CALENDAR_PART?.planIcsImport) { flash(t("cal.ics.unavailable")); return; }
+        pickIcsFile().then((picked) => {
+          if (!picked || destroyed) return;
+          if (picked.error) { flash(picked.error); return; }
+          const parsed = C.parseIcs(picked.text);
+          if (!parsed.events.length) { flash(t("cal.ics.emptyFile", { name: picked.name })); return; }
+          // The file has no notion of "this one reminds me": the person says which kind the whole file becomes.
+          let kind = "event";
+          const existing = () => (store.items?.list?.({}) || []);
+          const build = () => C.planIcsImport(parsed, existing(), { kind, now: Date.now(), zone: calendarDisplayZone() || "" });
+          const body = h("div", { class: "zn-ics-body" });
+          const rangeText = (plan) => {
+            if (plan.from === null || plan.to === null) return "";
+            const a = C.localDateKey(plan.from), b = C.localDateKey(plan.to);
+            return a === b ? a : a + " \u2013 " + b;
+          };
+          const draw = () => {
+            const plan = build();
+            body.replaceChildren();
+            body.append(
+              h("p", { class: "zn-ics-file" }, t("cal.ics.file", { name: picked.name, calendar: parsed.events[0]?.calendar || "" })),
+              h("p", {}, t("cal.ics.summary", { events: plan.events, reminders: plan.reminders, range: rangeText(plan) || t("cal.ics.noRange") })),
+              h("p", { class: "zn-ics-counts" },
+                t("cal.ics.addCount", { n: plan.add.length }),
+                plan.update.length ? " \u00b7 " + t("cal.ics.updateCount", { n: plan.update.length }) : "",
+                plan.skipped.length ? " \u00b7 " + t("cal.ics.skipCount", { n: plan.skipped.length }) : "",
+              ),
+            );
+            if (plan.skipped.length) {
+              const list = h("ul", { class: "zn-ics-skipped" });
+              for (const skipped of plan.skipped.slice(0, 8)) {
+                list.append(h("li", {}, (skipped.summary || t("cal.ics.untitled")) + " \u2014 " + t("cal.ics.reason." + skipped.reason)));
+              }
+              if (plan.skipped.length > 8) list.append(h("li", {}, t("cal.ics.moreSkipped", { n: plan.skipped.length - 8 })));
+              body.append(h("p", {}, t("cal.ics.skippedHeading")), list);
+            }
+            if (plan.warnings.length) body.append(h("p", { class: "zn-hint" }, t("cal.ics.warnings", { n: plan.warnings.length })));
+            return plan;
+          };
+          const pickKind = (next) => { kind = next; for (const b of kindChips) b.classList.toggle("is-on", b.dataset.kind === kind); draw(); };
+          const kindChips = [["event", t("cal.ics.asEvent")], ["reminder", t("cal.ics.asReminder")]].map(([value, label]) => {
+            const b = chip(label, value === kind);
+            b.dataset.kind = value;
+            b.addEventListener("click", () => pickKind(value));
+            return b;
+          });
+          const cancel = chip(t("common.cancel"));
+          const go = chip(t("cal.ics.importBtn"), true);
+          const plan = draw();
+          go.disabled = !plan.add.length && !plan.update.length;
+          openCard(t("cal.ics.title"), h("p", {}, t("cal.ics.kindHint")), h("div", { class: "zn-set-chips" }, ...kindChips), body,
+            h("p", { class: "zn-hint" }, t("cal.ics.footnote")),
+            h("div", { class: "zn-dialog-actions" }, cancel, go));
+          cancel.addEventListener("click", () => { closeDialog(); focusEditor(); });
+          go.addEventListener("click", () => {
+            const finalPlan = draw();
+            closeDialog();
+            importIcsPlan(finalPlan).catch((error) => { warn(error); flash(t("cal.ics.failed")); });
+          });
+        }).catch((error) => { warn(error); flash(t("cal.ics.failed")); });
+      }
+      async function importIcsPlan(plan) {
+        const items = store.items;
+        if (!items?.upsert) { flash(t("cal.ics.unavailable")); return; }
+        let added = 0, updated = 0;
+        // Updates keep what the person changed here: their own colour, the note it points at, and its category.
+        for (const entry of plan.update) {
+          const old = entry.existing;
+          const next = { ...entry.item, id: old.id, created: old.created, rev: old.rev };
+          if (old.x?.color) next.x = { ...next.x, color: old.x.color };
+          if (old.x?.noteId) next.x = { ...next.x, noteId: old.x.noteId };
+          if (old.x?.category) next.x = { ...next.x, category: old.x.category };
+          if (items.upsert(next)) updated++;
+        }
+        for (const item of plan.add) if (items.upsert(item)) added++;
+        await Promise.resolve(store.flush?.()).catch(() => {});
+        scheduleList();
+        // The calendar pane is drawn from the store, so a redraw is all an import needs (a closed pane takes nothing).
+        if (view === "list") requestCalendarBackground();
+        flash(t("cal.ics.done", { added, updated }));
+      }
+
       // Table creator: pick a size on the grid (or type it), choose left / centre / right per column,
       // then insert a ready table.
       function askTable() {
@@ -29157,6 +29265,13 @@
           openReminderHistoryCard();
           return true;
         },
+        // OW-53: the same door for the .ics import card.
+        openIcsImport: () => {
+          if (!isOpen || destroyed || !CALENDAR_PART?.parseIcs) return false;
+          outsideClaim = false;
+          askCalendarIcsImport();
+          return true;
+        },
         openAgendaSettings: () => {
           if (!isOpen || destroyed) return false;
           outsideClaim = false;
@@ -30215,6 +30330,17 @@
           return true;
         } catch (error) { warn(error); return false; }
       }
+      // OW-53: one calendar file, through the same open picker as every other import. The text and the name are
+      // all the card needs; the size is checked before the file is read.
+      async function pickIcs() {
+        const file = await pick(Ci.nsIFilePicker.modeOpen, t("cal.ics.pickTitle"), "", "ics");
+        if (!file) return null;
+        try {
+          const info = await IOUtils.stat(file.path);
+          if (info.size > MAX_ICS_BYTES) return { error: t("cal.ics.tooBig", { mb: Math.ceil(MAX_ICS_BYTES / 1048576) }) };
+          return { text: await IOUtils.readUTF8(file.path), name: String(file.path).split(/[\\/]/).pop() || "calendar.ics", size: info.size };
+        } catch (error) { warn(error); return { error: t("cal.ics.readFailed") }; }
+      }
       // ST7.5: the reminder history as a plain .txt, through the same save picker as every other export.
       async function exportReminderHistory(text) {
         const file = await pick(Ci.nsIFilePicker.modeSave, t("history.export"), "reminder-history.txt", "");
@@ -30511,7 +30637,7 @@
       }
       const tick = createTimeTickService({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), warn });
       onCleanup(() => tick.destroy());
-      const env = { openLink, copyText, exportNote, exportAll, exportZip, exportBackupZip, exportObsidianVault, pickObsidianVault, importObsidianVault, pickBackupZip, restoreBackupZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, exportReminderHistory, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now(),
+      const env = { openLink, copyText, exportNote, exportAll, exportZip, exportBackupZip, exportObsidianVault, pickObsidianVault, importObsidianVault, pickBackupZip, restoreBackupZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, exportReminderHistory, pickIcs, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now(),
         // Visibility rules live in meta.json, which raises no store event: the sheet asks for the Zen Agenda refresh.
         refreshAgenda: () => { if (!disposed && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); } },
         // SB6.5: Agenda Doctor diagnostics & safe one-click repair (wired to live host DOM + reminder history).
@@ -34996,7 +35122,9 @@
           agendaHoverCard, notesHoverCard, nextAgendaItem, nextNotesItem, inspectAgenda, repairAgenda,
           // ST7.5: the reminder-history card lives in a sheet, so a test needs the same door a person uses
           // (showNotes → the sheet handle) and the card itself.
-          showNotes, openReminderHistory: () => showNotes("").then((handle) => sheetOf(handle)?.openReminderHistory?.()) };
+          showNotes,
+          openReminderHistory: () => showNotes("").then((handle) => sheetOf(handle)?.openReminderHistory?.()),
+          openIcsImport: () => showNotes("").then((handle) => sheetOf(handle)?.openIcsImport?.()) };
         window.__zentralNotesTestSeam.sidebar = sidebar;
         onCleanup(() => {
           if (window.__zentralNotesTestSeam?.sidebar === sidebar) delete window.__zentralNotesTestSeam.sidebar;

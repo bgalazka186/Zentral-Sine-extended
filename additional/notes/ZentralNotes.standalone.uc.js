@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.278
+// @version 3.3.280
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.278, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.280, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.278";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.280";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1936,6 +1936,33 @@ const __zentralEmbeddedLoader = (function () {
       "cal.toolsMenu.createTimedReminder": "Create timed reminder…",
       "cal.toolsMenu.createAllDayReminder": "Create all-day reminder…",
       "cal.toolsMenu.reminderHistory": "Reminder history…",
+      "cal.toolsMenu.importIcs": "Import a calendar file (.ics)\u2026",
+      "cal.ics.title": "Import a calendar file",
+      "cal.ics.pickTitle": "Choose a calendar file",
+      "cal.ics.filter": "Calendar file",
+      "cal.ics.kindHint": "A calendar file has no notion of reminders: choose what everything in it becomes here.",
+      "cal.ics.asEvent": "Events on the calendar",
+      "cal.ics.asReminder": "Reminders that alert me",
+      "cal.ics.file": "{name}{calendar}",
+      "cal.ics.summary": "{events} event(s), {reminders} reminder(s) \u00b7 {range}",
+      "cal.ics.noRange": "no dated events",
+      "cal.ics.addCount": "{n} new",
+      "cal.ics.updateCount": "{n} already imported (updated)",
+      "cal.ics.skipCount": "{n} skipped",
+      "cal.ics.reason.cancelled": "cancelled in the file",
+      "cal.ics.reason.unreadable": "no readable start",
+      "cal.ics.untitled": "Untitled",
+      "cal.ics.skippedHeading": "Skipped:",
+      "cal.ics.moreSkipped": "\u2026and {n} more",
+      "cal.ics.warnings": "{n} thing(s) in the file could not be read and are left out, never guessed.",
+      "cal.ics.footnote": "Nothing is written until you press Import. Importing the same file again updates what it brought in before (by its own ID) and keeps the colour, category and note you gave those events.",
+      "cal.ics.importBtn": "Import",
+      "cal.ics.done": "Imported {added} new, updated {updated}",
+      "cal.ics.failed": "The calendar file could not be imported",
+      "cal.ics.emptyFile": "{name} has no events",
+      "cal.ics.readFailed": "The calendar file could not be read",
+      "cal.ics.tooBig": "A calendar file larger than {mb} MB is not read",
+      "cal.ics.unavailable": "Importing a calendar file is unavailable",
       "cal.toolsMenu.alertSettings": "Reminder sounds & quiet hours…",
       "cal.toolsMenu.agendaVisibility": "Zen Agenda visibility defaults…",
       "cal.toolsMenu.weekSettings": "Week start & numbers: {day}{weeks}…",
@@ -2919,6 +2946,33 @@ const __zentralEmbeddedLoader = (function () {
       "cal.toolsMenu.createTimedReminder": "Utw\u00f3rz przypomnienie z godzin\u0105\u2026",
       "cal.toolsMenu.createAllDayReminder": "Utw\u00f3rz przypomnienie ca\u0142odniowe\u2026",
       "cal.toolsMenu.reminderHistory": "Historia przypomnie\u0144\u2026",
+      "cal.toolsMenu.importIcs": "Importuj plik kalendarza (.ics)\u2026",
+      "cal.ics.title": "Importuj plik kalendarza",
+      "cal.ics.pickTitle": "Wybierz plik kalendarza",
+      "cal.ics.filter": "Plik kalendarza",
+      "cal.ics.kindHint": "Plik kalendarza nie zna poj\u0119cia przypomnienia: wybierz, czym ma by\u0107 wszystko, co w nim jest.",
+      "cal.ics.asEvent": "Wydarzenia w kalendarzu",
+      "cal.ics.asReminder": "Przypomnienia, kt\u00f3re mnie alarmuj\u0105",
+      "cal.ics.file": "{name}{calendar}",
+      "cal.ics.summary": "wydarze\u0144: {events}, przypomnie\u0144: {reminders} \u00b7 {range}",
+      "cal.ics.noRange": "brak wydarze\u0144 z dat\u0105",
+      "cal.ics.addCount": "nowe: {n}",
+      "cal.ics.updateCount": "ju\u017c zaimportowane (zaktualizowane): {n}",
+      "cal.ics.skipCount": "pomini\u0119te: {n}",
+      "cal.ics.reason.cancelled": "anulowane w pliku",
+      "cal.ics.reason.unreadable": "brak czytelnego pocz\u0105tku",
+      "cal.ics.untitled": "Bez tytu\u0142u",
+      "cal.ics.skippedHeading": "Pomini\u0119te:",
+      "cal.ics.moreSkipped": "\u2026i jeszcze {n}",
+      "cal.ics.warnings": "nie uda\u0142o si\u0119 odczyta\u0107 element\u00f3w: {n} \u2014 s\u0105 pomijane, nigdy zgadywane.",
+      "cal.ics.footnote": "Nic nie jest zapisywane, dop\u00f3ki nie naci\u015bniesz Importuj. Ponowny import tego samego pliku aktualizuje to, co wni\u00f3s\u0142 wcze\u015bniej (po swoim ID) i zachowuje kolor, kategori\u0119 i notatk\u0119, kt\u00f3re nada\u0142e\u015b tym wydarzeniom.",
+      "cal.ics.importBtn": "Importuj",
+      "cal.ics.done": "Zaimportowano nowe: {added}, zaktualizowano: {updated}",
+      "cal.ics.failed": "Nie uda\u0142o si\u0119 zaimportowa\u0107 pliku kalendarza",
+      "cal.ics.emptyFile": "{name} nie zawiera wydarze\u0144",
+      "cal.ics.readFailed": "Nie uda\u0142o si\u0119 odczyta\u0107 pliku kalendarza",
+      "cal.ics.tooBig": "Plik kalendarza wi\u0119kszy ni\u017c {mb} MB nie jest czytany",
+      "cal.ics.unavailable": "Import pliku kalendarza jest niedost\u0119pny",
       "cal.toolsMenu.alertSettings": "D\u017awi\u0119ki przypomnie\u0144 i godziny ciszy\u2026",
       "cal.toolsMenu.agendaVisibility": "Domy\u015blna widoczno\u015b\u0107 w Zen Agendzie\u2026",
       "cal.toolsMenu.weekSettings": "Pocz\u0105tek i numery tygodni: {day}{weeks}\u2026",
@@ -4600,13 +4654,22 @@ const __zentralEmbeddedLoader = (function () {
       reminders: { overrides: minutes },
       x: {
         kind, noteId: String(x.noteId ?? "").slice(0, 120), heading: String(x.heading ?? "").slice(0, MAX_TEXT),
-        category: cleanCategoryName(x.category), tz: cleanZone(x.tz), historyId: String(x.historyId ?? "").slice(0, 120), src: ["list", "note", "manual"].includes(x.src) ? x.src : "manual", key: String(x.key ?? "").slice(0, 60), legacyKey: String(x.legacyKey ?? "").slice(0, 60), moved: x.moved ? "1" : "", calNote: String(x.calNote ?? "").slice(0, MAX_DESC), notify: cleanNotifyOverrides(x.notify), agendaWindow: cleanAgendaWindow(x.agendaWindow), recurrenceExceptions: cleanRecurrenceExceptions(x.recurrenceExceptions, allDay),
+        category: cleanCategoryName(x.category), tz: cleanZone(x.tz), historyId: String(x.historyId ?? "").slice(0, 120), src: ["list", "note", "manual", "ics"].includes(x.src) ? x.src : "manual", key: String(x.key ?? "").slice(0, 60), legacyKey: String(x.legacyKey ?? "").slice(0, 60), moved: x.moved ? "1" : "", calNote: String(x.calNote ?? "").slice(0, MAX_DESC), notify: cleanNotifyOverrides(x.notify), agendaWindow: cleanAgendaWindow(x.agendaWindow), recurrenceExceptions: cleanRecurrenceExceptions(x.recurrenceExceptions, allDay),
       },
     };
     // ST7.8: an item's own colour is kept only when it has one, so items that were never colourised serialise (and
     // hash) exactly as they did before this field existed — no etag churn, no needless syncs.
     const itemColor = cleanItemColor(x.color);
     if (itemColor) item.x.color = itemColor;
+    // OW-53: what came from a calendar file is kept only on such an item, and only when it is there: an item that never
+    // saw an .ics serialises exactly as before (no etag churn). The UID is what makes a second import an update.
+    if (item.x.src === "ics") {
+      const uid = String(x.icsUid ?? "").trim().slice(0, 300);
+      if (uid) item.x.icsUid = uid;
+      if (x.icsCalendar) item.x.icsCalendar = String(x.icsCalendar).slice(0, 200);
+      if (x.icsLocation) item.x.icsLocation = String(x.icsLocation).slice(0, 500);
+      if (x.icsCancelled === true) item.x.icsCancelled = true;
+    }
     if (x.src === "list" && typeof x.categoryOverride === "string") item.x.categoryOverride = cleanCategoryName(x.categoryOverride);
     if (x.src === "list" && x.categoryInNote === true) item.x.categoryInNote = true;
     if (x.src === "list") {
@@ -5274,6 +5337,7 @@ const __zentralEmbeddedLoader = (function () {
   function toGoogle(it) {
     const priv = {};
     for (const [k, v] of Object.entries(it.x)) if ((v !== "" || k === "categoryOverride") && v !== undefined && v !== null && !(Array.isArray(v) && !v.length)) priv["zentral_" + k] = ["notify", "recurrenceExceptions", "agendaWindow", "categoryOverride", "categoryInNote"].includes(k) ? JSON.stringify(v) : String(v);
+    // OW-53: the calendar file's UID travels with the item, so an imported event that is later synced keeps its identity.
     const out = { id: it.id, summary: it.summary, description: it.description, status: it.status, start: it.start, updated: it.updated, extendedProperties: { private: priv } };
     out.end = it.end || it.start;
     if (it.created) out.created = it.created;
@@ -5294,6 +5358,288 @@ const __zentralEmbeddedLoader = (function () {
       created: g.created, updated: g.updated, recurrence: g.recurrence, reminders: g.reminders, x: { ...x, kind: x.kind || (sameEnd ? "reminder" : "event") } }, 0);
   }
 
+
+  // ---------- OW-53: an .ics calendar file from another app (Google Calendar and every other calendar) ----------
+  // The file is a fold of lines: a line that starts with a space or a tab continues the one before it. That single rule
+  // is the most common reason a hand-written reader fails on a real export, so it is the first thing done here.
+  function icsUnfold(text) {
+    const src = String(text || "").replace(/\r\n?/g, "\n");
+    const out = [];
+    for (const line of src.split("\n")) {
+      if ((line.startsWith(" ") || line.startsWith("\t")) && out.length) out[out.length - 1] += line.slice(1);
+      else out.push(line);
+    }
+    return out;
+  }
+  // TEXT values in a calendar file escape a newline, a comma, a semicolon and the backslash itself.
+  function icsText(value) {
+    const raw = String(value == null ? "" : value);
+    let out = "";
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i];
+      if (ch !== "\\") { out += ch; continue; }
+      const next = raw[++i];
+      if (next === "n" || next === "N") out += "\n";
+      else if (next === ",") out += ",";
+      else if (next === ";") out += ";";
+      else if (next === "\\") out += "\\";
+      else if (next !== undefined) out += next;
+    }
+    return out;
+  }
+  // `NAME;PARAM=VALUE;OTHER="a,b":value` -> { name, params, value }. A quoted parameter may hold a colon or a semicolon.
+  function icsProperty(line) {
+    const text = String(line || "");
+    let colon = -1, quoted = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '"') quoted = !quoted;
+      else if (ch === ":" && !quoted) { colon = i; break; }
+    }
+    if (colon < 0) return null;
+    const head = text.slice(0, colon), value = text.slice(colon + 1);
+    const pieces = [];
+    let cur = "", inQuotes = false;
+    for (const ch of head) {
+      if (ch === '"') { inQuotes = !inQuotes; cur += ch; continue; }
+      if (ch === ";" && !inQuotes) { pieces.push(cur); cur = ""; continue; }
+      cur += ch;
+    }
+    pieces.push(cur);
+    const name = String(pieces.shift() || "").toUpperCase();
+    if (!name) return null;
+    const params = {};
+    for (const piece of pieces) {
+      const at = piece.indexOf("=");
+      if (at < 0) continue;
+      params[piece.slice(0, at).toUpperCase()] = piece.slice(at + 1).replace(/^"|"$/g, "");
+    }
+    return { name, params, value: value.replace(/\r$/, "") };
+  }
+  // The day keys and clock times a calendar file writes: `20261117`, `20261117T090000` (local or UTC), with params.
+  function icsDateValue(prop) {
+    const raw = String(prop?.value || "").trim().toUpperCase();
+    if (!raw) return null;
+    const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/.exec(raw);
+    if (!m) return null;
+    const [, y, mo, d, hh, mm, ss, utc] = m;
+    const date = { year: Number(y), month: Number(mo), day: Number(d) };
+    if (date.month < 1 || date.month > 12 || date.day < 1 || date.day > 31) return null;
+    if (hh === undefined) return { date, time: null, utc: false, floating: true };
+    const time = { hour: Number(hh), minute: Number(mm), second: Number(ss) };
+    if (time.hour > 23 || time.minute > 59 || time.second > 60) return null;
+    return { date, time, utc: utc === "Z", tzid: prop.params?.TZID || "", dateOnly: prop.params?.VALUE === "DATE" };
+  }
+  // A wall clock in a named zone, read through Intl so no zone table is needed. A zone the browser does not know is
+  // reported back instead of silently becoming UTC.
+  function icsZonedMs(date, time, tzid) {
+    const zone = String(tzid || "").trim();
+    if (!zone) return null;
+    try {
+      const guess = Date.UTC(date.year, date.month - 1, date.day, time.hour, time.minute, time.second);
+      const fmt = new Intl.DateTimeFormat("en-US", { timeZone: zone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      // Two passes: the first offset is taken at the guess, the second at the corrected instant (a zone that switched
+      // at the moment in question needs the second one to land on the right side of the change).
+      let ms = guess;
+      for (let i = 0; i < 2; i++) {
+        const parts = {};
+        for (const part of fmt.formatToParts(new Date(ms))) parts[part.type] = part.value;
+        const asUtc = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour) % 24, Number(parts.minute), Number(parts.second));
+        const offset = asUtc - ms;
+        ms = guess - offset;
+      }
+      return ms;
+    } catch (_) {
+      return null;
+    }
+  }
+  function icsStamp(value, fallbackZone = "") {
+    if (!value) return null;
+    const { date, time, utc, tzid } = value;
+    if (!time) return { ms: Date.UTC(date.year, date.month - 1, date.day) - new Date(Date.UTC(date.year, date.month - 1, date.day)).getTimezoneOffset() * 60000, allDay: true };
+    if (utc) return { ms: Date.UTC(date.year, date.month - 1, date.day, time.hour, time.minute, time.second), allDay: false };
+    const zoned = icsZonedMs(date, time, tzid || fallbackZone);
+    if (zoned !== null) return { ms: zoned, allDay: false };
+    // A floating time is a wall clock with no zone: it is read in the person's own zone, as the calendar shows items.
+    const local = new Date(date.year, date.month - 1, date.day, time.hour, time.minute, time.second);
+    return { ms: local.getTime(), allDay: false, floating: true };
+  }
+  // The recurrence subset the calendar's own reader accepts, in its own words. Anything else is reported, not guessed.
+  function icsRecurrence(lines) {
+    const out = { rules: [], exceptions: [] }, warnings = [];
+    for (const { name, params, value } of lines) {
+      if (name === "EXDATE") {
+        // Each value carries the parameters of its own line: an EXDATE with a TZID is a wall clock in that zone, and
+        // reading it as UTC would skip the wrong occurrence.
+        for (const piece of String(value || "").split(",")) {
+          const parsed = icsDateValue({ value: piece, params: params || {} });
+          const stamp = parsed ? icsStamp(parsed, params?.TZID || "") : null;
+          if (stamp) out.exceptions.push(new Date(stamp.ms).toISOString());
+        }
+        continue;
+      }
+      if (name !== "RRULE") continue;
+      const fields = {};
+      for (const piece of String(value || "").split(";")) {
+        const at = piece.indexOf("=");
+        if (at > 0) fields[piece.slice(0, at).toUpperCase()] = piece.slice(at + 1).toUpperCase();
+      }
+      const freq = fields.FREQ;
+      if (!["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(freq)) { warnings.push("unsupported-frequency:" + String(value || "").slice(0, 40)); continue; }
+      const rule = ["RRULE:FREQ=" + freq];
+      if (Number(fields.INTERVAL) > 1) rule.push("INTERVAL=" + Math.round(Number(fields.INTERVAL)));
+      if (Number(fields.COUNT) > 0) rule.push("COUNT=" + Math.round(Number(fields.COUNT)));
+      if (fields.UNTIL) {
+        const parsed = icsDateValue({ value: fields.UNTIL, params: {} });
+        const stamp = parsed ? icsStamp(parsed) : null;
+        // The calendar's reader wants UNTIL in the same shape as the start; a UTC instant is written as UTC.
+        if (stamp) rule.push("UNTIL=" + new Date(stamp.ms).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z"));
+      }
+      if (fields.BYDAY) rule.push("BYDAY=" + fields.BYDAY);
+      out.rules.push(rule.join(";"));
+    }
+    return { ...out, warnings };
+  }
+  // One .ics file -> { events, warnings }. Pure: no clock, no filesystem, no preferences.
+  function parseIcs(text) {
+    const lines = icsUnfold(text);
+    const events = [], warnings = [];
+    let event = null, calendarName = "", depth = 0;
+    for (const line of lines) {
+      const prop = icsProperty(line);
+      if (!prop) continue;
+      if (prop.name === "BEGIN") {
+        depth++;
+        if (String(prop.value).toUpperCase() === "VEVENT") event = { lines: [], line: depth };
+        continue;
+      }
+      if (prop.name === "END") {
+        depth = Math.max(0, depth - 1);
+        if (String(prop.value).toUpperCase() === "VEVENT" && event) { events.push(event); event = null; }
+        continue;
+      }
+      if (!event) {
+        if (prop.name === "X-WR-CALNAME" && !calendarName) calendarName = icsText(prop.value);
+        continue;
+      }
+      // A repeated property (RRULE, EXDATE, ATTENDEE) keeps all of its lines; a single one (SUMMARY) keeps the first.
+      event.lines.push({ name: prop.name, params: prop.params || {}, value: prop.value });
+    }
+    if (event) warnings.push("unterminated-event");
+    const items = [];
+    for (const raw of events) {
+      const one = (name) => raw.lines.find((l) => l.name === name) || null;
+      const all = (name) => raw.lines.filter((l) => l.name === name);
+      const uid = icsText(one("UID")?.value || "");
+      const startProp = one("DTSTART");
+      const startValue = startProp ? icsDateValue(startProp) : null;
+      // An event with no start cannot be placed on a calendar. It is still reported, so the person sees the file's
+      // own problem rather than a silent shortage: the import plan lists it under `skipped`, not in `warnings` alone.
+      if (!startValue) {
+        warnings.push("no-start:" + (uid || "unnamed"));
+        items.push({ uid, summary: icsText(one("SUMMARY")?.value || "").trim().slice(0, 500), unreadable: true, startMs: null, endMs: null, allDay: false, cancelled: false, recurrence: [], exceptions: [], calendar: calendarName });
+        continue;
+      }
+      const start = icsStamp(startValue);
+      if (!start) {
+        warnings.push("bad-start:" + (uid || "unnamed"));
+        items.push({ uid, summary: icsText(one("SUMMARY")?.value || "").trim().slice(0, 500), unreadable: true, startMs: null, endMs: null, allDay: false, cancelled: false, recurrence: [], exceptions: [], calendar: calendarName });
+        continue;
+      }
+      const endProp = one("DTEND") || one("DTSTART");
+      const endValue = endProp ? icsDateValue(endProp) : null;
+      const end = endValue ? icsStamp(endValue) : start;
+      const status = String(one("STATUS")?.value || "").toUpperCase();
+      const rec = icsRecurrence(raw.lines);
+      warnings.push(...rec.warnings);
+      const allDay = Boolean(startValue.time === null);
+      items.push({
+        uid: uid || "",
+        summary: icsText(one("SUMMARY")?.value || "").trim().slice(0, 500),
+        description: icsText(one("DESCRIPTION")?.value || "").trim().slice(0, 20000),
+        location: icsText(one("LOCATION")?.value || "").trim().slice(0, 500),
+        startMs: start.ms,
+        endMs: Math.max(start.ms, end ? end.ms : start.ms),
+        allDay,
+        cancelled: status === "CANCELLED",
+        recurrence: rec.rules,
+        exceptions: rec.exceptions,
+        floating: Boolean(start.floating),
+        tzid: startProp?.params?.TZID || "",
+        calendar: calendarName,
+      });
+    }
+    return { events: items, warnings };
+  }
+  // A parsed event as one calendar item. `kind` says whether the person wants it to remind them (a reminder) or to be
+  // something on the calendar (an event); a file has no such split, since every calendar means something different.
+  function icsToItem(event, { kind = "event", now = Date.now(), zone = "" } = {}) {
+    if (!event) return null;
+    const iso = (ms) => new Date(ms).toISOString();
+    const dayKey = (ms) => {
+      if (!zone) return localDateKey(ms);
+      try {
+        const parts = {};
+        for (const part of new Intl.DateTimeFormat("en-US", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(ms))) parts[part.type] = part.value;
+        return parts.year + "-" + parts.month + "-" + parts.day;
+      } catch (_) { return localDateKey(ms); }
+    };
+    const start = event.allDay ? { date: dayKey(event.startMs) } : { dateTime: iso(event.startMs) };
+    // An all-day event in a calendar file ends the day after its last day (DTEND is exclusive), which is what the
+    // calendar's own all-day items do too.
+    const end = event.allDay
+      ? (event.endMs > event.startMs ? { date: dayKey(event.endMs) } : { date: dayKey(event.startMs + 86400000) })
+      : (event.endMs > event.startMs ? { dateTime: iso(event.endMs) } : undefined);
+    const x = {
+      kind,
+      src: "ics",
+      ...(event.uid ? { icsUid: event.uid } : {}),
+      ...(event.calendar ? { icsCalendar: String(event.calendar).slice(0, 200) } : {}),
+      ...(event.location ? { icsLocation: event.location } : {}),
+      ...(event.tzid ? { tz: event.tzid } : {}),
+      ...(event.cancelled ? { icsCancelled: true } : {}),
+    };
+    const item = makeItem({
+      summary: event.summary || "Untitled",
+      description: event.description,
+      start,
+      ...(end ? { end } : {}),
+      ...(event.recurrence.length ? { recurrence: event.recurrence } : {}),
+      x,
+    }, now);
+    // The exceptions keep the shape `cleanItem` stores: occurrences this series skips.
+    if (item && event.exceptions.length) {
+      item.x.recurrenceExceptions = event.exceptions.map((value) => ({ scope: "this", cancelled: true, recurrenceId: event.allDay ? { date: dayKey(Date.parse(value)) } : { dateTime: value } }));
+    }
+    return item;
+  }
+  // What an import would do, without writing anything: which events are new, which update an item already imported from
+  // the same file (matched on the calendar's UID), and what is skipped and why.
+  function planIcsImport(parsed, existing, { kind = "event", now = Date.now(), zone = "" } = {}) {
+    const list = Array.isArray(existing) ? existing : [];
+    const byUid = new Map();
+    for (const item of list) if (item?.x?.icsUid && !byUid.has(item.x.icsUid)) byUid.set(item.x.icsUid, item);
+    const add = [], update = [], skipped = [];
+    let reminders = 0, events = 0;
+    for (const event of parsed?.events || []) {
+      if (event.cancelled) { skipped.push({ reason: "cancelled", summary: event.summary, uid: event.uid }); continue; }
+      if (event.unreadable) { skipped.push({ reason: "unreadable", summary: event.summary, uid: event.uid }); continue; }
+      const item = icsToItem(event, { kind, now, zone });
+      if (!item) { skipped.push({ reason: "unreadable", summary: event.summary, uid: event.uid }); continue; }
+      if (item.x.kind === "reminder") reminders++; else events++;
+      const already = event.uid ? byUid.get(event.uid) : null;
+      if (already) update.push({ item, existing: already });
+      else add.push(item);
+    }
+    const stamps = [...add, ...update.map((u) => u.item)].map((item) => Date.parse(item.start.dateTime || item.start.date + "T00:00:00"));
+    const valid = stamps.filter((n) => Number.isFinite(n));
+    return {
+      add, update, skipped, reminders, events,
+      from: valid.length ? Math.min(...valid) : null,
+      to: valid.length ? Math.max(...valid) : null,
+      warnings: parsed?.warnings || [],
+    };
+  }
 
   // ---------- items inside a note (roadmap T2.3) ----------
   // A section of a note becomes calendar items when a marker line `%%calendar: Category%%` stands in it (an Obsidian
@@ -9816,7 +10162,9 @@ const __zentralEmbeddedLoader = (function () {
     if (!item || typeof item !== "object" || !String(item.id || "")) return [];
     const tr = (key, params = null) => t(key, params, lang);
     const reminder = isReminder(item);
-    const source = ["list", "note", "manual"].includes(item.x?.src) ? item.x.src : "manual";
+    // OW-53: an item that came from a calendar file is handled like a hand-made one (it can be edited, coloured and
+    // deleted here); only the three note-backed sources get the "edit it in its note" wording.
+    const source = ["list", "note", "manual", "ics"].includes(item.x?.src) ? item.x.src : "manual";
     const manual = source === "manual", mirrored = isMirroredAgendaItem(item);
     const recurring = !!item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length > 0);
     const lifecycle = ["pending", "done", "dismissed"].includes(state) ? state : "pending";
@@ -11348,7 +11696,7 @@ const __zentralEmbeddedLoader = (function () {
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, cleanHistoryFilter, filterHistoryRecords, historyPruneSurvey, exportHistoryLines, historySummaryLine, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_TABLE, HOLIDAY_TABLE_KINDS, holidayTableEntries, holidayTableYears, holidaySetCoverage, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, holidaySetsOf, NO_WORK_FREE, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaLeftCount, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaLeftCount, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle, icsUnfold, icsText, icsProperty, icsDateValue, icsZonedMs, icsStamp, icsRecurrence, parseIcs, icsToItem, planIcsImport,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -16416,7 +16764,15 @@ __zentralShim.register = function (def) {
     // ======================================================================
     // Pure core: export (HTML and plain text are built from the parsed blocks, never from raw input)
     // ======================================================================
+    // OW-53: a Google export is a text file of a few hundred kilobytes; a ceiling keeps a wrong pick (a video, an
+    // archive) from being read into memory. 8 MB is a calendar of tens of thousands of events.
+    const MAX_ICS_BYTES = 8 * 1024 * 1024;
     const EXPORT_FORMATS = Object.freeze({
+      ics: {
+        label: "Calendar file (.ics)",
+        ext: "ics",
+        loses: "",
+      },
       md: {
         label: "Markdown",
         ext: "md",
@@ -33540,6 +33896,8 @@ __zentralShim.register = function (def) {
         { icon: "bell", label: t("cal.toolsMenu.createAllDayReminder"), action: () => queueMicrotask(() => askCreateCalendarItem("reminder", true)) },
         { sep: true },
         { id: "reminder-history", label: t("cal.toolsMenu.reminderHistory"), icon: "history", run: openReminderHistoryCard },
+        // OW-53: a calendar file from another app, next to the tools that read and write the calendar.
+        { id: "calendar-import-ics", label: t("cal.toolsMenu.importIcs"), icon: "download", run: () => queueMicrotask(askCalendarIcsImport) },
         { id: "reminder-alert-settings", label: t("cal.toolsMenu.alertSettings"), icon: "volume-2", run: askCalendarAlertSettings },
         { id: "agenda-visibility-defaults", label: t("cal.toolsMenu.agendaVisibility"), icon: "calendar-check", run: askAgendaVisibilityDefaults },
         { sep: true },
@@ -38091,6 +38449,104 @@ __zentralShim.register = function (def) {
         });
         ok.focus({ preventScroll: true });
       }
+      // OW-53: bring a Google Calendar (or any other calendar's) .ics file in. Nothing is written before the person
+      // sees what would happen: the card names the events, the reminders, the date range and everything it skips, and
+      // only the Import button writes. A second import of the same file updates what it brought in, by the file's UID.
+      // The picker and the read live in `env` beside every other file the module opens, so a host (and a test) can
+      // answer with a file without a real file dialog.
+      function pickIcsFile() {
+        if (typeof env.pickIcs !== "function") return Promise.resolve({ error: t("cal.ics.unavailable") });
+        return Promise.resolve(env.pickIcs()).then((picked) => {
+          if (!picked) return null;
+          if (picked.error) return picked;
+          if (picked.size > MAX_ICS_BYTES) return { error: t("cal.ics.tooBig", { mb: Math.ceil(MAX_ICS_BYTES / 1048576) }) };
+          return picked;
+        }).catch((error) => { warn(error); return { error: t("cal.ics.readFailed") }; });
+      }
+      function askCalendarIcsImport() {
+        const C = CALENDAR_PART;
+        if (!C?.parseIcs || !CALENDAR_PART?.planIcsImport) { flash(t("cal.ics.unavailable")); return; }
+        pickIcsFile().then((picked) => {
+          if (!picked || destroyed) return;
+          if (picked.error) { flash(picked.error); return; }
+          const parsed = C.parseIcs(picked.text);
+          if (!parsed.events.length) { flash(t("cal.ics.emptyFile", { name: picked.name })); return; }
+          // The file has no notion of "this one reminds me": the person says which kind the whole file becomes.
+          let kind = "event";
+          const existing = () => (store.items?.list?.({}) || []);
+          const build = () => C.planIcsImport(parsed, existing(), { kind, now: Date.now(), zone: calendarDisplayZone() || "" });
+          const body = h("div", { class: "zn-ics-body" });
+          const rangeText = (plan) => {
+            if (plan.from === null || plan.to === null) return "";
+            const a = C.localDateKey(plan.from), b = C.localDateKey(plan.to);
+            return a === b ? a : a + " \u2013 " + b;
+          };
+          const draw = () => {
+            const plan = build();
+            body.replaceChildren();
+            body.append(
+              h("p", { class: "zn-ics-file" }, t("cal.ics.file", { name: picked.name, calendar: parsed.events[0]?.calendar || "" })),
+              h("p", {}, t("cal.ics.summary", { events: plan.events, reminders: plan.reminders, range: rangeText(plan) || t("cal.ics.noRange") })),
+              h("p", { class: "zn-ics-counts" },
+                t("cal.ics.addCount", { n: plan.add.length }),
+                plan.update.length ? " \u00b7 " + t("cal.ics.updateCount", { n: plan.update.length }) : "",
+                plan.skipped.length ? " \u00b7 " + t("cal.ics.skipCount", { n: plan.skipped.length }) : "",
+              ),
+            );
+            if (plan.skipped.length) {
+              const list = h("ul", { class: "zn-ics-skipped" });
+              for (const skipped of plan.skipped.slice(0, 8)) {
+                list.append(h("li", {}, (skipped.summary || t("cal.ics.untitled")) + " \u2014 " + t("cal.ics.reason." + skipped.reason)));
+              }
+              if (plan.skipped.length > 8) list.append(h("li", {}, t("cal.ics.moreSkipped", { n: plan.skipped.length - 8 })));
+              body.append(h("p", {}, t("cal.ics.skippedHeading")), list);
+            }
+            if (plan.warnings.length) body.append(h("p", { class: "zn-hint" }, t("cal.ics.warnings", { n: plan.warnings.length })));
+            return plan;
+          };
+          const pickKind = (next) => { kind = next; for (const b of kindChips) b.classList.toggle("is-on", b.dataset.kind === kind); draw(); };
+          const kindChips = [["event", t("cal.ics.asEvent")], ["reminder", t("cal.ics.asReminder")]].map(([value, label]) => {
+            const b = chip(label, value === kind);
+            b.dataset.kind = value;
+            b.addEventListener("click", () => pickKind(value));
+            return b;
+          });
+          const cancel = chip(t("common.cancel"));
+          const go = chip(t("cal.ics.importBtn"), true);
+          const plan = draw();
+          go.disabled = !plan.add.length && !plan.update.length;
+          openCard(t("cal.ics.title"), h("p", {}, t("cal.ics.kindHint")), h("div", { class: "zn-set-chips" }, ...kindChips), body,
+            h("p", { class: "zn-hint" }, t("cal.ics.footnote")),
+            h("div", { class: "zn-dialog-actions" }, cancel, go));
+          cancel.addEventListener("click", () => { closeDialog(); focusEditor(); });
+          go.addEventListener("click", () => {
+            const finalPlan = draw();
+            closeDialog();
+            importIcsPlan(finalPlan).catch((error) => { warn(error); flash(t("cal.ics.failed")); });
+          });
+        }).catch((error) => { warn(error); flash(t("cal.ics.failed")); });
+      }
+      async function importIcsPlan(plan) {
+        const items = store.items;
+        if (!items?.upsert) { flash(t("cal.ics.unavailable")); return; }
+        let added = 0, updated = 0;
+        // Updates keep what the person changed here: their own colour, the note it points at, and its category.
+        for (const entry of plan.update) {
+          const old = entry.existing;
+          const next = { ...entry.item, id: old.id, created: old.created, rev: old.rev };
+          if (old.x?.color) next.x = { ...next.x, color: old.x.color };
+          if (old.x?.noteId) next.x = { ...next.x, noteId: old.x.noteId };
+          if (old.x?.category) next.x = { ...next.x, category: old.x.category };
+          if (items.upsert(next)) updated++;
+        }
+        for (const item of plan.add) if (items.upsert(item)) added++;
+        await Promise.resolve(store.flush?.()).catch(() => {});
+        scheduleList();
+        // The calendar pane is drawn from the store, so a redraw is all an import needs (a closed pane takes nothing).
+        if (view === "list") requestCalendarBackground();
+        flash(t("cal.ics.done", { added, updated }));
+      }
+
       // Table creator: pick a size on the grid (or type it), choose left / centre / right per column,
       // then insert a ready table.
       function askTable() {
@@ -41062,6 +41518,13 @@ __zentralShim.register = function (def) {
           openReminderHistoryCard();
           return true;
         },
+        // OW-53: the same door for the .ics import card.
+        openIcsImport: () => {
+          if (!isOpen || destroyed || !CALENDAR_PART?.parseIcs) return false;
+          outsideClaim = false;
+          askCalendarIcsImport();
+          return true;
+        },
         openAgendaSettings: () => {
           if (!isOpen || destroyed) return false;
           outsideClaim = false;
@@ -42120,6 +42583,17 @@ __zentralShim.register = function (def) {
           return true;
         } catch (error) { warn(error); return false; }
       }
+      // OW-53: one calendar file, through the same open picker as every other import. The text and the name are
+      // all the card needs; the size is checked before the file is read.
+      async function pickIcs() {
+        const file = await pick(Ci.nsIFilePicker.modeOpen, t("cal.ics.pickTitle"), "", "ics");
+        if (!file) return null;
+        try {
+          const info = await IOUtils.stat(file.path);
+          if (info.size > MAX_ICS_BYTES) return { error: t("cal.ics.tooBig", { mb: Math.ceil(MAX_ICS_BYTES / 1048576) }) };
+          return { text: await IOUtils.readUTF8(file.path), name: String(file.path).split(/[\\/]/).pop() || "calendar.ics", size: info.size };
+        } catch (error) { warn(error); return { error: t("cal.ics.readFailed") }; }
+      }
       // ST7.5: the reminder history as a plain .txt, through the same save picker as every other export.
       async function exportReminderHistory(text) {
         const file = await pick(Ci.nsIFilePicker.modeSave, t("history.export"), "reminder-history.txt", "");
@@ -42416,7 +42890,7 @@ __zentralShim.register = function (def) {
       }
       const tick = createTimeTickService({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), warn });
       onCleanup(() => tick.destroy());
-      const env = { openLink, copyText, exportNote, exportAll, exportZip, exportBackupZip, exportObsidianVault, pickObsidianVault, importObsidianVault, pickBackupZip, restoreBackupZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, exportReminderHistory, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now(),
+      const env = { openLink, copyText, exportNote, exportAll, exportZip, exportBackupZip, exportObsidianVault, pickObsidianVault, importObsidianVault, pickBackupZip, restoreBackupZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, exportReminderHistory, pickIcs, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now(),
         // Visibility rules live in meta.json, which raises no store event: the sheet asks for the Zen Agenda refresh.
         refreshAgenda: () => { if (!disposed && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); } },
         // SB6.5: Agenda Doctor diagnostics & safe one-click repair (wired to live host DOM + reminder history).
@@ -46901,7 +47375,9 @@ __zentralShim.register = function (def) {
           agendaHoverCard, notesHoverCard, nextAgendaItem, nextNotesItem, inspectAgenda, repairAgenda,
           // ST7.5: the reminder-history card lives in a sheet, so a test needs the same door a person uses
           // (showNotes → the sheet handle) and the card itself.
-          showNotes, openReminderHistory: () => showNotes("").then((handle) => sheetOf(handle)?.openReminderHistory?.()) };
+          showNotes,
+          openReminderHistory: () => showNotes("").then((handle) => sheetOf(handle)?.openReminderHistory?.()),
+          openIcsImport: () => showNotes("").then((handle) => sheetOf(handle)?.openIcsImport?.()) };
         window.__zentralNotesTestSeam.sidebar = sidebar;
         onCleanup(() => {
           if (window.__zentralNotesTestSeam?.sidebar === sidebar) delete window.__zentralNotesTestSeam.sidebar;

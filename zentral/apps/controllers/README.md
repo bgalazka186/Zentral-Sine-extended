@@ -1,6 +1,6 @@
 # zentral/apps/controllers
 
-Owner and local file guide for Extended 3.3.278. Original Zentral reference: 1.1.0.
+Owner and local file guide for Extended 3.3.280. Original Zentral reference: 1.1.0.
 
 | File                             | Responsibility                                                                                   |
 | -------------------------------- | ------------------------------------------------------------------------------------------------ |

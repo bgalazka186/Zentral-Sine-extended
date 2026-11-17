@@ -208,6 +208,19 @@
   folder's title says it in words. The quiet-hours fold is **LEFT** in `SB6.9`: it needs a new preference in four files
   and shares nothing with the count. `tests/notes-agenda-left-count.test.cjs` (8 cases: the pure rule, the two
   projections agreeing, the real host's pill, and the CSS). Full suite 222/222.
+- `OW-53` DONE (3.3.280) — A Google Calendar (or any other calendar's) `.ics` file can be imported. The reader is pure
+  and lives in `ZentralNotesCalendar.js`: `parseIcs` unfolds continuation lines (the first thing a hand-written reader
+  gets wrong on a real export), splits `VEVENT` blocks, unescapes the text (`\n`, `\,`, `\;`, `\\`), reads `DTSTART`/
+  `DTEND` with `VALUE=DATE`, `TZID` (through `Intl`, so no zone table is shipped) and UTC `Z`, and takes the `RRULE`
+  subset the calendar's own recurrence reader accepts plus `EXDATE` with its own zone. `icsToItem` maps one event to a
+  calendar item (all-day to a date, timed to an instant, the file's `UID` to `x.icsUid`), and `planIcsImport` says what
+  an import would do without writing: new, already-imported (matched on the UID) and skipped, with the reason named.
+  The card in Calendar → Tools reads the file through the same picker the rest of the module uses, shows the events,
+  the reminders, the date range and every skip, lets the person choose whether the file becomes events or reminders,
+  and writes only on Import; a second import updates by UID and keeps the colour, category and note the person gave
+  those events. `src: "ics"` and the four `ics*` fields are first-class `x` members (kept only when present, so no
+  existing item's etag moves). `tests/notes-ics-import.test.cjs` (9 cases, a Google-shaped fixture with folds, `TZID`,
+  all-day, a weekly rule, an `EXDATE`, a cancelled event and a broken one). Full suite 223/223.
 | #   | Track ID | Ref           | Item                                                         | Impact   | Effort | Implementation Plan & Dependencies                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | :-- | :------- | :------------ | :----------------------------------------------------------- | :------- | :----- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 20  | `T1.14`  | `Cycle G #37` | Inline `#tag` index & front-matter `tags:` unification       | Med      | M      | **DONE in 3.3.47.** Unified `inlineTags`, `noteTags` and `tagSummary` index YAML and inline tags case-insensitively; the Tags chip opens a counted menu, supports clearing/selection, and filters All and Recent views. Headings, code, URLs, HTML attributes/comments, hidden comments, inequalities and hex colours are excluded. Covered by `notes-audit-bugfixes.test.cjs` and existing list-view tests.                                                                                        |
