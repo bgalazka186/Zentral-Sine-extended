@@ -77,6 +77,8 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
+|    60 | `OW-47`     | `OPEN`    | High                | S-M    | —                 | Split view: linked scrolling desyncs on long notes                                                       |
+|    61 | `OW-48`     | `OPEN`    | High                | S      | —                 | Calendar menu resizes and jitters between two sizes at some sheet sizes                                    |
 |    36 | `T2.13`     | `OPEN`    | Med                 | M      | all other Track 2 | ICS export/import and Google-sync groundwork (always last in Track 2)                                    |
 |    67 | `OW-38`     | `OPEN`    | Med                 | M-L    | none              | Automated test suites for all other Zentral features outside Notes                                       |
 |    41 | `T4.3a`     | `OPEN`    | Med                 | M      | none              | Extract calendar UI from `ZentralNotes.uc.js`                                                            |
@@ -101,6 +103,58 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 ---
 
 ## Task blocks (same order as the Master Order)
+
+#### `OW-47` — Split view: linked scrolling desyncs on long notes
+
+**Status:** `OPEN` · **Impact:** High · **Effort:** S-M · **Deps:** — · **Source:** owner live test 2026-11-17
+
+**Report:** "Linked scrolling is broken, for example in longer demo notes: it does work but can desync easily."
+
+**Problem:** with `syncScroll` on, editor and preview are two independent scrollports whose content heights differ
+(the preview is rendered markdown, the editor is source text; wrapped long lines are taller in one than the other).
+Today `syncScroll` maps one `scrollTop` to the other instead of a shared position, and `revealInPreview` moves the
+preview on its own, so the two drift apart after a few moves and never come back.
+
+**Plan:**
+1. Pure first, in `ZentralNotes.uc.js` next to the split helpers: `syncScrollPlan({source, sourceTop, sourceMax, targetMax, carried})`
+   that (a) maps the position as a fraction of the scrollable range, (b) returns `{top, carried}` where `carried` is the
+   sub-pixel remainder nobody can scroll to yet, so repeated small moves cannot lose position rounding, and (c) returns
+   `top: null` when either port cannot scroll (nothing to sync). Export it on `__zentralNotesTestSeam.core`.
+2. Anchor mode for long notes: while the preview is visible, the block nearest the top of the editor (heading first,
+   then paragraph line) is the anchor; the plan may return `{anchor}` in which case the preview is scrolled to that
+   block's offset instead of a fraction. Falls back to the fraction when no anchor exists.
+3. A visible feedback loop guard: every programmatic scroll sets a short flag so the `scroll` handler of the other
+   port ignores its own echo (one direction per gesture, no ping-pong).
+4. `revealInPreview` (already used by the caret/find) keeps priority: a reveal sets the shared position, so a later
+   scroll continues from the revealed place instead of jumping back.
+5. `tests/notes-split-scroll.test.cjs`: pure mapping/clamping, the carried remainder (100 tiny moves land exactly),
+   the echo guard, anchor choice, and a no-scroll-port case.
+
+**Done when:** the new test passes, `syncScroll` off leaves both ports untouched, and the full suite is green.
+
+#### `OW-48` — Calendar menu resizes and jitters between two sizes at some sheet sizes
+
+**Status:** `OPEN` · **Impact:** High · **Effort:** S · **Deps:** — · **Source:** owner live test 2026-11-17
+
+**Report:** "In some sizes the calendar menu can go into a loop of resizing and jitter between two states."
+
+**Problem:** the calendar popup/dialog is fitted to the sheet on every render (`fitDialog` and the popup placement
+code), and the fit result changes the element's own size, which re-triggers a fit. At some sheet sizes the two fits
+disagree by a pixel or two, so the dialog alternates — the classic fit → measure → fit loop.
+
+**Plan:**
+1. Pure first in `ZentralNotes.uc.js`/`additional/notes/calendar/ZentralNotesCalendar.js`: `fitDialogStable(prev, next, tolerance = 2)`
+   returns the previous box when `next` is within the tolerance on both axes, and otherwise the new box; plus
+   `dialogFitKey(area, target, textScale)` so an unchanged key never re-fits. Export on the seam.
+2. Apply it in the one place that runs the fit (`fitDialog`), and make the fit idempotent: fitting twice to the same
+   available area performs zero style writes the second time (a test asserts the write count).
+3. Never fit from inside a fit: the resize observer callback that starts a fit is dropped while a fit is in flight.
+4. `tests/notes-calendar-dialog-fit.test.cjs`: the tolerance rule (a 1-2 px oscillation settles on the first box),
+   a real oscillation run (measure → fit → measure must converge in one step), zero writes on a repeated fit, and the
+   in-flight guard.
+
+**Done when:** the new test passes, the existing `notes-calendar-dialog-layer` / `notes-calendar-context-position`
+tests stay green, and the full suite is green.
 
 #### `T2.13a` — Holidays and the future Google Calendar sync/import
 
@@ -510,4 +564,4 @@ Known debts / owner requirements: LIMITS of `OW-04`: the pointer is held to the 
 
 Planning only, no code (2026-11-17, version 3.3.244): the owner's holiday list added as `OW-43` (holiday sets split from the interface language, any language picks any set, first sets `PL` + `US`), `OW-44` (any number of sets at once), `OW-45` (one-place year table for movable/one-off dates such as the Polish election day and `niedziela handlowa`), `OW-46` (one master off switch) and `T2.13a` (how holidays behave when the `T2.13` ICS/Google groundwork is built: local sets are never imported or synced). They sit at the top of the Master Order; `T3.3` follows them.
 
-Next action: continue with `OW-38` (the next `OPEN` row whose dependencies are `DONE`; `T2.13` stays last in Track 2).
+Next action: continue with `OW-47` then `OW-48` (the two owner-reported bugs of 2026-11-17, both `OPEN` and unblocked; `T2.13` stays last in Track 2).

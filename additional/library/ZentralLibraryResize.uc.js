@@ -62,6 +62,8 @@
     return { source: null, value: "" };
   }
 
+  // A test seam: the pure decision and the compatibility switch it depends on, without a browser.
+  window.__zentralLibraryTestSeam = { resolveLibraryBackground, PREF, COMPAT_PREF, BG_ARC_PREF, BG_CUSTOM_PREF };
   function startBackground() {
     const root = document.documentElement;
     let style = null,
