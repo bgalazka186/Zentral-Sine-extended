@@ -929,6 +929,12 @@
       "control": "slider"
     },
     {
+      "property": "zen.workspace.zentral.notes.archive_daily_notes",
+      "label": "Keep compressed copies of past date notes; never auto-trash them",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
       "label": "Spell-check while typing",
       "type": "checkbox",
       "defaultValue": true,
@@ -1778,6 +1784,11 @@
     "zen.workspace.zentral.notes.language_accept_all": {
       "category": "notes",
       "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.archive_daily_notes": {
+      "category": "notes",
+      "section": "Performance",
       "owner": "notes"
     }
   },
