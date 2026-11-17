@@ -2771,3 +2771,135 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
   box-shadow: inset 2px 0 0 var(--zn-accent);
 }
 
+/* T2.6: Calendar Big Picture viewport popup. */
+.zentral-notes-sheet .zn-calendar-pane-head-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.zentral-notes-sheet .zn-calendar-bigpicture-btn {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+}
+.zentral-notes-sheet .zn-cal-bigpicture-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 14px;
+  text-align: center;
+  color: var(--zn-muted);
+}
+.zentral-notes-sheet .zn-cal-bigpicture-placeholder-text {
+  font-size: 0.9em;
+}
+.zentral-notes-sheet .zn-cal-bigpicture-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483645;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, #000 48%, transparent);
+  color: var(--zn-text);
+  font: inherit;
+  pointer-events: auto;
+}
+.zentral-notes-sheet .zn-cal-bigpicture-backdrop[popover][data-top-layer="true"] {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  background: color-mix(in srgb, #000 48%, transparent);
+  color: var(--zn-text);
+}
+.zentral-notes-sheet .zn-cal-bigpicture-card {
+  position: fixed;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-width: min(320px, calc(100vw - 16px));
+  min-height: min(240px, calc(100vh - 16px));
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow: hidden;
+  border: 1px solid var(--zn-line);
+  border-radius: calc(var(--zn-radius, 10px) + 2px);
+  background:
+    linear-gradient(var(--zn-surface), var(--zn-surface)),
+    var(--zn-backing);
+  color: var(--zn-text);
+  box-shadow: 0 20px 60px color-mix(in srgb, #000 50%, transparent);
+  outline: none;
+}
+.zentral-notes-sheet .zn-cal-bigpicture-bar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--zn-line);
+  background: color-mix(in srgb, var(--zn-hover) 26%, transparent);
+}
+.zentral-notes-sheet .zn-cal-bigpicture-title {
+  font-size: 0.94em;
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.zentral-notes-sheet .zn-cal-bigpicture-sizes {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px;
+  border: 1px solid var(--zn-line);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--zn-surface) 80%, transparent);
+}
+.zentral-notes-sheet .zn-cal-bigpicture-size {
+  padding: 2px 7px;
+  font-size: 0.8em;
+  font-variant-numeric: tabular-nums;
+  border-color: transparent;
+}
+.zentral-notes-sheet .zn-cal-bigpicture-size.is-on {
+  border-color: var(--zn-accent);
+  background: color-mix(in srgb, var(--zn-accent) 20%, transparent);
+  color: var(--zn-text);
+}
+.zentral-notes-sheet .zn-cal-bigpicture-close {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+}
+.zentral-notes-sheet .zn-cal-bigpicture-stage {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.zentral-notes-sheet .zn-cal-bigpicture-stage > .zn-calendar-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  background: transparent;
+}
+/* Non-popover fallback: keep menus and calendar dialogs above the Big Picture card via DOM order at the same layer. */
+.zentral-notes-sheet[data-big-picture="true"] .zn-menu:not([popover]),
+.zentral-notes-sheet[data-big-picture="true"] .zn-dialog:not([popover]) {
+  position: fixed;
+  z-index: 2147483645;
+}
+
+

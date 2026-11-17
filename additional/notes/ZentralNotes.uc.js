@@ -6948,6 +6948,7 @@
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, dockPx: 0, gapPx: 0, cardDock: "", cardW: 0, cardH: 0, cardHShare: 0,
         allNewChoice: "note", calendarClockMode: "both",
         calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarTab: "tree",
+        calendarBigPictureSize: CALENDAR_PART ? CALENDAR_PART.DEFAULT_CALENDAR_BIG_PICTURE_SIZE : 90,
         calendarView: "month", calendarWeekStart: 1, calendarWeekNumbers: false, calendarWeekSpan: { days: 7, anchor: "weekStart" }, calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
         // The hours Week and Day show ({ on, startMin, endMin }; off = the whole day). Replaced as a whole, never changed in place.
         calendarHours: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHours(null) : { on: false, startMin: 480, endMin: 1200 },
@@ -7689,6 +7690,7 @@
             meta.calendarPaneCollapsed = raw.calendarPaneCollapsed === true;
             if (meta.calendarTreeCollapsed && meta.calendarPaneCollapsed) meta.calendarTreeCollapsed = meta.calendarPaneCollapsed = false;
             meta.calendarTab = raw.calendarTab === "calendar" ? "calendar" : "tree";
+            meta.calendarBigPictureSize = CALENDAR_PART.cleanCalendarBigPictureSize(raw.calendarBigPictureSize);
             meta.calendarView = ["month", "upcoming", "agenda", "week", "day"].includes(raw.calendarView) ? raw.calendarView : "month";
             meta.calendarWeekStart = CALENDAR_PART.cleanWeekStart(raw.calendarWeekStart);
             meta.calendarWeekNumbers = CALENDAR_PART.cleanWeekNumbers(raw.calendarWeekNumbers);
@@ -15203,7 +15205,10 @@
       const treePane = h("section", { class: "zn-tree-pane", "aria-label": t("tree.pane.aria") }, listEl);
       const calendarPeriod = h("span", { class: "zn-calendar-pane-hint", "aria-live": "polite" }, "");
       const calendarHeadingEl = h("strong", {}, t("cal.heading"));
-      const calendarHeader = h("div", { class: "zn-calendar-pane-head" }, calendarHeadingEl, calendarPeriod);
+      const btnCalendarBigPicture = iconButton("maximize", t("cal.bigPicture.open"), "zn-calendar-bigpicture-btn");
+      btnCalendarBigPicture.setAttribute("aria-pressed", "false");
+      const calendarHeadRight = h("div", { class: "zn-calendar-pane-head-right" }, calendarPeriod, btnCalendarBigPicture);
+      const calendarHeader = h("div", { class: "zn-calendar-pane-head" }, calendarHeadingEl, calendarHeadRight);
       // Zen can close a panel when a native <select> opens its platform popup. Calendar controls therefore use
       // the same accessible in-sheet menu as the rest of Notes; the selectors remain buttons, never native selects.
       const calendarViewSelect = h("button", { type: "button", class: "zn-chip zn-calendar-view-select", "aria-label": t("cal.view.aria"), "aria-haspopup": "menu" }, t("cal.view.month"));
@@ -15283,6 +15288,266 @@
         };
       }
       // `resized`: nothing was asked for, only the size of the window or of the sheet changed.
+      let bigPicture = null;
+      let lastBigPictureEsc = null;
+      function syncCalendarBigPictureButton() {
+        const open = !!bigPicture;
+        const label = t(open ? "cal.bigPicture.close" : "cal.bigPicture.open");
+        btnCalendarBigPicture.title = label;
+        btnCalendarBigPicture.setAttribute("aria-label", label);
+        btnCalendarBigPicture.setAttribute("aria-pressed", open ? "true" : "false");
+        btnCalendarBigPicture.classList.toggle("is-on", open);
+        btnCalendarBigPicture.replaceChildren(icon(open ? "minimize" : "maximize", 13));
+        if (bigPicture) {
+          bigPicture.titleEl.textContent = t("cal.bigPicture.title");
+          bigPicture.card.setAttribute("aria-label", t("cal.bigPicture.dialogAria"));
+          bigPicture.sizeGroup.setAttribute("aria-label", t("cal.bigPicture.sizeGroupAria"));
+          bigPicture.btnClose.title = t("cal.bigPicture.close");
+          bigPicture.btnClose.setAttribute("aria-label", t("cal.bigPicture.close"));
+          for (const [pct, btn] of bigPicture.sizeButtons) {
+            const optLabel = t("cal.bigPicture.sizeOption", { pct });
+            btn.title = optLabel;
+            btn.setAttribute("aria-label", optLabel);
+          }
+          if (bigPicture.placeholderText) bigPicture.placeholderText.textContent = t("cal.bigPicture.placeholder");
+          if (bigPicture.placeholderBtn) bigPicture.placeholderBtn.textContent = t("cal.bigPicture.returnHere");
+        }
+      }
+      function bigPictureViewport() {
+        const docEl = (root.ownerDocument || document).documentElement || {};
+        return {
+          width: Math.max(0, Number(docEl.clientWidth) || Number(window.innerWidth) || 0),
+          height: Math.max(0, Number(docEl.clientHeight) || Number(window.innerHeight) || 0),
+        };
+      }
+      function applyCalendarBigPictureBox() {
+        if (!bigPicture || !CALENDAR_PART) return null;
+        const pct = CALENDAR_PART.cleanCalendarBigPictureSize(store.meta.calendarBigPictureSize);
+        const box = CALENDAR_PART.calendarBigPictureBox(bigPictureViewport(), pct);
+        bigPicture.box = box;
+        bigPicture.card.dataset.size = String(box.pct);
+        if (box.width > 0 && box.height > 0) {
+          bigPicture.card.style.width = box.width + "px";
+          bigPicture.card.style.height = box.height + "px";
+          bigPicture.card.style.left = box.left + "px";
+          bigPicture.card.style.top = box.top + "px";
+        } else {
+          bigPicture.card.style.width = box.pct + "vw";
+          bigPicture.card.style.height = box.pct + "vh";
+          bigPicture.card.style.left = "";
+          bigPicture.card.style.top = "";
+        }
+        for (const [sizePct, btn] of bigPicture.sizeButtons) {
+          const on = sizePct === box.pct;
+          btn.classList.toggle("is-on", on);
+          btn.setAttribute("aria-pressed", on ? "true" : "false");
+        }
+        return box;
+      }
+      function setCalendarBigPictureSize(pct) {
+        if (!CALENDAR_PART) return null;
+        const clean = CALENDAR_PART.cleanCalendarBigPictureSize(pct);
+        store.setMeta({ calendarBigPictureSize: clean });
+        if (!bigPicture) return clean;
+        applyCalendarBigPictureBox();
+        refitCalendar();
+        return clean;
+      }
+      function restorePaneScrollSnapshot(state) {
+        if (!state) return;
+        if (Number.isFinite(state.contentScrollTop)) calendarContent.scrollTop = Math.max(0, state.contentScrollTop);
+        if (Number.isFinite(state.contentScrollLeft)) calendarContent.scrollLeft = Math.max(0, state.contentScrollLeft);
+        const timeScroll = calendarContent.querySelector(".zn-cal-time-scroll");
+        if (timeScroll && state.scrollTop !== null && state.scrolls) timeScroll.scrollTop = Math.max(0, state.scrollTop);
+        const monthSel = calendarContent.querySelector(".zn-cal-month-selection");
+        if (monthSel && state.selectionScrollTop !== null) monthSel.scrollTop = Math.max(0, state.selectionScrollTop);
+      }
+      function closeCalendarBigPicture({ restoreFocus = true } = {}) {
+        if (!bigPicture) return false;
+        const bp = bigPicture;
+        const liveState = captureCalendarViewState();
+        const activeEl = document.activeElement;
+        const focusedInPane = activeEl && calendarPane.contains(activeEl) ? activeEl : null;
+        const focusedDayBtn = focusedInPane?.closest?.(".zn-cal-month-date[data-day]")?.getAttribute("data-day") || "";
+        bigPicture = null;
+        hideCalendarHoverCard();
+        if (menu?.calendar) closeMenu();
+        if (!restoreFocus && dialog?.dataset.calendarLayer === "true") closeDialog();
+        for (const off of bp.cleanups.splice(0).reverse()) {
+          try { off(); } catch (_) {}
+        }
+        try { if (bp.backdrop.hasAttribute("popover")) bp.backdrop.hidePopover?.(); } catch (_) {}
+        bp.backdrop.removeAttribute("popover");
+        delete bp.backdrop.dataset.topLayer;
+        if (bp.placeholder?.parentElement) {
+          bp.placeholder.replaceWith(calendarPane);
+        } else if (bp.hostParent) {
+          const ref = bp.hostNext && bp.hostNext.parentElement === bp.hostParent ? bp.hostNext : null;
+          bp.hostParent.insertBefore(calendarPane, ref);
+        } else {
+          allPanels.append(calendarPane);
+        }
+        bp.backdrop.remove();
+        delete calendarPane.dataset.bigPicture;
+        delete root.dataset.bigPicture;
+        syncCalendarBigPictureButton();
+        // Restore scroll positions immediately after DOM reparenting (which resets scrollTop in real browsers),
+        // so updateAllLayout/refitCalendar sees the exact live scroll offset even if a re-render occurs.
+        restorePaneScrollSnapshot(liveState);
+        if (isOpen && !destroyed) {
+          updateAllLayout(true);
+          if (!calendarPane.hidden) {
+            restorePaneScrollSnapshot(liveState);
+            restoreCalendarViewState(liveState);
+          }
+          if (restoreFocus && !calendarPane.hidden) {
+            if (liveState.focused && document.activeElement && calendarPane.contains(document.activeElement)) {
+              // restoreCalendarViewState already restored focus to the live item inside calendarPane.
+            } else if (focusedDayBtn) {
+              const dayBtn = [...calendarContent.querySelectorAll(".zn-cal-month-date")].find((b) => b.getAttribute("data-day") === focusedDayBtn);
+              if (dayBtn) dayBtn.focus?.({ preventScroll: true });
+              else btnCalendarBigPicture.focus?.({ preventScroll: true });
+            } else if (bp.openerFocus && bp.openerFocus !== bp.btnClose && root.contains(bp.openerFocus) && !bp.openerFocus.hidden && !bp.openerFocus.disabled) {
+              bp.openerFocus.focus?.({ preventScroll: true });
+            } else if (!btnCalendarBigPicture.hidden) {
+              btnCalendarBigPicture.focus?.({ preventScroll: true });
+            }
+          }
+        }
+        return true;
+      }
+      function openCalendarBigPicture({ size } = {}) {
+        if (destroyed || !isOpen || !CALENDAR_PART) return false;
+        if (size !== undefined) store.setMeta({ calendarBigPictureSize: CALENDAR_PART.cleanCalendarBigPictureSize(size) });
+        if (bigPicture) {
+          applyCalendarBigPictureBox();
+          refitCalendar();
+          return true;
+        }
+        if (view !== "list" || filter !== "all") {
+          filter = "all";
+          view = "list";
+          applyState();
+        }
+        if (store.meta.calendarPaneCollapsed === true) store.setMeta({ calendarPaneCollapsed: false });
+        updateAllLayout(false);
+        if (allLayout.dataset.layout === "tabs" && store.meta.calendarTab !== "calendar") {
+          store.setMeta({ calendarTab: "calendar" });
+          updateAllLayout(false);
+        }
+        if (!calendarFit && !calendarPane.hidden) renderCalendar();
+        closeMenu();
+        closeDialog();
+        hideCalendarHoverCard();
+        const openerFocus = document.activeElement;
+        const enterState = captureCalendarViewState();
+        const hostParent = calendarPane.parentElement || allPanels;
+        const hostChildren = [...(hostParent.children || [])];
+        const hostIdx = hostChildren.indexOf(calendarPane);
+        const hostNext = hostIdx >= 0 ? (hostChildren[hostIdx + 1] || null) : null;
+        const placeholderText = h("span", { class: "zn-cal-bigpicture-placeholder-text" }, t("cal.bigPicture.placeholder"));
+        const placeholderBtn = h("button", { type: "button", class: "zn-chip" }, t("cal.bigPicture.returnHere"));
+        const placeholder = h("div", { class: "zn-calendar-pane zn-cal-bigpicture-placeholder" }, placeholderText, placeholderBtn);
+        hostParent.insertBefore(placeholder, calendarPane);
+        const titleEl = h("strong", { class: "zn-cal-bigpicture-title" }, t("cal.bigPicture.title"));
+        const sizeButtons = new Map();
+        const sizeGroup = h("div", { class: "zn-cal-bigpicture-sizes", role: "group", "aria-label": t("cal.bigPicture.sizeGroupAria") });
+        for (const pct of CALENDAR_PART.CALENDAR_BIG_PICTURE_SIZES) {
+          const optLabel = t("cal.bigPicture.sizeOption", { pct });
+          const btn = h("button", { type: "button", class: "zn-chip zn-cal-bigpicture-size", "data-bp-size": String(pct), "aria-label": optLabel, title: optLabel, "aria-pressed": "false" }, pct + "%");
+          btn.addEventListener("click", () => setCalendarBigPictureSize(pct));
+          sizeButtons.set(pct, btn);
+          sizeGroup.append(btn);
+        }
+        const btnClose = iconButton("x", t("cal.bigPicture.close"), "zn-cal-bigpicture-close");
+        const bar = h("div", { class: "zn-cal-bigpicture-bar" }, titleEl, h("span", { class: "zn-grow" }), sizeGroup, btnClose);
+        const stage = h("div", { class: "zn-cal-bigpicture-stage" });
+        const card = h("div", { class: "zn-cal-bigpicture-card", role: "dialog", "aria-modal": "true", "aria-label": t("cal.bigPicture.dialogAria"), tabindex: "-1" }, bar, stage);
+        const backdrop = h("div", { class: "zn-cal-bigpicture-backdrop", role: "presentation" }, card);
+        placeholderBtn.addEventListener("click", () => closeCalendarBigPicture({ restoreFocus: true }));
+        btnClose.addEventListener("click", () => closeCalendarBigPicture({ restoreFocus: true }));
+        stage.append(calendarPane);
+        calendarPane.hidden = false;
+        calendarPane.dataset.bigPicture = "true";
+        root.dataset.bigPicture = "true";
+        root.append(backdrop);
+        let raised = false;
+        try {
+          if (typeof backdrop.showPopover === "function") {
+            backdrop.setAttribute("popover", "manual");
+            backdrop.dataset.topLayer = "true";
+            backdrop.showPopover();
+            raised = true;
+          }
+        } catch (_) {}
+        if (!raised) {
+          backdrop.removeAttribute("popover");
+          delete backdrop.dataset.topLayer;
+        }
+        const bp = {
+          backdrop, card, bar, stage, titleEl, sizeGroup, sizeButtons, btnClose,
+          placeholder, placeholderText, placeholderBtn, hostParent, hostNext, openerFocus,
+          box: null, cleanups: [],
+        };
+        bigPicture = bp;
+        const listenBig = (target, type, fn, opts) => {
+          if (!target?.addEventListener) return;
+          const off = resources.listen("sheet:bigPicture:" + type, target, type, fn, opts);
+          bp.cleanups.push(off);
+        };
+        const insideNode = (node, e) => {
+          if (!node) return false;
+          const path = e?.composedPath?.() || [];
+          return node === e?.target || path.includes(node) || !!node.contains?.(e?.target);
+        };
+        const onBackdropPointerDown = (e) => {
+          if (bigPicture !== bp) return;
+          if (e.target !== backdrop) return;
+          if (calendarDrag || calendarNoteDrop || dialog || menu) return;
+          e.stopPropagation();
+          closeCalendarBigPicture({ restoreFocus: true });
+        };
+        backdrop.addEventListener("pointerdown", onBackdropPointerDown);
+        bp.cleanups.push(() => backdrop.removeEventListener("pointerdown", onBackdropPointerDown));
+        listenBig(window, "pointerdown", (e) => {
+          if (bigPicture !== bp) return;
+          if (calendarDrag || calendarNoteDrop) return;
+          if (insideNode(card, e) || insideNode(menu?.el, e) || insideNode(dialog, e)) return;
+          closeCalendarBigPicture({ restoreFocus: true });
+        }, true);
+        const onBigKeydown = (e) => {
+          if (bigPicture !== bp || e?.key !== "Escape" || e === lastBigPictureEsc) return;
+          lastBigPictureEsc = e;
+          if (calendarDrag) { cancelCalendarDrag(); e.preventDefault(); e.stopPropagation(); return; }
+          if (calendarNoteDrop || calendarDragNoteId || dragNoteId) { cancelNoteDrag(); e.preventDefault(); e.stopPropagation(); return; }
+          if (dialog) { closeDialog(); e.preventDefault(); e.stopPropagation(); return; }
+          if (menu) { closeMenu(); e.preventDefault(); e.stopPropagation(); return; }
+          e.preventDefault();
+          e.stopPropagation();
+          closeCalendarBigPicture({ restoreFocus: true });
+        };
+        listenBig(window, "keydown", onBigKeydown, true);
+        if (document?.documentElement) listenBig(document.documentElement, "keydown", onBigKeydown, true);
+        listenBig(window, "resize", () => {
+          if (bigPicture !== bp) return;
+          applyCalendarBigPictureBox();
+          scheduleCalendarFit();
+        });
+        syncCalendarBigPictureButton();
+        applyCalendarBigPictureBox();
+        restorePaneScrollSnapshot(enterState);
+        refitCalendar();
+        restorePaneScrollSnapshot(enterState);
+        restoreCalendarViewState(enterState);
+        if (!document.activeElement || !card.contains(document.activeElement)) {
+          btnClose.focus?.({ preventScroll: true });
+        }
+        return true;
+      }
+      listen(btnCalendarBigPicture, "click", () => {
+        if (bigPicture) closeCalendarBigPicture({ restoreFocus: true });
+        else openCalendarBigPicture();
+      });
       function updateAllLayout(resized = false) {
         const active = view === "list" && filter === "all" && !!CALENDAR_PART;
         const calendarWasHidden = calendarPane.hidden;
@@ -15294,6 +15559,10 @@
         const picked = CALENDAR_PART?.calendarLayoutFor?.(mode, dims.width, dims.height) || { orientation: "lr", tabs: false };
         const treeCollapsed = active && store.meta.calendarTreeCollapsed === true;
         const calendarCollapsed = active && store.meta.calendarPaneCollapsed === true;
+        if (bigPicture && (!active || calendarCollapsed)) {
+          closeCalendarBigPicture({ restoreFocus: false });
+          return;
+        }
         // A collapsed pane is a deliberate one-pane mode; tabs are only the fallback when both panes
         // are requested but the available rectangle cannot hold their minimum useful sizes.
         const tabs = active && !treeCollapsed && !calendarCollapsed && picked.tabs;
@@ -15305,7 +15574,13 @@
         allPanels.dataset.treeCollapsed = treeCollapsed ? "true" : "false";
         allPanels.dataset.calendarCollapsed = calendarCollapsed ? "true" : "false";
         treePane.hidden = active && (treeCollapsed || (tabs && tab !== "tree"));
-        calendarPane.hidden = !active || calendarCollapsed || (tabs && tab !== "calendar");
+        if (bigPicture) {
+          calendarPane.hidden = false;
+          if (bigPicture.placeholder) bigPicture.placeholder.hidden = !active || calendarCollapsed || (tabs && tab !== "calendar");
+          applyCalendarBigPictureBox();
+        } else {
+          calendarPane.hidden = !active || calendarCollapsed || (tabs && tab !== "calendar");
+        }
         allSplitter.hidden = !active || tabs || treeCollapsed || calendarCollapsed;
         const share = picked.orientation === "lr"
           ? CALENDAR_PART?.cleanCalendarShare?.(store.meta.calendarSplitLR, 0.36) ?? 0.36
@@ -15357,6 +15632,7 @@
         calendarUndoMove.textContent = t("cal.undoChange");
         calendarToolsSelect.setAttribute("aria-label", t("cal.tools.aria"));
         calendarToolsSelect.textContent = t("cal.tools");
+        syncCalendarBigPictureButton();
         syncCalendarDaysControl(calendarViewName);
         // A change of size alone draws the calendar again only when it would come out differently (OW-03); before,
         // every px of a resize drew it again.
@@ -15699,6 +15975,7 @@
         } catch (_) {}
       }
       function openNote(id, { focus = true } = {}) {
+        closeCalendarBigPicture({ restoreFocus: false });
         closeMenu();
         if (currentId && currentId !== id) store.discardIfEmpty(currentId);
         store.setMeta({ lastNoteId: id, recent: pushRecent(store.meta.recent, id) });
@@ -15972,6 +16249,7 @@
         });
       }
       function showEditor() {
+        closeCalendarBigPicture({ restoreFocus: false });
         closeMenu();
         if (!currentId || !store.get(currentId)) {
           const id = store.latestId();
@@ -16565,6 +16843,7 @@
         calendarUndoMove.setAttribute("aria-label", t("cal.undoChange.aria"));
         calendarToolsSelect.textContent = t("cal.tools");
         calendarToolsSelect.setAttribute("aria-label", t("cal.tools.aria"));
+        syncCalendarBigPictureButton();
         calendarViewSelect.dataset.value = view;
         calendarViewSelect.textContent = t("cal.view." + view);
         syncCalendarDaysControl(view);
@@ -17460,7 +17739,9 @@
       }
       const calendarPaneHeight = () => {
         const rect = calendarPane.getBoundingClientRect?.();
-        return Math.max(0, Number(calendarPane.clientHeight) || Number(rect?.height) || Number(calendarPane.offsetHeight) || 0);
+        const measured = Math.max(0, Number(calendarPane.clientHeight) || Number(rect?.height) || Number(calendarPane.offsetHeight) || 0);
+        if (measured > 0) return measured;
+        return bigPicture?.box?.height ? Math.max(0, bigPicture.box.height - 44) : 0;
       };
       const calendarMonthNarrow = () => {
         const picker = CALENDAR_PART?.cleanCalendarPicker?.(store.meta.calendarPicker) || { mode: "auto", minWidth: 470, minHeight: 360 };
@@ -17479,7 +17760,9 @@
       const calendarMinHourPx = () => CALENDAR_PART.fitMinHourPx(calendarFontPx());
       function calendarPaneWidth() {
         const rect = calendarPane.getBoundingClientRect?.();
-        return Math.max(0, Number(calendarPane.clientWidth) || Number(rect?.width) || 0);
+        const measured = Math.max(0, Number(calendarPane.clientWidth) || Number(rect?.width) || 0);
+        if (measured > 0) return measured;
+        return bigPicture?.box?.width || 0;
       }
       let calendarBackgroundPending = false, calendarFlushQueued = false;
       const calendarInteracting = () => !!(calendarDrag || calendarNoteDrop || dialog || menu?.calendar);
@@ -18847,13 +19130,26 @@
         const focused = document.activeElement?.closest?.("[data-item-key]");
         const savedNode = (node) => node && calendarContent.contains(node) ? { key: node.getAttribute("data-item-key"), day: node.closest?.("[data-day]")?.getAttribute("data-day") || "" } : null;
         const scroll = calendarContent.querySelector(".zn-cal-time-scroll");
+        const monthSel = calendarContent.querySelector(".zn-cal-month-selection");
         // gridStart, hourPx: the first hour of the timeline as it is drawn now and the height of its hours. scrolls:
         // whether it was drawn as one that scrolls (not with its hours fitted: that one has no position to keep).
         const scrolls = !!scroll && scroll.dataset.fitted !== "true";
-        return { scrollTop: scroll ? scroll.scrollTop : null, scrolls, gridStart: scroll && calendarGridHours ? calendarGridHours.startMin : null, hourPx: scroll && calendarGridHours ? calendarGridHours.hourPx : null,
-          focused: savedNode(focused), hover: savedNode(calendarHoverAnchor) };
+        return {
+          view: calendarContent.dataset.view || "",
+          contentScrollTop: Number(calendarContent.scrollTop) || 0,
+          contentScrollLeft: Number(calendarContent.scrollLeft) || 0,
+          selectionScrollTop: monthSel ? (Number(monthSel.scrollTop) || 0) : null,
+          scrollTop: scroll ? scroll.scrollTop : null, scrolls, gridStart: scroll && calendarGridHours ? calendarGridHours.startMin : null, hourPx: scroll && calendarGridHours ? calendarGridHours.hourPx : null,
+          focused: savedNode(focused), hover: savedNode(calendarHoverAnchor),
+        };
       }
       function restoreCalendarViewState(state) {
+        if (state && (!state.view || state.view === calendarContent.dataset.view)) {
+          if (Number.isFinite(state.contentScrollTop)) calendarContent.scrollTop = Math.max(0, state.contentScrollTop);
+          if (Number.isFinite(state.contentScrollLeft)) calendarContent.scrollLeft = Math.max(0, state.contentScrollLeft);
+          const monthSel = calendarContent.querySelector(".zn-cal-month-selection");
+          if (monthSel && state.selectionScrollTop !== null && Number.isFinite(state.selectionScrollTop)) monthSel.scrollTop = Math.max(0, state.selectionScrollTop);
+        }
         const scroll = calendarContent.querySelector(".zn-cal-time-scroll");
         if (scroll && scroll.dataset.fitted === "true") {
           // The hours are fitted: there is nothing to scroll and no position to bring back.
@@ -19301,6 +19597,7 @@
         { icon: "clock", label: t("cal.toolsMenu.visibleHours", { hours: CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours).on ? calendarHoursText(store.meta.calendarHours).long : t("cal.toolsMenu.all24") }), action: () => queueMicrotask(askCalendarHours) },
         { icon: "globe", label: t("cal.toolsMenu.displayZone", { zone: calendarDisplayZone() || t("cal.toolsMenu.zoneLocal") }), action: () => queueMicrotask(askCalendarDisplayZone) },
         { icon: "clock", label: t("cal.toolsMenu.freeSlots"), action: () => queueMicrotask(askCalendarFreeSlots) },
+        { id: "calendar-big-picture", icon: bigPicture ? "minimize" : "maximize", label: t(bigPicture ? "cal.toolsMenu.bigPictureClose" : "cal.toolsMenu.bigPictureOpen"), run: () => { if (bigPicture) closeCalendarBigPicture({ restoreFocus: true }); else openCalendarBigPicture(); } },
         { sep: true },
         { icon: "copy", label: t("cal.toolsMenu.copyWeekMd"), action: () => { const out = calendarWeekMarkdown(); env.copyText?.(out.text); flash(t("cal.toolsMenu.weekCopied")); } },
         { icon: "download", label: t("cal.toolsMenu.saveWeekMd"), action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.exportCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((saved) => { if (saved) flash(t("cal.toolsMenu.weekExported")); }).catch((error) => flash(t("cal.toolsMenu.weekExportFailed", { error: String(error?.message || error) }))); } },
@@ -21706,7 +22003,8 @@
         });
         m.style.visibility = "hidden";
         root.append(m);
-        if (calendar && typeof m.showPopover === "function") {
+        const raiseCalendar = calendar || !!bigPicture;
+        if (raiseCalendar && typeof m.showPopover === "function") {
           try {
             m.setAttribute("popover", "manual"); m.dataset.calendarMenu = "true";
             m.showPopover();
@@ -21714,7 +22012,7 @@
         }
         placeMenu(m, anchor);
         m.style.visibility = "";
-        const activeMenu = (menu = { el: m, anchor, calendar, calendarView: store.meta.calendarView || "month", cleanups: [] });
+        const activeMenu = (menu = { el: m, anchor, calendar: raiseCalendar, calendarView: store.meta.calendarView || "month", cleanups: [] });
         const listenMenu = (target, type, fn, opts) => {
           target.addEventListener(type, fn, opts);
           activeMenu.cleanups.push(() => target.removeEventListener(type, fn, opts));
@@ -21793,7 +22091,14 @@
         const doc = (root.ownerDocument || document).documentElement || {};
         const viewport = { width: doc.clientWidth || window.innerWidth || 0, height: doc.clientHeight || window.innerHeight || 0 };
         for (const k of FIT_PROPS) card.style[k] = "";
-        const sr = root.getBoundingClientRect();
+        const bpBox = bigPicture?.card && dialog.dataset.calendarLayer === "true"
+          ? (() => {
+            const r = bigPicture.card.getBoundingClientRect?.();
+            if (r && r.width > 0 && r.height > 0) return r;
+            return bigPicture.box?.width > 0 && bigPicture.box?.height > 0 ? bigPicture.box : null;
+          })()
+          : null;
+        const sr = bpBox || root.getBoundingClientRect();
         if (dialog.dataset.calendarLayer === "true") {
           dialog.style.left = Math.round(sr.left) + "px"; dialog.style.top = Math.round(sr.top) + "px";
           dialog.style.width = Math.max(0, Math.round(sr.width)) + "px"; dialog.style.height = Math.max(0, Math.round(sr.height)) + "px";
@@ -22256,7 +22561,7 @@
       }
       function openCalendarCard(label, ...kids) {
         const card = openCard(label, ...kids);
-        if (adapter.position !== "absolute" || !dialog) return card;
+        if ((adapter.position !== "absolute" && !bigPicture) || !dialog) return card;
         let raised = false;
         try {
           if (typeof dialog.showPopover === "function") {
@@ -24791,11 +25096,13 @@
         const mod = e.ctrlKey || e.metaKey;
         const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
         if (key === "Escape") {
+          if (e === lastBigPictureEsc) return;
           if (calendarDrag) { cancelCalendarDrag(); e.preventDefault(); return; }
           if (calendarNoteDrop || calendarDragNoteId || dragNoteId) { cancelNoteDrag(); e.preventDefault(); return; }
           if (armed.length && !dialog && !menu) disarm();
           else if (dialog) closeDialog();
           else if (menu) closeMenu();
+          else if (bigPicture) { lastBigPictureEsc = e; closeCalendarBigPicture({ restoreFocus: true }); }
           else if (findOpen) closeFind();
           else if (view === "list" && treeSelection.selected.size) clearTreeSelection();
           else if (view === "list") showEditor();
@@ -24909,6 +25216,7 @@
         if (adapter.suspended?.()) {
           if (gesture) cancelGesture();
           root.dataset.suspended = "true";
+          if (bigPicture) closeCalendarBigPicture({ restoreFocus: false });
           if (dialog?.dataset.calendarLayer === "true") closeDialog();
           root.style.visibility = "hidden";
           root.style.pointerEvents = "none";
@@ -25423,7 +25731,7 @@
           if (ptrDown && !gesture && Date.now() - ptrDownAt > 1500) ptrDown = false;
           // Autohide "when the pointer is away" ignores where the keyboard focus is (typing does not pin it open).
           const focusHeld = adapter.pushPanel && hideTrigger() === "leave" ? false : focusInside();
-          const may = hoverMayClose({ focusInside: focusHeld, menuOpen: !!menu, dialogOpen: !!dialog, pointerDown: ptrDown, gesture: !!gesture, pointerInside: ptrInside }) && !chromeBusy();
+          const may = hoverMayClose({ focusInside: focusHeld, menuOpen: !!menu, dialogOpen: !!dialog || !!bigPicture, pointerDown: ptrDown, gesture: !!gesture, pointerInside: ptrInside }) && !chromeBusy();
           if (may) collapse();
           else armGrace();
         }, timing().graceMs);
@@ -25437,6 +25745,7 @@
         openedByHover = false;
         window.clearTimeout(graceTimer);
         graceTimer = 0;
+        closeCalendarBigPicture({ restoreFocus: false });
         closeMenu();
         closeDialog();
         drop();
@@ -25584,6 +25893,13 @@
       const onOutsidePress = (e) => {
         if (!isOpen || destroyed || gesture) return;
         const path = e.composedPath ? e.composedPath() : [];
+        if (bigPicture) {
+          if (menu?.el && (menu.el.contains(e.target) || path.includes(menu.el))) return;
+          if (dialog && (dialog.contains(e.target) || path.includes(dialog))) return;
+          if (bigPicture.card.contains(e.target) || path.includes(bigPicture.card)) return;
+          closeCalendarBigPicture({ restoreFocus: true });
+          return;
+        }
         if (root.contains(e.target) || path.includes(root) || (pillEl && (pillEl.contains(e.target) || path.includes(pillEl)))) return;
         // A press on the Notes button / browser chrome is not the user moving to a web field.
         if (!isExempt(e.target, path)) outsideClaim = true;
@@ -25785,6 +26101,7 @@
         ptrInside = false;
         cancelGesture();
         applyPush(0, 0);
+        closeCalendarBigPicture({ restoreFocus: false });
         closeMenu();
         closeDialog();
         flushReadCleanups();
@@ -25825,6 +26142,7 @@
         destroyed = true;
         offStore();
         unwatchParentPanelHidden();
+        closeCalendarBigPicture({ restoreFocus: false });
         closeDialog();
         flushReadCleanups();
         cancelAllAsync();
@@ -25852,6 +26170,9 @@
         close,
         destroy,
         refreshRead,
+        openCalendarBigPicture,
+        closeCalendarBigPicture,
+        isCalendarBigPictureOpen: () => !!bigPicture,
         refreshCalendar() { if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden) requestCalendarBackground(); },
         refreshList: scheduleList,
         layout: scheduleLayout,

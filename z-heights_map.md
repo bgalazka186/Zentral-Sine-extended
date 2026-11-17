@@ -10,7 +10,7 @@ when the ordering rules below are broken.
    painted above everything that is not also in the top layer, whatever its z-index. Among top-layer
    elements the one added **later** is on top. Top-layer users in this mod:
 
-   - `additional/notes/ZentralNotes.uc.js`: Notes standalone card & Agenda action toast: popover="manual" (Notes card only WHILE Notes has focus; toast shown on headless Agenda actions)
+   - `additional/notes/ZentralNotes.uc.js`: Notes standalone card, Calendar Big Picture popup & Agenda action toast: popover="manual" (Notes card only WHILE Notes has focus; Big Picture while calendar is expanded; toast shown on headless Agenda actions)
    - `additional/video/controllers/ZentralVideoEnlarge.js`: Big Preview: popover="manual", shown with showPopover() while enlarged
    - `loader/ZentralRuntime.js`: Shared sidebar hover card engine (createSidebarHoverCard, copied verbatim to ZentralStandaloneShim.js): used by RSS, Notes, and Agenda cards; popover="manual", re-shown on every show so it sits above Big Preview
 
@@ -51,6 +51,8 @@ when the ordering rules below are broken.
 | 2147483646 | RSS reader card (fallback only; see Top layer) | `#bgalazka-rss-card` | additional/rss/ZentralRssDisplay.css:110 |
 | 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-sheet[data-host="float"], .zentral-notes-sheet[data-host="dock"]` | additional/notes/ZentralNotes.css:99 |
 | 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-reveal` | additional/notes/ZentralNotes.css:1077 |
+| 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-sheet .zn-cal-bigpicture-backdrop` | additional/notes/ZentralNotes.css:2802 |
+| 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-sheet[data-big-picture="true"] .zn-menu:not([popover]), .zentral-notes-sheet[data-big-picture="true"] .zn-dialog:not([popover])` | additional/notes/ZentralNotes.css:2902 |
 | 2147483643 | Big Preview (fallback only; see Top layer) | `.zentral-notes-shield` | additional/notes/ZentralNotes.css:1627 |
 | 2147483643 | Big Preview (fallback only; see Top layer) | `#zentral-video-preview#zentral-video-preview[data-enlarged]` | additional/video/ZentralVideoPreview.css:522 |
 | 2147483642 | Dock ghost while a floating panel is dragged | `.zentral-notes-ghost` | additional/notes/ZentralNotes.css:1621 |

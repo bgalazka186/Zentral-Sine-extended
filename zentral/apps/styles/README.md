@@ -1,6 +1,6 @@
 # zentral/apps/styles
 
-Owner and local file guide for Extended 3.3.218. Original Zentral reference: 1.1.0.
+Owner and local file guide for Extended 3.3.219. Original Zentral reference: 1.1.0.
 
 | File                                 | Responsibility                                                                             |
 | ------------------------------------ | ------------------------------------------------------------------------------------------ |

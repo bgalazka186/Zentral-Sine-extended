@@ -36,7 +36,7 @@ const TIERS = {
 };
 const TOP_LAYER_NOTES = {
   "additional/video/controllers/ZentralVideoEnlarge.js": "Big Preview: popover=\"manual\", shown with showPopover() while enlarged",
-  "additional/notes/ZentralNotes.uc.js": "Notes standalone card & Agenda action toast: popover=\"manual\" (Notes card only WHILE Notes has focus; toast shown on headless Agenda actions)",
+  "additional/notes/ZentralNotes.uc.js": "Notes standalone card, Calendar Big Picture popup & Agenda action toast: popover=\"manual\" (Notes card only WHILE Notes has focus; Big Picture while calendar is expanded; toast shown on headless Agenda actions)",
   "loader/ZentralRuntime.js": "Shared sidebar hover card engine (createSidebarHoverCard, copied verbatim to ZentralStandaloneShim.js): used by RSS, Notes, and Agenda cards; popover=\"manual\", re-shown on every show so it sits above Big Preview",
 };
 
