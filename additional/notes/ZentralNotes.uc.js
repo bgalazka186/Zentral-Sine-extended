@@ -10350,7 +10350,11 @@
         // Only an owned deterministic mirror may remove text. Note update also
         // reconciles the item store, so a later note refresh cannot resurrect it.
         deleteCalendarItem(id) {
-          const item = items?.get?.(id);
+          // OW-62: `items.get` hides an item whose linked note is gone, and an imported `.ics` item often has a note id
+          // with no note behind it — so this used to refuse exactly the items the person was trying to delete. Read the
+          // raw list for the item itself, and decide by what it OWNS (a mirrored Agenda line owns words in a note), not
+          // by whether its note happens to be visible at this moment.
+          const item = (items?.list?.({ includeHidden: true }) || []).find((it) => it && it.id === id) || items?.get?.(id) || null;
           if (!item || items.storageState?.().writeBlocked) return false;
           const pruneItemShare = () => {
             if (activeSpaceMode === "space" && spaceShares.items[id] && !spaceShares.items[id].deleted && spaceShares.items[id].ownerSpaceId === activeSpaceId) {
@@ -10370,7 +10374,25 @@
           }
           if (!CALENDAR_PART.isMirroredAgendaItem(item)) return false;
           const note = notes.get(item.x.noteId);
-          if (!note || note.trashed) return false;
+          // OW-62: the note this item says it lives in is not here (deleted, still loading, or never written by the
+          // import). The item is the thing the person asked to remove, so make the note it needs — a blank one at the
+          // id it already names — and then take the line out of it, which is the same path a present note takes.
+          if (!note || note.trashed) {
+            const restored = note && note.trashed ? null : api.createBlankNoteFor(item.x.noteId);
+            if (!restored) return false;
+            const result = CALENDAR_PART.removeMirroredAgendaLine(restored.body, item);
+            // A fresh note is blank, so there is no line to take out: the item and its note go together.
+            if (!result.changed) {
+              const removed = items.remove(item.id);
+              if (removed) pruneItemShare();
+              api.discardIfEmpty(restored.id);
+              return removed;
+            }
+            api.update(restored.id, result.body, "agenda-delete");
+            const gone = !items.get(item.id);
+            if (gone) pruneItemShare();
+            return gone;
+          }
           const result = CALENDAR_PART.removeMirroredAgendaLine(note.body, item);
           if (!result.changed) return false;
           api.update(note.id, result.body, "agenda-delete");
@@ -11183,6 +11205,35 @@
           return n;
         },
         // An untouched new note leaves no file behind.
+        // OW-62: an item names the note it lives in, and that note is not there (an import wrote the item before the
+        // note, or the note was deleted out from under it). Make a blank note AT THAT ID, so the item's own link stays
+        // true and the caller can do what it was asked to do instead of refusing. Returns the note, or null if the id
+        // is not usable.
+        createBlankNoteFor(id) {
+          const wanted = String(id || "");
+          if (!wanted || !isAssetNoteId(wanted) || notes.has(wanted)) return null;
+          const t = now();
+          const note = decorateNoteOwnership({
+            id: wanted,
+            body: "",
+            created: t,
+            updated: t,
+            touched: false,
+            color: "none",
+            label: "",
+            folder: "",
+            pinned: false,
+            calendarOnly: false,
+            trashed: 0,
+            remind: 0,
+            reminded: 0,
+            _onDisk: false,
+            _mtime: t,
+          }, { ownerSpaceId: activeSpaceId, ownerDir: dir, foreign: false });
+          notes.set(wanted, note);
+          emit("change", wanted, { created: true });
+          return note;
+        },
         discardIfEmpty(id) {
           const note = notes.get(id);
           if (note && !note._onDisk && !note.body.trim()) {
@@ -19148,7 +19199,10 @@
       }
       function currentCalendarItem(item) {
         const id = String(item?.x?.series || item?.id || "");
-        return id ? store.items?.get(id) || null : null;
+        if (!id) return null;
+        // OW-62: `get` hides an item whose note is not visible, which is exactly the imported item the owner cannot
+        // delete. Ask for the raw list first so "its note is missing" does not read as "the item is gone".
+        return (store.items?.list?.({ includeHidden: true }) || []).find((it) => it && it.id === id) || store.items?.get(id) || null;
       }
       function currentCalendarOccurrence(item) {
         if (!item?.x?.series || !item.x.recurrenceId) return currentCalendarItem(item) || (item?.x?.src === "note" ? item : null);

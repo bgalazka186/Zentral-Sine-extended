@@ -1317,6 +1317,22 @@ a sensible width the button drops to a second line instead of being clipped. Tes
 controls may swallow a click, and the four CSS declarations), plus the card left in the state the OW-60 checks expect.
 Suite `233/233`.
 
+**`OW-62` DONE (3.3.298)** — the imported reminder the owner could not delete. He had reported it before (`OW-58`,
+3.3.285) and reported it again, which was the useful signal: the first fix made a free-standing item deletable, and it
+was true, and it was not enough. Two doors stood in the way and both asked the same question — `items.get(id)` — and
+`get` deliberately hides an item whose linked note is not visible. An imported `.ics` item frequently names a note that
+was never written, so the one item the person was pointing at was the one item that read as "no such item". The delete
+path and the pre-check the menu uses now read the raw list (`includeHidden: true`), and decide by what the item OWNS:
+a mirrored Agenda line owns words in a note, an imported or hand-made item owns none. Where a note really is needed and
+is not there — a mirrored line whose note was deleted, or an import that wrote the item before the note — the store now
+MAKES the note at the id the item already names (`createBlankNoteFor`), so the item's own link stays true, and then does
+what it was asked to do; a blank note has no line to remove, so the item and the note go together. The owner asked for
+exactly this ("at least try to create such note if it needs one and its not avalible"), and it is the right shape: the
+refusal was never about safety, it was about looking in the wrong list. Tests:
+`tests/notes-calendar-ics-delete-note.test.cjs` (6) — an imported item whose note is missing is deleted rather than
+refused, a hidden item is still found, a mirrored line creates the note at the named id, a bad id is refused, and the
+menu never sends the person to a note that does not exist. Suite `234/234`.
+
 
 ## The Master Order rows that were finished (moved out of the TODO table, 2026-11-17)
 
