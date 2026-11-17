@@ -96,6 +96,9 @@
   // The one host the weather widget talks to. Open-Meteo needs no key and no account, which keeps the widget
   // inside the "no cloud inside the mod" rule: nothing is synced, one place name goes out per refresh.
   const WEATHER_ENDPOINT = "https://api.open-meteo.com/v1/forecast";
+  // A week is what the card needs: today, tomorrow, and the first day that looks wet. One request, same host.
+  const WEATHER_FORECAST_DAYS = 7;
+  const WET_ICON_GROUPS = Object.freeze(["rain", "snow", "sleet", "storm", "drizzle"]);
 
   const LIMITS = Object.freeze({
     MAX_HEIGHT_SHARE: [15, 80],
@@ -1487,6 +1490,33 @@
     };
   }
 
+  // The chrome window has no `navigator.getBattery`; the platform owns the battery through the power manager
+  // (`navigator.getBattery()` on a content window, `Services`' power service in the browser window). The reading is
+  // normalised here once, so the card never has to know which one answered.
+  function readBatteryInfo(source) {
+    if (!source || typeof source !== "object") return null;
+    const level = source.level;
+    return {
+      level: Number.isFinite(Number(level)) ? Number(level) : Number(source.percent) / 100,
+      charging: Boolean(source.charging),
+      dischargingTime: source.dischargingTime,
+    };
+  }
+
+  // Two different kinds of "nothing": a desktop simply has no battery (quiet — the setting asked for a battery, there
+  // is none), while a build that cannot report memory is a surprise worth one dash. Neither is ever drawn as 0%.
+  function unavailableParts(opts = {}, batterySupported = true, memorySupported = true) {
+    const out = [];
+    if (opts.showMemory !== false && !memorySupported) {
+      out.push({ kind: "memory", text: "\u2014", title: "Memory usage is not available in this build", level: "muted", unavailable: true });
+    }
+    // A battery that cannot be read is only worth a word when memory is not carrying the card.
+    if (opts.showBattery !== false && !batterySupported && opts.showMemory === false) {
+      out.push({ kind: "battery", text: "no battery", title: "This machine has no battery the browser can read", level: "muted", unavailable: true });
+    }
+    return out;
+  }
+
   // "used / limit" from the two byte counts Firefox reports; a missing limit prints only what is used.
   function memoryParts(usage) {
     if (!usage || typeof usage !== "object") return null;
@@ -1518,6 +1548,19 @@
     return out;
   }
 
+  // The card's whole line: real readings first, and only when a half has no reading does its honest placeholder show.
+  // One missing reading never removes the other, and a card with nothing readable still says so.
+  function composeStatusParts(opts = {}, battery, memory, support = {}) {
+    const real = statusLineParts(opts, battery, memory);
+    // Only a half that has neither a reading nor a supported source is worth mentioning.
+    const missing = unavailableParts(
+      opts,
+      support.battery !== false || Boolean(battery),
+      support.memory !== false || Boolean(memory),
+    ).filter((part) => !real.some((r) => r.kind === part.kind));
+    return [...real, ...missing];
+  }
+
   // Battery changes are events; memory is a reading, so it is refreshed on a slow interval through the scheduler.
   function nextStatusDelayMs(battery) {
     if (battery && battery.charging) return 60000;
@@ -1538,6 +1581,47 @@
     if (timerRunning) return { action: "timer-stop" };
     if (long) return { action: "ask-duration" };
     return { action: stopwatchRunning ? "stopwatch-stop" : "stopwatch-start" };
+  }
+
+  // OW-49: the Clock is the only visible surface. A click on it opens one small panel; that panel is the whole timer
+  // UI. The rule is pure so the layout can be tested without a sidebar:
+  //   idle clock + click -> open the panel (and start nothing by itself)
+  //   panel open  + click -> close it, unless a countdown is running (then the click stops the countdown)
+  //   running countdown, panel closed -> the clock line carries the time, so a running timer is never invisible.
+  function resolveClockPanelState(opts = {}) {
+    const open = Boolean(opts.open);
+    if (opts.timerRunning) return { action: "stop-timer", open };
+    if (open) return { action: "close", open: false };
+    return { action: "open", open: true };
+  }
+
+  // What the panel's own buttons are, in the order they are drawn. Deliberately few: one primary button, a lap button
+  // that exists only while the stopwatch runs, and a reset that is disabled when there is nothing to reset.
+  function clockPanelControls(state = {}, opts = {}) {
+    const timer = state.timer;
+    const stopwatch = state.stopwatch;
+    const usingTimer = Boolean(timer && (timer.running || (timer.remainingMs > 0 && timer.remainingMs < timer.durationMs)));
+    const primary = usingTimer
+      ? timer.running ? "Stop" : "Resume"
+      : stopwatch && stopwatch.running ? "Stop" : "Start";
+    return {
+      primary,
+      lap: Boolean(stopwatch && stopwatch.running),
+      reset: Boolean((stopwatch && (stopwatch.running || stopwatch.accumulatedMs > 0)) || usingTimer),
+      field: !usingTimer, // while a countdown runs the readout replaces the field, not sits next to it
+      presets: Boolean(opts.wide) && !usingTimer,
+      note: Boolean(opts.quickNote),
+      controls: ["primary", ...(stopwatch && stopwatch.running ? ["lap"] : []), ...((stopwatch && (stopwatch.running || stopwatch.accumulatedMs > 0)) || usingTimer ? ["reset"] : [])],
+    };
+  }
+
+  // What the Clock line shows while the panel is closed: a running countdown, then a running stopwatch, then nothing.
+  function clockBadge(state = {}, nowMs = 0) {
+    const timer = state.timer;
+    const stopwatch = state.stopwatch;
+    if (timer && timer.running) return { kind: "countdown", text: formatDuration(timerRemaining(timer, nowMs)) };
+    if (stopwatch && stopwatch.running) return { kind: "stopwatch", text: formatDuration(stopwatchElapsed(stopwatch, nowMs)) };
+    return { kind: "none", text: "" };
   }
 
   // A quick timer from "in X": the duration is read with the same parser as the widget's own field.
@@ -1746,8 +1830,8 @@
       "latitude=" + p.latitude,
       "longitude=" + p.longitude,
       "current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
-      "daily=weather_code,temperature_2m_max,temperature_2m_min",
-      "forecast_days=1",
+      "daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_hours,snowfall_sum",
+      "forecast_days=" + WEATHER_FORECAST_DAYS,
       "timeformat=unixtime",
       "timezone=auto",
       resolveWeatherUnits(units) === "imperial" ? "temperature_unit=fahrenheit&wind_speed_unit=mph" : "temperature_unit=celsius&wind_speed_unit=kmh",
@@ -1762,6 +1846,73 @@
     return Math.round(n * f) / f;
   };
 
+  // A day is "wet" when its code says rain/snow/sleet/storm AND the numbers agree (hours of precipitation or a real
+  // chance of it). A dry-looking code with 90% probability, or a wet code with zero hours and zero chance, is noise.
+  function isWetDay(day) {
+    if (!day || typeof day !== "object") return false;
+    const info = weatherCodeInfo(day.code);
+    if (!WET_ICON_GROUPS.includes(info.icon)) return false;
+    const hours = Number(day.precipitationHours);
+    const chance = Number(day.precipitationProbability);
+    const snow = Number(day.snowfall);
+    if (Number.isFinite(snow) && snow > 0) return true;
+    if (Number.isFinite(hours) && hours > 0) return true;
+    if (Number.isFinite(chance) && chance >= 40) return true;
+    // The code alone still counts when the day reports nothing at all.
+    return !Number.isFinite(hours) && !Number.isFinite(chance);
+  }
+
+  // The first wet day after today: { index, daysAhead, date, code, label, icon } or null for a dry week.
+  function nextWetDay(days, fromIndex = 1) {
+    if (!Array.isArray(days)) return null;
+    for (let i = Math.max(0, fromIndex); i < days.length; i++) {
+      const day = days[i];
+      if (!isWetDay(day)) continue;
+      const info = weatherCodeInfo(day.code);
+      return {
+        index: i,
+        daysAhead: i,
+        date: day.date || "",
+        code: info.code,
+        label: info.label,
+        icon: info.icon,
+      };
+    }
+    return null;
+  }
+
+  // What the card's second line says. Wide: tomorrow plus the next wet day. Narrow: one of them, and a click swaps.
+  // Pure, so the swap is testable without a sidebar.
+  function weatherOutlookParts(week, opts = {}) {
+    const days = Array.isArray(week) ? week : [];
+    const labels = weatherUnitLabels(opts.units, opts.countryCode);
+    const temp = (n) => (n == null ? "" : Math.round(n) + labels.temperature);
+    const tomorrow = days[1] || null;
+    const wet = nextWetDay(days, 1);
+    // "tomorrow" itself counts as the next wet day; say so once, not twice.
+    const wetIsTomorrow = Boolean(wet && wet.index === 1);
+    const wetText = wet
+      ? wetIsTomorrow
+        ? "Rain tomorrow"
+        : wet.daysAhead === 2
+          ? "Rain in 2 days"
+          : "Rain " + wet.label.toLowerCase() + " in " + wet.daysAhead + " days"
+      : days.length > 1
+        ? "No rain this week"
+        : "";
+    const tomorrowText = tomorrow
+      ? "Tomorrow " + temp(tomorrow.high) + " / " + temp(tomorrow.low) + (tomorrow.icon && tomorrow.icon !== "sun" ? " " + tomorrow.icon : "")
+      : "";
+    return {
+      tomorrow: tomorrowText,
+      wet: wetText,
+      wetDay: wet ? { ...wet } : null,
+      // The swap on a narrow card alternates between these two; an empty one is skipped.
+      faces: [tomorrowText, wetText].filter(Boolean),
+      text: [tomorrowText, wetText].filter(Boolean).join(" \u00b7 "),
+    };
+  }
+
   // The response is reduced to what is drawn, once: the cache then holds a tiny object, not the raw payload.
   function readWeatherPayload(payload, units) {
     if (!payload || typeof payload !== "object") return null;
@@ -1771,7 +1922,27 @@
     const day = payload.daily || {};
     const high = Array.isArray(day.temperature_2m_max) ? roundWeather(day.temperature_2m_max[0]) : null;
     const low = Array.isArray(day.temperature_2m_min) ? roundWeather(day.temperature_2m_min[0]) : null;
+    // A week, reduced to one small object per day: the cache must stay tiny, and a raw payload never reaches the card.
+    const codes = Array.isArray(day.weather_code) ? day.weather_code : [];
+    const highs = Array.isArray(day.temperature_2m_max) ? day.temperature_2m_max : [];
+    const lows = Array.isArray(day.temperature_2m_min) ? day.temperature_2m_min : [];
+    const chances = Array.isArray(day.precipitation_probability_max) ? day.precipitation_probability_max : [];
+    const hours = Array.isArray(day.precipitation_hours) ? day.precipitation_hours : [];
+    const snows = Array.isArray(day.snowfall_sum) ? day.snowfall_sum : [];
+    const dates = Array.isArray(day.time) ? day.time : [];
+    const week = codes.slice(0, WEATHER_FORECAST_DAYS).map((code, index) => ({
+      code: weatherCodeInfo(code).code,
+      icon: weatherCodeInfo(code).icon,
+      label: weatherCodeInfo(code).label,
+      high: index < highs.length ? roundWeather(highs[index]) : null,
+      low: index < lows.length ? roundWeather(lows[index]) : null,
+      precipitationProbability: index < chances.length ? roundWeather(chances[index]) : null,
+      precipitationHours: index < hours.length ? roundWeather(hours[index], 1) : null,
+      snowfall: index < snows.length ? roundWeather(snows[index], 1) : null,
+      date: index < dates.length ? String(dates[index]) : "",
+    }));
     return {
+      week,
       units: cleanWeatherUnits(units),
       temperature: roundWeather(cur.temperature_2m, 1),
       humidity: roundWeather(cur.relative_humidity_2m),
@@ -1897,6 +2068,10 @@
     cleanWeatherPlace,
     weatherRequestUrl,
     readWeatherPayload,
+    WEATHER_FORECAST_DAYS,
+    isWetDay,
+    nextWetDay,
+    weatherOutlookParts,
     weatherUnitLabels,
     formatWeatherParts,
     isWeatherCacheFresh,
@@ -1907,8 +2082,14 @@
     batteryParts,
     memoryParts,
     statusLineParts,
+    composeStatusParts,
+    readBatteryInfo,
+    unavailableParts,
     nextStatusDelayMs,
     resolveClockClick,
+    resolveClockPanelState,
+    clockPanelControls,
+    clockBadge,
     quickTimerFromText,
     parseTimerDuration,
     formatDuration,
@@ -2329,6 +2510,7 @@
                           scheduler.refresh(def.id, { force: true, area: lastArea, ...opts }),
                         getCachedValue: () => scheduler.getCached(def.id),
                         setCachedValue: (v) => scheduler.setCached(def.id, v),
+                        getArea: () => ({ ...lastArea }),
                       })
                     : null;
               } catch (err) {
@@ -2602,9 +2784,15 @@
           const zoneEl = doc.createElement("div");
           zoneEl.className = "zw-card-meta zw-clock-zone";
           zoneEl.hidden = true;
+          // OW-49: while the timer panel is closed a running countdown still shows here, so it is never invisible.
+          const badgeEl = doc.createElement("span");
+          badgeEl.className = "zw-clock-badge";
+          badgeEl.hidden = true;
+          clockBadgeElement = badgeEl;
           let staticRenderKey = "";
 
           wrap.appendChild(main);
+          wrap.appendChild(badgeEl);
           wrap.appendChild(zoneEl);
 
           // T3.9d: the Clock is also a shortcut. A plain click starts/stops the stopwatch, a long press (or a
@@ -2640,11 +2828,17 @@
           wrap.addEventListener("click", (e) => {
             if (longPressFired) { longPressFired = false; return; }
             if (e && ((e.button != null && e.button !== 0) || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey)) return;
-            const kind = clockClickKind(e);
-            if (kind.action === "none") return;
+            // OW-49: the click reveals the one small panel; a running countdown is stopped by the same click.
+            const mountedTimer = mountedCards.get("timer");
+            const open = Boolean(mountedTimer && (mountedTimer.instance?.element?.dataset?.zwOpen === "true"));
+            const decision = resolveClockPanelState({ open, timerRunning: Boolean(timerState.timer?.running) });
+            if (!getBool(WIDGET_PREFS.TIMER_CLICK_STOPWATCH, DEFAULTS.TIMER_CLICK_STOPWATCH)) return;
             e.preventDefault();
             e.stopPropagation();
-            clockClick(kind.action);
+            if (decision.action === "stop-timer") { clockClick("timer-stop"); return; }
+            if (decision.action === "close") { clockClick("close-panel"); return; }
+            clockClick("open");
+            clockPanel()?.dataset && (clockPanel().dataset.zwOpen = "true");
           });
 
           return {
@@ -2902,9 +3096,62 @@
           const placeEl = doc.createElement("div");
           placeEl.className = "zw-card-meta zw-weather-place";
 
+          // OW-50: the second line is tomorrow, and the next day that looks wet. On a narrow card only one fits, so a
+          // click swaps between them. The swap is per-window state, not a pref: it is a glance, not a setting.
+          const outlookEl = doc.createElement("div");
+          outlookEl.className = "zw-card-meta zw-weather-outlook";
+          outlookEl.hidden = true;
+          let outlookFace = 0;
+          let outlookFaces = [];
+
           wrap.appendChild(main);
           wrap.appendChild(metaEl);
+          wrap.appendChild(outlookEl);
           wrap.appendChild(placeEl);
+
+          const areaWidth = () => {
+            try {
+              const width = getArea?.()?.width;
+              return typeof width === "number" ? width : null;
+            } catch (_) {
+              return null;
+            }
+          };
+          const paintOutlook = (parts, opts) => {
+            if (!parts || !parts.text) {
+              outlookEl.hidden = true;
+              outlookEl.textContent = "";
+              outlookFaces = [];
+              return;
+            }
+            const width = areaWidth();
+            const narrow = typeof width === "number" && width < 200;
+            const faces = parts.faces || [];
+            if (narrow && faces.length > 1) {
+              if (outlookFace >= faces.length) outlookFace = 0;
+              outlookEl.textContent = faces[outlookFace];
+              outlookEl.title = "Click to see the other day";
+              outlookEl.setAttribute("data-zw-outlook-face", String(outlookFace));
+            } else {
+              outlookEl.textContent = parts.text;
+              outlookEl.title = parts.text;
+              outlookEl.removeAttribute("data-zw-outlook-face");
+            }
+            outlookFaces = faces;
+            outlookEl.hidden = false;
+            outlookEl.setAttribute("aria-label", (opts?.place ? opts.place + ": " : "") + parts.text);
+          };
+          // A click on the outlook line swaps the two days when the card had to hide one.
+          outlookEl.addEventListener("click", (e) => {
+            if (!outlookFaces || outlookFaces.length < 2) return;
+            e.preventDefault();
+            e.stopPropagation();
+            outlookFace = (outlookFace + 1) % outlookFaces.length;
+            const width = areaWidth();
+            if (typeof width !== "number" || width >= 200) return;
+            outlookEl.textContent = outlookFaces[outlookFace];
+            outlookEl.setAttribute("data-zw-outlook-face", String(outlookFace));
+          });
 
           const paint = (value, info = {}) => {
             const opts = readWeatherOpts();
@@ -2916,6 +3163,8 @@
               labelEl.textContent = info.error ? "Weather unavailable" : "";
               rangeEl.textContent = "";
               detailsEl.textContent = "";
+              outlookEl.hidden = true;
+              outlookFaces = [];
               wrap.setAttribute("aria-label", info.error ? "Weather unavailable" : "Weather: no place set");
               return;
             }
@@ -2925,6 +3174,12 @@
             labelEl.textContent = parts.label;
             rangeEl.textContent = parts.range;
             detailsEl.textContent = parts.details;
+            try {
+              paintOutlook(weatherOutlookParts(value.week, opts), opts);
+            } catch (err) {
+              outlookEl.hidden = true;
+              console.warn("[ZentralWidgets] weather outlook failed:", err);
+            }
             wrap.setAttribute("aria-label", (opts.place ? opts.place + ": " : "") + parts.text);
           };
 
@@ -2996,6 +3251,10 @@
       // One card: a stopwatch and a countdown that share a single readout, five presets, one free field and a laps
       // list. Its state lives here (not in prefs): a stopwatch is a moment, not a setting.
       const timerState = { stopwatch: stopwatchReset(), timer: timerReset(), lapsOpen: false };
+      // The Clock line's small badge; the timer panel writes into it so a running countdown survives a closed panel.
+      let clockBadgeElement = null;
+      // Ids revealed by a Clock click even though their own pref is off: a glance, not a setting.
+      const transientCards = new Set();
       const clockClickState = { timer: null };
       function paintTimerCard(paint) {
         if (typeof paint === "function") {
@@ -3044,14 +3303,18 @@
           const lapBtn = mk("lap", "Lap", "Take a lap");
           const resetBtn = mk("reset", "Reset", "Reset to zero");
 
+          // OW-49: five full-size preset buttons became one line of short chips. Same five durations, a tenth of the
+          // visual weight.
           const presets = doc.createElement("div");
           presets.className = "zw-timer-presets";
-          const presetButtons = TIMER_PRESETS_MS.map((ms) => {
+          const CHIP_TEXT = ["1m", "5m", "10m", "30m", "1h"];
+          const presetButtons = TIMER_PRESETS_MS.map((ms, index) => {
             const b = doc.createElement("button");
             b.type = "button";
             b.className = "zw-timer-preset";
-            b.textContent = formatDuration(ms);
+            b.textContent = CHIP_TEXT[index] || formatDuration(ms);
             b.title = "Start a countdown of " + formatDuration(ms);
+            b.setAttribute("aria-label", "Start a countdown of " + formatDuration(ms));
             presets.appendChild(b);
             return { ms, button: b };
           });
@@ -3074,6 +3337,7 @@
 
           const noteRow = doc.createElement("div");
           noteRow.className = "zw-timer-note-row";
+          noteRow.hidden = true; // the note is a chip away, not a permanent row (OW-49)
           const noteField = doc.createElement("input");
           noteField.type = "text";
           noteField.className = "zw-timer-note";
@@ -3092,12 +3356,21 @@
           laps.className = "zw-timer-laps";
           laps.hidden = true;
 
+          // A note chip next to the presets: it shows the note row only when somebody wants it.
+          const noteChip = doc.createElement("button");
+          noteChip.type = "button";
+          noteChip.className = "zw-timer-chip zw-timer-note-chip";
+          noteChip.textContent = "Note";
+          noteChip.title = "Write a quick note";
+          noteChip.setAttribute("aria-label", "Write a quick note");
+
           wrap.appendChild(readout);
           wrap.appendChild(actions);
           wrap.appendChild(presets);
           wrap.appendChild(fieldRow);
           wrap.appendChild(noteRow);
           wrap.appendChild(laps);
+          presets.appendChild(noteChip);
 
           let repaint = () => {};
           let pendingTick = null;
@@ -3117,9 +3390,26 @@
             startBtn.textContent = usingTimer ? (t.running ? "Stop" : "Resume") : sw.running ? "Stop" : "Start";
             startBtn.title = usingTimer ? "Stop the countdown" : sw.running ? "Stop the stopwatch" : "Start the stopwatch";
             startBtn.setAttribute("aria-label", startBtn.title);
+            // OW-49: the face changes with the state instead of showing everything at once.
+            const wide = (() => {
+              try {
+                const width = getArea?.()?.width;
+                return typeof width === "number" ? width >= 200 : true;
+              } catch (_) {
+                return true;
+              }
+            })();
+            const controls = clockPanelControls(timerState, {
+              wide,
+              quickNote: !noteRow.dataset.zwForcedOff,
+            });
+            lapBtn.hidden = !controls.lap;
             lapBtn.disabled = !sw.running;
-            resetBtn.disabled = !sw.running && !sw.accumulatedMs && !usingTimer;
-            laps.hidden = !sw.laps.length;
+            resetBtn.disabled = !controls.reset;
+            // While a countdown runs the readout is the whole middle: the field goes, not the numbers.
+            fieldRow.hidden = !controls.field;
+            presets.hidden = !controls.presets;
+            laps.hidden = !sw.laps.length || !sw.running;
             if (sw.laps.length) {
               const doc2 = laps.ownerDocument;
               laps.replaceChildren(...sw.laps.map((at, i) => {
@@ -3129,6 +3419,15 @@
               }));
             }
             wrap.setAttribute("data-zw-timer", usingTimer ? (t.running ? "countdown" : "countdown-stopped") : sw.running ? "stopwatch" : "idle");
+            // The Clock line reads this while the panel is closed, so a running timer is never invisible.
+            const badge = clockBadge(timerState, nowMs());
+            wrap.dataset.zwBadge = badge.text;
+            if (clockBadgeElement) {
+              clockBadgeElement.textContent = badge.text;
+              clockBadgeElement.hidden = !badge.text;
+              clockBadgeElement.setAttribute("data-zw-badge", badge.kind);
+              if (badge.text) clockBadgeElement.title = badge.kind === "countdown" ? "Countdown running" : "Stopwatch running";
+            }
             wrap.setAttribute("aria-label", "Timer " + formatDuration(value) + (modeEl.textContent ? ", " + modeEl.textContent : ""));
             // One wake-up at a time, and only while something moves.
             clearTick();
@@ -3209,8 +3508,36 @@
           const syncNoteRow = () => {
             const opener = resolveCalendarOpener(window);
             const ok = Boolean(opener && typeof opener.openQuickNote === "function") && getBool(WIDGET_PREFS.TIMER_QUICK_NOTE, DEFAULTS.TIMER_QUICK_NOTE);
-            noteRow.hidden = !ok;
+            // The chip is the way in; without Notes there is no chip at all.
+            noteChip.hidden = !ok;
+            noteRow.dataset.zwForcedOff = ok ? "" : "true";
+            if (!ok) noteRow.hidden = true;
           };
+          noteChip.addEventListener("click", () => {
+            noteRow.hidden = !noteRow.hidden;
+            if (!noteRow.hidden) noteField.focus?.();
+          });
+
+          // OW-49: the panel dismisses on Escape and on a click outside it, the way a small popover should. A running
+          // countdown keeps the panel's readout alive on the Clock line, so closing never hides a timer.
+          const dismissPanel = (event) => {
+            if (event?.type === "keydown" && event.key !== "Escape") return;
+            delete wrap.dataset.zwOpen;
+            wrap.setAttribute("data-zw-open", "false");
+          };
+          const onDocumentDown = (event) => {
+            if (wrap.dataset.zwOpen !== "true") return;
+            if (wrap.contains?.(event.target)) return;
+            dismissPanel(event);
+          };
+          const onKeyDown = (event) => {
+            if (wrap.dataset.zwOpen !== "true") return;
+            if (event.key === "Escape") dismissPanel(event);
+          };
+          if (typeof doc.addEventListener === "function") {
+            doc.addEventListener("pointerdown", onDocumentDown, true);
+            doc.addEventListener("keydown", onKeyDown, true);
+          }
           syncNoteRow();
           if (typeof window.addEventListener === "function") {
             window.addEventListener(CALENDAR_AVAILABILITY_EVENT, syncNoteRow);
@@ -3223,6 +3550,18 @@
             render: () => draw(),
             // The Clock click lands here: start/stop the stopwatch, stop a quick timer, or ask for a duration.
             clockClick(kind) {
+              // OW-49: opening the panel is the normal answer; the panel itself starts and stops.
+              if (kind === "open" || kind === "close-panel") {
+                if (kind === "open") {
+                  wrap.dataset.zwOpen = "true";
+                  wrap.setAttribute("data-zw-open", "true");
+                } else {
+                  delete wrap.dataset.zwOpen;
+                  wrap.setAttribute("data-zw-open", "false");
+                }
+                draw();
+                return;
+              }
               if (kind === "stopwatch-start") timerState.stopwatch = stopwatchStart(timerState.stopwatch, nowMs());
               else if (kind === "stopwatch-stop") timerState.stopwatch = stopwatchStop(timerState.stopwatch, nowMs());
               else if (kind === "timer-stop") timerState.timer = timerStop(timerState.timer, nowMs());
@@ -3233,17 +3572,62 @@
             dispose() {
               clearTick();
               if (typeof window.removeEventListener === "function") window.removeEventListener(CALENDAR_AVAILABILITY_EVENT, syncNoteRow);
+              if (typeof doc.removeEventListener === "function") {
+                doc.removeEventListener("pointerdown", onDocumentDown, true);
+                doc.removeEventListener("keydown", onKeyDown, true);
+              }
             },
           };
         },
       });
 
-      // The Clock card can start a stopwatch: a plain click, a long press for "in X", and a second click to stop.
+      const clockPanel = () => mountedCards.get("timer")?.instance?.element || null;
+      // OW-49: a Clock click reveals the timer panel. If a countdown is running, the same click stops it — the person
+      // is looking at the number they want to stop, and a stop that needs a panel opened first is a trap.
+      function revealTimerCard() {
+        const def = registry.get("timer");
+        if (!def) return false;
+        if (!isWidgetEnabled(def)) {
+          // The panel is a glance, not a setting: it may appear without turning the widget's pref on. It leaves again
+          // when the person closes it.
+          transientCards.add("timer");
+          syncWidgetsAndLayout();
+        }
+        return mountedCards.has("timer");
+      }
       function clockClick(action) {
         const mounted = mountedCards.get("timer");
-        const api = mounted?.instance;
-        if (!api || typeof api.clockClick !== "function") return false;
-        api.clockClick(action);
+        const wrap = mounted?.instance?.element || null;
+        const isOpen = Boolean(wrap && (wrap.dataset?.zwOpen === "true" || wrap.getAttribute?.("data-zw-open") === "true"));
+        if (!mounted) {
+          if (!revealTimerCard()) return false;
+          const fresh = mountedCards.get("timer");
+          if (fresh?.instance?.element) {
+            fresh.instance.element.dataset.zwOpen = "true";
+            fresh.instance.element.setAttribute("data-zw-open", "true");
+          }
+          // Opening is all a plain click does until the person chooses something in the panel.
+          if (action === "stopwatch-start" || action === "stopwatch-stop" || action === "timer-stop") return true;
+          fresh?.instance?.clockClick?.(action);
+          return true;
+        }
+        if (action === "close-panel") {
+          if (wrap) {
+            delete wrap.dataset.zwOpen;
+            wrap.setAttribute("data-zw-open", "false");
+          }
+          if (transientCards.delete("timer")) syncWidgetsAndLayout();
+          return true;
+        }
+        if (!isOpen && (action === "stopwatch-start" || action === "ask-duration")) {
+          if (wrap) {
+            wrap.dataset.zwOpen = "true";
+            wrap.setAttribute("data-zw-open", "true");
+          }
+          return true;
+        }
+        if (typeof mounted.instance?.clockClick !== "function") return false;
+        mounted.instance.clockClick(action);
         return true;
       }
       function clockClickKind(event) {
@@ -3258,36 +3642,80 @@
       // ---- T3.9e: battery and memory ---------------------------------------------------------------------------
       // Battery events come from the platform (charging, level change); memory is a reading, so it rides the
       // scheduler's slow interval. Neither is polled per second, and neither runs while the sidebar is hidden.
+      // The browser window has no `navigator.getBattery`; the platform exposes the battery through the power
+      // manager. Either answer is normalised by readBatteryInfo(), and "no battery at all" is a fact worth printing,
+      // not a reason to hide the card.
       let batteryRef = null;
       let batterySeen = null;
+      let batterySupport = null; // null = not known yet, true = a reading is possible, false = this machine/build cannot
       const readMemory = () => {
         try {
-          return Services.appinfo?.getMemoryUsage ? Services.appinfo.getMemoryUsage() : null;
+          const usage = Services.appinfo?.getMemoryUsage?.();
+          if (!usage) return null;
+          return {
+            used: Number(usage.usedSize ?? usage.memorySize ?? usage.used) || 0,
+            total: Number(usage.totalSize ?? usage.total ?? usage.limit) || 0,
+          };
         } catch (_) {
           return null;
         }
       };
-      const watchBattery = () => {
-        if (batteryRef || typeof navigator === "undefined" || typeof navigator.getBattery !== "function") return;
+      let memorySupport = null;
+      const memorySupported = () => {
+        if (memorySupport !== null) return memorySupport;
         try {
-          navigator.getBattery().then((b) => {
-            if (disposed) return;
-            batteryRef = b;
-            batterySeen = batteryParts(b);
-            const changed = () => {
-              batterySeen = batteryParts(batteryRef);
-              scheduler.refresh("status", { force: true, area: lastArea });
-            };
-            b.addEventListener?.("levelchange", changed);
-            b.addEventListener?.("chargingchange", changed);
-            registerCleanup(() => {
-              try {
-                b.removeEventListener?.("levelchange", changed);
-                b.removeEventListener?.("chargingchange", changed);
-              } catch (_) {}
-            });
-          }).catch(() => {});
+          memorySupport =
+            typeof Services.appinfo?.getMemoryUsage === "function" && Boolean(readMemory());
+        } catch (_) {
+          memorySupport = false;
+        }
+        return memorySupport;
+      };
+      const adoptBattery = (source) => {
+        if (disposed) return;
+        batteryRef = source;
+        batterySeen = batteryParts(readBatteryInfo(source));
+        // A source that answers but reports no usable level is still a battery the machine has.
+        batterySupport = true;
+        const changed = () => {
+          batterySeen = batteryParts(readBatteryInfo(batteryRef));
+          scheduler.refresh("status", { force: true, area: lastArea });
+        };
+        source.addEventListener?.("levelchange", changed);
+        source.addEventListener?.("chargingchange", changed);
+        registerCleanup(() => {
+          try {
+            source.removeEventListener?.("levelchange", changed);
+            source.removeEventListener?.("chargingchange", changed);
+          } catch (_) {}
+        });
+        scheduler.refresh("status", { force: true, area: lastArea });
+      };
+      const watchBattery = () => {
+        if (batteryRef || disposed) return;
+        // A content-side navigator, when the runtime hands one over, is the simplest source.
+        if (typeof navigator !== "undefined" && typeof navigator.getBattery === "function") {
+          try {
+            navigator.getBattery().then(adoptBattery).catch(() => { batterySupport = false; });
+            return;
+          } catch (_) {}
+        }
+        // The browser window reads the same power manager Firefox's own battery indicator uses.
+        try {
+          const power =
+            (typeof Services !== "undefined" ? Services.power : null) ||
+            (typeof Cc !== "undefined" && typeof Ci !== "undefined"
+              ? Cc["@mozilla.org/power/powermanagerservice;1"].getService(Ci.nsIPowerManagerService)
+              : null);
+          const battery = power?.battery;
+          if (!battery) {
+            batterySupport = false;
+            return;
+          }
+          adoptBattery(battery);
+          return;
         } catch (_) {}
+        batterySupport = false;
       };
       registerWidget({
         id: "status",
@@ -3315,14 +3743,23 @@
                 showBattery: getBool(WIDGET_PREFS.STATUS_SHOW_BATTERY, DEFAULTS.STATUS_SHOW_BATTERY),
                 showMemory: getBool(WIDGET_PREFS.STATUS_SHOW_MEMORY, DEFAULTS.STATUS_SHOW_MEMORY),
               };
-              return { opts, battery: batterySeen, memory: readMemory() };
+              const memory = readMemory();
+              return {
+                opts,
+                battery: batterySeen,
+                memory,
+                support: {
+                  battery: batterySupport !== false,
+                  memory: memorySupport !== false && memorySupported(),
+                },
+              };
             },
             nextDelayMs(_now, cached) {
               return nextStatusDelayMs(cached?.value?.battery);
             },
             render(value) {
               const opts = value?.opts || { showBattery: true, showMemory: true };
-              const parts = statusLineParts(opts, value?.battery, value?.memory);
+              const parts = composeStatusParts(opts, value?.battery, value?.memory, value?.support || {});
               const find = (kind) => parts.find((p) => p.kind === kind);
               const b = find("battery");
               const m = find("memory");

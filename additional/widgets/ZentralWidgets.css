@@ -275,9 +275,64 @@
   opacity: 0.78 !important;
 }
 
+/* OW-49: the panel is a small reveal from the Clock, not a card of buttons. While closed, everything but the readout
+ * is out of the way, so the widget reads as one quiet line. */
+#zentral-sidebar-widgets .zw-timer[data-zw-open="false"] .zw-timer-actions,
+#zentral-sidebar-widgets .zw-timer[data-zw-open="false"] .zw-timer-presets,
+#zentral-sidebar-widgets .zw-timer[data-zw-open="false"] .zw-timer-field-row,
+#zentral-sidebar-widgets .zw-timer[data-zw-open="false"] .zw-timer-note-row {
+  display: none !important;
+}
+
+#zentral-sidebar-widgets .zw-timer-presets {
+  gap: 3px !important;
+}
+
+#zentral-sidebar-widgets .zw-timer-preset {
+  padding: 2px 7px !important;
+  font-size: 10px !important;
+}
+
+/* The readout is the one thing that stays big; everything else is small and quiet. */
+#zentral-sidebar-widgets .zw-timer-value {
+  font-size: 22px !important;
+}
+
 /* A countdown that finished flashes its readout, and the Clock card shows the same text when it runs one. */
 #zentral-sidebar-widgets .zw-timer[data-zw-rang="true"] .zw-timer-value {
   color: color-mix(in srgb, #e5a04b 80%, currentColor) !important;
+}
+
+/* OW-49: the Clock's own badge. A running countdown is visible without opening anything. */
+#zentral-sidebar-widgets .zw-clock-badge {
+  font-size: 10px !important;
+  font-variant-numeric: tabular-nums !important;
+  letter-spacing: 0.02em !important;
+  opacity: 0.75 !important;
+  white-space: nowrap !important;
+}
+
+#zentral-sidebar-widgets .zw-clock-badge[data-zw-badge="countdown"] {
+  color: color-mix(in srgb, #e5a04b 70%, currentColor) !important;
+  opacity: 1 !important;
+}
+
+/* OW-50: the weather's second line — tomorrow and the next wet day. */
+#zentral-sidebar-widgets .zw-weather-outlook {
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+#zentral-sidebar-widgets .zw-weather-outlook[data-zw-outlook-face] {
+  text-decoration: underline dotted !important;
+  text-underline-offset: 2px !important;
+}
+
+/* The default face is one line, and a narrow card must not wrap it into three. */
+#zentral-sidebar-widgets .zw-weather .zw-card-meta {
+  min-width: 0 !important;
 }
 
 #zentral-sidebar-widgets .zw-clock[data-zw-clock-timer="true"] .zw-clock-main::after {

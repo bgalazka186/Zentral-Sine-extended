@@ -134,4 +134,61 @@ test("a quick note goes through the one opener channel Notes already publishes",
   assert.ok(/return openNoteFromOutside\(made\.id\);/.test(host), "the new note opens through the one outside path");
 });
 
+/* OW-49: the timer was a permanent card of buttons. It is now one small panel that the Clock reveals, and the clock
+ * line carries a running countdown so nothing that is counting can be invisible. */
+test("the panel rule opens, closes and stops a running countdown", () => {
+  const r = c.resolveClockPanelState;
+  assert.deepEqual(json(r({ open: false, timerRunning: false })), { action: "open", open: true }, "a closed clock reveals the panel");
+  assert.deepEqual(json(r({ open: true, timerRunning: false })), { action: "close", open: false }, "a second click closes it");
+  assert.deepEqual(json(r({ open: true, timerRunning: true })), { action: "stop-timer", open: true }, "a running countdown is stopped by the same click");
+  assert.deepEqual(json(r({ open: false, timerRunning: true })), { action: "stop-timer", open: false }, "even when the panel was closed");
+});
+
+test("the panel shows few controls, and only the ones that can do something", () => {
+  const idle = c.clockPanelControls({ stopwatch: c.stopwatchReset(), timer: c.TIMER_IDLE }, { wide: true });
+  assert.equal(idle.primary, "Start");
+  assert.equal(idle.lap, false, "no Lap before the stopwatch runs");
+  assert.equal(idle.reset, false, "nothing to reset means no enabled Reset");
+  assert.deepEqual(json(idle.controls), ["primary"], "one button is the whole idle face");
+  assert.equal(idle.field, true, "the duration field is there when nothing runs");
+  assert.equal(idle.presets, true);
+
+  const running = c.clockPanelControls({ stopwatch: c.stopwatchStart(c.stopwatchReset(), 0), timer: c.TIMER_IDLE }, { wide: true });
+  assert.equal(running.primary, "Stop");
+  assert.equal(running.lap, true);
+  assert.equal(running.reset, true);
+  assert.deepEqual(json(running.controls), ["primary", "lap", "reset"]);
+
+  const counting = c.clockPanelControls({ stopwatch: c.stopwatchReset(), timer: c.timerStart(300000, 0) }, { wide: false });
+  assert.equal(counting.primary, "Stop");
+  assert.equal(counting.field, false, "the readout replaces the field while a countdown runs");
+  assert.equal(counting.presets, false, "and the chips are gone on a narrow panel");
+});
+
+test("a running timer is visible on the Clock line even with the panel closed", () => {
+  const now = 1000;
+  const counting = c.clockBadge({ stopwatch: c.stopwatchReset(), timer: c.timerStart(60000, now) }, now + 15000);
+  assert.equal(counting.kind, "countdown");
+  assert.equal(counting.text, "0:45");
+  const watching = c.clockBadge({ stopwatch: c.stopwatchStart(c.stopwatchReset(), now), timer: c.TIMER_IDLE }, now + 5000);
+  assert.equal(watching.kind, "stopwatch");
+  assert.ok(watching.text.length > 0);
+  assert.equal(c.clockBadge({ stopwatch: c.stopwatchReset(), timer: c.TIMER_IDLE }, now).kind, "none", "an idle clock says nothing");
+  // The live cards must actually use both rules.
+  assert.ok(/clockBadgeElement/.test(SRC), "the Clock card owns a badge element");
+  assert.ok(/clockBadge\(timerState/.test(SRC), "and the timer writes the same rule into it");
+  assert.ok(/resolveClockPanelState\(/.test(SRC), "the Clock's click handler uses the panel rule");
+});
+
+test("the panel is compact: chips instead of five full presets, and the note is a chip", () => {
+  const timer = SRC.slice(SRC.indexOf('id: "timer"'), SRC.indexOf('id: "timer"') + 12000);
+  assert.match(timer, /CHIP_TEXT = \["1m", "5m", "10m", "30m", "1h"\]/, "the presets are short chips");
+  assert.match(timer, /noteRow\.hidden = true/, "the note row ships hidden");
+  assert.match(timer, /noteChip\.addEventListener\("click"/, "and is revealed by its own chip");
+  assert.ok(!/noteRow\.hidden = !ok;/.test(timer), "Notes availability hides the chip, not a permanent row");
+  assert.match(timer, /laps\.hidden = !sw\.laps\.length \|\| !sw\.running/, "laps only while the stopwatch runs");
+  // The panel may appear without turning its own widget pref on, and must leave again on close.
+  assert.ok(/transientCards/.test(SRC), "a revealed panel is transient, not a hidden setting change");
+});
+
 console.log("\nPASS widgets-timer (" + passed + " tests)");

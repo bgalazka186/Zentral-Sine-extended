@@ -10,6 +10,7 @@ const vm = require("node:vm");
 
 const root = path.resolve(__dirname, "..");
 const SRC = fs.readFileSync(path.join(root, "additional/widgets/ZentralWidgets.uc.js"), "utf8");
+const SETTINGS = JSON.parse(fs.readFileSync(path.join(root, "additional/widgets/settings.json"), "utf8"));
 const seam = {};
 const win = { __zentralWidgetsTestSeam: seam, ZentralRuntime: { register() {} } };
 win.window = win;
@@ -54,7 +55,10 @@ test("the one request carries the place, the units and nothing else", () => {
   assert.match(url, /longitude=21\.01/);
   assert.match(url, /temperature_unit=celsius/);
   assert.match(url, /wind_speed_unit=kmh/);
-  assert.match(url, /forecast_days=1/);
+  assert.match(url, /forecast_days=7/, "a week, so tomorrow and the next wet day can be named");
+  assert.match(url, /precipitation_probability_max/, "the wet-day rule needs a probability");
+  assert.match(url, /precipitation_hours/);
+  assert.match(url, /snowfall_sum/, "snow is not rain; it needs its own number");
   assert.match(url, /timezone=auto/);
   const imperial = c.weatherRequestUrl({ latitude: "40.71", longitude: "-74.0" }, "imperial");
   assert.match(imperial, /temperature_unit=fahrenheit/);
@@ -150,6 +154,107 @@ test("the widget is off until a place is chosen, and asks nobody when off", () =
   const cfg = SRC.slice(SRC.indexOf("function readWeatherOpts"), SRC.indexOf("registerWidget({", SRC.indexOf("function readWeatherOpts")));
   assert.ok(cfg.length > 100, "the widget reads its own settings");
   assert.ok(!/fetch\(/.test(cfg), "reading the settings never touches the network");
+});
+
+/* OW-50: the card only knew today. It now asks for a week and names tomorrow and the next wet day. The wet-day rule
+ * is deliberately conservative: a wet-looking code with no hours and no chance is not "rain", and a dry code with a
+ * high probability is not either. */
+const day = (over) => ({ code: 1, icon: "sun", label: "Mainly clear", high: 9, low: 2, precipitationProbability: 5, precipitationHours: 0, snowfall: 0, date: "2026-11-17", ...over });
+const rain = (over) => day({ code: 61, icon: "rain", label: "Light rain", precipitationHours: 4, precipitationProbability: 80, ...over });
+
+test("a day counts as wet only when its code and its numbers agree", () => {
+  assert.equal(c.isWetDay(rain()), true);
+  assert.equal(c.isWetDay(day({ code: 71, icon: "snow", snowfall: 2, precipitationHours: 0, precipitationProbability: 0 })), true, "snow is wet");
+  assert.equal(c.isWetDay(day({ code: 61, icon: "rain", precipitationHours: 0, precipitationProbability: 0 })), false, "a rain code with nothing behind it is noise");
+  assert.equal(c.isWetDay(day({ code: 1, icon: "sun", precipitationProbability: 90, precipitationHours: 0 })), false, "a dry code is not rain however likely");
+  assert.equal(c.isWetDay(day({ code: 61, precipitationHours: 0, precipitationProbability: 45 })), true, "a real chance alone counts");
+  assert.equal(c.isWetDay(null), false);
+});
+
+test("the next wet day is the first one after today, and a dry week says so", () => {
+  const week = [day(), day(), day(), rain({ date: "2026-11-20" }), rain({ date: "2026-11-21" })];
+  const wet = c.nextWetDay(week, 1);
+  assert.equal(wet.daysAhead, 3);
+  assert.equal(wet.date, "2026-11-20");
+  assert.equal(wet.label, "Light rain");
+  assert.equal(c.nextWetDay([day(), day(), day()], 1), null, "no wet day in the window");
+  assert.equal(c.nextWetDay([rain()], 1), null, "today is not 'next'");
+  assert.equal(c.nextWetDay(null, 1), null);
+  assert.equal(c.nextWetDay([day(), rain()], 1).daysAhead, 1, "tomorrow is a valid answer");
+});
+
+test("the outlook line names tomorrow and the next rain, and never repeats itself", () => {
+  const wide = c.weatherOutlookParts([day({ high: 8, low: 1 }), day({ high: 11, low: 3 }), rain()], { units: "metric" });
+  assert.equal(wide.tomorrow, "Tomorrow 11\u00b0C / 3\u00b0C");
+  assert.equal(wide.wet, "Rain in 2 days");
+  assert.equal(wide.faces.length, 2, "both halves are available for a narrow card");
+  // Rain tomorrow is said once, on the rain line.
+  const tomorrowWet = c.weatherOutlookParts([day(), rain({ high: 7, low: 1 })], { units: "metric" });
+  assert.equal(tomorrowWet.wet, "Rain tomorrow");
+  assert.ok(!tomorrowWet.tomorrow.includes("Rain"), "the word appears on one line only");
+  // A dry week still answers the question.
+  const dry = c.weatherOutlookParts([day(), day(), day()], { units: "metric" });
+  assert.equal(dry.wet, "No rain this week");
+  // No week at all is simply no second line, never a crash.
+  const empty = c.weatherOutlookParts(null);
+  assert.equal(empty.text, "");
+  assert.deepEqual(JSON.parse(JSON.stringify(empty.faces)), []);
+  assert.equal(empty.wetDay, null);
+});
+
+test("a week of days survives the payload reduction, and the raw payload never does", () => {
+  const payload = {
+    current: { temperature_2m: 6.4, relative_humidity_2m: 81, weather_code: 3, wind_speed_10m: 12.1, time: 1_700_000_000 },
+    daily: {
+      time: [1_700_000_000, 1_700_086_400, 1_700_172_800],
+      weather_code: [3, 61, 1],
+      temperature_2m_max: [9.1, 7.4, 8.9],
+      temperature_2m_min: [2.2, 1.1, 0.4],
+      precipitation_probability_max: [10, 85, 5],
+      precipitation_hours: [0, 5.5, 0],
+      snowfall_sum: [0, 0, 0],
+    },
+    countryCode: "PL",
+  };
+  const value = c.readWeatherPayload(payload, "metric");
+  assert.equal(value.week.length, 3, "one small entry per day");
+  assert.equal(value.week[1].code, 61);
+  assert.equal(value.week[1].high, 7);
+  assert.equal(value.week[1].precipitationProbability, 85);
+  assert.equal(value.week[1].precipitationHours, 5.5);
+  assert.equal(value.week[2].low, 0);
+  assert.equal(value.week[0].snowfall, 0);
+  assert.equal(c.nextWetDay(value.week, 1).daysAhead, 1, "the reduced week still answers the question");
+  // A payload without the new fields degrades to a usable single day, never a crash.
+  const bare = c.readWeatherPayload({ current: payload.current, daily: { weather_code: [3], temperature_2m_max: [9], temperature_2m_min: [2] } }, "metric");
+  assert.equal(bare.week.length, 1);
+  assert.equal(bare.week[0].precipitationProbability, null);
+  assert.equal(c.nextWetDay(bare.week, 1), null);
+});
+
+test("the card shows the outlook, and a narrow card swaps the hidden day on click", () => {
+  const card = SRC.slice(SRC.indexOf('id: "weather"'), SRC.indexOf('id: "weather"') + 9000);
+  assert.match(card, /zw-weather-outlook/, "the second line has its own element");
+  assert.match(card, /weatherOutlookParts\(/, "and is filled from the pure rule");
+  assert.match(card, /addEventListener\("click"/, "the swap is a click, not a setting");
+  assert.match(card, /areaWidth\(\)/, "the swap only happens when the card really is narrow");
+  assert.match(card, /data-zw-outlook-face/, "the face is visible to CSS so the swap can be styled");
+});
+
+/* OW-51: typing a name used to look like a failure, because the name is only a label and the numbers did the work.
+ * The settings now say so, and the two coordinates are described as what they are: the real input. */
+test("the place setting says a typed name is a label, and the coordinates are the real input", () => {
+  const schema = SETTINGS.schema;
+  const row = (suffix) => schema.find((item) => String(item.property).endsWith(suffix));
+  const place = row("weather.place");
+  const lat = row("weather.latitude");
+  const lon = row("weather.longitude");
+  assert.ok(/only a label/i.test(place.label + " " + (place.description || "")), "the label says what a name is for");
+  assert.ok(/latitude and longitude/i.test(place.description || ""), "and points at what is actually used");
+  for (const item of [lat, lon]) {
+    assert.match(item.label, /filled by the name lookup/i, "the coordinates explain where their value comes from");
+    assert.match(item.label, /edit to override/i, "and that they can be typed by hand");
+  }
 });
 
 console.log("\nPASS widgets-weather (" + passed + " tests)");

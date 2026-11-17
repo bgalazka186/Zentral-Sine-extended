@@ -153,21 +153,24 @@
     },
     {
       "property": "zen.workspace.zentral.widgets.weather.place",
-      "label": "Weather place (a city name, looked up once)",
+      "label": "Weather place — a name you type is only a label",
       "type": "input",
-      "defaultValue": ""
+      "defaultValue": "",
+      "description": "The forecast uses the latitude and longitude below. Typing a city name looks it up once and fills those two numbers; the name itself never reaches the weather service."
     },
     {
       "property": "zen.workspace.zentral.widgets.weather.latitude",
-      "label": "Weather latitude (filled by the place lookup)",
+      "label": "Weather latitude (filled by the name lookup — edit to override)",
       "type": "input",
-      "defaultValue": ""
+      "defaultValue": "",
+      "description": "Used for the forecast. Clearing it turns the widget off until a place is found again."
     },
     {
       "property": "zen.workspace.zentral.widgets.weather.longitude",
-      "label": "Weather longitude (filled by the place lookup)",
+      "label": "Weather longitude (filled by the name lookup — edit to override)",
       "type": "input",
-      "defaultValue": ""
+      "defaultValue": "",
+      "description": "Used together with the latitude; one without the other is never requested."
     },
     {
       "property": "zen.workspace.zentral.widgets.weather.units",

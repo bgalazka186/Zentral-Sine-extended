@@ -63,6 +63,31 @@
 - `T3.6` (custom colours with a colour picker and saved quick colours; per-note spell-check toggle already existed as the `spellcheck` pref) — done in 3.2.3, see the handoff.
 - 3.2.0 (2026-11-08): merge conflict markers in the 4 version/hash files fixed; `Outline` renamed **Table of contents** and given its own toolbar button; More menu regrouped (Labels, Templates, Links & dates, Window, Settings & help); Markdown mode in Quick settings and its own Settings tab; Insert caret menu gained underline, spoiler, hidden comment, line break, inline/block math, collapsible section, date/time, all 15 callout kinds, foldable callouts; checklist hold menu offers the Obsidian task states; code block language list has Diff; `docs/MARKDOWN_FLAVORS.md` has a _GUI in Notes_ column; demo notes rebuilt from it (6 notes).
 
+- `OW-49`…`OW-52` DONE (3.3.263) — Four owner reports of 2026-11-17, in the order they were filed.
+  * `OW-52` (the bug) — The Status widget rendered nothing at all. Two platform facts broke it: the browser window has no
+    `navigator.getBattery` (so the battery half never filled in), and `getMemoryUsage()` was guarded only by a name check
+    (so a build that answers with a different shape silently produced "no memory"). One missing half then removed the
+    whole card. Now both sources are tried (content navigator, then the power-manager service), both readings are
+    normalised by `readBatteryInfo`/`readMemory`, one missing half never removes the other, a memory reading that cannot
+    be taken prints one honest dash instead of vanishing, a desktop's absent battery stays quiet when memory carries the
+    card, and the support state is remembered so a failed read is not retried on every paint. `widgets-status` grew to 10
+    tests.
+  * `OW-50` — Weather now asks for a week (one request, same host) and names tomorrow plus the next day that looks wet.
+    "Wet" is conservative: the WMO code must say rain/snow/sleet/storm *and* the numbers must agree (precipitation hours,
+    snowfall, or a real probability); a rain code with nothing behind it and a dry code with 90% chance are both "no".
+    A dry week says "No rain this week" instead of leaving a line blank; rain tomorrow is said once, not twice. On a
+    narrow card one of the two lines is shown and a click swaps them — a glance, not a preference. The cached value stays
+    a small reduced week, never the raw payload. `widgets-weather` grew to 14 tests.
+  * `OW-51` — The place setting now says what a typed name does: it is only a label, the coordinates are what the forecast
+    uses, and the two coordinate rows say they are filled by the lookup and may be edited by hand. No behaviour change:
+    the lookup was already one-shot.
+  * `OW-49` — The Timer stopped being a permanent card of buttons and became the small panel the Clock reveals. One
+    primary button, a Lap button that exists only while a stopwatch runs, a Reset that is disabled when there is nothing
+    to reset, five short chips instead of five full-size presets, the duration field only when nothing is counting, the
+    note row behind its own chip, laps only while running. Escape and a click outside dismiss the panel; the panel can
+    appear without turning its own widget pref on (and leaves again). While closed, a running countdown or stopwatch shows
+    on the Clock line itself, so nothing that counts can be invisible. The pure rules (`resolveClockPanelState`,
+    `clockPanelControls`, `clockBadge`) are seam-tested; `widgets-timer` grew to 13 tests.
 ## Old recovery note
 
 > **Recovery note (2026-11-12):** Earlier handoff text included Track 2 completion claims that must be checked against the actual source and tests before relying on them. The verified working tree is now version **3.3.113**; its release state is governed by the source, generated-build checks and test suites in this archive, not by older handoff claims.

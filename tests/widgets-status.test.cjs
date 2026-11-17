@@ -81,6 +81,66 @@ test("the widget reads nothing from the machine and owns no timer", () => {
   assert.ok(/Services\.appinfo\?\.getMemoryUsage/.test(SRC), "memory comes from the platform's own counters");
 });
 
+/* OW-52: the card showed nothing at all. Two platform facts broke it — the chrome window has no
+ * `navigator.getBattery`, and `getMemoryUsage()` is not guaranteed to answer in the browser window — and either
+ * missing half removed the whole card. These tests pin the repair: one missing reading never removes the other, and
+ * a reading that cannot be taken is said out loud instead of vanishing. */
+test("battery readings are normalised from either platform shape", () => {
+  assert.deepEqual(json(c.readBatteryInfo({ level: 0.42, charging: true })), { level: 0.42, charging: true });
+  const fromPowerManager = c.readBatteryInfo({ percent: 42, charging: false, dischargingTime: 3600 });
+  assert.equal(fromPowerManager.level, 0.42, "the power manager reports 0-100, the card wants 0-1");
+  assert.equal(fromPowerManager.charging, false);
+  assert.equal(c.readBatteryInfo(null), null);
+  assert.equal(c.readBatteryInfo(undefined), null);
+});
+
+test("one missing reading never removes the other", () => {
+  const memory = { used: 2 * 1024 ** 3, total: 4 * 1024 ** 3 };
+  const battery = { level: 0.5, charging: false };
+  // No battery support, but memory works: the card still shows memory.
+  const withoutBattery = c.composeStatusParts({ showBattery: true, showMemory: true }, null, memory, { battery: false, memory: true });
+  assert.deepEqual(json(withoutBattery.map((p) => p.kind)), ["memory"], "a desktop's missing battery stays quiet");
+  assert.equal(withoutBattery[0].text, "2 / 4 GB");
+  // No memory support, but the battery answers: the card still shows the battery.
+  const withoutMemory = c.composeStatusParts({ showBattery: true, showMemory: true }, battery, null, { battery: true, memory: false });
+  assert.deepEqual(json(withoutMemory.map((p) => p.kind)), ["battery", "memory"], "the battery, then the memory dash");
+  assert.equal(withoutMemory[0].text, "50%");
+  assert.equal(withoutMemory[1].unavailable, true);
+});
+
+test("a reading that cannot be taken says so instead of vanishing", () => {
+  // Neither half readable: the tray is never empty and silent.
+  const none = c.composeStatusParts({ showBattery: true, showMemory: true }, null, null, { battery: false, memory: false });
+  assert.equal(none.length, 1, "memory explains itself; a desktop's missing battery does not nag");
+  assert.equal(none[0].kind, "memory");
+  assert.equal(none[0].text, "\u2014");
+  assert.equal(none[0].unavailable, true);
+  // A battery-only card on a machine with no battery says why it is empty.
+  const batteryOnly = c.composeStatusParts({ showBattery: true, showMemory: false }, null, null, { battery: false, memory: false });
+  assert.equal(batteryOnly.length, 1);
+  assert.equal(batteryOnly[0].text, "no battery");
+  // A real reading is never replaced by a placeholder.
+  const mixed = c.composeStatusParts({ showBattery: true, showMemory: true }, { level: 0.7 }, null, { battery: true, memory: false });
+  assert.deepEqual(json(mixed.map((p) => p.kind)), ["battery", "memory"], "the reading, then the dash");
+  assert.equal(mixed[0].text, "70%");
+  assert.equal(mixed[1].unavailable, true);
+  // Switching a half off means it is not mentioned at all.
+  const off = c.composeStatusParts({ showBattery: false, showMemory: true }, null, null, { battery: false, memory: false });
+  assert.deepEqual(json(off.map((p) => p.kind)), ["memory"]);
+});
+
+test("the live card reads the platform it actually runs in, and paints its first value", () => {
+  // The chrome window has no navigator.getBattery: the power manager is the documented fallback.
+  assert.ok(/navigator\.getBattery/.test(SRC), "the content-side API is still tried first");
+  assert.ok(/powermanagerservice|Services\.power/.test(SRC), "and the browser window's power manager is the fallback");
+  assert.ok(/Services\.appinfo\?\.getMemoryUsage\?/.test(SRC), "memory is guarded with a call, not just a name check");
+  assert.ok(/memorySupport !== false/.test(SRC), "a memory read failure is remembered, not retried every paint");
+  assert.ok(/composeStatusParts\(/.test(SRC), "the card paints the composed line, not the raw readings");
+  // A mount must not wait a whole five-minute interval for its first paint.
+  assert.ok(/batterySupport !== false/.test(SRC), "the battery state is tracked as unknown/yes/no");
+  assert.ok(/scheduler\.refresh\("status", \{ force: true/.test(SRC), "a battery event forces an immediate repaint");
+});
+
 test("the settings section exists and every pref is declared", () => {
   const wanted = [
     c.WIDGET_PREFS.STATUS_ENABLED,
