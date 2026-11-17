@@ -96,13 +96,14 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 |    52 | `ST7.5`     | `DONE`    | Low-Med             | S-M    | 3.3.274           | Reminder history export, prune and inspect UI                                                            |
 |    53 | `UI4.10`    | `DONE`    | Low-Med             | S-M    | 3.3.275           | Settings dialog follows the text size                                                                    |
 |    54 | `ST7.4`     | `OPEN`    | Low-Med (long term) | L      | ST7.1             | Render Agenda rows without real tabs (research)                                                          |
-|    55 | `SB6.9`     | `OPEN`    | Low                 | S      | TM3.1             | Agenda sidebar quiet hours and 'left' counts                                                             |
+|    55 | `SB6.9`     | `PARTIAL` | Low                 | S      | TM3.1             | Agenda sidebar quiet hours and 'left' counts                                                             |
 |    56 | `F0.15`     | `OPEN`    | Low                 | S      | —                 | Isolate the time-budget test of the Agenda projection                                                    |
 |    57 | `DOC-1`     | `DONE`    | Low                 | S      | 3.3.268           | README documents a split view that does not exist                                                        |
 |    58 | `TM3.7`     | `DONE`    | Low                 | S      | 3.3.269           | Day range keeps the wall clock on the day the clocks go forward at midnight                              |
 |    59 | `F0.16`     | `OPEN`    | Low                 | S-M    | —                 | Sweep tests that build fixtures around the real clock                                                    |
 |    60 | `SB6.11`    | `DONE`    | Med                 | S      | 3.3.272           | Right-click a Notes or Agenda row in the sidebar for its own menu, not Zen's tab menu |
 |    61 | `ST7.8`     | `DONE`    | Med                 | S      | 3.3.271           | Give one reminder or event its own colour, not only through its note or category          |
+|    62 | `OW-53`     | `OPEN`    | Med                 | M      | —                 | Import a Google Calendar `.ics` file into the calendar (import/export)                                    |
 
 ---
 
@@ -201,16 +202,53 @@ _Not blocked by the calendar work._
 
 #### `SB6.9` — Agenda sidebar quiet hours and 'left' counts
 
-**Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Depends on:** TM3.1 · **Source:** Proposals S5/D3
+**Status:** `PARTIAL` (left counts shipped 3.3.276) · **Impact:** Low · **Effort:** S · **Depends on:** TM3.1 · **Source:** Proposals S5/D3
 
 **Problem:** Ideas from the audit.
 
 **Plan (do in this order):**
 
-1. Optional: collapse the Agenda folder outside work hours or when nothing is due within N hours.
-2. Day pill and label show items 'left' (excludes ended and done).
+1. ~~Day pill and label show items 'left' (excludes ended and done).~~ **DONE 3.3.276** — `agendaLeftCount` in the pure
+   layer; both projections carry `left` and must agree (the incremental fuzz test enforces it); the sidebar pill reads
+   `left/count` only where something ended, so a day that is all ahead still shows the plain count. The tooltip keeps the
+   whole day in words.
+2. **LEFT:** optional — collapse the Agenda folder outside work hours or when nothing is due within N hours. This needs a
+   new preference (PREF constant, `settings.json` schema and meta, `layout.json` order, `standalone.json`
+   `preferenceOrder`) and a clock-driven fold on the real `zen-folder`; it shares nothing with the count work above.
 
-**Tests / done when:** Projection tests.
+**Tests / done when:** Projection tests (`tests/notes-agenda-left-count.test.cjs`, 8 cases) — kept for the LEFT half.
+
+#### `OW-53` — Import a Google Calendar `.ics` file into the calendar
+
+**Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Source:** owner request 2026-11-17
+
+**Problem:** A person can export the calendar (`Export` writes Markdown, and a week can be saved) but cannot bring an
+existing Google Calendar account across. Google exports an `.ics` file (Calendar → Settings → Import & export → Export),
+and every other calendar writes one too, so the file is the one format that matters. Everything that has to happen is
+already in the code base: `fromGoogle`/`toGoogle` translate an item to and from the calendar shape, `createItemStore`
+takes `upsert`, and the calendar's Import/Export row already owns the picker and the report/rollback pattern used by the
+backup zip.
+
+**Plan (do in this order):**
+
+1. Pure layer in `ZentralNotesCalendar.js`: `parseIcs(text)` → `{ calendars, events, warnings }`. Unfold continuation
+   lines first (a line starting with a space or tab continues the previous one — the single most common reason a
+   hand-written parser fails), then split `BEGIN:VEVENT` … `END:VEVENT` blocks. Read `DTSTART`/`DTEND` with and without
+   `VALUE=DATE`, `TZID=`, UTC `Z` and floating times; `SUMMARY`; `DESCRIPTION`; `LOCATION`; `STATUS:CANCELLED`;
+   `RRULE` (only the `FREQ`, `INTERVAL`, `COUNT`, `UNTIL`, `BYDAY` subset the recurrence reader already accepts);
+   `RECURRENCE-ID` and `EXDATE`. Handle the escapes (`\n`, `\,`, `\;`, `\\`) and folded UTF-8.
+2. Map one `VEVENT` to a calendar item: all-day → `start.date`, timed → `start.dateTime` in the display zone, reminder
+   vs event by a choice at import (an `.ics` has no such split), `x.src = "ics"`, a stable `x.icsUid` from `UID` so a
+   second import updates instead of duplicating.
+3. Import UI: one row in the calendar's Import/Export menu ("Import a calendar file (.ics)…"), a file picker limited to
+   `.ics`, then one summary card: how many events, how many reminders, the date range, what was skipped and why (a
+   cancelled event, an unreadable one, a duplicate), and Import / Cancel. Nothing is written before Import.
+4. Write it: dedupe by `x.icsUid` (update in place, keep the local colour and note link), undo in one step if the person
+   asks (the same rollback the backup restore uses).
+
+**Tests / done when:** `tests/notes-ics-import.test.cjs` — a real Google export fixture (folded lines, `TZID`,
+all-day, an `RRULE`, a cancelled event, an escaped comma in the summary), the pure parse, the item mapping, the dedupe on
+a second import, and the summary card's numbers. No network: the file is the interface.
 
 #### `F0.15` — Isolate the time-budget test of the Agenda projection
 
@@ -292,7 +330,7 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.275.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9`, `SB6.6`, `UI4.11`, `DOC-1`, `TM3.7`, `ST7.8`, `SB6.11`, `ST7.5` and `UI4.10` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`221/221` test files) passes in Node/fake-Zen at 3.3.275; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.278.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9`, `SB6.6`, `UI4.11`, `DOC-1`, `TM3.7`, `ST7.8`, `SB6.11`, `ST7.5`, `UI4.10` and the 'left' half of `SB6.9` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`222/222` test files) passes in Node/fake-Zen at 3.3.278; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
 Completed this session (3.3.163–3.3.244), every finished item archived in `docs/LEGACY_done_rows.md`:
 
@@ -436,4 +474,4 @@ Known debts / owner requirements: LIMITS of `OW-04`: the pointer is held to the 
 
 Planning only, no code (2026-11-17, version 3.3.244): the owner's holiday list added as `OW-43` (holiday sets split from the interface language, any language picks any set, first sets `PL` + `US`), `OW-44` (any number of sets at once), `OW-45` (one-place year table for movable/one-off dates such as the Polish election day and `niedziela handlowa`), `OW-46` (one master off switch) and `T2.13a` (how holidays behave when the `T2.13` ICS/Google groundwork is built: local sets are never imported or synced). They sit at the top of the Master Order; `T3.3` follows them.
 
-Next action: the owner reports, the reminder-history card and the text-size follow-up are shipped (`ST7.8` 3.3.271, `SB6.11` 3.3.272, `ST7.5` 3.3.274, `UI4.10` 3.3.275), so the queue moves to the next small row (`SB6.9`); `ST7.3` (calendar UI state out of notes metadata) stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.
+Next action: the owner reports, the reminder-history card, the text-size follow-up and the Agenda 'left' counts are shipped (`ST7.8` 3.3.271, `SB6.11` 3.3.272, `ST7.5` 3.3.274, `UI4.10` 3.3.275, `SB6.9` 3.3.278), and the new owner row `OW-53` (Google Calendar `.ics` import) is next in the queue; `ST7.3` (calendar UI state out of notes metadata) stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.

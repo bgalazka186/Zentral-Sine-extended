@@ -519,6 +519,7 @@
       "sidebar.agenda.root.openCalendar": "Open calendar",
       "sidebar.agenda.root.refresh": "Refresh Agenda",
       "sidebar.agenda.root.settings": "Agenda settings",
+      "sidebar.agenda.leftOfCount": "{left} of {count} left today",
       "sidebar.agenda.root.hide": "Hide Agenda",
       "sidebar.agenda.itemUnavailable": "Agenda item no longer available",
       "sidebar.agenda.previewAria": "Agenda preview",

@@ -2584,6 +2584,8 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-note-alert-row { display: flex; justify-content: flex-end; margin: -4px 0 6px; }
 
 /* Virtual Zen Agenda folder and occurrence tabs. */
+/* SB6.9: a day with items already behind it shows what is left of it ("2/5"); a day where nothing ended yet keeps the
+   plain count, which is the same number either way. */
 zen-folder[bgalazka-notes-agenda-day]::after {
   content: attr(bgalazka-notes-agenda-count);
   display: inline-flex;
@@ -2596,6 +2598,10 @@ zen-folder[bgalazka-notes-agenda-day]::after {
   font-size: .78em;
   line-height: 1.5;
   background: color-mix(in srgb, currentColor 14%, transparent);
+}
+zen-folder[bgalazka-notes-agenda-day][bgalazka-notes-agenda-left]::after {
+  content: attr(bgalazka-notes-agenda-left) "/" attr(bgalazka-notes-agenda-count);
+  background: color-mix(in srgb, currentColor 22%, transparent);
 }
 tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
 

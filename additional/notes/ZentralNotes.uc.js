@@ -14731,7 +14731,7 @@
       const foreign = [...(folder.querySelectorAll?.("tab") || [])].length > 0 || descendants.some((child) => restoredPseudoFolderKind(child) !== kind);
       if (!foreign) { try { folder.delete?.(); return true; } catch (_) { return false; } }
       for (const el of [folder, ...descendants].filter((child) => restoredPseudoFolderKind(child) === kind)) {
-        for (const attr of ["bgalazka-notes-folder", "bgalazka-notes-subfolder", "bgalazka-notes-label", "bgalazka-notes-parent", "bgalazka-notes-color", "bgalazka-notes-icon", "bgalazka-notes-parts", "bgalazka-notes-parts-opacity", "bgalazka-notes-agenda-folder", "bgalazka-notes-agenda-day", "bgalazka-notes-agenda-key", "bgalazka-notes-agenda-count", "bgalazka-notes-agenda-label"]) el.removeAttribute(attr);
+        for (const attr of ["bgalazka-notes-folder", "bgalazka-notes-subfolder", "bgalazka-notes-label", "bgalazka-notes-parent", "bgalazka-notes-color", "bgalazka-notes-icon", "bgalazka-notes-parts", "bgalazka-notes-parts-opacity", "bgalazka-notes-agenda-folder", "bgalazka-notes-agenda-day", "bgalazka-notes-agenda-key", "bgalazka-notes-agenda-count", "bgalazka-notes-agenda-left", "bgalazka-notes-agenda-label"]) el.removeAttribute(attr);
         if (el.id) el.id = "zentral-released-" + el.id;
       }
       return true;
@@ -32170,6 +32170,17 @@
             const folder = agendaDayEl(entry.key); if (!folder) return false;
             folder.setAttribute("bgalazka-notes-agenda-label", entry.label);
             if (entry.count > 0) folder.setAttribute("bgalazka-notes-agenda-count", String(entry.count)); else folder.removeAttribute("bgalazka-notes-agenda-count");
+            // SB6.9: the day pill says what is still ahead ("2 of 5 left"), which is what a glance at the sidebar wants;
+            // the count itself stays the whole day, so nothing disappears from it.
+            if (Number.isFinite(entry.left) && entry.left !== entry.count) {
+              folder.setAttribute("bgalazka-notes-agenda-left", String(entry.left));
+              folder.setAttribute("bgalazka-notes-agenda-label", entry.label);
+              // The tooltip (a real title on a real folder) keeps the whole day, for a person who asks.
+              folder.setAttribute("title", t("sidebar.agenda.leftOfCount", { left: entry.left, count: entry.count }));
+            } else {
+              folder.removeAttribute("bgalazka-notes-agenda-left");
+              folder.removeAttribute("title");
+            }
             folder.setAttribute("label", entry.label);
             try { folder.label = entry.label; } catch (_) {}
             return true;

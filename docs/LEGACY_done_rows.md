@@ -197,6 +197,17 @@
   shrink (`zn-field-pair` is `repeat(2, minmax(0, 1fr))`, the field a shrinking grid item) and its size grid stops
   growing past 26px a cell on a wide card, which is what showed both scrollbars. `tests/notes-settings-layout.test.cjs`
   grew to 8 cases, including a text-size change and a sheet resize while a card is open. Full suite 221/221.
+- `SB6.9` (left counts) DONE (3.3.278) — The Agenda day pill now says what is still ahead. `agendaLeftCount` counts the
+  projected entries of a day that have not ended and are not done; an all-day entry is a day, not a moment, so it stays
+  left until the day is over. Both projection paths carry the same `left` — the stateless one and the incremental one —
+  and `tests/notes-agenda-incremental.test.cjs` (the randomized fuzz equality test) is what caught the first, wrong cut:
+  the stateless path had counted the raw items while the projector only ever sees the projected shape. There is now one
+  reader of one shape, and the two paths cannot drift. `left` is the only field a clock alone can change, so
+  `materializeDayBucket` takes the clock of the run doing the materializing rather than the previous run's `lastNow`.
+  The sidebar shows `left/count` only where something ended (a day that is all ahead keeps the plain count), and the
+  folder's title says it in words. The quiet-hours fold is **LEFT** in `SB6.9`: it needs a new preference in four files
+  and shares nothing with the count. `tests/notes-agenda-left-count.test.cjs` (8 cases: the pure rule, the two
+  projections agreeing, the real host's pill, and the CSS). Full suite 222/222.
 | #   | Track ID | Ref           | Item                                                         | Impact   | Effort | Implementation Plan & Dependencies                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | :-- | :------- | :------------ | :----------------------------------------------------------- | :------- | :----- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 20  | `T1.14`  | `Cycle G #37` | Inline `#tag` index & front-matter `tags:` unification       | Med      | M      | **DONE in 3.3.47.** Unified `inlineTags`, `noteTags` and `tagSummary` index YAML and inline tags case-insensitively; the Tags chip opens a counted menu, supports clearing/selection, and filters All and Recent views. Headings, code, URLs, HTML attributes/comments, hidden comments, inequalities and hex colours are excluded. Covered by `notes-audit-bugfixes.test.cjs` and existing list-view tests.                                                                                        |

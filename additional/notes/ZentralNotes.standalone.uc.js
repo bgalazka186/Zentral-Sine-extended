@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.275
+// @version 3.3.278
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.275, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.278, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.275";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.278";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2210,6 +2210,7 @@ const __zentralEmbeddedLoader = (function () {
       "sidebar.agenda.root.openCalendar": "Open calendar",
       "sidebar.agenda.root.refresh": "Refresh Agenda",
       "sidebar.agenda.root.settings": "Agenda settings",
+      "sidebar.agenda.leftOfCount": "{left} of {count} left today",
       "sidebar.agenda.root.hide": "Hide Agenda",
       "sidebar.agenda.itemUnavailable": "Agenda item no longer available",
       "sidebar.agenda.previewAria": "Agenda preview",
@@ -3192,6 +3193,7 @@ const __zentralEmbeddedLoader = (function () {
       "sidebar.agenda.root.openCalendar": "Otw\u00f3rz kalendarz",
       "sidebar.agenda.root.refresh": "Od\u015bwie\u017c Agend\u0119",
       "sidebar.agenda.root.settings": "Ustawienia Agendy",
+      "sidebar.agenda.leftOfCount": "pozosta\u0142o {left} z {count}",
       "sidebar.agenda.root.hide": "Ukryj Agend\u0119",
       "sidebar.agenda.itemUnavailable": "Element Agendy nie jest ju\u017c dost\u0119pny",
       "sidebar.agenda.previewAria": "Podgl\u0105d Agendy",
@@ -8692,6 +8694,27 @@ const __zentralEmbeddedLoader = (function () {
     }
     return Number.isFinite(next) ? next : null;
   }
+  // SB6.9: how many of these items are still ahead. A timed item counts while it has not ended; an all-day item or a
+  // reminder counts while its own moment has not passed, and a reminder without a time counts for the whole day.
+  // SB6.9: how many of these Agenda entries are still ahead. The input is always the projected shape (see
+  // `agendaZenItem`): it carries a number start and end and says itself whether it ended. An all-day entry is a day, not
+  // a moment, so it is left until that day is over; an entry that ended is not left. Done items never reach a bucket.
+  function agendaLeftCount(items, now) {
+    const stamp = Number(now);
+    if (!Number.isFinite(stamp) || !Array.isArray(items)) return 0;
+    let left = 0;
+    for (const item of items) {
+      if (!item) continue;
+      if (item.allDay) { left++; continue; }
+      if (typeof item.ended === "boolean") { if (!item.ended) left++; continue; }
+      // A shape without `ended`: fall back to its own start and end against the clock. An entry with neither cannot be
+      // placed on the clock, so it is not counted as left (rather than being counted for ever).
+      const start = Number(item.start), end = Number.isFinite(Number(item.end)) ? Number(item.end) : start;
+      if (!Number.isFinite(start) && !Number.isFinite(end)) continue;
+      if (!Number.isFinite(end) || end > stamp) left++;
+    }
+    return left;
+  }
   function agendaBuckets(items, now, days = 4, isDone = () => false, locale = undefined) {
     const n = Math.max(1, Math.min(31, Math.floor(Number(days)) || 4));
     const base = dayStart(now);
@@ -8699,7 +8722,7 @@ const __zentralEmbeddedLoader = (function () {
     for (let i = 0; i < n; i++) {
       const from = civilDayStart(base, i), to = civilDayStart(base, i + 1);
       const list = expandRange(items, from, to).filter((it) => !isDone(it));
-      out.push({ offset: i, key: localDateKey(from), label: agendaDayLabel(i, from, locale), from, to, count: list.length, items: list });
+      out.push({ offset: i, key: localDateKey(from), label: agendaDayLabel(i, from, locale), from, to, count: list.length, left: agendaLeftCount(list, now), items: list });
     }
     return out;
   }
@@ -8849,13 +8872,21 @@ const __zentralEmbeddedLoader = (function () {
       for (let offset = first; offset <= last && offset < n; offset++) buckets[offset].items.push(item);
     }
     for (const bucket of buckets) bucket.count = bucket.items.length;
-    return buckets.map((bucket) => ({
-      key: "day:" + bucket.key,
-      date: bucket.key,
-      label: bucket.label,
-      count: bucket.count,
-      items: bucket.items.map((item) => agendaZenItem(item, bucket.key, now, options?.lang)),
-    }));
+    // SB6.9: `left` is counted from the projected entries, never from the raw items: the incremental projector only has
+    // the projected shape, and a second reader of the raw shape is a second rule (the fuzz test in
+    // `tests/notes-agenda-incremental.test.cjs` is what found the difference).
+    return buckets.map((bucket) => {
+      const items = bucket.items.map((item) => agendaZenItem(item, bucket.key, now, options?.lang));
+      return {
+        key: "day:" + bucket.key,
+        date: bucket.key,
+        label: bucket.label,
+        count: bucket.count,
+        // What is still ahead: an entry that ended, or whose day is over, is not left. Done items never reached here.
+        left: agendaLeftCount(items, now),
+        items,
+      };
+    });
   }
   // SB6.10: Incremental Agenda projection.
   // Flat, allocation-light item version signature covering every field that affects
@@ -9017,7 +9048,9 @@ const __zentralEmbeddedLoader = (function () {
       return { rawOccurrences, dayMap, dayOffsets: [...dayMap.keys()], timedEnds };
     }
 
-    function materializeDayBucket(offset) {
+    // SB6.9: `left` is the one field of a bucket that the clock alone can change, so it is taken from the clock of the
+    // run doing the materializing rather than from the previous one (which is what `lastNow` still holds here).
+    function materializeDayBucket(offset, stamp = lastNow) {
       const entries = dayEntries[offset];
       const dateKey = ctx.dayKeys[offset];
       const items = new Array(entries.length);
@@ -9027,6 +9060,8 @@ const __zentralEmbeddedLoader = (function () {
         date: dateKey,
         label: ctx.dayLabels[offset],
         count: items.length,
+        // SB6.9: the same "still ahead" rule as the stateless projection, so an incremental run tells the same story.
+        left: agendaLeftCount(items, Number.isFinite(stamp) ? stamp : Date.now()),
         items,
       };
     }
@@ -9096,7 +9131,7 @@ const __zentralEmbeddedLoader = (function () {
       }
       for (let offset = 0; offset < n; offset++) {
         dayEntries[offset].sort(compareEntries);
-        materializeDayBucket(offset);
+        materializeDayBucket(offset, stamp);
       }
       recomputeEndBoundaries(stamp);
       lastNow = stamp;
@@ -9288,7 +9323,7 @@ const __zentralEmbeddedLoader = (function () {
           rebuilt.sort(compareEntries);
           dayEntries[offset] = rebuilt;
         }
-        materializeDayBucket(offset);
+        materializeDayBucket(offset, stamp);
       }
 
       if (changedIds.length || removedIds.length || stamp >= nextEndBoundary || stamp < prevEndBoundary) {
@@ -11313,7 +11348,7 @@ const __zentralEmbeddedLoader = (function () {
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, cleanHistoryFilter, filterHistoryRecords, historyPruneSurvey, exportHistoryLines, historySummaryLine, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_TABLE, HOLIDAY_TABLE_KINDS, holidayTableEntries, holidayTableYears, holidaySetCoverage, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, holidaySetsOf, NO_WORK_FREE, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaLeftCount, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -26601,7 +26636,7 @@ __zentralShim.register = function (def) {
       const foreign = [...(folder.querySelectorAll?.("tab") || [])].length > 0 || descendants.some((child) => restoredPseudoFolderKind(child) !== kind);
       if (!foreign) { try { folder.delete?.(); return true; } catch (_) { return false; } }
       for (const el of [folder, ...descendants].filter((child) => restoredPseudoFolderKind(child) === kind)) {
-        for (const attr of ["bgalazka-notes-folder", "bgalazka-notes-subfolder", "bgalazka-notes-label", "bgalazka-notes-parent", "bgalazka-notes-color", "bgalazka-notes-icon", "bgalazka-notes-parts", "bgalazka-notes-parts-opacity", "bgalazka-notes-agenda-folder", "bgalazka-notes-agenda-day", "bgalazka-notes-agenda-key", "bgalazka-notes-agenda-count", "bgalazka-notes-agenda-label"]) el.removeAttribute(attr);
+        for (const attr of ["bgalazka-notes-folder", "bgalazka-notes-subfolder", "bgalazka-notes-label", "bgalazka-notes-parent", "bgalazka-notes-color", "bgalazka-notes-icon", "bgalazka-notes-parts", "bgalazka-notes-parts-opacity", "bgalazka-notes-agenda-folder", "bgalazka-notes-agenda-day", "bgalazka-notes-agenda-key", "bgalazka-notes-agenda-count", "bgalazka-notes-agenda-left", "bgalazka-notes-agenda-label"]) el.removeAttribute(attr);
         if (el.id) el.id = "zentral-released-" + el.id;
       }
       return true;
@@ -44040,6 +44075,17 @@ __zentralShim.register = function (def) {
             const folder = agendaDayEl(entry.key); if (!folder) return false;
             folder.setAttribute("bgalazka-notes-agenda-label", entry.label);
             if (entry.count > 0) folder.setAttribute("bgalazka-notes-agenda-count", String(entry.count)); else folder.removeAttribute("bgalazka-notes-agenda-count");
+            // SB6.9: the day pill says what is still ahead ("2 of 5 left"), which is what a glance at the sidebar wants;
+            // the count itself stays the whole day, so nothing disappears from it.
+            if (Number.isFinite(entry.left) && entry.left !== entry.count) {
+              folder.setAttribute("bgalazka-notes-agenda-left", String(entry.left));
+              folder.setAttribute("bgalazka-notes-agenda-label", entry.label);
+              // The tooltip (a real title on a real folder) keeps the whole day, for a person who asks.
+              folder.setAttribute("title", t("sidebar.agenda.leftOfCount", { left: entry.left, count: entry.count }));
+            } else {
+              folder.removeAttribute("bgalazka-notes-agenda-left");
+              folder.removeAttribute("title");
+            }
             folder.setAttribute("label", entry.label);
             try { folder.label = entry.label; } catch (_) {}
             return true;
