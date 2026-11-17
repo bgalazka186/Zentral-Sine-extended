@@ -185,6 +185,63 @@ const test = async (name, fn) => { await fn(); console.log("ok -", name); };
     assert.equal(sheet.isOpen(), true);
   });
 
+  await test("UI4.11: Escape gives the keyboard back to the button that opened the menu", () => {
+    more.focus();
+    more.click();
+    const first = query(sheet.root, ".zn-menu button");
+    assert.notEqual(dom.state.activeElement, more, "opening the menu moves the focus into it");
+    first.dispatchEvent(new Ev("keydown", { key: "Escape", bubbles: true }));
+    assert.equal(menuOpen(sheet.root), false);
+    assert.equal(dom.state.activeElement, more, "the opener has the focus again");
+  });
+
+  await test("UI4.11: the sheet-level Escape path restores focus too", () => {
+    more.focus();
+    more.click();
+    assert.equal(menuOpen(sheet.root), true);
+    // The sheet's own key controller handles Escape when the focus sits outside the menu (the menu is open, no row
+    // focused): this is the path a person who opened the menu by pointer and pressed Escape actually takes.
+    sheet.root.dispatchEvent(new Ev("keydown", { key: "Escape", bubbles: true }));
+    assert.equal(menuOpen(sheet.root), false);
+    assert.equal(dom.state.activeElement, more);
+    assert.equal(sheet.isOpen(), true, "the sheet stays open");
+  });
+
+  await test("UI4.11: an action chosen from the menu keeps the focus usable afterwards", () => {
+    more.focus();
+    more.click();
+    // A plain action row: not a group opener, not the submenu's Back row, not a swatch or slider.
+    const row = all(sheet.root, ".zn-menu button").find((button) =>
+      button.classList.contains("zn-menu-item") && !button.classList.contains("zn-menu-group") && !button.classList.contains("zn-menu-back") &&
+      !button.disabled && button.getAttribute("aria-disabled") !== "true");
+    assert.ok(row, "the menu has a plain action");
+    row.click();
+    assert.equal(menuOpen(sheet.root), false);
+    assert.notEqual(dom.state.activeElement, row, "the focus is not left on the removed row");
+    assert.equal(dom.state.activeElement, more, "the opener takes it back");
+  });
+
+  await test("UI4.11: a pointer press elsewhere does not steal the focus", () => {
+    more.click();
+    assert.equal(menuOpen(sheet.root), true);
+    const otherControl = sheet.root.all().find((element) => element.title === "All notes (Ctrl+K)");
+    otherControl.focus();
+    dispatchWindow("pointerdown", otherControl);
+    assert.equal(menuOpen(sheet.root), false);
+    assert.equal(dom.state.activeElement, otherControl, "the control the person pressed keeps the focus");
+  });
+
+  await test("UI4.11: a menu with a geometry anchor (no element to focus) closes quietly", () => {
+    const surface = sheet.root.all().find((element) => element.classList?.contains("zn-chip") && element.textContent === "Trash");
+    surface.focus();
+    surface.dispatchEvent(new Ev("contextmenu", { bubbles: true, clientX: 80, clientY: 80 }));
+    const row = all(sheet.root, ".zn-menu button").find((button) => !button.disabled);
+    const escape = new Ev("keydown", { key: "Escape", bubbles: true });
+    row.dispatchEvent(escape);
+    assert.equal(escape.defaultPrevented, true);
+    assert.equal(menuOpen(sheet.root), false, "no exception and the menu is gone");
+  });
+
   await test("focus leaving a menu closes it, including a move to another control inside the sheet", () => {
     more.click();
     const first = query(sheet.root, ".zn-menu button");

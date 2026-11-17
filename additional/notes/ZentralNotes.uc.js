@@ -24043,10 +24043,15 @@
       listen(tocPill, "click", () => showOutline(tocPill));
 
       // ---- menus -----------------------------------------------------------------
-      function closeMenu() {
+      // UI4.11: a menu that goes away must give the keyboard back to what opened it. `restoreFocus: "keyboard"` is the
+      // Escape and Enter path (the person is navigating without a pointer); "action" also returns the focus after a
+      // row ran, because the row is gone with the menu. A pointer press elsewhere, a blur, a scroll or a toggle-close
+      // must not steal the focus the person just moved by hand.
+      function closeMenu({ restoreFocus = "", action = false } = {}) {
         if (!menu) return;
         const closing = menu;
         menu = null;
+        const wantsFocus = restoreFocus === "keyboard" || action;
         for (const stop of (closing.cleanups || []).splice(0).reverse()) {
           try {
             stop();
@@ -24055,6 +24060,14 @@
         try { if (closing.el.hasAttribute("popover")) closing.el.hidePopover?.(); } catch (_) {}
         closing.el.removeAttribute("popover");
         closing.el.remove();
+        if (wantsFocus) {
+          // Only a real element can take the focus: pointer-activated menus are anchored to plain geometry objects,
+          // and focus() on a detached element is a no-op by itself, so the opener needs no liveness test here.
+          const opener = closing.anchor;
+          if (opener && typeof opener.focus === "function") {
+            try { opener.focus({ preventScroll: true }); } catch (_) {}
+          }
+        }
         if (closing.calendar) queueCalendarBackgroundFlush();
       }
       // Keeps a menu fully inside both the sheet and the window: it is right-aligned to its anchor,
@@ -24206,7 +24219,7 @@
                 if (it.reason && !it.quietDisabled) b.append(h("small", { class: "zn-menu-reason" }, it.reason));
               } else {
                 b.addEventListener("click", () => {
-                  closeMenu();
+                  closeMenu({ action: true });
                   it.run();
                 });
               }
@@ -24221,7 +24234,7 @@
           if (ev.key === "Escape") {
             ev.preventDefault();
             ev.stopPropagation();
-            closeMenu();
+            closeMenu({ restoreFocus: "keyboard" });
             return;
           }
           if (ev.key === "Enter") {
@@ -27772,7 +27785,7 @@
           if (calendarNoteDrop || calendarDragNoteId || dragNoteId) { cancelNoteDrag(); e.preventDefault(); return; }
           if (armed.length && !dialog && !menu) disarm();
           else if (dialog) closeDialog();
-          else if (menu) closeMenu();
+          else if (menu) closeMenu({ restoreFocus: "keyboard" });
           else if (bigPicture) { lastBigPictureEsc = e; closeCalendarBigPicture({ restoreFocus: true }); }
           else if (findOpen) closeFind();
           else if (view === "list" && treeSelection.selected.size) clearTreeSelection();

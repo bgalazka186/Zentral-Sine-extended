@@ -110,6 +110,13 @@
   and per-day rules, the self-removal guard and the routing guard.
 ## Ordered Execution Backlog (DONE rows)
 
+- `UI4.11` DONE (3.3.267) — Escape now hands the keyboard back to whatever opened a sheet menu. `closeMenu` takes
+  `{ restoreFocus: "keyboard", action }`: both Escape paths (the menu's own keydown and the sheet-level controller that
+  runs when the focus is outside the menu) pass "keyboard", and a row that runs passes `action`, because that row leaves
+  with the menu. Outside pointer presses, blur, scroll and toggle-close deliberately do not take the focus, so a person
+  who moved it by hand keeps it. Menus anchored to plain geometry objects simply close: `closeMenu` only calls
+  `focus()` on an anchor that has one. `tests/notes-menu-lifecycle.test.cjs` gained four cases (opener focus on both
+  Escape paths, a chosen row, and the pointer press that must not steal focus) over the real menu controller.
 | Order | Global # | Track ID     | Status | Item                                                                                   | Dependencies & Remaining Scope                                                                                                                                               |
 | :---- | :------- | :----------- | :----- | :------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1     | Hotfix   | `B3.3.50-1`  | `DONE` | Hide/remove Agenda seed tabs and empty Agenda day folders                              | Empty days are omitted and retired; seed tabs are removed after creation or recreated with a labelled fallback when Zen deletes empty folders. Old seeds are swept.          |
