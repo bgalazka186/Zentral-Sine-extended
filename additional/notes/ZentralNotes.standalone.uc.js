@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.209
+// @version 3.3.210
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.209, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.210, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.209";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.210";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -17169,6 +17169,101 @@ __zentralShim.register = function (def) {
           }
           return { plan, entries, counts: plan.counts };
         },
+        // ---- Obsidian vault import (T1.19c) ----------------------------------------------------------
+        async importObsidianVault(rawEntries, { mode = "merge" } = {}) {
+          if (!dir) return { ok: false, error: "Notes storage folder is unavailable." };
+          await api.flush();
+          // Load existing asset bytes for local notes so identical re-imported attachments are reused without duplication.
+          const existingAssets = new Map();
+          if (io.readBytes) {
+            const inventory = await api.assetInventory().catch(() => []);
+            for (const rel of inventory) {
+              const entry = classifyBackupEntry(rel);
+              if (!entry || entry.kind !== "asset") continue;
+              try {
+                const bytes = await io.readBytes(io.join(dir, ASSET_DIR, entry.noteId, entry.file));
+                if (!(bytes instanceof Uint8Array)) continue;
+                let map = existingAssets.get(entry.noteId);
+                if (!map) { map = new Map(); existingAssets.set(entry.noteId, map); }
+                map.set(entry.file, bytes);
+              } catch (_) {}
+            }
+          }
+          const plan = planObsidianVaultImport(rawEntries, {
+            existingNotes: notes,
+            existingFolders: meta.folders,
+            existingAssets,
+            mode,
+            nowMs: now(),
+          });
+          if (!plan.ok) return plan;
+          let writtenAssets = 0;
+          for (const asset of plan.assetsToWrite) {
+            if (!io.makeDir || !io.writeBytes) break;
+            try {
+              const folder = io.join(dir, ASSET_DIR, asset.noteId);
+              await io.makeDir(folder);
+              await io.writeBytes(io.join(folder, asset.file), asset.bytes);
+              writtenAssets++;
+            } catch (error) {
+              warn(error);
+            }
+          }
+          const createdIds = [], updatedIds = [];
+          let skippedCount = plan.counts.skip;
+          for (const entry of plan.notes) {
+            if (entry.action !== "create" && entry.action !== "update") continue;
+            if (entry.backupDisplaced) {
+              const existing = notes.get(entry.id);
+              if (existing) {
+                try {
+                  const backupPath = await backupConflictText(existing.id, serializeNote(existing));
+                  if (!backupPath) { skippedCount++; continue; }
+                } catch (error) {
+                  warn(error);
+                  skippedCount++;
+                  continue;
+                }
+              }
+            }
+            const stored = decorateNoteOwnership(
+              { ...entry.note, _onDisk: false, _mtime: entry.note.updated || now() },
+              { ownerSpaceId: activeSpaceId, ownerDir: dir, foreign: false },
+            );
+            notes.set(stored.id, stored);
+            markDirty(stored.id);
+            if (entry.action === "create") createdIds.push(stored.id);
+            else updatedIds.push(stored.id);
+          }
+          // Flush note text to disk before syncing calendar items (UI4.7).
+          await flushDirty();
+          for (const id of [...createdIds, ...updatedIds]) {
+            syncItems(id, false, false);
+          }
+          if (plan.foldersChanged) {
+            const withUids = ensureFolderUids(plan.mergedFolders, [...notes.values()]);
+            setMeta({ folders: withUids.folders });
+          } else {
+            const withUids = ensureFolderUids(meta.folders, [...notes.values()]);
+            if (withUids.changed) setMeta({ folders: withUids.folders });
+          }
+          await api.flush();
+          emit("reset", "");
+          emit("tree", "");
+          return {
+            ok: true,
+            mode: plan.mode,
+            createdIds,
+            updatedIds,
+            counts: {
+              ...plan.counts,
+              create: createdIds.length,
+              update: updatedIds.length,
+              skip: skippedCount,
+              assets: writtenAssets,
+            },
+          };
+        },
         // The UI calls this only after an explicit confirmation. Recheck references at deletion time;
         // includes Trash and all open windows' latest in-memory note set in this store instance.
         async removeAsset(rel) {
@@ -19760,7 +19855,7 @@ __zentralShim.register = function (def) {
       return out;
     }
     function insideInlineObsidianComment(line, offset) {
-      const re = /%%[^%\n]*%%/g;
+      const re = /%%(?:(?!%%)[^\n])*%%/g;
       for (let m; (m = re.exec(line)); ) {
         if (offset >= m.index && offset < m.index + m[0].length) return true;
         if (m.index > offset) break;
@@ -19770,7 +19865,7 @@ __zentralShim.register = function (def) {
     function mapOutsideObsidianComments(segment, fn) {
       if (!segment.includes("%%")) return fn(segment);
       let out = "", last = 0;
-      const re = /%%[^%\n]*%%/g;
+      const re = /%%(?:(?!%%)[^\n])*%%/g;
       for (let m; (m = re.exec(segment)); ) {
         if (m.index > last) out += fn(segment.slice(last, m.index));
         out += m[0];
@@ -19974,6 +20069,590 @@ __zentralShim.register = function (def) {
         appConfigText,
         pathPlan,
         counts: { notes: files.length, folders: pathPlan.folders.length, assets: assetMap.size },
+      };
+    }
+
+    // ---- Obsidian vault import (T1.19c) ------------------------------------------------------------
+    // Pure vault inspection, YAML front-matter unwrapping, folder mapping, link/asset rewriting, and
+    // non-duplicating merge/overwrite planning (matches by zentral_id first, then obsidian_path).
+    const OBSIDIAN_IMPORT_MAX_FILES = 2000;
+    const OBSIDIAN_IMPORT_MAX_TOTAL_BYTES = 256 * 1024 * 1024;
+    const OBSIDIAN_IMPORT_MAX_DEPTH = 16;
+    function unquoteYamlScalar(raw) {
+      const s = String(raw ?? "").trim();
+      if (!s) return "";
+      if (s.startsWith('"') && s.endsWith('"') && s.length >= 2) {
+        try { return String(JSON.parse(s)); } catch (_) { return s.slice(1, -1); }
+      }
+      if (s.startsWith("'") && s.endsWith("'") && s.length >= 2) {
+        return s.slice(1, -1).replace(/''/g, "'");
+      }
+      return s;
+    }
+    function extractObsidianPathFromForeign(foreign) {
+      if (typeof foreign !== "string" || !foreign.trim()) return "";
+      for (const entry of splitYamlEntries(foreign)) {
+        if (entry.keyLower !== "obsidian_path") continue;
+        const m = /^[^:]+:\s*(.*)$/.exec(entry.lines[0] || "");
+        const val = m ? cleanVaultRelPath(unquoteYamlScalar(m[1])) : "";
+        if (val) return val;
+      }
+      return "";
+    }
+    function parseObsidianFrontMatter(rawText, relPath = "") {
+      const text = normalizeNewlines(String(rawText ?? "")).replace(/^\uFEFF/, "");
+      const fm = leadingFrontMatter(text);
+      const body = fm ? text.split("\n").slice(fm.lines).join("\n") : text;
+      const meta = {
+        zentralId: "",
+        created: 0,
+        updated: 0,
+        color: "none",
+        label: "",
+        pinned: false,
+        flavor: "",
+        remind: 0,
+        obsidianPath: "",
+      };
+      const foreignEntries = [];
+      const OBS_OWNED_KEYS = new Set([
+        "zentral_id", "zentral_color", "zentral_label", "zentral_pinned", "zentral_flavor", "zentral_remind",
+        "obsidian_path", "id", "created", "updated", "touched", "color", "label", "folder", "pinned", "flavor", "trashed", "remind", "reminded",
+      ]);
+      if (fm) {
+        for (const entry of splitYamlEntries(fm.raw)) {
+          const k = entry.keyLower;
+          const m = /^[^:]+:\s*(.*)$/.exec(entry.lines[0] || "");
+          const val = m ? unquoteYamlScalar(m[1]) : "";
+          if (k === "zentral_id" || k === "id") {
+            if (!meta.zentralId && val && NOTE_ID_RE.test(val) && !val.includes("..")) meta.zentralId = val;
+          } else if (k === "created") {
+            const t = toTime(val, 0); if (t > 0) meta.created = t;
+          } else if (k === "updated") {
+            const t = toTime(val, 0); if (t > 0) meta.updated = t;
+          } else if (k === "zentral_color" || k === "color") {
+            const c = cleanNoteColor(val); if (c && c !== "none") meta.color = c;
+          } else if (k === "zentral_label" || k === "label") {
+            const l = cleanLabel(val); if (l) meta.label = l;
+          } else if (k === "zentral_pinned" || k === "pinned") {
+            if (val.toLowerCase() === "true") meta.pinned = true;
+          } else if (k === "zentral_flavor" || k === "flavor") {
+            if (FLAVORS_PART && FLAVORS_PART.MODES.includes(val)) meta.flavor = val;
+          } else if (k === "zentral_remind" || k === "remind") {
+            const r = cleanRemind(toTime(val, 0)); if (r > 0) meta.remind = r;
+          } else if (k === "obsidian_path") {
+            const p = cleanVaultRelPath(val); if (p) meta.obsidianPath = p;
+          } else if (!OBS_OWNED_KEYS.has(k)) {
+            foreignEntries.push(entry);
+          }
+        }
+      }
+      const cleanRel = cleanVaultRelPath(relPath);
+      const foreignLines = [];
+      for (const entry of foreignEntries) foreignLines.push(...entry.lines);
+      if (cleanRel) foreignLines.push("obsidian_path: " + obsidianYamlScalar(cleanRel, { forceString: true }));
+      const foreignRaw = foreignLines.join("\n").trim();
+      const foreign = foreignRaw.length <= MAX_FOREIGN_CHARS ? foreignRaw : foreignRaw.slice(0, MAX_FOREIGN_CHARS);
+      return { meta, body, foreign };
+    }
+    function classifyObsidianVaultEntry(rawPath) {
+      const clean = cleanVaultRelPath(rawPath);
+      if (!clean) return null;
+      const parts = clean.split("/");
+      if (parts.length > OBSIDIAN_IMPORT_MAX_DEPTH + 1) return null;
+      if (clean.toLowerCase() === ".obsidian/app.json") return { kind: "app-config", path: clean };
+      if (parts.some((seg) => seg.startsWith("."))) return null;
+      const fileName = parts[parts.length - 1];
+      const dirPath = parts.slice(0, -1).join("/");
+      if (/\.md$/i.test(fileName)) {
+        const baseName = fileName.slice(0, -3);
+        if (!baseName) return null;
+        return { kind: "note", path: clean, dirPath, fileName, baseName, vaultTarget: dirPath ? dirPath + "/" + baseName : baseName };
+      }
+      const safeName = cleanAssetFileName(fileName, "");
+      if (!safeName) return null;
+      const probe = "assets/a/" + safeName;
+      const img = parseAssetLink(probe);
+      const vid = img ? null : parseVideoAssetLink(probe);
+      const doc = img || vid ? null : parseFileAssetLink(probe);
+      const parsed = img || vid || doc;
+      if (!parsed) return null;
+      return {
+        kind: "asset",
+        assetKind: img ? "image" : vid ? "video" : "file",
+        mime: parsed.mime,
+        path: clean,
+        dirPath,
+        fileName,
+        safeName: parsed.file,
+      };
+    }
+    function bytesEqual(a, b) {
+      if (!(a instanceof Uint8Array) || !(b instanceof Uint8Array) || a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+      return true;
+    }
+    function resolveRelativeVaultPath(baseDir, rawTarget) {
+      let decoded = String(rawTarget ?? "").trim();
+      try { decoded = decodeURIComponent(decoded); } catch (_) {}
+      decoded = decoded.replace(/\\/g, "/").replace(/^\/+/, "");
+      if (!decoded) return "";
+      const out = baseDir && (decoded.startsWith("./") || decoded.startsWith("../") || !decoded.includes("/"))
+        ? baseDir.split("/").filter(Boolean)
+        : [];
+      for (const seg of decoded.split("/")) {
+        if (!seg || seg === ".") continue;
+        if (seg === "..") { if (!out.length) return ""; out.pop(); }
+        else out.push(seg);
+      }
+      return cleanVaultRelPath(out.join("/"));
+    }
+    function planObsidianVaultImport(rawEntries = [], {
+      existingNotes = [],
+      existingFolders = [],
+      existingAssets = new Map(),
+      mode = "merge",
+      nowMs = Date.now(),
+      makeIdFn = makeId,
+      rand = Math.random,
+    } = {}) {
+      if (!Array.isArray(rawEntries)) return { ok: false, error: "Invalid Obsidian vault entries." };
+      if (rawEntries.length > OBSIDIAN_IMPORT_MAX_FILES) return { ok: false, error: "Vault has too many files (limit " + OBSIDIAN_IMPORT_MAX_FILES + ")." };
+      const cleanMode = mode === "overwrite" ? "overwrite" : "merge";
+      const dec = new TextDecoder("utf-8", { fatal: false });
+      const seenPaths = new Set();
+      let totalBytes = 0, skippedEntries = 0, invalidAssets = 0;
+      let attachmentFolderPath = "";
+      const rawNotes = [];
+      const validAssets = [];
+      for (const raw of rawEntries) {
+        const bytes = raw?.bytes instanceof Uint8Array ? raw.bytes : null;
+        if (!bytes) { skippedEntries++; continue; }
+        totalBytes += bytes.length;
+        if (totalBytes > OBSIDIAN_IMPORT_MAX_TOTAL_BYTES) return { ok: false, error: "Obsidian vault exceeds the maximum import size." };
+        const info = classifyObsidianVaultEntry(raw?.path);
+        if (!info) { skippedEntries++; continue; }
+        const pathKey = info.path.toLowerCase();
+        if (seenPaths.has(pathKey)) { skippedEntries++; continue; }
+        seenPaths.add(pathKey);
+        if (info.kind === "app-config") {
+          try {
+            const cfg = JSON.parse(dec.decode(bytes));
+            if (cfg && typeof cfg.attachmentFolderPath === "string") {
+              attachmentFolderPath = cleanVaultRelPath(cfg.attachmentFolderPath.replace(/^\.\/+/, "").replace(/\/+$/, ""));
+            }
+          } catch (_) {}
+        } else if (info.kind === "note") {
+          if (bytes.length > MAX_IMPORT_BYTES) { skippedEntries++; continue; }
+          rawNotes.push({ info, text: dec.decode(bytes), mtime: Math.max(0, Number(raw?.mtime) || 0) || nowMs });
+        } else if (info.kind === "asset") {
+          if (!validateBackupAssetBytes(info, bytes).ok) { invalidAssets++; continue; }
+          validAssets.push({ ...info, bytes });
+        }
+      }
+      if (!rawNotes.length) return { ok: false, error: "No Markdown notes found in that folder." };
+
+      // Index existing local notes (never match OW-18 foreign shared notes) by id and by obsidian_path.
+      const existingLocal = (existingNotes instanceof Map ? [...existingNotes.values()] : Array.isArray(existingNotes) ? existingNotes : [])
+        .filter((n) => n && !n._sharedFromOtherSpace);
+      const existingById = new Map();
+      const existingByObsPath = new Map();
+      for (const n of existingLocal) {
+        existingById.set(n.id, n);
+        const op = extractObsidianPathFromForeign(n.foreign);
+        if (op && !existingByObsPath.has(op.toLowerCase())) existingByObsPath.set(op.toLowerCase(), n);
+      }
+
+      // Build folder mapping while reusing existing folders by parent+label and mapping top-level Agenda -> daily.
+      let mergedFolders = cleanFolders(existingFolders);
+      const folderMap = new Map(); // vaultDirPathLower -> zentralFolderId
+      const ensureVaultFolder = (dirPath) => {
+        if (!dirPath) return "";
+        const key = dirPath.toLowerCase();
+        if (folderMap.has(key)) return folderMap.get(key);
+        const rawSegs = dirPath.split("/").filter(Boolean);
+        const segs = rawSegs.length <= FOLDER_MAX_DEPTH
+          ? rawSegs
+          : [...rawSegs.slice(0, FOLDER_MAX_DEPTH - 1), rawSegs.slice(FOLDER_MAX_DEPTH - 1).join(" / ")];
+        let parentId = "";
+        for (let i = 0; i < segs.length; i++) {
+          const label = segs[i].replace(/[\r\n\t]+/g, " ").trim().slice(0, FOLDER_LABEL_MAX) || "Folder";
+          if (i === 0 && label.toLowerCase() === DATE_FOLDER_LABEL.toLowerCase()) {
+            const hasNonDailyAgenda = mergedFolders.some((f) => parentOfFolder(f.id) === "" && f.id !== DATE_FOLDER && f.label.toLowerCase() === label.toLowerCase());
+            if (!hasNonDailyAgenda) {
+              if (!mergedFolders.some((f) => f.id === DATE_FOLDER)) {
+                const patched = patchFolderMeta(mergedFolders, DATE_FOLDER, { label: DATE_FOLDER_LABEL }, rand);
+                if (patched) mergedFolders = patched;
+              }
+              parentId = DATE_FOLDER;
+              continue;
+            }
+          }
+          const existing = mergedFolders.find((f) => parentOfFolder(f.id) === parentId && (f.label.toLowerCase() === label.toLowerCase() || lastSeg(f.id).toLowerCase() === label.toLowerCase()));
+          if (existing) {
+            parentId = existing.id;
+          } else {
+            const added = addFolderMeta(mergedFolders, existingLocal, parentId, label, rand);
+            if (!added) break;
+            mergedFolders = added.folders;
+            parentId = added.id;
+          }
+        }
+        folderMap.set(key, parentId);
+        return parentId;
+      };
+
+      // Pass 1: parse front matter, match existing note IDs, assign folders & preliminary bodies/headings.
+      const usedIds = new Set(existingById.keys());
+      const parsedNotes = [];
+      for (const item of rawNotes) {
+        const { meta, body, foreign } = parseObsidianFrontMatter(item.text, item.info.path);
+        const matched = (meta.zentralId && existingById.get(meta.zentralId))
+          || existingByObsPath.get(item.info.path.toLowerCase())
+          || (meta.obsidianPath ? existingByObsPath.get(meta.obsidianPath.toLowerCase()) : null)
+          || null;
+        let id = matched ? matched.id : (meta.zentralId && !usedIds.has(meta.zentralId) ? meta.zentralId : "");
+        if (!id) {
+          do { id = makeIdFn(); } while (!id || usedIds.has(id));
+        }
+        usedIds.add(id);
+        const folder = ensureVaultFolder(item.info.dirPath);
+        let preparedBody = body;
+        const firstNonEmpty = preparedBody.split("\n").find((l) => l.trim().length > 0) || "";
+        const hasHeading = /^ {0,3}#{1,6}[ \t]+\S/.test(firstNonEmpty);
+        if (!firstNonEmpty) {
+          preparedBody = "# " + item.info.baseName + "\n";
+        } else if (!hasHeading && cleanLine(firstNonEmpty).toLowerCase() !== item.info.baseName.toLowerCase()) {
+          preparedBody = "# " + item.info.baseName + "\n\n" + preparedBody;
+        }
+        parsedNotes.push({
+          id,
+          matched,
+          relPath: item.info.path,
+          dirPath: item.info.dirPath,
+          baseName: item.info.baseName,
+          vaultTarget: item.info.vaultTarget,
+          folder,
+          meta,
+          foreign,
+          rawBody: preparedBody,
+          headings: headingsOf(preparedBody),
+          mtime: item.mtime,
+        });
+      }
+
+      // Build vault note & asset resolution tables.
+      const noteByRel = new Map();
+      const noteByTarget = new Map();
+      const notesByBase = new Map();
+      for (const pn of parsedNotes) {
+        noteByRel.set(pn.relPath.toLowerCase(), pn);
+        noteByTarget.set(pn.vaultTarget.toLowerCase(), pn);
+        const bk = pn.baseName.toLowerCase();
+        if (!notesByBase.has(bk)) notesByBase.set(bk, []);
+        notesByBase.get(bk).push(pn);
+      }
+      const assetByRel = new Map();
+      const assetsByName = new Map();
+      for (const asset of validAssets) {
+        assetByRel.set(asset.path.toLowerCase(), asset);
+        const nk = asset.fileName.toLowerCase();
+        if (!assetsByName.has(nk)) assetsByName.set(nk, []);
+        assetsByName.get(nk).push(asset);
+      }
+      const resolveVaultAsset = (rawRef, currentDir) => {
+        let ref = String(rawRef ?? "").trim();
+        if (!ref || /^(?:https?:|mailto:|data:)/i.test(ref)) return null;
+        try { ref = decodeURIComponent(ref); } catch (_) {}
+        ref = ref.replace(/\\/g, "/").replace(/[?#][\s\S]*$/, "").trim();
+        if (!ref) return null;
+        // 1. Direct relative path from current note's directory
+        const relCandidate = resolveRelativeVaultPath(currentDir, ref);
+        if (relCandidate && assetByRel.has(relCandidate.toLowerCase())) return assetByRel.get(relCandidate.toLowerCase());
+        // 2. Direct path from vault root
+        const rootCandidate = cleanVaultRelPath(ref.replace(/^\/+/, ""));
+        if (rootCandidate && assetByRel.has(rootCandidate.toLowerCase())) return assetByRel.get(rootCandidate.toLowerCase());
+        // 3. Inside configured attachmentFolderPath
+        if (attachmentFolderPath) {
+          const attCandidate = cleanVaultRelPath(attachmentFolderPath + "/" + ref.replace(/^\/+/, ""));
+          if (attCandidate && assetByRel.has(attCandidate.toLowerCase())) return assetByRel.get(attCandidate.toLowerCase());
+        }
+        // 4. Shortest-path basename match (prefer same dir -> attachmentFolderPath -> first)
+        const base = ref.split("/").pop().toLowerCase();
+        const hits = assetsByName.get(base);
+        if (!hits || !hits.length) return null;
+        if (hits.length === 1) return hits[0];
+        const sameDir = hits.find((a) => a.dirPath.toLowerCase() === currentDir.toLowerCase());
+        if (sameDir) return sameDir;
+        if (attachmentFolderPath) {
+          const inAtt = hits.find((a) => a.dirPath.toLowerCase() === attachmentFolderPath.toLowerCase());
+          if (inAtt) return inAtt;
+        }
+        return hits[0];
+      };
+      const resolveVaultNote = (rawHref, currentDir) => {
+        let ref = String(rawHref ?? "").trim();
+        if (!ref || /^(?:https?:|mailto:|data:)/i.test(ref)) return null;
+        let hash = "";
+        const hIdx = ref.indexOf("#");
+        if (hIdx >= 0) { hash = ref.slice(hIdx + 1); ref = ref.slice(0, hIdx); }
+        try { ref = decodeURIComponent(ref); } catch (_) {}
+        try { hash = decodeURIComponent(hash); } catch (_) {}
+        if (!/\.md$/i.test(ref)) return null;
+        const rel = resolveRelativeVaultPath(currentDir, ref);
+        let hit = rel ? noteByRel.get(rel.toLowerCase()) : null;
+        if (!hit) {
+          const root = cleanVaultRelPath(ref.replace(/^\/+/, ""));
+          if (root) hit = noteByRel.get(root.toLowerCase()) || null;
+        }
+        if (!hit) {
+          const base = ref.split("/").pop().replace(/\.md$/i, "").toLowerCase();
+          const list = notesByBase.get(base);
+          if (list && list.length === 1) hit = list[0];
+        }
+        if (!hit) return null;
+        let headingAnchor = "";
+        if (hash) {
+          const found = hit.headings.find((h) => h.text.toLowerCase() === hash.toLowerCase() || h.slug === hash.toLowerCase());
+          headingAnchor = found ? found.slug : headingSlug(hash);
+        }
+        return { note: hit, headingSlug: headingAnchor };
+      };
+
+      // Pass 2: convert bodies, allocate per-note assets (reusing identical existing assets), decide merge/overwrite actions.
+      const assetsToWrite = [];
+      const plannedNotes = [];
+      const counts = { total: parsedNotes.length, create: 0, update: 0, unchanged: 0, skip: 0, assets: 0, invalidAssets, skippedEntries };
+
+      for (const pn of parsedNotes) {
+        const noteExistingAssets = existingAssets instanceof Map ? (existingAssets.get(pn.id) || new Map()) : new Map();
+        const usedAssetNames = [...noteExistingAssets.keys()];
+        const allocatedForNote = new Map(); // vaultAssetPathLower -> { file, asset, isNew }
+        const pendingNoteAssets = [];
+
+        const attachVaultAsset = (asset) => {
+          const ak = asset.path.toLowerCase();
+          if (allocatedForNote.has(ak)) return allocatedForNote.get(ak);
+          // Reuse existing asset file on disk if bytes match identically (prevents duplicate files on re-import).
+          for (const [exName, exBytes] of noteExistingAssets.entries()) {
+            if (exName.toLowerCase() === asset.safeName.toLowerCase() && bytesEqual(exBytes, asset.bytes)) {
+              const reused = { file: exName, asset, isNew: false };
+              allocatedForNote.set(ak, reused);
+              return reused;
+            }
+          }
+          for (const [exName, exBytes] of noteExistingAssets.entries()) {
+            if (bytesEqual(exBytes, asset.bytes)) {
+              const reused = { file: exName, asset, isNew: false };
+              allocatedForNote.set(ak, reused);
+              return reused;
+            }
+          }
+          const destFile = uniqueAssetFileName(asset.safeName, usedAssetNames);
+          if (!destFile) return null;
+          usedAssetNames.push(destFile);
+          const rec = { file: destFile, asset, isNew: true };
+          allocatedForNote.set(ak, rec);
+          pendingNoteAssets.push({ noteId: pn.id, file: destFile, bytes: asset.bytes, rel: assetRel(pn.id, destFile), srcPath: asset.path });
+          return rec;
+        };
+
+        const convertSegment = (segment) => mapOutsideObsidianComments(segment, (plain) => {
+          const protectedAt = exportProtectedPositions(plain, []);
+          // 1. Convert Obsidian attachment embeds ![[img.png|Alt|420]], ![[clip.mp4|480]], ![[spec.pdf]]
+          let out = plain.replace(/!\[\[([^\[\]\n]{1,240})\]\]/g, (raw, inner, offset) => {
+            for (const i of [offset, offset + 1, offset + 2, offset + raw.length - 2, offset + raw.length - 1]) if (protectedAt.has(i)) return raw;
+            const segs = inner.split("|").map((s) => s.trim());
+            const target = segs[0] || "";
+            if (!target) return raw;
+            const asset = resolveVaultAsset(target, pn.dirPath);
+            if (!asset) return raw;
+            let width = 0, altParts = [];
+            for (let k = 1; k < segs.length; k++) {
+              const sizeM = /^(\d{1,4})(?:x\d{1,4})?$/.exec(segs[k]);
+              if (sizeM && k === segs.length - 1) width = Math.max(32, Math.min(1600, Number(sizeM[1])));
+              else if (segs[k]) altParts.push(segs[k]);
+            }
+            const alt = altParts.join(" ").trim();
+            const alloc = attachVaultAsset(asset);
+            if (!alloc) return raw;
+            if (asset.assetKind === "image") {
+              const rel = assetRel(pn.id, alloc.file) + (width > 0 ? "#w=" + width : "");
+              return "![" + alt + "](" + rel + ")";
+            }
+            if (asset.assetKind === "video") {
+              return "![[" + alloc.file + (width > 0 ? "|" + width : "") + "]]";
+            }
+            return "[" + (alt || alloc.file) + "](" + assetRel(pn.id, alloc.file) + ")";
+          });
+          // 2. Convert attachment wikilinks [[spec.pdf|Spec PDF]] -> [Spec PDF](assets/<id>/spec.pdf)
+          const protectedWiki = exportProtectedPositions(out, []);
+          out = out.replace(WIKI_RE, (raw, target, alias, offset) => {
+            for (const i of [offset, offset + 1, offset + raw.length - 2, offset + raw.length - 1]) if (protectedWiki.has(i)) return raw;
+            const asset = resolveVaultAsset(target, pn.dirPath);
+            if (!asset) return raw;
+            const alloc = attachVaultAsset(asset);
+            if (!alloc) return raw;
+            const label = (alias ? alias.trim() : "") || alloc.file;
+            return "[" + label + "](" + assetRel(pn.id, alloc.file) + ")";
+          });
+          return out;
+        });
+
+        // Protect multi-line %% ... %% Obsidian comment blocks
+        const lines = pn.rawBody.split("\n");
+        const outChunks = [];
+        let buf = [], inObsComment = false, fence = null;
+        const flushBuf = () => {
+          if (!buf.length) return;
+          const text = buf.join("\n");
+          buf = [];
+          outChunks.push(mapMarkdownForExport(
+            text,
+            (segment) => convertSegment(segment),
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            { flavor: pn.meta.flavor || "obsidian" },
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            (info) => {
+              if (insideInlineObsidianComment(info.line, info.start)) return null;
+              const inner = info.destWithParens.slice(1, -1).trim();
+              const destMatch = /^(<[^>\n]+>|[^\s)]+)([\s\S]*)$/.exec(inner);
+              if (!destMatch) return null;
+              const src = unAngle(destMatch[1]);
+              if (parseAssetLink(src) || parseVideoAssetLink(src)) return null;
+              const asset = resolveVaultAsset(src, pn.dirPath);
+              if (!asset) return null;
+              const alloc = attachVaultAsset(asset);
+              if (!alloc) return null;
+              const sizeM = /\|(\d{1,4})(?:x\d{1,4})?$/.exec(info.alt);
+              const width = sizeM ? Math.max(32, Math.min(1600, Number(sizeM[1]))) : 0;
+              const cleanAlt = (sizeM ? info.alt.slice(0, sizeM.index) : info.alt).trim();
+              if (asset.assetKind === "image") {
+                return "![" + cleanAlt + "](" + assetRel(pn.id, alloc.file) + (width > 0 ? "#w=" + width : "") + ")";
+              }
+              if (asset.assetKind === "video") {
+                return "![[" + alloc.file + (width > 0 ? "|" + width : "") + "]]";
+              }
+              return "[" + (cleanAlt || alloc.file) + "](" + assetRel(pn.id, alloc.file) + ")";
+            },
+            (info) => {
+              if (insideInlineObsidianComment(info.line, info.start)) return null;
+              const inner = info.destWithParens.slice(1, -1).trim();
+              const destMatch = /^(<[^>\n]+>|[^\s)]+)([\s\S]*)$/.exec(inner);
+              if (!destMatch) return null;
+              const src = unAngle(destMatch[1]);
+              if (parseFileAssetLink(src) || parseAssetLink(src) || parseVideoAssetLink(src)) return null;
+              const asset = resolveVaultAsset(src, pn.dirPath);
+              if (asset) {
+                const alloc = attachVaultAsset(asset);
+                if (!alloc) return null;
+                return "[" + (info.label.trim() || alloc.file) + "](" + assetRel(pn.id, alloc.file) + ")";
+              }
+              // Leave already-canonical Zentral note links targeting an existing note alone
+              const existingCanonical = noteLinkParts(src);
+              if (existingCanonical && (usedIds.has(existingCanonical.id) || existingById.has(existingCanonical.id))) return null;
+              const noteHit = resolveVaultNote(src, pn.dirPath);
+              if (!noteHit) return null;
+              const targetHref = noteHit.note.id + ".md" + (noteHit.headingSlug ? "#" + noteHit.headingSlug : "");
+              return "[" + info.label + "](" + targetHref + ")";
+            },
+          ));
+        };
+        for (const line of lines) {
+          if (!inObsComment) {
+            const wasFenced = !!fence, next = nextMarkdownFence(line, fence);
+            if (wasFenced || next) { fence = next; buf.push(line); continue; }
+            if (/^\s*%%\s*$/.test(line)) { flushBuf(); inObsComment = true; outChunks.push(line); continue; }
+            buf.push(line);
+          } else {
+            outChunks.push(line);
+            if (/^\s*%%\s*$/.test(line)) inObsComment = false;
+          }
+        }
+        flushBuf();
+        const convertedBody = outChunks.join("\n");
+
+        const incomingUpdated = Math.max(pn.meta.updated || 0, pn.mtime || 0) || nowMs;
+        const incomingCreated = pn.meta.created || pn.mtime || nowMs;
+        const nextNote = {
+          id: pn.id,
+          body: convertedBody,
+          created: pn.matched ? (pn.matched.created || incomingCreated) : incomingCreated,
+          updated: incomingUpdated,
+          touched: true,
+          color: pn.meta.color !== "none" ? pn.meta.color : (pn.matched ? pn.matched.color : "none"),
+          label: pn.meta.label || (pn.matched ? pn.matched.label : ""),
+          folder: pn.folder,
+          pinned: pn.meta.pinned || (pn.matched ? !!pn.matched.pinned : false),
+          flavor: pn.meta.flavor || (pn.matched ? (pn.matched.flavor || "") : ""),
+          trashed: 0,
+          remind: pn.meta.remind || (pn.matched ? (pn.matched.remind || 0) : 0),
+          reminded: pn.matched ? (pn.matched.reminded || 0) : 0,
+          foreign: pn.foreign,
+        };
+
+        let action = "create";
+        if (pn.matched) {
+          const ex = pn.matched;
+          if (ex.trashed && cleanMode === "merge") {
+            action = "skip";
+          } else {
+            const sameContent =
+              normalizeNewlines(String(ex.body ?? "")) === normalizeNewlines(nextNote.body) &&
+              cleanFolder(ex.folder) === cleanFolder(nextNote.folder) &&
+              cleanNoteColor(ex.color) === cleanNoteColor(nextNote.color) &&
+              cleanLabel(ex.label) === cleanLabel(nextNote.label) &&
+              !!ex.pinned === !!nextNote.pinned &&
+              (ex.flavor || "") === (nextNote.flavor || "") &&
+              (ex.remind || 0) === (nextNote.remind || 0) &&
+              String(ex.foreign || "").trim() === String(nextNote.foreign || "").trim() &&
+              !ex.trashed &&
+              pendingNoteAssets.length === 0;
+            if (sameContent) {
+              action = "unchanged";
+            } else if (cleanMode === "overwrite" || incomingUpdated > (ex.updated || 0)) {
+              action = "update";
+            } else {
+              action = "skip";
+            }
+          }
+        }
+        counts[action]++;
+        if (action === "create" || action === "update") {
+          for (const a of pendingNoteAssets) { assetsToWrite.push(a); counts.assets++; }
+        }
+        plannedNotes.push({
+          id: pn.id,
+          relPath: pn.relPath,
+          folder: pn.folder,
+          body: convertedBody,
+          note: nextNote,
+          action,
+          backupDisplaced: action === "update" && !!pn.matched,
+        });
+      }
+
+      const withUids = ensureFolderUids(mergedFolders, existingLocal, rand);
+      const finalFolders = withUids.folders;
+      const foldersChanged = JSON.stringify(cleanFolders(existingFolders)) !== JSON.stringify(cleanFolders(finalFolders));
+      return {
+        ok: true,
+        mode: cleanMode,
+        attachmentFolderPath,
+        notes: plannedNotes,
+        assetsToWrite,
+        mergedFolders: finalFolders,
+        foldersChanged,
+        counts,
       };
     }
     // Rebuilds the block (or expands a [TOC] line). Returns { body, changed, found }.
@@ -21453,7 +22132,7 @@ __zentralShim.register = function (def) {
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, cleanSlotPx, cleanCardPx, cleanCardShare, resolveSlotHeight, resolveCardHeight, hasStartupPanelPref, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, gapPageFloor, gapMaxPx, clampGapPx, GAP_PANEL_MIN_PX, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
-        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, BACKUP_FORMAT, BACKUP_VERSION, BACKUP_MAX_ENTRIES, BACKUP_MAX_TOTAL_BYTES, cleanBackupZipPath, classifyBackupEntry, validateBackupAssetBytes, buildBackupManifest, inspectBackupEntries, planBackupRestore, OBSIDIAN_VAULT_APP_CONFIG, safeObsidianSegment, cleanVaultRelPath, obsidianYamlScalar, splitYamlEntries, planObsidianVaultPaths, buildObsidianFrontMatter, collectObsidianAssetRefs, convertBodyToObsidian, buildObsidianVaultPlan, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, mergeFolders, mergeMeta, META_SHARED_KEYS, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
+        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, BACKUP_FORMAT, BACKUP_VERSION, BACKUP_MAX_ENTRIES, BACKUP_MAX_TOTAL_BYTES, cleanBackupZipPath, classifyBackupEntry, validateBackupAssetBytes, buildBackupManifest, inspectBackupEntries, planBackupRestore, OBSIDIAN_VAULT_APP_CONFIG, safeObsidianSegment, cleanVaultRelPath, obsidianYamlScalar, splitYamlEntries, planObsidianVaultPaths, buildObsidianFrontMatter, collectObsidianAssetRefs, convertBodyToObsidian, buildObsidianVaultPlan, OBSIDIAN_IMPORT_MAX_FILES, OBSIDIAN_IMPORT_MAX_TOTAL_BYTES, OBSIDIAN_IMPORT_MAX_DEPTH, unquoteYamlScalar, extractObsidianPathFromForeign, parseObsidianFrontMatter, classifyObsidianVaultEntry, planObsidianVaultImport, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, mergeFolders, mergeMeta, META_SHARED_KEYS, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,
@@ -29046,6 +29725,65 @@ __zentralShim.register = function (def) {
           merge.focus({ preventScroll: true });
         }).catch((error) => { console.warn("[ZentralNotes] backup pick failed", error); flash("Could not open ZIP backup"); });
       }
+      function askImportObsidianVault() {
+        if (typeof env.pickObsidianVault !== "function" || typeof env.importObsidianVault !== "function") {
+          flash("Obsidian vault import is unavailable");
+          return;
+        }
+        Promise.resolve(env.pickObsidianVault()).then((picked) => {
+          if (destroyed || !picked || picked.cancelled) return;
+          if (!picked.ok) {
+            flash(picked.error || "Could not read Obsidian vault");
+            return;
+          }
+          const preview = planObsidianVaultImport(picked.entries || [], {
+            existingNotes: store.all ? store.all() : store.list(),
+            existingFolders: store.meta?.folders || [],
+            mode: "merge",
+            nowMs: env.now ? env.now() : Date.now(),
+          });
+          if (!preview.ok) {
+            flash(preview.error || "No importable notes found in that vault");
+            return;
+          }
+          const c = preview.counts || {};
+          const summary = [];
+          if (c.create) summary.push(`${c.create} new note${c.create === 1 ? "" : "s"}`);
+          if (c.update) summary.push(`${c.update} newer note${c.update === 1 ? "" : "s"} to update`);
+          if (c.unchanged) summary.push(`${c.unchanged} unchanged`);
+          if (c.skip) summary.push(`${c.skip} newer local kept`);
+          if (c.assets) summary.push(`${c.assets} attached file${c.assets === 1 ? "" : "s"}`);
+          const cancel = chip("Cancel");
+          const overwrite = chip("Overwrite matching");
+          const merge = chip("Import / Merge", true);
+          openCard(
+            "Import Obsidian vault" + (picked.folderName ? " (" + picked.folderName + ")" : ""),
+            h("p", {}, "Vault scan: " + (summary.length ? summary.join(", ") : `${c.total || 0} notes`) + "." + (picked.truncated ? " (Folder limit reached.)" : "")),
+            h("p", {}, "Import / Merge adds new notes and updates only notes modified more recently in Obsidian, without duplicating previously imported notes. Overwrite matching replaces matching local notes after saving a recovery backup."),
+            h("div", { class: "zn-dialog-actions" }, cancel, overwrite, merge),
+          );
+          const runImport = (mode) => {
+            closeDialog();
+            Promise.resolve(env.importObsidianVault(picked.entries, { mode })).then((res) => {
+              if (destroyed) return;
+              if (!res?.ok) { flash(res?.error || "Obsidian vault import failed"); return; }
+              const rc = res.counts || {};
+              const parts = [];
+              if (rc.create) parts.push(`${rc.create} imported`);
+              if (rc.update) parts.push(`${rc.update} updated`);
+              if (rc.assets) parts.push(`${rc.assets} file${rc.assets === 1 ? "" : "s"}`);
+              if (rc.unchanged && !rc.create && !rc.update) parts.push(`${rc.unchanged} already up to date`);
+              flash(parts.length ? "Obsidian vault: " + parts.join(", ") : "Obsidian vault already up to date");
+              scheduleList();
+              applyState();
+            }).catch((error) => { console.warn("[ZentralNotes] obsidian import failed", error); if (!destroyed) flash("Obsidian vault import failed"); });
+          };
+          cancel.addEventListener("click", closeDialog);
+          overwrite.addEventListener("click", () => runImport("overwrite"));
+          merge.addEventListener("click", () => runImport("merge"));
+          merge.focus({ preventScroll: true });
+        }).catch((error) => { console.warn("[ZentralNotes] obsidian vault pick failed", error); if (!destroyed) flash("Could not open Obsidian vault"); });
+      }
 
       // ---- small dialogs: link, table, quick settings, shortcuts ---------------------------------------
       function openCard(label, ...kids) {
@@ -30681,6 +31419,7 @@ __zentralShim.register = function (def) {
             { icon: "save", label: "Export all notes\u2026", action: () => { const list = markdownExportSnapshot(store.list()); askMarkdownExport(list, (options) => env.exportAll(list, options)); } },
             { icon: "save", label: "Export all as zip\u2026", action: () => { const list = markdownExportSnapshot(store.list()); askMarkdownExport(list, (options) => askExport("zip", async () => { const k = await env.exportZip(list, options); if (k) flash(`Zipped ${k} notes`); })); } },
             { icon: "save", label: "Export as Obsidian vault\u2026", action: async () => { const res = await env.exportObsidianVault?.({ readOptions: env.readOpts?.() || {} }); if (res?.ok) { const c = res.counts || {}; flash(`Exported ${c.notes || 0} notes${c.assets ? ` and ${c.assets} files` : ""} to Obsidian vault${res.skipped ? ` (${res.skipped} existing skipped)` : ""}`); } else if (res && !res.cancelled) { flash(res.error || "Could not export Obsidian vault"); } } },
+            { icon: "folder", label: "Import Obsidian vault\u2026", action: () => askImportObsidianVault() },
             { icon: "save", label: "Backup all (ZIP with assets)\u2026", action: async () => { const res = await env.exportBackupZip?.(); if (res?.ok) { const c = res.counts || {}; flash(`Backed up ${(c.notes || 0) + (c.trashed || 0)} notes and ${c.assets || 0} files`); } } },
             { icon: "restore", label: "Restore from ZIP backup\u2026", action: () => askRestoreBackup() },
             { icon: "folder", label: "Import .md folder\u2026", action: async () => { const k = await env.importFolder(store); flash(k ? `Imported ${k} notes` : "Nothing imported"); if (view === "list") scheduleList(); } },
@@ -33867,6 +34606,58 @@ __zentralShim.register = function (def) {
           return { ok: false, error: String(error?.message || error) };
         }
       }
+      async function pickObsidianVault() {
+        try {
+          const folder = await pick(Ci.nsIFilePicker.modeGetFolder, "Select an Obsidian vault folder to import");
+          if (!folder) return { ok: false, cancelled: true };
+          const entries = [];
+          let totalBytes = 0, truncated = false;
+          const walk = async (dirPath, relPrefix, depth) => {
+            if (depth > OBSIDIAN_IMPORT_MAX_DEPTH || truncated) return;
+            let children;
+            try { children = (await IOUtils.getChildren(dirPath)).sort(); }
+            catch (error) { warn(error); return; }
+            for (const child of children) {
+              if (entries.length >= OBSIDIAN_IMPORT_MAX_FILES) { truncated = true; return; }
+              const name = PathUtils.filename(child);
+              if (!name) continue;
+              const rel = relPrefix ? relPrefix + "/" + name : name;
+              let info;
+              try { info = await IOUtils.stat(child); }
+              catch (_) { continue; }
+              if (info.type === "directory") {
+                if (name.startsWith(".") && !(depth === 0 && name.toLowerCase() === ".obsidian")) continue;
+                await walk(child, rel, depth + 1);
+                continue;
+              }
+              if (info.type !== "regular") continue;
+              const classified = classifyObsidianVaultEntry(rel);
+              if (!classified) continue;
+              const maxFile = classified.kind === "note" ? MAX_IMPORT_BYTES
+                : classified.assetKind === "video" ? ASSET_VIDEO_MAX_BYTES
+                : classified.assetKind === "file" ? ASSET_FILE_MAX_BYTES
+                : ASSET_MAX_BYTES;
+              if (info.size > maxFile) continue;
+              if (totalBytes + info.size > OBSIDIAN_IMPORT_MAX_TOTAL_BYTES) { truncated = true; return; }
+              try {
+                const bytes = await IOUtils.read(child);
+                totalBytes += bytes.length;
+                entries.push({ path: classified.path, bytes, mtime: info.lastModified || Date.now() });
+              } catch (error) {
+                warn(error);
+              }
+            }
+          };
+          await walk(folder.path, "", 0);
+          return { ok: true, folderPath: folder.path, folderName: PathUtils.filename(folder.path) || "", entries, truncated };
+        } catch (error) {
+          warn(error);
+          return { ok: false, error: String(error?.message || error) };
+        }
+      }
+      async function importObsidianVault(entries, opts = {}) {
+        return store.importObsidianVault(entries, opts);
+      }
       async function pickBackupZip() {
         const file = await pick(Ci.nsIFilePicker.modeOpen, "Choose a Zentral Notes ZIP backup", "", "zip");
         if (!file) return null;
@@ -33969,7 +34760,7 @@ __zentralShim.register = function (def) {
       }
       const tick = createTimeTickService({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), warn });
       onCleanup(() => tick.destroy());
-      const env = { openLink, copyText, exportNote, exportAll, exportZip, exportBackupZip, exportObsidianVault, pickBackupZip, restoreBackupZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now(),
+      const env = { openLink, copyText, exportNote, exportAll, exportZip, exportBackupZip, exportObsidianVault, pickObsidianVault, importObsidianVault, pickBackupZip, restoreBackupZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now(),
         // Visibility rules live in meta.json, which raises no store event: the sheet asks for the Zen Agenda refresh.
         refreshAgenda: () => { if (!disposed && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); } },
         // For a sheet that was opened before the notes could be read: when they are there, and a write that must wait for them.
