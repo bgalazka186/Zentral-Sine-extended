@@ -2157,6 +2157,14 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet[data-all-notes-active="false"] .zn-calendar-splitter { display: none !important; }
 .zentral-notes-sheet[data-all-notes-active="false"] .zn-tree-pane { flex: 1 1 auto !important; }
 
+/* OW-59: what a note or a date has linked. One row per item, the words on the left, the two actions on the right. */
+.zentral-notes-sheet .zn-linked-items { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.zentral-notes-sheet .zn-linked-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 320px; overflow: auto; }
+.zentral-notes-sheet .zn-linked-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px; border-bottom: 1px solid var(--zn-line); min-width: 0; }
+.zentral-notes-sheet .zn-linked-text { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.zentral-notes-sheet .zn-linked-meta { font-size: 11px; opacity: 0.7; }
+.zentral-notes-sheet .zn-linked-actions { display: flex; flex: 0 0 auto; gap: 4px; }
+
 /* T2.4b: month, forward-days and agenda calendar views. */
 .zentral-notes-sheet .zn-calendar-pane-head { flex: 0 0 auto; }
 .zentral-notes-sheet .zn-calendar-controls { display: flex; flex: 0 0 auto; align-items: center; flex-wrap: wrap; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--zn-line); }

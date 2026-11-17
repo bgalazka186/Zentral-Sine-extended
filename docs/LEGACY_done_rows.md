@@ -1196,3 +1196,23 @@ PL string, so a refusal never borrows the note wording. Tests: `tests/notes-cale
 the predicate, the menu for every source, Convert, both translations, the real store delete of an imported and of a
 hand-made item, the refusal of a note-backed item with no note body, delete + re-import adding it back once, and a
 mirror still removing its own Agenda line.
+
+**`OW-59` DONE (3.3.287)** — Unlink a reminder or event from its note, and list what a note (or a date) has linked. The
+note text stays the only truth: unlinking is one text edit, so nothing new is stored and the note's own undo covers it.
+Pure layer in `ZentralNotesCalendar.js`: `noteLinkedItems(items, noteId, { date })` (a note scopes to that note, a date
+scopes across notes because the question asked from a date's menu is about the day, and both together narrow both; every
+row carries `kind`, `title`, `date`, `source`, `mirrored`, `ownsNoteText`), `unlinkPlan(item)` (a genuine mirror answers
+`remove-line`, a list line `drop-date`, a `%%calendar%%`/inline line `drop-schedule`, a free-standing item refuses with
+`no-note-text`, junk with `no-item`), and `unlinkLineText(line, now)` (strips the leading date and time **and the
+`%%zn-item-id%%`/category marks** — leaving the identity token behind would re-create the item on the next read, which is
+the opposite of unlinking — keeping the checkbox and the words). One trap worth keeping: `items.get()` hides an item
+whose note is not visible, so `unlinkCalendarItem` reads the raw list and answers `missing-note` rather than `missing`;
+and a bare time is never treated as a date, so `- 09:00 Dentist` is refused instead of losing the person's time. A short
+written date (`20.11`) is refused for the same reason: the extractor never scheduled it, so it is not an item to unlink.
+UI: "Linked to this note…" in the note menu, "Everything linked to today…" in the date menu, "Everything on this
+date…" in the per-date reminder chooser, all opening one card whose rows offer only the actions that can work — Unlink
+when `unlinkPlan(item).ok`, Delete when `itemIsFreeStanding(item)` (reusing the OW-58 predicate, no per-source list).
+Tests: `tests/notes-linked-items.test.cjs` (8 cases: the line edit and its three refusals, no item left behind and the
+neighbour untouched, `unlinkPlan` per source including a real `agendaMirrorLine`+`mirroredItem` mirror, `noteLinkedItems`
+across the three scopes, the real store unlink of a dated list line, refusal of a free-standing item and of an orphan,
+and a mirror unlinking its own Agenda line). Suite `230/230`; all `--check`s and `check-default-drift` green.

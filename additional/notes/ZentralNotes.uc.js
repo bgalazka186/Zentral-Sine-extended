@@ -10115,6 +10115,45 @@
           if (gone) pruneItemShare();
           return gone;
         },
+        // OW-59: unlink an item from its note without deleting the words. The note text is the only truth, so this
+        // edits text (one store write) and lets the reconciler drop the item; nothing new is stored anywhere.
+        //   mirror line (src "list" with the generated key) -> the whole line goes, because the line IS the item
+        //   dated list line                                    -> the leading date/time goes, the words stay
+        //   `%%calendar%%` / inline schedule (src "note")      -> the line's own date/time goes only when it has one
+        // Returns { ok, noteId, kind } and never half-edits: an unreadable line is refused with a reason.
+        unlinkCalendarItem(id) {
+          // `items.get` hides an item whose note is not visible, which is exactly the item this has to answer about:
+          // "its note is gone" is a refusal with a reason, not "no such item". Read the raw list instead.
+          const item = (items?.list?.({ includeHidden: true }) || []).find((it) => it.id === id) || null;
+          if (!item || items.storageState?.().writeBlocked) return { ok: false, reason: "missing" };
+          const plan = CALENDAR_PART.unlinkPlan(item);
+          if (!plan.ok) return { ok: false, reason: plan.reason };
+          const note = notes.get(item.x?.noteId);
+          if (!note || note.trashed) return { ok: false, reason: "missing-note" };
+          let body = "", writeKind = "";
+          if (CALENDAR_PART.isMirroredAgendaItem(item)) {
+            const result = CALENDAR_PART.removeMirroredAgendaLine(note.body, item);
+            if (!result.changed) return { ok: false, reason: "unreadable" };
+            body = result.body;
+            writeKind = "agenda-unlink";
+          } else {
+            // One line, found by its own identity in the note, and edited only when this reader understands it.
+            const target = String(item.x?.key || "");
+            const lines = String(note.body || "").split("\n");
+            let at = -1;
+            if (target) {
+              at = lines.findIndex((line) => CALENDAR_PART.itemIdTokens(line).includes(target));
+            }
+            if (at < 0) return { ok: false, reason: "unreadable" };
+            const next = CALENDAR_PART.unlinkLineText(lines[at], now());
+            if (next === null || next === lines[at]) return { ok: false, reason: "unreadable" };
+            lines[at] = next;
+            body = lines.join("\n");
+            writeKind = "calendar-unlink";
+          }
+          api.update(note.id, body, writeKind);
+          return { ok: true, noteId: note.id, kind: item.x?.kind || "event" };
+        },
         // After a reschedule of a note-derived item, rewrite ITS line's date/time so the text and the calendar agree
         // (otherwise a later note edit would silently pull the old time back). Only the leading date/time of the one
         // line changes; a line whose date comes from a heading is left alone. Idempotent. Returns true when text changed.
@@ -20802,6 +20841,66 @@
         return askCalendarComposer(options);
       }
 
+      // OW-59: everything a note has linked to the calendar, in one list, with the two actions that matter: unlink it
+      // (the words stay, the calendar stops seeing them) or open it. The same card answers "what is on this date?" when
+      // the caller passes a date, which is how the date's own menu reaches it.
+      function askLinkedCalendarItems({ noteId = "", date = "", onChanged = null } = {}) {
+        const C = CALENDAR_PART;
+        const linked = C?.noteLinkedItems ? C.noteLinkedItems(store.items?.list?.({ includeHidden: true }) || [], noteId, { date }) : [];
+        const card = h("div", { class: "zn-linked-items" });
+        const done = chip("Done", true);
+        const redraw = () => {
+          const rows = C.noteLinkedItems(store.items?.list?.({ includeHidden: true }) || [], noteId, { date });
+          card.replaceChildren();
+          if (!rows.length) {
+            card.append(h("p", { class: "zn-empty" }, date ? (noteId ? "Nothing of this note is on that date." : "Nothing is linked to this date.") : "Nothing is linked to this note."));
+            return [];
+          }
+          const list = h("ul", { class: "zn-linked-list", role: "list" });
+          for (const row of rows) {
+            const line = h("li", { class: "zn-linked-row" });
+            const text = h("div", { class: "zn-linked-text" });
+            text.append(h("strong", {}, row.title), h("span", { class: "zn-linked-meta" }, [row.kind === "reminder" ? "Reminder" : "Event", row.date ? displayDateKey(row.date) : "No date", row.mirrored ? "Agenda line" : row.source === "note" ? "In this note" : row.source === "list" ? "List line" : ""].filter(Boolean).join(" \u00b7 ")));
+            const actions = h("div", { class: "zn-linked-actions" });
+            const item = store.items?.list?.({ includeHidden: true })?.find?.((it) => it.id === row.id) || null;
+            const open = chip("Edit\u2026");
+            open.addEventListener("click", () => { closeDialog(); if (item) askCalendarComposer({ item }); else flash(unlinkRefusal("missing")); });
+            actions.append(open);
+            // Each action asks the one predicate that decides it: Unlink only where a link exists to sever, Delete only
+            // where the item owns no note text (otherwise its words would be silently destroyed). No per-source list.
+            if (CALENDAR_PART.unlinkPlan?.(item).ok) {
+              const unlink = chip("Unlink");
+              unlink.addEventListener("click", () => {
+                const result = store.unlinkCalendarItem?.(row.id) || { ok: false, reason: "missing" };
+                if (!result.ok) return flash(unlinkRefusal(result.reason));
+                redraw();
+                try { onChanged?.(); } catch (_) {}
+                renderCalendar?.();
+                flash(row.mirrored ? "Unlinked: the Agenda line is gone" : "Unlinked: the words stay, the date is gone");
+              });
+              actions.append(unlink);
+            }
+            if (CALENDAR_PART.itemIsFreeStanding?.(item)) {
+              const del = chip("Delete");
+              del.addEventListener("click", () => { closeDialog(); askDeleteCalendarItem(item); });
+              actions.append(del);
+            }
+            line.append(text, actions);
+            list.append(line);
+          }
+          card.append(list);
+          return rows;
+        };
+        redraw();
+        openCalendarCard(date ? "On this date" : "Linked to this note", card, h("div", { class: "zn-dialog-actions" }, done));
+        done.addEventListener("click", () => { closeDialog(); focusEditor?.(); });
+      }
+      function unlinkRefusal(reason) {
+        if (reason === "missing-note") return "That note is gone, so there is nothing to unlink";
+        if (reason === "unreadable") return "That line cannot be read safely; edit it in the note instead";
+        if (reason === "no-note-text") return "That item is not linked to a note";
+        return "That item is no longer available";
+      }
       function askNotesReminderShortcut() {
         const C = CALENDAR_PART;
         if (!C || !store.items) return flash("Calendar item storage is unavailable");
@@ -20837,10 +20936,13 @@
             choices.append(button);
           }
           const create = chip("Create another reminder on this date");
+          // OW-59: the date is also the way IN to what it already holds: unlink one, or open one, from here.
+          const listAll = chip("Everything on this date\u2026");
           const cancel = chip("Cancel");
           create.addEventListener("click", () => { closeDialog(); askCalendarComposer({ kind: "reminder", allDay: false, date: selectedDate, summary: usefulTitle, noteId, heading, linkCurrent: false }); });
+          listAll.addEventListener("click", () => { closeDialog(); askLinkedCalendarItems({ noteId, date: selectedDate, onChanged: () => scheduleList?.() }); });
           cancel.addEventListener("click", closeDialog);
-          return openCalendarCard("Choose the reminder to edit", h("p", { class: "zn-empty" }, `${matches.length} reminders already exist for ${displayDateKey(selectedDate)}. Choose one to edit, or deliberately create another.`), choices, h("div", { class: "zn-dialog-actions" }, cancel, create));
+          return openCalendarCard("Choose the reminder to edit", h("p", { class: "zn-empty" }, `${matches.length} reminders already exist for ${displayDateKey(selectedDate)}. Choose one to edit, or deliberately create another.`), choices, h("div", { class: "zn-dialog-actions" }, cancel, listAll, create));
         }
         askCalendarComposer({ kind: "reminder", allDay: false, date: selectedDate || undefined, summary: usefulTitle, noteId, heading, linkCurrent: false });
       }
@@ -23814,6 +23916,7 @@
           { icon: "plus", label: "Quick capture here\u2026", action: () => queueMicrotask(() => askQuickCapture(n.id)) },
           { icon: "plus", label: "Quick capture to today\u2019s note\u2026", action: () => queueMicrotask(() => askQuickCapture("")) },
           { icon: "calendar-plus", label: "Add to Calendar…", action: () => queueMicrotask(() => composeFromNote(n.id)) },
+          { icon: "calendar", label: "Linked to this note…", action: () => queueMicrotask(() => askLinkedCalendarItems({ noteId: n.id })) },
           { icon: "calendar-plus", label: t("birthday.menu.addEntry"), action: () => queueMicrotask(() => askAddBirthdayEntry(n.id)) },
           ...(shareRows.length ? [{ sep: true }, ...shareRows] : []),
           { sep: true },
@@ -25672,6 +25775,8 @@
       function showDateMenu() {
         const now = Date.now();
         const items = DATE_KINDS.map(([k, label]) => ({ icon: "bell", label: label + "  " + displayDateKey(dateTarget(k, now).ymd), action: () => openDateNote(k) }));
+        // OW-59: what is already linked to today, reachable without knowing about a note's menu first.
+        items.push({ icon: "calendar", label: "Everything linked to today\u2026", action: () => queueMicrotask(() => askLinkedCalendarItems({ date: dateTarget("today", now).ymd })) });
         items.push({ icon: "bell", label: "Other date\u2026", action: () => queueMicrotask(askOtherDate) }, { sep: true });
         const fmt = dateDisplayFormat();
         const days = dateMode() === "single" ? (store.list().find(isJournal) ? journalDays(store.list().find(isJournal).body, fmt).slice(-15).reverse().map((ymd) => ({ ymd })) : []) : listDateNotes(store.list(), { dateFormat: fmt }).slice(0, 15);

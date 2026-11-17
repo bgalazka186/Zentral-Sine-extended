@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.285
+// @version 3.3.287
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.285, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.287, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.285";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.287";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -10212,6 +10212,63 @@ const __zentralEmbeddedLoader = (function () {
     return Boolean(item && typeof item === "object" && String(item.id || "")) && !itemOwnsNoteText(item);
   }
 
+  // OW-59: the items a note has linked, in one list, so a person can see them and unlink one. Only real calendar
+  // items are listed (an item with no id, or one that belongs to another note, is not this note's business).
+  // A date alone ("what is on this day?") is a scope too: it crosses notes, because the question the owner asks from
+  // the date's menu is about the day, not about one note. A note alone scopes to that note; both scopes together
+  // answer "what of this note is on this day".
+  function noteLinkedItems(items, noteId, opts = {}) {
+    const wanted = String(noteId ?? "");
+    const dateKey = String(opts.date ?? "").trim();
+    if (!wanted && !dateKey) return [];
+    if (!Array.isArray(items)) return [];
+    return items
+      .filter((item) => item && String(item.id || ""))
+      .filter((item) => !wanted || String(item.x?.noteId || "") === wanted)
+      .filter((item) => !dateKey || localDateKey(itemRange(item)[0]) === dateKey)
+      .map((item) => ({
+        id: item.id,
+        kind: isReminder(item) ? "reminder" : "event",
+        title: String(item.summary || "").trim() || "Untitled item",
+        date: Number.isFinite(itemRange(item)[0]) ? localDateKey(itemRange(item)[0]) : "",
+        allDay: isAllDay(item),
+        source: ["list", "note"].includes(item.x?.src) ? item.x.src : item.x?.src === "ics" ? "ics" : "manual",
+        mirrored: isMirroredAgendaItem(item),
+        ownsNoteText: itemOwnsNoteText(item),
+      }))
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)) || a.title.localeCompare(b.title));
+  }
+  // How an unlink reads per source, as words the caller shows before it writes anything.
+  function unlinkPlan(item) {
+    if (!item || typeof item !== "object" || !String(item.id || "")) {
+      return { ok: false, source: "", action: "none", keepsText: false, reason: "no-item" };
+    }
+    if (!itemOwnsNoteText(item)) return { ok: false, source: "free", action: "none", keepsText: false, reason: "no-note-text" };
+    if (isMirroredAgendaItem(item)) return { ok: true, source: "list", action: "remove-line", keepsText: false, reason: "" };
+    if (item.x?.src === "list") return { ok: true, source: "list", action: "drop-date", keepsText: true, reason: "" };
+    return { ok: true, source: "note", action: "drop-schedule", keepsText: true, reason: "" };
+  }
+  // The line minus its leading date (and time): the words stay, the calendar stops seeing a schedule in them.
+  // null when the line has no leading date this reader recognises, so a caller never guesses and never half-edits.
+  function unlinkLineText(line, now = 0) {
+    const text = String(line || "");
+    if (!text) return null;
+    const head = LINE_HEAD_RE.exec(text);
+    if (!head) return null;
+    const afterBox = head[2];
+    const prefix = parseDatePrefix(stripItemIdMarks(afterBox), now);
+    if (!prefix || afterBox.indexOf(prefix.raw) !== 0) return null;
+    // A bare time ("09:00 Dentist") is not a date; unlinking that would silently delete the person's time.
+    if (/^\d{1,2}[:.]\d{2}$/.test(prefix.raw)) return null;
+    let rest = afterBox.slice(prefix.raw.length).replace(/^\s*/, "");
+    const time = LINE_TIME_RE.exec(rest);
+    if (time) rest = rest.slice(time[1].length).replace(/^\s*/, "");
+    // The identity marks go with the date: leaving `%%zn-item-id:…%%` behind would re-create the item on the next
+    // read, which is the opposite of unlinking. The words and the checkbox stay; only what made it a calendar item goes.
+    rest = stripItemIdMarks(rest).replace(ITEM_CATEGORY_RE, (m, value) => (String(value || "").trim() ? m : "")).replace(/\s+$/, "");
+    return rest ? head[1] + rest : null;
+  }
+
   // Per-target context menu model for calendar rows. This stays pure so every calendar surface can
   // render the same capabilities and reasons without duplicating lifecycle/source rules.
   // SB6.2: Agenda root folder right-click menu entries (localized via language tables).
@@ -11766,9 +11823,9 @@ const __zentralEmbeddedLoader = (function () {
   const api = {
     KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, translate, t, pluralCategory, tCount, translationKeys, missingTranslationKeys, ymd, parseYmd, dayStart, addDays, nextDayStart, dayRange, civilDayStart, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, lineScheduleSignature, cleanTextSchedule, scheduleSignatureFromItem, scheduleFromParsedLine, reconcileListItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, cleanHistoryFilter, filterHistoryRecords, historyPruneSurvey, exportHistoryLines, historySummaryLine, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_TABLE, HOLIDAY_TABLE_KINDS, holidayTableEntries, holidayTableYears, holidaySetCoverage, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, holidaySetsOf, NO_WORK_FREE, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, itemIdTokens, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, cleanHistoryFilter, filterHistoryRecords, historyPruneSurvey, exportHistoryLines, historySummaryLine, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_TABLE, HOLIDAY_TABLE_KINDS, holidayTableEntries, holidayTableYears, holidaySetCoverage, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, holidaySetsOf, NO_WORK_FREE, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     DEFAULT_DAY_LOOK, DAY_LOOK_KINDS, DAY_LOOK_MAX_STRENGTH, cleanDayLookColor, cleanDayLookStrength, cleanDayLook, dayLookTint, CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaLeftCount, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, itemOwnsNoteText, itemIsFreeStanding, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle, icsUnfold, icsText, icsProperty, icsDateValue, icsZonedMs, icsStamp, icsRecurrence, parseIcs, icsToItem, planIcsImport,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaLeftCount, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, itemOwnsNoteText, itemIsFreeStanding, noteLinkedItems, unlinkPlan, unlinkLineText, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle, icsUnfold, icsText, icsProperty, icsDateValue, icsZonedMs, icsStamp, icsRecurrence, parseIcs, icsToItem, planIcsImport,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -22439,6 +22496,45 @@ __zentralShim.register = function (def) {
           const gone = !items.get(item.id);
           if (gone) pruneItemShare();
           return gone;
+        },
+        // OW-59: unlink an item from its note without deleting the words. The note text is the only truth, so this
+        // edits text (one store write) and lets the reconciler drop the item; nothing new is stored anywhere.
+        //   mirror line (src "list" with the generated key) -> the whole line goes, because the line IS the item
+        //   dated list line                                    -> the leading date/time goes, the words stay
+        //   `%%calendar%%` / inline schedule (src "note")      -> the line's own date/time goes only when it has one
+        // Returns { ok, noteId, kind } and never half-edits: an unreadable line is refused with a reason.
+        unlinkCalendarItem(id) {
+          // `items.get` hides an item whose note is not visible, which is exactly the item this has to answer about:
+          // "its note is gone" is a refusal with a reason, not "no such item". Read the raw list instead.
+          const item = (items?.list?.({ includeHidden: true }) || []).find((it) => it.id === id) || null;
+          if (!item || items.storageState?.().writeBlocked) return { ok: false, reason: "missing" };
+          const plan = CALENDAR_PART.unlinkPlan(item);
+          if (!plan.ok) return { ok: false, reason: plan.reason };
+          const note = notes.get(item.x?.noteId);
+          if (!note || note.trashed) return { ok: false, reason: "missing-note" };
+          let body = "", writeKind = "";
+          if (CALENDAR_PART.isMirroredAgendaItem(item)) {
+            const result = CALENDAR_PART.removeMirroredAgendaLine(note.body, item);
+            if (!result.changed) return { ok: false, reason: "unreadable" };
+            body = result.body;
+            writeKind = "agenda-unlink";
+          } else {
+            // One line, found by its own identity in the note, and edited only when this reader understands it.
+            const target = String(item.x?.key || "");
+            const lines = String(note.body || "").split("\n");
+            let at = -1;
+            if (target) {
+              at = lines.findIndex((line) => CALENDAR_PART.itemIdTokens(line).includes(target));
+            }
+            if (at < 0) return { ok: false, reason: "unreadable" };
+            const next = CALENDAR_PART.unlinkLineText(lines[at], now());
+            if (next === null || next === lines[at]) return { ok: false, reason: "unreadable" };
+            lines[at] = next;
+            body = lines.join("\n");
+            writeKind = "calendar-unlink";
+          }
+          api.update(note.id, body, writeKind);
+          return { ok: true, noteId: note.id, kind: item.x?.kind || "event" };
         },
         // After a reschedule of a note-derived item, rewrite ITS line's date/time so the text and the calendar agree
         // (otherwise a later note edit would silently pull the old time back). Only the leading date/time of the one
@@ -33127,6 +33223,66 @@ __zentralShim.register = function (def) {
         return askCalendarComposer(options);
       }
 
+      // OW-59: everything a note has linked to the calendar, in one list, with the two actions that matter: unlink it
+      // (the words stay, the calendar stops seeing them) or open it. The same card answers "what is on this date?" when
+      // the caller passes a date, which is how the date's own menu reaches it.
+      function askLinkedCalendarItems({ noteId = "", date = "", onChanged = null } = {}) {
+        const C = CALENDAR_PART;
+        const linked = C?.noteLinkedItems ? C.noteLinkedItems(store.items?.list?.({ includeHidden: true }) || [], noteId, { date }) : [];
+        const card = h("div", { class: "zn-linked-items" });
+        const done = chip("Done", true);
+        const redraw = () => {
+          const rows = C.noteLinkedItems(store.items?.list?.({ includeHidden: true }) || [], noteId, { date });
+          card.replaceChildren();
+          if (!rows.length) {
+            card.append(h("p", { class: "zn-empty" }, date ? (noteId ? "Nothing of this note is on that date." : "Nothing is linked to this date.") : "Nothing is linked to this note."));
+            return [];
+          }
+          const list = h("ul", { class: "zn-linked-list", role: "list" });
+          for (const row of rows) {
+            const line = h("li", { class: "zn-linked-row" });
+            const text = h("div", { class: "zn-linked-text" });
+            text.append(h("strong", {}, row.title), h("span", { class: "zn-linked-meta" }, [row.kind === "reminder" ? "Reminder" : "Event", row.date ? displayDateKey(row.date) : "No date", row.mirrored ? "Agenda line" : row.source === "note" ? "In this note" : row.source === "list" ? "List line" : ""].filter(Boolean).join(" \u00b7 ")));
+            const actions = h("div", { class: "zn-linked-actions" });
+            const item = store.items?.list?.({ includeHidden: true })?.find?.((it) => it.id === row.id) || null;
+            const open = chip("Edit\u2026");
+            open.addEventListener("click", () => { closeDialog(); if (item) askCalendarComposer({ item }); else flash(unlinkRefusal("missing")); });
+            actions.append(open);
+            // Each action asks the one predicate that decides it: Unlink only where a link exists to sever, Delete only
+            // where the item owns no note text (otherwise its words would be silently destroyed). No per-source list.
+            if (CALENDAR_PART.unlinkPlan?.(item).ok) {
+              const unlink = chip("Unlink");
+              unlink.addEventListener("click", () => {
+                const result = store.unlinkCalendarItem?.(row.id) || { ok: false, reason: "missing" };
+                if (!result.ok) return flash(unlinkRefusal(result.reason));
+                redraw();
+                try { onChanged?.(); } catch (_) {}
+                renderCalendar?.();
+                flash(row.mirrored ? "Unlinked: the Agenda line is gone" : "Unlinked: the words stay, the date is gone");
+              });
+              actions.append(unlink);
+            }
+            if (CALENDAR_PART.itemIsFreeStanding?.(item)) {
+              const del = chip("Delete");
+              del.addEventListener("click", () => { closeDialog(); askDeleteCalendarItem(item); });
+              actions.append(del);
+            }
+            line.append(text, actions);
+            list.append(line);
+          }
+          card.append(list);
+          return rows;
+        };
+        redraw();
+        openCalendarCard(date ? "On this date" : "Linked to this note", card, h("div", { class: "zn-dialog-actions" }, done));
+        done.addEventListener("click", () => { closeDialog(); focusEditor?.(); });
+      }
+      function unlinkRefusal(reason) {
+        if (reason === "missing-note") return "That note is gone, so there is nothing to unlink";
+        if (reason === "unreadable") return "That line cannot be read safely; edit it in the note instead";
+        if (reason === "no-note-text") return "That item is not linked to a note";
+        return "That item is no longer available";
+      }
       function askNotesReminderShortcut() {
         const C = CALENDAR_PART;
         if (!C || !store.items) return flash("Calendar item storage is unavailable");
@@ -33162,10 +33318,13 @@ __zentralShim.register = function (def) {
             choices.append(button);
           }
           const create = chip("Create another reminder on this date");
+          // OW-59: the date is also the way IN to what it already holds: unlink one, or open one, from here.
+          const listAll = chip("Everything on this date\u2026");
           const cancel = chip("Cancel");
           create.addEventListener("click", () => { closeDialog(); askCalendarComposer({ kind: "reminder", allDay: false, date: selectedDate, summary: usefulTitle, noteId, heading, linkCurrent: false }); });
+          listAll.addEventListener("click", () => { closeDialog(); askLinkedCalendarItems({ noteId, date: selectedDate, onChanged: () => scheduleList?.() }); });
           cancel.addEventListener("click", closeDialog);
-          return openCalendarCard("Choose the reminder to edit", h("p", { class: "zn-empty" }, `${matches.length} reminders already exist for ${displayDateKey(selectedDate)}. Choose one to edit, or deliberately create another.`), choices, h("div", { class: "zn-dialog-actions" }, cancel, create));
+          return openCalendarCard("Choose the reminder to edit", h("p", { class: "zn-empty" }, `${matches.length} reminders already exist for ${displayDateKey(selectedDate)}. Choose one to edit, or deliberately create another.`), choices, h("div", { class: "zn-dialog-actions" }, cancel, listAll, create));
         }
         askCalendarComposer({ kind: "reminder", allDay: false, date: selectedDate || undefined, summary: usefulTitle, noteId, heading, linkCurrent: false });
       }
@@ -36139,6 +36298,7 @@ __zentralShim.register = function (def) {
           { icon: "plus", label: "Quick capture here\u2026", action: () => queueMicrotask(() => askQuickCapture(n.id)) },
           { icon: "plus", label: "Quick capture to today\u2019s note\u2026", action: () => queueMicrotask(() => askQuickCapture("")) },
           { icon: "calendar-plus", label: "Add to Calendar…", action: () => queueMicrotask(() => composeFromNote(n.id)) },
+          { icon: "calendar", label: "Linked to this note…", action: () => queueMicrotask(() => askLinkedCalendarItems({ noteId: n.id })) },
           { icon: "calendar-plus", label: t("birthday.menu.addEntry"), action: () => queueMicrotask(() => askAddBirthdayEntry(n.id)) },
           ...(shareRows.length ? [{ sep: true }, ...shareRows] : []),
           { sep: true },
@@ -37997,6 +38157,8 @@ __zentralShim.register = function (def) {
       function showDateMenu() {
         const now = Date.now();
         const items = DATE_KINDS.map(([k, label]) => ({ icon: "bell", label: label + "  " + displayDateKey(dateTarget(k, now).ymd), action: () => openDateNote(k) }));
+        // OW-59: what is already linked to today, reachable without knowing about a note's menu first.
+        items.push({ icon: "calendar", label: "Everything linked to today\u2026", action: () => queueMicrotask(() => askLinkedCalendarItems({ date: dateTarget("today", now).ymd })) });
         items.push({ icon: "bell", label: "Other date\u2026", action: () => queueMicrotask(askOtherDate) }, { sep: true });
         const fmt = dateDisplayFormat();
         const days = dateMode() === "single" ? (store.list().find(isJournal) ? journalDays(store.list().find(isJournal).body, fmt).slice(-15).reverse().map((ymd) => ({ ymd })) : []) : listDateNotes(store.list(), { dateFormat: fmt }).slice(0, 15);
