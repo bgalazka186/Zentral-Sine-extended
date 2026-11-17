@@ -76,15 +76,22 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
+|    61 | `OW-32`     | `OPEN`    | High                | S      | none              | All notes pane squeeze priority: protect interactable areas first, then titles, collapse contents first  |
+|    62 | `OW-33`     | `OPEN`    | High                | S      | none              | Small-window All notes chrome & non-calendar toolbar overflow safety                                     |
+|    63 | `OW-34`     | `OPEN`    | Med-High            | S      | none              | Quick-hide toggle for Calendar filter/controls bar in small windows                                      |
+|    64 | `OW-35`     | `OPEN`    | Med-High            | S      | none              | Independent filter state for regular Calendar pane vs Big Picture popup                                  |
+|    65 | `OW-36`     | `OPEN`    | Med-High            | M      | none              | Spell-check right-click menu: spelling suggestions, add to dictionary / ignore, and language picker      |
 |    12 | `T2.9`      | `PARTIAL` | Med-High            | M      | none              | Daily-note lifecycle and archive policy inside Agenda                                                    |
 |    33 | `T2.10`     | `OPEN`    | Med                 | M      | none              | Work-free-day tint + selectable holiday calendars                                                        |
+|    66 | `OW-37`     | `OPEN`    | Med                 | M      | none              | Hide/control Notes pseudo-tabs & Zentral webpanel host tabs in Ctrl+Tab menu (keep fake addon host IDs)  |
 |    34 | `T2.11b1`   | `OPEN`    | High                | M      | Track 1-2 UI done | Audit UI discoverability of all Notes functions                                                          |
 |    35 | `T2.11b2`   | `OPEN`    | Med                 | M      | T2.11b1           | Rebuild the Notes DEMO notes                                                                             |
 |    36 | `T2.13`     | `OPEN`    | Med                 | M      | all other Track 2 | ICS export/import and Google-sync groundwork (always last in Track 2)                                    |
 |    37 | `T3.3`      | `OPEN`    | Med                 | M      | —                 | Drag-and-drop note tabs within Zen sidebar                                                               |
 |    38 | `T3.8`      | `OPEN`    | Med                 | M      | —                 | Split View as an equal-sized companion window/pane                                                       |
 |    39 | `T3.9c`     | `OPEN`    | Med                 | M      | T3.9a             | Widgets: weather (cached, user refresh interval)                                                         |
-|    40 | `T3.9d`     | `OPEN`    | Med                 | M      | T3.9a             | Widgets: timer, quick note, RSS headline                                                                 |
+|    40 | `T3.9d`     | `OPEN`    | Med                 | M      | T3.9a             | Widgets: timer and quick note (RSS headline widget dropped; Zen has built-in RSS)                        |
+|    67 | `OW-38`     | `OPEN`    | Med                 | M-L    | none              | Automated test suites for all other Zentral features outside Notes                                       |
 |    41 | `T4.3a`     | `OPEN`    | Med                 | M      | none              | Extract calendar UI from `ZentralNotes.uc.js`                                                            |
 |    42 | `T4.3b`     | `OPEN`    | Med                 | M      | T4.3a             | Extract parser/wiki graph and import/export                                                              |
 |    43 | `T4.3c`     | `OPEN`    | Med                 | M      | T4.3b             | Extract Zen sidebar UI; single build entry                                                               |
@@ -109,6 +116,61 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 ## Task blocks (same order as the Master Order)
 
+#### `OW-32` — All notes pane squeeze priority: protect interactable areas first, then titles, collapse contents first
+
+**Status:** `OPEN` · **Impact:** High · **Effort:** S · **Source:** owner live test 2026-11-16
+
+**Problem:** In the All notes view beside Calendar, squeezing the notes list/pane narrow squeezes or hides note titles before note contents/snippets/metadata, and can squeeze interactable buttons/controls.
+
+**Plan:**
+1. Audit `.zn-item`, `.zn-item-main`, `.zn-item-title`, `.zn-item-meta`/preview/badges, `.zn-item-actions`, and `.zn-frow` flex/grid rules in `additional/notes/ZentralNotes.css` and `ZentralNotes.uc.js`.
+2. Enforce strict squeeze priority via flex-shrink, `min-width`, and container/width breakpoints: (a) interactable areas/controls never shrink to 0 or get clipped (`flex-shrink: 0`), (b) note titles stay visible with high shrink resistance and clean ellipsis rather than disappearing, (c) secondary note contents/previews/meta/badges collapse and hide FIRST when space gets tight.
+3. Add layout/cascade tests verifying interactable controls, title visibility, and progressive content collapse across narrow widths.
+
+#### `OW-33` — Small-window All notes chrome & non-calendar toolbar overflow safety
+
+**Status:** `OPEN` · **Impact:** High · **Effort:** S · **Source:** owner live test 2026-11-16
+
+**Problem:** In All notes view on a small window, non-calendar toolbars, search/filter chips, folder bar, and header menus can get squeezed out of reach or take up more space than needed.
+
+**Plan:**
+1. Audit `.zn-all-head`, `.zn-all-tools`, `.zn-all-search`, filter chips, batch bar, and action buttons in `additional/notes/ZentralNotes.css` and `ZentralNotes.uc.js` at narrow widths (`240–420 px`) and short heights (`300–450 px`).
+2. Make All notes chrome compact in small windows: compact padding/gaps, graceful wrapping or overflow-accessible controls so no button/menu becomes unreachable, and zero wasted vertical bloat.
+3. Add narrow/short-window tests verifying every non-calendar All notes control remains accessible and compact without overflowing or clipping.
+
+#### `OW-34` — Quick-hide toggle for Calendar filter/controls bar in small windows
+
+**Status:** `OPEN` · **Impact:** Med-High · **Effort:** S · **Source:** owner live test 2026-11-16
+
+**Problem:** The Calendar toolbar/filter bar (views, kind/category filters, density/size, days, tools) takes too much vertical space in a small window.
+
+**Plan:**
+1. Add a one-click compact toggle button (e.g. `Hide filters` / `Show filters`, with active-filter indicator dot when filters are non-default while hidden) to collapse the secondary Calendar filter/controls row cleanly.
+2. Persist collapsed state per window in `meta.calendarFiltersCollapsed` (cleanly validated in `metaFromRaw`) and wire EN/PL i18n keys.
+3. Add tests verifying toggle, active-filter badge visibility while collapsed, persistence, keyboard accessibility, and EN/PL localization.
+
+#### `OW-35` — Independent filter state for regular Calendar pane vs Big Picture popup
+
+**Status:** `OPEN` · **Impact:** Med-High · **Effort:** S · **Source:** owner live test 2026-11-16
+
+**Problem:** Regular Calendar view and Big Picture popup currently share `calendarFilterKind` and `calendarFilterCategory`, so changing filters inside Big Picture changes the regular Calendar pane (and vice versa).
+
+**Plan:**
+1. Store Big Picture filter state separately (`meta.calendarBigPictureFilterKind`, `meta.calendarBigPictureFilterCategory` — or `meta.calendarBigPictureFilters = { kind, category }`), cleanly validated in `metaFromRaw`.
+2. Route active filter reads/writes (`calendarFilterKind`/`calendarFilterCategory`) to the regular set when inline and the Big Picture set while Big Picture is open, re-rendering cleanly on open and close so each remembers its own filters independently across opens/reloads.
+3. Add tests in `tests/notes-calendar-bigpicture.test.cjs` confirming complete filter isolation and persistence between regular Calendar and Big Picture.
+
+#### `OW-36` — Spell-check right-click menu: spelling suggestions, add to dictionary / ignore, and language picker
+
+**Status:** `OPEN` · **Impact:** Med-High · **Effort:** M · **Source:** owner live test 2026-11-16
+
+**Problem:** Notes has spell-check while typing (`PREF.SPELL`), but right-clicking a misspelled word in the editor does not offer spelling suggestions, Add to dictionary / Ignore word, or switching spell-check languages.
+
+**Plan:**
+1. Build pure spell-check menu model & helpers (parsing suggestions, personal dictionary / session ignore list, language list & multi-language selection, word-boundary replacement on `<textarea>` / editor).
+2. Integrate with Gecko `InlineSpellChecker` (`editor.getInlineSpellChecker(true)` / `spellChecker` / `mozISpellCheckingEngine` / `getDictionaryList` / `setCurrentDictionaries` / `addWordToDictionary` / `ignoreWord`) inside the Notes editor context menu (`onEditorContextMenu`), with clean fallback when native engine is unavailable.
+3. Add EN/PL i18n strings and comprehensive unit + fake-editor DOM tests verifying suggestions replacement, Add to dictionary, Ignore word, and switching/combining dictionaries (e.g. `en-US`, `pl-PL`).
+
 #### `T2.9` — Daily-note lifecycle and archive policy inside Agenda
 
 **Status:** `PARTIAL` · **Impact:** Med-High · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
@@ -123,7 +185,7 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 **Status:** `OPEN` · **Impact:** Med · **Effort:** S-M each · **Source:** owner 2026-11-10
 
-Standalone module `additional/widgets` (also in the full pack). Rules for all: study how new-tab-page widgets work and mimic them; never interact with the sidebar video player (free area about 179x426, about 179x301 while a 16:9 player shows; no fixed ratio); always leave room for tabs, folders and Essentials (setting: max share of free height, hide below a minimum); no permanent polling, per-widget refresh interval, pause when window or sidebar is hidden, cache last value. `a` (`DONE` at 3.3.223): shell, free-area measurement, player avoidance, per-widget on/off. `b` (`DONE` at 3.3.224): clock, date. `c`: weather. `d`: timer, quick note, RSS headline. `e`: battery/system load and the settings section.
+Standalone module `additional/widgets` (also in the full pack). Rules for all: study how new-tab-page widgets work and mimic them; never interact with the sidebar video player (free area about 179x426, about 179x301 while a 16:9 player shows; no fixed ratio); always leave room for tabs, folders and Essentials (setting: max share of free height, hide below a minimum); no permanent polling, per-widget refresh interval, pause when window or sidebar is hidden, cache last value. `a` (`DONE` at 3.3.223): shell, free-area measurement, player avoidance, per-widget on/off. `b` (`DONE` at 3.3.224): clock, date. `c`: weather. `d`: timer, quick note (RSS headline widget dropped per owner 2026-11-16; Zen browser has built-in RSS). `e`: battery/system load and the settings section.
 
 #### `T2.10` — Work-free-day tint + selectable holiday calendars
 
@@ -132,6 +194,28 @@ Standalone module `additional/widgets` (also in the full pack). Rules for all: s
 **Current state and what is LEFT:** Depends on `T2.1` (`DONE`), `T2.4b` (`DONE`). Greenish tint for weekends, public holidays and personal days off in month/week/list views with offline region rules (`holidaysFor(region, year)` / `isWorkFree(day, prefs)`).
 
 **Full specification (original row):** **OPEN.** Depends on `T2.1`, `T2.4b`. Greenish tint for weekends, public holidays and personal days off in month/week/list views. Region selector (Polish, German, English, American, more later); offline fixed/Easter/weekday rules; pure `holidaysFor(region, year)` / `isWorkFree(day, prefs)` tested per year, tooltip names holiday, own extra days off. Decide weekend days per region (Sat/Sun or Fri/Sat).
+
+#### `OW-37` — Hide/control Notes pseudo-tabs & Zentral webpanel host tabs in Ctrl+Tab menu (keep fake addon host IDs)
+
+**Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Source:** owner live test 2026-11-16
+
+**Problem:** Notes reminders/events/note pseudo-tabs and Zentral webpanel host tabs can appear in Firefox/Zen's `Ctrl+Tab` preview switcher. Priority constraint: Zentral webpanel webapps MUST retain their fake addon host tab IDs/isolation intact (`ZentralBrowserIntegrations` addon host model must never be weakened or broken).
+
+**Plan:**
+1. Audit Firefox/Zen `ctrlTab` (`window.ctrlTab.tabList`, `ctrlTab.updatePreviews`, `ctrlTab._recentlyUsedTabs`, `gBrowser.visibleTabs`, `tab.hidden` / `skipSessionStore`) and inspect how `ZentralBrowserIntegrations.uc.js` (addon host tabs) and `ZentralNotes.uc.js` (Notes/Agenda pseudo-tabs) interact with `ctrlTab`.
+2. Add a reversible, reference-counted `ctrlTab` filter/shield (plus clean preference toggle if appropriate) that excludes Notes/Agenda pseudo-tabs and Zentral webpanel host tabs from `Ctrl+Tab` tab cycling/previews WITHOUT altering addon host IDs, `gBrowser.tabs` ownership, or container/extension isolation.
+3. Add thorough fake-Zen `ctrlTab` tests verifying Notes pseudo-tabs & webpanel host tabs are excluded from `Ctrl+Tab` while normal tabs cycle normally and addon host IDs remain 100% intact.
+
+#### `OW-38` — Automated test suites for all other Zentral features outside Notes
+
+**Status:** `OPEN` · **Impact:** Med · **Effort:** M-L · **Source:** owner live test 2026-11-16
+
+**Problem:** Notes, Widgets, Colorful Folders, App Shortcuts, Tab Unload, and Standalone builds have automated test suites, while other Zentral core & additional features lack dedicated behavioral tests.
+
+**Plan:**
+1. Audit every Zentral feature under `extension/`, `zentral/`, `loader/`, and `additional/` without dedicated tests (Panels lifecycle/floating/hover/corner/secondary views, Video Preview, Library Resize, Compact Hover, Tab Drag, Startup, RSS Display, Diagnostics Logger, Settings Shell).
+2. Build focused, fast Node/fake-Zen behavioral test suites for each feature covering init/pref-reactivity, core behavior, edge cases, and leak-free dispose.
+3. Verify all new suites run cleanly under `tests/run-all.cjs`.
 
 #### `T2.11b1` / `T2.11b2` — Discoverability audit, then demo rebuild
 
@@ -377,13 +461,15 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.228, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.229, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.228.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`186/186` test files) passes in Node/fake-Zen at 3.3.228. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.229.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`187/187` test files) passes in Node/fake-Zen at 3.3.229. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
-Completed this session (3.3.163–3.3.228), every finished item archived in `docs/LEGACY_done_rows.md`:
+Completed this session (3.3.163–3.3.229), every finished item archived in `docs/LEGACY_done_rows.md`:
+
+- `OW-31` (3.3.229) — fixed NOTES and Agenda folders jumping to the bottom of pinned tabs on Zen workspace switch (`additional/notes/ZentralNotes.uc.js`): replaced hardcoded `target.insertBefore(root, target.lastChild || null)` in `syncSharedWorkspace` with canonical anchor placement (`managedRootAnchors`, `desiredManagedRootBefore`, `isAlreadyBefore`, `repositionManagedRoots`) that honours `PREF.ZEN_TOP` and `PREF.AGENDA_POSITION` (`above`/`below`) across both shared and space-local workspace switches, preserves trailing non-tab separators, performs zero repeated DOM moves when already in position, and reacts live to `PREF.ZEN_TOP` changes in `prefObserver`. Verified in `tests/notes-workspace-root-position.test.cjs` (`187/187` suite).
 
 - `ST7.2` (3.3.228) — added crash-safe reminder history compaction and `lastDiskText` fast-path in `additional/notes/calendar/ZentralNotesCalendar.js` (`REMINDER_HISTORY_ARCHIVE_FILE = "reminder-history.archive.jsonl"`, `REMINDER_HISTORY_RETENTION_DEFAULT = 30`, `cleanReminderHistoryRetentionDays`, `compactReminderHistory`, `formatHistoryArchiveLines`, `parseHistoryArchiveLines`, automatic compaction on `open()` plus explicit `compact()`, and `lastDiskText` identity skip in `mergeStored`). Keeps the single latest lifecycle transition (`done`/`dismissed`/`reopened`) per `(itemId, occurrenceId)` forever (preserving `stateFor()` 100%), keeps all records within `retentionDays` and any future/recent-scheduled `alerted`/`skipped` records, and archives older alerts/snoozes/superseded transitions to deduplicated JSONL before atomically rewriting `reminder-history.json` with a TOCTOU concurrent-write guard (aborting with zero data loss on archive failure or concurrent change). Wired `zen.workspace.zentral.notes.reminder_history_days` (`1..3650`, default `30`, Settings → Reminders + `settings.json`/`standalone.json`/`layout.json` + EN/PL i18n) into `ZentralNotes.uc.js`, exposed `historyFacade.compact()`, and preserved `reminder-history.archive.jsonl` through full ZIP backup & deduplicated restore. Production-shape before/after (1-year workload): `5,000` records `1032.6 KB → 286.2 KB` (`-72.3%`), warm `open()` `42.75 → 7.10 ms` (`6.0×`), `claimAlert()` `36.35 → 1.30 ms/call` (`28.0×`); `20,000` records `4172.8 KB → 1153.3 KB` (`-72.4%`), warm `open()` `92.99 → 33.00 ms` (`2.8×`), `claimAlert()` `153.44 → 4.20 ms/call` (`36.5×`). Verified in `tests/notes-history-compaction.test.cjs` (`186/186` suite).
 

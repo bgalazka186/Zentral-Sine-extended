@@ -29059,16 +29059,66 @@
           return !zenParentOf(el);
         } catch (error) { warn(error); return false; }
       }
+      // OW-31: canonical anchor computation for NOTES & Agenda roots inside a workspace's pinned container.
+      // Preserves configured top/bottom placement and trailing non-tab separators across workspace switches.
+      function managedRootAnchors(host, notesRoot, agendaRoot) {
+        const children = [...(host?.children || [])];
+        const isTabOrFolder = (c) => /^(zen-folder|tab)$/i.test(c?.localName || "");
+        const firstForeign = children.find((c) => c !== notesRoot && c !== agendaRoot && isTabOrFolder(c)) || null;
+        let tail = null;
+        for (let i = children.length - 1; i >= 0; i--) {
+          const c = children[i];
+          if (c === notesRoot || c === agendaRoot) continue;
+          if (isTabOrFolder(c)) break;
+          tail = c;
+        }
+        return { firstForeign, tail };
+      }
+      function desiredManagedRootBefore(host, kind) {
+        const notesRoot = zenMode() === "off" ? null : zenRootEl();
+        const agendaRoot = agendaEnabled() ? agendaRootEl() : null;
+        const zenTop = prefBool(PREF.ZEN_TOP, true);
+        const pos = agendaPosition();
+        const { firstForeign, tail } = managedRootAnchors(host, notesRoot, agendaRoot);
+        if (kind === "notes") {
+          if (zenTop) {
+            if (agendaRoot && agendaRoot.parentElement === host && pos === "below") return agendaRoot;
+            return firstForeign || tail;
+          }
+          return tail;
+        }
+        if (notesRoot && notesRoot.parentElement === host) {
+          return pos === "below" ? (notesRoot.nextSibling || null) : notesRoot;
+        }
+        if (zenTop || pos === "above") return firstForeign || tail;
+        return tail;
+      }
+      function isAlreadyBefore(host, node, anchor) {
+        if (!host || !node || node.parentElement !== host) return false;
+        if (anchor === node) return true;
+        const children = [...(host.children || [])];
+        const idx = children.indexOf(node);
+        if (idx < 0) return false;
+        const next = children[idx + 1] || null;
+        return next === (anchor || null);
+      }
       // NOTES is a managed projection, not a draggable user folder. Keep its root
       // top-level and restore it if a native/API move bypasses dragstart protection.
-      function zenToTop(el) {
+      function zenToTop(el, forceRelocate = false) {
         try {
-          if (!prefBool(PREF.ZEN_TOP, true) || zenParentOf(el)) return;
+          if (!el || zenParentOf(el)) return;
+          if (!forceRelocate && !prefBool(PREF.ZEN_TOP, true)) return;
           const host = el.parentElement;
           if (!host) return;
-          const first = [...host.children].find((c) => c !== el && /^(zen-folder|tab)$/i.test(c.localName || ""));
-          if (first && first !== el && first !== el.nextElementSibling) host.insertBefore(el, first);
+          const anchor = desiredManagedRootBefore(host, "notes");
+          if (!isAlreadyBefore(host, el, anchor)) host.insertBefore(el, anchor || null);
         } catch (error) { warn(error); }
+      }
+      function repositionManagedRoots() {
+        const notesRoot = zenMode() === "off" ? null : zenRootEl();
+        const agendaRoot = agendaEnabled() ? agendaRootEl() : null;
+        if (notesRoot && !zenParentOf(notesRoot)) zenToTop(notesRoot, true);
+        if (agendaRoot && !zenParentOf(agendaRoot)) agendaPlaceRoot(agendaRoot, agendaPosition());
       }
       // Entries of ours that are not inside the NOTES folder any more (unpinned, made an Essential, dragged into another
       // folder or window, duplicated, restored): they are only placeholders, so they are closed and the next step puts
@@ -29329,9 +29379,9 @@
           } else if (position !== "below" && (rootIndex < 0 || rootIndex + 1 !== notesIndex)) {
             host.insertBefore(root, notesRoot); agendaMutationCount++;
           }
-        } else if (!notesRoot && position === "above") {
-          const first = siblings.find((child) => child !== root && /^(zen-folder|tab)$/i.test(child.localName || ""));
-          if (first && rootIndex > siblings.indexOf(first)) { host.insertBefore(root, first); agendaMutationCount++; }
+        } else if (!notesRoot && (position === "above" || prefBool(PREF.ZEN_TOP, true))) {
+          const { firstForeign } = managedRootAnchors(host, null, root);
+          if (firstForeign && (rootIndex < 0 || rootIndex > siblings.indexOf(firstForeign))) { host.insertBefore(root, firstForeign); agendaMutationCount++; }
         }
       }
       // Some Zen versions delete a folder as soon as its last tab is removed.
@@ -29912,11 +29962,12 @@
         const notesReady = zenMode() === "off" || dedupeNotesRoots(document, { removeTab: zenRemoveTab, warn });
         const agendaReady = !agendaEnabled() || agendaDedupeRoots(agendaRootEl());
         const roots = [
-          { ready: notesReady, root: zenMode() === "off" ? null : zenRootEl(), ownFolder: (f) => !!(f.hasAttribute?.("bgalazka-notes-subfolder") || notesKeyFromId(f.id)), ownTab: (t) => zenManagedTab(t) },
-          { ready: agendaReady, root: agendaEnabled() ? agendaRootEl() : null, ownFolder: agendaOwnedDay, ownTab: agendaOwnTab },
+          { kind: "notes", ready: notesReady, root: zenMode() === "off" ? null : zenRootEl(), ownFolder: (f) => !!(f.hasAttribute?.("bgalazka-notes-subfolder") || notesKeyFromId(f.id)), ownTab: (t) => zenManagedTab(t) },
+          { kind: "agenda", ready: agendaReady, root: agendaEnabled() ? agendaRootEl() : null, ownFolder: agendaOwnedDay, ownTab: agendaOwnTab },
         ];
+        const zenTop = prefBool(PREF.ZEN_TOP, true);
         let complete = true;
-        for (const { root, ownFolder, ownTab, ready } of roots) {
+        for (const { kind, root, ownFolder, ownTab, ready } of roots) {
           if (!root || root.isConnected === false) continue;
           if (!ready) { complete = false; continue; }
           const plan = sharedProjectionPlan({ active, targetReady: !!target, alreadyThere: root.parentElement === target });
@@ -29930,7 +29981,16 @@
           const parent = root.parentElement, next = root.nextSibling;
           try {
             let changed = plan === "move";
-            if (changed) target.insertBefore(root, target.lastChild || null);
+            if (changed) {
+              const anchor = desiredManagedRootBefore(target, kind);
+              target.insertBefore(root, anchor || null);
+            } else if (zenTop && !zenParentOf(root)) {
+              const anchor = desiredManagedRootBefore(target, kind);
+              if (!isAlreadyBefore(target, root, anchor)) {
+                target.insertBefore(root, anchor || null);
+                changed = true;
+              }
+            }
             for (const node of nodes) if (node.getAttribute("zen-workspace-id") !== active) { node.setAttribute("zen-workspace-id", active); changed = true; }
             if (changed) {
               window.gBrowser?.tabContainer?._invalidateCachedTabs?.();
@@ -32536,6 +32596,9 @@
             }
             if (zenMode() !== "off") zenSoon();
             if (agendaEnabled()) agendaSoon();
+          }
+          else if (name === PREF.ZEN_TOP) {
+            repositionManagedRoots();
           }
           else if (name === PREF.AGENDA_ENABLED || name === PREF.AGENDA_POSITION || name === PREF.AGENDA_DAYS || name === PREF.AGENDA_OVERDUE || name === PREF.AGENDA_OVERDUE_DAYS || name === PREF.AGENDA_OVERDUE_CAP || name === PREF.AGENDA_HIDE_TRASHED || name === PREF.AGENDA_MAX_ITEMS) agendaSoon();
           else if (name === PREF.ZEN_ROOT_COLOR || name === PREF.ZEN_ROOT_ICON || name === PREF.ZEN_ROOT_PARTS || name === PREF.ZEN_ROOT_PART_OPACITY) {
