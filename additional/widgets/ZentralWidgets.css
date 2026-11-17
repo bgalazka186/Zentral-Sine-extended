@@ -124,6 +124,167 @@
   color: color-mix(in srgb, #e5534b 85%, currentColor) !important;
 }
 
+/* ---- Built-in Clock widget (T3.9b) ---- */
+
+#zentral-sidebar-widgets .zw-clock {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 2px !important;
+  min-width: 0 !important;
+}
+
+#zentral-sidebar-widgets .zw-clock-main {
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 3px !important;
+  min-width: 0 !important;
+  line-height: 1.05 !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+#zentral-sidebar-widgets .zw-clock-time {
+  font-size: 28px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.025em !important;
+  white-space: nowrap !important;
+}
+
+#zentral-sidebar-widgets .zw-clock-seconds {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  opacity: 0.66 !important;
+  white-space: nowrap !important;
+}
+
+#zentral-sidebar-widgets .zw-clock-meridiem {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.03em !important;
+  text-transform: uppercase !important;
+  opacity: 0.72 !important;
+  margin-inline-start: 2px !important;
+  white-space: nowrap !important;
+}
+
+#zentral-sidebar-widgets .zw-clock-zone {
+  font-size: 10px !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
+}
+
+#zentral-sidebar-widgets[data-zw-density="compact"] .zw-clock-time {
+  font-size: 24px !important;
+}
+
+#zentral-sidebar-widgets[data-zw-density="comfortable"] .zw-clock-time {
+  font-size: 32px !important;
+}
+
+/* ---- Built-in Date widget (T3.9b) ---- */
+
+#zentral-sidebar-widgets .zw-date {
+  display: flex !important;
+  align-items: center !important;
+  gap: 9px !important;
+  min-width: 0 !important;
+}
+
+#zentral-sidebar-widgets .zw-date-badge {
+  display: flex !important;
+  flex: 0 0 auto !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 36px !important;
+  min-height: 36px !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent) !important;
+  background: color-mix(in srgb, currentColor 6%, transparent) !important;
+}
+
+#zentral-sidebar-widgets .zw-date-badge-dow {
+  width: 100% !important;
+  text-align: center !important;
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  line-height: 1.45 !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
+  background: color-mix(in srgb, var(--zen-primary-color, #4c8bf5) 26%, transparent) !important;
+  color: inherit !important;
+}
+
+#zentral-sidebar-widgets .zw-date-badge-day {
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  line-height: 1.35 !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+#zentral-sidebar-widgets .zw-date-info {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  gap: 1px !important;
+  min-width: 0 !important;
+}
+
+#zentral-sidebar-widgets .zw-date-top {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+}
+
+#zentral-sidebar-widgets .zw-date-secondary {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  opacity: 0.72 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+#zentral-sidebar-widgets .zw-date-week {
+  flex: 0 0 auto !important;
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  padding: 1px 4px !important;
+  border-radius: 4px !important;
+  background: color-mix(in srgb, currentColor 10%, transparent) !important;
+  opacity: 0.78 !important;
+}
+
+#zentral-sidebar-widgets .zw-date-primary {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  line-height: 1.25 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+#zentral-sidebar-widgets[data-zw-density="compact"] .zw-date {
+  gap: 7px !important;
+}
+
+#zentral-sidebar-widgets[data-zw-density="compact"] .zw-date-badge {
+  width: 32px !important;
+  min-height: 32px !important;
+  border-radius: 6px !important;
+}
+
+#zentral-sidebar-widgets[data-zw-density="compact"] .zw-date-badge-day {
+  font-size: 14px !important;
+}
+
+#zentral-sidebar-widgets[data-zw-density="compact"] .zw-date-primary {
+  font-size: 12px !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   #zentral-sidebar-widgets .zw-card {
     transition: none !important;

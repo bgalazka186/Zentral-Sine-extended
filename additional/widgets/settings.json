@@ -68,6 +68,82 @@
       "label": "Disabled widget IDs (comma-separated)",
       "type": "string",
       "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.clock.enabled",
+      "label": "Show Clock widget",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.clock.format",
+      "label": "Clock format",
+      "type": "dropdown",
+      "defaultValue": "auto",
+      "options": [
+        {
+          "label": "Automatic (locale)",
+          "value": "auto"
+        },
+        {
+          "label": "24-hour",
+          "value": "24h"
+        },
+        {
+          "label": "12-hour",
+          "value": "12h"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.clock.show_seconds",
+      "label": "Show seconds on Clock widget",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.clock.show_zone",
+      "label": "Show time zone label on Clock widget",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.date.enabled",
+      "label": "Show Date widget",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.date.format",
+      "label": "Date format",
+      "type": "dropdown",
+      "defaultValue": "long",
+      "options": [
+        {
+          "label": "Long (Monday · November 16)",
+          "value": "long"
+        },
+        {
+          "label": "Short (Mon · Nov 16)",
+          "value": "short"
+        },
+        {
+          "label": "ISO (2026-11-16)",
+          "value": "iso"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.date.show_year",
+      "label": "Show year on Date widget",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.date.show_week_number",
+      "label": "Show ISO week number on Date widget",
+      "type": "checkbox",
+      "defaultValue": false
     }
   ],
   "settings": {
@@ -79,6 +155,46 @@
     "zen.workspace.zentral.widgets.disabled_ids": {
       "category": "widgets",
       "section": "Sidebar widgets",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.clock.enabled": {
+      "category": "widgets",
+      "section": "Clock & Date",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.clock.format": {
+      "category": "widgets",
+      "section": "Clock & Date",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.clock.show_seconds": {
+      "category": "widgets",
+      "section": "Clock & Date",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.clock.show_zone": {
+      "category": "widgets",
+      "section": "Clock & Date",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.date.enabled": {
+      "category": "widgets",
+      "section": "Clock & Date",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.date.format": {
+      "category": "widgets",
+      "section": "Clock & Date",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.date.show_year": {
+      "category": "widgets",
+      "section": "Clock & Date",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.date.show_week_number": {
+      "category": "widgets",
+      "section": "Clock & Date",
       "owner": "widgets"
     },
     "zen.workspace.zentral.widgets.max_height_share": {

@@ -229,6 +229,9 @@
           "label": "Sidebar widgets"
         },
         {
+          "label": "Clock & Date"
+        },
+        {
           "label": "Layout & visibility"
         }
       ],
@@ -955,6 +958,19 @@
     },
     "zen.workspace.zentral.widgets.enabled",
     "zen.workspace.zentral.widgets.disabled_ids",
+    {
+      "type": "text",
+      "label": "**Sidebar Widgets · Clock & Date**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.widgets.clock.enabled",
+    "zen.workspace.zentral.widgets.clock.format",
+    "zen.workspace.zentral.widgets.clock.show_seconds",
+    "zen.workspace.zentral.widgets.clock.show_zone",
+    "zen.workspace.zentral.widgets.date.enabled",
+    "zen.workspace.zentral.widgets.date.format",
+    "zen.workspace.zentral.widgets.date.show_year",
+    "zen.workspace.zentral.widgets.date.show_week_number",
     {
       "type": "text",
       "label": "**Sidebar Widgets · Layout & visibility**",

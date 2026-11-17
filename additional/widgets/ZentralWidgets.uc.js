@@ -35,6 +35,14 @@
     TABS_RESERVE_PX: "zen.workspace.zentral.widgets.tabs_reserve_px",
     PAUSE_WHEN_HIDDEN: "zen.workspace.zentral.widgets.pause_when_hidden",
     DISABLED_IDS: "zen.workspace.zentral.widgets.disabled_ids",
+    CLOCK_ENABLED: "zen.workspace.zentral.widgets.clock.enabled",
+    CLOCK_FORMAT: "zen.workspace.zentral.widgets.clock.format",
+    CLOCK_SHOW_SECONDS: "zen.workspace.zentral.widgets.clock.show_seconds",
+    CLOCK_SHOW_ZONE: "zen.workspace.zentral.widgets.clock.show_zone",
+    DATE_ENABLED: "zen.workspace.zentral.widgets.date.enabled",
+    DATE_FORMAT: "zen.workspace.zentral.widgets.date.format",
+    DATE_SHOW_YEAR: "zen.workspace.zentral.widgets.date.show_year",
+    DATE_SHOW_WEEK: "zen.workspace.zentral.widgets.date.show_week_number",
   });
 
   const DEFAULTS = Object.freeze({
@@ -45,7 +53,18 @@
     TABS_RESERVE_PX: 24,
     PAUSE_WHEN_HIDDEN: true,
     DISABLED_IDS: "",
+    CLOCK_ENABLED: true,
+    CLOCK_FORMAT: "auto",
+    CLOCK_SHOW_SECONDS: false,
+    CLOCK_SHOW_ZONE: false,
+    DATE_ENABLED: true,
+    DATE_FORMAT: "long",
+    DATE_SHOW_YEAR: false,
+    DATE_SHOW_WEEK: false,
   });
+
+  const CLOCK_FORMATS = Object.freeze(["auto", "24h", "12h"]);
+  const DATE_FORMATS = Object.freeze(["long", "short", "iso"]);
 
   const LIMITS = Object.freeze({
     MAX_HEIGHT_SHARE: [15, 80],
@@ -148,6 +167,280 @@
 
   function isVideoPlayerElement(node) {
     return Boolean(node && node.id === VIDEO_PLAYER_ID);
+  }
+
+  function cleanClockFormat(val) {
+    const s = String(val || "")
+      .trim()
+      .toLowerCase();
+    return CLOCK_FORMATS.includes(s) ? s : DEFAULTS.CLOCK_FORMAT;
+  }
+
+  function cleanDateFormat(val) {
+    const s = String(val || "")
+      .trim()
+      .toLowerCase();
+    return DATE_FORMATS.includes(s) ? s : DEFAULTS.DATE_FORMAT;
+  }
+
+  function pad2(n) {
+    return String(Math.max(0, Math.floor(Number(n) || 0))).padStart(2, "0");
+  }
+
+  /**
+   * DST-safe ISO 8601 week number (Monday-first, week 1 contains Jan 4).
+   */
+  function isoWeekNumber(year, month1, day) {
+    const utc = new Date(Date.UTC(year, month1 - 1, day));
+    const dow = utc.getUTCDay() || 7; // Mon=1 .. Sun=7
+    utc.setUTCDate(utc.getUTCDate() + 4 - dow);
+    const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
+    return Math.ceil(((utc - yearStart) / 86400000 + 1) / 7);
+  }
+
+  function civilPartsOf(nowMs, { locale, timeZone } = {}) {
+    const d = new Date(nowMs);
+    if (timeZone) {
+      try {
+        const fmt = new Intl.DateTimeFormat(locale || "en-US", {
+          timeZone,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hourCycle: "h23",
+        });
+        const map = {};
+        for (const p of fmt.formatToParts(d)) map[p.type] = p.value;
+        const year = Number(map.year);
+        const month = Number(map.month);
+        const day = Number(map.day);
+        const hour = Number(map.hour) % 24;
+        const minute = Number(map.minute);
+        const second = Number(map.second);
+        if (
+          [year, month, day, hour, minute, second].every(Number.isFinite)
+        ) {
+          return { year, month, day, hour, minute, second };
+        }
+      } catch (_) {}
+    }
+    return {
+      year: d.getFullYear(),
+      month: d.getMonth() + 1,
+      day: d.getDate(),
+      hour: d.getHours(),
+      minute: d.getMinutes(),
+      second: d.getSeconds(),
+    };
+  }
+
+  function formatClockParts(nowMs, opts = {}) {
+    const format = cleanClockFormat(opts.format);
+    const showSeconds = Boolean(opts.showSeconds);
+    const showZone = Boolean(opts.showZone);
+    const locale = opts.locale || undefined;
+    const timeZone = opts.timeZone || undefined;
+    const d = new Date(nowMs);
+    const civil = civilPartsOf(nowMs, { locale, timeZone });
+
+    let hours = pad2(civil.hour);
+    let minutes = pad2(civil.minute);
+    let seconds = pad2(civil.second);
+    let meridiem = "";
+    let zoneLabel = "";
+
+    const intlOpts = {
+      hour: format === "12h" ? "numeric" : "2-digit",
+      minute: "2-digit",
+    };
+    if (showSeconds) intlOpts.second = "2-digit";
+    if (format === "24h") intlOpts.hourCycle = "h23";
+    else if (format === "12h") intlOpts.hour12 = true;
+    if (timeZone) intlOpts.timeZone = timeZone;
+    if (showZone) intlOpts.timeZoneName = "short";
+
+    try {
+      const parts = new Intl.DateTimeFormat(locale, intlOpts).formatToParts(d);
+      const map = {};
+      for (const p of parts) {
+        if (!(p.type in map)) map[p.type] = p.value;
+      }
+      if (map.hour != null) hours = format === "24h" ? pad2(Number(map.hour) % 24) : map.hour;
+      if (map.minute != null) minutes = map.minute;
+      if (map.second != null) seconds = map.second;
+      if (map.dayPeriod) meridiem = map.dayPeriod.trim();
+      if (map.timeZoneName) zoneLabel = map.timeZoneName.trim();
+    } catch (_) {
+      if (format === "12h") {
+        meridiem = civil.hour >= 12 ? "PM" : "AM";
+        hours = String(civil.hour % 12 || 12);
+      }
+    }
+
+    const time = `${hours}:${minutes}`;
+    const fullTime = showSeconds ? `${time}:${seconds}` : time;
+    const text = meridiem ? `${fullTime} ${meridiem}` : fullTime;
+    const key = showSeconds
+      ? `${civil.year}-${pad2(civil.month)}-${pad2(civil.day)}T${pad2(civil.hour)}:${pad2(civil.minute)}:${pad2(civil.second)}`
+      : `${civil.year}-${pad2(civil.month)}-${pad2(civil.day)}T${pad2(civil.hour)}:${pad2(civil.minute)}`;
+
+    return {
+      time,
+      hours,
+      minutes,
+      seconds: showSeconds ? seconds : "",
+      meridiem,
+      zoneLabel: showZone ? zoneLabel : "",
+      text,
+      key,
+      format,
+      showSeconds,
+      showZone,
+    };
+  }
+
+  function formatDateParts(nowMs, opts = {}) {
+    const format = cleanDateFormat(opts.format);
+    const showYear = Boolean(opts.showYear);
+    const showWeekNumber = Boolean(opts.showWeekNumber);
+    const locale = opts.locale || undefined;
+    const timeZone = opts.timeZone || undefined;
+    const d = new Date(nowMs);
+    const civil = civilPartsOf(nowMs, { locale, timeZone });
+    const isoDate = `${civil.year}-${pad2(civil.month)}-${pad2(civil.day)}`;
+    const weekNumber = isoWeekNumber(civil.year, civil.month, civil.day);
+
+    let weekdayShort = "";
+    let weekdayLong = "";
+    let monthLabel = "";
+
+    try {
+      const base = timeZone ? { timeZone } : {};
+      weekdayShort = new Intl.DateTimeFormat(locale, {
+        ...base,
+        weekday: "short",
+      }).format(d);
+      weekdayLong = new Intl.DateTimeFormat(locale, {
+        ...base,
+        weekday: "long",
+      }).format(d);
+      monthLabel = new Intl.DateTimeFormat(locale, {
+        ...base,
+        month: format === "short" ? "short" : "long",
+      }).format(d);
+    } catch (_) {
+      const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const MONTHS = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+      ];
+      const utcDow = new Date(Date.UTC(civil.year, civil.month - 1, civil.day)).getUTCDay();
+      weekdayShort = DAYS[utcDow] || "";
+      weekdayLong = weekdayShort;
+      monthLabel = MONTHS[civil.month - 1] || "";
+    }
+
+    let primary = "";
+    let secondary = "";
+    if (format === "iso") {
+      primary = isoDate;
+      secondary = weekdayLong;
+    } else if (format === "short") {
+      primary = `${monthLabel} ${civil.day}${showYear ? `, ${civil.year}` : ""}`;
+      secondary = weekdayShort;
+    } else {
+      primary = `${monthLabel} ${civil.day}${showYear ? `, ${civil.year}` : ""}`;
+      secondary = weekdayLong;
+    }
+
+    const weekBadge = showWeekNumber ? `W${weekNumber}` : "";
+    const text = [secondary, primary, weekBadge].filter(Boolean).join(" · ");
+
+    return {
+      isoDate,
+      year: civil.year,
+      month: civil.month,
+      dayNumber: String(civil.day),
+      weekdayShort,
+      weekdayLong,
+      monthLabel,
+      weekNumber,
+      weekBadge,
+      primary,
+      secondary,
+      text,
+      key: isoDate,
+      format,
+      showYear,
+      showWeekNumber,
+    };
+  }
+
+  /**
+   * Exact milliseconds until the next second or minute wall-clock boundary.
+   */
+  function nextClockDelayMs(nowMs, showSeconds = false) {
+    const unit = showSeconds ? 1000 : 60000;
+    const rem = unit - (((nowMs % unit) + unit) % unit);
+    return Math.max(50, Math.min(unit, rem === 0 ? unit : rem));
+  }
+
+  /**
+   * Exact milliseconds until the next local calendar midnight (DST-safe).
+   */
+  function nextLocalMidnightDelayMs(nowMs, timeZone) {
+    if (timeZone) {
+      const c = civilPartsOf(nowMs, { timeZone });
+      const elapsedSec = c.hour * 3600 + c.minute * 60 + c.second;
+      const msInSec = ((nowMs % 1000) + 1000) % 1000;
+      const approx = Math.max(1000, (86400 - elapsedSec) * 1000 - msInSec + 100);
+      return Math.min(86400000, approx);
+    }
+    const d = new Date(nowMs);
+    const nextMidnight = new Date(
+      d.getFullYear(),
+      d.getMonth(),
+      d.getDate() + 1,
+      0,
+      0,
+      0,
+      100,
+    ).getTime();
+    return Math.max(1000, nextMidnight - nowMs);
+  }
+
+  function isClockCacheStale(nowMs, cached, opts = {}) {
+    if (!cached?.value) return true;
+    const format = cleanClockFormat(opts.format);
+    const showSeconds = Boolean(opts.showSeconds);
+    const showZone = Boolean(opts.showZone);
+    if (
+      cached.value.format !== format ||
+      Boolean(cached.value.showSeconds) !== showSeconds ||
+      Boolean(cached.value.showZone) !== showZone
+    )
+      return true;
+    const fresh = formatClockParts(nowMs, opts);
+    return fresh.key !== cached.value.key;
+  }
+
+  function isDateCacheStale(nowMs, cached, opts = {}) {
+    if (!cached?.value) return true;
+    const format = cleanDateFormat(opts.format);
+    const showYear = Boolean(opts.showYear);
+    const showWeekNumber = Boolean(opts.showWeekNumber);
+    if (
+      cached.value.format !== format ||
+      Boolean(cached.value.showYear) !== showYear ||
+      Boolean(cached.value.showWeekNumber) !== showWeekNumber
+    )
+      return true;
+    const civil = civilPartsOf(nowMs, opts);
+    const isoDate = `${civil.year}-${pad2(civil.month)}-${pad2(civil.day)}`;
+    return isoDate !== cached.value.key;
   }
 
   function resolveWidgetRefreshMs(def, rawPrefValue) {
@@ -700,25 +993,37 @@
       if (!entry || disposed) return Promise.resolve(false);
       if (paused && !force) return Promise.resolve(false);
       const cached = cache.get(cacheKeyOf(entry.def));
-      if (
-        !force &&
-        cached &&
-        entry.intervalMs > 0 &&
-        now() - cached.updatedAt < entry.intervalMs
-      ) {
-        const remaining = Math.max(
-          50,
-          entry.intervalMs - (now() - cached.updatedAt),
-        );
-        clearEntryTimer(entry);
-        if (!paused) {
-          entry.timer = setTimer(() => {
-            entry.timer = null;
-            if (!disposed && !paused && entries.has(id))
-              refresh(id, { force: true, area });
-          }, remaining);
+      if (!force && cached && entry.intervalMs > 0) {
+        const customStale =
+          typeof entry.instance?.isStale === "function"
+            ? Boolean(entry.instance.isStale(now(), cached, entry.intervalMs))
+            : now() - cached.updatedAt >= entry.intervalMs;
+        if (!customStale) {
+          let remaining = Math.max(
+            50,
+            entry.intervalMs - (now() - cached.updatedAt),
+          );
+          if (typeof entry.instance?.nextDelayMs === "function") {
+            try {
+              const custom = entry.instance.nextDelayMs(
+                now(),
+                entry.intervalMs,
+                cached.value,
+              );
+              if (Number.isFinite(custom) && custom >= 50)
+                remaining = Math.round(custom);
+            } catch (_) {}
+          }
+          clearEntryTimer(entry);
+          if (!paused) {
+            entry.timer = setTimer(() => {
+              entry.timer = null;
+              if (!disposed && !paused && entries.has(id))
+                refresh(id, { force: true, area });
+            }, remaining);
+          }
+          return Promise.resolve(false);
         }
-        return Promise.resolve(false);
       }
 
       if (typeof entry.instance?.fetch !== "function") {
@@ -920,6 +1225,8 @@
     WIDGET_PREFS,
     DEFAULTS,
     LIMITS,
+    CLOCK_FORMATS,
+    DATE_FORMATS,
     VIDEO_PLAYER_ID,
     TRAY_ID,
     clampInt,
@@ -927,6 +1234,15 @@
     parseDisabledIds,
     serializeDisabledIds,
     isVideoPlayerElement,
+    cleanClockFormat,
+    cleanDateFormat,
+    isoWeekNumber,
+    formatClockParts,
+    formatDateParts,
+    nextClockDelayMs,
+    nextLocalMidnightDelayMs,
+    isClockCacheStale,
+    isDateCacheStale,
     resolveWidgetRefreshMs,
     computeWidgetArea,
     chooseWidgetMountTarget,
@@ -1032,6 +1348,12 @@
       }
 
       function widgetIntervalMs(def) {
+        if (typeof def.resolveIntervalMs === "function") {
+          try {
+            const custom = def.resolveIntervalMs();
+            if (Number.isFinite(custom) && custom >= 0) return Math.round(custom);
+          } catch (_) {}
+        }
         let rawPref = null;
         if (def.refreshPref) {
           try {
@@ -1418,6 +1740,20 @@
             }
           });
         }
+        if (Array.isArray(cleanDef.watchPrefs)) {
+          for (const wp of cleanDef.watchPrefs) {
+            watchPref(wp, () => {
+              if (mountedCards.has(id)) {
+                scheduler.updateInterval(
+                  id,
+                  widgetIntervalMs(cleanDef),
+                  lastArea,
+                );
+                scheduler.refresh(id, { force: true, area: lastArea });
+              }
+            });
+          }
+        }
         syncWidgetsAndLayout();
         return true;
       }
@@ -1480,12 +1816,202 @@
         }));
       }
 
-      // ---- Event & pref wiring (zero permanent polling) ----
+      // ---- Event & pref wiring (no permanent polling) ----
 
       const onShellPref = () => syncWidgetsAndLayout();
-      for (const pref of Object.values(WIDGET_PREFS)) {
+      for (const pref of [
+        WIDGET_PREFS.ENABLED,
+        WIDGET_PREFS.MAX_HEIGHT_SHARE,
+        WIDGET_PREFS.MIN_FREE_HEIGHT,
+        WIDGET_PREFS.MIN_SIDEBAR_WIDTH,
+        WIDGET_PREFS.TABS_RESERVE_PX,
+        WIDGET_PREFS.PAUSE_WHEN_HIDDEN,
+        WIDGET_PREFS.DISABLED_IDS,
+      ]) {
         watchPref(pref, onShellPref);
       }
+
+      // ---- Built-in widgets: Clock & Date (T3.9b) ----
+
+      function readClockOpts() {
+        return {
+          format: cleanClockFormat(
+            getString(WIDGET_PREFS.CLOCK_FORMAT, "auto"),
+          ),
+          showSeconds: getBool(WIDGET_PREFS.CLOCK_SHOW_SECONDS, false),
+          showZone: getBool(WIDGET_PREFS.CLOCK_SHOW_ZONE, false),
+        };
+      }
+
+      function readDateOpts() {
+        return {
+          format: cleanDateFormat(
+            getString(WIDGET_PREFS.DATE_FORMAT, "long"),
+          ),
+          showYear: getBool(WIDGET_PREFS.DATE_SHOW_YEAR, false),
+          showWeekNumber: getBool(WIDGET_PREFS.DATE_SHOW_WEEK, false),
+        };
+      }
+
+      registerWidget({
+        id: "clock",
+        title: "Clock",
+        showHeader: false,
+        order: 10,
+        pref: WIDGET_PREFS.CLOCK_ENABLED,
+        defaultEnabled: true,
+        watchPrefs: [
+          WIDGET_PREFS.CLOCK_FORMAT,
+          WIDGET_PREFS.CLOCK_SHOW_SECONDS,
+          WIDGET_PREFS.CLOCK_SHOW_ZONE,
+        ],
+        resolveIntervalMs: () =>
+          getBool(WIDGET_PREFS.CLOCK_SHOW_SECONDS, false) ? 1000 : 60000,
+        create({ document: doc }) {
+          const wrap = doc.createElement("div");
+          wrap.className = "zw-clock";
+
+          const main = doc.createElement("div");
+          main.className = "zw-clock-main";
+          const timeEl = doc.createElement("span");
+          timeEl.className = "zw-clock-time";
+          const secEl = doc.createElement("span");
+          secEl.className = "zw-clock-seconds";
+          secEl.hidden = true;
+          const merEl = doc.createElement("span");
+          merEl.className = "zw-clock-meridiem";
+          merEl.hidden = true;
+          main.appendChild(timeEl);
+          main.appendChild(secEl);
+          main.appendChild(merEl);
+
+          const zoneEl = doc.createElement("div");
+          zoneEl.className = "zw-card-meta zw-clock-zone";
+          zoneEl.hidden = true;
+
+          wrap.appendChild(main);
+          wrap.appendChild(zoneEl);
+
+          return {
+            element: wrap,
+            fetch({ now }) {
+              return formatClockParts(now, readClockOpts());
+            },
+            isStale(now, cached) {
+              return isClockCacheStale(now, cached, readClockOpts());
+            },
+            nextDelayMs(now) {
+              return nextClockDelayMs(now, readClockOpts().showSeconds);
+            },
+            render(value) {
+              if (!value) return;
+              timeEl.textContent = value.time || "";
+              if (value.seconds) {
+                secEl.textContent = ":" + value.seconds;
+                secEl.hidden = false;
+              } else {
+                secEl.textContent = "";
+                secEl.hidden = true;
+              }
+              if (value.meridiem) {
+                merEl.textContent = value.meridiem;
+                merEl.hidden = false;
+              } else {
+                merEl.textContent = "";
+                merEl.hidden = true;
+              }
+              if (value.zoneLabel) {
+                zoneEl.textContent = value.zoneLabel;
+                zoneEl.hidden = false;
+              } else {
+                zoneEl.textContent = "";
+                zoneEl.hidden = true;
+              }
+              wrap.setAttribute("data-zw-clock-key", value.key || "");
+              wrap.setAttribute("aria-label", value.text || "Clock");
+            },
+          };
+        },
+      });
+
+      registerWidget({
+        id: "date",
+        title: "Date",
+        showHeader: false,
+        order: 20,
+        pref: WIDGET_PREFS.DATE_ENABLED,
+        defaultEnabled: true,
+        refreshMs: 86400000,
+        watchPrefs: [
+          WIDGET_PREFS.DATE_FORMAT,
+          WIDGET_PREFS.DATE_SHOW_YEAR,
+          WIDGET_PREFS.DATE_SHOW_WEEK,
+        ],
+        create({ document: doc }) {
+          const wrap = doc.createElement("div");
+          wrap.className = "zw-date";
+
+          const badge = doc.createElement("div");
+          badge.className = "zw-date-badge";
+          badge.setAttribute("aria-hidden", "true");
+          const badgeDow = doc.createElement("span");
+          badgeDow.className = "zw-date-badge-dow";
+          const badgeDay = doc.createElement("span");
+          badgeDay.className = "zw-date-badge-day";
+          badge.appendChild(badgeDow);
+          badge.appendChild(badgeDay);
+
+          const info = doc.createElement("div");
+          info.className = "zw-date-info";
+          const topRow = doc.createElement("div");
+          topRow.className = "zw-date-top";
+          const secondaryEl = doc.createElement("span");
+          secondaryEl.className = "zw-date-secondary";
+          const weekEl = doc.createElement("span");
+          weekEl.className = "zw-date-week";
+          weekEl.hidden = true;
+          topRow.appendChild(secondaryEl);
+          topRow.appendChild(weekEl);
+
+          const primaryEl = doc.createElement("div");
+          primaryEl.className = "zw-date-primary";
+
+          info.appendChild(topRow);
+          info.appendChild(primaryEl);
+
+          wrap.appendChild(badge);
+          wrap.appendChild(info);
+
+          return {
+            element: wrap,
+            fetch({ now }) {
+              return formatDateParts(now, readDateOpts());
+            },
+            isStale(now, cached) {
+              return isDateCacheStale(now, cached, readDateOpts());
+            },
+            nextDelayMs(now) {
+              return nextLocalMidnightDelayMs(now);
+            },
+            render(value) {
+              if (!value) return;
+              badgeDow.textContent = value.weekdayShort || "";
+              badgeDay.textContent = value.dayNumber || "";
+              secondaryEl.textContent = value.secondary || "";
+              primaryEl.textContent = value.primary || "";
+              if (value.weekBadge) {
+                weekEl.textContent = value.weekBadge;
+                weekEl.hidden = false;
+              } else {
+                weekEl.textContent = "";
+                weekEl.hidden = true;
+              }
+              wrap.setAttribute("data-zw-date-key", value.key || "");
+              wrap.setAttribute("aria-label", value.text || "Date");
+            },
+          };
+        },
+      });
 
       const onVisibilityOrResize = () => scheduleMeasure();
       const listen = (target, type, fn, opts) => {

@@ -636,7 +636,11 @@ function createFakeSidebarHarness(initialPrefs = {}) {
   });
 
   await test("room for tabs, folders & Essentials: adding overflowing tabs auto-hides tray and pauses timers", () => {
-    const h = createFakeSidebarHarness({ "zen.workspace.zentral.widgets.enabled": true });
+    const h = createFakeSidebarHarness({
+      "zen.workspace.zentral.widgets.enabled": true,
+      "zen.workspace.zentral.widgets.clock.enabled": false,
+      "zen.workspace.zentral.widgets.date.enabled": false,
+    });
     const { api } = h.start();
 
     let fetches = 0;
@@ -688,7 +692,11 @@ function createFakeSidebarHarness(initialPrefs = {}) {
   });
 
   await test("pause when window or sidebar is hidden, cached last value, and error resilience", async () => {
-    const h = createFakeSidebarHarness({ "zen.workspace.zentral.widgets.enabled": true });
+    const h = createFakeSidebarHarness({
+      "zen.workspace.zentral.widgets.enabled": true,
+      "zen.workspace.zentral.widgets.clock.enabled": false,
+      "zen.workspace.zentral.widgets.date.enabled": false,
+    });
     const { api } = h.start();
 
     let failNext = false;
@@ -771,6 +779,8 @@ function createFakeSidebarHarness(initialPrefs = {}) {
   await test("per-widget on/off (dedicated pref & disabled_ids), ordering, and zero-leak destroy", () => {
     const h = createFakeSidebarHarness({
       "zen.workspace.zentral.widgets.enabled": true,
+      "zen.workspace.zentral.widgets.clock.enabled": false,
+      "zen.workspace.zentral.widgets.date.enabled": false,
       "zen.workspace.zentral.widgets.alpha.enabled": true,
     });
     const { api } = h.start();

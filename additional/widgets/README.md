@@ -19,6 +19,9 @@ Full installation uses root `theme.json` and `preferences.json`, plus `loader/`;
 - **Video-player avoidance:** `#zentral-sidebar-widgets` mounts cleanly above `#zen-media-controls-toolbar` / `#zen-sidebar-bottom-buttons` without disturbing `#zentral-video-preview` or its anchor adjacency. The tray reads `#zentral-video-preview`'s live measured height (never a fixed aspect ratio, and `0` while hidden or popped out to Big Preview) and subtracts it directly from available free height.
 - **Room for tabs, folders, and Essentials:** Free height excludes top/bottom chrome, Essentials, the sidebar video player, and occupied tabs/folders height. The tray height is capped by `max_height_share` (%) minus `tabs_reserve_px` (px) and hides automatically whenever free height drops below `min_free_height` (px) or sidebar width drops below `min_sidebar_width` (px).
 - **No permanent polling:** No `setInterval`. Each widget defines its own refresh interval and optional boundary alignment, caches its last good value, and pauses all timers whenever the window or sidebar is hidden.
+- **Built-in Clock & Date widgets:**
+  - **Clock** (`zen.workspace.zentral.widgets.clock.*`): new-tab-page digital clock (`auto` / `24h` / `12h`), optional seconds and time-zone label, boundary-aligned to the exact minute (or second when seconds are enabled) so it wakes up once per minute/second and zero times while hidden.
+  - **Date** (`zen.workspace.zentral.widgets.date.*`): mini calendar badge + weekday/date (`long` / `short` / `iso`), optional year and ISO week number (`W#`), boundary-aligned to local midnight (wakes up once per day, and catches missed midnight transitions on resume).
 
 ## Install as a standalone Sine feature
 
