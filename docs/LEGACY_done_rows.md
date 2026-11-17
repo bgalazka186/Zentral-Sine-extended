@@ -1116,3 +1116,22 @@ The card click is now free, which `OW-57` will use for cycling places.
 Tests: 2 cases in `tests/widgets-weather.test.cjs` (both halves drawn, styled to
 wrap) — the removal assertion is anchored to `setAttribute`, not a raw token,
 because the code legitimately still *clears* a stale attribute.
+
+`OW-55` DONE (3.3.282) — the owner decides what a day off looks like.
+Three kinds (weekend, holiday, other free days), each a tint colour and a
+strength in percent. The pure layer is `cleanDayLook` / `dayLookTint` /
+`DEFAULT_DAY_LOOK` in `ZentralNotesCalendar.js`, and the defaults are exactly
+the literals the stylesheet shipped with (`#6ca8ff 10%`, `#f0b85b 13%`,
+`#78a9c8 4%`), so a sheet that never opened the setting is unchanged and
+`dayLookTint` returns "" for a default pair — no variable, no flag. Six
+`LOOK_*` prefs feed the existing `--zentral-notes-ov-*` path, so the change
+applies live and Reset covers them without another list; each strength is in
+`LOOK_NUM_PREFS` and each tint variable in `LOOK_VARS` so disposal cleans up.
+The CSS keeps the old literal as the `var()` fallback and all six view places
+(month cell, time header, all-day cell, column, day group, agenda row) follow
+the one variable. Only the resting tint: selection and hover keep their tokens.
+The tint loop is guarded by `CALENDAR_PART?.DEFAULT_DAY_LOOK` like every other
+calendar call, so a build without the calendar file still reads its prefs.
+Tests: `tests/notes-day-look.test.cjs` (9 cases) — defaults, per-field junk
+fallback and clamping, no-variable-for-defaults, the CSS fallbacks, six places
+per kind, the six prefs in the schema/Sine page/settings card, and the guard.

@@ -155,6 +155,13 @@
       LOOK_TEXT: "zen.workspace.zentral.notes.look_text",
       LOOK_ACCENT: "zen.workspace.zentral.notes.look_accent",
       LOOK_LINE: "zen.workspace.zentral.notes.look_line",
+      // OW-55: what a day off looks like (colour + strength each; -1 strength = the shipped tint)
+      LOOK_WEEKEND_TINT: "zen.workspace.zentral.notes.look_weekend_tint",
+      LOOK_WEEKEND_STRENGTH: "zen.workspace.zentral.notes.look_weekend_strength",
+      LOOK_HOLIDAY_TINT: "zen.workspace.zentral.notes.look_holiday_tint",
+      LOOK_HOLIDAY_STRENGTH: "zen.workspace.zentral.notes.look_holiday_strength",
+      LOOK_FREE_TINT: "zen.workspace.zentral.notes.look_free_tint",
+      LOOK_FREE_STRENGTH: "zen.workspace.zentral.notes.look_free_strength",
       // Capture: selection / page -> note
       CAPTURE_TARGET: "zen.workspace.zentral.notes.capture_target",
       CAPTURE_MENU: "zen.workspace.zentral.notes.capture_menu",
@@ -287,7 +294,7 @@
     }
     const LOOK_PREFS = Object.freeze(Object.keys(PREF).filter((k) => k.startsWith("LOOK_")).map((k) => PREF[k]));
     // Integer look prefs: -1 (or anything out of range) keeps the theme's own value.
-    const LOOK_NUM_PREFS = new Set([PREF.LOOK_RADIUS, PREF.LOOK_BORDER, PREF.LOOK_PADDING, PREF.LOOK_OPACITY, PREF.LOOK_SHADOW_BLUR, PREF.LOOK_SHADOW_Y, PREF.LOOK_SHADOW_ALPHA, PREF.LOOK_BTN_SIZE, PREF.LOOK_BTN_RADIUS]);
+    const LOOK_NUM_PREFS = new Set([PREF.LOOK_RADIUS, PREF.LOOK_BORDER, PREF.LOOK_PADDING, PREF.LOOK_OPACITY, PREF.LOOK_SHADOW_BLUR, PREF.LOOK_SHADOW_Y, PREF.LOOK_SHADOW_ALPHA, PREF.LOOK_BTN_SIZE, PREF.LOOK_BTN_RADIUS, PREF.LOOK_WEEKEND_STRENGTH, PREF.LOOK_HOLIDAY_STRENGTH, PREF.LOOK_FREE_STRENGTH]);
     const VIEW_PREFS = new Set([PREF.WRAP, PREF.FONT_SIZE, PREF.LINE_HEIGHT, PREF.READ_COPY, PREF.THEME, ...LOOK_PREFS]);
     const WINDOW_PREFS = new Set([PREF.HOVER_REVEAL, PREF.PUSH_PAGE, PREF.CARD_AUTOHIDE, PREF.CARD_ENTRY_REVEAL, PREF.CARD_SIDEBAR_GUARD, PREF.CARD_PILL_BORDER, PREF.PUSH_PANEL_PERCENT, PREF.WIDE_PERCENT, PREF.REVEAL_HEIGHT, PREF.REVEAL_DELAY, PREF.AVOID_SIDEBAR]);
     const READ_PREFS = new Set([PREF.TOC_PILL, PREF.BLANK_LINES, PREF.LINE_BREAKS, PREF.SETEXT, PREF.HUB_DESC, PREF.BACKLINKS_PANEL]);
@@ -5473,6 +5480,13 @@
           C("btnIcon", "Icon color", PREF.LOOK_BTN_ICON, "text"),
           C("btnFill", "Fill color", PREF.LOOK_BTN_FILL, "accent"),
           C("btnBorder", "Border color", PREF.LOOK_BTN_BORDER, "text"),
+          { kind: "heading", i18nKey: "settings.heading.dayLook", label: "Days off" },
+          C("weekendTint", "Weekend tint", PREF.LOOK_WEEKEND_TINT, "accent"),
+          L("weekendStrength", "Weekend visibility", PREF.LOOK_WEEKEND_STRENGTH, 0, 60, "%", 10),
+          C("holidayTint", "Holiday tint", PREF.LOOK_HOLIDAY_TINT, "accent"),
+          L("holidayStrength", "Holiday visibility", PREF.LOOK_HOLIDAY_STRENGTH, 0, 60, "%", 13),
+          C("freeTint", "Other free days tint", PREF.LOOK_FREE_TINT, "accent"),
+          L("freeStrength", "Other free days visibility", PREF.LOOK_FREE_STRENGTH, 0, 60, "%", 4),
         ],
       },
       {
@@ -5573,6 +5587,7 @@
     const LOOK_VARS = Object.freeze([
       "radius", "border", "shadow", "opacity", "padding", "font", "editor-font", "heading", "btn-size",
       "btn-radius", "btn-icon", "btn-fill", "btn-border", "bg", "text", "accent", "line",
+      "weekend-tint", "holiday-tint", "free-tint",
     ].map((n) => "--zentral-notes-ov-" + n));
     // get(prefName) -> stored text. Returns { vars: {name: value}, flags: [..] }; invalid values are ignored.
     function lookOverrides(get) {
@@ -5616,6 +5631,21 @@
       if ((c = hex(PREF.LOOK_TEXT))) put("text", "text", c);
       if ((c = hex(PREF.LOOK_ACCENT))) put("accent", "accent", c);
       if ((c = hex(PREF.LOOK_LINE))) put("line", "line", c);
+      // OW-55: only a tint that differs from the shipped one sets a variable; otherwise the stylesheet's own
+      // fallback applies and the rule stays exactly as it was. Without the calendar part there are no day cells at
+      // all, so there is nothing to tint (every other calendar call is guarded the same way).
+      for (const [kind, tintPref, strengthPref] of (CALENDAR_PART?.DEFAULT_DAY_LOOK ? [
+        ["weekend", PREF.LOOK_WEEKEND_TINT, PREF.LOOK_WEEKEND_STRENGTH],
+        ["holiday", PREF.LOOK_HOLIDAY_TINT, PREF.LOOK_HOLIDAY_STRENGTH],
+        ["free", PREF.LOOK_FREE_TINT, PREF.LOOK_FREE_STRENGTH],
+      ] : [])) {
+        const def = CALENDAR_PART.DEFAULT_DAY_LOOK[kind];
+        const tone = hex(tintPref) || def.color;
+        const raw = String(get(strengthPref) ?? "").trim();
+        const strength = /^\d{1,3}$/.test(raw) ? Number(raw) : def.strength;
+        if (tone === def.color && strength === def.strength) continue;
+        put(kind + "-tint", kind + "-tint", CALENDAR_PART.dayLookTint({ [kind]: { color: tone, strength } }, kind));
+      }
       return { vars, flags };
     }
 

@@ -569,6 +569,63 @@
       "control": "color"
     },
     {
+      "property": "zen.workspace.zentral.notes.look_weekend_tint",
+      "label": "Notes calendar Weekend tint (six-digit #RRGGBB, empty = the shipped tint)",
+      "type": "string",
+      "defaultValue": "",
+      "control": "color"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.look_weekend_strength",
+      "label": "Notes calendar Weekend tint visibility (percent, 0-60; -1 = the shipped tint)",
+      "type": "input",
+      "defaultValue": -1,
+      "control": "slider",
+      "numeric": {
+        "min": -1,
+        "max": 60,
+        "unit": "%"
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.notes.look_holiday_tint",
+      "label": "Notes calendar Holiday tint (six-digit #RRGGBB, empty = the shipped tint)",
+      "type": "string",
+      "defaultValue": "",
+      "control": "color"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.look_holiday_strength",
+      "label": "Notes calendar Holiday tint visibility (percent, 0-60; -1 = the shipped tint)",
+      "type": "input",
+      "defaultValue": -1,
+      "control": "slider",
+      "numeric": {
+        "min": -1,
+        "max": 60,
+        "unit": "%"
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.notes.look_free_tint",
+      "label": "Notes calendar Other free days tint (six-digit #RRGGBB, empty = the shipped tint)",
+      "type": "string",
+      "defaultValue": "",
+      "control": "color"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.look_free_strength",
+      "label": "Notes calendar Other free days tint visibility (percent, 0-60; -1 = the shipped tint)",
+      "type": "input",
+      "defaultValue": -1,
+      "control": "slider",
+      "numeric": {
+        "min": -1,
+        "max": 60,
+        "unit": "%"
+      }
+    },
+    {
       "property": "zen.workspace.zentral.notes.capture_target",
       "label": "Add to note: default target of the shortcuts",
       "type": "dropdown",
@@ -1464,6 +1521,36 @@
     "zen.workspace.zentral.notes.look_line": {
       "category": "notes-appearance",
       "section": "Colors & backing",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.look_weekend_tint": {
+      "category": "notes-appearance",
+      "section": "Days off",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.look_weekend_strength": {
+      "category": "notes-appearance",
+      "section": "Days off",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.look_holiday_tint": {
+      "category": "notes-appearance",
+      "section": "Days off",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.look_holiday_strength": {
+      "category": "notes-appearance",
+      "section": "Days off",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.look_free_tint": {
+      "category": "notes-appearance",
+      "section": "Days off",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.look_free_strength": {
+      "category": "notes-appearance",
+      "section": "Days off",
       "owner": "notes"
     },
     "zen.workspace.zentral.notes.capture_target": {

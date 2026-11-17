@@ -2164,14 +2164,17 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-calendar-controls-toggle { position: relative; flex: 0 0 auto; }
 .zentral-notes-sheet .zn-calendar-controls-dot { position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 999px; background: var(--zn-accent); pointer-events: none; }
 .zentral-notes-sheet .zn-calendar-controls-dot[hidden] { display: none !important; }
-/* OW-39: Keep work-free days distinct without washing out events, text, or selection. */
+/* OW-39: Keep work-free days distinct without washing out events, text, or selection.
+   OW-55: the colour and strength of each are the owner's (--zentral-notes-ov-*-tint); the fallback here is the
+   tint this rule shipped with, so a sheet that never opened the setting looks exactly as before. These are resting
+   tints only: selection, hover and the holiday edge keep their own tokens. */
 .zentral-notes-sheet .zn-cal-month-cell.is-workfree,
 .zentral-notes-sheet .zn-cal-time-day-head.is-workfree,
 .zentral-notes-sheet .zn-cal-time-allday-cell.is-workfree,
 .zentral-notes-sheet .zn-cal-time-column.is-workfree,
 .zentral-notes-sheet .zn-cal-day-group.is-workfree,
 .zentral-notes-sheet .zn-cal-agenda-row.is-workfree {
-  background: color-mix(in srgb, #78a9c8 4%, transparent);
+  background: var(--zentral-notes-ov-free-tint, color-mix(in srgb, #78a9c8 4%, transparent));
 }
 .zentral-notes-sheet .zn-cal-month-cell.is-weekend,
 .zentral-notes-sheet .zn-cal-time-day-head.is-weekend,
@@ -2179,7 +2182,7 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-time-column.is-weekend,
 .zentral-notes-sheet .zn-cal-day-group.is-weekend,
 .zentral-notes-sheet .zn-cal-agenda-row.is-weekend {
-  background: color-mix(in srgb, #6ca8ff 10%, transparent);
+  background: var(--zentral-notes-ov-weekend-tint, color-mix(in srgb, #6ca8ff 10%, transparent));
 }
 .zentral-notes-sheet .zn-cal-month-cell.is-holiday,
 .zentral-notes-sheet .zn-cal-time-day-head.is-holiday,
@@ -2187,7 +2190,7 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-time-column.is-holiday,
 .zentral-notes-sheet .zn-cal-day-group.is-holiday,
 .zentral-notes-sheet .zn-cal-agenda-row.is-holiday {
-  background: color-mix(in srgb, #f0b85b 13%, transparent);
+  background: var(--zentral-notes-ov-holiday-tint, color-mix(in srgb, #f0b85b 13%, transparent));
 }
 /* OW-45: a trading Sunday or an election day is marked, but it is a working day: no work-free tint. */
 .zentral-notes-sheet .zn-cal-month-cell.is-trading-sunday,

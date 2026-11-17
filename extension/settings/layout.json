@@ -1316,6 +1316,17 @@
     "zen.workspace.zentral.notes.look_line",
     {
       "type": "text",
+      "label": "**Notes appearance · Days off**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.notes.look_weekend_tint",
+    "zen.workspace.zentral.notes.look_weekend_strength",
+    "zen.workspace.zentral.notes.look_holiday_tint",
+    "zen.workspace.zentral.notes.look_holiday_strength",
+    "zen.workspace.zentral.notes.look_free_tint",
+    "zen.workspace.zentral.notes.look_free_strength",
+    {
+      "type": "text",
       "label": "**Video**",
       "size": "22px"
     },

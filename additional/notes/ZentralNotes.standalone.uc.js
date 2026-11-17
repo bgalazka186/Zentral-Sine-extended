@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.281
+// @version 3.3.282
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.281, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.282, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.281";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.282";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -166,7 +166,7 @@ const __zentralShim = (function () {
       _observer: observer,
     };
   }
-  const numericItems = [{"key":"zen.workspace.zentral.notes.push_panel_percent","text":"zen.workspace.zentral.notes.push_panel_percent_text","min":20,"max":80,"def":45},{"key":"zen.workspace.zentral.notes.reveal_height_px","text":"zen.workspace.zentral.notes.reveal_height_px_text","min":2,"max":24,"def":10},{"key":"zen.workspace.zentral.notes.reveal_delay_ms","text":"zen.workspace.zentral.notes.reveal_delay_ms_text","min":0,"max":1000,"def":100},{"key":"zen.workspace.zentral.hybrid.dock_push_px","text":"zen.workspace.zentral.hybrid.dock_push_px_text","min":4,"max":440,"def":15},{"key":"zen.workspace.zentral.hybrid.detached_height_percent","text":"zen.workspace.zentral.hybrid.detached_height_percent_text","min":20,"max":100,"def":78},{"key":"zen.workspace.bgalazka.pill_position","text":"zen.workspace.bgalazka.pill_position_text","min":-50,"max":50,"def":0},{"key":"zen.workspace.bgalazka.pill_background_opacity","text":"zen.workspace.bgalazka.pill_background_opacity_text","min":0,"max":100,"def":48},{"key":"zen.workspace.bgalazka.pill_peek_dot_opacity","text":"zen.workspace.bgalazka.pill_peek_dot_opacity_text","min":0,"max":100,"def":31},{"key":"zen.workspace.bgalazka.hover_reveal_width_px","text":"zen.workspace.bgalazka.hover_reveal_width_px_text","min":0,"max":464,"def":1},{"key":"zen.workspace.bgalazka.hover_reveal_delay_ms","text":"zen.workspace.bgalazka.hover_reveal_delay_ms_text","min":0,"max":60000,"def":160},{"key":"zen.workspace.zentral.panels.autohide_delay_ms","text":"zen.workspace.zentral.panels.autohide_delay_ms_text","min":0,"max":60000,"def":400},{"key":"zen.workspace.zentral.notes.wide_percent","text":"zen.workspace.zentral.notes.wide_percent_text","min":130,"max":300,"def":200},{"key":"zen.workspace.zentral.notes.look_radius","text":"zen.workspace.zentral.notes.look_radius_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_border","text":"zen.workspace.zentral.notes.look_border_text","min":-1,"max":8,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_blur","text":"zen.workspace.zentral.notes.look_shadow_blur_text","min":-1,"max":120,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_y","text":"zen.workspace.zentral.notes.look_shadow_y_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_alpha","text":"zen.workspace.zentral.notes.look_shadow_alpha_text","min":-1,"max":100,"def":-1},{"key":"zen.workspace.zentral.notes.look_opacity","text":"zen.workspace.zentral.notes.look_opacity_text","min":-1,"max":100,"def":-1},{"key":"zen.workspace.zentral.notes.look_padding","text":"zen.workspace.zentral.notes.look_padding_text","min":-1,"max":64,"def":-1},{"key":"zen.workspace.zentral.notes.look_btn_size","text":"zen.workspace.zentral.notes.look_btn_size_text","min":-1,"max":56,"def":-1},{"key":"zen.workspace.zentral.notes.look_btn_radius","text":"zen.workspace.zentral.notes.look_btn_radius_text","min":-1,"max":50,"def":-1},{"key":"zen.workspace.zentral.notes.autosave_seconds","text":"zen.workspace.zentral.notes.autosave_seconds_text","min":2,"max":60,"def":5},{"key":"zen.workspace.zentral.notes.font_size","text":"zen.workspace.zentral.notes.font_size_text","min":8,"max":40,"def":13},{"key":"zen.workspace.zentral.notes.line_height","text":"zen.workspace.zentral.notes.line_height_text","min":100,"max":300,"def":160},{"key":"zen.workspace.zentral.notes.history_keep","text":"zen.workspace.zentral.notes.history_keep_text","min":1,"max":200,"def":20},{"key":"zen.workspace.zentral.notes.history_minutes","text":"zen.workspace.zentral.notes.history_minutes_text","min":1,"max":1440,"def":10},{"key":"zen.workspace.zentral.notes.history_cap_kb","text":"zen.workspace.zentral.notes.history_cap_kb_text","min":16,"max":4096,"def":512},{"key":"zen.workspace.zentral.notes.history_warn_mb","text":"zen.workspace.zentral.notes.history_warn_mb_text","min":5,"max":2000,"def":100},{"key":"zen.workspace.zentral.notes.trash_auto_empty_days","text":"zen.workspace.zentral.notes.trash_auto_empty_days_text","min":0,"max":3650,"def":30},{"key":"zen.workspace.zentral.notes.spellcheck_max_chars","text":"zen.workspace.zentral.notes.spellcheck_max_chars_text","min":1000,"max":1000000,"def":100000}];
+  const numericItems = [{"key":"zen.workspace.zentral.notes.push_panel_percent","text":"zen.workspace.zentral.notes.push_panel_percent_text","min":20,"max":80,"def":45},{"key":"zen.workspace.zentral.notes.reveal_height_px","text":"zen.workspace.zentral.notes.reveal_height_px_text","min":2,"max":24,"def":10},{"key":"zen.workspace.zentral.notes.reveal_delay_ms","text":"zen.workspace.zentral.notes.reveal_delay_ms_text","min":0,"max":1000,"def":100},{"key":"zen.workspace.zentral.hybrid.dock_push_px","text":"zen.workspace.zentral.hybrid.dock_push_px_text","min":4,"max":440,"def":15},{"key":"zen.workspace.zentral.hybrid.detached_height_percent","text":"zen.workspace.zentral.hybrid.detached_height_percent_text","min":20,"max":100,"def":78},{"key":"zen.workspace.bgalazka.pill_position","text":"zen.workspace.bgalazka.pill_position_text","min":-50,"max":50,"def":0},{"key":"zen.workspace.bgalazka.pill_background_opacity","text":"zen.workspace.bgalazka.pill_background_opacity_text","min":0,"max":100,"def":48},{"key":"zen.workspace.bgalazka.pill_peek_dot_opacity","text":"zen.workspace.bgalazka.pill_peek_dot_opacity_text","min":0,"max":100,"def":31},{"key":"zen.workspace.bgalazka.hover_reveal_width_px","text":"zen.workspace.bgalazka.hover_reveal_width_px_text","min":0,"max":464,"def":1},{"key":"zen.workspace.bgalazka.hover_reveal_delay_ms","text":"zen.workspace.bgalazka.hover_reveal_delay_ms_text","min":0,"max":60000,"def":160},{"key":"zen.workspace.zentral.panels.autohide_delay_ms","text":"zen.workspace.zentral.panels.autohide_delay_ms_text","min":0,"max":60000,"def":400},{"key":"zen.workspace.zentral.notes.wide_percent","text":"zen.workspace.zentral.notes.wide_percent_text","min":130,"max":300,"def":200},{"key":"zen.workspace.zentral.notes.look_radius","text":"zen.workspace.zentral.notes.look_radius_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_border","text":"zen.workspace.zentral.notes.look_border_text","min":-1,"max":8,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_blur","text":"zen.workspace.zentral.notes.look_shadow_blur_text","min":-1,"max":120,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_y","text":"zen.workspace.zentral.notes.look_shadow_y_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_alpha","text":"zen.workspace.zentral.notes.look_shadow_alpha_text","min":-1,"max":100,"def":-1},{"key":"zen.workspace.zentral.notes.look_opacity","text":"zen.workspace.zentral.notes.look_opacity_text","min":-1,"max":100,"def":-1},{"key":"zen.workspace.zentral.notes.look_padding","text":"zen.workspace.zentral.notes.look_padding_text","min":-1,"max":64,"def":-1},{"key":"zen.workspace.zentral.notes.look_btn_size","text":"zen.workspace.zentral.notes.look_btn_size_text","min":-1,"max":56,"def":-1},{"key":"zen.workspace.zentral.notes.look_btn_radius","text":"zen.workspace.zentral.notes.look_btn_radius_text","min":-1,"max":50,"def":-1},{"key":"zen.workspace.zentral.notes.look_weekend_strength","text":"zen.workspace.zentral.notes.look_weekend_strength_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_holiday_strength","text":"zen.workspace.zentral.notes.look_holiday_strength_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_free_strength","text":"zen.workspace.zentral.notes.look_free_strength_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.autosave_seconds","text":"zen.workspace.zentral.notes.autosave_seconds_text","min":2,"max":60,"def":5},{"key":"zen.workspace.zentral.notes.font_size","text":"zen.workspace.zentral.notes.font_size_text","min":8,"max":40,"def":13},{"key":"zen.workspace.zentral.notes.line_height","text":"zen.workspace.zentral.notes.line_height_text","min":100,"max":300,"def":160},{"key":"zen.workspace.zentral.notes.history_keep","text":"zen.workspace.zentral.notes.history_keep_text","min":1,"max":200,"def":20},{"key":"zen.workspace.zentral.notes.history_minutes","text":"zen.workspace.zentral.notes.history_minutes_text","min":1,"max":1440,"def":10},{"key":"zen.workspace.zentral.notes.history_cap_kb","text":"zen.workspace.zentral.notes.history_cap_kb_text","min":16,"max":4096,"def":512},{"key":"zen.workspace.zentral.notes.history_warn_mb","text":"zen.workspace.zentral.notes.history_warn_mb_text","min":5,"max":2000,"def":100},{"key":"zen.workspace.zentral.notes.trash_auto_empty_days","text":"zen.workspace.zentral.notes.trash_auto_empty_days_text","min":0,"max":3650,"def":30},{"key":"zen.workspace.zentral.notes.spellcheck_max_chars","text":"zen.workspace.zentral.notes.spellcheck_max_chars_text","min":1000,"max":1000000,"def":100000}];
   function nativeSidebarElement() {
       const tabs = window.gBrowser?.tabContainer;
       const candidates = [
@@ -2370,6 +2370,7 @@ const __zentralEmbeddedLoader = (function () {
       "settings.heading.text": "Text",
       "settings.heading.colors": "Colors",
       "settings.heading.buttons": "Buttons",
+      "settings.heading.dayLook": "Days off",
       "settings.heading.versionHistory": "Version history",
       "settings.heading.reminders": "Reminders",
       "settings.heading.performance": "Performance",
@@ -2423,6 +2424,12 @@ const __zentralEmbeddedLoader = (function () {
       "settings.opt.btnIcon": "Icon color",
       "settings.opt.btnFill": "Fill color",
       "settings.opt.btnBorder": "Border color",
+      "settings.opt.weekendTint": "Weekend tint",
+      "settings.opt.weekendStrength": "Weekend visibility",
+      "settings.opt.holidayTint": "Holiday tint",
+      "settings.opt.holidayStrength": "Holiday visibility",
+      "settings.opt.freeTint": "Other free days tint",
+      "settings.opt.freeStrength": "Other free days visibility",
       "settings.opt.capTarget": "Default target of the shortcuts",
       "settings.opt.capMenu": "Entry in the right-click menu",
       "settings.opt.capDate": "Include the date",
@@ -3380,6 +3387,7 @@ const __zentralEmbeddedLoader = (function () {
       "settings.heading.text": "Tekst",
       "settings.heading.colors": "Kolory",
       "settings.heading.buttons": "Przyciski",
+      "settings.heading.dayLook": "Dni wolne",
       "settings.heading.versionHistory": "Historia wersji",
       "settings.heading.reminders": "Przypomnienia",
       "settings.heading.performance": "Wydajno\u015b\u0107",
@@ -3433,6 +3441,12 @@ const __zentralEmbeddedLoader = (function () {
       "settings.opt.btnIcon": "Kolor ikon",
       "settings.opt.btnFill": "Kolor wype\u0142nienia",
       "settings.opt.btnBorder": "Kolor obramowania",
+      "settings.opt.weekendTint": "Kolor weekendu",
+      "settings.opt.weekendStrength": "Widoczno\u015b\u0107 weekendu",
+      "settings.opt.holidayTint": "Kolor \u015bwi\u0119ta",
+      "settings.opt.holidayStrength": "Widoczno\u015b\u0107 \u015bwi\u0119ta",
+      "settings.opt.freeTint": "Kolor innych dni wolnych",
+      "settings.opt.freeStrength": "Widoczno\u015b\u0107 innych dni wolnych",
       "settings.opt.capTarget": "Domy\u015blny cel skr\u00f3t\u00f3w",
       "settings.opt.capMenu": "Pozycja w menu kontekstowym",
       "settings.opt.capDate": "Do\u0142\u0105cz dat\u0119",
@@ -7968,6 +7982,46 @@ const __zentralEmbeddedLoader = (function () {
       colorMode: ["count", "category"].includes(o.colorMode) ? o.colorMode : DEFAULT_CALENDAR_PICKER.colorMode,
     };
   }
+  // OW-55: what a day off looks like. Three kinds, each a hex colour and a strength in percent; the defaults are
+  // exactly the literals the stylesheet shipped with, so a sheet that never touched the setting is unchanged.
+  const DEFAULT_DAY_LOOK = Object.freeze({
+    weekend: Object.freeze({ color: "#6ca8ff", strength: 10 }),
+    holiday: Object.freeze({ color: "#f0b85b", strength: 13 }),
+    free: Object.freeze({ color: "#78a9c8", strength: 4 }),
+  });
+  const DAY_LOOK_KINDS = Object.freeze(["weekend", "holiday", "free"]);
+  const DAY_LOOK_MAX_STRENGTH = 100;
+  function cleanDayLookColor(value, fallback) {
+    const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+    return /^#[0-9a-f]{6}$/.test(raw) ? raw : fallback;
+  }
+  function cleanDayLookStrength(value, fallback) {
+    if (value === null || value === undefined || value === "") return fallback;
+    const number = typeof value === "number" || (typeof value === "string" && value.trim() !== "") ? Number(value) : NaN;
+    if (!Number.isFinite(number)) return fallback;
+    return Math.max(0, Math.min(DAY_LOOK_MAX_STRENGTH, Math.round(number)));
+  }
+  // { weekend: {color, strength}, holiday: {...}, free: {...} }; junk in one field falls back for that field only.
+  function cleanDayLook(value) {
+    const o = value && typeof value === "object" ? value : {};
+    const one = (kind) => {
+      const raw = o[kind] && typeof o[kind] === "object" ? o[kind] : {};
+      const def = DEFAULT_DAY_LOOK[kind];
+      return { color: cleanDayLookColor(raw.color, def.color), strength: cleanDayLookStrength(raw.strength, def.strength) };
+    };
+    const out = {};
+    for (const kind of DAY_LOOK_KINDS) out[kind] = one(kind);
+    return out;
+  }
+  // The CSS value for one kind, or "" when it equals the default (the stylesheet's own fallback then applies and the
+  // rule stays byte-identical for anyone who never opened the setting).
+  function dayLookTint(look, kind) {
+    const clean = cleanDayLook(look);
+    const picked = clean[kind] || DEFAULT_DAY_LOOK[kind];
+    const def = DEFAULT_DAY_LOOK[kind] || DEFAULT_DAY_LOOK.free;
+    if (picked.color === def.color && picked.strength === def.strength) return "";
+    return `color-mix(in srgb, ${picked.color} ${picked.strength}%, transparent)`;
+  }
   // The hours the grid has to show: the chosen ones, widened by whole hours until every timed item of the days in
   // view lies inside. Off = 0..1440. The hours follow the times of the items, not the size of their boxes: a reminder
   // at 19:50 lies inside 08:00-20:00 (the grid keeps its box inside), one at 20:00 sharp lies after it.
@@ -11695,7 +11749,7 @@ const __zentralEmbeddedLoader = (function () {
     KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, translate, t, pluralCategory, tCount, translationKeys, missingTranslationKeys, ymd, parseYmd, dayStart, addDays, nextDayStart, dayRange, civilDayStart, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, lineScheduleSignature, cleanTextSchedule, scheduleSignatureFromItem, scheduleFromParsedLine, reconcileListItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, cleanHistoryFilter, filterHistoryRecords, historyPruneSurvey, exportHistoryLines, historySummaryLine, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_TABLE, HOLIDAY_TABLE_KINDS, holidayTableEntries, holidayTableYears, holidaySetCoverage, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, holidaySetsOf, NO_WORK_FREE, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
-    CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
+    DEFAULT_DAY_LOOK, DAY_LOOK_KINDS, DAY_LOOK_MAX_STRENGTH, cleanDayLookColor, cleanDayLookStrength, cleanDayLook, dayLookTint, CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
     cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaLeftCount, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle, icsUnfold, icsText, icsProperty, icsDateValue, icsZonedMs, icsStamp, icsRecurrence, parseIcs, icsToItem, planIcsImport,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
@@ -12408,6 +12462,13 @@ __zentralShim.register = function (def) {
       LOOK_TEXT: "zen.workspace.zentral.notes.look_text",
       LOOK_ACCENT: "zen.workspace.zentral.notes.look_accent",
       LOOK_LINE: "zen.workspace.zentral.notes.look_line",
+      // OW-55: what a day off looks like (colour + strength each; -1 strength = the shipped tint)
+      LOOK_WEEKEND_TINT: "zen.workspace.zentral.notes.look_weekend_tint",
+      LOOK_WEEKEND_STRENGTH: "zen.workspace.zentral.notes.look_weekend_strength",
+      LOOK_HOLIDAY_TINT: "zen.workspace.zentral.notes.look_holiday_tint",
+      LOOK_HOLIDAY_STRENGTH: "zen.workspace.zentral.notes.look_holiday_strength",
+      LOOK_FREE_TINT: "zen.workspace.zentral.notes.look_free_tint",
+      LOOK_FREE_STRENGTH: "zen.workspace.zentral.notes.look_free_strength",
       // Capture: selection / page -> note
       CAPTURE_TARGET: "zen.workspace.zentral.notes.capture_target",
       CAPTURE_MENU: "zen.workspace.zentral.notes.capture_menu",
@@ -12540,7 +12601,7 @@ __zentralShim.register = function (def) {
     }
     const LOOK_PREFS = Object.freeze(Object.keys(PREF).filter((k) => k.startsWith("LOOK_")).map((k) => PREF[k]));
     // Integer look prefs: -1 (or anything out of range) keeps the theme's own value.
-    const LOOK_NUM_PREFS = new Set([PREF.LOOK_RADIUS, PREF.LOOK_BORDER, PREF.LOOK_PADDING, PREF.LOOK_OPACITY, PREF.LOOK_SHADOW_BLUR, PREF.LOOK_SHADOW_Y, PREF.LOOK_SHADOW_ALPHA, PREF.LOOK_BTN_SIZE, PREF.LOOK_BTN_RADIUS]);
+    const LOOK_NUM_PREFS = new Set([PREF.LOOK_RADIUS, PREF.LOOK_BORDER, PREF.LOOK_PADDING, PREF.LOOK_OPACITY, PREF.LOOK_SHADOW_BLUR, PREF.LOOK_SHADOW_Y, PREF.LOOK_SHADOW_ALPHA, PREF.LOOK_BTN_SIZE, PREF.LOOK_BTN_RADIUS, PREF.LOOK_WEEKEND_STRENGTH, PREF.LOOK_HOLIDAY_STRENGTH, PREF.LOOK_FREE_STRENGTH]);
     const VIEW_PREFS = new Set([PREF.WRAP, PREF.FONT_SIZE, PREF.LINE_HEIGHT, PREF.READ_COPY, PREF.THEME, ...LOOK_PREFS]);
     const WINDOW_PREFS = new Set([PREF.HOVER_REVEAL, PREF.PUSH_PAGE, PREF.CARD_AUTOHIDE, PREF.CARD_ENTRY_REVEAL, PREF.CARD_SIDEBAR_GUARD, PREF.CARD_PILL_BORDER, PREF.PUSH_PANEL_PERCENT, PREF.WIDE_PERCENT, PREF.REVEAL_HEIGHT, PREF.REVEAL_DELAY, PREF.AVOID_SIDEBAR]);
     const READ_PREFS = new Set([PREF.TOC_PILL, PREF.BLANK_LINES, PREF.LINE_BREAKS, PREF.SETEXT, PREF.HUB_DESC, PREF.BACKLINKS_PANEL]);
@@ -17726,6 +17787,13 @@ __zentralShim.register = function (def) {
           C("btnIcon", "Icon color", PREF.LOOK_BTN_ICON, "text"),
           C("btnFill", "Fill color", PREF.LOOK_BTN_FILL, "accent"),
           C("btnBorder", "Border color", PREF.LOOK_BTN_BORDER, "text"),
+          { kind: "heading", i18nKey: "settings.heading.dayLook", label: "Days off" },
+          C("weekendTint", "Weekend tint", PREF.LOOK_WEEKEND_TINT, "accent"),
+          L("weekendStrength", "Weekend visibility", PREF.LOOK_WEEKEND_STRENGTH, 0, 60, "%", 10),
+          C("holidayTint", "Holiday tint", PREF.LOOK_HOLIDAY_TINT, "accent"),
+          L("holidayStrength", "Holiday visibility", PREF.LOOK_HOLIDAY_STRENGTH, 0, 60, "%", 13),
+          C("freeTint", "Other free days tint", PREF.LOOK_FREE_TINT, "accent"),
+          L("freeStrength", "Other free days visibility", PREF.LOOK_FREE_STRENGTH, 0, 60, "%", 4),
         ],
       },
       {
@@ -17826,6 +17894,7 @@ __zentralShim.register = function (def) {
     const LOOK_VARS = Object.freeze([
       "radius", "border", "shadow", "opacity", "padding", "font", "editor-font", "heading", "btn-size",
       "btn-radius", "btn-icon", "btn-fill", "btn-border", "bg", "text", "accent", "line",
+      "weekend-tint", "holiday-tint", "free-tint",
     ].map((n) => "--zentral-notes-ov-" + n));
     // get(prefName) -> stored text. Returns { vars: {name: value}, flags: [..] }; invalid values are ignored.
     function lookOverrides(get) {
@@ -17869,6 +17938,21 @@ __zentralShim.register = function (def) {
       if ((c = hex(PREF.LOOK_TEXT))) put("text", "text", c);
       if ((c = hex(PREF.LOOK_ACCENT))) put("accent", "accent", c);
       if ((c = hex(PREF.LOOK_LINE))) put("line", "line", c);
+      // OW-55: only a tint that differs from the shipped one sets a variable; otherwise the stylesheet's own
+      // fallback applies and the rule stays exactly as it was. Without the calendar part there are no day cells at
+      // all, so there is nothing to tint (every other calendar call is guarded the same way).
+      for (const [kind, tintPref, strengthPref] of (CALENDAR_PART?.DEFAULT_DAY_LOOK ? [
+        ["weekend", PREF.LOOK_WEEKEND_TINT, PREF.LOOK_WEEKEND_STRENGTH],
+        ["holiday", PREF.LOOK_HOLIDAY_TINT, PREF.LOOK_HOLIDAY_STRENGTH],
+        ["free", PREF.LOOK_FREE_TINT, PREF.LOOK_FREE_STRENGTH],
+      ] : [])) {
+        const def = CALENDAR_PART.DEFAULT_DAY_LOOK[kind];
+        const tone = hex(tintPref) || def.color;
+        const raw = String(get(strengthPref) ?? "").trim();
+        const strength = /^\d{1,3}$/.test(raw) ? Number(raw) : def.strength;
+        if (tone === def.color && strength === def.strength) continue;
+        put(kind + "-tint", kind + "-tint", CALENDAR_PART.dayLookTint({ [kind]: { color: tone, strength } }, kind));
+      }
       return { vars, flags };
     }
 

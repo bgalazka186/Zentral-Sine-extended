@@ -381,6 +381,50 @@
   },
   {
     "type": "text",
+    "label": "**Notes appearance · Days off**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_weekend_tint",
+    "label": "Notes calendar Weekend tint (six-digit #RRGGBB, empty = the shipped tint)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_weekend_strength_text",
+    "label": "Notes calendar Weekend tint visibility (percent, 0-60; -1 = the shipped tint) [-1 to 60 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_holiday_tint",
+    "label": "Notes calendar Holiday tint (six-digit #RRGGBB, empty = the shipped tint)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_holiday_strength_text",
+    "label": "Notes calendar Holiday tint visibility (percent, 0-60; -1 = the shipped tint) [-1 to 60 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_free_tint",
+    "label": "Notes calendar Other free days tint (six-digit #RRGGBB, empty = the shipped tint)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_free_strength_text",
+    "label": "Notes calendar Other free days tint visibility (percent, 0-60; -1 = the shipped tint) [-1 to 60 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "type": "text",
     "label": "**Notes capture**",
     "size": "16px"
   },

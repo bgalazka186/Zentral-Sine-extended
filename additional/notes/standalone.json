@@ -3,7 +3,7 @@
   "themeId": "zentral-notes",
   "name": "Zentral Notes",
   "description": "Quick notes as plain Markdown files: multiple notes, highlights, checklists, tables, split-view preview, search, trash, export (Markdown, HTML, text, PDF, zip). Opens from a shortcut anywhere and adds a Notes button to Zentral panel bars when the full pack's panels are present. Standalone part of Zentral Extended.",
-  "version": "3.3.281",
+  "version": "3.3.282",
   "entry": "ZentralNotes.uc.js",
   "output": "ZentralNotes.standalone.uc.js",
   "loader": "__zentralNotesLoader",
@@ -87,6 +87,17 @@
     "zen.workspace.zentral.notes.look_text",
     "zen.workspace.zentral.notes.look_accent",
     "zen.workspace.zentral.notes.look_line",
+    {
+      "type": "text",
+      "label": "**Notes appearance · Days off**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.notes.look_weekend_tint",
+    "zen.workspace.zentral.notes.look_weekend_strength",
+    "zen.workspace.zentral.notes.look_holiday_tint",
+    "zen.workspace.zentral.notes.look_holiday_strength",
+    "zen.workspace.zentral.notes.look_free_tint",
+    "zen.workspace.zentral.notes.look_free_strength",
     {
       "type": "text",
       "label": "**Notes capture**",

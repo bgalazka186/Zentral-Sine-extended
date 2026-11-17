@@ -728,6 +728,27 @@
     "def": -1
   },
   {
+    "key": "zen.workspace.zentral.notes.look_weekend_strength",
+    "text": "zen.workspace.zentral.notes.look_weekend_strength_text",
+    "min": -1,
+    "max": 60,
+    "def": -1
+  },
+  {
+    "key": "zen.workspace.zentral.notes.look_holiday_strength",
+    "text": "zen.workspace.zentral.notes.look_holiday_strength_text",
+    "min": -1,
+    "max": 60,
+    "def": -1
+  },
+  {
+    "key": "zen.workspace.zentral.notes.look_free_strength",
+    "text": "zen.workspace.zentral.notes.look_free_strength_text",
+    "min": -1,
+    "max": 60,
+    "def": -1
+  },
+  {
     "key": "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px",
     "text": "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px_text",
     "min": 6,
