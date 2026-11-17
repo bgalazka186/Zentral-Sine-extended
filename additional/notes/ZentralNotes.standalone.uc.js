@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.272
+// @version 3.3.274
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.272, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.274, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.272";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.274";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1991,6 +1991,41 @@ const __zentralEmbeddedLoader = (function () {
       "toast.itemColorSet": "Colour set to {colour}",
       "toast.itemColorCleared": "The item uses the note or category colour again",
       "sidebar.row.zenActions": "Zen tab actions…",
+      "history.title": "Reminder history",
+      "history.search": "Search the history",
+      "history.window": "How far back",
+      "history.windowAll": "Everything",
+      "history.windowDay": "Last {count} day",
+      "history.windowDays": "Last {count} days",
+      "history.empty": "No reminder history yet. Done, Dismissed, Snoozed and alert records appear here.",
+      "history.noneMatch": "Nothing matches these filters.",
+      "history.more": "\u2026and {count} more",
+      "history.clearFilter": "Clear filters",
+      "history.copy": "Copy as text",
+      "history.copied": "Copied to the clipboard",
+      "history.export": "Save as text file\u2026",
+      "history.exported": "The history was saved",
+      "history.prune": "Trim old records\u2026",
+      "history.pruneTitle": "Trim the reminder history",
+      "history.pruneAsk": "Move {count} old records to the archive and keep {kept}? Only records older than {days} days lose their place in the list.",
+      "history.pruneArchive": "Nothing is deleted: the trimmed records are appended to reminder-history-archive.jsonl first, and the automatic trimming uses the same rule when the history is saved.",
+      "history.pruneConfirm": "Trim now",
+      "history.pruneNothing": "Nothing is older than {days} days, so there is nothing to trim.",
+      "history.pruneDone": "Moved {count} records to the archive",
+      "history.pruneFailed": "The history could not be trimmed",
+      "history.loadOlder": "Load older records",
+      "history.untitled": "Untitled reminder",
+      "history.scheduled": "Scheduled: {when}",
+      "history.openNote": "Open note",
+      "history.showing": "showing {shown} of {total}",
+      "history.footnote": "The history is append-only and stored separately from calendar.json. Older records are moved to reminder-history-archive.jsonl, never deleted; snoozing and rescheduling do not mark a reminder complete.",
+      "history.action.alerted": "Alerted",
+      "history.action.skipped": "Skipped",
+      "history.action.done": "Done",
+      "history.action.dismissed": "Dismissed",
+      "history.action.reopened": "Reopened",
+      "history.action.snoozed": "Snoozed",
+      "history.action.rescheduled": "Rescheduled",
       "menu.color": "Colour",
       "menu.colorCustom": "Custom colour…",
       "menu.colorInherit": "Use the note or category colour",
@@ -2938,6 +2973,41 @@ const __zentralEmbeddedLoader = (function () {
       "toast.itemColorSet": "Ustawiono kolor: {colour}",
       "toast.itemColorCleared": "Element zn\u00f3w u\u017cywa koloru notatki lub kategorii",
       "sidebar.row.zenActions": "Dzia\u0142ania karty Zen\u2026",
+      "history.title": "Historia przypomnie\u0144",
+      "history.search": "Szukaj w historii",
+      "history.window": "Jak dawno",
+      "history.windowAll": "Wszystko",
+      "history.windowDay": "Ostatni {count} dzie\u0144",
+      "history.windowDays": "Ostatnie {count} dni",
+      "history.empty": "Nie ma jeszcze historii przypomnie\u0144. Tutaj pojawiaj\u0105 si\u0119 wpisy o zrobieniu, odrzuceniu, od\u0142o\u017ceniu i alertach.",
+      "history.noneMatch": "\u017baden wpis nie pasuje do tych filtr\u00f3w.",
+      "history.more": "\u2026i {count} wi\u0119cej",
+      "history.clearFilter": "Wyczy\u015b\u0107 filtry",
+      "history.copy": "Kopiuj jako tekst",
+      "history.copied": "Skopiowano do schowka",
+      "history.export": "Zapisz jako plik tekstowy\u2026",
+      "history.exported": "Historia zosta\u0142a zapisana",
+      "history.prune": "Przenie\u015b stare wpisy\u2026",
+      "history.pruneTitle": "Przenie\u015b \u015blady przypomnie\u0144",
+      "history.pruneAsk": "Przenie\u015b\u0107 {count} starych wpis\u00f3w do archiwum i zachowa\u0107 {kept}? Tylko wpisy starsze ni\u017c {days} dni znikn\u0105 z listy.",
+      "history.pruneArchive": "Nic nie jest usuwane: przeniesione wpisy trafiaj\u0105 najpierw do reminder-history-archive.jsonl, a automatyczne porz\u0105dkowanie u\u017cywa tej samej regu\u0142y przy zapisie historii.",
+      "history.pruneConfirm": "Przenie\u015b teraz",
+      "history.pruneNothing": "Nic nie jest starsze ni\u017c {days} dni, wi\u0119c nie ma czego przenosi\u0107.",
+      "history.pruneDone": "Przeniesiono {count} wpis\u00f3w do archiwum",
+      "history.pruneFailed": "Nie uda\u0142o si\u0119 przenie\u015b\u0107 historii",
+      "history.loadOlder": "Wczytaj starsze wpisy",
+      "history.untitled": "Przypomnienie bez tytu\u0142u",
+      "history.scheduled": "Zaplanowano: {when}",
+      "history.openNote": "Otw\u00f3rz notatk\u0119",
+      "history.showing": "pokazano {shown} z {total}",
+      "history.footnote": "Historia tylko dopisuje wpisy i jest trzymana osobno od calendar.json. Starsze wpisy trafiaj\u0105 do reminder-history-archive.jsonl, nigdy nie s\u0105 usuwane; od\u0142o\u017cenie i przeniesienie nie oznaczaj\u0105 przypomnienia jako zrobionego.",
+      "history.action.alerted": "Alert",
+      "history.action.skipped": "Pomini\u0119ty",
+      "history.action.done": "Zrobione",
+      "history.action.dismissed": "Odrzucone",
+      "history.action.reopened": "Otwarte ponownie",
+      "history.action.snoozed": "Od\u0142o\u017cone",
+      "history.action.rescheduled": "Przeniesione",
       "menu.color": "Kolor",
       "menu.colorCustom": "Kolor niestandardowy…",
       "menu.colorInherit": "U\u017cyj koloru notatki lub kategorii",
@@ -5759,6 +5829,66 @@ const __zentralEmbeddedLoader = (function () {
       action, stage: ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "", at,
       ...(raw.coalesced === true ? { coalesced: true } : {}),
     };
+  }
+  // ST7.5: reading and trimming the reminder history from the settings.
+  // filterHistoryRecords is the one place that decides which records a person is looking at, so the list, the count and
+  // the export always agree. `action` is a set of actions, `days` is a look-back window (0 = everything), `text` matches
+  // the summary or the ids.
+  function cleanHistoryFilter(raw = {}) {
+    const src = raw && typeof raw === "object" ? raw : {};
+    const actions = (Array.isArray(src.actions) ? src.actions : src.action ? [src.action] : [])
+      .map((a) => String(a || "").trim()).filter((a) => REMINDER_HISTORY_ACTIONS.includes(a));
+    const days = Math.max(0, Math.min(3650, Math.floor(Number(src.days) || 0)));
+    return { actions: [...new Set(actions)], days, text: String(src.text || "").trim().slice(0, 120) };
+  }
+  function filterHistoryRecords(records, rawFilter = {}, nowMs = Date.now()) {
+    const filter = cleanHistoryFilter(rawFilter);
+    const list = Array.isArray(records) ? records : [];
+    const stamp = Number.isFinite(Number(nowMs)) ? Number(nowMs) : Date.now();
+    const cutoff = filter.days > 0 ? stamp - filter.days * 86400000 : 0;
+    const needle = filter.text.toLowerCase();
+    return list.filter((record) => {
+      if (!record) return false;
+      if (filter.actions.length && !filter.actions.includes(record.action)) return false;
+      if (cutoff && !(Number(record.at) >= cutoff)) return false;
+      if (needle) {
+        const haystack = [record.summary, record.itemId, record.occurrenceId, record.noteId, record.action, record.stage]
+          .map((value) => String(value || "").toLowerCase()).join("\u0000");
+        if (!haystack.includes(needle)) return false;
+      }
+      return true;
+    });
+  }
+  // What trimming would move now: the same rule the automatic compaction uses, run without writing anything, so the
+  // confirmation can name real numbers instead of a guess.
+  function historyPruneSurvey(records, nowMs, { retentionDays = REMINDER_HISTORY_RETENTION_DEFAULT } = {}) {
+    const list = Array.isArray(records) ? records : [];
+    const { kept, archived, cutoff, retentionDays: days } = compactReminderHistory(list, nowMs, { retentionDays });
+    const byAction = {};
+    for (const record of archived) byAction[record.action] = (byAction[record.action] || 0) + 1;
+    return { total: list.length, kept: kept.length, archived: archived.length, cutoff, retentionDays: days, byAction };
+  }
+  // A plain-text export: one line per record, newest first, the same fields a person can see in the list.
+  function exportHistoryLines(records, { lang = DEFAULT_NOTES_LANGUAGE } = {}) {
+    const list = Array.isArray(records) ? records.slice() : [];
+    list.sort((a, b) => (Number(b.at) || 0) - (Number(a.at) || 0) || (Number(b.seq) || 0) - (Number(a.seq) || 0));
+    return list.map((record) => {
+      const when = Number(record.at) ? new Date(Number(record.at)).toISOString() : "";
+      const start = record.start?.dateTime ? " start=" + record.start.dateTime : record.start?.date ? " start=" + record.start.date : "";
+      const stage = record.stage ? " stage=" + record.stage : "";
+      const summary = String(record.summary || "").replace(/\s+/g, " ").trim();
+      return [when, record.action, stage.trim(), "item=" + String(record.itemId || ""), summary].filter(Boolean).join("\t") + start;
+    }).join("\n") + (list.length ? "\n" : "");
+  }
+  // The summary line above the list, so an empty list still explains why it is empty.
+  function historySummaryLine(survey, filter = {}, { lang = DEFAULT_NOTES_LANGUAGE } = {}) {
+    const shown = Number(survey?.total) || 0, all = Number(survey?.all) || shown;
+    const parts = [String(shown) + " of " + String(all) + " records"];
+    const clean = cleanHistoryFilter(filter);
+    if (clean.days > 0) parts.push("last " + clean.days + " days");
+    if (clean.actions.length) parts.push(clean.actions.join(", "));
+    if (clean.text) parts.push("\"" + clean.text + "\"");
+    return parts.join(" \u00b7 ");
   }
   const REMINDER_STACK_LIMIT = 3;
   // Display and cross-window retirement rules for occurrence-scoped reminder cards.
@@ -11181,7 +11311,7 @@ const __zentralEmbeddedLoader = (function () {
   const api = {
     KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, translate, t, pluralCategory, tCount, translationKeys, missingTranslationKeys, ymd, parseYmd, dayStart, addDays, nextDayStart, dayRange, civilDayStart, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, lineScheduleSignature, cleanTextSchedule, scheduleSignatureFromItem, scheduleFromParsedLine, reconcileListItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_TABLE, HOLIDAY_TABLE_KINDS, holidayTableEntries, holidayTableYears, holidaySetCoverage, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, holidaySetsOf, NO_WORK_FREE, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, cleanHistoryFilter, filterHistoryRecords, historyPruneSurvey, exportHistoryLines, historySummaryLine, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_TABLE, HOLIDAY_TABLE_KINDS, holidayTableEntries, holidayTableYears, holidaySetCoverage, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, holidaySetsOf, NO_WORK_FREE, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
     cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
@@ -33092,49 +33222,145 @@ __zentralShim.register = function (def) {
         openCalendarCard(t("cal.weekDialog.title"), startRow, numbersRow, note, h("div", { class: "zn-dialog-actions" }, cancel, save));
         startSelect.focus({ preventScroll: true });
       }
-      function openReminderHistory() {
+      // ST7.5: the reminder history, read, filtered, exported and trimmed. One list decides what the count, the copy and
+      // the save all see, so they can never disagree. Trimming always asks first and names real numbers; the trimmed
+      // records go to the JSONL archive (never the bin), exactly as the automatic compaction does.
+      function openReminderHistoryCard() {
         const history = reminderHistoryStore();
-        const rows = h("div", { class: "zn-noteset zn-reminder-history", role: "list" });
-        const pageSize = 500;
+        const pageSize = 300;
+        let filter = CALENDAR_PART.cleanHistoryFilter({});
         let offset = 0;
-        const labels = { alerted: "Notification shown", done: "Marked done", dismissed: "Dismissed", reopened: "Reopened", snoozed: "Snoozed", rescheduled: "Rescheduled" };
-        const status = h("p", { class: "zn-empty", role: "status" });
-        const more = chip("Load older entries");
-        const renderPage = () => {
-          const entries = history?.list({ limit: pageSize, offset }) || [];
-          if (!entries.length && offset === 0) rows.insertBefore(h("p", { class: "zn-empty" }, "No reminder history yet. Lifecycle changes are recorded here."), status);
-          for (const entry of entries) {
-            const row = h("div", { class: "zn-hist-row", role: "listitem" });
+        let busy = false;
+        const rows = h("div", { class: "zn-noteset zn-reminder-history", role: "list" });
+        const status = h("p", { class: "zn-empty", role: "status", "aria-live": "polite" });
+        const notice = h("p", { class: "zn-history-notice", role: "status", "aria-live": "polite", hidden: true });
+        const more = chip(t("history.loadOlder"));
+        const search = h("input", { type: "search", class: "zn-field", placeholder: t("history.search"), "aria-label": t("history.search") });
+        const dayPick = h("select", { class: "zn-select", "aria-label": t("history.window") });
+        for (const [value, label] of [["0", t("history.windowAll")], ["1", t("history.windowDay", { count: 1 })], ["7", t("history.windowDays", { count: 7 })], ["30", t("history.windowDays", { count: 30 })], ["365", t("history.windowDays", { count: 365 })]]) {
+          dayPick.append(h("option", { value }, label));
+        }
+        const actionChips = h("div", { class: "zn-set-chips" });
+        const records = () => (history?.list?.({}) || []);
+        const shown = () => CALENDAR_PART.filterHistoryRecords(records(), filter);
+        // A mirrored Agenda line can move to another Date Note after the record was written: follow the live item.
+        const sourceOf = (entry) => {
+          const liveItem = store.items?.list?.().find((it) => { const id = CALENDAR_PART.reminderIdentity(it); return id && id.occurrenceId === entry.occurrenceId && id.itemId === entry.itemId; });
+          const sourceId = (liveItem?.x?.noteId && store.get(liveItem.x.noteId) ? liveItem.x.noteId : entry.noteId) || "";
+          return { sourceId, source: sourceId ? store.get(sourceId) : null, heading: sourceId === liveItem?.x?.noteId ? (liveItem.x.heading || "") : "" };
+        };
+        function say(text) {
+          notice.textContent = text;
+          notice.hidden = !text;
+        }
+        const drawActions = () => {
+          actionChips.replaceChildren(...CALENDAR_PART.REMINDER_HISTORY_ACTIONS.map((action) => {
+            const on = filter.actions.includes(action);
+            const chipEl = h("button", { type: "button", class: "zn-chip" + (on ? " is-on" : ""), "aria-pressed": on ? "true" : "false" }, t("history.action." + action));
+            chipEl.addEventListener("click", () => {
+              filter = CALENDAR_PART.cleanHistoryFilter({ ...filter, actions: on ? filter.actions.filter((a) => a !== action) : [...filter.actions, action] });
+              offset = 0;
+              draw();
+            });
+            return chipEl;
+          }));
+          search.value = filter.text;
+          dayPick.value = String(filter.days);
+        };
+        const draw = () => {
+          drawActions();
+          const list = shown();
+          rows.replaceChildren();
+          const page = list.slice(0, offset + pageSize);
+          if (!list.length) {
+            rows.append(h("p", { class: "zn-empty" }, records().length ? t("history.noneMatch") : t("history.empty")));
+          }
+          for (const entry of page) {
+            const row = h("div", { class: "zn-hist-row", role: "listitem", "data-action": entry.action });
             const info = h("div", { class: "zn-reminder-history-info" });
-            info.append(h("strong", {}, entry.summary || "Untitled reminder"), h("span", { class: "zn-hist-when" }, (labels[entry.action] || entry.action) + " · " + new Date(entry.at).toLocaleString()));
+            info.append(h("strong", {}, entry.summary || t("history.untitled")),
+              h("span", { class: "zn-hist-when" }, t("history.action." + entry.action) + " \u00b7 " + historyWhen(entry.at)));
             if (entry.start) {
               const when = entry.start.date || entry.start.dateTime;
-              if (when) info.append(h("span", { class: "zn-reminder-history-when" }, "Scheduled: " + String(when).replace("T", " ").replace(/\.\d{3}Z$/, " UTC")));
+              if (when) info.append(h("span", { class: "zn-reminder-history-when" }, t("history.scheduled", { when: String(when).replace("T", " ").replace(/\.\d{3}Z$/, " UTC") })));
             }
             row.append(info);
-            // A mirrored Agenda line can move to another Date Note after the record was written: follow the live item.
-            const liveItem = store.items?.list?.().find((it) => { const id = CALENDAR_PART.reminderIdentity(it); return id && id.occurrenceId === entry.occurrenceId && id.itemId === entry.itemId; });
-            const sourceId = (liveItem?.x?.noteId && store.get(liveItem.x.noteId) ? liveItem.x.noteId : entry.noteId) || "";
-            const source = sourceId && store.get(sourceId);
+            const { sourceId, source, heading } = sourceOf(entry);
             if (source) {
-              const open = chip("Open note");
-              open.addEventListener("click", () => { closeDialog(); openNoteByIdAndHeading(sourceId, sourceId === liveItem?.x?.noteId ? (liveItem.x.heading || "") : "", entry.occurrenceId); });
+              const open = chip(t("history.openNote"));
+              open.addEventListener("click", () => { closeDialog(); openNoteByIdAndHeading(sourceId, heading, entry.occurrenceId); });
               row.append(open);
             }
-            rows.insertBefore(row, status);
+            rows.append(row);
           }
-          offset += entries.length;
-          const total = Number(history?.storageState?.().count) || 0;
-          status.textContent = `Showing ${offset} of ${total} entries`;
-          more.hidden = offset >= total || !entries.length;
+          const total = records().length;
+          status.textContent = CALENDAR_PART.historySummaryLine({ total: list.length, all: total }, filter, { lang: notesLang() }) +
+            (list.length ? " \u00b7 " + t("history.showing", { shown: page.length, total: list.length }) : "");
+          more.hidden = page.length >= list.length;
+          pruneBtn.disabled = busy || !total;
+          copyBtn.disabled = busy || !list.length;
+          exportBtn.disabled = busy || !list.length;
+          rows.append(status, more);
         };
-        more.addEventListener("click", renderPage);
-        rows.append(status, more);
-        renderPage();
-        const note = h("p", { class: "zn-hist-note" }, "History is append-only and stored separately from calendar.json. Entries are retained until the profile data is removed; snoozing and rescheduling do not mark a reminder complete.");
-        const close = chip("Close", true);
+        search.addEventListener("input", () => { filter = CALENDAR_PART.cleanHistoryFilter({ ...filter, text: search.value }); offset = 0; draw(); });
+        dayPick.addEventListener("change", () => { filter = CALENDAR_PART.cleanHistoryFilter({ ...filter, days: Number(dayPick.value) }); offset = 0; draw(); });
+        more.addEventListener("click", () => { offset += pageSize; draw(); });
+        const clearFilter = chip(t("history.clearFilter"));
+        const copyBtn = chip(t("history.copy"));
+        const exportBtn = chip(t("history.export"));
+        const pruneBtn = chip(t("history.prune"), true);
+        clearFilter.addEventListener("click", () => { filter = CALENDAR_PART.cleanHistoryFilter({}); offset = 0; say(""); draw(); });
+        copyBtn.addEventListener("click", () => {
+          env.copyText?.(CALENDAR_PART.exportHistoryLines(shown(), { lang: notesLang() }));
+          say(t("history.copied"));
+        });
+        exportBtn.addEventListener("click", () => {
+          exportHistoryFile(shown()).then((ok) => { if (ok) say(t("history.exported")); }).catch(warn);
+        });
+        pruneBtn.addEventListener("click", () => {
+          if (busy) return;
+          // The same retention the store itself uses, so the preview and the automatic trimming cannot disagree.
+          const policy = typeof env.historyRetentionDays === "function" ? env.historyRetentionDays() : CALENDAR_PART.REMINDER_HISTORY_RETENTION_DEFAULT;
+          const survey = CALENDAR_PART.historyPruneSurvey(records(), Date.now(), { retentionDays: policy });
+          if (!survey.archived) { say(t("history.pruneNothing", { days: survey.retentionDays })); return; }
+          askPruneHistory(survey, () => {
+            busy = true; draw();
+            Promise.resolve(history?.compact?.({ retentionDays: survey.retentionDays }))
+              .then((res) => {
+                busy = false;
+                say(res?.ok === false ? t("history.pruneFailed") : t("history.pruneDone", { count: Number(res?.archived) || survey.archived }));
+                offset = 0; draw();
+              })
+              .catch((error) => { busy = false; warn(error); say(t("history.pruneFailed")); draw(); });
+          });
+        });
+        const close = chip(t("common.close"), true);
         close.addEventListener("click", closeDialog);
-        openCalendarCard("Reminder history", rows, note, h("div", { class: "zn-dialog-actions" }, close));
+        const filters = h("div", { class: "zn-history-filters" }, search, dayPick);
+        draw();
+        const note = h("p", { class: "zn-hist-note" }, t("history.footnote"));
+        openCalendarCard(t("history.title"), filters, actionChips, notice, rows, note,
+          h("div", { class: "zn-dialog-actions" }, clearFilter, copyBtn, exportBtn, pruneBtn, close));
+        if (pruneBtn.disabled) close.focus({ preventScroll: true }); else pruneBtn.focus({ preventScroll: true });
+      }
+      function historyWhen(at) {
+        try { return new Date(at).toLocaleString(notesLocale(), { dateStyle: "medium", timeStyle: "short" }); } catch (_) { return new Date(at).toISOString(); }
+      }
+      // The trimmed records are appended to the JSONL archive before the main file shrinks, so this only has to say what
+      // will move and how far back the kept part goes.
+      function askPruneHistory(survey, onConfirm) {
+        const cancel = chip(t("common.cancel"));
+        const confirm = chip(t("history.pruneConfirm"), true);
+        const parts = [t("history.pruneAsk", { count: survey.archived, kept: survey.kept, days: survey.retentionDays })];
+        const actions = Object.entries(survey.byAction || {}).map(([action, count]) => t("history.action." + action) + " " + count);
+        if (actions.length) parts.push(actions.join(", "));
+        openCard(t("history.pruneTitle"), h("p", {}, parts.join(" ")), h("p", { class: "zn-empty" }, t("history.pruneArchive")), h("div", { class: "zn-dialog-actions" }, cancel, confirm));
+        cancel.addEventListener("click", closeDialog);
+        confirm.addEventListener("click", () => { closeDialog(); onConfirm(); });
+        cancel.focus({ preventScroll: true });
+      }
+      function exportHistoryFile(list) {
+        return Promise.resolve(env.exportReminderHistory?.(CALENDAR_PART.exportHistoryLines(list, { lang: notesLang() }))).then((saved) => !!saved);
       }
       function askCalendarHolidaysDialog() {
         const C = CALENDAR_PART;
@@ -33278,7 +33504,7 @@ __zentralShim.register = function (def) {
         { icon: "bell", label: t("cal.toolsMenu.createTimedReminder"), action: () => queueMicrotask(() => askCreateCalendarItem("reminder", false)) },
         { icon: "bell", label: t("cal.toolsMenu.createAllDayReminder"), action: () => queueMicrotask(() => askCreateCalendarItem("reminder", true)) },
         { sep: true },
-        { id: "reminder-history", label: t("cal.toolsMenu.reminderHistory"), icon: "history", run: openReminderHistory },
+        { id: "reminder-history", label: t("cal.toolsMenu.reminderHistory"), icon: "history", run: openReminderHistoryCard },
         { id: "reminder-alert-settings", label: t("cal.toolsMenu.alertSettings"), icon: "volume-2", run: askCalendarAlertSettings },
         { id: "agenda-visibility-defaults", label: t("cal.toolsMenu.agendaVisibility"), icon: "calendar-check", run: askAgendaVisibilityDefaults },
         { sep: true },
@@ -40772,6 +40998,14 @@ __zentralShim.register = function (def) {
           outsideClaim = false;
           return openCalendarPane();
         },
+        // ST7.5: the reminder history is a card of the calendar's Tools menu; the sheet exposes it so a host (and a
+        // test) can open it without imitating that menu.
+        openReminderHistory: () => {
+          if (!isOpen || destroyed || !CALENDAR_PART?.exportHistoryLines) return false;
+          outsideClaim = false;
+          openReminderHistoryCard();
+          return true;
+        },
         openAgendaSettings: () => {
           if (!isOpen || destroyed) return false;
           outsideClaim = false;
@@ -41830,6 +42064,15 @@ __zentralShim.register = function (def) {
           return true;
         } catch (error) { warn(error); return false; }
       }
+      // ST7.5: the reminder history as a plain .txt, through the same save picker as every other export.
+      async function exportReminderHistory(text) {
+        const file = await pick(Ci.nsIFilePicker.modeSave, t("history.export"), "reminder-history.txt", "");
+        if (!file) return false;
+        try {
+          await IOUtils.writeUTF8(file.path, String(text || ""));
+          return true;
+        } catch (error) { warn(error); return false; }
+      }
       async function printCalendarWeek(text, weekStart) {
         try {
           const dir = PathUtils.join(PathUtils.tempDir, "zentral-notes-print");
@@ -42117,12 +42360,14 @@ __zentralShim.register = function (def) {
       }
       const tick = createTimeTickService({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), warn });
       onCleanup(() => tick.destroy());
-      const env = { openLink, copyText, exportNote, exportAll, exportZip, exportBackupZip, exportObsidianVault, pickObsidianVault, importObsidianVault, pickBackupZip, restoreBackupZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now(),
+      const env = { openLink, copyText, exportNote, exportAll, exportZip, exportBackupZip, exportObsidianVault, pickObsidianVault, importObsidianVault, pickBackupZip, restoreBackupZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, exportReminderHistory, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now(),
         // Visibility rules live in meta.json, which raises no store event: the sheet asks for the Zen Agenda refresh.
         refreshAgenda: () => { if (!disposed && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); } },
         // SB6.5: Agenda Doctor diagnostics & safe one-click repair (wired to live host DOM + reminder history).
         inspectAgenda: () => inspectAgenda(),
         repairAgenda: () => repairAgenda(),
+        // ST7.5: the retention policy the history store itself uses, so a trim preview matches the automatic one.
+        historyRetentionDays: () => CALENDAR_PART?.cleanReminderHistoryRetentionDays?.(prefInt(PREF.REMINDER_HISTORY_DAYS, 30)) || 30,
         // For a sheet that was opened before the notes could be read: when they are there, and a write that must wait for them.
         storeWhenReady, withStore };
 
@@ -46581,7 +46826,10 @@ __zentralShim.register = function (def) {
         const sidebar = { store, ensureStore, storeWhenReady, withStore, zenApi, zen, agendaApi, agendaController, agendaCloseAction, agendaClosedSet, agendaOnTabClosed, tick, reminders,
           onAgendaMouse, onAgendaSelect, onAgendaTabEvent, onAgendaAttr, agendaEnsureVisuals, onAgendaFolderMenuShowing,
           onAgendaFolderMenuHidden, onAgendaTabMenuShowing, runAgendaAction: runHeadlessAgendaAction, agendaToast: agendaActionToast,
-          agendaHoverCard, notesHoverCard, nextAgendaItem, nextNotesItem, inspectAgenda, repairAgenda };
+          agendaHoverCard, notesHoverCard, nextAgendaItem, nextNotesItem, inspectAgenda, repairAgenda,
+          // ST7.5: the reminder-history card lives in a sheet, so a test needs the same door a person uses
+          // (showNotes → the sheet handle) and the card itself.
+          showNotes, openReminderHistory: () => showNotes("").then((handle) => sheetOf(handle)?.openReminderHistory?.()) };
         window.__zentralNotesTestSeam.sidebar = sidebar;
         onCleanup(() => {
           if (window.__zentralNotesTestSeam?.sidebar === sidebar) delete window.__zentralNotesTestSeam.sidebar;

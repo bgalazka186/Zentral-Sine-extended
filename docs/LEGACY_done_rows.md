@@ -172,6 +172,21 @@
   test host grew three things a real browser has and it did not: window capture listeners now see fake-DOM events, a
   popup has `state`/`openPopupAtScreen`/`hidePopup`, and the module's `globalThis` mirrors the page's global.
   `tests/notes-sidebar-row-menu.test.cjs` (6 tests). Full suite 219/219.
+
+- `ST7.5` DONE (3.3.274) — The reminder history can now be read, filtered, exported and trimmed. The card that already
+  lived in Calendar → Tools → Reminder history was rebuilt rather than duplicated: it reads every record once
+  (`history.list({})`) and one filter decides what the list, the count, the copy and the save all see, so they cannot
+  disagree. `cleanHistoryFilter` bounds itself (a real action, a 0–3650-day window, a trimmed search), `filterHistoryRecords`
+  applies actions + window + a case-insensitive search over the summary and ids, `exportHistoryLines` writes one
+  tab-separated line per record newest-first with the scheduled instant and no embedded newlines, and `historySummaryLine`
+  explains an empty result instead of showing a blank card. Trimming is a preview first: `historyPruneSurvey` runs the very
+  rule the automatic compaction uses (`compactReminderHistory`) without writing, the confirmation names real numbers and
+  the action breakdown, and only then does `history.compact()` append the old records to
+  `reminder-history-archive.jsonl` before shrinking the main file — so nothing is ever deleted, and Cancel changes
+  nothing. Copy and Save as .txt reuse the existing clipboard and save picker; a plain .txt needs no format. The sheet
+  gained `openReminderHistory()` so a host (or a test) can open the card without imitating the Tools menu.
+  `tests/notes-reminder-history-ui.test.cjs` (5 pure tests) and `tests/notes-reminder-history-card.test.cjs` (3 harness
+  tests). Full suite 221/221.
 | #   | Track ID | Ref           | Item                                                         | Impact   | Effort | Implementation Plan & Dependencies                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | :-- | :------- | :------------ | :----------------------------------------------------------- | :------- | :----- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 20  | `T1.14`  | `Cycle G #37` | Inline `#tag` index & front-matter `tags:` unification       | Med      | M      | **DONE in 3.3.47.** Unified `inlineTags`, `noteTags` and `tagSummary` index YAML and inline tags case-insensitively; the Tags chip opens a counted menu, supports clearing/selection, and filters All and Recent views. Headings, code, URLs, HTML attributes/comments, hidden comments, inequalities and hex colours are excluded. Covered by `notes-audit-bugfixes.test.cjs` and existing list-view tests.                                                                                        |
