@@ -857,6 +857,18 @@
       "birthday.add.title": "Add birthday reminder",
       "birthday.add.submit": "Add reminder",
       "birthday.add.addedFlash": "Added yearly birthday reminder for {name}",
+      "spell.noSuggestions": "No spelling suggestions",
+      "spell.addToDictionary": "Add \u201c{word}\u201d to dictionary",
+      "spell.ignoreWord": "Ignore \u201c{word}\u201d",
+      "spell.checkSpelling": "Check spelling",
+      "spell.languages": "Languages",
+      "spell.languagesActive": "Languages ({langs})",
+      "spell.noDictionaries": "No dictionaries installed",
+      "spell.addedToast": "Added \u201c{word}\u201d to dictionary.",
+      "spell.edit.cut": "Cut",
+      "spell.edit.copy": "Copy",
+      "spell.edit.paste": "Paste",
+      "spell.edit.selectAll": "Select all",
     }),
   });
 

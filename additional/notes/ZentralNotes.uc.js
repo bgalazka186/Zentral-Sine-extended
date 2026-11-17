@@ -1678,6 +1678,257 @@
     // reading time at 200 words a minute, rounded up; with a selection it counts the selection and says so.
     // Spell-check is the costly part of a huge note: below the limit it follows the pref, above it is off.
     const spellcheckOn = (enabled, maxChars, length) => enabled !== false && !(maxChars > 0 && length > maxChars);
+    // OW-36: Pure spell-check editor context menu helpers (word extraction, suggestions, multi-language picker).
+    const SPELL_MAX_SUGGESTIONS = 6;
+    const SPELL_LANG_CODE_RE = /^[A-Za-z]{2,8}(?:[-_][A-Za-z0-9]{1,12})*$/;
+    const SPELL_CORE_CHAR_RE = /[\p{L}\p{M}\p{N}]/u;
+    const SPELL_LETTER_RE = /\p{L}/u;
+    function isSpellWordChar(ch) {
+      return !!ch && (SPELL_CORE_CHAR_RE.test(ch) || ch === "'" || ch === "\u2019" || ch === "-");
+    }
+    function wordRangeAtOffset(text, offset, selStart = offset, selEnd = offset) {
+      const s = String(text ?? "");
+      if (!s) return null;
+      const rawOff = Math.max(0, Math.min(s.length, Math.floor(Number(offset) || 0)));
+      if (Number.isInteger(selStart) && Number.isInteger(selEnd) && selEnd > selStart && selStart >= 0 && selEnd <= s.length) {
+        if (rawOff >= selStart && rawOff <= selEnd) {
+          let a = selStart, b = selEnd;
+          while (a < b && !SPELL_CORE_CHAR_RE.test(s[a])) a++;
+          while (b > a && !SPELL_CORE_CHAR_RE.test(s[b - 1])) b--;
+          const selected = s.slice(a, b);
+          if (selected && !/\s/.test(selected) && [...selected].every(isSpellWordChar) && SPELL_LETTER_RE.test(selected)) {
+            return { word: selected, start: a, end: b };
+          }
+        }
+      }
+      let pos = rawOff;
+      if (pos === s.length || !isSpellWordChar(s[pos])) {
+        if (pos > 0 && isSpellWordChar(s[pos - 1])) pos -= 1;
+        else return null;
+      }
+      let start = pos, end = pos + 1;
+      while (start > 0 && isSpellWordChar(s[start - 1])) start--;
+      while (end < s.length && isSpellWordChar(s[end])) end++;
+      while (start < end && !SPELL_CORE_CHAR_RE.test(s[start])) start++;
+      while (end > start && !SPELL_CORE_CHAR_RE.test(s[end - 1])) end--;
+      if (end <= start) return null;
+      const word = s.slice(start, end);
+      if (!SPELL_LETTER_RE.test(word)) return null;
+      return { word, start, end };
+    }
+    function replaceWordRange(text, start, end, replacement) {
+      const s = String(text ?? "");
+      const a = Math.max(0, Math.min(s.length, Math.floor(Number(start) || 0)));
+      const b = Math.max(a, Math.min(s.length, Math.floor(Number(end) || 0)));
+      const rep = String(replacement ?? "");
+      return { start: a, end: b, text: rep, selStart: a + rep.length, selEnd: a + rep.length };
+    }
+    function cleanSpellLanguages(raw) {
+      const list = Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(",") : [];
+      const seen = new Set();
+      const out = [];
+      for (const entry of list) {
+        const code = String(entry || "").trim();
+        if (!code || !SPELL_LANG_CODE_RE.test(code)) continue;
+        const key = code.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(code);
+        if (out.length >= 12) break;
+      }
+      return out;
+    }
+    function toggleSpellLanguage(activeList, code, availableList = []) {
+      const avail = cleanSpellLanguages(availableList);
+      const canon = (c) => {
+        const clean = String(c || "").trim();
+        if (!clean) return "";
+        const hit = avail.find((entry) => entry.toLowerCase() === clean.toLowerCase());
+        return hit || (SPELL_LANG_CODE_RE.test(clean) ? clean : "");
+      };
+      const target = canon(code);
+      const base = cleanSpellLanguages(activeList)
+        .map(canon)
+        .filter((entry) => entry && (!avail.length || avail.includes(entry)));
+      if (!target) return base;
+      const idx = base.findIndex((entry) => entry.toLowerCase() === target.toLowerCase());
+      if (idx >= 0) {
+        if (base.length <= 1) return [base[0]];
+        return [...base.slice(0, idx), ...base.slice(idx + 1)];
+      }
+      return [...base, target];
+    }
+    function formatSpellLanguageLabel(code, uiLang = "en") {
+      const raw = String(code || "").trim();
+      if (!raw) return "";
+      if (typeof Intl !== "undefined" && typeof Intl.DisplayNames === "function") {
+        const candidates = [raw.replace(/_/g, "-")];
+        const parts = candidates[0].split("-");
+        if (parts.length > 2) candidates.push(`${parts[0]}-${parts[1]}`);
+        if (parts.length > 1) candidates.push(parts[0]);
+        for (const tag of candidates) {
+          try {
+            const dn = new Intl.DisplayNames([uiLang || "en"], { type: "language" });
+            const label = dn.of(tag);
+            if (label && label.toLowerCase() !== raw.toLowerCase() && label.toLowerCase() !== tag.toLowerCase()) {
+              return `${label} (${raw})`;
+            }
+          } catch (_) {}
+        }
+      }
+      return raw;
+    }
+    function collectSpellSuggestions(spellChecker, word, max = SPELL_MAX_SUGGESTIONS) {
+      const target = String(word || "").trim();
+      if (!spellChecker || !target || typeof spellChecker.CheckCurrentWord !== "function") {
+        return { misspelled: false, suggestions: [] };
+      }
+      let misspelled = false;
+      try {
+        misspelled = Boolean(spellChecker.CheckCurrentWord(target));
+      } catch (_) {
+        return { misspelled: false, suggestions: [] };
+      }
+      if (!misspelled) return { misspelled: false, suggestions: [] };
+      const limit = Math.max(0, Math.min(20, Math.floor(Number(max) || SPELL_MAX_SUGGESTIONS)));
+      const suggestions = [];
+      const seen = new Set();
+      if (typeof spellChecker.GetSuggestedWord === "function" && limit > 0) {
+        for (let i = 0; i < limit * 3 && suggestions.length < limit; i++) {
+          let next = "";
+          try { next = String(spellChecker.GetSuggestedWord() || ""); } catch (_) { break; }
+          if (!next) break;
+          if (seen.has(next)) continue;
+          seen.add(next);
+          suggestions.push(next);
+        }
+      }
+      return { misspelled: true, suggestions };
+    }
+    function buildEditorSpellMenuModel({
+      wordInfo = null,
+      spellEnabled = true,
+      spellAvailable = false,
+      misspelled = false,
+      suggestions = [],
+      availableDictionaries = [],
+      currentDictionaries = [],
+      readOnly = false,
+      hasSelection = false,
+      canPaste = true,
+      uiLang = "en",
+      tr = (key, vars) => {
+        let out = String(key);
+        if (vars && typeof vars === "object") {
+          for (const [k, v] of Object.entries(vars)) out = out.replaceAll(`{${k}}`, String(v));
+        }
+        return out;
+      },
+    } = {}) {
+      const items = [];
+      const avail = cleanSpellLanguages(availableDictionaries);
+      const currentSet = new Set(cleanSpellLanguages(currentDictionaries).map((c) => c.toLowerCase()));
+      const activeAvail = avail.filter((c) => currentSet.has(c.toLowerCase()));
+      if (spellEnabled && spellAvailable && !readOnly && wordInfo && misspelled) {
+        const list = (Array.isArray(suggestions) ? suggestions : []).filter((s) => typeof s === "string" && s.length > 0).slice(0, SPELL_MAX_SUGGESTIONS);
+        if (list.length) {
+          for (let i = 0; i < list.length; i++) {
+            items.push({
+              id: `spell-suggest-${i + 1}`,
+              actionKind: "suggest",
+              label: list[i],
+              bold: true,
+              replacement: list[i],
+              start: wordInfo.start,
+              end: wordInfo.end,
+              data: { spellAction: "suggest", spellWord: list[i] },
+            });
+          }
+        } else {
+          items.push({ id: "spell-no-suggestions", heading: true, label: tr("spell.noSuggestions") });
+        }
+        items.push({
+          id: "spell-add",
+          actionKind: "add",
+          label: tr("spell.addToDictionary", { word: wordInfo.word }),
+          word: wordInfo.word,
+          data: { spellAction: "add", spellWord: wordInfo.word },
+        });
+        items.push({
+          id: "spell-ignore",
+          actionKind: "ignore",
+          label: tr("spell.ignoreWord", { word: wordInfo.word }),
+          word: wordInfo.word,
+          data: { spellAction: "ignore", spellWord: wordInfo.word },
+        });
+        items.push({ sep: true });
+      }
+      items.push({
+        id: "edit-cut",
+        actionKind: "cut",
+        label: tr("spell.edit.cut"),
+        enabled: !readOnly && Boolean(hasSelection),
+        quietDisabled: true,
+        data: { spellAction: "cut" },
+      });
+      items.push({
+        id: "edit-copy",
+        actionKind: "copy",
+        label: tr("spell.edit.copy"),
+        enabled: Boolean(hasSelection),
+        quietDisabled: true,
+        data: { spellAction: "copy" },
+      });
+      items.push({
+        id: "edit-paste",
+        actionKind: "paste",
+        label: tr("spell.edit.paste"),
+        enabled: !readOnly && Boolean(canPaste),
+        quietDisabled: true,
+        data: { spellAction: "paste" },
+      });
+      items.push({
+        id: "edit-select-all",
+        actionKind: "selectAll",
+        label: tr("spell.edit.selectAll"),
+        enabled: true,
+        data: { spellAction: "selectAll" },
+      });
+      items.push({ sep: true });
+      items.push({
+        id: "spell-toggle",
+        actionKind: "toggleSpell",
+        label: tr("spell.checkSpelling"),
+        checked: Boolean(spellEnabled),
+        enabled: true,
+        data: { spellAction: "toggleSpell" },
+      });
+      if (spellAvailable && avail.length > 0) {
+        const activeCodes = activeAvail.length ? activeAvail : cleanSpellLanguages(currentDictionaries);
+        const langLabel = activeCodes.length
+          ? tr("spell.languagesActive", { langs: activeCodes.join(", ") })
+          : tr("spell.languages");
+        items.push({
+          id: "spell-languages",
+          actionKind: "languages",
+          icon: "globe",
+          label: langLabel,
+          data: { spellAction: "languages" },
+          group: avail.map((code, i) => ({
+            id: `spell-lang-${i + 1}`,
+            actionKind: "toggleLanguage",
+            langCode: code,
+            label: formatSpellLanguageLabel(code, uiLang),
+            checked: currentSet.has(code.toLowerCase()),
+            enabled: true,
+            data: { spellAction: "toggleLanguage", spellLang: code },
+          })),
+        });
+      } else if (spellEnabled && spellAvailable) {
+        items.push({ id: "spell-no-dicts", heading: true, label: tr("spell.noDictionaries") });
+      }
+      return items;
+    }
     const READ_WPM = 200;
     function counterText(body, selection = "", extended = false) {
       const text = selection ? String(selection) : String(body || "");
@@ -7122,7 +7373,7 @@
       const listeners = new Set();
       const backedUp = new Set();
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, dockPx: 0, gapPx: 0, cardDock: "", cardW: 0, cardH: 0, cardHShare: 0,
-        allNewChoice: "note", calendarClockMode: "both",
+        allNewChoice: "note", calendarClockMode: "both", spellLanguages: [],
         calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarFiltersCollapsed: false, calendarBigPictureFiltersCollapsed: false, calendarTab: "tree",
         calendarBigPictureSize: CALENDAR_PART ? CALENDAR_PART.DEFAULT_CALENDAR_BIG_PICTURE_SIZE : 90,
         calendarView: "month", calendarWeekStart: 1, calendarWeekNumbers: false, calendarWeekSpan: { days: 7, anchor: "weekStart" }, calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarBigPictureFilterKind: "all", calendarBigPictureFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
@@ -7851,6 +8102,7 @@
           meta.recent = cleanRecent(raw.recent);
           meta.folders = cleanFolders(raw.folders);
           if (OPEN_IN_KINDS.includes(raw.openIn)) meta.openIn = raw.openIn;
+          meta.spellLanguages = cleanSpellLanguages(raw.spellLanguages);
           meta.cardDock = cleanCardDock(raw.cardDock);
           const cardW = Number(raw.cardW);
           if (Number.isFinite(cardW) && cardW >= GEO_MIN.w && cardW <= 4000) meta.cardW = Math.round(cardW);
@@ -14722,7 +14974,7 @@
         flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART, notesLang, notesLocale, t, tCount,
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS, SHARED_TURN_WAIT_MS, STARTUP_TURN_WAIT_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
-        wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, SHOWCASE_NOTE_ID, buildShowcaseNote, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
+        wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, SHOWCASE_NOTE_ID, buildShowcaseNote, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, SPELL_MAX_SUGGESTIONS, wordRangeAtOffset, replaceWordRange, cleanSpellLanguages, toggleSpellLanguage, formatSpellLanguageLabel, collectSpellSuggestions, buildEditorSpellMenuModel, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
         makeFolderUid, ensureFolderUids, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_STYLE, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, SPACE_MODES, cleanSpaceMode, SPACES_DIR, SPACE_REGISTRY_FILE, SPACE_SHARES_FILE, cleanWorkspaceId, workspaceDirKey, readZenWorkspaces, resolveActiveWorkspaceIdentity, cleanSpaceRegistry, reconcileSpaceRegistry, cleanShareTargets, cleanShareRecord, cleanSpaceShares, mergeSpaceShares, isSharedWithSpace, planSpaceSharesForSpace, resolveSpaceStorageTarget, canShareCalendarItemWithoutNote, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
@@ -14775,6 +15027,8 @@
       strike: "M16 4H9a3 3 0 0 0-2.83 4 M14 12a4 4 0 0 1 0 8H6 M4 12h16",
       highlight: "m9 11-6 6v3h9l3-3 M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4",
       check: "m9 11 3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11",
+      checkmark: "M20 6 9 17l-5-5",
+      globe: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z M2 12h20 M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z",
       bullets: "M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01",
       heading: "M6 12h12 M6 20V4 M18 20V4",
       eye: "M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
@@ -16532,6 +16786,7 @@
           countEl.textContent = counterText(n.body, sel, ext);
           const spell = spellcheckOn(getPref(PREF.SPELL, true), getPref(PREF.SPELL_MAX, 100000), n.body.length);
           if (ta.spellcheck !== spell) ta.spellcheck = spell;
+          syncEditorSpellState(spell);
         } else countEl.textContent = "";
         const s = store.state;
         const calendarState = store.items?.storageState?.();
@@ -22932,6 +23187,13 @@
               m.append(h("div", { class: "zn-menu-item zn-menu-head", role: "presentation", "aria-disabled": "true" }, it.label));
             } else if (it.group) {
               const b = h("button", { type: "button", class: "zn-menu-item zn-menu-group", role: "menuitem", "aria-haspopup": "menu" });
+              if (it.data && typeof it.data === "object") {
+                for (const [k, v] of Object.entries(it.data)) {
+                  if (v === undefined || v === null) continue;
+                  b.dataset[k] = String(v);
+                  b.setAttribute("data-" + k.replace(/[A-Z]/g, (ch) => "-" + ch.toLowerCase()), String(v));
+                }
+              }
               if (it.icon) b.append(icon(it.icon));
               b.append(h("span", {}, it.label), icon("chevron"));
               b.addEventListener("click", () => {
@@ -22941,13 +23203,32 @@
               });
               m.append(b);
             } else {
-              const b = h("button", { type: "button", class: "zn-menu-item" + (it.danger ? " is-danger" : "") + (!it.enabled ? " is-disabled" : ""), role: "menuitem", "aria-disabled": it.enabled ? "false" : "true", title: it.reason || null });
-              if (it.icon) b.append(icon(it.icon));
+              const isCheck = typeof it.checked === "boolean";
+              const b = h("button", {
+                type: "button",
+                class: "zn-menu-item" + (it.danger ? " is-danger" : "") + (it.bold ? " is-bold" : "") + (isCheck && it.checked ? " is-checked" : "") + (!it.enabled ? " is-disabled" : ""),
+                role: isCheck ? "menuitemcheckbox" : "menuitem",
+                "aria-checked": isCheck ? (it.checked ? "true" : "false") : null,
+                "aria-disabled": it.enabled ? "false" : "true",
+                title: it.reason || null,
+              });
+              if (it.data && typeof it.data === "object") {
+                for (const [k, v] of Object.entries(it.data)) {
+                  if (v === undefined || v === null) continue;
+                  b.dataset[k] = String(v);
+                  b.setAttribute("data-" + k.replace(/[A-Z]/g, (ch) => "-" + ch.toLowerCase()), String(v));
+                }
+              }
+              if (isCheck) {
+                const slot = h("span", { class: "zn-menu-check", "aria-hidden": "true" });
+                if (it.checked) slot.append(icon("checkmark"));
+                b.append(slot);
+              } else if (it.icon) b.append(icon(it.icon));
               const label = h("span", {}, it.label);
               b.append(label);
               if (!it.enabled) {
                 b.disabled = true;
-                if (it.reason) b.append(h("small", { class: "zn-menu-reason" }, it.reason));
+                if (it.reason && !it.quietDisabled) b.append(h("small", { class: "zn-menu-reason" }, it.reason));
               } else {
                 b.addEventListener("click", () => {
                   closeMenu();
@@ -26029,6 +26310,250 @@
       listen(ta, "mouseup", () => { scheduleOutline(); armedSelection(); if (getPref(PREF.FOOTER_COUNTER, false) === true) scheduleChrome(); });
       listen(ta, "click", scheduleOutline);
       listen(ta, "select", scheduleOutline);
+      // OW-36: Spell-check right-click menu for the Notes editor (suggestions, Add to dictionary / Ignore, Languages).
+      const sessionIgnoredWords = new Set();
+      const addedDictionaryWords = new Set();
+      let lastAppliedSpellLangKey = "";
+      function resolveInlineSpellChecker(el) {
+        try {
+          if (typeof env.getInlineSpellChecker === "function") return env.getInlineSpellChecker(el) || null;
+        } catch (_) {}
+        try {
+          const ed = el.editor || (typeof Ci !== "undefined" && Ci.nsIDOMNSEditableElement ? el.QueryInterface?.(Ci.nsIDOMNSEditableElement)?.editor : null);
+          if (!ed || typeof ed.getInlineSpellChecker !== "function") return null;
+          return ed.getInlineSpellChecker(true) || null;
+        } catch (_) {
+          return null;
+        }
+      }
+      function readSpellDictionaryList(sc) {
+        if (!sc || typeof sc.GetDictionaryList !== "function") return [];
+        try {
+          const direct = sc.GetDictionaryList();
+          if (Array.isArray(direct)) return cleanSpellLanguages(direct);
+        } catch (_) {}
+        try {
+          const out = {};
+          sc.GetDictionaryList(out, {});
+          if (Array.isArray(out.value)) return cleanSpellLanguages(out.value);
+        } catch (_) {}
+        return [];
+      }
+      function readCurrentSpellDictionaries(sc) {
+        if (!sc) return [];
+        if (typeof sc.GetCurrentDictionaries === "function") {
+          try {
+            const direct = sc.GetCurrentDictionaries();
+            if (Array.isArray(direct)) return cleanSpellLanguages(direct);
+          } catch (_) {}
+          try {
+            const out = {};
+            sc.GetCurrentDictionaries(out, {});
+            if (Array.isArray(out.value)) return cleanSpellLanguages(out.value);
+          } catch (_) {}
+        }
+        if (typeof sc.GetCurrentDictionary === "function") {
+          try {
+            const single = sc.GetCurrentDictionary();
+            if (typeof single === "string" && single.trim()) return cleanSpellLanguages([single]);
+          } catch (_) {}
+        }
+        return [];
+      }
+      function applySpellDictionaries(isc, sc, nextList) {
+        const list = cleanSpellLanguages(nextList);
+        if (!sc || !list.length) return;
+        const recheck = () => {
+          try { isc?.spellCheckRange?.(null); } catch (_) {}
+        };
+        try {
+          if (typeof sc.SetCurrentDictionaries === "function") {
+            const res = sc.SetCurrentDictionaries(list);
+            if (res && typeof res.then === "function") res.then(recheck, () => {});
+            else recheck();
+            return;
+          }
+          if (typeof sc.SetCurrentDictionary === "function") {
+            sc.SetCurrentDictionary(list[0]);
+            recheck();
+          }
+        } catch (_) {}
+      }
+      function syncEditorSpellState(enabled) {
+        const isc = resolveInlineSpellChecker(ta);
+        if (!isc) return;
+        try {
+          if ("enableRealTimeSpell" in isc && isc.enableRealTimeSpell !== Boolean(enabled)) {
+            isc.enableRealTimeSpell = Boolean(enabled);
+          }
+        } catch (_) {}
+        if (!enabled) return;
+        const saved = cleanSpellLanguages(store.meta.spellLanguages);
+        const key = saved.join(",");
+        if (!saved.length || key === lastAppliedSpellLangKey) return;
+        const sc = isc.spellChecker || null;
+        if (!sc) return;
+        const avail = readSpellDictionaryList(sc);
+        const valid = avail.length ? saved.filter((c) => avail.some((a) => a.toLowerCase() === c.toLowerCase())) : saved;
+        if (!valid.length) return;
+        lastAppliedSpellLangKey = key;
+        applySpellDictionaries(isc, sc, valid);
+      }
+      function editorContextOffset(e) {
+        const s0 = Number.isInteger(ta.selectionStart) ? ta.selectionStart : 0;
+        const s1 = Number.isInteger(ta.selectionEnd) ? ta.selectionEnd : s0;
+        if (s1 > s0) return s0;
+        try {
+          const doc = ta.ownerDocument || document;
+          const pos = typeof doc?.caretPositionFromPoint === "function" ? doc.caretPositionFromPoint(e.clientX, e.clientY) : null;
+          if (pos && pos.offsetNode === ta && Number.isInteger(pos.offset)) return pos.offset;
+        } catch (_) {}
+        return s0;
+      }
+      function runEditorClipboardAction(actionKind) {
+        const s0 = Number.isInteger(ta.selectionStart) ? ta.selectionStart : 0;
+        const s1 = Number.isInteger(ta.selectionEnd) ? ta.selectionEnd : s0;
+        const selectedText = s1 > s0 ? ta.value.slice(s0, s1) : "";
+        if (actionKind === "selectAll") {
+          ta.focus({ preventScroll: true });
+          ta.setSelectionRange(0, ta.value.length);
+          scheduleOutline();
+          if (getPref(PREF.FOOTER_COUNTER, false) === true) scheduleChrome();
+          return;
+        }
+        if (actionKind === "copy") {
+          if (!selectedText) return;
+          ta.focus({ preventScroll: true });
+          let copied = false;
+          try { copied = Boolean(document.execCommand?.("copy")); } catch (_) {}
+          if (!copied) {
+            try { window.navigator?.clipboard?.writeText?.(selectedText)?.catch?.(() => {}); } catch (_) {}
+          }
+          return;
+        }
+        if (actionKind === "cut") {
+          if (ta.readOnly || !selectedText) return;
+          ta.focus({ preventScroll: true });
+          let cut = false;
+          try { cut = Boolean(document.execCommand?.("cut")); } catch (_) {}
+          if (!cut || ta.value.slice(s0, s1) === selectedText) {
+            try { window.navigator?.clipboard?.writeText?.(selectedText)?.catch?.(() => {}); } catch (_) {}
+            applyEdit({ start: s0, end: s1, text: "", selStart: s0, selEnd: s0 });
+          }
+          return;
+        }
+        if (actionKind === "paste") {
+          if (ta.readOnly) return;
+          ta.focus({ preventScroll: true });
+          let pasted = false;
+          try { pasted = Boolean(document.execCommand?.("paste")); } catch (_) {}
+          if (!pasted && window.navigator?.clipboard?.readText) {
+            Promise.resolve(window.navigator.clipboard.readText()).then((clipText) => {
+              if (typeof clipText === "string" && clipText.length && !ta.readOnly) {
+                const a = Number.isInteger(ta.selectionStart) ? ta.selectionStart : s0;
+                const b = Number.isInteger(ta.selectionEnd) ? ta.selectionEnd : s1;
+                applyEdit({ start: a, end: b, text: clipText, selStart: a + clipText.length, selEnd: a + clipText.length });
+              }
+            }, () => {});
+          }
+        }
+      }
+      function openEditorContextMenu(e) {
+        if (busy || ta.disabled) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const n = note();
+        const spellEnabled = spellcheckOn(getPref(PREF.SPELL, true), getPref(PREF.SPELL_MAX, 100000), (n?.body || ta.value || "").length);
+        if (ta.spellcheck !== spellEnabled) ta.spellcheck = spellEnabled;
+        syncEditorSpellState(spellEnabled);
+        const isc = resolveInlineSpellChecker(ta);
+        const sc = isc?.spellChecker || null;
+        const spellAvailable = Boolean(isc && sc);
+        const availableDictionaries = spellAvailable ? readSpellDictionaryList(sc) : [];
+        let currentDictionaries = spellAvailable ? readCurrentSpellDictionaries(sc) : [];
+        if (!currentDictionaries.length && store.meta.spellLanguages?.length) {
+          currentDictionaries = cleanSpellLanguages(store.meta.spellLanguages);
+        }
+        const s0 = Number.isInteger(ta.selectionStart) ? ta.selectionStart : 0;
+        const s1 = Number.isInteger(ta.selectionEnd) ? ta.selectionEnd : s0;
+        const offset = editorContextOffset(e);
+        const wordInfo = wordRangeAtOffset(ta.value, offset, s0, s1);
+        let misspelled = false;
+        let suggestions = [];
+        if (spellEnabled && spellAvailable && !ta.readOnly && wordInfo) {
+          if (!sessionIgnoredWords.has(wordInfo.word) && !addedDictionaryWords.has(wordInfo.word)) {
+            const check = collectSpellSuggestions(sc, wordInfo.word, SPELL_MAX_SUGGESTIONS);
+            misspelled = check.misspelled;
+            suggestions = check.suggestions;
+          }
+        }
+        const model = buildEditorSpellMenuModel({
+          wordInfo,
+          spellEnabled,
+          spellAvailable,
+          misspelled,
+          suggestions,
+          availableDictionaries,
+          currentDictionaries,
+          readOnly: Boolean(ta.readOnly),
+          hasSelection: s1 > s0,
+          canPaste: !ta.readOnly,
+          uiLang: notesLang(),
+          tr: t,
+        });
+        const bindRow = (entry) => {
+          if (entry.sep || entry.heading) return entry;
+          if (Array.isArray(entry.group)) return { ...entry, group: entry.group.map(bindRow) };
+          let run = null;
+          if (entry.actionKind === "suggest") {
+            run = () => {
+              applyEdit(replaceWordRange(ta.value, entry.start, entry.end, entry.replacement));
+              try { isc?.spellCheckRange?.(null); } catch (_) {}
+            };
+          } else if (entry.actionKind === "add") {
+            run = () => {
+              addedDictionaryWords.add(entry.word);
+              try {
+                if (typeof isc?.addWordToDictionary === "function") isc.addWordToDictionary(entry.word);
+                else if (typeof sc?.AddWordToDictionary === "function") sc.AddWordToDictionary(entry.word);
+                isc?.spellCheckRange?.(null);
+              } catch (_) {}
+              flash(t("spell.addedToast", { word: entry.word }));
+            };
+          } else if (entry.actionKind === "ignore") {
+            run = () => {
+              sessionIgnoredWords.add(entry.word);
+              try {
+                if (typeof isc?.ignoreWord === "function") isc.ignoreWord(entry.word);
+                else if (typeof sc?.IgnoreWordAllOccurrences === "function") sc.IgnoreWordAllOccurrences(entry.word);
+                isc?.spellCheckRange?.(null);
+              } catch (_) {}
+            };
+          } else if (entry.actionKind === "toggleSpell") {
+            run = () => {
+              const next = getPref(PREF.SPELL, true) === false;
+              setPref(PREF.SPELL, next);
+              const nextSpell = spellcheckOn(next, getPref(PREF.SPELL_MAX, 100000), (note()?.body || ta.value || "").length);
+              ta.spellcheck = nextSpell;
+              syncEditorSpellState(nextSpell);
+              try { isc?.spellCheckRange?.(null); } catch (_) {}
+            };
+          } else if (entry.actionKind === "toggleLanguage") {
+            run = () => {
+              const next = toggleSpellLanguage(currentDictionaries, entry.langCode, availableDictionaries);
+              if (!next.length) return;
+              lastAppliedSpellLangKey = next.join(",");
+              store.setMeta({ spellLanguages: next });
+              applySpellDictionaries(isc, sc, next);
+            };
+          } else if (entry.actionKind === "cut" || entry.actionKind === "copy" || entry.actionKind === "paste" || entry.actionKind === "selectAll") {
+            run = () => runEditorClipboardAction(entry.actionKind);
+          }
+          return { ...entry, run };
+        };
+        showMenu(pointAnchor(e), model.map(bindRow));
+      }
+      listen(ta, "contextmenu", openEditorContextMenu);
       // {{date}}, @today, /tomorrow ...: swapped for the real date the moment the last character is typed (see
       // additional/notes/flavors/ZentralNotesShortcuts.js). The note keeps plain text, so every other app reads it too.
       function expandShortcut(ev) {

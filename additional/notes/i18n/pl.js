@@ -870,6 +870,18 @@
       "birthday.add.title": "Dodaj przypomnienie urodzinowe",
       "birthday.add.submit": "Dodaj przypomnienie",
       "birthday.add.addedFlash": "Dodano coroczne przypomnienie urodzinowe: {name}",
+      "spell.noSuggestions": "Brak podpowiedzi pisowni",
+      "spell.addToDictionary": "Dodaj \u201e{word}\u201d do s\u0142ownika",
+      "spell.ignoreWord": "Ignoruj \u201e{word}\u201d",
+      "spell.checkSpelling": "Sprawdzaj pisowni\u0119",
+      "spell.languages": "J\u0119zyki",
+      "spell.languagesActive": "J\u0119zyki ({langs})",
+      "spell.noDictionaries": "Brak zainstalowanych s\u0142ownik\u00f3w",
+      "spell.addedToast": "Dodano \u201e{word}\u201d do s\u0142ownika.",
+      "spell.edit.cut": "Wytnij",
+      "spell.edit.copy": "Kopiuj",
+      "spell.edit.paste": "Wklej",
+      "spell.edit.selectAll": "Zaznacz wszystko",
     }),
   });
 

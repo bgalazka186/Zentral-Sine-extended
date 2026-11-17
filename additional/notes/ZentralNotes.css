@@ -639,6 +639,8 @@
 .zentral-notes-sheet .zn-menu-item:hover,
 .zentral-notes-sheet .zn-menu-item:focus-visible { background: var(--zn-hover); outline: none; }
 .zentral-notes-sheet .zn-menu-item.is-danger { color: #ff6b6b; }
+.zentral-notes-sheet .zn-menu-item.is-bold { font-weight: 600; }
+.zentral-notes-sheet .zn-menu-check { display: inline-flex; width: 14px; height: 14px; flex: 0 0 14px; align-items: center; justify-content: center; color: var(--zn-accent); }
 .zentral-notes-sheet .zn-menu-item.is-disabled { cursor: not-allowed; opacity: 0.58; text-align: left; flex-wrap: wrap; }
 .zentral-notes-sheet .zn-menu-item.is-disabled:hover,
 .zentral-notes-sheet .zn-menu-item.is-disabled:focus-visible { background: transparent; }
