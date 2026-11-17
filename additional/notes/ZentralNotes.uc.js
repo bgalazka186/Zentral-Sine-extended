@@ -22675,6 +22675,12 @@
         showList(); updateAllLayout(); renderCalendar();
         return true;
       }
+      function openCalendarPane() {
+        filter = "all"; view = "list";
+        store.setMeta({ calendarPaneCollapsed: false, calendarTab: "calendar" });
+        showList(); updateAllLayout(); renderCalendar();
+        return true;
+      }
       function dateDisplayFormat() {
         return CALENDAR_PART?.cleanDateFormat?.(getPref(PREF.DATE_DISPLAY, CALENDAR_PART.DEFAULT_DATE_FORMAT || "DD-MM-YYYY")) || "DD-MM-YYYY";
       }
@@ -25850,6 +25856,17 @@
           outsideClaim = false;
           return openAgendaDay(key);
         },
+        openCalendar: () => {
+          if (!isOpen || destroyed) return false;
+          outsideClaim = false;
+          return openCalendarPane();
+        },
+        openAgendaSettings: () => {
+          if (!isOpen || destroyed) return false;
+          outsideClaim = false;
+          askAllSettings("zen");
+          return true;
+        },
         openNote: (id, opts) => {
           if (!isOpen || destroyed || !store.get(id)) return false;
           openNote(id, opts);
@@ -28754,7 +28771,43 @@
         const date = folder.getAttribute?.("bgalazka-notes-agenda-day") || "";
         if (folder !== root && (!CALENDAR_PART?.parseYmd?.(date) || agendaDayEl("day:" + date) !== folder)) return;
         document.documentElement.setAttribute("zentral-agenda-folder-ctx", "true");
-        if (folder === root) return;
+        if (folder === root) {
+          const entries = CALENDAR_PART?.agendaRootMenuModel
+            ? CALENDAR_PART.agendaRootMenuModel({ lang: notesLang() })
+            : [
+                { id: "open-calendar", label: t("sidebar.agenda.root.openCalendar") },
+                { id: "refresh-agenda", label: t("sidebar.agenda.root.refresh") },
+                { id: "agenda-settings", label: t("sidebar.agenda.root.settings") },
+                { id: "hide-agenda", label: t("sidebar.agenda.root.hide") },
+              ];
+          for (const entry of entries) {
+            const item = document.createXULElement("menuitem");
+            item.setAttribute("label", entry.label);
+            item.setAttribute("zentral-agenda-folder-own", "root:" + entry.id);
+            item.addEventListener("command", () => {
+              if (disposed || !agendaEnabled() || agendaRootEl() !== folder) return;
+              if (entry.id === "open-calendar") {
+                showNotes("").then((handle) => {
+                  if (!disposed) sheetOf(handle)?.openCalendar?.();
+                }).catch(warn);
+              } else if (entry.id === "refresh-agenda") {
+                agendaController.invalidate?.();
+                syncSharedWorkspace();
+                storeWhenReady().then(() => {
+                  if (!disposed && agendaEnabled()) agendaController.runNow();
+                }).catch(warn);
+              } else if (entry.id === "agenda-settings") {
+                showNotes("").then((handle) => {
+                  if (!disposed) sheetOf(handle)?.openAgendaSettings?.();
+                }).catch(warn);
+              } else if (entry.id === "hide-agenda") {
+                try { Services.prefs.setBoolPref(PREF.AGENDA_ENABLED, false); } catch (error) { warn(error); }
+              }
+            });
+            menu.append(item);
+          }
+          return;
+        }
         for (const [id, labelKey] of [["day", "sidebar.agenda.openDayView"], ["reminder", "sidebar.agenda.createReminderDay"], ["event", "sidebar.agenda.createEventDay"]]) {
           const item = document.createXULElement("menuitem");
           item.setAttribute("label", t(labelKey));

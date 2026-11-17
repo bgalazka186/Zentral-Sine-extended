@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.214
+// @version 3.3.215
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.214, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.215, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.214";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.215";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2143,6 +2143,10 @@ const __zentralEmbeddedLoader = (function () {
       "sidebar.agenda.openDayView": "Open Day view",
       "sidebar.agenda.createReminderDay": "Create reminder for this day…",
       "sidebar.agenda.createEventDay": "Create event for this day…",
+      "sidebar.agenda.root.openCalendar": "Open calendar",
+      "sidebar.agenda.root.refresh": "Refresh Agenda",
+      "sidebar.agenda.root.settings": "Agenda settings",
+      "sidebar.agenda.root.hide": "Hide Agenda",
       "sidebar.agenda.itemUnavailable": "Agenda item no longer available",
       "sidebar.agenda.previewAria": "Agenda preview",
       "sidebar.note.open": "Open note",
@@ -2901,6 +2905,10 @@ const __zentralEmbeddedLoader = (function () {
       "sidebar.agenda.openDayView": "Otw\u00f3rz widok dnia",
       "sidebar.agenda.createReminderDay": "Utw\u00f3rz przypomnienie na ten dzie\u0144\u2026",
       "sidebar.agenda.createEventDay": "Utw\u00f3rz wydarzenie na ten dzie\u0144\u2026",
+      "sidebar.agenda.root.openCalendar": "Otw\u00f3rz kalendarz",
+      "sidebar.agenda.root.refresh": "Od\u015bwie\u017c Agend\u0119",
+      "sidebar.agenda.root.settings": "Ustawienia Agendy",
+      "sidebar.agenda.root.hide": "Ukryj Agend\u0119",
       "sidebar.agenda.itemUnavailable": "Element Agendy nie jest ju\u017c dost\u0119pny",
       "sidebar.agenda.previewAria": "Podgl\u0105d Agendy",
       "sidebar.note.open": "Otw\u00f3rz notatk\u0119",
@@ -8237,6 +8245,16 @@ const __zentralEmbeddedLoader = (function () {
 
   // Per-target context menu model for calendar rows. This stays pure so every calendar surface can
   // render the same capabilities and reasons without duplicating lifecycle/source rules.
+  // SB6.2: Agenda root folder right-click menu entries (localized via language tables).
+  const AGENDA_ROOT_MENU_COMMANDS = Object.freeze(["open-calendar", "refresh-agenda", "agenda-settings", "hide-agenda"]);
+  function agendaRootMenuModel({ lang = DEFAULT_NOTES_LANGUAGE } = {}) {
+    return [
+      { id: "open-calendar", label: t("sidebar.agenda.root.openCalendar", null, lang) },
+      { id: "refresh-agenda", label: t("sidebar.agenda.root.refresh", null, lang) },
+      { id: "agenda-settings", label: t("sidebar.agenda.root.settings", null, lang) },
+      { id: "hide-agenda", label: t("sidebar.agenda.root.hide", null, lang) },
+    ];
+  }
   function calendarItemMenuModel(item, { state = "pending", historyWritable = false, agendaVisible, agendaWritable = true, lang = DEFAULT_NOTES_LANGUAGE } = {}) {
     if (!item || typeof item !== "object" || !String(item.id || "")) return [];
     const tr = (key, params = null) => t(key, params, lang);
@@ -9320,7 +9338,7 @@ const __zentralEmbeddedLoader = (function () {
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -32552,6 +32570,12 @@ __zentralShim.register = function (def) {
         showList(); updateAllLayout(); renderCalendar();
         return true;
       }
+      function openCalendarPane() {
+        filter = "all"; view = "list";
+        store.setMeta({ calendarPaneCollapsed: false, calendarTab: "calendar" });
+        showList(); updateAllLayout(); renderCalendar();
+        return true;
+      }
       function dateDisplayFormat() {
         return CALENDAR_PART?.cleanDateFormat?.(getPref(PREF.DATE_DISPLAY, CALENDAR_PART.DEFAULT_DATE_FORMAT || "DD-MM-YYYY")) || "DD-MM-YYYY";
       }
@@ -35727,6 +35751,17 @@ __zentralShim.register = function (def) {
           outsideClaim = false;
           return openAgendaDay(key);
         },
+        openCalendar: () => {
+          if (!isOpen || destroyed) return false;
+          outsideClaim = false;
+          return openCalendarPane();
+        },
+        openAgendaSettings: () => {
+          if (!isOpen || destroyed) return false;
+          outsideClaim = false;
+          askAllSettings("zen");
+          return true;
+        },
         openNote: (id, opts) => {
           if (!isOpen || destroyed || !store.get(id)) return false;
           openNote(id, opts);
@@ -38631,7 +38666,43 @@ __zentralShim.register = function (def) {
         const date = folder.getAttribute?.("bgalazka-notes-agenda-day") || "";
         if (folder !== root && (!CALENDAR_PART?.parseYmd?.(date) || agendaDayEl("day:" + date) !== folder)) return;
         document.documentElement.setAttribute("zentral-agenda-folder-ctx", "true");
-        if (folder === root) return;
+        if (folder === root) {
+          const entries = CALENDAR_PART?.agendaRootMenuModel
+            ? CALENDAR_PART.agendaRootMenuModel({ lang: notesLang() })
+            : [
+                { id: "open-calendar", label: t("sidebar.agenda.root.openCalendar") },
+                { id: "refresh-agenda", label: t("sidebar.agenda.root.refresh") },
+                { id: "agenda-settings", label: t("sidebar.agenda.root.settings") },
+                { id: "hide-agenda", label: t("sidebar.agenda.root.hide") },
+              ];
+          for (const entry of entries) {
+            const item = document.createXULElement("menuitem");
+            item.setAttribute("label", entry.label);
+            item.setAttribute("zentral-agenda-folder-own", "root:" + entry.id);
+            item.addEventListener("command", () => {
+              if (disposed || !agendaEnabled() || agendaRootEl() !== folder) return;
+              if (entry.id === "open-calendar") {
+                showNotes("").then((handle) => {
+                  if (!disposed) sheetOf(handle)?.openCalendar?.();
+                }).catch(warn);
+              } else if (entry.id === "refresh-agenda") {
+                agendaController.invalidate?.();
+                syncSharedWorkspace();
+                storeWhenReady().then(() => {
+                  if (!disposed && agendaEnabled()) agendaController.runNow();
+                }).catch(warn);
+              } else if (entry.id === "agenda-settings") {
+                showNotes("").then((handle) => {
+                  if (!disposed) sheetOf(handle)?.openAgendaSettings?.();
+                }).catch(warn);
+              } else if (entry.id === "hide-agenda") {
+                try { Services.prefs.setBoolPref(PREF.AGENDA_ENABLED, false); } catch (error) { warn(error); }
+              }
+            });
+            menu.append(item);
+          }
+          return;
+        }
         for (const [id, labelKey] of [["day", "sidebar.agenda.openDayView"], ["reminder", "sidebar.agenda.createReminderDay"], ["event", "sidebar.agenda.createEventDay"]]) {
           const item = document.createXULElement("menuitem");
           item.setAttribute("label", t(labelKey));
