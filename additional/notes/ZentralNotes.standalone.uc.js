@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.205
+// @version 3.3.206
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.205, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.206, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.205";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.206";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -24618,6 +24618,16 @@ __zentralShim.register = function (def) {
         dateTargetEndBtn.addEventListener("click", () => selectDateTarget("end"));
 
         const noteSelect = h("select", { class: "zn-select", "aria-label": "Linked note" });
+        const createInFolder = !original && typeof options.folderId === "string";
+        let newFolderNoteOption = "__zentral_new_folder_note__";
+        if (createInFolder) {
+          while (store.get(newFolderNoteOption)) newFolderNoteOption += "_";
+          const targetFolder = options.folderId
+            ? store.meta.folders.find((f) => f.id === options.folderId && (!options.folderUid || f.uid === options.folderUid))
+            : null;
+          const folderLabel = options.folderId ? (targetFolder?.label || options.folderLabel || options.folderId) : (options.folderLabel || "Notes");
+          noteSelect.append(h("option", { value: newFolderNoteOption }, "New note in " + folderLabel));
+        }
         noteSelect.append(h("option", { value: "" }, "No linked note"));
         const linkedNotes = store.list({ trashed: false }).slice().sort((a, b) => titleOf(a.body).localeCompare(titleOf(b.body)));
         for (const linked of linkedNotes) noteSelect.append(h("option", { value: linked.id }, titleOf(linked.body) || "Untitled note"));
@@ -24625,13 +24635,14 @@ __zentralShim.register = function (def) {
           const linked = store.get(defaultNoteId);
           if (linked) noteSelect.append(h("option", { value: linked.id }, titleOf(linked.body) || "Untitled note"));
         }
-        noteSelect.value = defaultNoteId || "";
+        noteSelect.value = createInFolder && !defaultNoteId ? newFolderNoteOption : (defaultNoteId || "");
+        const selectedExistingNoteId = () => (createInFolder && noteSelect.value === newFolderNoteOption ? "" : noteSelect.value);
         const noteRow = h("label", { class: "zn-field-row" }, h("span", {}, "Linked note"), noteSelect);
         const noteAlertDefaults = chip("Note alert defaults…");
         const noteAgendaDefaults = chip("Note Agenda defaults…");
         const noteAlertRow = h("div", { class: "zn-cal-note-alert-row" }, noteAlertDefaults, noteAgendaDefaults);
-        noteAlertDefaults.addEventListener("click", () => { if (noteSelect.value) askNoteAlertDefaults(noteSelect.value); else status.textContent = "Choose a linked note first."; });
-        noteAgendaDefaults.addEventListener("click", () => { if (noteSelect.value) askNoteAgendaDefaults(noteSelect.value); else status.textContent = "Choose a linked note first."; });
+        noteAlertDefaults.addEventListener("click", () => { const nid = selectedExistingNoteId(); if (nid) askNoteAlertDefaults(nid); else status.textContent = "Choose an existing linked note first."; });
+        noteAgendaDefaults.addEventListener("click", () => { const nid = selectedExistingNoteId(); if (nid) askNoteAgendaDefaults(nid); else status.textContent = "Choose an existing linked note first."; });
         const categorySelect = h("select", { class: "zn-select", "aria-label": "Calendar category" });
         const categories = store.items.categoryList();
         let inheritCategory = "__zentral_note_category__", sourceCategory = "";
@@ -24648,7 +24659,7 @@ __zentralShim.register = function (def) {
         const selectedCategory = () => categorySelect.value === inheritCategory ? sourceCategory : categorySelect.value;
         const categoryRow = h("label", { class: "zn-field-row" }, h("span", {}, "Category"), categorySelect);
         const composeLayers = () => {
-          const noteId = noteSelect.value;
+          const noteId = selectedExistingNoteId();
           const linked = noteId ? store.get(noteId) : null;
           const catName = selectedCategory();
           const catEntry = catName ? store.items.category(catName) : null;
@@ -24893,11 +24904,18 @@ __zentralShim.register = function (def) {
             notify.due = { enabled: notifyInputs.due.checked, ...(sounds.due || {}) };
             notify.followup = { enabled: notifyInputs.followup.checked, delayMinutes: Number(notifySelects.followup.value), ...(sounds.followup || {}) };
           }
+          const wantsNewFolderNote = createInFolder && noteSelect.value === newFolderNoteOption;
+          let resolvedFolderId = "";
+          if (wantsNewFolderNote && options.folderId) {
+            const currentFolder = store.meta.folders.find((f) => (options.folderUid ? f.uid === options.folderUid : f.id === options.folderId));
+            if (!currentFolder) { status.textContent = "Target folder no longer exists."; return; }
+            resolvedFolderId = currentFolder.id;
+          }
           const item = C.composeCalendarItem({
             item: original, id: original?.id, kind: kind.value, allDay: allDay.checked,
             summary: title.input.value, startDate: startDate.input.value, startTime: startTime.input.value,
             endDate: endDate.input.value, endTime: endTime.input.value,
-            noteId: noteSelect.value, category: selectedCategory(),
+            noteId: selectedExistingNoteId(), category: selectedCategory(),
             ...(original?.x?.src === "list" ? { categoryOverride: categorySelect.value === inheritCategory ? null : selectedCategory() } : {}),
             description: description.value, calNote: calNote.value,
             heading: original?.x?.heading || options.heading || "", tz: zoneValue,
@@ -24913,7 +24931,13 @@ __zentralShim.register = function (def) {
           }
           const noteSync = original?.x?.src === "list" ? store.prepareItemCategoryToNote(item, { fmt: dateDisplayFormat() }) : null;
           if (noteSync?.error) { status.textContent = noteSync.error; return; }
-          const saved = store.items.upsert(item);
+          let itemToSave = item;
+          if (wantsNewFolderNote) {
+            const createdNote = store.create("# " + title.input.value.trim() + "\n", resolvedFolderId);
+            if (!createdNote) { status.textContent = "Could not create note in the selected folder."; return; }
+            itemToSave = { ...item, x: { ...item.x, noteId: createdNote.id } };
+          }
+          const saved = store.items.upsert(itemToSave);
           if (!saved) { status.textContent = "Could not save the calendar item. Check calendar storage."; return; }
           if (zoneValue !== zone) rememberCalendarZone(zoneValue);
           if (!original && !saved.x?.noteId) { try { store.mirrorItemToAgendaNote(saved.id, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
@@ -31792,6 +31816,17 @@ __zentralShim.register = function (def) {
           });
           return true;
         },
+        sidebarFolderReminder: (id = "", uid = "") => {
+          if (!isOpen || destroyed || !CALENDAR_PART || !store.items) return false;
+          if (id) {
+            const folder = store.meta.folders.find((entry) => entry.id === id && entry.uid === uid);
+            if (!folder) return false;
+            askCalendarComposer({ kind: "reminder", folderId: folder.id, folderUid: folder.uid, folderLabel: folder.label, linkCurrent: false });
+            return true;
+          }
+          askCalendarComposer({ kind: "reminder", folderId: "", folderUid: "", folderLabel: "Notes", linkCurrent: false });
+          return true;
+        },
         sidebarFolderDelete: (id = "", uid = "") => {
           if (!isOpen || destroyed || !id) return false;
           const folder = store.meta.folders.find((entry) => entry.id === id && entry.uid === uid);
@@ -35732,6 +35767,20 @@ __zentralShim.register = function (def) {
           });
           menu.append(sub);
         }
+        const remindItem = document.createXULElement("menuitem");
+        remindItem.setAttribute("label", "Create reminder in this folder…");
+        remindItem.setAttribute("zentral-notes-folder-own", "reminder");
+        const remindUid = meta?.uid || "";
+        remindItem.addEventListener("command", () => {
+          showNotes("").then((handle) => {
+            if (disposed || zen.dead || zenMode() === "off" || isRoot && zenMode() !== menuMode) return;
+            if (isRoot && parentId === TABBAR_FOLDER) store.ensureTabbarFolder();
+            const current = isRoot ? store.meta.folders.find((folder) => folder.id === parentId) : store.meta.folders.find((folder) => folder.uid === remindUid);
+            if ((!isRoot || parentId) && !current) return;
+            sheetOf(handle)?.sidebarFolderReminder?.(current?.id || "", current?.uid || "");
+          }).catch(warn);
+        });
+        menu.append(remindItem);
         const style = document.createXULElement("menuitem");
         style.setAttribute("label", "Change color and icon…");
         style.setAttribute("zentral-notes-folder-own", "style");

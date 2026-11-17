@@ -76,7 +76,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
-|     9 | `T3.4`      | `PARTIAL` | Med-High            | S-M    | —                 | Context menu on Notes & Agenda folders/pseudo-tabs in Zen tab bar                                        |
 |    10 | `T2.4c4`    | `PARTIAL` | Med-High            | M      | —                 | Time-zone and DST correctness in time grid                                                               |
 |    11 | `T2.5`      | `PARTIAL` | Med-High            | M      | —                 | Drag, resize and create items in the calendar                                                            |
 |    12 | `T2.9`      | `PARTIAL` | Med-High            | M      | none              | Daily-note lifecycle and archive policy inside Agenda                                                    |
@@ -137,26 +136,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 **Status:** `OPEN` · **Impact:** Med-High · **Effort:** M each · **Depends on:** none (b), then b to c · **Source:** split of T1.19 (`T1.19a` DONE in `docs/LEGACY_done_rows.md`)
 
 `b`: export a vault folder mapping YAML front matter, `[[Note#Heading|alias]]`, `![[embeds]]`, callouts, tags. `c`: import such a vault, with a re-import that does not duplicate notes.
-
-#### `T3.4` — Context menu on Notes & Agenda folders/pseudo-tabs in Zen tab bar
-
-**Status:** `PARTIAL` · **Impact:** Med-High · **Effort:** S-M · **Source:** carried over from the previous roadmap (unchanged requirement)
-
-**Current state and what is LEFT:** DONE: _New note in this folder_, _New subfolder_, _Change color and icon_, _Export folder_ and guarded _Delete folder_ on Notes folders (dialogs check stable parent identity). DONE also: Agenda day folders expose _Create reminder_, _Create event_ and _Open Day view_; scoped native-folder filtering and teardown are in place. DONE also: Agenda pseudo-tab menus reuse the calendar action model, revalidate record/occurrence identity and respect disabled actions. LEFT (only this): _Create reminder in this folder…_ on Notes folders (listed in the owner-approved proposal below, not built: `onFolderMenuShowing` has New note, New subfolder, Change color and icon, Export folder, Delete folder). Recurring snooze is tracked in `T2.19`; live checks are not tasks.
-
-**Full specification (original row):** **PARTIAL.** Needs the folder uid and colour/icon fields that now exist (`store.folderUid`, `store.setFolderStyle`). DONE: _New note in this folder_ (Notes controller, `onFolderMenuShowing`) and colors/icon through the Colorful Folders menu. **LEFT:** (1) Notes folders: _Change Folder Color/Icon_ for a Notes-only install, _New subfolder_, _Export Folder_, _Delete_; (2) Agenda day folders (`bgalazka-notes-agenda-day`): _Create reminder for this day…_, _Create event for this day…_, _Open Day view_; (3) Agenda item pseudo-tabs (`bgalazka-notes-agenda-item`): hide irrelevant native tab items and expose _Open source note_, _Mark done_, _Dismiss_, _Snooze_, _Change time…_, _Edit details…_.
-
-**Detailed proposal (owner-approved 2026-11-13, owner notes included):**
-
-### 3. Clean Zen Sidebar Context Menus (`T3.4`) Without Native Clutter
-
-Right-clicking an Agenda item tab or Agenda day folder currently exposes Firefox's native tab/folder actions (`Reload Tab`, `Mute Tab`, `Move Tab`, `Unload Tab`), which make no sense on virtual Agenda entries. Extending the existing `:root[zentral-notes-ctx="item"]` CSS hiding pattern to `tab[bgalazka-notes-agenda-item]` and `zen-folder[bgalazka-notes-agenda-day]` lets us present crisp, focused menus:
-
-- **Agenda Item Tab RMB:** _Open source note_, _Mark done_, _Dismiss_, _Snooze (+1h / Tomorrow / Pick…)_, _Change time…_, _Edit details…_.
-- **Agenda Day Folder RMB:** _Create reminder for this day…_, _Create event for this day…_, _Open Day view_.
-- **Notes Folder RMB:** _New note in this folder_, _New subfolder…_, _Create reminder in this folder…_, _Folder color & icon…_, _Delete folder…_.
-
-#### NOTE FROM OWNER:yes exacly what i meant but make sure it has safeguards so it wont affect normal folers and tabs
 
 #### `T2.4c4` — Time-zone and DST correctness in time grid
 
