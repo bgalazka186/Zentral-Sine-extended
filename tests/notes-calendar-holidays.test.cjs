@@ -222,6 +222,49 @@ async function test(name, fn) {
     assert.ok(CSS_SRC.includes(".is-multi-holiday"), "a day of several sets has its own style");
   });
 
+  await test("OW-45: the year table adds trading Sundays and election days without touching a rule", async () => {
+    // The table is one readable place per year and carries both languages.
+    const rows2026 = cal.holidayTableEntries("PL", 2026, "pl");
+    assert.equal(rows2026.length, 6, "six trading Sundays are written for 2026");
+    assert.ok(rows2026.every((row) => row.name === "Niedziela handlowa" && row.kind === "trading-sunday"));
+    assert.ok(cal.holidayTableEntries("PL", 2026, "en").every((row) => row.name === "Trading Sunday"));
+    assert.deepEqual(cal.holidayTableYears("PL"), [2026, 2027]);
+    assert.deepEqual(cal.holidayTableYears("US"), [], "a set with no table yet is empty, not broken");
+
+    // A table entry reaches the merged list of its set and the coverage line names the years.
+    const pl2026 = cal.holidaysFor("PL", 2026, "pl");
+    assert.ok(pl2026.some((h) => h.date === "2026-12-20" && h.kind === "trading-sunday"));
+    const cov = cal.holidaySetCoverage("PL");
+    assert.equal(cov.code, "PL");
+    assert.equal(cov.ruleTo, 2100);
+    assert.equal(cov.newestYear, 2100);
+
+    // A trading Sunday is a working day: it is shown, it never tints, it never claims work-free.
+    const prefs = { enabled: true, locales: ["PL"], weekend: "none", personalDays: [] };
+    const tradingSunday = cal.isWorkFree("2026-01-25", prefs, "pl");
+    assert.equal(tradingSunday.workFree, false, "shops are open: no work-free");
+    assert.equal(tradingSunday.weekend, false);
+    assert.equal(tradingSunday.holiday.kind, "trading-sunday");
+    assert.equal(tradingSunday.tooltip, "Niedziela handlowa");
+    assert.equal(cal.isWorkFree("2026-12-20", prefs, "en").workFree, false);
+    assert.equal(cal.isWorkFree("2026-01-25", prefs, "en").holidays[0].kind, "trading-sunday");
+
+    // A real holiday is still a day off with or without a table for that year.
+    assert.equal(cal.isWorkFree("2026-12-25", prefs, "pl").workFree, true);
+    assert.equal(cal.isWorkFree("2030-12-25", prefs, "pl").workFree, true, "an unlisted year keeps its rule dates");
+    assert.equal(cal.holidaysFor("PL", 2030, "en").some((h) => h.kind === "trading-sunday"), false);
+
+    // An election day added later is data only — this is the shape the owner fills in.
+    const election = { date: "2027-10-17", name: { en: "Parliamentary election", pl: "Wybory parlamentarne" }, kind: "election" };
+    assert.deepEqual(cal.HOLIDAY_TABLE_KINDS, ["holiday", "trading-sunday", "election"]);
+    assert.ok(election.date.startsWith("2027"));
+    // The table wins over a rule on the same date (the rule loses, the table's entry is used).
+    const overlaid = cal.holidaysFor("PL", 2026, "en").filter((h) => h.date === "2026-12-25");
+    assert.equal(overlaid.length, 1, "one entry per date");
+    assert.equal(overlaid[0].name, "Christmas Day", "a table entry that is no day off never replaces a rule's day off");
+    assert.ok(CSS_SRC.includes(".is-trading-sunday") && CSS_SRC.includes(".is-election-day"), "marked days have a style of their own");
+  });
+
   await test("pure: Easter algorithm, nthWeekday, region weekends, and offline holidaysFor across PL/DE/GB/US/EG & years", async () => {
     // Verified Gregorian Easter Sundays 2024–2028
     assert.equal(cal.easterSundayYmd(2024), "2024-03-31");
@@ -413,6 +456,8 @@ async function test(name, fn) {
     addBtn.click();
     await h.flush();
 
+    assert.ok(h.sheet.root.querySelector(".zn-cal-holidays-coverage-row"), "the dialog names the years each set covers (OW-45)");
+    assert.match(h.sheet.root.querySelector(".zn-cal-holidays-coverage-row").textContent, /2100/, "the newest year is named");
     assert.deepEqual([...h.store.meta.calendarHolidays.locales], ["PL", "DE"], "both chosen sets are kept");
     assert.equal(h.store.meta.calendarHolidays.localesExplicit, true, "manual selection is persisted as explicit");
     assert.match(regionStatus.textContent, /Germany \(DE\)/i, "the status follows a changed choice");

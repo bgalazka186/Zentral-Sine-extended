@@ -18507,6 +18507,14 @@
           el.dataset.holiday = wf.holiday.name;
           el.setAttribute("data-holiday", wf.holiday.name);
         }
+        // OW-45: an entry that is no day off (a trading Sunday, an election day) is marked, never tinted as a holiday.
+        const entryKinds = (Array.isArray(wf.holidays) ? wf.holidays : []).map((entry) => entry.kind);
+        for (const kind of ["trading-sunday", "election"]) {
+          if (!entryKinds.includes(kind)) continue;
+          el.classList.add(kind === "election" ? "is-election-day" : "is-trading-sunday");
+          el.dataset.holidayKind = kind;
+          el.classList.add("is-holiday-mark");
+        }
         // OW-44: every chosen set is named, and a day that belongs to several says which (data-holiday-sets).
         const holidaySets = CALENDAR_PART?.holidaySetsOf?.(wf) || [];
         if (holidaySets.length) {
@@ -20941,11 +20949,22 @@
         if (!C) return;
         let state = calendarHolidayPrefs();
         let regionStatus = null;
+        let coverageLine = null;
         const renderRegionStatus = () => {
           if (!regionStatus) return;
           regionStatus.textContent = !state.locales.length
             ? t("cal.holidays.noneSelected")
             : t("cal.holidays.setsActive", { sets: state.locales.map((code) => t("cal.holidays.region." + code)).join(", ") });
+          // OW-45: the newest year the set's own data reaches, so a person knows when to look at it again.
+          if (!coverageLine) return;
+          coverageLine.replaceChildren();
+          if (!state.locales.length) return;
+          for (const code of state.locales) {
+            const coverage = C.holidaySetCoverage(code);
+            const years = coverage.years.length ? coverage.years.join(", ") : t("cal.holidays.coverageRulesOnly");
+            coverageLine.append(h("p", { class: "zn-cal-holidays-coverage-row", "data-set": code },
+              t("cal.holidays.coverage", { region: t("cal.holidays.region." + code), years, newest: coverage.newestYear })));
+          }
         };
         const save = (next) => {
           state = C.cleanCalendarHolidays(next);
@@ -20973,6 +20992,7 @@
           setsList.append(h("label", { class: "zn-check-row zn-cal-holidays-set-row", "data-set": code }, box, h("span", {}, t("cal.holidays.region." + code))));
         }
         regionStatus = h("p", { class: "zn-cal-holidays-region-status", "aria-live": "polite" }, "");
+        coverageLine = h("div", { class: "zn-cal-holidays-coverage", "aria-live": "polite" });
         renderRegionStatus();
 
         const weekendSelect = h("select", { class: "zn-field zn-cal-holidays-weekend", "aria-label": t("cal.holidays.weekendLabel") });
@@ -21043,7 +21063,7 @@
           t("cal.holidays.title"),
           enableRow,
           regionStatus,
-          h("div", { class: "zn-dialog-label" }, h("strong", {}, t("cal.holidays.setsHeading")), setsList, h("p", { class: "zn-hint" }, t("cal.holidays.setsHint"))),
+          h("div", { class: "zn-dialog-label" }, h("strong", {}, t("cal.holidays.setsHeading")), setsList, h("p", { class: "zn-hint" }, t("cal.holidays.setsHint")), coverageLine),
           h("label", { class: "zn-dialog-label" }, t("cal.holidays.weekendLabel"), weekendSelect),
           h("div", { class: "zn-cal-holidays-section" },
             h("strong", { class: "zn-cal-holidays-heading" }, t("cal.holidays.personalHeading")),

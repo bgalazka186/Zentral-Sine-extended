@@ -2091,6 +2091,25 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-agenda-row.is-holiday {
   background: color-mix(in srgb, #f0b85b 13%, transparent);
 }
+/* OW-45: a trading Sunday or an election day is marked, but it is a working day: no work-free tint. */
+.zentral-notes-sheet .zn-cal-month-cell.is-trading-sunday,
+.zentral-notes-sheet .zn-cal-picker-day.is-trading-sunday,
+.zentral-notes-sheet .zn-cal-time-day-head.is-trading-sunday,
+.zentral-notes-sheet .zn-cal-day-group.is-trading-sunday,
+.zentral-notes-sheet .zn-cal-agenda-row.is-trading-sunday,
+.zentral-notes-sheet .zn-cal-month-cell.is-election-day,
+.zentral-notes-sheet .zn-cal-picker-day.is-election-day,
+.zentral-notes-sheet .zn-cal-time-day-head.is-election-day,
+.zentral-notes-sheet .zn-cal-day-group.is-election-day,
+.zentral-notes-sheet .zn-cal-agenda-row.is-election-day {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--zn-accent, #6ca8ff) 35%, transparent);
+}
+.zentral-notes-sheet .zn-cal-holidays-coverage-row {
+  margin: 2px 0 0;
+  font-size: 0.92em;
+  opacity: 0.8;
+}
 /* OW-44: the same day is a holiday in more than one chosen set — a second accent edge, still one tint. */
 .zentral-notes-sheet .zn-cal-month-cell.is-multi-holiday,
 .zentral-notes-sheet .zn-cal-picker-day.is-multi-holiday {
