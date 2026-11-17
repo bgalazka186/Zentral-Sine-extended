@@ -13539,6 +13539,11 @@
       if (notesMarked) return notesEnabled ? "" : "notes";
       return "";
     }
+    const EPHEMERAL_TAB_ATTR = "bgalazka-ephemeral-tab";
+    const SKIP_SESSION_ATTR = "skipSessionStore";
+    const STALE_PSEUDO_TAB_ATTRS = [NOTES_ATTR, AGENDA_ATTR, EPHEMERAL_TAB_ATTR, SKIP_SESSION_ATTR];
+    const PSEUDO_PAYLOAD_HINT_RE = /zn-(?:note:|new:|agenda-)|bgalazka-zentral-notes|zentral-notes-agenda|bgalazka-ephemeral-tab/;
+    const isManagedPseudoFolderId = (id) => typeof id === "string" && (id === NOTES_ZEN_ROOT_ID || id.startsWith(NOTES_ZEN_SUB_PREFIX) || id === AGENDA_ROOT_ID || id.startsWith("zentral-notes-agenda-day-"));
     function sweepRestoredPseudoTabs(tabs, { notesEnabled = false, agendaEnabled = false, getTabState, removeTab, warn = () => {} } = {}) {
       let removed = 0;
       for (const tab of tabs || []) {
@@ -13558,8 +13563,7 @@
           // as soon as the live/current session entry is an ordinary page.
           if (ordinaryCurrent(url) || ((!url || url === "about:blank") && ordinaryCurrent(sessionUrl))) {
             try {
-              tab.removeAttribute?.(NOTES_ATTR);
-              tab.removeAttribute?.(AGENDA_ATTR);
+              for (const attr of STALE_PSEUDO_TAB_ATTRS) tab.removeAttribute?.(attr);
               if (isPseudoUrl(tab._zentralNotesUrl || "")) delete tab._zentralNotesUrl;
             } catch (_) {}
             continue;
@@ -13570,12 +13574,12 @@
       }
       return removed;
     }
-    // ZenSessionManager.saveState consumes the window snapshots to build its
-    // sidebar/session and Sync projection. Clone only affected windows; do not
-    // mutate the browser's snapshot (which Firefox also writes separately).
-    function filterZenSidebarState(state) {
-      if (!state || !Array.isArray(state.windows)) return state;
-      const isPseudo = (tab) => {
+    // Unified non-mutating snapshot sanitizer for both ZenSessionStore.saveState
+    // and Firefox's SessionFile.write (windows, _closedWindows, _closedTabs,
+    // selected index remapping, folders, native groups, and split-view metadata).
+    function filterSessionStoreState(state) {
+      if (!state || typeof state !== "object") return state;
+      const isPseudoTabState = (tab) => {
         if (!tab || typeof tab !== "object") return false;
         const entries = Array.isArray(tab.entries) ? tab.entries : [];
         const index = entries.length
@@ -13584,19 +13588,60 @@
         const current = index >= 0 ? String(entries[index]?.url || "") : "";
         if (current && current !== "about:blank") return !!pseudoTabCleanupKind({ url: current }, {});
         const fallback = String(tab._zenPinnedInitialState?.entry?.url || tab.userTypedValue || "");
-        return !!pseudoTabCleanupKind({ url: fallback }, {});
+        if (fallback && fallback !== "about:blank" && pseudoTabCleanupKind({ url: fallback }, {})) return true;
+        const attrs = tab.attributes && typeof tab.attributes === "object" ? tab.attributes : null;
+        if (attrs && (attrs[EPHEMERAL_TAB_ATTR] || attrs[NOTES_ATTR] || attrs[AGENDA_ATTR])) return true;
+        return false;
       };
-      const managed = (id) => typeof id === "string" && (id === NOTES_ZEN_ROOT_ID || id.startsWith(NOTES_ZEN_SUB_PREFIX) || id === AGENDA_ROOT_ID || id.startsWith("zentral-notes-agenda-day-"));
-      const parents = new Map(), used = new Set(), removedTabIds = new Set(), liveTabIds = new Set();
-      for (const win of state.windows) {
-        for (const folder of (Array.isArray(win?.folders) ? win.folders : [])) if (folder?.id) {
-          if (!parents.has(folder.id)) parents.set(folder.id, folder.parentId || "");
-          if (!managed(folder.id)) used.add(folder.id);
+      const collectTabIds = (tab, target) => {
+        if (!tab || typeof tab !== "object") return;
+        for (const key of ["zenSyncId", "id", "zenLiveId"]) {
+          if (typeof tab[key] === "string" && tab[key]) target.add(tab[key]);
         }
-        for (const tab of (Array.isArray(win?.tabs) ? win.tabs : [])) {
+      };
+      const sanitizeSurvivingTab = (tab, droppedSplitIds) => {
+        if (!tab || typeof tab !== "object") return tab;
+        const attrs = tab.attributes && typeof tab.attributes === "object" ? tab.attributes : null;
+        const hasStaleAttr = !!(attrs && STALE_PSEUDO_TAB_ATTRS.some((k) => Object.prototype.hasOwnProperty.call(attrs, k)));
+        const dropSplitId = !!(droppedSplitIds.size && typeof tab.splitViewId === "string" && droppedSplitIds.has(tab.splitViewId));
+        const dropZenSplit = !!(droppedSplitIds.size && typeof tab.zenSplitView === "string" && droppedSplitIds.has(tab.zenSplitView));
+        if (!hasStaleAttr && !dropSplitId && !dropZenSplit) return tab;
+        const next = { ...tab };
+        if (hasStaleAttr) {
+          const nextAttrs = {};
+          for (const [k, v] of Object.entries(attrs)) {
+            if (!STALE_PSEUDO_TAB_ATTRS.includes(k)) nextAttrs[k] = v;
+          }
+          next.attributes = nextAttrs;
+        }
+        if (dropSplitId) delete next.splitViewId;
+        if (dropZenSplit) delete next.zenSplitView;
+        return next;
+      };
+      const hasFlatShape = Array.isArray(state.tabs) || Array.isArray(state.folders) || Array.isArray(state.groups) || Array.isArray(state.splitViewData) || Array.isArray(state.splitViews);
+      const hasWindows = Array.isArray(state.windows);
+      const hasClosedWindows = Array.isArray(state._closedWindows);
+      if (!hasWindows && !hasClosedWindows && !hasFlatShape) return state;
+
+      const allContainers = [];
+      if (hasWindows) for (const w of state.windows) if (w && typeof w === "object") allContainers.push(w);
+      if (hasClosedWindows) for (const w of state._closedWindows) if (w && typeof w === "object") allContainers.push(w);
+      if (hasFlatShape) allContainers.push(state);
+
+      const parents = new Map(), used = new Set(), removedTabIds = new Set(), liveTabIds = new Set();
+      for (const box of allContainers) {
+        for (const folder of (Array.isArray(box.folders) ? box.folders : [])) if (folder?.id) {
+          if (!parents.has(folder.id)) parents.set(folder.id, folder.parentId || "");
+          if (!isManagedPseudoFolderId(folder.id)) used.add(folder.id);
+        }
+        for (const tab of (Array.isArray(box.tabs) ? box.tabs : [])) {
           if (!tab) continue;
-          if (isPseudo(tab)) { if (tab.zenSyncId) removedTabIds.add(tab.zenSyncId); }
-          else { if (tab.groupId) used.add(tab.groupId); if (tab.zenSyncId) liveTabIds.add(tab.zenSyncId); }
+          if (isPseudoTabState(tab)) collectTabIds(tab, removedTabIds);
+          else {
+            if (tab.groupId) used.add(tab.groupId);
+            if (tab.folderId) used.add(tab.folderId);
+            collectTabIds(tab, liveTabIds);
+          }
         }
       }
       // Preserve a managed folder whenever a normal tab or a foreign folder in
@@ -13606,19 +13651,145 @@
         while (next && remaining-- > 0 && !used.has(next)) { used.add(next); next = parents.get(next); }
       }
       for (const id of liveTabIds) removedTabIds.delete(id);
-      const removedFolders = new Set([...parents.keys()].filter((id) => managed(id) && !used.has(id)));
-      let changed = false;
-      const windows = state.windows.map((win) => {
-        if (!win || typeof win !== "object") return win;
-        let copy = win;
-        if (Array.isArray(win.tabs)) {
-          const tabs = win.tabs.filter((tab) => !isPseudo(tab));
-          if (tabs.length !== win.tabs.length) { copy = { ...copy, tabs }; changed = true; }
+      const removedFolders = new Set([...parents.keys()].filter((id) => isManagedPseudoFolderId(id) && !used.has(id)));
+
+      const filterSplitList = (list, oldToNew, removedIndices, droppedSplitIds) => {
+        if (!Array.isArray(list)) return { list, changed: false };
+        let listChanged = false;
+        const out = [];
+        for (const sv of list) {
+          if (Array.isArray(sv)) {
+            let itemChanged = false;
+            const kept = [];
+            for (const el of sv) {
+              if (typeof el === "string") {
+                if (removedTabIds.has(el)) { itemChanged = true; continue; }
+                kept.push(el);
+              } else if (typeof el === "number" && Number.isInteger(el) && el >= 0 && oldToNew) {
+                if (removedIndices.has(el)) { itemChanged = true; continue; }
+                const mapped = oldToNew.has(el) ? oldToNew.get(el) : el;
+                if (mapped !== el) itemChanged = true;
+                kept.push(mapped);
+              } else if (el && typeof el === "object") {
+                if (isPseudoTabState(el) || (el.zenSyncId && removedTabIds.has(el.zenSyncId)) || (el.id && removedTabIds.has(el.id))) {
+                  itemChanged = true; continue;
+                }
+                kept.push(el);
+              } else kept.push(el);
+            }
+            if (itemChanged) {
+              listChanged = true;
+              if (kept.length >= 2) out.push(kept);
+            } else out.push(sv);
+            continue;
+          }
+          if (!sv || typeof sv !== "object") { out.push(sv); continue; }
+          const field = Array.isArray(sv.tabs) ? "tabs" : (Array.isArray(sv.tabIds) ? "tabIds" : "");
+          if (!field) { out.push(sv); continue; }
+          const origArr = sv[field];
+          let itemChanged = false, droppedCount = 0;
+          const kept = [];
+          for (const el of origArr) {
+            if (typeof el === "string") {
+              if (removedTabIds.has(el)) { itemChanged = true; droppedCount++; continue; }
+              kept.push(el);
+            } else if (typeof el === "number" && Number.isInteger(el) && el >= 0 && oldToNew) {
+              if (removedIndices.has(el)) { itemChanged = true; droppedCount++; continue; }
+              const mapped = oldToNew.has(el) ? oldToNew.get(el) : el;
+              if (mapped !== el) itemChanged = true;
+              kept.push(mapped);
+            } else if (el && typeof el === "object") {
+              if (isPseudoTabState(el) || (el.zenSyncId && removedTabIds.has(el.zenSyncId)) || (el.id && removedTabIds.has(el.id))) {
+                itemChanged = true; droppedCount++; continue;
+              }
+              kept.push(el);
+            } else kept.push(el);
+          }
+          if (droppedCount > 0 && kept.length < 2) {
+            listChanged = true;
+            if (typeof sv.id === "string" && sv.id) droppedSplitIds.add(sv.id);
+            if (typeof sv.splitViewId === "string" && sv.splitViewId) droppedSplitIds.add(sv.splitViewId);
+            continue;
+          }
+          if (itemChanged) {
+            listChanged = true;
+            out.push({ ...sv, [field]: kept });
+          } else out.push(sv);
         }
-        if (Array.isArray(win.folders)) {
+        return { list: listChanged ? out : list, changed: listChanged };
+      };
+
+      const filterContainer = (box) => {
+        if (!box || typeof box !== "object") return { box, changed: false, hadTabs: false, keptTabs: 0, keptFolders: 0 };
+        let copy = box, boxChanged = false;
+        let oldToNew = null, removedIndices = new Set();
+        let rawTabs = null, tabsRemoved = false;
+        const hadTabs = Array.isArray(box.tabs) && box.tabs.length > 0;
+        if (Array.isArray(box.tabs)) {
+          oldToNew = new Map();
+          rawTabs = [];
+          for (let i = 0; i < box.tabs.length; i++) {
+            const tab = box.tabs[i];
+            if (isPseudoTabState(tab)) { removedIndices.add(i); tabsRemoved = true; continue; }
+            oldToNew.set(i, rawTabs.length);
+            rawTabs.push(tab);
+          }
+        }
+        const droppedSplitIds = new Set();
+        for (const splitKey of ["splitViewData", "splitViews"]) {
+          if (Array.isArray(box[splitKey])) {
+            const res = filterSplitList(box[splitKey], oldToNew, removedIndices, droppedSplitIds);
+            if (res.changed) {
+              if (copy === box) copy = { ...box };
+              copy[splitKey] = res.list;
+              boxChanged = true;
+            }
+          }
+        }
+        if (rawTabs) {
+          let anySanitized = false;
+          const finalTabs = rawTabs.map((tab) => {
+            const cleaned = sanitizeSurvivingTab(tab, droppedSplitIds);
+            if (cleaned !== tab) anySanitized = true;
+            return cleaned;
+          });
+          if (tabsRemoved || anySanitized) {
+            if (copy === box) copy = { ...box };
+            copy.tabs = finalTabs;
+            boxChanged = true;
+          }
+          if (tabsRemoved && Number.isInteger(box.selected)) {
+            const origIdx = box.selected - 1;
+            let nextSel;
+            if (!finalTabs.length) nextSel = 0;
+            else if (oldToNew.has(origIdx)) nextSel = oldToNew.get(origIdx) + 1;
+            else {
+              let found = -1;
+              for (let i = Math.max(0, origIdx); i < box.tabs.length; i++) if (oldToNew.has(i)) { found = oldToNew.get(i); break; }
+              if (found < 0) {
+                for (let i = Math.min(box.tabs.length - 1, origIdx - 1); i >= 0; i--) if (oldToNew.has(i)) { found = oldToNew.get(i); break; }
+              }
+              nextSel = found >= 0 ? found + 1 : 1;
+            }
+            if (nextSel !== box.selected) {
+              if (copy === box) copy = { ...box };
+              copy.selected = nextSel;
+              boxChanged = true;
+            }
+          }
+        }
+        if (Array.isArray(box._closedTabs)) {
+          const closed = box._closedTabs.filter((entry) => !isPseudoTabState(entry?.state || entry));
+          if (closed.length !== box._closedTabs.length) {
+            if (copy === box) copy = { ...box };
+            copy._closedTabs = closed;
+            boxChanged = true;
+          }
+        }
+        if (Array.isArray(box.folders)) {
           let foldersChanged = false;
           const folders = [];
-          for (const folder of win.folders) {
+          for (const folder of box.folders) {
             if (removedFolders.has(folder?.id)) { foldersChanged = true; continue; }
             let next = folder;
             if (Array.isArray(folder?.emptyTabIds)) {
@@ -13631,45 +13802,114 @@
             }
             folders.push(next);
           }
-          if (foldersChanged) { copy = { ...copy, folders }; changed = true; }
+          if (foldersChanged) {
+            if (copy === box) copy = { ...box };
+            copy.folders = folders;
+            boxChanged = true;
+          }
         }
-        // Zen also copies native group metadata independently of its folders.
-        // Drop only groups whose corresponding managed folder was proven unused.
-        if (Array.isArray(win.groups)) {
-          const groups = win.groups.filter((group) => !removedFolders.has(group?.id));
-          if (groups.length !== win.groups.length) { copy = { ...copy, groups }; changed = true; }
+        if (Array.isArray(box.groups)) {
+          let groupsChanged = false;
+          const groups = [];
+          for (const group of box.groups) {
+            if (removedFolders.has(group?.id)) { groupsChanged = true; continue; }
+            if (Array.isArray(group?.tabs)) {
+              const gTabs = group.tabs.filter((el) => {
+                if (typeof el === "string") return !removedTabIds.has(el);
+                if (el && typeof el === "object") return !isPseudoTabState(el) && !(el.zenSyncId && removedTabIds.has(el.zenSyncId));
+                return true;
+              });
+              if (gTabs.length !== group.tabs.length) {
+                groups.push({ ...group, tabs: gTabs }); groupsChanged = true; continue;
+              }
+            }
+            groups.push(group);
+          }
+          if (groupsChanged) {
+            if (copy === box) copy = { ...box };
+            copy.groups = groups;
+            boxChanged = true;
+          }
         }
-        return copy;
-      });
-      return changed ? { ...state, windows } : state;
+        const keptTabs = Array.isArray(copy.tabs) ? copy.tabs.length : 0;
+        const keptFolders = Array.isArray(copy.folders) ? copy.folders.length : 0;
+        return { box: copy, changed: boxChanged, hadTabs, keptTabs, keptFolders };
+      };
+
+      let changed = false;
+      let nextState = state;
+      if (hasFlatShape) {
+        const res = filterContainer(nextState);
+        if (res.changed) { nextState = res.box; changed = true; }
+      }
+      if (hasWindows) {
+        let winChanged = false;
+        const windows = state.windows.map((win) => {
+          const res = filterContainer(win);
+          if (res.changed) winChanged = true;
+          return res.box;
+        });
+        if (winChanged) {
+          if (nextState === state) nextState = { ...state };
+          nextState.windows = windows;
+          changed = true;
+        }
+      }
+      if (hasClosedWindows) {
+        let closedChanged = false;
+        const closedWindows = [];
+        for (const win of state._closedWindows) {
+          const res = filterContainer(win);
+          if (res.hadTabs && res.keptTabs === 0 && res.keptFolders === 0) { closedChanged = true; continue; }
+          if (res.changed) closedChanged = true;
+          closedWindows.push(res.box);
+        }
+        if (closedChanged) {
+          if (nextState === state) nextState = { ...state };
+          nextState._closedWindows = closedWindows;
+          changed = true;
+        }
+      }
+      return changed ? nextState : state;
     }
-    // The Zen session manager is a process-wide singleton shared by windows.
-    // Reference count its reversible wrapper; never overwrite newer wrappers.
-    const ZEN_SIDEBAR_SHIELD = Symbol.for("zentral-notes/zen-sidebar-shield/v1");
-    function acquireZenSidebarShield(target, warn = () => {}) {
+    const filterZenSidebarState = filterSessionStoreState;
+    // Fast-path wrapper for Firefox's SessionFile.write(data), which may receive
+    // either an object snapshot or a serialized JSON string.
+    function filterSessionFilePayload(data) {
+      if (typeof data === "string") {
+        if (!PSEUDO_PAYLOAD_HINT_RE.test(data)) return data;
+        try {
+          const parsed = JSON.parse(data);
+          const filtered = filterSessionStoreState(parsed);
+          return filtered === parsed ? data : JSON.stringify(filtered);
+        } catch (_) { return data; }
+      }
+      if (data && typeof data === "object") return filterSessionStoreState(data);
+      return data;
+    }
+    // Generic process-wide, reference-counted, prototype-safe, reversible
+    // method shield. Never overwrites newer wrappers on disposal.
+    function acquireMethodShield(target, methodName, symbolKey, wrapCall, warn = () => {}) {
       if (!target || (typeof target !== "object" && typeof target !== "function")) return null;
       try {
-        let record = Object.getOwnPropertyDescriptor(target, ZEN_SIDEBAR_SHIELD)?.value;
+        let record = Object.getOwnPropertyDescriptor(target, symbolKey)?.value;
         if (record) {
-          if (!record.active || Object.getOwnPropertyDescriptor(target, "saveState")?.value !== record.wrapper) return null;
+          if (!record.active || Object.getOwnPropertyDescriptor(target, methodName)?.value !== record.wrapper) return null;
           record.users++;
         } else {
-          const own = Object.getOwnPropertyDescriptor(target, "saveState");
+          const own = Object.getOwnPropertyDescriptor(target, methodName);
           let owner = target, desc = own;
-          while (!desc && (owner = Object.getPrototypeOf(owner))) desc = Object.getOwnPropertyDescriptor(owner, "saveState");
+          while (!desc && (owner = Object.getPrototypeOf(owner))) desc = Object.getOwnPropertyDescriptor(owner, methodName);
           if (!desc || typeof desc.value !== "function" || (own && !own.configurable)) return null;
           record = { active: true, users: 1, own, wrapper: null };
           const original = desc.value;
-          record.wrapper = function (state, ...args) {
-            let next = state;
-            if (record.active) {
-              try { next = filterZenSidebarState(state); } catch (error) { try { warn(error); } catch (_) {} }
-            }
-            return Reflect.apply(original, this, [next, ...args]);
+          record.wrapper = function (...args) {
+            if (!record.active) return Reflect.apply(original, this, args);
+            return wrapCall(original, this, args, warn);
           };
-          Object.defineProperty(target, ZEN_SIDEBAR_SHIELD, { value: record, configurable: true });
-          try { Object.defineProperty(target, "saveState", { value: record.wrapper, writable: true, configurable: true, enumerable: desc.enumerable }); }
-          catch (error) { delete target[ZEN_SIDEBAR_SHIELD]; throw error; }
+          Object.defineProperty(target, symbolKey, { value: record, configurable: true });
+          try { Object.defineProperty(target, methodName, { value: record.wrapper, writable: true, configurable: true, enumerable: desc.enumerable }); }
+          catch (error) { delete target[symbolKey]; throw error; }
         }
         let released = false;
         const release = () => {
@@ -13677,15 +13917,124 @@
           released = true;
           if (--record.users > 0) return;
           record.active = false;
-          if (Object.getOwnPropertyDescriptor(target, "saveState")?.value === record.wrapper) {
-            if (record.own) Object.defineProperty(target, "saveState", record.own);
-            else delete target.saveState;
+          if (Object.getOwnPropertyDescriptor(target, methodName)?.value === record.wrapper) {
+            if (record.own) Object.defineProperty(target, methodName, record.own);
+            else delete target[methodName];
           }
-          if (Object.getOwnPropertyDescriptor(target, ZEN_SIDEBAR_SHIELD)?.value === record) delete target[ZEN_SIDEBAR_SHIELD];
+          if (Object.getOwnPropertyDescriptor(target, symbolKey)?.value === record) delete target[symbolKey];
         };
-        release.isCurrent = () => record.active && Object.getOwnPropertyDescriptor(target, "saveState")?.value === record.wrapper;
+        release.isCurrent = () => record.active && Object.getOwnPropertyDescriptor(target, methodName)?.value === record.wrapper;
         return release;
       } catch (error) { try { warn(error); } catch (_) {} return null; }
+    }
+    // The Zen session manager is a process-wide singleton shared by windows.
+    // Reference count its reversible wrapper; never overwrite newer wrappers.
+    const ZEN_SIDEBAR_SHIELD = Symbol.for("zentral-notes/zen-sidebar-shield/v1");
+    function acquireZenSidebarShield(target, warn = () => {}) {
+      return acquireMethodShield(target, "saveState", ZEN_SIDEBAR_SHIELD, (original, self, args, w) => {
+        let next = args[0];
+        try { next = filterSessionStoreState(next); } catch (error) { try { w(error); } catch (_) {} }
+        return Reflect.apply(original, self, [next, ...args.slice(1)]);
+      }, warn);
+    }
+    // Firefox's separate sessionstore.jsonlz4 / recovery.jsonlz4 persistence boundary.
+    const SESSION_FILE_SHIELD = Symbol.for("zentral-notes/firefox-session-file-shield/v1");
+    function acquireSessionFileShield(target, warn = () => {}) {
+      return acquireMethodShield(target, "write", SESSION_FILE_SHIELD, (original, self, args, w) => {
+        let next = args[0];
+        try { next = filterSessionFilePayload(next); } catch (error) { try { w(error); } catch (_) {} }
+        return Reflect.apply(original, self, [next, ...args.slice(1)]);
+      }, warn);
+    }
+    // ZenPinnedTabsStorage / ZenSync record hygiene: prevent new pseudo-tab pins
+    // from entering SQLite/Sync and safely prune previously synced pseudo records.
+    function isPseudoPinRecord(pin) {
+      if (!pin || typeof pin !== "object" || pin.isGroup || pin.isFolder) return false;
+      return !!pseudoTabCleanupKind({ url: String(pin.url || "") }, {});
+    }
+    function planSyncedPseudoRecordCleanup(pins) {
+      const list = Array.isArray(pins) ? pins : [];
+      const folderParent = new Map(), folderIdsSet = new Set(), used = new Set();
+      const tabIds = [];
+      const pinIdOf = (pin) => String(pin?.uuid || pin?.id || "");
+      const parentIdOf = (pin) => String(pin?.parentUuid || pin?.folderParentUuid || pin?.parentId || "");
+      for (const pin of list) {
+        if (!pin || typeof pin !== "object") continue;
+        const id = pinIdOf(pin);
+        if (!id) continue;
+        const parent = parentIdOf(pin);
+        if (pin.isGroup || pin.isFolder) {
+          folderIdsSet.add(id);
+          if (!folderParent.has(id)) folderParent.set(id, parent);
+          if (!isManagedPseudoFolderId(id)) used.add(id);
+        } else if (isPseudoPinRecord(pin)) {
+          tabIds.push(id);
+        } else if (parent) {
+          used.add(parent);
+        }
+      }
+      for (const id of [...used]) {
+        let next = folderParent.get(id), remaining = folderParent.size + 1;
+        while (next && remaining-- > 0 && !used.has(next)) { used.add(next); next = folderParent.get(next); }
+      }
+      const depthOf = (id) => {
+        let d = 0, cur = folderParent.get(id), rem = folderParent.size + 1;
+        while (cur && rem-- > 0) { d++; cur = folderParent.get(cur); }
+        return d;
+      };
+      const unusedManagedFolders = [...folderIdsSet].filter((id) => isManagedPseudoFolderId(id) && !used.has(id));
+      // Remove children before parents so parent references stay valid during deletion.
+      unusedManagedFolders.sort((a, b) => depthOf(b) - depthOf(a));
+      const preservedFolderIds = [...folderIdsSet].filter((id) => isManagedPseudoFolderId(id) && used.has(id));
+      return { tabIds, folderIds: unusedManagedFolders, removedUuids: [...tabIds, ...unusedManagedFolders], preservedFolderIds };
+    }
+    async function prunePreviouslySyncedPseudoRecords(storage, { warn = () => {} } = {}) {
+      const empty = { removedTabs: 0, removedFolders: 0, preservedFolders: 0, total: 0 };
+      if (!storage || typeof storage.getPins !== "function") return empty;
+      const canRemoveOne = typeof storage.removePin === "function";
+      const canRemoveMany = typeof storage.removePins === "function";
+      if (!canRemoveOne && !canRemoveMany) return empty;
+      let pins;
+      try { pins = await storage.getPins(); } catch (error) { try { warn(error); } catch (_) {} return empty; }
+      const plan = planSyncedPseudoRecordCleanup(pins);
+      if (!plan.removedUuids.length) return { ...empty, preservedFolders: plan.preservedFolderIds.length };
+      let removedTabs = 0, removedFolders = 0;
+      const tabSet = new Set(plan.tabIds);
+      if (canRemoveOne) {
+        for (const uuid of plan.removedUuids) {
+          try {
+            await storage.removePin(uuid);
+            if (tabSet.has(uuid)) removedTabs++; else removedFolders++;
+          } catch (error) { try { warn(error); } catch (_) {} }
+        }
+      } else {
+        try {
+          await storage.removePins(plan.removedUuids);
+          removedTabs = plan.tabIds.length;
+          removedFolders = plan.folderIds.length;
+        } catch (error) { try { warn(error); } catch (_) {} }
+      }
+      return { removedTabs, removedFolders, preservedFolders: plan.preservedFolderIds.length, total: removedTabs + removedFolders };
+    }
+    const PINNED_SAVE_SHIELD = Symbol.for("zentral-notes/zen-pinned-storage-save-shield/v1");
+    const PINNED_UPDATE_SHIELD = Symbol.for("zentral-notes/zen-pinned-storage-update-shield/v1");
+    function acquirePinnedTabsStorageShield(target, warn = () => {}) {
+      if (!target || (typeof target !== "object" && typeof target !== "function")) return null;
+      const wrapPinWrite = (original, self, args, w) => {
+        try {
+          if (isPseudoPinRecord(args[0])) return Promise.resolve(null);
+        } catch (error) { try { w(error); } catch (_) {} }
+        return Reflect.apply(original, self, args);
+      };
+      const releases = [];
+      const rSave = acquireMethodShield(target, "savePin", PINNED_SAVE_SHIELD, wrapPinWrite, warn);
+      if (rSave) releases.push(rSave);
+      const rUpdate = acquireMethodShield(target, "updatePin", PINNED_UPDATE_SHIELD, wrapPinWrite, warn);
+      if (rUpdate) releases.push(rUpdate);
+      if (!releases.length) return null;
+      const release = () => { for (const fn of releases) fn(); };
+      release.isCurrent = () => releases.every((fn) => fn.isCurrent());
+      return release;
     }
     function restoredPseudoFolderKind(folder) {
       if (!folder || folder.localName !== "zen-folder") return "";
@@ -14357,7 +14706,7 @@
         hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_FOLDER_LABEL, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
         DATE_TITLE_RE, dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
         HISTORY_DIR, HISTORY_DEFAULTS, HISTORY_RANGE, BACKUP_DIR, BACKUP_HOURS, backupEntryName, parseBackupName, backupPlan, backupLeft, UNLOAD_RECOVERY_DIR, UNLOAD_KINDS, unloadEntryStem, parseUnloadEntryName, planUnloadWrites, decideNoteRecovery, historyOptions, historyStamp, historyFileName, parseHistoryName, shouldSnapshot, pruneHistory, historyWarning,
-        orderPlan, childSequence, wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, pseudoTabCleanupKind, sweepRestoredPseudoTabs, filterZenSidebarState, acquireZenSidebarShield, restoredPseudoFolderKind, retireRestoredPseudoFolder, projectZen,
+        orderPlan, childSequence, wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, pseudoTabCleanupKind, sweepRestoredPseudoTabs, filterSessionStoreState, filterZenSidebarState, filterSessionFilePayload, acquireZenSidebarShield, acquireSessionFileShield, isPseudoPinRecord, planSyncedPseudoRecordCleanup, prunePreviouslySyncedPseudoRecords, acquirePinnedTabsStorageShield, restoredPseudoFolderKind, retireRestoredPseudoFolder, projectZen,
         utf8Bytes, createPerfSampler, createResourceRegistry, ACTIVE_RESOURCE_INVENTORY, createZenFolder,
       };
     }
@@ -27627,27 +27976,43 @@
       const getHostRuntime = () => hostRuntime || window.ZentralRuntime || window.__zentralStandaloneRuntime || null;
       let disposed = false;
       const warn = (error) => console.warn("[ZentralNotes]", error);
-      // Zen's public session manager builds both its sidebar file and the Sync
-      // projection from saveState(). Firefox's separate session file is NOT
-      // covered here; keep the remaining isolation work explicit in the roadmap.
+      // Zero-Leak ZenSync & SessionStore Shield (B3.3.50-6):
+      // 1) ZenSessionStore.saveState (Zen sidebar session + Sync payload)
+      // 2) Firefox SessionFile.write (sessionstore.jsonlz4 / recovery.jsonlz4)
+      // 3) ZenPinnedTabsStorage.savePin/updatePin (SQLite zen_pins / Sync)
+      const attachNativeShield = (name, resolveTarget, acquireFn) => {
+        const initial = resolveTarget();
+        if (initial && lifecycle?.watchNative) {
+          const binding = lifecycle.watchNative({
+            name, enabled: () => true,
+            resolve: resolveTarget, events: ["activate"],
+            attach(target, child) {
+              const release = acquireFn(target, warn);
+              if (!release) throw new Error(name + " hook is unavailable or already replaced");
+              child.own(release);
+              return { isCurrent: release.isCurrent };
+            },
+          });
+          onCleanup(() => binding.destroy());
+        } else if (initial) {
+          const release = acquireFn(initial, warn);
+          if (release) onCleanup(release);
+        }
+      };
       let zenSessionManager = null;
       try { zenSessionManager = ChromeUtils.importESModule?.("resource:///modules/zen/ZenSessionManager.sys.mjs")?.ZenSessionStore || null; } catch (_) {}
-      if (zenSessionManager && lifecycle?.watchNative) {
-        const binding = lifecycle.watchNative({
-          name: "notes-zen-sidebar-session-shield", enabled: () => true,
-          resolve: () => zenSessionManager, events: ["activate"],
-          attach(target, child) {
-            const release = acquireZenSidebarShield(target, warn);
-            if (!release) throw new Error("Zen sidebar session hook is unavailable or already replaced");
-            child.own(release);
-            return { isCurrent: release.isCurrent };
-          },
-        });
-        onCleanup(() => binding.destroy());
-      } else if (zenSessionManager) {
-        const release = acquireZenSidebarShield(zenSessionManager, warn);
-        if (release) onCleanup(release);
-      }
+      attachNativeShield("notes-zen-sidebar-session-shield", () => zenSessionManager, acquireZenSidebarShield);
+
+      let firefoxSessionFile = null;
+      try { firefoxSessionFile = ChromeUtils.importESModule?.("resource:///modules/sessionstore/SessionFile.sys.mjs")?.SessionFile || null; } catch (_) {}
+      attachNativeShield("notes-firefox-session-file-shield", () => firefoxSessionFile, acquireSessionFileShield);
+
+      let zenPinnedStorage = null;
+      try {
+        zenPinnedStorage = ChromeUtils.importESModule?.("resource:///modules/zen/ZenPinnedTabsStorage.sys.mjs")?.ZenPinnedTabsStorage
+          || window.gZenPinnedTabManager?._zenPinnedTabsStorage || null;
+      } catch (_) {}
+      attachNativeShield("notes-zen-pinned-storage-shield", () => zenPinnedStorage, acquirePinnedTabsStorageShield);
 
       const prefBool = (k, d) => {
         try {
@@ -28449,8 +28814,7 @@
       }
       function clearStalePseudoTabMarks(tab) {
         try {
-          tab.removeAttribute?.(NOTES_ATTR);
-          tab.removeAttribute?.(AGENDA_ATTR);
+          for (const attr of STALE_PSEUDO_TAB_ATTRS) tab.removeAttribute?.(attr);
           if (isZentralPseudoUrl(tab._zentralNotesUrl || "")) delete tab._zentralNotesUrl;
           // A tab originally created as a placeholder may later be reused by
           // Zen or another extension. It must lose the in-memory exemption too.
@@ -28534,8 +28898,12 @@
       function addManagedPseudoTab(url) {
         pseudoTabCreationDepth++;
         try {
-          const tab = window.gBrowser.addTab(url, { skipAnimation: true, triggeringPrincipal: systemPrincipal() });
-          if (tab) internalPseudoTabs.add(tab);
+          const tab = window.gBrowser.addTab(url, { skipAnimation: true, skipSessionStore: true, triggeringPrincipal: systemPrincipal() });
+          if (tab) {
+            internalPseudoTabs.add(tab);
+            tab.setAttribute?.(EPHEMERAL_TAB_ATTR, "true");
+            tab.setAttribute?.(SKIP_SESSION_ATTR, "true");
+          }
           return tab;
         } finally { pseudoTabCreationDepth--; }
       }
@@ -30946,22 +31314,57 @@
           removeTab: zenRemoveTab, warn,
         });
       }
-      function cleanDisabledPseudoFolders() {
-        const folders = [...(document.querySelectorAll?.("zen-folder") || [])];
+      function cleanDisabledPseudoFolders(onlyFolder = null) {
+        const folders = onlyFolder ? [onlyFolder] : [...(document.querySelectorAll?.("zen-folder") || [])];
         for (const folder of folders) {
+          if (!folder || !folder.isConnected) continue;
           const kind = restoredPseudoFolderKind(folder);
           if (!kind || (kind === "notes" ? zenMode() !== "off" : agendaEnabled())) continue;
           const ancestor = folder.parentElement?.closest?.("zen-folder");
           if (ancestor && restoredPseudoFolderKind(ancestor) === kind) continue;
+          cleanRestoredPseudoTabs([...(folder.querySelectorAll?.("tab") || [])]);
           retireRestoredPseudoFolder(folder, kind);
         }
       }
       cleanRestoredPseudoTabs([...(document.querySelectorAll?.("tab") || [])]);
       cleanDisabledPseudoFolders();
+      let syncPrunePromise = null;
+      const pruneSyncedPseudoNow = () => {
+        if (disposed || !zenPinnedStorage) return;
+        if (syncPrunePromise) return;
+        syncPrunePromise = prunePreviouslySyncedPseudoRecords(zenPinnedStorage, { warn })
+          .catch(warn)
+          .finally(() => { syncPrunePromise = null; });
+      };
+      const onSyncEngineFinish = {
+        observe(_subject, _topic, data) {
+          if (disposed) return;
+          const engine = String(data || "");
+          if (engine && !/^(tabs|zen[-_]?pins|pinned[-_]?tabs)$/i.test(engine)) return;
+          cleanRestoredPseudoTabs([...(document.querySelectorAll?.("tab") || [])]);
+          cleanDisabledPseudoFolders();
+          pruneSyncedPseudoNow();
+        },
+      };
+      try {
+        Services.obs.addObserver(onSyncEngineFinish, "weave:engine:sync:finish");
+        onCleanup(() => { try { Services.obs.removeObserver(onSyncEngineFinish, "weave:engine:sync:finish"); } catch (_) {} });
+      } catch (_) {}
+      if (zenPinnedStorage) {
+        const readyBarrier = getHostRuntime()?.whenNativeReady ? getHostRuntime().whenNativeReady() : Promise.resolve();
+        Promise.resolve(readyBarrier).then(() => { if (!disposed) pruneSyncedPseudoNow(); }).catch(() => {});
+      }
       const onPseudoTabRestored = (event) => {
         if (disposed || event.target?.localName !== "tab") return;
+        let folder = event.target.closest?.("zen-folder") || null;
+        const kind = folder ? restoredPseudoFolderKind(folder) : "";
+        while (folder && kind) {
+          const parent = folder.parentElement?.closest?.("zen-folder");
+          if (!parent || restoredPseudoFolderKind(parent) !== kind) break;
+          folder = parent;
+        }
         cleanRestoredPseudoTabs([event.target]);
-        cleanDisabledPseudoFolders();
+        if (folder && kind) cleanDisabledPseudoFolders(folder);
       };
       if (lifecycle?.listen) {
         const offPseudoRestore = lifecycle.listen(window, "SSTabRestored", onPseudoTabRestored, true);

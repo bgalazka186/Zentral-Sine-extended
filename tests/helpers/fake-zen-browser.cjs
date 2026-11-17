@@ -24,7 +24,7 @@ function loadRuntimeHoverCard(ctx) {
   return vm.runInNewContext("(" + runtimeSource.slice(start, i + 1) + ")", ctx);
 }
 
-function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyFolders = false, calendar = Calendar, hiddenDOMWindow = null, sharedObs = null, workspaceName = "Default" } = {}) {
+function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyFolders = false, calendar = Calendar, hiddenDOMWindow = null, sharedObs = null, workspaceName = "Default", esModules = {}, gZenPinnedTabManager = null, SessionStore = null } = {}) {
   const dom = require("./fake-dom.cjs")(), { El, Ev, document } = dom;
   document.querySelector = (selector) => document.querySelectorAll(selector)[0] || null;
   document.createXULElement = (tag) => document.createElement(tag);
@@ -78,6 +78,8 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   const win = {
     document, __zentralNotesParts: { "notes-calendar": calendar }, __zentralNotesTestSeam: {},
     ZentralRuntime: { register(value) { definition = value; } },
+    ...(gZenPinnedTabManager ? { gZenPinnedTabManager } : {}),
+    ...(SessionStore ? { SessionStore } : {}),
     gZenWorkspaces: {
       activeWorkspace: sidebar.ws.id,
       workspaceElement(id) { return workspaces.get(id) || null; },
@@ -94,7 +96,7 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   win.window = win;
   win.gBrowser = {
     get tabs() { return document.querySelectorAll("tab"); }, selectedTab: null,
-    addTab(url, options = {}) { const tab = sidebar.tab(url); tab.id = `fake-${id}-${++tabId}`; tab.linkedBrowser = { currentURI: { spec: url } }; const ws = win.gZenWorkspaces.activeWorkspace; tab.setAttribute("zen-workspace-id", ws); (workspaces.get(ws)?.pinnedTabsContainer || sidebar.pinned).append(tab); if (!options.deferTabOpen) emit("TabOpen", tab); return tab; },
+    addTab(url, options = {}) { const tab = sidebar.tab(url); tab.id = `fake-${id}-${++tabId}`; tab._addTabOptions = { ...options }; tab.linkedBrowser = { currentURI: { spec: url } }; const ws = win.gZenWorkspaces.activeWorkspace; tab.setAttribute("zen-workspace-id", ws); (workspaces.get(ws)?.pinnedTabsContainer || sidebar.pinned).append(tab); if (!options.deferTabOpen) emit("TabOpen", tab); return tab; },
     pinTab(tab) { tab.pinned = true; tab.setAttribute("pinned", "true"); emit("TabPinned", tab); },
     removeTab(tab) {
       const folder = tab.closest("zen-folder");
@@ -162,7 +164,7 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     disconnect() { this.target = null; this.options = null; mutationObservers.delete(this); }
   }
   class ResizeObserver { observe() {} unobserve() {} disconnect() {} }
-  const vmGlobals = { window: win, document, globalThis: { Services }, ChromeUtils: { importESModule: () => ({}) }, PathUtils, IOUtils, MutationObserver, ResizeObserver, Event: Ev, Uint8Array,
+  const vmGlobals = { window: win, document, globalThis: { Services }, ChromeUtils: { importESModule: (uri) => esModules[uri] || {} }, PathUtils, IOUtils, MutationObserver, ResizeObserver, Event: Ev, Uint8Array,
     navigator: { platform: "Linux" }, console, URL, Date: FakeDate, JSON, Math, Promise, RegExp, Number, Map, Set, WeakMap, setTimeout, clearTimeout, queueMicrotask };
   const ctx = vm.createContext(vmGlobals);
   const sharedHoverCard = loadRuntimeHoverCard(ctx);
