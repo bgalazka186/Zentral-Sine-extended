@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.244
+// @version 3.3.245
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.244, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.245, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.244";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.245";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2570,6 +2570,10 @@ const __zentralEmbeddedLoader = (function () {
       "cal.holidays.regionLabel": "Public holiday calendar",
       "cal.holidays.regionPrompt": "Choose your country or region to show its public holidays on the calendar.",
       "cal.holidays.regionActive": "Showing public holidays for {region}.",
+      "cal.holidays.setsHeading": "Public holiday sets",
+      "cal.holidays.setsHint": "Pick any number of sets. The language of the names follows the Notes language, not the set.",
+      "cal.holidays.noneSelected": "No holiday set chosen: only weekends and personal days off are shown.",
+      "cal.holidays.setsActive": "Showing public holidays: {sets}.",
       "cal.holidays.region.none": "None (weekends only)",
       "cal.holidays.region.PL": "Poland (PL)",
       "cal.holidays.region.DE": "Germany (DE)",
@@ -3500,6 +3504,10 @@ const __zentralEmbeddedLoader = (function () {
       "cal.holidays.regionLabel": "Kalendarz \u015bwi\u0105t pa\u0144stwowych",
       "cal.holidays.regionPrompt": "Wybierz kraj lub region, aby wyświetlać jego święta w kalendarzu.",
       "cal.holidays.regionActive": "Wyświetlane są święta: {region}.",
+      "cal.holidays.setsHeading": "Zestawy \u015bwi\u0105t",
+      "cal.holidays.setsHint": "Wybierz dowoln\u0105 liczb\u0119 zestaw\u00f3w. J\u0119zyk nazw zale\u017cy od j\u0119zyka notatek, nie od zestawu.",
+      "cal.holidays.noneSelected": "Nie wybrano \u017cadnego zestawu \u015bwi\u0105t: pokazywane s\u0105 tylko weekendy i w\u0142asne dni wolne.",
+      "cal.holidays.setsActive": "Wy\u015bwietlane \u015bwi\u0119ta: {sets}.",
       "cal.holidays.region.none": "Brak (tylko weekendy)",
       "cal.holidays.region.PL": "Polska (PL)",
       "cal.holidays.region.DE": "Niemcy (DE)",
@@ -10651,6 +10659,19 @@ const __zentralEmbeddedLoader = (function () {
   const HOLIDAY_REGIONS = Object.freeze(["none", "PL", "DE", "GB", "US", "EG"]);
   const WEEKEND_PRESETS = Object.freeze(["auto", "sat-sun", "fri-sat", "none"]);
   const HOLIDAY_PERSONAL_MAX = 200;
+  // OW-43: the holiday SET (which country's free days are shown) is a choice of its own, not a property of the
+  // interface language. The language only decides the language of the names. A set is one entry here plus one
+  // branch in holidaysFor(); the newest year its rules (and later the HOLIDAY_TABLE of OW-45) can serve is listed so
+  // the dialog can say when a person may want to look at it again.
+  const HOLIDAY_LOCALES = Object.freeze([
+    Object.freeze({ code: "PL", weekend: [6, 0], from: 1900, to: 2100 }),
+    Object.freeze({ code: "US", weekend: [6, 0], from: 1900, to: 2100 }),
+    Object.freeze({ code: "DE", weekend: [6, 0], from: 1900, to: 2100 }),
+    Object.freeze({ code: "GB", weekend: [6, 0], from: 1900, to: 2100 }),
+    Object.freeze({ code: "EG", weekend: [5, 6], from: 1900, to: 2100 }),
+  ]);
+  const HOLIDAY_LOCALE_CODES = Object.freeze(HOLIDAY_LOCALES.map((entry) => entry.code));
+  const HOLIDAY_LOCALES_MAX = 8;
   const holidayYearCache = new Map();
 
   function pad2(n) { return String(Math.max(0, Math.floor(Number(n) || 0))).padStart(2, "0"); }
@@ -10702,15 +10723,15 @@ const __zentralEmbeddedLoader = (function () {
     return day >= 1 ? ymdParts(y, mo, day) : "";
   }
   function regionWeekendDays(region) {
-    const code = HOLIDAY_REGIONS.includes(region) ? region : "none";
-    return code === "EG" ? [5, 6] : [6, 0];
+    const info = holidayLocaleInfo(region);
+    return info ? [...info.weekend] : [6, 0];
   }
   function weekendDaysFor(prefs) {
     const clean = cleanCalendarHolidays(prefs);
     if (clean.weekend === "none") return [];
     if (clean.weekend === "fri-sat") return [5, 6];
     if (clean.weekend === "sat-sun") return [6, 0];
-    return regionWeekendDays(clean.region);
+    return regionWeekendDays(clean.locales[0] || clean.region);
   }
   function defaultHolidayRegion(locale) {
     const parts = String(locale || "").trim().replace(/_/g, "-").split("-").filter(Boolean);
@@ -10722,12 +10743,47 @@ const __zentralEmbeddedLoader = (function () {
     const language = String(parts[0] || "").toLowerCase();
     return language === "pl" ? "PL" : language === "de" ? "DE" : "none";
   }
+  function holidayLocaleInfo(code) {
+    const key = String(code || "").trim().toUpperCase();
+    return HOLIDAY_LOCALES.find((entry) => entry.code === key) || null;
+  }
+  function cleanHolidayLocale(code) {
+    const info = holidayLocaleInfo(code);
+    return info ? info.code : "";
+  }
+  // The sets a fresh profile starts with, from the app locale. `none` means "no set chosen", never "weekends off".
+  function defaultHolidayLocales(locale) {
+    const region = defaultHolidayRegion(locale);
+    return region && region !== "none" && cleanHolidayLocale(region) ? Object.freeze([cleanHolidayLocale(region)]) : Object.freeze([]);
+  }
+  function cleanHolidayLocales(raw) {
+    const list = Array.isArray(raw) ? raw : (typeof raw === "string" ? raw.split(",") : []);
+    const out = [];
+    for (const entry of list) {
+      const code = cleanHolidayLocale(entry);
+      if (code && !out.includes(code)) out.push(code);
+      if (out.length >= HOLIDAY_LOCALES_MAX) break;
+    }
+    return Object.freeze(out);
+  }
   function cleanCalendarHolidays(raw, locale = "") {
     const src = raw && typeof raw === "object" ? raw : {};
     const enabled = src.enabled !== false;
     const regionExplicit = src.regionExplicit === true;
     const storedRegion = HOLIDAY_REGIONS.includes(src.region) ? src.region : null;
     const region = storedRegion && (storedRegion !== "none" || regionExplicit) ? storedRegion : defaultHolidayRegion(locale);
+    // OW-43: a stored list of sets wins. Without one, a stored single selection (every version before OW-43) is
+    // migrated once, and a fresh profile starts from the app locale.
+    const storedLocales = Array.isArray(src.locales) ? cleanHolidayLocales(src.locales) : null;
+    // A stored single set other than "none" is a real choice and migrates even without the explicit flag (OW-39
+    // wrote such values without it); only a stored "none" needs `regionExplicit` to survive.
+    const legacyExplicit = storedLocales ? null : (src.localesExplicit === true || regionExplicit === true || Boolean(storedRegion && storedRegion !== "none"));
+    const locales = storedLocales
+      ? storedLocales
+      : (legacyExplicit
+        ? cleanHolidayLocales(storedRegion && storedRegion !== "none" ? [storedRegion] : [])
+        : defaultHolidayLocales(locale));
+    const localesExplicit = Boolean(storedLocales) || legacyExplicit;
     const weekend = WEEKEND_PRESETS.includes(src.weekend) ? src.weekend : "auto";
     const personalMap = new Map();
     const list = Array.isArray(src.personalDays) ? src.personalDays : [];
@@ -10739,7 +10795,9 @@ const __zentralEmbeddedLoader = (function () {
       personalMap.set(date, { date, label });
     }
     const personalDays = [...personalMap.values()].sort((a, b) => a.date.localeCompare(b.date));
-    return { enabled, region, regionExplicit, weekend, personalDays };
+    // `region` stays the first chosen set (or "none") so every reader that still asks for one keeps working.
+    const primaryRegion = locales.length ? locales[0] : "none";
+    return { enabled, region: primaryRegion, regionExplicit, locales, localesExplicit, weekend, personalDays };
   }
   function addPersonalDayOff(prefs, dateKey, label = "") {
     const clean = cleanCalendarHolidays(prefs);
@@ -10756,10 +10814,11 @@ const __zentralEmbeddedLoader = (function () {
     return cleanCalendarHolidays({ ...clean, personalDays: clean.personalDays.filter((entry) => entry.date !== key) });
   }
   function holidaysFor(region, year, lang = "en") {
-    const code = HOLIDAY_REGIONS.includes(region) ? region : "none";
+    const info = holidayLocaleInfo(region);
+    const code = info ? info.code : "none";
     const y = Math.trunc(Number(year));
     const lc = cleanNotesLanguage(lang);
-    if (code === "none" || !Number.isFinite(y) || y < 1900 || y > 2100) return [];
+    if (!info || !Number.isFinite(y) || y < info.from || y > info.to) return [];
     const cacheKey = `${code}:${y}:${lc}`;
     if (holidayYearCache.has(cacheKey)) return holidayYearCache.get(cacheKey);
     const pl = lc === "pl";
@@ -10857,6 +10916,29 @@ const __zentralEmbeddedLoader = (function () {
     holidayYearCache.set(cacheKey, sorted);
     return sorted;
   }
+  // Every holiday of every chosen set in one list, sorted by date (OW-43/OW-44). Two sets may name the same day;
+  // both names are kept (`name` joins them) and the entry says which sets it came from.
+  function holidayEntriesFor(prefs, year, lang = "en") {
+    const clean = cleanCalendarHolidays(prefs);
+    const codes = clean.locales.length ? clean.locales : (clean.region !== "none" ? cleanHolidayLocales([clean.region]) : []);
+    if (!codes.length) return Object.freeze([]);
+    const byDate = new Map();
+    for (const code of codes) {
+      for (const entry of holidaysFor(code, year, lang)) {
+        const seen = byDate.get(entry.date);
+        if (!seen) {
+          byDate.set(entry.date, { date: entry.date, name: entry.name, kind: entry.kind, locale: code, locales: [code], names: [entry.name] });
+          continue;
+        }
+        if (seen.names.includes(entry.name)) continue;
+        seen.names.push(entry.name);
+        seen.locales.push(code);
+        seen.name = seen.names.join(" \u00b7 ");
+        seen.kind = "holiday";
+      }
+    }
+    return Object.freeze([...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).map((entry) => Object.freeze(entry)));
+  }
   function isWorkFree(day, prefs, lang = "en") {
     const clean = cleanCalendarHolidays(prefs);
     const key = typeof day === "string" && parseYmd(day.trim()) ? day.trim() : localDateKey(day);
@@ -10866,16 +10948,19 @@ const __zentralEmbeddedLoader = (function () {
     const wd = weekdayOfYmd(key);
     const weekend = weekendDaysFor(clean).includes(wd);
     const year = Number(key.slice(0, 4));
-    const holiday = clean.region !== "none" ? (holidaysFor(clean.region, year, lang).find((h) => h.date === key) || null) : null;
+    // Every chosen set is read (OW-44); `holiday` stays the first one for readers written before the list existed.
+    const holidays = holidayEntriesFor(clean, year, lang).filter((entry) => entry.date === key);
+    const holiday = holidays.length ? holidays[0] : null;
     const personal = clean.personalDays.find((p) => p.date === key) || null;
     const reasons = [];
-    if (holiday) reasons.push(holiday.name);
+    for (const entry of holidays) reasons.push(entry.name);
     if (personal) reasons.push(personal.label ? personal.label : t("cal.holidays.personalDayOff", null, lang));
     const tooltip = reasons.join(" \u00b7 ");
     return {
       workFree: Boolean(weekend || holiday || personal),
       weekend,
       holiday,
+      holidays,
       personal,
       reasons,
       tooltip,
@@ -10885,7 +10970,7 @@ const __zentralEmbeddedLoader = (function () {
   const api = {
     KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, translate, t, pluralCategory, tCount, translationKeys, missingTranslationKeys, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, lineScheduleSignature, cleanTextSchedule, scheduleSignatureFromItem, scheduleFromParsedLine, reconcileListItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
     cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
@@ -18828,6 +18913,8 @@ __zentralShim.register = function (def) {
       const dirty = new Set();
       const listeners = new Set();
       const backedUp = new Set();
+      // True when a stored holiday choice predates OW-43 and it was an explicit "none": keep it, never re-enable.
+      const legacyHolidayOptOut = (raw) => Boolean(raw && typeof raw === "object" && raw.region === "none" && raw.regionExplicit === true && !Array.isArray(raw.locales));
       const calendarHolidayLocale = (() => {
         try { const locale = Services.locale?.appLocaleAsBCP47; if (locale) return String(locale); } catch (_) {}
         try { const locale = window.navigator?.language; if (locale) return String(locale); } catch (_) {}
@@ -18843,7 +18930,7 @@ __zentralShim.register = function (def) {
         // The size of each calendar view ("auto" = fitted to the pane, or px; OW-03). Replaced as a whole, never changed in place.
         calendarScale: CALENDAR_PART ? CALENDAR_PART.cleanCalendarScale(null) : { month: "auto", week: "auto", day: "auto", upcoming: "auto", agenda: "auto" },
         calendarPicker: CALENDAR_PART ? CALENDAR_PART.cleanCalendarPicker(null) : { mode: "auto", minWidth: 470, minHeight: 360, colorMode: "count" },
-        calendarHolidays: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHolidays(null, calendarHolidayLocale) : { enabled: true, region: "none", weekend: "auto", personalDays: [] },
+        calendarHolidays: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHolidays(null, calendarHolidayLocale) : { enabled: true, region: "none", locales: [], weekend: "auto", personalDays: [] },
         calendarAlertSettings: CALENDAR_PART ? CALENDAR_PART.cleanAlertSettings(null) : {}, calendarNoteAlertOverrides: {},
         calendarAgendaDefaults: {}, calendarNoteAgendaOverrides: {} };
       let meta = { ...DEFAULT_META };
@@ -19597,6 +19684,7 @@ __zentralShim.register = function (def) {
             meta.calendarScale = CALENDAR_PART.cleanCalendarScale(raw.calendarScale, raw.calendarDensity);
             meta.calendarPicker = CALENDAR_PART.cleanCalendarPicker(raw.calendarPicker);
             meta.calendarHolidays = CALENDAR_PART.cleanCalendarHolidays(raw.calendarHolidays, calendarHolidayLocale);
+            if (legacyHolidayOptOut(raw.calendarHolidays)) meta.calendarHolidays = CALENDAR_PART.cleanCalendarHolidays({ ...meta.calendarHolidays, locales: [] }, calendarHolidayLocale);
             meta.calendarSnap = CALENDAR_PART.cleanCalendarSnap(raw.calendarSnap);
             meta.calendarHours = CALENDAR_PART.cleanCalendarHours(raw.calendarHours);
             const daysForward = Number(raw.calendarDaysForward);
@@ -29933,8 +30021,9 @@ __zentralShim.register = function (def) {
         cancel.addEventListener("click", closeDialog);
       }
       // T2.10: Work-free day tint & holiday tooltips across Month, Week, Day, Upcoming, and Agenda views.
-      const calendarHolidayPrefs = () => CALENDAR_PART?.cleanCalendarHolidays?.(store.meta.calendarHolidays) || { enabled: true, region: "none", weekend: "auto", personalDays: [] };
-      const calendarWorkFreeInfo = (day) => CALENDAR_PART?.isWorkFree?.(day, calendarHolidayPrefs(), notesLang()) || { workFree: false, weekend: false, holiday: null, personal: null, reasons: [], tooltip: "" };
+      // The holiday names follow the Notes interface language (OW-43); the sets themselves are the user's choice.
+      const calendarHolidayPrefs = () => CALENDAR_PART?.cleanCalendarHolidays?.(store.meta.calendarHolidays) || { enabled: true, region: "none", locales: [], weekend: "auto", personalDays: [] };
+      const calendarWorkFreeInfo = (day) => CALENDAR_PART?.isWorkFree?.(day, calendarHolidayPrefs(), notesLang()) || { workFree: false, weekend: false, holiday: null, holidays: [], personal: null, reasons: [], tooltip: "" };
       function applyWorkFreeAttrs(el, wf, { appendTitle = false } = {}) {
         if (!el || !wf || !wf.workFree) return;
         el.classList.add("is-workfree");
@@ -32375,9 +32464,9 @@ __zentralShim.register = function (def) {
         let regionStatus = null;
         const renderRegionStatus = () => {
           if (!regionStatus) return;
-          regionStatus.textContent = state.region === "none"
-            ? t("cal.holidays.regionPrompt")
-            : t("cal.holidays.regionActive", { region: t("cal.holidays.region." + state.region) });
+          regionStatus.textContent = !state.locales.length
+            ? t("cal.holidays.noneSelected")
+            : t("cal.holidays.setsActive", { sets: state.locales.map((code) => t("cal.holidays.region." + code)).join(", ") });
         };
         const save = (next) => {
           state = C.cleanCalendarHolidays(next);
@@ -32390,14 +32479,20 @@ __zentralShim.register = function (def) {
         enableCheck.addEventListener("change", () => save({ ...state, enabled: enableCheck.checked }));
         const enableRow = h("label", { class: "zn-check-row" }, enableCheck, h("span", {}, t("cal.holidays.enableTint")));
 
-        const regionSelect = h("select", { class: "zn-field zn-cal-holidays-region", "aria-label": t("cal.holidays.regionLabel") });
-        for (const code of C.HOLIDAY_REGIONS) {
-          const opt = h("option", { value: code }, t("cal.holidays.region." + code));
-          if (code === state.region) opt.selected = true;
-          regionSelect.append(opt);
+        // OW-43: the holiday SET is chosen apart from the interface language, and any number of sets at once (OW-44).
+        const setsList = h("div", { class: "zn-cal-holidays-sets" });
+        for (const code of C.HOLIDAY_LOCALE_CODES) {
+          const box = h("input", { type: "checkbox", class: "zn-cal-holidays-set", "data-set": code });
+          box.checked = state.locales.includes(code);
+          box.addEventListener("change", () => {
+            const next = [...state.locales];
+            const at = next.indexOf(code);
+            if (box.checked && at < 0) next.push(code);
+            if (!box.checked && at >= 0) next.splice(at, 1);
+            save({ ...state, locales: next, localesExplicit: true, regionExplicit: true });
+          });
+          setsList.append(h("label", { class: "zn-check-row zn-cal-holidays-set-row", "data-set": code }, box, h("span", {}, t("cal.holidays.region." + code))));
         }
-        regionSelect.value = state.region;
-        regionSelect.addEventListener("change", () => save({ ...state, region: regionSelect.value, regionExplicit: true }));
         regionStatus = h("p", { class: "zn-cal-holidays-region-status", "aria-live": "polite" }, "");
         renderRegionStatus();
 
@@ -32469,7 +32564,7 @@ __zentralShim.register = function (def) {
           t("cal.holidays.title"),
           enableRow,
           regionStatus,
-          h("label", { class: "zn-dialog-label" }, t("cal.holidays.regionLabel"), regionSelect),
+          h("div", { class: "zn-dialog-label" }, h("strong", {}, t("cal.holidays.setsHeading")), setsList, h("p", { class: "zn-hint" }, t("cal.holidays.setsHint"))),
           h("label", { class: "zn-dialog-label" }, t("cal.holidays.weekendLabel"), weekendSelect),
           h("div", { class: "zn-cal-holidays-section" },
             h("strong", { class: "zn-cal-holidays-heading" }, t("cal.holidays.personalHeading")),
@@ -32494,7 +32589,7 @@ __zentralShim.register = function (def) {
         { id: "agenda-visibility-defaults", label: t("cal.toolsMenu.agendaVisibility"), icon: "calendar-check", run: askAgendaVisibilityDefaults },
         { sep: true },
         { id: "calendar-week-settings", icon: "calendar", label: t("cal.toolsMenu.weekSettings", { day: t(calendarWeekStartDay() === 0 ? "common.sunday" : "common.monday"), weeks: calendarShowWeekNumbers() ? ", " + t("cal.weekNumber.short") : "" }), run: askCalendarWeekSettings },
-        { id: "calendar-holidays", icon: "calendar", label: holPrefs.region !== "none" ? t("cal.toolsMenu.holidaysRegion", { region: t("cal.holidays.region." + holPrefs.region) }) : t("cal.toolsMenu.holidaysSetup"), run: () => queueMicrotask(askCalendarHolidaysDialog) },
+        { id: "calendar-holidays", icon: "calendar", label: holPrefs.locales.length ? t("cal.toolsMenu.holidaysRegion", { region: holPrefs.locales.map((code) => t("cal.holidays.region." + code)).join(", ") }) : t("cal.toolsMenu.holidaysSetup"), run: () => queueMicrotask(askCalendarHolidaysDialog) },
         { icon: "clock", label: t("cal.toolsMenu.visibleHours", { hours: CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours).on ? calendarHoursText(store.meta.calendarHours).long : t("cal.toolsMenu.all24") }), action: () => queueMicrotask(askCalendarHours) },
         { icon: "globe", label: t("cal.toolsMenu.displayZone", { zone: calendarDisplayZone() || t("cal.toolsMenu.zoneLocal") }), action: () => queueMicrotask(askCalendarDisplayZone) },
         { icon: "clock", label: t("cal.toolsMenu.freeSlots"), action: () => queueMicrotask(askCalendarFreeSlots) },

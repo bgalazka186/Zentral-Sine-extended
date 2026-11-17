@@ -157,6 +157,47 @@ async function test(name, fn) {
 }
 
 (async () => {
+  await test("OW-43 pure: holiday sets are chosen apart from the interface language (PL + US, any language)", async () => {
+    // A set list is the source of truth; a fresh profile still follows the app locale.
+    assert.deepEqual(cal.cleanCalendarHolidays(null, "pl-PL").locales, ["PL"]);
+    assert.deepEqual(cal.cleanCalendarHolidays(null, "en-US").locales, ["US"]);
+    assert.deepEqual(cal.cleanCalendarHolidays(null, "fr-FR").locales, []);
+    assert.equal(cal.cleanCalendarHolidays(null, "pl-PL").region, "PL", "the first set is still reported as region");
+    assert.equal(cal.cleanCalendarHolidays(null, "fr-FR").region, "none");
+
+    // Legacy single `region` migrates once, including an explicit "none" opt-out.
+    assert.deepEqual(cal.cleanCalendarHolidays({ region: "US" }, "pl-PL").locales, ["US"]);
+    assert.deepEqual(cal.cleanCalendarHolidays({ region: "none", regionExplicit: true }, "pl-PL").locales, []);
+    assert.deepEqual(cal.cleanCalendarHolidays({ region: "none" }, "pl-PL").locales, ["PL"], "an old unconfigured none follows the locale");
+
+    // Validation and cap.
+    assert.deepEqual(cal.cleanHolidayLocales(["pl", "US", "US", "zz", "DE"]), ["PL", "US", "DE"]);
+    assert.equal(cal.cleanHolidayLocale("us"), "US");
+    assert.equal(cal.cleanHolidayLocale("none"), "");
+    assert.ok(cal.cleanHolidayLocales(["PL", "US", "DE", "GB", "EG"]).length <= cal.HOLIDAY_LOCALES_MAX);
+    assert.deepEqual(cal.defaultHolidayLocales("en-GB"), ["GB"]);
+
+    // The name language is the interface language, the set is not.
+    const plInEnglish = cal.holidaysFor("PL", 2026, "en");
+    const plInPolish = cal.holidaysFor("PL", 2026, "pl");
+    assert.ok(plInEnglish.some((h) => h.date === "2026-05-03" && h.name === "Constitution Day"));
+    assert.ok(plInPolish.some((h) => h.date === "2026-05-03" && /Konstytucji/.test(h.name)));
+    assert.ok(cal.holidaysFor("US", 2026, "pl").some((h) => h.date === "2026-11-26" && /Dzi\u0119kczynienia/.test(h.name)), "US set named in Polish");
+
+    // Two sets at once keep both names on a shared day and never drop one.
+    const both = cal.holidayEntriesFor({ enabled: true, locales: ["PL", "US"], weekend: "auto", personalDays: [] }, 2026, "en");
+    const may1 = both.filter((e) => e.date === "2026-05-01");
+    assert.equal(may1.length, 1, "one entry per day");
+    assert.deepEqual([...may1[0].locales].sort(), ["PL"], "only Poland has 2026-05-01");
+    assert.ok(both.some((e) => e.date === "2026-07-03" && /Independence Day/.test(e.name)));
+    const wf = cal.isWorkFree("2026-05-01", { enabled: true, locales: ["PL", "US"], weekend: "auto", personalDays: [] }, "en");
+    assert.equal(wf.workFree, true);
+    assert.deepEqual(wf.holidays.map((h) => h.name), ["Labour Day"]);
+    assert.equal(wf.holiday.name, "Labour Day", "`holiday` still names the first one");
+    assert.equal(cal.isWorkFree("2026-07-03", { enabled: true, locales: ["US"], weekend: "auto", personalDays: [] }, "pl").workFree, true);
+    assert.equal(cal.isWorkFree("2026-07-03", { enabled: true, locales: ["PL"], weekend: "auto", personalDays: [] }, "pl").workFree, false);
+  });
+
   await test("pure: Easter algorithm, nthWeekday, region weekends, and offline holidaysFor across PL/DE/GB/US/EG & years", async () => {
     // Verified Gregorian Easter Sundays 2024–2028
     assert.equal(cal.easterSundayYmd(2024), "2024-03-31");
@@ -331,24 +372,31 @@ async function test(name, fn) {
     holMenuItem.click();
     await h.flush();
 
-    const regionSel = h.sheet.root.querySelector(".zn-cal-holidays-region");
+    const setPL = h.sheet.root.querySelector('.zn-cal-holidays-set[data-set="PL"]');
+    const setDE = h.sheet.root.querySelector('.zn-cal-holidays-set[data-set="DE"]');
     const dateIn = h.sheet.root.querySelector(".zn-cal-holidays-date");
     const labelIn = h.sheet.root.querySelector(".zn-cal-holidays-label");
     const addBtn = h.sheet.root.querySelector(".zn-cal-holidays-add");
-    assert.ok(regionSel && dateIn && labelIn && addBtn, "Holidays dialog controls rendered");
+    assert.ok(setPL && setDE && dateIn && labelIn && addBtn, "Holidays dialog controls rendered");
     const regionStatus = h.sheet.root.querySelector(".zn-cal-holidays-region-status");
-    assert.match(regionStatus?.textContent || "", /Showing public holidays for Poland/i, "selected public calendar is explained");
-    regionSel.value = "DE";
-    regionSel.dispatchEvent(new h.Event("change", { bubbles: true }));
+    assert.match(regionStatus?.textContent || "", /Showing public holidays: Poland \(PL\)/i, "chosen sets are explained");
+    assert.equal(setPL.checked, true, "the current set is ticked");
+    setDE.checked = true;
+    setDE.dispatchEvent(new h.Event("change", { bubbles: true }));
+    await h.flush();
     dateIn.value = "2026-05-15";
     labelIn.value = "Berlin trip";
     addBtn.click();
     await h.flush();
 
-    assert.equal(h.store.meta.calendarHolidays.region, "DE");
-    assert.equal(h.store.meta.calendarHolidays.regionExplicit, true, "manual selection is persisted as explicit");
-    assert.match(regionStatus.textContent, /Germany/i, "region status follows a changed selection");
+    assert.deepEqual([...h.store.meta.calendarHolidays.locales], ["PL", "DE"], "both chosen sets are kept");
+    assert.equal(h.store.meta.calendarHolidays.localesExplicit, true, "manual selection is persisted as explicit");
+    assert.match(regionStatus.textContent, /Germany \(DE\)/i, "the status follows a changed choice");
     assert.ok(h.store.meta.calendarHolidays.personalDays.some((p) => p.date === "2026-05-15" && p.label === "Berlin trip"));
+    // The second set tints its own days in the live calendar, not only in the pure helper.
+    const wfDe = cal.isWorkFree("2026-05-25", h.store.meta.calendarHolidays, "en");
+    assert.equal(wfDe.holiday?.name, "Whit Monday", "the stored sets are what the live calendar reads");
+    assert.equal(cal.isWorkFree("2026-05-25", { ...h.store.meta.calendarHolidays, locales: ["PL"] }, "en").holiday, null);
 
     await h.store.flush();
     h.sheet.destroy();
@@ -357,7 +405,8 @@ async function test(name, fn) {
     // Reload fresh store from disk -> verify full persistence
     const h2 = makeHarness({ files, lang: "pl" });
     await h2.store.open();
-    assert.equal(h2.store.meta.calendarHolidays.region, "DE");
+    assert.deepEqual([...h2.store.meta.calendarHolidays.locales], ["PL", "DE"], "the sets survive a restart");
+    assert.equal(h2.store.meta.calendarHolidays.region, "PL");
     assert.ok(h2.store.meta.calendarHolidays.personalDays.some((p) => p.date === "2026-05-15" && p.label === "Berlin trip"));
     assert.ok(CSS_SRC.includes(".zn-cal-month-cell.is-workfree"), "work-free CSS tint rule present");
     assert.ok(CSS_SRC.includes(".zn-cal-picker-day.is-workfree"), "picker work-free CSS rule present");

@@ -7384,6 +7384,8 @@
       const dirty = new Set();
       const listeners = new Set();
       const backedUp = new Set();
+      // True when a stored holiday choice predates OW-43 and it was an explicit "none": keep it, never re-enable.
+      const legacyHolidayOptOut = (raw) => Boolean(raw && typeof raw === "object" && raw.region === "none" && raw.regionExplicit === true && !Array.isArray(raw.locales));
       const calendarHolidayLocale = (() => {
         try { const locale = Services.locale?.appLocaleAsBCP47; if (locale) return String(locale); } catch (_) {}
         try { const locale = window.navigator?.language; if (locale) return String(locale); } catch (_) {}
@@ -7399,7 +7401,7 @@
         // The size of each calendar view ("auto" = fitted to the pane, or px; OW-03). Replaced as a whole, never changed in place.
         calendarScale: CALENDAR_PART ? CALENDAR_PART.cleanCalendarScale(null) : { month: "auto", week: "auto", day: "auto", upcoming: "auto", agenda: "auto" },
         calendarPicker: CALENDAR_PART ? CALENDAR_PART.cleanCalendarPicker(null) : { mode: "auto", minWidth: 470, minHeight: 360, colorMode: "count" },
-        calendarHolidays: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHolidays(null, calendarHolidayLocale) : { enabled: true, region: "none", weekend: "auto", personalDays: [] },
+        calendarHolidays: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHolidays(null, calendarHolidayLocale) : { enabled: true, region: "none", locales: [], weekend: "auto", personalDays: [] },
         calendarAlertSettings: CALENDAR_PART ? CALENDAR_PART.cleanAlertSettings(null) : {}, calendarNoteAlertOverrides: {},
         calendarAgendaDefaults: {}, calendarNoteAgendaOverrides: {} };
       let meta = { ...DEFAULT_META };
@@ -8153,6 +8155,7 @@
             meta.calendarScale = CALENDAR_PART.cleanCalendarScale(raw.calendarScale, raw.calendarDensity);
             meta.calendarPicker = CALENDAR_PART.cleanCalendarPicker(raw.calendarPicker);
             meta.calendarHolidays = CALENDAR_PART.cleanCalendarHolidays(raw.calendarHolidays, calendarHolidayLocale);
+            if (legacyHolidayOptOut(raw.calendarHolidays)) meta.calendarHolidays = CALENDAR_PART.cleanCalendarHolidays({ ...meta.calendarHolidays, locales: [] }, calendarHolidayLocale);
             meta.calendarSnap = CALENDAR_PART.cleanCalendarSnap(raw.calendarSnap);
             meta.calendarHours = CALENDAR_PART.cleanCalendarHours(raw.calendarHours);
             const daysForward = Number(raw.calendarDaysForward);
@@ -18489,8 +18492,9 @@
         cancel.addEventListener("click", closeDialog);
       }
       // T2.10: Work-free day tint & holiday tooltips across Month, Week, Day, Upcoming, and Agenda views.
-      const calendarHolidayPrefs = () => CALENDAR_PART?.cleanCalendarHolidays?.(store.meta.calendarHolidays) || { enabled: true, region: "none", weekend: "auto", personalDays: [] };
-      const calendarWorkFreeInfo = (day) => CALENDAR_PART?.isWorkFree?.(day, calendarHolidayPrefs(), notesLang()) || { workFree: false, weekend: false, holiday: null, personal: null, reasons: [], tooltip: "" };
+      // The holiday names follow the Notes interface language (OW-43); the sets themselves are the user's choice.
+      const calendarHolidayPrefs = () => CALENDAR_PART?.cleanCalendarHolidays?.(store.meta.calendarHolidays) || { enabled: true, region: "none", locales: [], weekend: "auto", personalDays: [] };
+      const calendarWorkFreeInfo = (day) => CALENDAR_PART?.isWorkFree?.(day, calendarHolidayPrefs(), notesLang()) || { workFree: false, weekend: false, holiday: null, holidays: [], personal: null, reasons: [], tooltip: "" };
       function applyWorkFreeAttrs(el, wf, { appendTitle = false } = {}) {
         if (!el || !wf || !wf.workFree) return;
         el.classList.add("is-workfree");
@@ -20931,9 +20935,9 @@
         let regionStatus = null;
         const renderRegionStatus = () => {
           if (!regionStatus) return;
-          regionStatus.textContent = state.region === "none"
-            ? t("cal.holidays.regionPrompt")
-            : t("cal.holidays.regionActive", { region: t("cal.holidays.region." + state.region) });
+          regionStatus.textContent = !state.locales.length
+            ? t("cal.holidays.noneSelected")
+            : t("cal.holidays.setsActive", { sets: state.locales.map((code) => t("cal.holidays.region." + code)).join(", ") });
         };
         const save = (next) => {
           state = C.cleanCalendarHolidays(next);
@@ -20946,14 +20950,20 @@
         enableCheck.addEventListener("change", () => save({ ...state, enabled: enableCheck.checked }));
         const enableRow = h("label", { class: "zn-check-row" }, enableCheck, h("span", {}, t("cal.holidays.enableTint")));
 
-        const regionSelect = h("select", { class: "zn-field zn-cal-holidays-region", "aria-label": t("cal.holidays.regionLabel") });
-        for (const code of C.HOLIDAY_REGIONS) {
-          const opt = h("option", { value: code }, t("cal.holidays.region." + code));
-          if (code === state.region) opt.selected = true;
-          regionSelect.append(opt);
+        // OW-43: the holiday SET is chosen apart from the interface language, and any number of sets at once (OW-44).
+        const setsList = h("div", { class: "zn-cal-holidays-sets" });
+        for (const code of C.HOLIDAY_LOCALE_CODES) {
+          const box = h("input", { type: "checkbox", class: "zn-cal-holidays-set", "data-set": code });
+          box.checked = state.locales.includes(code);
+          box.addEventListener("change", () => {
+            const next = [...state.locales];
+            const at = next.indexOf(code);
+            if (box.checked && at < 0) next.push(code);
+            if (!box.checked && at >= 0) next.splice(at, 1);
+            save({ ...state, locales: next, localesExplicit: true, regionExplicit: true });
+          });
+          setsList.append(h("label", { class: "zn-check-row zn-cal-holidays-set-row", "data-set": code }, box, h("span", {}, t("cal.holidays.region." + code))));
         }
-        regionSelect.value = state.region;
-        regionSelect.addEventListener("change", () => save({ ...state, region: regionSelect.value, regionExplicit: true }));
         regionStatus = h("p", { class: "zn-cal-holidays-region-status", "aria-live": "polite" }, "");
         renderRegionStatus();
 
@@ -21025,7 +21035,7 @@
           t("cal.holidays.title"),
           enableRow,
           regionStatus,
-          h("label", { class: "zn-dialog-label" }, t("cal.holidays.regionLabel"), regionSelect),
+          h("div", { class: "zn-dialog-label" }, h("strong", {}, t("cal.holidays.setsHeading")), setsList, h("p", { class: "zn-hint" }, t("cal.holidays.setsHint"))),
           h("label", { class: "zn-dialog-label" }, t("cal.holidays.weekendLabel"), weekendSelect),
           h("div", { class: "zn-cal-holidays-section" },
             h("strong", { class: "zn-cal-holidays-heading" }, t("cal.holidays.personalHeading")),
@@ -21050,7 +21060,7 @@
         { id: "agenda-visibility-defaults", label: t("cal.toolsMenu.agendaVisibility"), icon: "calendar-check", run: askAgendaVisibilityDefaults },
         { sep: true },
         { id: "calendar-week-settings", icon: "calendar", label: t("cal.toolsMenu.weekSettings", { day: t(calendarWeekStartDay() === 0 ? "common.sunday" : "common.monday"), weeks: calendarShowWeekNumbers() ? ", " + t("cal.weekNumber.short") : "" }), run: askCalendarWeekSettings },
-        { id: "calendar-holidays", icon: "calendar", label: holPrefs.region !== "none" ? t("cal.toolsMenu.holidaysRegion", { region: t("cal.holidays.region." + holPrefs.region) }) : t("cal.toolsMenu.holidaysSetup"), run: () => queueMicrotask(askCalendarHolidaysDialog) },
+        { id: "calendar-holidays", icon: "calendar", label: holPrefs.locales.length ? t("cal.toolsMenu.holidaysRegion", { region: holPrefs.locales.map((code) => t("cal.holidays.region." + code)).join(", ") }) : t("cal.toolsMenu.holidaysSetup"), run: () => queueMicrotask(askCalendarHolidaysDialog) },
         { icon: "clock", label: t("cal.toolsMenu.visibleHours", { hours: CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours).on ? calendarHoursText(store.meta.calendarHours).long : t("cal.toolsMenu.all24") }), action: () => queueMicrotask(askCalendarHours) },
         { icon: "globe", label: t("cal.toolsMenu.displayZone", { zone: calendarDisplayZone() || t("cal.toolsMenu.zoneLocal") }), action: () => queueMicrotask(askCalendarDisplayZone) },
         { icon: "clock", label: t("cal.toolsMenu.freeSlots"), action: () => queueMicrotask(askCalendarFreeSlots) },
