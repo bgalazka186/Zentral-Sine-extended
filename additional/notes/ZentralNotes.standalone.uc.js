@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.249
+// @version 3.3.250
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.249, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.250, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.249";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.250";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -25005,6 +25005,87 @@ __zentralShim.register = function (def) {
       ].join("\n");
       return updateToc(raw).body;
     }
+    // T2.11b2: the DEMO set follows docs/NOTES_DISCOVERABILITY.md §8 — every section names the control it shows, and
+    // every surface (editor, All notes, every calendar view, Tools, holidays, the Agenda folder, Settings) has a note.
+    const DEMO_CALENDAR_NOTE_ID = "zn-demo-calendar";
+    const DEMO_WHERE_NOTE_ID = "zn-demo-where";
+    function buildCalendarDemoBody() {
+      return [
+        "# Calendar and Agenda tour",
+        "",
+        "Every control below exists in the calendar pane of All notes. Open it with the calendar button in the toolbar or with the Calendar shortcut.",
+        "",
+        "## How this note is a calendar",
+        "",
+        "A section that starts with a `%%calendar%%` marker turns its list lines into real calendar items. A line begins with a date (the `14-11-2026` shape of Settings > Links & history), then an optional time or range, then the title. Everything below is live: click an item to open it, drag it to move it.",
+        "",
+        "%%calendar: Personal%%",
+        "- 18-11-2026 09:00-09:30 Morning plan",
+        "- 18-11-2026 18:00 Call the family",
+        "- 20-11-2026 Long weekend",
+        "",
+        "## Where each calendar control is",
+        "",
+        "| What | Where |",
+        "| --- | --- |",
+        "| Month, Next days, Agenda, Week, Day | the view button on the calendar toolbar |",
+        "| Prev / Next / Today | the arrows and the Today button on the toolbar |",
+        "| Size (Fit, or an hour's height by hand) | the `Size` button on the toolbar |",
+        "| Visible hours of Week and Day | the `08-20` button or Tools > Visible hours |",
+        "| Display time zone | Tools > Display time zone |",
+        "| Week start and week numbers | Tools > Week start & numbers |",
+        "| Filters (kind, category) | the filter row; hide it with the small toggle at its right |",
+        "| Create an event or a reminder | Tools, or the `+` menu in All notes, or right-click a day |",
+        "| Edit, move, snooze, done, dismiss | right-click the item |",
+        "| Day view, new item, personal day off | right-click a day |",
+        "| Free slots (When am I free?) | Tools |",
+        "| Big picture, week as Markdown, print | Tools |",
+        "| Reminder history, sounds and quiet hours | Tools |",
+        "| Holidays and days off | Tools > Holidays & days off |",
+        "",
+        "## Holidays",
+        "",
+        "Tools > Holidays & days off chooses any number of public holiday sets. The interface language names them; the set decides which days are free. Weekends, personal days off and the newest year of each set are on the same dialog. One switch turns the whole feature off. A trading Sunday is shown but is not a day off.",
+        "",
+        "## The Agenda folder in the Zen sidebar",
+        "",
+        "With Agenda turned on (Settings > Zen sidebar), the Zen sidebar shows a live Agenda folder: one row per item inside its display window. Hover a row for Open, Done, Snooze and Dismiss; right-click for the rest; the Agenda folder's own menu holds Open calendar, Refresh, Agenda settings and Hide Agenda.",
+        "",
+        "Back to [[Where is a function?]]",
+        "",
+      ].join("\n");
+    }
+    function buildWhereDemoBody() {
+      return [
+        "# Where is a function?",
+        "",
+        "This note is the discoverability list (T2.11b1). The longer version is in the repository: `docs/NOTES_DISCOVERABILITY.md`.",
+        "",
+        "## While writing a note",
+        "",
+        "- **Toolbar**: bold, italic, strike, highlight, code, headings, lists, checklist (hold it for task states), quote, callout, nest in and out, rule, link, image, table, table of contents.",
+        "- **Caret menu at the end of the toolbar**: pictures, callouts, more text styles, math, collapsible section, footnote, hub list, date and time.",
+        "- **More (three dots)**: import and export, labels, reminder, templates, version history, calendar-only, birthday entries, duplicate, move to folder, the Markdown mode of this note, window, settings and help.",
+        "- **Quick settings (sliders)**: text size, line height, wrapping, blank lines, line breaks, scroll sync, copy format, Markdown mode, theme.",
+        "",
+        "## All notes",
+        "",
+        "- The `+` control creates a note, a folder, a reminder, an event or a date note; right-click it for the full menu.",
+        "- A row: right-click for rename, move, colour, label, exclusion, calendar-only, trash and share; drag it onto a calendar day to add it to the calendar.",
+        "- Shift or Ctrl click rows for the batch bar: move, tag, label, category, export, trash.",
+        "",
+        "## Calendar",
+        "",
+        "See [[Calendar and Agenda tour]] for the full table.",
+        "",
+        "## Settings",
+        "",
+        "Seven tabs: **Writing**, **Markdown**, **Window**, **Appearance**, **Capture**, **Links & history**, **Zen sidebar**. Reminders, version history, the Trash lifetime, find-highlighting and spell-check are rows of **Links & history**. The Keyboard shortcuts dialog opens from the bottom of that tab.",
+        "",
+        "Back to [[Notes syntax tour]]",
+        "",
+      ].join("\n");
+    }
     const DEMO_NOTES = Object.freeze([
       { id: "zn-demo-tour", body: [
         "# Notes syntax tour", "",
@@ -25021,6 +25102,8 @@ __zentralShim.register = function (def) {
         "A [web link](https://example.com), a link to another note: [[Linking notes demo]], and a footnote.[^1]", "",
         "[^1]: Footnotes are collected at the bottom of the read view.", "",
         "---", "", "Next: [[Callouts and reminders]], [[Markdown flavors showcase]], [[Typing shortcuts and where things are]]", ""].join("\n") },
+      { id: DEMO_WHERE_NOTE_ID, body: buildWhereDemoBody() },
+      { id: DEMO_CALENDAR_NOTE_ID, body: buildCalendarDemoBody() },
       { id: "zn-demo-links", body: [
         "# Linking notes demo", "",
         "Write `[[` and start typing a note's title to link to it. Links work in both directions:", "",
@@ -25039,7 +25122,7 @@ __zentralShim.register = function (def) {
         "Open More > Remind me\u2026, pick a time (to the minute) and a bell chip appears beside the title when it is set.",
         "Try a time two minutes from now to see the notification.", ""].join("\n") },
       { id: "zn-demo-flavors", body: ["# Markdown flavors showcase", "", "Syntax from GitHub, Obsidian and Reddit in one note (Settings > Markdown: the mode decides which spelling wins where they differ). Every entry below has a button: open the caret menu at the end of the toolbar.", "", "## Text styles", "", "**bold**, *italic*, ***both***, ~~strike~~, ==highlight==, =={green}green==, `code`, <u>underline</u>, ||spoiler||, X^2^, H~2~O, <kbd>Ctrl</kbd>.", "", "A %%hidden comment%% sits between these words and shows only while editing.", "", "## Callouts", "", "> [!NOTE]", "> GitHub kinds: note, tip, important, warning, caution.", "", "> [!QUESTION] Obsidian kinds, with a title", "> abstract, info, todo, success, question, failure, danger, bug, example, quote.", "", "> [!FAQ]- Foldable, closed", "> Click the title to open. Use + instead of - to start open.", "", "## Tasks", "", "- [ ] to do", "- [x] done", "- [/] in progress", "- [-] cancelled", "- [?] question", "- [!] important", "- [>] forwarded", "- [*] star", "(hold the Checklist button to pick a state)", "", "## Math", "", "Inline: $E = mc^2$. Block:", "", "$$", "\\int_0^1 x^2 \\, dx = \\frac{1}{3}", "$$", "", "## Collapsible section", "", "<details>", "<summary>Click to open</summary>", "", "Hidden text with **formatting**.", "", "</details>", "", "## Code", "", "```diff", "- removed line", "+ added line", "```", "", "## Table with line breaks", "", "| Item | Note |", "| --- | --- |", "| one | first line<br>second line |", "", "## Dates and tags", "", "Today is {{date}}. Insert it from the caret menu: Date and time. Tags like #demo/flavors are recognised.", "", "## Footnote", "", "A claim with a footnote.[^1]", "", "[^1]: Insert > Blocks and notes > Footnote.", "", "Related: [[Typing shortcuts and where things are]], [[Notes syntax tour]]", ""].join("\n") },
-      { id: "zn-demo-shortcuts", body: ["# Typing shortcuts and where things are", "", "## Type a word, get a value", "", "Settings > Markdown switches these on or off and sets the date and time format.", "", "- `{{date}}`, `{{time}}`, `{{title}}`: replaced when you type the closing braces.", "- `@today`, `@tomorrow`, `@yesterday`, `@weekday`, `@now`: replaced on Space or Enter.", "- `@+3d`, `@-2d`, `@+1w`, `@monday`: a date that far away.", "- `/today`, `/time`, `/tomorrow`: the same with a slash.", "", "No typing needed: Insert caret menu > Date and time, or give it a key under Keyboard shortcuts.", "", "## Where is everything", "", "- **Toolbar**: bold, italic, strike, highlight, headings, lists, checklist (hold: task states), quote, nest in/out, rule, code, links, image, table, **Table of contents**.", "- **Caret menu at the end of the toolbar**: pictures, callouts (all kinds, foldable), more text styles (underline, spoiler, hidden comment, sup, sub, key, line break), math, collapsible section, footnote, hub list, date and time.", "- **Quick settings** (sliders button): text size, wrapping, Markdown mode, theme.", "- **Settings**: Writing, Markdown, Window, Appearance, Capture, Links & history.", "- **More (three dots)**: import and export, labels, reminder, templates, links and dates, version history, window, settings and help.", "", "Back to [[Notes syntax tour]].", ""].join("\n") },
+      { id: "zn-demo-shortcuts", body: ["# Typing shortcuts and where things are", "", "## Type a word, get a value", "", "Settings > Markdown switches these on or off and sets the date and time format.", "", "- `{{date}}`, `{{time}}`, `{{title}}`: replaced when you type the closing braces.", "- `@today`, `@tomorrow`, `@yesterday`, `@weekday`, `@now`: replaced on Space or Enter.", "- `@+3d`, `@-2d`, `@+1w`, `@monday`: a date that far away.", "- `/today`, `/time`, `/tomorrow`: the same with a slash.", "", "No typing needed: Insert caret menu > Date and time, or give it a key under Keyboard shortcuts.", "", "## Where is everything", "", "- **Toolbar**: bold, italic, strike, highlight, headings, lists, checklist (hold: task states), quote, nest in/out, rule, code, links, image, table, **Table of contents**.", "- **Caret menu at the end of the toolbar**: pictures, callouts (all kinds, foldable), more text styles (underline, spoiler, hidden comment, sup, sub, key, line break), math, collapsible section, footnote, hub list, date and time.", "- **Quick settings** (sliders button): text size, wrapping, Markdown mode, theme.", "- **Settings**: Writing, Markdown, Window, Appearance, Capture, Links & history.", "- **More (three dots)**: import and export, labels, reminder, templates, links and dates, version history, window, settings and help. It also holds `Where is a function?`, the list of every control.", "", "Back to [[Notes syntax tour]].", ""].join("\n") },
       { id: "zn-demo-torture", body: [
         "# Torture test (placeholder)", "",
         "These lines poke at edge cases. Each should render without breaking the layout; the owner's own torture test should replace or extend this note.", "",
@@ -26909,7 +26992,7 @@ __zentralShim.register = function (def) {
         flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART, notesLang, notesLocale, t, tCount,
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS, SHARED_TURN_WAIT_MS, STARTUP_TURN_WAIT_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
-        wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, SHOWCASE_NOTE_ID, buildShowcaseNote, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, SPELL_MAX_SUGGESTIONS, wordRangeAtOffset, replaceWordRange, cleanSpellLanguages, toggleSpellLanguage, formatSpellLanguageLabel, collectSpellSuggestions, buildEditorSpellMenuModel, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
+        wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, DEMO_WHERE_NOTE_ID, DEMO_CALENDAR_NOTE_ID, buildCalendarDemoBody, buildWhereDemoBody, SHOWCASE_NOTE_ID, buildShowcaseNote, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, SPELL_MAX_SUGGESTIONS, wordRangeAtOffset, replaceWordRange, cleanSpellLanguages, toggleSpellLanguage, formatSpellLanguageLabel, collectSpellSuggestions, buildEditorSpellMenuModel, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
         makeFolderUid, ensureFolderUids, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_STYLE, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, SPACE_MODES, cleanSpaceMode, SPACES_DIR, SPACE_REGISTRY_FILE, SPACE_SHARES_FILE, cleanWorkspaceId, workspaceDirKey, readZenWorkspaces, resolveActiveWorkspaceIdentity, cleanSpaceRegistry, reconcileSpaceRegistry, cleanShareTargets, cleanShareRecord, cleanSpaceShares, mergeSpaceShares, isSharedWithSpace, planSpaceSharesForSpace, resolveSpaceStorageTarget, canShareCalendarItemWithoutNote, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, folderPathMatchesNote, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
