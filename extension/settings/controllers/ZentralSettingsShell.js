@@ -101,16 +101,30 @@
                 Math.round(bounds.right - bounds.left) + "px";
               return;
             }
-            const sidebar =
-              document.getElementById("sidebar-box") ||
-              document.getElementById("sidebar-container") ||
-              document.getElementById("vertical-tabs") ||
-              document
-                .getElementById("tabbrowser-tabs")
-                ?.closest(
-                  "#sidebar-box, #sidebar-container, #vertical-tabs, .zen-sidebar",
-                ) ||
-              document.getElementById("tabbrowser-tabs");
+            const sidebarCandidates = [
+              window.ZentralRuntime?.nativeSidebarElement?.(),
+              document.getElementById("navigator-toolbox"),
+              document.getElementById("sidebar-container"),
+              document.getElementById("tabbrowser-tabs"),
+              document.getElementById("vertical-tabs"),
+              document.getElementById("sidebar-box"),
+            ];
+            let sidebar = null;
+            for (const candidate of sidebarCandidates) {
+              if (!candidate?.isConnected) continue;
+              const style = window.getComputedStyle?.(candidate);
+              if (
+                style &&
+                (style.display === "none" || style.visibility === "collapse")
+              ) {
+                continue;
+              }
+              const r = candidate.getBoundingClientRect?.();
+              if (r && r.width > 20 && r.width < window.innerWidth) {
+                sidebar = candidate;
+                break;
+              }
+            }
 
             const isSidebarCollapsed =
               document.documentElement.getAttribute("zen-sidebar-collapsed") ===
@@ -957,7 +971,7 @@
         <div class="zs-header">
           <div class="zs-title-group">
             <h2 class="zs-title">Zentral Settings</h2>
-            <span class="zs-version-badge">v3.3.237</span>
+            <span class="zs-version-badge">v3.3.238</span>
           </div>
           <div class="zs-header-actions">
             <button id="zs-kofi-btn" class="zs-kofi-btn" title="Support Zentral on Ko-fi (ko-fi.com/michele501st)">

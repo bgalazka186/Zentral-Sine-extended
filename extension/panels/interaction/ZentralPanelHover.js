@@ -626,8 +626,13 @@
         // compact mode, so check that first (same approach as ZentralLibraryResize).
         const sidebar = window.ZentralRuntime?.nativeSidebarElement?.();
         if (sidebar?.hasAttribute("zen-has-hover")) return true;
+        if (sidebar?.matches?.(":hover")) return true;
         // Fall back to direct :hover for non-compact / visible sidebars.
+        // Include #tabbrowser-tabs and #navigator-toolbox because Zen 1.24.1b+
+        // keeps Firefox's #vertical-tabs stub hidden (display: none).
         return !!(
+          document.getElementById("navigator-toolbox")?.matches(":hover") ||
+          document.getElementById("tabbrowser-tabs")?.matches(":hover") ||
           document.getElementById("sidebar-box")?.matches(":hover") ||
           document.getElementById("sidebar-container")?.matches(":hover") ||
           document.getElementById("vertical-tabs")?.matches(":hover")
@@ -701,7 +706,7 @@
         // sidebar hover surface is a continuous hover session with the panel.
         if (event?.relatedTarget) {
           const sidebar = event.relatedTarget.closest?.(
-            "#sidebar-box, #sidebar-container, #vertical-tabs, #sidebar",
+            "#navigator-toolbox, #tabbrowser-tabs, #sidebar-box, #sidebar-container, #vertical-tabs, #sidebar",
           );
           if (sidebar) return;
         }

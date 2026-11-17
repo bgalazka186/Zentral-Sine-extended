@@ -67,6 +67,7 @@ These apply to every row. They come from past regressions; each rule was checked
 15. **Owner rule reversal 2026-11-14.** In Month view a click selects the day; it does not open Day view (`OW-06`). Do not re-add the old behaviour from old rows or tests.
 16. **Never hand a DOM element to `assert.equal` / `assert.deepEqual`.** When such an assertion fails, Node renders both fake DOM trees into the message and the test file never ends. Compare elements with `===` inside `assert.ok(...)` and assert on ids, labels or counts. `tests/run-all.cjs` stops a file after 5 minutes (`ZENTRAL_TEST_TIMEOUT_MS`) and reports it as failed; while writing a new test file, run it under `timeout 60 node …`.
 17. **Sidebar projection & pseudo-tab regression guards (retained from `ST7.1`/`OW-18`).** Always materialize `querySelectorAll()` (`[...list]`) before calling Array methods (`NodeList` has no `.filter`/`.map`); bind NOTES/Agenda click and select handlers before fallible workspace projection sync; keep storage/data ownership separate from sidebar projection DOM movement (`syncSharedWorkspace`); exclude Notes/Agenda pseudo-tabs from normal-tab unload successors using live URI/SessionStore predicates (never cached labels/stale expandos); allow dragging ordinary web tabs out of managed folders; activate Agenda pseudo-tabs on stationary unmodified left `mouseup` with single-fire delayed-click suppression.
+18. **Real Zen sidebar DOM guardrails (retained from `OW-40`).** Never short-circuit onto `document.getElementById("vertical-tabs") || ...` or `#sidebar-box` without filtering out `display: none` / `0×0` Firefox stubs — in Zen `1.24.1b+`, `#vertical-tabs` and `#sidebar-box` remain in the DOM as hidden `0×0` boxes while real tabs live under `#navigator-toolbox` → `#TabsToolbar-customization-target` → `#tabbrowser-tabs` → `zen-workspace[active]` (with off-screen inactive workspaces and `.zen-workspace-empty-space`). Any sidebar layout, anchoring, or hover change must be tested against `tests/helpers/real-zen-sidebar-dom.cjs` and keep `tests/zen-sidebar-dom-guardrails.test.cjs` green.
 
 ---
 
@@ -77,14 +78,16 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
 |    12 | `T2.9`      | `PARTIAL` | Med-High            | M      | none              | Daily-note lifecycle and archive policy inside Agenda                                                    |
+|    70 | `OW-41`     | `OPEN`    | Med-High            | S      | none              | Clicking the Date/Calendar sidebar widget opens Zentral Calendar when Notes/Calendar is installed        |
 |    68 | `OW-39`     | `OPEN`    | Med-High            | S-M    | none              | Work-free-day contrast & holiday visibility polish from live tests (distinct subtle tint + holidays)     |
 |    34 | `T2.11b1`   | `OPEN`    | High                | M      | Track 1-2 UI done | Audit UI discoverability of all Notes functions                                                          |
 |    35 | `T2.11b2`   | `OPEN`    | Med                 | M      | T2.11b1           | Rebuild the Notes DEMO notes                                                                             |
 |    36 | `T2.13`     | `OPEN`    | Med                 | M      | all other Track 2 | ICS export/import and Google-sync groundwork (always last in Track 2)                                    |
+|    71 | `OW-42`     | `OPEN`    | Med                 | S      | none              | Clock seconds-counter widget performance audit, DOM-write minimization & perf budget tests               |
 |    37 | `T3.3`      | `OPEN`    | Med                 | M      | —                 | Drag-and-drop note tabs within Zen sidebar                                                               |
 |    38 | `T3.8`      | `OPEN`    | Med                 | M      | —                 | Split View as an equal-sized companion window/pane                                                       |
 |    39 | `T3.9c`     | `OPEN`    | Med                 | M      | T3.9a             | Widgets: weather (cached, user refresh interval)                                                         |
-|    40 | `T3.9d`     | `OPEN`    | Med                 | M      | T3.9a             | Widgets: timer and quick note (RSS headline widget dropped; Zen has built-in RSS)                        |
+|    40 | `T3.9d`     | `OPEN`    | Med                 | M      | T3.9a             | Widgets: timer/stopwatch (incl. Clock-click quick stopwatch & alarm in X s/min) and quick note           |
 |    67 | `OW-38`     | `OPEN`    | Med                 | M-L    | none              | Automated test suites for all other Zentral features outside Notes                                       |
 |    41 | `T4.3a`     | `OPEN`    | Med                 | M      | none              | Extract calendar UI from `ZentralNotes.uc.js`                                                            |
 |    42 | `T4.3b`     | `OPEN`    | Med                 | M      | T4.3a             | Extract parser/wiki graph and import/export                                                              |
@@ -120,6 +123,21 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 **Owner decision needed first (2026-11-16):** past date notes that are not blank are never cleaned up today. Decide whether they may ever go to Trash automatically (the safe default is never; only the archive setting moves them).
 
+#### `OW-41` — Clicking the Date/Calendar sidebar widget opens Zentral Calendar when installed
+
+**Status:** `OPEN` · **Impact:** Med-High · **Effort:** S · **Source:** owner 2026-11-16
+
+**Problem:** Clicking the Date/Calendar sidebar widget currently does nothing even when Zentral Notes / Calendar is installed in the same Zen window.
+
+**Plan:**
+1. Expose a clean, lightweight window-level capability hook from `additional/notes/ZentralNotes.uc.js` (e.g. a stable `Symbol.for("zentral/notes-calendar-opener/v1")` registration/unregister on `window`, cleanly torn down on unload/destroy, plus checking Notes enabled state) that opens Zentral Notes directly in Calendar view (`sheet.openCalendar()`, also handling cold/lazy sheet open and Agenda/Calendar focus cleanly).
+2. Wire the Date widget in `additional/widgets/ZentralWidgets.uc.js` to detect whether the Calendar opener is registered (reacting dynamically when Notes loads after Widgets or unloads):
+   - When installed/available: make the Date widget card interactive (`role="button"`, `tabindex="0"`, `data-clickable="true"`, clear tooltip `"Open Calendar"`), open Calendar on primary click or `Enter`/`Space`, and show subtle pointer/hover/focus styling in `ZentralWidgets.css`.
+   - When Notes/Calendar is NOT installed or disabled: remain inert (no clickable cursor, no broken click behavior, no console errors, zero hard dependency between standalone `additional/widgets` and `additional/notes`).
+3. Add unit & cross-module integration tests in `tests/widgets-clock-date.test.cjs` covering: Calendar installed (click + Enter + Space opens Calendar), Notes loads after Widgets, Notes unloads/tears down, standalone Widgets without Notes (inert, zero errors).
+
+**Tests / done when:** All new cases pass in `tests/widgets-clock-date.test.cjs` and standalone check stays clean.
+
 #### `OW-39` — Work-free-day contrast & holiday visibility polish from live tests
 
 **Status:** `OPEN` · **Impact:** Med-High · **Effort:** S-M · **Source:** owner live test 2026-11-16
@@ -131,11 +149,27 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 - Ensure public holidays are visibly active/discoverable (e.g. sensible locale-based default or prominent region prompt/indicator, clear holiday color/badge differentiation from ordinary weekends, and full holiday sets verified across views in live Zen).
 - Add/update CSS & behavioral regression tests covering work-day vs weekend vs public-holiday visual differentiation.
 
+#### `OW-42` — Clock seconds-counter widget performance audit, DOM-write minimization & perf budget tests
+
+**Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Source:** owner 2026-11-16
+
+**Problem:** When the Clock widget's `show_seconds` option is enabled, it updates every 1 second. We need to verify and minimize its real-world CPU/DOM/repaint impact so a 1 Hz tick causes negligible overhead in Zen Browser.
+
+**Plan:**
+1. Audit `additional/widgets/ZentralWidgets.uc.js` and `additional/widgets/ZentralWidgets.css` on every 1 Hz clock tick:
+   - Avoid rebuilding DOM nodes (`replaceChildren` / `createElement`) or rewriting unchanged `textContent` on every second — update only the seconds `<span>` when hour/minute/period/zone haven't changed, and reuse cached `Intl.DateTimeFormat` / `dateStyle` formatters instead of reconstructing them every second.
+   - Verify zero layout-forcing reads (`getBoundingClientRect`, `offsetHeight`, `getComputedStyle`) happen during a clock tick (only during layout/resize events).
+   - Ensure CSS paint/layout containment (`contain: layout style paint` on `.zw-clock` / `.zw-clock-sec` and `font-variant-numeric: tabular-nums`) prevents seconds ticks from triggering sibling/sidebar relayout or wide repaints.
+   - Verify automatic pause when window is occluded/minimized, sidebar is collapsed/hidden, or tray is hidden due to low free space (`pause_when_hidden`).
+2. Benchmark 3,600 simulated 1 Hz ticks (1 hour of seconds) in Node and record measured JS time, DOM mutations per tick, and allocations; add a deterministic regression/perf test in `tests/widgets-clock-date-perf.test.cjs` asserting strict mutation & timing budgets.
+
+**Tests / done when:** Seconds ticks perform <=1 DOM text write (seconds node only on steady ticks), zero layout reads, zero node creations, pass perf budget test, and findings are recorded in handoff.
+
 #### `T3.9c`..`T3.9e` — Sidebar widgets (split of T3.9; `T3.9a` DONE at 3.3.223, `T3.9b` DONE at 3.3.224)
 
 **Status:** `OPEN` · **Impact:** Med · **Effort:** S-M each · **Source:** owner 2026-11-10
 
-Standalone module `additional/widgets` (also in the full pack). Rules for all: study how new-tab-page widgets work and mimic them; never interact with the sidebar video player (free area about 179x426, about 179x301 while a 16:9 player shows; no fixed ratio); always leave room for tabs, folders and Essentials (setting: max share of free height, hide below a minimum); no permanent polling, per-widget refresh interval, pause when window or sidebar is hidden, cache last value. `a` (`DONE` at 3.3.223): shell, free-area measurement, player avoidance, per-widget on/off. `b` (`DONE` at 3.3.224): clock, date. `c`: weather. `d`: timer, quick note (RSS headline widget dropped per owner 2026-11-16; Zen browser has built-in RSS). `e`: battery/system load and the settings section.
+Standalone module `additional/widgets` (also in the full pack). Rules for all: study how new-tab-page widgets work and mimic them; never interact with the sidebar video player (free area about 179x426, about 179x301 while a 16:9 player shows; no fixed ratio); always leave room for tabs, folders and Essentials (setting: max share of free height, hide below a minimum); no permanent polling, per-widget refresh interval, pause when window or sidebar is hidden, cache last value. `a` (`DONE` at 3.3.223): shell, free-area measurement, player avoidance, per-widget on/off. `b` (`DONE` at 3.3.224): clock, date. `c`: weather. `d`: timer/stopwatch and quick note — **owner requirement (2026-11-16): clicking the Clock widget can start a stopwatch or create a quick alarm/timer in X seconds / X minutes** (RSS headline widget dropped per owner 2026-11-16; Zen browser has built-in RSS). `e`: battery/system load and the settings section.
 
 #### `OW-38` — Automated test suites for all other Zentral features outside Notes
 
@@ -392,13 +426,16 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.232, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.238, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.236.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`193/193` test files) passes in Node/fake-Zen at 3.3.236. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.238.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`194/194` test files) passes in Node/fake-Zen at 3.3.238. Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
-Completed this session (3.3.163–3.3.236), every finished item archived in `docs/LEGACY_done_rows.md`:
+Completed this session (3.3.163–3.3.238), every finished item archived in `docs/LEGACY_done_rows.md`:
+
+- `OW-40` (3.3.238) — built reusable real-Zen `1.24.1b+` sidebar DOM fixture helper (`tests/helpers/real-zen-sidebar-dom.cjs`, modeling hidden Firefox `#vertical-tabs` & `#sidebar-box` stubs, visible `#navigator-toolbox` / `#TabsToolbar-customization-target` / `#tabbrowser-tabs`, active + off-screen inactive `zen-workspace`, `.zen-workspace-empty-space`, `#zen-media-controls-toolbar`, `#zentral-video-preview`, and `toolbarspring`) and `tests/zen-sidebar-dom-guardrails.test.cjs` (whole-repo static audit forbidding unguarded `getElementById("vertical-tabs") ||` or `#vertical-tabs`-only hover checks, plus 8 real-Zen DOM behavioral tests). Caught and fixed two additional latent hidden-stub bugs during the audit: `extension/settings/controllers/ZentralSettingsShell.js` (`updatePosition()` fallback now filters visible sidebar candidates instead of short-circuiting on hidden `#sidebar-box`/`#vertical-tabs`) and `extension/panels/interaction/ZentralPanelHover.js` (added `#navigator-toolbox` and `#tabbrowser-tabs` to `isSidebarHoverSurfaceHovered()` and `relatedTarget.closest(...)`). Added Rule 18 to `TODO_notes_roadmap.md` (`194/194` suite).
+- Live Zen `1.24.1b` widgets hotfix (3.3.237, verified live by owner) — fixed `additional/widgets/ZentralWidgets.uc.js` (`resolveTabsHost`, `isFlexibleSpacerElement`, `isRectHorizontallyInHost`, `findActiveZenWorkspace`, invariant `.zen-workspace-empty-space` measurement, and `zen-workspace[active]` observation) so Firefox's hidden `#vertical-tabs` stub no longer shadows Zen's visible `#tabbrowser-tabs` (`193/193` suite).
 
 - `OW-37` (3.3.236) — hid Notes/Agenda pseudo-tabs (always) and Zentral webpanel add-on host tabs (configurable via `zen.workspace.bgalazka.hide_addon_hosts_ctrl_tab`, default `true`) from Firefox/Zen's `Ctrl+Tab` MRU switcher (`ctrlTab.tabList`, `start`, `open`, `setupGUI`, `updatePreviews`, `pick`) and sequential `advanceSelectedTab` cycling via a shared, reference-counted registry (`Symbol.for("zentral/ctrl-tab-filter/v1")`) across `additional/notes/ZentralNotes.uc.js` and `extension/panels/browsers/ZentralBrowserIntegrations.uc.js`, without ever mutating `gBrowser.tabs` or host `linkedBrowser`s so real Firefox WebExtension host tab IDs stay 100% intact. Wired pref schema/UI in `extension/panels/browsers/settings.json`, `extension/panels/ZentralPanels.uc.js`, `extension/settings/controllers/ZentralFeatureSettings.js`, `extension/settings/layout.json`, and `extension/settings/recommended.json`. Verified in `tests/ctrl-tab-filter.test.cjs` (`193/193` suite).
 
