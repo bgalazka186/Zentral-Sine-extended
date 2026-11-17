@@ -150,6 +150,33 @@
   color: color-mix(in srgb, #e5534b 85%, currentColor) !important;
 }
 
+/* ---- Built-in Status widget (T3.9e) ---- */
+
+#zentral-sidebar-widgets .zw-status {
+  contain: layout style paint !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: baseline !important;
+  gap: 4px 8px !important;
+  min-width: 0 !important;
+  font-size: 11px !important;
+  font-variant-numeric: tabular-nums !important;
+  opacity: 0.85 !important;
+}
+
+#zentral-sidebar-widgets .zw-status-item[hidden] {
+  display: none !important;
+}
+
+#zentral-sidebar-widgets .zw-status-item[data-zw-level="low"] {
+  color: color-mix(in srgb, #e5a04b 70%, currentColor) !important;
+}
+
+#zentral-sidebar-widgets .zw-status-item[data-zw-level="critical"] {
+  color: color-mix(in srgb, #e5534b 80%, currentColor) !important;
+  font-weight: 600 !important;
+}
+
 /* ---- Built-in Timer widget (T3.9d) ---- */
 
 #zentral-sidebar-widgets .zw-timer {

@@ -238,6 +238,9 @@
           "label": "Timer"
         },
         {
+          "label": "Status"
+        },
+        {
           "label": "Layout & visibility"
         }
       ],
@@ -999,6 +1002,14 @@
     "zen.workspace.zentral.widgets.timer.enabled",
     "zen.workspace.zentral.widgets.timer.click_stopwatch",
     "zen.workspace.zentral.widgets.quick_note.enabled",
+    {
+      "type": "text",
+      "label": "**Sidebar Widgets · Status**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.widgets.status.enabled",
+    "zen.workspace.zentral.widgets.status.show_battery",
+    "zen.workspace.zentral.widgets.status.show_memory",
     {
       "type": "text",
       "label": "**Sidebar Widgets · Layout & visibility**",

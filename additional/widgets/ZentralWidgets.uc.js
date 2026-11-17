@@ -52,6 +52,9 @@
     TIMER_ENABLED: "zen.workspace.zentral.widgets.timer.enabled",
     TIMER_CLICK_STOPWATCH: "zen.workspace.zentral.widgets.timer.click_stopwatch",
     TIMER_QUICK_NOTE: "zen.workspace.zentral.widgets.quick_note.enabled",
+    STATUS_ENABLED: "zen.workspace.zentral.widgets.status.enabled",
+    STATUS_SHOW_BATTERY: "zen.workspace.zentral.widgets.status.show_battery",
+    STATUS_SHOW_MEMORY: "zen.workspace.zentral.widgets.status.show_memory",
   });
 
   const DEFAULTS = Object.freeze({
@@ -80,6 +83,9 @@
     TIMER_ENABLED: true,
     TIMER_CLICK_STOPWATCH: true,
     TIMER_QUICK_NOTE: true,
+    STATUS_ENABLED: false,
+    STATUS_SHOW_BATTERY: true,
+    STATUS_SHOW_MEMORY: true,
   });
 
   const CLOCK_FORMATS = Object.freeze(["auto", "24h", "12h"]);
@@ -1462,6 +1468,62 @@
     };
   }
 
+  // ---- T3.9e: battery and memory ------------------------------------------------------------------------------
+  // Nothing here reads the machine: every helper takes the numbers the caller collected, so the card is a painter
+  // and the reading can be tested without a battery.
+  function batteryParts(info) {
+    if (!info || typeof info !== "object") return null;
+    const level = Number(info.level);
+    const charging = Boolean(info.charging);
+    if (!Number.isFinite(level)) return null;
+    const percent = Math.round(Math.max(0, Math.min(1, level)) * 100);
+    const state = charging ? "charging" : info.dischargingTime === Infinity || info.dischargingTime === 0 ? "plugged in" : "on battery";
+    return {
+      percent,
+      charging,
+      text: percent + "%",
+      title: percent + "% — " + state,
+      level: percent <= 10 ? "critical" : percent <= 25 ? "low" : "ok",
+    };
+  }
+
+  // "used / limit" from the two byte counts Firefox reports; a missing limit prints only what is used.
+  function memoryParts(usage) {
+    if (!usage || typeof usage !== "object") return null;
+    const used = Number(usage.usedSize ?? usage.used);
+    const limit = Number(usage.totalSize ?? usage.total ?? usage.limit);
+    if (!Number.isFinite(used) || used <= 0) return null;
+    const gb = (bytes) => Math.round((bytes / (1024 ** 3)) * 10) / 10;
+    const text = Number.isFinite(limit) && limit > 0 ? gb(used) + " / " + gb(limit) + " GB" : gb(used) + " GB";
+    return {
+      usedBytes: used,
+      limitBytes: Number.isFinite(limit) && limit > 0 ? limit : 0,
+      sharePercent: Number.isFinite(limit) && limit > 0 ? Math.round((used / limit) * 100) : 0,
+      text,
+      title: "Memory used by the browser",
+    };
+  }
+
+  // One line, only what the person asked for, in a stable order.
+  function statusLineParts(opts = {}, battery, memory) {
+    const out = [];
+    if (opts.showBattery !== false) {
+      const b = batteryParts(battery);
+      if (b) out.push({ kind: "battery", text: b.text + (b.charging ? " \u26a1" : ""), title: b.title, level: b.level });
+    }
+    if (opts.showMemory !== false) {
+      const m = memoryParts(memory);
+      if (m) out.push({ kind: "memory", text: m.text, title: m.title, level: m.sharePercent >= 90 ? "critical" : m.sharePercent >= 75 ? "low" : "ok" });
+    }
+    return out;
+  }
+
+  // Battery changes are events; memory is a reading, so it is refreshed on a slow interval through the scheduler.
+  function nextStatusDelayMs(battery) {
+    if (battery && battery.charging) return 60000;
+    return 5 * 60000;
+  }
+
   // ---- T3.9d: stopwatch, quick timer and quick note -----------------------------------------------------------
   // What a click on the Clock means. Pure, so the rule is testable and the card stays a painter:
   //  - the quick timer wins while a countdown it started is running (a second click stops it);
@@ -1842,6 +1904,10 @@
     readGeocodePayload,
     geocodeUrl,
     TIMER_PRESETS_MS,
+    batteryParts,
+    memoryParts,
+    statusLineParts,
+    nextStatusDelayMs,
     resolveClockClick,
     quickTimerFromText,
     parseTimerDuration,
@@ -3188,6 +3254,92 @@
           long: Boolean(event?.shiftKey),
         });
       }
+
+      // ---- T3.9e: battery and memory ---------------------------------------------------------------------------
+      // Battery events come from the platform (charging, level change); memory is a reading, so it rides the
+      // scheduler's slow interval. Neither is polled per second, and neither runs while the sidebar is hidden.
+      let batteryRef = null;
+      let batterySeen = null;
+      const readMemory = () => {
+        try {
+          return Services.appinfo?.getMemoryUsage ? Services.appinfo.getMemoryUsage() : null;
+        } catch (_) {
+          return null;
+        }
+      };
+      const watchBattery = () => {
+        if (batteryRef || typeof navigator === "undefined" || typeof navigator.getBattery !== "function") return;
+        try {
+          navigator.getBattery().then((b) => {
+            if (disposed) return;
+            batteryRef = b;
+            batterySeen = batteryParts(b);
+            const changed = () => {
+              batterySeen = batteryParts(batteryRef);
+              scheduler.refresh("status", { force: true, area: lastArea });
+            };
+            b.addEventListener?.("levelchange", changed);
+            b.addEventListener?.("chargingchange", changed);
+            registerCleanup(() => {
+              try {
+                b.removeEventListener?.("levelchange", changed);
+                b.removeEventListener?.("chargingchange", changed);
+              } catch (_) {}
+            });
+          }).catch(() => {});
+        } catch (_) {}
+      };
+      registerWidget({
+        id: "status",
+        title: "Status",
+        showHeader: false,
+        order: 50,
+        pref: WIDGET_PREFS.STATUS_ENABLED,
+        defaultEnabled: false,
+        refreshMs: 5 * 60000,
+        watchPrefs: [WIDGET_PREFS.STATUS_SHOW_BATTERY, WIDGET_PREFS.STATUS_SHOW_MEMORY],
+        create({ document: doc }) {
+          const wrap = doc.createElement("div");
+          wrap.className = "zw-status";
+          const batteryEl = doc.createElement("span");
+          batteryEl.className = "zw-status-item zw-status-battery";
+          const memoryEl = doc.createElement("span");
+          memoryEl.className = "zw-status-item zw-status-memory";
+          wrap.appendChild(batteryEl);
+          wrap.appendChild(memoryEl);
+          return {
+            element: wrap,
+            fetch() {
+              watchBattery();
+              const opts = {
+                showBattery: getBool(WIDGET_PREFS.STATUS_SHOW_BATTERY, DEFAULTS.STATUS_SHOW_BATTERY),
+                showMemory: getBool(WIDGET_PREFS.STATUS_SHOW_MEMORY, DEFAULTS.STATUS_SHOW_MEMORY),
+              };
+              return { opts, battery: batterySeen, memory: readMemory() };
+            },
+            nextDelayMs(_now, cached) {
+              return nextStatusDelayMs(cached?.value?.battery);
+            },
+            render(value) {
+              const opts = value?.opts || { showBattery: true, showMemory: true };
+              const parts = statusLineParts(opts, value?.battery, value?.memory);
+              const find = (kind) => parts.find((p) => p.kind === kind);
+              const b = find("battery");
+              const m = find("memory");
+              batteryEl.hidden = !b;
+              memoryEl.hidden = !m;
+              batteryEl.textContent = b ? b.text : "";
+              batteryEl.title = b ? b.title : "";
+              batteryEl.setAttribute("data-zw-level", b ? b.level : "");
+              memoryEl.textContent = m ? m.text : "";
+              memoryEl.title = m ? m.title : "";
+              memoryEl.setAttribute("data-zw-level", m ? m.level : "");
+              wrap.hidden = !parts.length;
+              wrap.setAttribute("aria-label", parts.map((p) => p.title).join("; ") || "Status");
+            },
+          };
+        },
+      });
 
       const onVisibilityOrResize = () => scheduleMeasure();
       const listen = (target, type, fn, opts) => {

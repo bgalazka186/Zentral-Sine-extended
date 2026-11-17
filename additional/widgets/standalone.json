@@ -3,7 +3,7 @@
   "themeId": "zentral-widgets",
   "name": "Zentral Sidebar Widgets",
   "description": "New-tab-page-style sidebar widgets with automatic free-area sizing, video-player avoidance, pause-when-hidden, and cached values. Standalone part of Zentral Extended.",
-  "version": "3.3.257",
+  "version": "3.3.258",
   "entry": "ZentralWidgets.uc.js",
   "output": "ZentralWidgets.standalone.uc.js",
   "settings": "settings.json",
@@ -56,6 +56,14 @@
     "zen.workspace.zentral.widgets.timer.enabled",
     "zen.workspace.zentral.widgets.timer.click_stopwatch",
     "zen.workspace.zentral.widgets.quick_note.enabled",
+    {
+      "type": "text",
+      "label": "**Status**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.widgets.status.enabled",
+    "zen.workspace.zentral.widgets.status.show_battery",
+    "zen.workspace.zentral.widgets.status.show_memory",
     {
       "type": "text",
       "label": "**Layout & visibility**",

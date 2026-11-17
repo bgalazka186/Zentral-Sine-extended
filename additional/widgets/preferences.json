@@ -178,6 +178,29 @@
   },
   {
     "type": "text",
+    "label": "**Status**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.status.enabled",
+    "label": "Show Status widget (battery and memory)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.status.show_battery",
+    "label": "Show the battery in the Status widget",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.status.show_memory",
+    "label": "Show the memory in the Status widget",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "type": "text",
     "label": "**Layout & visibility**",
     "size": "16px"
   },

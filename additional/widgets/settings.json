@@ -217,6 +217,24 @@
       "label": "Show the quick note row in the Timer widget",
       "type": "checkbox",
       "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.status.enabled",
+      "label": "Show Status widget (battery and memory)",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.status.show_battery",
+      "label": "Show the battery in the Status widget",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.status.show_memory",
+      "label": "Show the memory in the Status widget",
+      "type": "checkbox",
+      "defaultValue": true
     }
   ],
   "settings": {
@@ -338,6 +356,21 @@
     "zen.workspace.zentral.widgets.quick_note.enabled": {
       "category": "widgets",
       "section": "Timer",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.status.enabled": {
+      "category": "widgets",
+      "section": "Status",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.status.show_battery": {
+      "category": "widgets",
+      "section": "Status",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.status.show_memory": {
+      "category": "widgets",
+      "section": "Status",
       "owner": "widgets"
     }
   }
