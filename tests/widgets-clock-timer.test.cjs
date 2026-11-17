@@ -115,6 +115,23 @@ test("the three settings exist and reach Sine's own page", () => {
   assert.deepEqual(values, ["clock", "timer"]);
   const notices = schema.get("zen.workspace.zentral.widgets.timer.end_notice").options.map((o) => o.value);
   assert.deepEqual(notices, ["none", "toast", "system"]);
+  // OW-61: the three assertions above were all true while the dialog showed none of these, because the dialog is
+  // built from `settings`, not from `schema` or from the layout order. This is the assertion that was missing.
+  for (const item of SETTINGS.schema) {
+    assert.ok(SETTINGS.settings[item.property], item.property + " has a settings entry (or the dialog drops it)");
+  }
+  for (const property of [
+    "zen.workspace.zentral.widgets.clock.mode",
+    "zen.workspace.zentral.widgets.timer.end_sound",
+    "zen.workspace.zentral.widgets.timer.end_notice",
+    "zen.workspace.zentral.widgets.weather.places",
+  ]) {
+    const meta = SETTINGS.settings[property];
+    assert.ok(meta, property + " is not generated-and-forgotten");
+    assert.equal(meta.owner, "widgets", property + " belongs to this module");
+    assert.ok(LAYOUT.categories.some((c) => c.id === meta.category && c.sections.some((sec) => sec.label === meta.section)),
+      property + " points at a category and section the layout really declares");
+  }
 });
 
 test("nothing about a finished countdown is written to prefs", () => {

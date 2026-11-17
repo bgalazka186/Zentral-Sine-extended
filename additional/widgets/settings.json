@@ -310,6 +310,31 @@
       "section": "Sidebar widgets",
       "owner": "widgets"
     },
+    "zen.workspace.zentral.widgets.max_height_share": {
+      "category": "widgets",
+      "section": "Layout & visibility",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.min_free_height": {
+      "category": "widgets",
+      "section": "Layout & visibility",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.min_sidebar_width": {
+      "category": "widgets",
+      "section": "Layout & visibility",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.tabs_reserve_px": {
+      "category": "widgets",
+      "section": "Layout & visibility",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.pause_when_hidden": {
+      "category": "widgets",
+      "section": "Layout & visibility",
+      "owner": "widgets"
+    },
     "zen.workspace.zentral.widgets.disabled_ids": {
       "category": "widgets",
       "section": "Sidebar widgets",
@@ -355,31 +380,6 @@
       "section": "Clock & Date",
       "owner": "widgets"
     },
-    "zen.workspace.zentral.widgets.max_height_share": {
-      "category": "widgets",
-      "section": "Layout & visibility",
-      "owner": "widgets"
-    },
-    "zen.workspace.zentral.widgets.min_free_height": {
-      "category": "widgets",
-      "section": "Layout & visibility",
-      "owner": "widgets"
-    },
-    "zen.workspace.zentral.widgets.min_sidebar_width": {
-      "category": "widgets",
-      "section": "Layout & visibility",
-      "owner": "widgets"
-    },
-    "zen.workspace.zentral.widgets.tabs_reserve_px": {
-      "category": "widgets",
-      "section": "Layout & visibility",
-      "owner": "widgets"
-    },
-    "zen.workspace.zentral.widgets.pause_when_hidden": {
-      "category": "widgets",
-      "section": "Layout & visibility",
-      "owner": "widgets"
-    },
     "zen.workspace.zentral.widgets.weather.enabled": {
       "category": "widgets",
       "section": "Weather",
@@ -410,12 +410,32 @@
       "section": "Weather",
       "owner": "widgets"
     },
+    "zen.workspace.zentral.widgets.weather.places": {
+      "category": "widgets",
+      "section": "Weather",
+      "owner": "widgets"
+    },
     "zen.workspace.zentral.widgets.timer.enabled": {
       "category": "widgets",
       "section": "Timer",
       "owner": "widgets"
     },
     "zen.workspace.zentral.widgets.timer.click_stopwatch": {
+      "category": "widgets",
+      "section": "Timer",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.clock.mode": {
+      "category": "widgets",
+      "section": "Clock & Date",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.timer.end_sound": {
+      "category": "widgets",
+      "section": "Timer",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.timer.end_notice": {
       "category": "widgets",
       "section": "Timer",
       "owner": "widgets"

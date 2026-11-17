@@ -1216,3 +1216,15 @@ Tests: `tests/notes-linked-items.test.cjs` (8 cases: the line edit and its three
 neighbour untouched, `unlinkPlan` per source including a real `agendaMirrorLine`+`mirroredItem` mirror, `noteLinkedItems`
 across the three scopes, the real store unlink of a dated list line, refusal of a free-standing item and of an orphan,
 and a mirror unlinking its own Agenda line). Suite `230/230`; all `--check`s and `check-default-drift` green.
+
+**`OW-61` DONE (3.3.288)** — the clock/timer settings were generated but never shown. `additional/widgets/settings.json`
+had `schema` rows for `clock.mode`, `timer.end_sound`, `timer.end_notice` and `weather.places` and no `settings` entry
+for any of them; the dialog is built from `settings`, so four settings existed in `preferences.json` and nowhere a person
+could reach them. The same file also failed the layout check, and `additional/notes/settings.json` used a `Days off`
+section the `notes-appearance` category never declared — the checker called all 14 out and nobody ran it. Fixed by adding
+the four entries (section: Clock & Date / Timer / Weather) in schema order, declaring the `Days off` section on
+`notes-appearance`, and putting `node tools/check-settings-consistency.cjs` into the documented chain in `AGENTS.md` so a
+`schema` row without a `settings` entry fails the session instead of the owner. The test that should have caught it
+(`the three settings exist and reach Sine's own page`) checked `schema` and `layout.order` and never `settings`; it now
+asserts every widget `schema` property has a `settings` entry pointing at a category and section the layout really
+declares. Suite `230/230`.

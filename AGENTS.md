@@ -23,6 +23,8 @@ Also update:
 
 After a bump, run `node tools/build-standalone.cjs` (regenerates the bundles and lock files; do not hand-edit the lock files' versions) and `node tools/build-preferences.cjs` (keeps the root `preferences.json` in step with the schema), then `node tools/build-standalone.cjs --check` and `node tests/standalone.test.cjs`. After changing settings placement, run `node tools/organize-layout-order.cjs` before building preferences.
 
+**Always end a chunk with `node tools/check-settings-consistency.cjs`.** A `schema` row with no `settings` entry generates a preference that the dialog never renders — exactly the OW-61 bug, where `clock.mode`, `timer.end_sound`, `timer.end_notice` and `weather.places` were shipped but invisible for two releases because this check lived outside the chain. It must print `catalog checks passed`.
+
 Never leave a standalone module at an older version than the main mod. Verify with `grep 3.0.2` (or whatever the prior version was) after a bump to confirm zero stale references remain.
 
 ## Feature lifecycle contract (instructions for future AI edits)

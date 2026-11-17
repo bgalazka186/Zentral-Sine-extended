@@ -407,6 +407,10 @@
         {
           "label": "Colors & backing",
           "icon": "palette"
+        },
+        {
+          "label": "Days off",
+          "icon": "calendar"
         }
       ]
     },

@@ -110,10 +110,57 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 |    66 | `OW-57`     | `DONE`    | Med                 | S-M    | 3.3.283           | —                 | Weather: two or three saved places, cycled by a click                                                      |
 |    67 | `OW-58`     | `DONE`    | High                | S      | 3.3.285           | —                 | An imported `.ics` event or reminder cannot be deleted: the menu says "delete it in its linked note" and there is none |
 |    68 | `OW-59`     | `DONE`    | High                | S-M    | 3.3.287           | —                 | Reminders/events linked to a note cannot be unlinked there, and a date in a note has no way to list what is linked |
+|    69 | `OW-60`     | `OPEN`    | High                | M      | —                 | OW-56 | Clock and stopwatch do not actually replace each other: the second face shows numbers but offers none of the stopwatch/countdown controls, the standalone Timer card still exists beside it, and the quick note is not reachable from the plain clock |
+|    70 | `OW-61`     | `DONE`    | High                | S      | 3.3.288           | OW-56 | The OW-56 clock/timer settings never appeared in Zentral Settings: the four new prefs are in `schema` but have no `settings` entry, so the dialog drops them |
 
 ---
 
 ## Task blocks (same order as the Master Order)
+
+#### `OW-60` — The Clock and the stopwatch must really be one card
+
+**Status:** `OPEN` · **Impact:** High · **Effort:** M · **Depends on:** OW-56 · **Source:** owner report 2026-11-17 (3rd batch)
+
+**Problem (the owner's words, three defects):**
+1. the stopwatch and the clock should **replace each other**, and the stopwatch must keep its **countdown**; the **quick
+   note** must be reachable **from the plain clock**. Today the second face (`zw-clock-timer-face`) is a readout and
+   nothing else: it draws `formatDuration(...)` and a kind label, so there is no Start/Stop, no Lap, no Reset, no preset
+   chips, no typed duration and no Note chip. The only way to work the stopwatch or the countdown is still to enable a
+   **second card**.
+2. the old standalone Timer card is still available although it should not be. `id: "timer"` is still registered with
+   `TIMER_ENABLED` and `defaultEnabled: false`, still in `settings.json` (row + `timer.enabled`), still in
+   `layout.json`/`standalone.json`, and `tests/widgets-timer.test.cjs` still tests it — so after the merge the owner can
+   still turn "the old stopwatch" on from settings.
+3. (report 1, last clause) the quick note is a row inside the Timer card only (`zw-timer-note-row` + the `Note` chip,
+   gated on `resolveCalendarOpener(window).openQuickNote` and `TIMER_QUICK_NOTE`). On the plain clock face there is
+   nothing.
+
+**Plan (do this in order):**
+1. Move the controls, not the state. The clock's timer face gains the same row the Timer card has now: Start/Stop
+   (`timerButtonsModel` already decides the label), Lap (only while running), Reset, the five preset chips, the typed
+   duration field and the Note chip. Every action already exists as a pure helper (`stopwatchStart/Stop/Lap/Reset`,
+   `timerStart`, `parseDurationInput`, `timerButtonsModel`, `timerPanelState`) — the face must call them and repaint,
+   not reimplement them.
+2. One face, two kinds: on the timer face, Start runs the **stopwatch** when there is no countdown and resumes the
+   **countdown** when there is one; the presets and the typed duration start a countdown. Lap only makes sense for the
+   stopwatch, so it is absent while a countdown runs. This is "the stopwatch keeps its countdown function" in the
+   owner's wording.
+3. The quick note goes to the **clock face** as its own chip (same `openQuickNote` opener, same
+   `TIMER_QUICK_NOTE` gate, hidden entirely when Notes is not installed), reachable while the clock is showing.
+4. Retire the standalone Timer card: remove `id: "timer"` from the registry, its schema rows and `settings` entries,
+   its layout order entry, its `standalone.json` names, and delete `tests/widgets-timer.test.cjs` (its coverage moves
+   to the clock/timer test). **The pref `TIMER_ENABLED` must keep working**: `cleanEnabledIds`/`getBool` must treat it
+   as "show the Timer face", i.e. map it onto `CLOCK_MODE = "timer"` on read, so an owner who had the old card enabled
+   lands on the timer face instead of losing it. `disabled_ids` must be scrubbed of `"timer"` the same way.
+5. Keep `TIMER_CLICK_STOPWATCH` honest: with the Timer card gone it is no longer "clicking the Clock also starts the
+   stopwatch"; it becomes the gate on the click flipping the face, and the setting's label/description must say that in
+   EN and PL.
+
+**Tests / done when:** `tests/widgets-clock-timer.test.cjs` drives the **real mounted clock card**: it starts the
+stopwatch from the timer face, sees the elapsed numbers move, laps, resets, starts a countdown from a preset and from a
+typed duration, and saves a quick note from the **clock** face with a fake opener. `tests/widgets-clock-timer.test.cjs`
+also proves the standalone `"timer"` card is gone from the registry, `settings.json`, `layout.json` and
+`standalone.json`, and that `TIMER_ENABLED` still lands on the timer face. The suite has one fewer test file.
 
 #### `T2.13a` — Holidays and the future Google Calendar sync/import
 
@@ -293,7 +340,7 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.287.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9`, `SB6.6`, `UI4.11`, `DOC-1`, `TM3.7`, `ST7.8`, `SB6.11`, `ST7.5`, `UI4.10`, the 'left' half of `SB6.9`, `OW-53`, `F0.15`, `F0.16`, `OW-54`, `OW-55`, `OW-56`, `OW-57`, `OW-58` and `OW-59` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`230/230` test files) passes in Node/fake-Zen at 3.3.287; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.288.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9`, `SB6.6`, `UI4.11`, `DOC-1`, `TM3.7`, `ST7.8`, `SB6.11`, `ST7.5`, `UI4.10`, the 'left' half of `SB6.9`, `OW-53`, `F0.15`, `F0.16`, `OW-54`, `OW-55`, `OW-56`, `OW-57`, `OW-58`, `OW-59` and `OW-61` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`230/230` test files) passes in Node/fake-Zen at 3.3.288; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
 `OW-59` DONE (3.3.287) — a note's reminders and events can now be unlinked from it: one card, reachable from the note's
 menu ("Linked to this note…"), from the date menu ("Everything linked to today…") and from the per-date reminder
