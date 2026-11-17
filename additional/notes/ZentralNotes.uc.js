@@ -29814,6 +29814,7 @@
         getPosition: agendaPosition,
         now: () => Date.now(),
         getWindowIsMasterPolicy: true,
+        hasHistoryTracking: true,
         getWindow: (item) => {
           const category = item.x?.category ? store.items?.category?.(item.x.category) : null;
           const notePolicy = item.x?.noteId ? store.noteAgendaOverride(item.x.noteId) : null;
@@ -30043,7 +30044,10 @@
       const agendaItemUnsub = store.items?.on?.((ev) => {
         if (CALENDAR_PART?.agendaItemEventAffectsProjection(ev) && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); }
       });
-      const agendaHistoryUnsub = store.items?.history?.on?.(() => {
+      const agendaHistoryUnsub = store.items?.history?.on?.((ev) => {
+        if (ev?.kind === "append" && ev.itemId) agendaController.markHistoryDirty?.([ev.itemId]);
+        else if (ev?.kind === "refresh" && Array.isArray(ev.identities) && ev.identities.length) agendaController.markHistoryDirty?.(ev.identities.map((x) => x?.itemId).filter(Boolean));
+        else agendaController.markHistoryDirty?.();
         if (!disposed && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); }
       });
       const agendaNoteUnsub = store.on((ev) => {

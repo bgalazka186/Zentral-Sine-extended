@@ -77,7 +77,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
 |    12 | `T2.9`      | `PARTIAL` | Med-High            | M      | none              | Daily-note lifecycle and archive policy inside Agenda                                                    |
-|    30 | `SB6.10`    | `OPEN`    | Med                 | M      | PF2.3             | Incremental Agenda projection                                                                            |
 |    31 | `B3.3.50-6` | `PARTIAL` | Med                 | M      | —                 | Harden ZenSync & SessionStore isolation for Agenda and Notes pseudo-tabs                                 |
 |    32 | `ST7.2`     | `OPEN`    | Med                 | M      | H1.2, H1.3, PF2.1 | Reminder history compaction (or append-only segments)                                                    |
 |    33 | `T2.10`     | `OPEN`    | Med                 | M      | none              | Work-free-day tint + selectable holiday calendars                                                        |
@@ -127,18 +126,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 **Status:** `OPEN` · **Impact:** Med · **Effort:** S-M each · **Source:** owner 2026-11-10
 
 Standalone module `additional/widgets` (also in the full pack). Rules for all: study how new-tab-page widgets work and mimic them; never interact with the sidebar video player (free area about 179x426, about 179x301 while a 16:9 player shows; no fixed ratio); always leave room for tabs, folders and Essentials (setting: max share of free height, hide below a minimum); no permanent polling, per-widget refresh interval, pause when window or sidebar is hidden, cache last value. `a` (`DONE` at 3.3.223): shell, free-area measurement, player avoidance, per-widget on/off. `b` (`DONE` at 3.3.224): clock, date. `c`: weather. `d`: timer, quick note, RSS headline. `e`: battery/system load and the settings section.
-
-#### `SB6.10` — Incremental Agenda projection
-
-**Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Depends on:** PF2.3 · **Source:** Proposal S3
-
-**Problem:** Every run rebuilds all days.
-
-**Plan (do in this order):**
-
-1. Diff items by version and re-project only changed ids and affected days.
-
-**Tests / done when:** Equality test with full projection on random edits.
 
 #### `B3.3.50-6` — Harden ZenSync & SessionStore isolation for Agenda and Notes pseudo-tabs
 
@@ -420,13 +407,15 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.225, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.226, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.225.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`183/183` test files) passes in Node/fake-Zen at 3.3.225. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.226.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`184/184` test files) passes in Node/fake-Zen at 3.3.226. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
-Completed this session (3.3.163–3.3.225), every finished item archived in `docs/LEGACY_done_rows.md`:
+Completed this session (3.3.163–3.3.226), every finished item archived in `docs/LEGACY_done_rows.md`:
+
+- `SB6.10` (3.3.226) — added incremental Agenda projection (`agendaItemSignature`, `createIncrementalAgendaProjector`) in `additional/notes/calendar/ZentralNotesCalendar.js` and wired it into `createZenAgenda` (`hasHistoryTracking`, `markHistoryDirty`, `lastProjectionStats`, `invalidate({ full })`) and `additional/notes/ZentralNotes.uc.js` (`agendaHistoryUnsub` forwarding exact `ev.itemId` / `ev.identities` to `agendaController.markHistoryDirty(...)`). Diffs source items by version/fields/policy signature, re-expands only changed/removed/history-dirty ids and patches only affected day buckets (binary-search `insertSorted`, reusing unchanged day bucket objects by reference), maps `x.historyId` and `note-reminder:<noteId>` identities back to source items, tracks intra-day `ended` boundaries across all `tailDays` fan-outs, and resets safely on midnight rollover, `days`/`lang` changes, or duplicate/missing ids. Production-shape before/after benchmark (5 runs avg, 1 recurring edit/run including `prepareAgendaWindows`): `500×4`: `61.57 → 4.45 ms` (`13.8×`), `500×31`: `370.65 → 6.03 ms` (`61.5×`), `2000×4`: `153.68 → 11.38 ms` (`13.5×`), `2000×31`: `1478.30 → 21.92 ms` (`67.4×`; single-day edit `4.89 ms`, `~300×`). Verified via 120-step deterministic randomized fuzz equality vs full `agendaZenProjection`, production perf budget, and live fake-Zen host test in `tests/notes-agenda-incremental.test.cjs` (`184/184` suite).
 
 - `T3.10` (3.3.225) — added custom per-app / per-panel keyboard shortcuts in `extension/panels/interaction/ZentralAppShortcuts.js` (loaded by `ZentralPanels.uc.js`, stored in `zen.workspace.bgalazka.app_shortcuts` without mutating native app records, declared in `extension/panels/settings.json` & `extension/settings/layout.json`). Reuses Notes' canonical assignable-keys model (`parseShortcut`, `formatCombo`, `normalizeCombo`, `comboFromEvent`, `matchesShortcut`, layout-independent `e.code`, >=2 keys requiring Ctrl/Alt/Meta); refuses collisions across other apps, Notes global/action shortcuts, Insta-Peek, Extension Panel keybinds, live Zen/Firefox `<key>` DOM elements, `gZenKeyboardShortcutsManager`, and a platform-aware baseline Zen/Firefox table; adds Add/Show/Remove entries to `#zen-apps-sidebar-tile-context` with an in-window key-recording prompt (`#zentral-app-shortcut-prompt`); globally toggles visibility (reveals closed/hover-hidden/other-app panels and hides visible ones, including Essential panels) while respecting recording/repeat/enlarged-video guards; and exposes live Show/Set/Remove management in Settings → Keyboard & Mouse (`App & panel shortcuts`) (`tests/app-shortcuts.test.cjs`, `183/183` suite).
 

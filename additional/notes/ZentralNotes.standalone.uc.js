@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.225
+// @version 3.3.226
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.225, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.226, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.225";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.226";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -8351,6 +8351,460 @@ const __zentralEmbeddedLoader = (function () {
       items: bucket.items.map((item) => agendaZenItem(item, bucket.key, now, options?.lang)),
     }));
   }
+  // SB6.10: Incremental Agenda projection.
+  // Flat, allocation-light item version signature covering every field that affects
+  // expansion, visibility policy, identity, or rendered Agenda presentation.
+  function agendaItemSignature(item, policy) {
+    if (!item || typeof item !== "object") return "";
+    const x = item.x && typeof item.x === "object" ? item.x : {};
+    const rec = Array.isArray(item.recurrence) && item.recurrence.length ? item.recurrence.join("\u001e") : "";
+    const ex = Array.isArray(x.recurrenceExceptions) && x.recurrenceExceptions.length ? JSON.stringify(x.recurrenceExceptions) : "";
+    const pKey = policy ? ((policy.enabled ? "1" : "0") + ":" + (policy.leadDays || 0) + ":" + (policy.tailDays || 0)) : "1:0:0";
+    return [
+      item.id || "",
+      item.rev ?? "",
+      item.updated || "",
+      item.etag || "",
+      item.status || "",
+      item.summary || "",
+      item.description || "",
+      item.start?.date || "",
+      item.start?.dateTime || "",
+      item.start?.timeZone || "",
+      item.end?.date || "",
+      item.end?.dateTime || "",
+      item.end?.timeZone || "",
+      rec,
+      ex,
+      x.kind || "",
+      x.src || "",
+      x.series || "",
+      x.recurrenceId || "",
+      x.historyId || "",
+      x.noteId || "",
+      x.heading || "",
+      x.calNote || "",
+      x.category || "",
+      x.tz || "",
+      x.color || "",
+      x.noteColor || "",
+      x.categoryColor || "",
+      x.sourceNoteTitle || "",
+      x.sourceNoteTrashed ? "1" : "0",
+      x.sourceNoteTrashedTitle || "",
+      x.rId || "",
+      pKey,
+    ].join("\u001f");
+  }
+  function createIncrementalAgendaProjector() {
+    let ctx = null;
+    let itemsById = new Map();
+    let historyIdToSourceIds = new Map();
+    let dayEntries = [];
+    let dayBuckets = [];
+    let runStamp = 0;
+    let lastNow = NaN;
+    let nextEndBoundary = Infinity;
+    let prevEndBoundary = -Infinity;
+    let lastHistoryVersion = undefined;
+    let lastStats = { full: true, changedIds: [], removedIds: [], affectedDays: [] };
+
+    const compareEntries = (a, b) =>
+      a.sortStart - b.sortStart || (a.sortId < b.sortId ? -1 : a.sortId > b.sortId ? 1 : 0);
+
+    function insertSorted(arr, entry) {
+      let lo = 0, hi = arr.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (compareEntries(arr[mid], entry) <= 0) lo = mid + 1;
+        else hi = mid;
+      }
+      arr.splice(lo, 0, entry);
+    }
+
+    function addHistoryMapping(historyKey, sourceId) {
+      if (!historyKey || historyKey === sourceId) return;
+      let set = historyIdToSourceIds.get(historyKey);
+      if (!set) { set = new Set(); historyIdToSourceIds.set(historyKey, set); }
+      set.add(sourceId);
+    }
+
+    function removeHistoryMapping(historyKey, sourceId) {
+      if (!historyKey || historyKey === sourceId) return;
+      const set = historyIdToSourceIds.get(historyKey);
+      if (!set) return;
+      set.delete(sourceId);
+      if (!set.size) historyIdToSourceIds.delete(historyKey);
+    }
+
+    function recomputeEndBoundaries(stamp) {
+      let next = Infinity, prev = -Infinity;
+      for (const entry of itemsById.values()) {
+        const ends = entry.timedEnds;
+        if (!ends || !ends.length) continue;
+        for (let i = 0; i < ends.length; i++) {
+          const endMs = ends[i];
+          if (endMs > stamp) { if (endMs < next) next = endMs; }
+          else { if (endMs > prev) prev = endMs; }
+        }
+      }
+      nextEndBoundary = next;
+      prevEndBoundary = prev;
+    }
+
+    function buildSingleItemProjection(source, policy, stamp, isDone, getWindow, policies) {
+      const dayMap = new Map();
+      const timedEnds = [];
+      let rawOccurrences = [];
+      if (!live(source)) {
+        return { rawOccurrences, dayMap, dayOffsets: [], timedEnds };
+      }
+      const n = ctx.days, base = ctx.base, baseOrdinal = ctx.baseOrdinal, windowEnd = ctx.windowEnd;
+      const itemPolicy = policy || resolveAgendaWindow(source);
+      const isDefaultWin = itemPolicy.enabled && !itemPolicy.leadDays && !itemPolicy.tailDays && !getWindow;
+      const candFrom = itemPolicy.tailDays ? addDays(base, -itemPolicy.tailDays) : base;
+      const candTo = itemPolicy.leadDays ? addDays(windowEnd, itemPolicy.leadDays) : windowEnd;
+
+      if (itemPolicy.enabled || (!policies && getWindow)) {
+        if (source.x?.series || !(source.recurrence || []).length) {
+          const [s, e] = itemRange(source);
+          if (isReminder(source) ? (s >= candFrom && s < candTo) : (s < candTo && e > candFrom)) {
+            rawOccurrences = [source];
+          }
+        } else {
+          rawOccurrences = expandItem(source, candFrom, candTo);
+        }
+      }
+
+      if (!rawOccurrences.length) {
+        return { rawOccurrences, dayMap, dayOffsets: [], timedEnds };
+      }
+
+      const lang = ctx.lang;
+      for (let i = 0; i < rawOccurrences.length; i++) {
+        const occ = rawOccurrences[i];
+        if (isDone && isDone(occ)) continue;
+        let first, last;
+        if (isDefaultWin) {
+          const [start, end] = itemRange(occ);
+          first = Math.max(0, localDayOrdinal(start) - baseOrdinal);
+          last = Math.min(n - 1, localDayOrdinal(end > start ? end - 1 : start) - baseOrdinal);
+        } else {
+          const occPolicy = preparedAgendaWindow(occ, getWindow, policies);
+          if (!occPolicy.enabled) continue;
+          const visible = resolvedAgendaVisibilityRange(occ, occPolicy);
+          if (!visible) continue;
+          first = Math.max(0, localDayOrdinal(visible.from) - baseOrdinal);
+          last = Math.min(n - 1, localDayOrdinal(visible.to - 1) - baseOrdinal);
+        }
+        if (first > last || first >= n || last < 0) continue;
+        const [start, end] = itemRange(occ);
+        if (!isReminder(occ) && end > start) timedEnds.push(end);
+        for (let offset = first; offset <= last && offset < n; offset++) {
+          const dateKey = ctx.dayKeys[offset];
+          const zen = agendaZenItem(occ, dateKey, stamp, lang);
+          let list = dayMap.get(offset);
+          if (!list) { list = []; dayMap.set(offset, list); }
+          list.push({ sourceId: source.id, sortStart: start, sortId: occ.id, zen });
+        }
+      }
+      return { rawOccurrences, dayMap, dayOffsets: [...dayMap.keys()], timedEnds };
+    }
+
+    function materializeDayBucket(offset) {
+      const entries = dayEntries[offset];
+      const dateKey = ctx.dayKeys[offset];
+      const items = new Array(entries.length);
+      for (let i = 0; i < entries.length; i++) items[i] = entries[i].zen;
+      dayBuckets[offset] = {
+        key: "day:" + dateKey,
+        date: dateKey,
+        label: ctx.dayLabels[offset],
+        count: items.length,
+        items,
+      };
+    }
+
+    function reset() {
+      ctx = null;
+      itemsById = new Map();
+      historyIdToSourceIds = new Map();
+      dayEntries = [];
+      dayBuckets = [];
+      runStamp = 0;
+      lastNow = NaN;
+      nextEndBoundary = Infinity;
+      prevEndBoundary = -Infinity;
+      lastHistoryVersion = undefined;
+    }
+
+    function fullRebuild(sourceItems, stamp, n, base, baseKey, baseOrdinal, windowEnd, lang, langCode, isDone, getWindow, policies, historyVersion) {
+      reset();
+      const dayKeys = new Array(n);
+      const dayLabels = new Array(n);
+      dayEntries = new Array(n);
+      dayBuckets = new Array(n);
+      for (let offset = 0; offset < n; offset++) {
+        const from = addDays(base, offset);
+        dayKeys[offset] = localDateKey(from);
+        dayLabels[offset] = agendaDayLabel(offset, from, lang);
+        dayEntries[offset] = [];
+      }
+      ctx = { baseKey, base, baseOrdinal, days: n, windowEnd, lang, langCode, dayKeys, dayLabels };
+      runStamp = 1;
+
+      const changedIds = [];
+      for (let i = 0; i < sourceItems.length; i++) {
+        const source = sourceItems[i];
+        const id = source?.id;
+        if (!id || itemsById.has(id)) {
+          // Pathological missing or duplicate IDs: fall back to stateless full projection
+          // and keep cache uninitialized so subsequent calls remain exact.
+          reset();
+          const fallback = agendaZenProjection(sourceItems, stamp, n, isDone || (() => false), getWindow, policies, { lang });
+          lastStats = { full: true, changedIds: [], removedIds: [], affectedDays: Array.from({ length: n }, (_, k) => k) };
+          return { projection: fallback, stats: lastStats };
+        }
+        const policy = preparedAgendaWindow(source, getWindow, policies);
+        const policyKey = (policy.enabled ? "1" : "0") + ":" + (policy.leadDays || 0) + ":" + (policy.tailDays || 0);
+        const sig = agendaItemSignature(source, policy);
+        const built = buildSingleItemProjection(source, policy, stamp, isDone, getWindow, policies);
+        const histKey = reminderIdentity(source)?.itemId || "";
+        addHistoryMapping(histKey, id);
+        itemsById.set(id, {
+          ref: source,
+          sig,
+          policyKey,
+          stamp: runStamp,
+          historyKey: histKey,
+          hasWindowOccurrences: built.rawOccurrences.length > 0,
+          dayOffsets: built.dayOffsets,
+          dayMap: built.dayMap,
+          timedEnds: built.timedEnds,
+        });
+        for (const [offset, list] of built.dayMap) {
+          const target = dayEntries[offset];
+          for (let j = 0; j < list.length; j++) target.push(list[j]);
+        }
+        changedIds.push(id);
+      }
+      for (let offset = 0; offset < n; offset++) {
+        dayEntries[offset].sort(compareEntries);
+        materializeDayBucket(offset);
+      }
+      recomputeEndBoundaries(stamp);
+      lastNow = stamp;
+      lastHistoryVersion = historyVersion;
+      lastStats = { full: true, changedIds, removedIds: [], affectedDays: Array.from({ length: n }, (_, k) => k) };
+      return { projection: dayBuckets.slice(), stats: lastStats };
+    }
+
+    function project(items, now, options = {}) {
+      const sourceItems = items || [];
+      const stamp = Number(now);
+      const n = Math.max(1, Math.min(31, Math.floor(Number(options.days)) || 4));
+      const base = dayStart(stamp), baseKey = localDateKey(base), baseOrdinal = localDayOrdinal(base), windowEnd = addDays(base, n);
+      const lang = options.lang;
+      const langCode = notesLanguageTable(lang).code;
+      const isDone = typeof options.isDone === "function" ? options.isDone : null;
+      const getWindow = options.getWindow || null;
+      const policies = options.policies || null;
+      const historyVersion = options.historyVersion;
+
+      if (
+        !ctx ||
+        options.forceFull ||
+        ctx.baseKey !== baseKey ||
+        ctx.days !== n ||
+        ctx.langCode !== langCode
+      ) {
+        return fullRebuild(sourceItems, stamp, n, base, baseKey, baseOrdinal, windowEnd, lang, langCode, isDone, getWindow, policies, historyVersion);
+      }
+
+      runStamp++;
+      const forcedDirty = new Set();
+
+      // 1. Expand caller-provided dirtyIds (supports both source IDs and reminder history IDs).
+      const rawDirty = options.dirtyIds;
+      let dirtyAllInWindow = false;
+      if (rawDirty === "*") {
+        dirtyAllInWindow = true;
+      } else if (rawDirty) {
+        for (const rawId of rawDirty) {
+          if (!rawId) continue;
+          const sid = String(rawId);
+          forcedDirty.add(sid);
+          const mapped = historyIdToSourceIds.get(sid);
+          if (mapped) for (const m of mapped) forcedDirty.add(m);
+        }
+      }
+
+      // 2. Handle history / isDone invalidation when caller didn't specify exact dirtyIds.
+      if (isDone) {
+        if (historyVersion !== undefined) {
+          if (historyVersion !== lastHistoryVersion && !rawDirty) dirtyAllInWindow = true;
+        } else if (!rawDirty) {
+          dirtyAllInWindow = true;
+        }
+      }
+      if (dirtyAllInWindow) {
+        for (const [id, entry] of itemsById) {
+          if (entry.hasWindowOccurrences || entry.dayOffsets.length > 0) forcedDirty.add(id);
+        }
+      }
+
+      // 3. Detect intra-day timed event `ended` transitions across all days (including tailDays).
+      if (stamp >= nextEndBoundary || stamp < prevEndBoundary) {
+        const lo = Math.min(lastNow, stamp), hi = Math.max(lastNow, stamp);
+        for (const [id, entry] of itemsById) {
+          const ends = entry.timedEnds;
+          if (!ends || !ends.length) continue;
+          for (let i = 0; i < ends.length; i++) {
+            const endMs = ends[i];
+            if (endMs > lo && endMs <= hi) { forcedDirty.add(id); break; }
+          }
+        }
+      }
+
+      const changedIds = [];
+      const removedIds = [];
+      const affectedDays = new Set();
+      const dayDirtySources = new Map();
+      const markDayDirty = (offset, sourceId) => {
+        affectedDays.add(offset);
+        let set = dayDirtySources.get(offset);
+        if (!set) { set = new Set(); dayDirtySources.set(offset, set); }
+        set.add(sourceId);
+      };
+
+      // 4. Diff sourceItems by reference / version signature / resolved policy.
+      for (let i = 0; i < sourceItems.length; i++) {
+        const source = sourceItems[i];
+        const id = source?.id;
+        if (!id) {
+          return fullRebuild(sourceItems, stamp, n, base, baseKey, baseOrdinal, windowEnd, lang, langCode, isDone, getWindow, policies, historyVersion);
+        }
+        const prev = itemsById.get(id);
+        if (prev && prev.stamp === runStamp) {
+          // Duplicate id in sourceItems -> fall back cleanly.
+          return fullRebuild(sourceItems, stamp, n, base, baseKey, baseOrdinal, windowEnd, lang, langCode, isDone, getWindow, policies, historyVersion);
+        }
+        const policy = preparedAgendaWindow(source, getWindow, policies);
+        const policyKey = (policy.enabled ? "1" : "0") + ":" + (policy.leadDays || 0) + ":" + (policy.tailDays || 0);
+        const isForced = forcedDirty.has(id);
+
+        if (prev && !isForced && prev.ref === source && prev.policyKey === policyKey) {
+          prev.stamp = runStamp;
+          continue;
+        }
+        const sig = agendaItemSignature(source, policy);
+        if (prev && !isForced && prev.sig === sig) {
+          prev.ref = source;
+          prev.stamp = runStamp;
+          continue;
+        }
+
+        // Changed or newly added item: re-project ONLY this item ID.
+        const built = buildSingleItemProjection(source, policy, stamp, isDone, getWindow, policies);
+        if (prev && prev.sig === sig && prev.dayOffsets.length === built.dayOffsets.length) {
+          let identical = true;
+          for (let k = 0; k < built.dayOffsets.length && identical; k++) {
+            const off = built.dayOffsets[k];
+            const oldList = prev.dayMap.get(off);
+            const newList = built.dayMap.get(off);
+            if (!oldList || !newList || oldList.length !== newList.length) { identical = false; break; }
+            for (let j = 0; j < newList.length; j++) {
+              if (oldList[j].zen.key !== newList[j].zen.key || oldList[j].zen.ended !== newList[j].zen.ended) {
+                identical = false;
+                break;
+              }
+            }
+          }
+          if (identical) {
+            prev.ref = source;
+            prev.stamp = runStamp;
+            continue;
+          }
+        }
+        changedIds.push(id);
+        if (prev) {
+          for (let k = 0; k < prev.dayOffsets.length; k++) markDayDirty(prev.dayOffsets[k], id);
+          removeHistoryMapping(prev.historyKey, id);
+        }
+        const histKey = reminderIdentity(source)?.itemId || "";
+        addHistoryMapping(histKey, id);
+        itemsById.set(id, {
+          ref: source,
+          sig,
+          policyKey,
+          stamp: runStamp,
+          historyKey: histKey,
+          hasWindowOccurrences: built.rawOccurrences.length > 0,
+          dayOffsets: built.dayOffsets,
+          dayMap: built.dayMap,
+          timedEnds: built.timedEnds,
+        });
+        for (let k = 0; k < built.dayOffsets.length; k++) markDayDirty(built.dayOffsets[k], id);
+      }
+
+      // 5. Detect removed items (not seen in this run).
+      for (const [id, entry] of itemsById) {
+        if (entry.stamp === runStamp) continue;
+        removedIds.push(id);
+        for (let k = 0; k < entry.dayOffsets.length; k++) markDayDirty(entry.dayOffsets[k], id);
+        removeHistoryMapping(entry.historyKey, id);
+        itemsById.delete(id);
+      }
+
+      // 6. Rebuild ONLY affected days; unaffected days keep their existing bucket references.
+      for (const offset of affectedDays) {
+        const dirtySet = dayDirtySources.get(offset);
+        const current = dayEntries[offset];
+        if (dirtySet && dirtySet.size <= 16 && current.length > 32) {
+          const kept = [];
+          for (let i = 0; i < current.length; i++) {
+            if (!dirtySet.has(current[i].sourceId)) kept.push(current[i]);
+          }
+          for (const sourceId of dirtySet) {
+            const entry = itemsById.get(sourceId);
+            const added = entry?.dayMap?.get(offset);
+            if (!added) continue;
+            for (let j = 0; j < added.length; j++) insertSorted(kept, added[j]);
+          }
+          dayEntries[offset] = kept;
+        } else {
+          const rebuilt = [];
+          for (const entry of itemsById.values()) {
+            const list = entry.dayMap.get(offset);
+            if (!list) continue;
+            for (let j = 0; j < list.length; j++) rebuilt.push(list[j]);
+          }
+          rebuilt.sort(compareEntries);
+          dayEntries[offset] = rebuilt;
+        }
+        materializeDayBucket(offset);
+      }
+
+      if (changedIds.length || removedIds.length || stamp >= nextEndBoundary || stamp < prevEndBoundary) {
+        recomputeEndBoundaries(stamp);
+      }
+      lastNow = stamp;
+      lastHistoryVersion = historyVersion;
+      lastStats = {
+        full: false,
+        changedIds,
+        removedIds,
+        affectedDays: [...affectedDays].sort((a, b) => a - b),
+      };
+      return { projection: dayBuckets.slice(), stats: lastStats };
+    }
+
+    return {
+      project,
+      reset,
+      get lastStats() { return lastStats; },
+    };
+  }
   // Separate, occurrence-scoped overdue bucket. Civil-day look-back excludes
   // today even for a past time today; item visibility and lifecycle still apply.
   function agendaOverdueProjection(items, now, { enabled = true, days = 7, cap = 10, isDone = () => false, getWindow = null, policies = null, lang = undefined } = {}) {
@@ -8427,9 +8881,20 @@ const __zentralEmbeddedLoader = (function () {
   }
   // Coalesced, store-change-driven controller for the virtual Zen Agenda folder. The host
   // supplies DOM/Zen operations through `api`; this controller owns no browser globals.
-  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getMaxItems = () => 0, getEnabled = () => true, getReady = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), getLanguage = () => undefined, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
+  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getMaxItems = () => 0, getEnabled = () => true, getReady = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, hasHistoryTracking = false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), getLanguage = () => undefined, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
     let dead = false, timer = null, timerAt = Infinity, last = [], lastMore = null, busy = false, consecutiveChanges = 0, blockedUntil = 0;
+    const projector = createIncrementalAgendaProjector();
+    let historyTracked = !!hasHistoryTracking, historyVersion = 0, pendingHistoryDirtyAll = false;
+    const pendingHistoryDirtyIds = new Set();
+    let lastProjectionStats = null;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
+    function markHistoryDirty(ids = null) {
+      historyTracked = true;
+      historyVersion++;
+      if (!ids) { pendingHistoryDirtyAll = true; pendingHistoryDirtyIds.clear(); return; }
+      if (pendingHistoryDirtyAll) return;
+      for (const id of ids) if (id) pendingHistoryDirtyIds.add(String(id));
+    }
     function armAt(due) {
       if (dead || !Number.isFinite(due)) return;
       const stamp = Number(now());
@@ -8460,7 +8925,7 @@ const __zentralEmbeddedLoader = (function () {
       let sourceItems = [], policies = null, fullProjection = null, overdue = null, operations = 0;
       const revision = api.mutationCount?.() || 0;
       try {
-        if (!getEnabled()) { api.removeAll?.(); last = []; lastMore = null; clearScheduled(); return []; }
+        if (!getEnabled()) { projector.reset(); api.removeAll?.(); last = []; lastMore = null; clearScheduled(); return []; }
         // The items are not loaded yet (startup, before the store has opened). An empty list now would not mean that
         // nothing is due: reconciling against it would remove the entries that session restore just brought back. The
         // host schedules a run when the store is ready.
@@ -8468,8 +8933,24 @@ const __zentralEmbeddedLoader = (function () {
         sourceItems = getItems?.() || [];
         policies = getWindowIsMasterPolicy ? prepareAgendaWindows(sourceItems, getWindow) : null;
         const lang = getLanguage();
-        fullProjection = agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow, policies, { lang });
-        overdue = agendaOverdueProjection(sourceItems, now(), { ...getOverdue(), isDone, getWindow, policies, lang });
+        const projNow = now();
+        const dirtyIds = historyTracked
+          ? (pendingHistoryDirtyAll ? "*" : (pendingHistoryDirtyIds.size ? [...pendingHistoryDirtyIds] : null))
+          : null;
+        pendingHistoryDirtyAll = false;
+        pendingHistoryDirtyIds.clear();
+        const projected = projector.project(sourceItems, projNow, {
+          days: getDays(),
+          isDone,
+          getWindow,
+          policies,
+          lang,
+          historyVersion: historyTracked ? historyVersion : undefined,
+          dirtyIds,
+        });
+        fullProjection = projected.projection;
+        lastProjectionStats = projected.stats;
+        overdue = agendaOverdueProjection(sourceItems, projNow, { ...getOverdue(), isDone, getWindow, policies, lang });
         const capped = applyAgendaItemCap(agendaVisibleDays(fullProjection), getMaxItems?.(), { lang });
         const projection = [...(overdue ? [overdue] : []), ...capped.days];
         if (!projection.length && !capped.more) {
@@ -8523,12 +9004,14 @@ const __zentralEmbeddedLoader = (function () {
     return {
       runNow,
       schedule,
-      invalidate() { consecutiveChanges = 0; blockedUntil = 0; },
+      invalidate(opts) { consecutiveChanges = 0; blockedUntil = 0; if (opts?.full) projector.reset(); },
+      markHistoryDirty,
       refreshClock() { if (dead) return []; clearScheduled(); consecutiveChanges = 0; blockedUntil = 0; return runNow(); },
       get busy() { return busy; },
       get projection() { return last; },
       get more() { return lastMore; },
-      destroy() { dead = true; clearScheduled(); try { api.removeAll?.(); } catch (error) { safeWarn(error); } },
+      get lastProjectionStats() { return lastProjectionStats; },
+      destroy() { dead = true; projector.reset(); clearScheduled(); try { api.removeAll?.(); } catch (error) { safeWarn(error); } },
     };
   }
   // SB6.5: Pure Agenda Doctor diagnostics & safe-repair planner.
@@ -9842,7 +10325,7 @@ const __zentralEmbeddedLoader = (function () {
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -40213,6 +40696,7 @@ __zentralShim.register = function (def) {
         getPosition: agendaPosition,
         now: () => Date.now(),
         getWindowIsMasterPolicy: true,
+        hasHistoryTracking: true,
         getWindow: (item) => {
           const category = item.x?.category ? store.items?.category?.(item.x.category) : null;
           const notePolicy = item.x?.noteId ? store.noteAgendaOverride(item.x.noteId) : null;
@@ -40442,7 +40926,10 @@ __zentralShim.register = function (def) {
       const agendaItemUnsub = store.items?.on?.((ev) => {
         if (CALENDAR_PART?.agendaItemEventAffectsProjection(ev) && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); }
       });
-      const agendaHistoryUnsub = store.items?.history?.on?.(() => {
+      const agendaHistoryUnsub = store.items?.history?.on?.((ev) => {
+        if (ev?.kind === "append" && ev.itemId) agendaController.markHistoryDirty?.([ev.itemId]);
+        else if (ev?.kind === "refresh" && Array.isArray(ev.identities) && ev.identities.length) agendaController.markHistoryDirty?.(ev.identities.map((x) => x?.itemId).filter(Boolean));
+        else agendaController.markHistoryDirty?.();
         if (!disposed && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); }
       });
       const agendaNoteUnsub = store.on((ev) => {
