@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Widgets
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.253
+// @version 3.3.257
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.253, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.257, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.253";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.257";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1145,6 +1145,9 @@ function nativeSidebarSide() {
     WEATHER_LONGITUDE: "zen.workspace.zentral.widgets.weather.longitude",
     WEATHER_UNITS: "zen.workspace.zentral.widgets.weather.units",
     WEATHER_REFRESH_MINUTES: "zen.workspace.zentral.widgets.weather.refresh_minutes",
+    TIMER_ENABLED: "zen.workspace.zentral.widgets.timer.enabled",
+    TIMER_CLICK_STOPWATCH: "zen.workspace.zentral.widgets.timer.click_stopwatch",
+    TIMER_QUICK_NOTE: "zen.workspace.zentral.widgets.quick_note.enabled",
   });
 
   const DEFAULTS = Object.freeze({
@@ -1170,6 +1173,9 @@ function nativeSidebarSide() {
     WEATHER_LONGITUDE: "",
     WEATHER_UNITS: "auto",
     WEATHER_REFRESH_MINUTES: 30,
+    TIMER_ENABLED: true,
+    TIMER_CLICK_STOPWATCH: true,
+    TIMER_QUICK_NOTE: true,
   });
 
   const CLOCK_FORMATS = Object.freeze(["auto", "24h", "12h"]);
@@ -2552,6 +2558,137 @@ function nativeSidebarSide() {
     };
   }
 
+  // ---- T3.9d: stopwatch, quick timer and quick note -----------------------------------------------------------
+  // What a click on the Clock means. Pure, so the rule is testable and the card stays a painter:
+  //  - the quick timer wins while a countdown it started is running (a second click stops it);
+  //  - otherwise a plain click starts the stopwatch, or stops it when it runs;
+  //  - a long press (or the widget's own button) opens the "in X seconds" sheet instead.
+  function resolveClockClick(opts = {}) {
+    const enabled = Boolean(opts.clickEnabled);
+    const timerRunning = Boolean(opts.timerRunning);
+    const stopwatchRunning = Boolean(opts.stopwatchRunning);
+    const long = Boolean(opts.long);
+    if (!enabled) return { action: "none" };
+    if (timerRunning) return { action: "timer-stop" };
+    if (long) return { action: "ask-duration" };
+    return { action: stopwatchRunning ? "stopwatch-stop" : "stopwatch-start" };
+  }
+
+  // A quick timer from "in X": the duration is read with the same parser as the widget's own field.
+  function quickTimerFromText(text, nowMs) {
+    const ms = parseTimerDuration(text);
+    return ms > 0 ? timerStart(ms, nowMs) : null;
+  }
+
+  // All three are pure state machines over a clock value the caller supplies: nothing in this part reads the wall
+  // clock, so a suspended window catches up instead of drifting.
+  const TIMER_PRESETS_MS = Object.freeze([60, 300, 600, 1800, 3600].map((s) => s * 1000));
+
+  // "5", "5m", "2 min", "90s", "1h30", "1:30" -> milliseconds. Words in both languages the mod ships.
+  function parseTimerDuration(text) {
+    const raw = String(text ?? "").trim().toLowerCase();
+    if (!raw) return 0;
+    const clock = raw.match(/^(\d{1,3}):([0-5]?\d)(?::([0-5]?\d))?$/);
+    if (clock) {
+      const a = Number(clock[1]);
+      const b = Number(clock[2]);
+      const c = clock[3] === undefined ? null : Number(clock[3]);
+      const seconds = c === null ? a * 60 + b : a * 3600 + b * 60 + c;
+      return Math.max(0, Math.min(24 * 3600, seconds)) * 1000;
+    }
+    // Split at the unit letters first ("1h30" -> "1h", "30"), then read each piece on its own.
+    const parts = raw.match(/\d+(?:[.,]\d+)?\s*(?:godz\w*|hours?|h|min\w*|minutes?|m|sec\w*|sek\w*|s)?/g);
+    if (!parts) return 0;
+    let total = 0;
+    let sawHour = false;
+    for (const part of parts) {
+      const value = Number(part.replace(",", ".").replace(/[^0-9.]/g, ""));
+      if (!Number.isFinite(value)) continue;
+      const unit = part.replace(/[0-9.,\s]+/g, "");
+      // The unit decides the scale; the letters are matched whole, so "1h30" reads as an hour and thirty minutes.
+      if (/^(h|godz\w*|hours?)$/.test(unit)) { total += value * 3600; sawHour = true; }
+      else if (/^(m|min\w*|minutes?)$/.test(unit)) total += value * 60;
+      // A bare number after an hour is minutes ("1h30"), otherwise seconds ("90" means ninety seconds).
+      else if (sawHour) total += value * 60;
+      else total += value;
+    }
+    return Math.max(0, Math.min(24 * 3600, total)) * 1000;
+  }
+
+  // 0:07 / 12:07 / 1:02:07 — an hour field only appears when there is an hour.
+  function formatDuration(ms) {
+    const total = Math.max(0, Math.floor(Number(ms) / 1000) || 0);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    return h ? h + ":" + pad2(m) + ":" + pad2(s) : m + ":" + pad2(s);
+  }
+
+  const STOPWATCH_IDLE = Object.freeze({ running: false, startedAt: 0, accumulatedMs: 0, laps: [] });
+
+  function stopwatchElapsed(state, nowMs) {
+    const acc = Number(state?.accumulatedMs) || 0;
+    if (!state?.running) return Math.max(0, acc);
+    return Math.max(0, acc + Math.max(0, Number(nowMs) - Number(state.startedAt || nowMs)));
+  }
+
+  function stopwatchStart(state, nowMs) {
+    if (state?.running) return { ...state };
+    return { running: true, startedAt: Number(nowMs) || 0, accumulatedMs: Number(state?.accumulatedMs) || 0, laps: [...(state?.laps || [])] };
+  }
+
+  function stopwatchStop(state, nowMs) {
+    if (!state?.running) return { ...STOPWATCH_IDLE, accumulatedMs: Number(state?.accumulatedMs) || 0, laps: [...(state?.laps || [])] };
+    return { running: false, startedAt: 0, accumulatedMs: stopwatchElapsed(state, nowMs), laps: [...(state.laps || [])] };
+  }
+
+  function stopwatchLap(state, nowMs) {
+    if (!state?.running) return state;
+    const at = stopwatchElapsed(state, nowMs);
+    const laps = [...(state.laps || []), at];
+    return { ...state, laps: laps.slice(-500) };
+  }
+
+  const stopwatchReset = () => ({ ...STOPWATCH_IDLE, laps: [] });
+
+  // ---- countdown ("timer in X seconds/minutes", quick alarm) ----
+  const TIMER_IDLE = Object.freeze({ running: false, endsAt: 0, remainingMs: 0, durationMs: 0, rung: false });
+
+  function timerStart(durationMs, nowMs) {
+    const span = Math.max(1000, Math.min(24 * 3600 * 1000, Math.round(Number(durationMs) || 0)));
+    return { running: true, endsAt: Number(nowMs) + span, remainingMs: span, durationMs: span, rung: false };
+  }
+  function timerRemaining(state, nowMs) {
+    if (!state?.running) return Math.max(0, Number(state?.remainingMs) || 0);
+    return Math.max(0, Number(state.endsAt || 0) - Number(nowMs));
+  }
+  // The one place a timer decides it has finished: `rung` makes it fire exactly once, even across a sleep.
+  function timerTick(state, nowMs) {
+    if (!state?.running) return { state: { ...state }, finished: false };
+    const left = timerRemaining(state, nowMs);
+    if (left > 0) return { state, finished: false };
+    if (state.rung) return { state, finished: false };
+    return { state: { ...state, running: false, remainingMs: 0, rung: true }, finished: true };
+  }
+  // Stopping freezes what is left; the caller says when, so the value is the same on every machine.
+  function timerStop(state, nowMs) {
+    return {
+      running: false,
+      endsAt: 0,
+      remainingMs: timerRemaining(state, nowMs ?? state?.endsAt ?? 0),
+      durationMs: Number(state?.durationMs) || 0,
+      rung: false,
+    };
+  }
+  const timerReset = () => ({ ...TIMER_IDLE });
+
+  // How long until the next visible change: a running timer ticks once a second only while it is on screen.
+  function nextTimerTickDelayMs(state, nowMs) {
+    if (!state?.running) return 0;
+    const left = timerRemaining(state, nowMs);
+    return left > 0 ? Math.min(1000, left) : 0;
+  }
+
   // ---- T3.9c: weather (Open-Meteo, no key, one request per refresh) -------------------------------------------
   // WMO weather codes, as Open-Meteo reports them. The table is the whole vocabulary: a code nobody knows is drawn
   // as "unknown", never guessed.
@@ -2800,6 +2937,24 @@ function nativeSidebarSide() {
     nextWeatherDelayMs,
     readGeocodePayload,
     geocodeUrl,
+    TIMER_PRESETS_MS,
+    resolveClockClick,
+    quickTimerFromText,
+    parseTimerDuration,
+    formatDuration,
+    STOPWATCH_IDLE,
+    TIMER_IDLE,
+    stopwatchElapsed,
+    stopwatchStart,
+    stopwatchStop,
+    stopwatchLap,
+    stopwatchReset,
+    timerStart,
+    timerRemaining,
+    timerTick,
+    timerStop,
+    timerReset,
+    nextTimerTickDelayMs,
     isClockCacheStale,
     isDateCacheStale,
     resolveWidgetRefreshMs,
@@ -3482,6 +3637,46 @@ function nativeSidebarSide() {
           wrap.appendChild(main);
           wrap.appendChild(zoneEl);
 
+          // T3.9d: the Clock is also a shortcut. A plain click starts/stops the stopwatch, a long press (or a
+          // right click) asks for "in X", and a click while a quick timer runs stops it. The rule itself lives in
+          // resolveClockClick (pure); this block only feeds it what it cannot know.
+          let longPressTimer = null;
+          let longPressFired = false;
+          const cancelLongPress = () => {
+            if (longPressTimer !== null && typeof window.clearTimeout === "function") window.clearTimeout(longPressTimer);
+            longPressTimer = null;
+          };
+          wrap.addEventListener("pointerdown", (e) => {
+            if (e.button !== 0) return;
+            longPressFired = false;
+            cancelLongPress();
+            if (typeof window.setTimeout !== "function") return;
+            longPressTimer = window.setTimeout(() => {
+              longPressTimer = null;
+              longPressFired = true;
+              const kind = clockClickKind({ shiftKey: true });
+              if (kind.action !== "none") clockClick(kind.action);
+            }, 550);
+          });
+          wrap.addEventListener("pointerup", cancelLongPress);
+          wrap.addEventListener("pointercancel", () => { cancelLongPress(); longPressFired = false; });
+          wrap.addEventListener("pointerleave", cancelLongPress);
+          wrap.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const kind = clockClickKind({ shiftKey: true });
+            if (kind.action !== "none") clockClick(kind.action);
+          });
+          wrap.addEventListener("click", (e) => {
+            if (longPressFired) { longPressFired = false; return; }
+            if (e && ((e.button != null && e.button !== 0) || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey)) return;
+            const kind = clockClickKind(e);
+            if (kind.action === "none") return;
+            e.preventDefault();
+            e.stopPropagation();
+            clockClick(kind.action);
+          });
+
           return {
             element: wrap,
             fetch({ now }) {
@@ -3826,6 +4021,269 @@ function nativeSidebarSide() {
         resolveWeatherPlaceFromName();
       });
       if (getBool(WIDGET_PREFS.WEATHER_ENABLED, DEFAULTS.WEATHER_ENABLED)) resolveWeatherPlaceFromName();
+
+      // ---- T3.9d: timer, stopwatch and quick note --------------------------------------------------------------
+      // One card: a stopwatch and a countdown that share a single readout, five presets, one free field and a laps
+      // list. Its state lives here (not in prefs): a stopwatch is a moment, not a setting.
+      const timerState = { stopwatch: stopwatchReset(), timer: timerReset(), lapsOpen: false };
+      const clockClickState = { timer: null };
+      function paintTimerCard(paint) {
+        if (typeof paint === "function") {
+          try { paint(); } catch (err) { console.warn("[ZentralWidgets] timer paint failed:", err); }
+        }
+      }
+      registerWidget({
+        id: "timer",
+        title: "Timer",
+        showHeader: false,
+        order: 40,
+        pref: WIDGET_PREFS.TIMER_ENABLED,
+        defaultEnabled: false,
+        // The card has no refresh of its own: it repaints on the second its own state asks for.
+        refreshMs: 0,
+        watchPrefs: [WIDGET_PREFS.TIMER_CLICK_STOPWATCH],
+        create({ document: doc }) {
+          const wrap = doc.createElement("div");
+          wrap.className = "zw-timer";
+
+          const readout = doc.createElement("div");
+          readout.className = "zw-timer-readout";
+          const clockEl = doc.createElement("span");
+          clockEl.className = "zw-timer-value";
+          const modeEl = doc.createElement("span");
+          modeEl.className = "zw-timer-mode";
+          readout.appendChild(clockEl);
+          readout.appendChild(modeEl);
+
+          const actions = doc.createElement("div");
+          actions.className = "zw-timer-actions";
+
+          const buttons = {};
+          const mk = (name, text, title) => {
+            const b = doc.createElement("button");
+            b.type = "button";
+            b.className = "zw-timer-btn";
+            b.textContent = text;
+            b.title = title;
+            b.setAttribute("aria-label", title);
+            buttons[name] = b;
+            actions.appendChild(b);
+            return b;
+          };
+          const startBtn = mk("start", "Start", "Start the stopwatch");
+          const lapBtn = mk("lap", "Lap", "Take a lap");
+          const resetBtn = mk("reset", "Reset", "Reset to zero");
+
+          const presets = doc.createElement("div");
+          presets.className = "zw-timer-presets";
+          const presetButtons = TIMER_PRESETS_MS.map((ms) => {
+            const b = doc.createElement("button");
+            b.type = "button";
+            b.className = "zw-timer-preset";
+            b.textContent = formatDuration(ms);
+            b.title = "Start a countdown of " + formatDuration(ms);
+            presets.appendChild(b);
+            return { ms, button: b };
+          });
+
+          const fieldRow = doc.createElement("div");
+          fieldRow.className = "zw-timer-field-row";
+          const field = doc.createElement("input");
+          field.type = "text";
+          field.className = "zw-timer-field";
+          field.placeholder = "in 5 min";
+          field.setAttribute("aria-label", "A duration for the timer, for example 5 min or 1:30");
+          field.spellcheck = false;
+          const setBtn = doc.createElement("button");
+          setBtn.type = "button";
+          setBtn.className = "zw-timer-btn";
+          setBtn.textContent = "Set";
+          setBtn.title = "Start the countdown with the typed duration";
+          fieldRow.appendChild(field);
+          fieldRow.appendChild(setBtn);
+
+          const noteRow = doc.createElement("div");
+          noteRow.className = "zw-timer-note-row";
+          const noteField = doc.createElement("input");
+          noteField.type = "text";
+          noteField.className = "zw-timer-note";
+          noteField.placeholder = "Quick note";
+          noteField.setAttribute("aria-label", "Write a quick note");
+          noteField.spellcheck = false;
+          const noteBtn = doc.createElement("button");
+          noteBtn.type = "button";
+          noteBtn.className = "zw-timer-btn";
+          noteBtn.textContent = "Save";
+          noteBtn.title = "Save this text as a note";
+          noteRow.appendChild(noteField);
+          noteRow.appendChild(noteBtn);
+
+          const laps = doc.createElement("ol");
+          laps.className = "zw-timer-laps";
+          laps.hidden = true;
+
+          wrap.appendChild(readout);
+          wrap.appendChild(actions);
+          wrap.appendChild(presets);
+          wrap.appendChild(fieldRow);
+          wrap.appendChild(noteRow);
+          wrap.appendChild(laps);
+
+          let repaint = () => {};
+          let pendingTick = null;
+          const clearTick = () => {
+            if (pendingTick !== null && typeof window.clearTimeout === "function") window.clearTimeout(pendingTick);
+            pendingTick = null;
+          };
+          const nowMs = () => Date.now();
+
+          const draw = () => {
+            const sw = timerState.stopwatch;
+            const t = timerState.timer;
+            const usingTimer = t.running || (t.remainingMs > 0 && t.remainingMs < t.durationMs);
+            const value = usingTimer ? timerRemaining(t, nowMs()) : stopwatchElapsed(sw, nowMs());
+            clockEl.textContent = formatDuration(value);
+            modeEl.textContent = usingTimer ? "countdown" : sw.running ? "stopwatch" : sw.accumulatedMs > 0 ? "stopped" : "";
+            startBtn.textContent = usingTimer ? (t.running ? "Stop" : "Resume") : sw.running ? "Stop" : "Start";
+            startBtn.title = usingTimer ? "Stop the countdown" : sw.running ? "Stop the stopwatch" : "Start the stopwatch";
+            startBtn.setAttribute("aria-label", startBtn.title);
+            lapBtn.disabled = !sw.running;
+            resetBtn.disabled = !sw.running && !sw.accumulatedMs && !usingTimer;
+            laps.hidden = !sw.laps.length;
+            if (sw.laps.length) {
+              const doc2 = laps.ownerDocument;
+              laps.replaceChildren(...sw.laps.map((at, i) => {
+                const li = doc2.createElement("li");
+                li.textContent = "#" + (i + 1) + "  " + formatDuration(at);
+                return li;
+              }));
+            }
+            wrap.setAttribute("data-zw-timer", usingTimer ? (t.running ? "countdown" : "countdown-stopped") : sw.running ? "stopwatch" : "idle");
+            wrap.setAttribute("aria-label", "Timer " + formatDuration(value) + (modeEl.textContent ? ", " + modeEl.textContent : ""));
+            // One wake-up at a time, and only while something moves.
+            clearTick();
+            const moving = usingTimer ? t.running : sw.running;
+            if (moving && typeof window.setTimeout === "function") {
+              const delay = usingTimer ? nextTimerTickDelayMs(t, nowMs()) : 1000;
+              pendingTick = window.setTimeout(() => {
+                pendingTick = null;
+                const tick = usingTimer ? timerTick(timerState.timer, nowMs()) : { state: timerState.timer, finished: false };
+                if (usingTimer && tick.state !== timerState.timer) timerState.timer = tick.state;
+                if (tick.finished) ringTimer();
+                try { draw(); } catch (_) {}
+              }, Math.max(200, delay));
+            }
+          };
+          repaint = draw;
+
+          const ringTimer = () => {
+            wrap.setAttribute("data-zw-rang", "true");
+            if (typeof window.setTimeout === "function") {
+              window.setTimeout(() => wrap.removeAttribute("data-zw-rang"), 4000);
+            }
+            try { Services.sound.beep(); } catch (_) {}
+          };
+
+          const startStop = () => {
+            const t = timerState.timer;
+            if (t.running) {
+              timerState.timer = timerStop(t, nowMs());
+            } else if (t.remainingMs > 0 && t.durationMs) {
+              timerState.timer = timerStart(t.remainingMs, nowMs());
+            } else {
+              timerState.stopwatch = timerState.stopwatch.running ? stopwatchStop(timerState.stopwatch, nowMs()) : stopwatchStart(timerState.stopwatch, nowMs());
+            }
+            draw();
+          };
+          startBtn.addEventListener("click", startStop);
+          lapBtn.addEventListener("click", () => {
+            timerState.stopwatch = stopwatchLap(timerState.stopwatch, nowMs());
+            draw();
+          });
+          resetBtn.addEventListener("click", () => {
+            timerState.stopwatch = stopwatchReset();
+            timerState.timer = timerReset();
+            draw();
+          });
+          const startFromField = () => {
+            const next = quickTimerFromText(field.value, nowMs());
+            if (!next) { field.select?.(); return; }
+            timerState.timer = next;
+            field.value = "";
+            draw();
+          };
+          setBtn.addEventListener("click", startFromField);
+          field.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") { e.preventDefault(); startFromField(); }
+          });
+          for (const { ms, button } of presetButtons) {
+            button.addEventListener("click", () => {
+              timerState.timer = timerStart(ms, nowMs());
+              draw();
+            });
+          }
+
+          // A quick note leaves through the notes opener; the text is the person's, nothing is typed for them.
+          const saveNote = () => {
+            const text = String(noteField.value || "").trim();
+            const opener = resolveCalendarOpener(window);
+            if (!opener || typeof opener.openQuickNote !== "function") return;
+            try { opener.openQuickNote(text); } catch (_) {}
+            noteField.value = "";
+          };
+          noteBtn.addEventListener("click", saveNote);
+          noteField.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") { e.preventDefault(); saveNote(); }
+          });
+          // The quick-note row disappears when Notes is not installed: a button that cannot work is worse than none.
+          const syncNoteRow = () => {
+            const opener = resolveCalendarOpener(window);
+            const ok = Boolean(opener && typeof opener.openQuickNote === "function") && getBool(WIDGET_PREFS.TIMER_QUICK_NOTE, DEFAULTS.TIMER_QUICK_NOTE);
+            noteRow.hidden = !ok;
+          };
+          syncNoteRow();
+          if (typeof window.addEventListener === "function") {
+            window.addEventListener(CALENDAR_AVAILABILITY_EVENT, syncNoteRow);
+          }
+
+          draw();
+          return {
+            element: wrap,
+            fetch: () => null,
+            render: () => draw(),
+            // The Clock click lands here: start/stop the stopwatch, stop a quick timer, or ask for a duration.
+            clockClick(kind) {
+              if (kind === "stopwatch-start") timerState.stopwatch = stopwatchStart(timerState.stopwatch, nowMs());
+              else if (kind === "stopwatch-stop") timerState.stopwatch = stopwatchStop(timerState.stopwatch, nowMs());
+              else if (kind === "timer-stop") timerState.timer = timerStop(timerState.timer, nowMs());
+              else if (kind === "ask-duration") field.focus?.();
+              draw();
+            },
+            state: timerState,
+            dispose() {
+              clearTick();
+              if (typeof window.removeEventListener === "function") window.removeEventListener(CALENDAR_AVAILABILITY_EVENT, syncNoteRow);
+            },
+          };
+        },
+      });
+
+      // The Clock card can start a stopwatch: a plain click, a long press for "in X", and a second click to stop.
+      function clockClick(action) {
+        const mounted = mountedCards.get("timer");
+        const api = mounted?.instance;
+        if (!api || typeof api.clockClick !== "function") return false;
+        api.clockClick(action);
+        return true;
+      }
+      function clockClickKind(event) {
+        return resolveClockClick({
+          clickEnabled: getBool(WIDGET_PREFS.TIMER_CLICK_STOPWATCH, DEFAULTS.TIMER_CLICK_STOPWATCH) && isWidgetEnabled(registry.get("timer")),
+          timerRunning: Boolean(timerState.timer?.running),
+          stopwatchRunning: Boolean(timerState.stopwatch?.running),
+          long: Boolean(event?.shiftKey),
+        });
+      }
 
       const onVisibilityOrResize = () => scheduleMeasure();
       const listen = (target, type, fn, opts) => {

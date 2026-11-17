@@ -150,6 +150,113 @@
   color: color-mix(in srgb, #e5534b 85%, currentColor) !important;
 }
 
+/* ---- Built-in Timer widget (T3.9d) ---- */
+
+#zentral-sidebar-widgets .zw-timer {
+  contain: layout style paint !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+}
+
+#zentral-sidebar-widgets .zw-timer-readout {
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 6px !important;
+  min-width: 0 !important;
+}
+
+#zentral-sidebar-widgets .zw-timer-value {
+  font-size: 26px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  font-variant-numeric: tabular-nums !important;
+  white-space: nowrap !important;
+}
+
+#zentral-sidebar-widgets .zw-timer-mode {
+  font-size: 10px !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
+  opacity: 0.6 !important;
+}
+
+#zentral-sidebar-widgets .zw-timer-actions,
+#zentral-sidebar-widgets .zw-timer-presets {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+}
+
+#zentral-sidebar-widgets .zw-timer-btn,
+#zentral-sidebar-widgets .zw-timer-preset {
+  font: inherit !important;
+  font-size: 11px !important;
+  padding: 3px 8px !important;
+  border-radius: 999px !important;
+  border: 1px solid var(--zw-line, rgba(128, 128, 128, 0.28)) !important;
+  background: transparent !important;
+  color: inherit !important;
+  cursor: pointer !important;
+}
+
+#zentral-sidebar-widgets .zw-timer-preset {
+  font-variant-numeric: tabular-nums !important;
+  opacity: 0.82 !important;
+}
+
+#zentral-sidebar-widgets .zw-timer-btn:hover,
+#zentral-sidebar-widgets .zw-timer-preset:hover {
+  background: var(--zw-hover, rgba(128, 128, 128, 0.16)) !important;
+}
+
+#zentral-sidebar-widgets .zw-timer-btn:disabled {
+  opacity: 0.4 !important;
+  cursor: default !important;
+}
+
+#zentral-sidebar-widgets .zw-timer-field-row,
+#zentral-sidebar-widgets .zw-timer-note-row {
+  display: flex !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+}
+
+#zentral-sidebar-widgets .zw-timer-field,
+#zentral-sidebar-widgets .zw-timer-note {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  font: inherit !important;
+  font-size: 11px !important;
+  padding: 3px 7px !important;
+  border-radius: 999px !important;
+  border: 1px solid var(--zw-line, rgba(128, 128, 128, 0.28)) !important;
+  background: transparent !important;
+  color: inherit !important;
+}
+
+#zentral-sidebar-widgets .zw-timer-laps {
+  margin: 0 !important;
+  padding: 0 0 0 2px !important;
+  list-style: none !important;
+  max-height: 96px !important;
+  overflow: auto !important;
+  font-size: 10px !important;
+  font-variant-numeric: tabular-nums !important;
+  opacity: 0.78 !important;
+}
+
+/* A countdown that finished flashes its readout, and the Clock card shows the same text when it runs one. */
+#zentral-sidebar-widgets .zw-timer[data-zw-rang="true"] .zw-timer-value {
+  color: color-mix(in srgb, #e5a04b 80%, currentColor) !important;
+}
+
+#zentral-sidebar-widgets .zw-clock[data-zw-clock-timer="true"] .zw-clock-main::after {
+  content: "";
+}
+
 /* ---- Built-in Weather widget (T3.9c) ---- */
 
 #zentral-sidebar-widgets .zw-weather {

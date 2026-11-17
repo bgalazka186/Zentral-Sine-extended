@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.253
+// @version 3.3.257
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.253, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.257, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.253";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.257";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -29415,6 +29415,15 @@ __zentralShim.register = function (def) {
           if (off >= 0) revealSourceMatch({ start: off, end: off });
         }
       }
+      // A note opened from outside the sheet. The reminder path and the widget quick capture both land here, so
+      // the start view is decided once.
+      function openNoteFromOutside(noteId, heading = "", itemId = "") {
+        if (!isOpen || destroyed || !store.get(noteId)) return false;
+        outsideClaim = false;
+        const wanted = startMode(getPref(PREF.DEFAULT_VIEW, "last"), store.meta.mode);
+        if (wanted !== store.meta.mode) store.setMeta({ mode: wanted });
+        return openNoteByIdAndHeading(noteId, heading, itemId);
+      }
       function openNoteByIdAndHeading(noteId, heading = "", itemId = "") {
         const target = typeof noteId === "string" ? store.get(noteId) : null;
         if (!target || target.trashed) return false;
@@ -40447,12 +40456,13 @@ __zentralShim.register = function (def) {
         quickCaptureToday: () => {
           if (isOpen && !destroyed) queueMicrotask(() => askQuickCapture(""));
         },
-        openNoteById: (id, heading = "", itemId = "") => {
-          if (!isOpen || destroyed || !store.get(id)) return false;
-          outsideClaim = false;
-          const wanted = startMode(getPref(PREF.DEFAULT_VIEW, "last"), store.meta.mode);
-          if (wanted !== store.meta.mode) store.setMeta({ mode: wanted });
-          return openNoteByIdAndHeading(id, heading, itemId);
+        openNoteById: (id, heading = "", itemId = "") => openNoteFromOutside(id, heading, itemId),
+        quickCapture: (text) => {
+          if (!isOpen || destroyed) return false;
+          const body = String(text ?? "").trim().slice(0, 4000);
+          if (!body) { newNote(""); return true; }
+          const made = store.create(body); // the widget never picks a folder for the person
+          return openNoteFromOutside(made.id);
         },
         runAgendaItemAction: (identity, command) => {
           if (!isOpen || destroyed || !CALENDAR_PART?.resolveAgendaOccurrence || !store.items) return false;
@@ -41903,9 +41913,17 @@ __zentralShim.register = function (def) {
           window.dispatchEvent(ev);
         } catch (_) {}
       }
+      // T3.9d: a quick note from a sidebar widget. The text arrives only when the person used the widget that
+      // moment; the sheet creates the note itself, so nothing is typed into a field behind their back.
+      function openQuickNoteFromHost(text) {
+        const body = typeof text === "string" ? text.slice(0, 4000) : "";
+        return showNotes("").then((h) => sheetOf(h)?.quickCapture?.(body)).catch(warn);
+      }
       const calendarOpener = {
         isAvailable: () => !disposed && enabledNow() && Boolean(CALENDAR_PART),
         openCalendar: () => openCalendarFromHost(),
+        openQuickNote: (text) => openQuickNoteFromHost(text),
+        canQuickNote: () => !disposed && enabledNow(),
       };
       window[CALENDAR_OPENER_SYM] = calendarOpener;
       notifyCalendarAvailability();

@@ -17778,6 +17778,15 @@
           if (off >= 0) revealSourceMatch({ start: off, end: off });
         }
       }
+      // A note opened from outside the sheet. The reminder path and the widget quick capture both land here, so
+      // the start view is decided once.
+      function openNoteFromOutside(noteId, heading = "", itemId = "") {
+        if (!isOpen || destroyed || !store.get(noteId)) return false;
+        outsideClaim = false;
+        const wanted = startMode(getPref(PREF.DEFAULT_VIEW, "last"), store.meta.mode);
+        if (wanted !== store.meta.mode) store.setMeta({ mode: wanted });
+        return openNoteByIdAndHeading(noteId, heading, itemId);
+      }
       function openNoteByIdAndHeading(noteId, heading = "", itemId = "") {
         const target = typeof noteId === "string" ? store.get(noteId) : null;
         if (!target || target.trashed) return false;
@@ -28810,12 +28819,13 @@
         quickCaptureToday: () => {
           if (isOpen && !destroyed) queueMicrotask(() => askQuickCapture(""));
         },
-        openNoteById: (id, heading = "", itemId = "") => {
-          if (!isOpen || destroyed || !store.get(id)) return false;
-          outsideClaim = false;
-          const wanted = startMode(getPref(PREF.DEFAULT_VIEW, "last"), store.meta.mode);
-          if (wanted !== store.meta.mode) store.setMeta({ mode: wanted });
-          return openNoteByIdAndHeading(id, heading, itemId);
+        openNoteById: (id, heading = "", itemId = "") => openNoteFromOutside(id, heading, itemId),
+        quickCapture: (text) => {
+          if (!isOpen || destroyed) return false;
+          const body = String(text ?? "").trim().slice(0, 4000);
+          if (!body) { newNote(""); return true; }
+          const made = store.create(body); // the widget never picks a folder for the person
+          return openNoteFromOutside(made.id);
         },
         runAgendaItemAction: (identity, command) => {
           if (!isOpen || destroyed || !CALENDAR_PART?.resolveAgendaOccurrence || !store.items) return false;
@@ -30266,9 +30276,17 @@
           window.dispatchEvent(ev);
         } catch (_) {}
       }
+      // T3.9d: a quick note from a sidebar widget. The text arrives only when the person used the widget that
+      // moment; the sheet creates the note itself, so nothing is typed into a field behind their back.
+      function openQuickNoteFromHost(text) {
+        const body = typeof text === "string" ? text.slice(0, 4000) : "";
+        return showNotes("").then((h) => sheetOf(h)?.quickCapture?.(body)).catch(warn);
+      }
       const calendarOpener = {
         isAvailable: () => !disposed && enabledNow() && Boolean(CALENDAR_PART),
         openCalendar: () => openCalendarFromHost(),
+        openQuickNote: (text) => openQuickNoteFromHost(text),
+        canQuickNote: () => !disposed && enabledNow(),
       };
       window[CALENDAR_OPENER_SYM] = calendarOpener;
       notifyCalendarAvailability();

@@ -235,6 +235,9 @@
           "label": "Weather"
         },
         {
+          "label": "Timer"
+        },
+        {
           "label": "Layout & visibility"
         }
       ],
@@ -988,6 +991,14 @@
     "zen.workspace.zentral.widgets.weather.longitude",
     "zen.workspace.zentral.widgets.weather.units",
     "zen.workspace.zentral.widgets.weather.refresh_minutes",
+    {
+      "type": "text",
+      "label": "**Sidebar Widgets · Timer**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.widgets.timer.enabled",
+    "zen.workspace.zentral.widgets.timer.click_stopwatch",
+    "zen.workspace.zentral.widgets.quick_note.enabled",
     {
       "type": "text",
       "label": "**Sidebar Widgets · Layout & visibility**",
