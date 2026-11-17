@@ -7123,9 +7123,9 @@
       const backedUp = new Set();
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, dockPx: 0, gapPx: 0, cardDock: "", cardW: 0, cardH: 0, cardHShare: 0,
         allNewChoice: "note", calendarClockMode: "both",
-        calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarFiltersCollapsed: false, calendarTab: "tree",
+        calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarFiltersCollapsed: false, calendarBigPictureFiltersCollapsed: false, calendarTab: "tree",
         calendarBigPictureSize: CALENDAR_PART ? CALENDAR_PART.DEFAULT_CALENDAR_BIG_PICTURE_SIZE : 90,
-        calendarView: "month", calendarWeekStart: 1, calendarWeekNumbers: false, calendarWeekSpan: { days: 7, anchor: "weekStart" }, calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
+        calendarView: "month", calendarWeekStart: 1, calendarWeekNumbers: false, calendarWeekSpan: { days: 7, anchor: "weekStart" }, calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarBigPictureFilterKind: "all", calendarBigPictureFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
         // The hours Week and Day show ({ on, startMin, endMin }; off = the whole day). Replaced as a whole, never changed in place.
         calendarHours: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHours(null) : { on: false, startMin: 480, endMin: 1200 },
         // The size of each calendar view ("auto" = fitted to the pane, or px; OW-03). Replaced as a whole, never changed in place.
@@ -7872,6 +7872,7 @@
             meta.calendarPaneCollapsed = raw.calendarPaneCollapsed === true;
             if (meta.calendarTreeCollapsed && meta.calendarPaneCollapsed) meta.calendarTreeCollapsed = meta.calendarPaneCollapsed = false;
             meta.calendarFiltersCollapsed = raw.calendarFiltersCollapsed === true;
+            meta.calendarBigPictureFiltersCollapsed = raw.calendarBigPictureFiltersCollapsed === true;
             meta.calendarTab = raw.calendarTab === "calendar" ? "calendar" : "tree";
             meta.calendarBigPictureSize = CALENDAR_PART.cleanCalendarBigPictureSize(raw.calendarBigPictureSize);
             meta.calendarView = ["month", "upcoming", "agenda", "week", "day"].includes(raw.calendarView) ? raw.calendarView : "month";
@@ -7885,8 +7886,10 @@
             meta.calendarHours = CALENDAR_PART.cleanCalendarHours(raw.calendarHours);
             const daysForward = Number(raw.calendarDaysForward);
             meta.calendarDaysForward = [3, 7, 14, 30].includes(daysForward) ? daysForward : 7;
-            meta.calendarFilterKind = ["all", "event", "reminder"].includes(raw.calendarFilterKind) ? raw.calendarFilterKind : "all";
-            meta.calendarFilterCategory = typeof raw.calendarFilterCategory === "string" ? raw.calendarFilterCategory.slice(0, 80) : "";
+            meta.calendarFilterKind = CALENDAR_PART.cleanCalendarFilterKind(raw.calendarFilterKind);
+            meta.calendarFilterCategory = CALENDAR_PART.cleanCalendarFilterCategory(raw.calendarFilterCategory);
+            meta.calendarBigPictureFilterKind = CALENDAR_PART.cleanCalendarFilterKind(raw.calendarBigPictureFilterKind);
+            meta.calendarBigPictureFilterCategory = CALENDAR_PART.cleanCalendarFilterCategory(raw.calendarBigPictureFilterCategory);
             meta.calendarCursor = CALENDAR_PART.parseYmd(raw.calendarCursor) ? raw.calendarCursor : "";
             meta.calendarDisplayZone = CALENDAR_PART.cleanZone(raw.calendarDisplayZone) || "";
             meta.calendarRecentZones = CALENDAR_PART.cleanRecentZones(raw.calendarRecentZones);
@@ -15979,14 +15982,39 @@
         const monthSel = calendarContent.querySelector(".zn-cal-month-selection");
         if (monthSel && state.selectionScrollTop !== null) monthSel.scrollTop = Math.max(0, state.selectionScrollTop);
       }
+      function activeCalendarFilterKeys(isBig = Boolean(bigPicture)) {
+        return CALENDAR_PART?.calendarFilterKeysFor?.(Boolean(isBig)) || {
+          kindKey: isBig ? "calendarBigPictureFilterKind" : "calendarFilterKind",
+          categoryKey: isBig ? "calendarBigPictureFilterCategory" : "calendarFilterCategory",
+          collapsedKey: isBig ? "calendarBigPictureFiltersCollapsed" : "calendarFiltersCollapsed",
+        };
+      }
+      function activeCalendarFilters(isBig = Boolean(bigPicture)) {
+        return CALENDAR_PART?.readCalendarFilters?.(store.meta, Boolean(isBig)) || {
+          kind: "all",
+          category: "",
+          collapsed: false,
+        };
+      }
+      function setActiveCalendarFilters(patch, isBig = Boolean(bigPicture)) {
+        const keys = activeCalendarFilterKeys(isBig);
+        const update = {};
+        if ("kind" in patch) update[keys.kindKey] = CALENDAR_PART?.cleanCalendarFilterKind?.(patch.kind) || "all";
+        if ("category" in patch) update[keys.categoryKey] = CALENDAR_PART?.cleanCalendarFilterCategory?.(patch.category) || "";
+        if ("collapsed" in patch) update[keys.collapsedKey] = Boolean(patch.collapsed);
+        if (Object.keys(update).length) store.setMeta(update);
+      }
       function closeCalendarBigPicture({ restoreFocus = true } = {}) {
         if (!bigPicture) return false;
         const bp = bigPicture;
+        const beforeFilters = activeCalendarFilters(true);
         const liveState = captureCalendarViewState();
         const activeEl = document.activeElement;
         const focusedInPane = activeEl && calendarPane.contains(activeEl) ? activeEl : null;
         const focusedDayBtn = focusedInPane?.closest?.(".zn-cal-month-date[data-day]")?.getAttribute("data-day") || "";
         bigPicture = null;
+        const afterFilters = activeCalendarFilters(false);
+        const filtersChanged = beforeFilters.kind !== afterFilters.kind || beforeFilters.category !== afterFilters.category;
         hideCalendarHoverCard();
         if (menu?.calendar) closeMenu();
         if (!restoreFocus && dialog?.dataset.calendarLayer === "true") closeDialog();
@@ -16008,12 +16036,14 @@
         delete calendarPane.dataset.bigPicture;
         delete root.dataset.bigPicture;
         syncCalendarBigPictureButton();
+        syncCalendarControlsToggle();
         // Restore scroll positions immediately after DOM reparenting (which resets scrollTop in real browsers),
         // so updateAllLayout/refitCalendar sees the exact live scroll offset even if a re-render occurs.
         restorePaneScrollSnapshot(liveState);
         if (isOpen && !destroyed) {
           updateAllLayout(true);
           if (!calendarPane.hidden) {
+            if (filtersChanged) renderCalendar();
             restorePaneScrollSnapshot(liveState);
             restoreCalendarViewState(liveState);
           }
@@ -16150,10 +16180,15 @@
           applyCalendarBigPictureBox();
           scheduleCalendarFit();
         });
+        const beforeFilters = activeCalendarFilters(false);
+        const afterFilters = activeCalendarFilters(true);
+        const filtersChanged = beforeFilters.kind !== afterFilters.kind || beforeFilters.category !== afterFilters.category;
         syncCalendarBigPictureButton();
+        syncCalendarControlsToggle();
         applyCalendarBigPictureBox();
         restorePaneScrollSnapshot(enterState);
-        refitCalendar();
+        if (filtersChanged) renderCalendar();
+        else refitCalendar();
         restorePaneScrollSnapshot(enterState);
         restoreCalendarViewState(enterState);
         if (!document.activeElement || !card.contains(document.activeElement)) {
@@ -16162,8 +16197,8 @@
         return true;
       }
       listen(btnCalendarControlsToggle, "click", () => {
-        const next = store.meta.calendarFiltersCollapsed !== true;
-        store.setMeta({ calendarFiltersCollapsed: next });
+        const next = !activeCalendarFilters().collapsed;
+        setActiveCalendarFilters({ collapsed: next });
         syncCalendarControlsToggle();
         if (!calendarPane.hidden) refitCalendar();
       });
@@ -16172,10 +16207,11 @@
         else openCalendarBigPicture();
       });
       function syncCalendarControlsToggle() {
-        const collapsed = store.meta.calendarFiltersCollapsed === true;
-        const kind = ["all", "event", "reminder"].includes(store.meta.calendarFilterKind) ? store.meta.calendarFilterKind : "all";
+        const filters = activeCalendarFilters();
+        const collapsed = filters.collapsed;
+        const kind = filters.kind;
         const categories = store.items?.categoryList?.() || [];
-        const requestedCategory = typeof store.meta.calendarFilterCategory === "string" ? store.meta.calendarFilterCategory : "";
+        const requestedCategory = filters.category;
         const category = categories.some((entry) => entry.name === requestedCategory) ? requestedCategory : "";
         const activeFilters = CALENDAR_PART?.calendarActiveFilterCount?.(kind, category) || 0;
         calendarControls.hidden = collapsed;
@@ -17503,14 +17539,14 @@
         return [...unique.values()].filter((item) => item.status !== "cancelled");
       }
       function calendarFilteredItems() {
-        const kind = ["all", "event", "reminder"].includes(store.meta.calendarFilterKind) ? store.meta.calendarFilterKind : "all";
-        const category = typeof store.meta.calendarFilterCategory === "string" ? store.meta.calendarFilterCategory : "";
+        const { kind, category } = activeCalendarFilters();
         return calendarBaseItems().filter((item) => (kind === "all" || item.x.kind === kind) && (!category || item.x.category === category));
       }
       function syncCalendarFilterOptions() {
-        const kind = ["all", "event", "reminder"].includes(store.meta.calendarFilterKind) ? store.meta.calendarFilterKind : "all";
+        const filters = activeCalendarFilters();
+        const kind = filters.kind;
         const categories = store.items?.categoryList?.() || [];
-        const requestedCategory = typeof store.meta.calendarFilterCategory === "string" ? store.meta.calendarFilterCategory : "";
+        const requestedCategory = filters.category;
         const category = categories.some((entry) => entry.name === requestedCategory) ? requestedCategory : "";
         const view = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
         calendarHeadingEl.textContent = t("cal.heading");
@@ -17537,7 +17573,7 @@
         calendarKindSelect.textContent = t(kind === "event" ? "cal.filter.events" : kind === "reminder" ? "cal.filter.reminders" : "cal.filter.allItems");
         calendarCategorySelect.dataset.value = category;
         calendarCategorySelect.textContent = category || t("cal.filter.allCategories");
-        if (category !== requestedCategory) store.setMeta({ calendarFilterCategory: category });
+        if (category !== requestedCategory) setActiveCalendarFilters({ category });
         syncCalendarControlsToggle();
       }
       function calendarChoiceMenu(anchor, entries, current, choose) {
@@ -20205,12 +20241,12 @@
           { value: "event", label: t("cal.filter.events") },
           { value: "reminder", label: t("cal.filter.reminders") },
         ],
-        store.meta.calendarFilterKind || "all", (value) => { store.setMeta({ calendarFilterKind: value }); renderCalendar(); }));
+        activeCalendarFilters().kind, (value) => { setActiveCalendarFilters({ kind: value }); renderCalendar(); }));
       listen(calendarCategorySelect, "click", () => {
         const categories = store.items?.categoryList?.() || [];
         calendarChoiceMenu(calendarCategorySelect,
           [{ value: "", label: t("cal.filter.allCategories") }, ...categories.map((entry) => ({ value: entry.name, label: entry.name }))],
-          store.meta.calendarFilterCategory || "", (value) => { store.setMeta({ calendarFilterCategory: value }); renderCalendar(); });
+          activeCalendarFilters().category, (value) => { setActiveCalendarFilters({ category: value }); renderCalendar(); });
       });
       function calendarWeekStart() {
         return calendarShownWeekDays()[0];

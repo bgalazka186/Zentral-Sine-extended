@@ -547,6 +547,121 @@ async function test(name, fn) {
     await h.store.close();
   });
 
+  await test("OW-35: regular Calendar and Big Picture remember independent filters and controls visibility across reload", async () => {
+    // Pure helpers
+    assert.deepEqual(C.calendarFilterKeysFor(false), { kindKey: "calendarFilterKind", categoryKey: "calendarFilterCategory", collapsedKey: "calendarFiltersCollapsed" });
+    assert.deepEqual(C.calendarFilterKeysFor(true), { kindKey: "calendarBigPictureFilterKind", categoryKey: "calendarBigPictureFilterCategory", collapsedKey: "calendarBigPictureFiltersCollapsed" });
+    assert.deepEqual(C.readCalendarFilters({ calendarFilterKind: "event", calendarFilterCategory: "Work", calendarFiltersCollapsed: true, calendarBigPictureFilterKind: "reminder", calendarBigPictureFilterCategory: "Personal", calendarBigPictureFiltersCollapsed: false }, false),
+      { kind: "event", category: "Work", collapsed: true });
+    assert.deepEqual(C.readCalendarFilters({ calendarFilterKind: "event", calendarFilterCategory: "Work", calendarFiltersCollapsed: true, calendarBigPictureFilterKind: "reminder", calendarBigPictureFilterCategory: "Personal", calendarBigPictureFiltersCollapsed: false }, true),
+      { kind: "reminder", category: "Personal", collapsed: false });
+
+    const { io } = makeMemoryIo();
+    const h = makeSheetHarness({ io, sheetW: 960, sheetH: 620 });
+    await h.store.open();
+    h.store.create("# Filters test");
+    h.store.items.upsertCategory({ name: "Work", color: "#4a90e2" });
+    h.store.items.upsertCategory({ name: "Personal", color: "#d36aa6" });
+    const tomorrow = C.localDateKey(C.addDays(C.dayStart(Date.now()), 1));
+    const startMs = C.parseYmd(tomorrow).getTime() + 10 * 3600000;
+    h.store.items.upsert({ id: "ev-work", summary: "Work Standup", start: { dateTime: new Date(startMs).toISOString() }, end: { dateTime: new Date(startMs + 3600000).toISOString() }, x: { kind: "event", category: "Work", src: "manual" } });
+    h.store.items.upsert({ id: "rem-personal", summary: "Buy Groceries", start: { dateTime: new Date(startMs + 7200000).toISOString() }, x: { kind: "reminder", category: "Personal", src: "manual" } });
+    h.store.items.upsert({ id: "ev-personal", summary: "Gym Session", start: { dateTime: new Date(startMs + 10800000).toISOString() }, end: { dateTime: new Date(startMs + 14400000).toISOString() }, x: { kind: "event", category: "Personal", src: "manual" } });
+
+    await h.sheet.open();
+    await flush();
+    h.sheet.openCalendar();
+    await flush();
+
+    const viewBtn = h.sheet.root.querySelector(".zn-calendar-view-select");
+    const kindBtn = h.sheet.root.querySelector(".zn-calendar-kind-filter");
+    const catBtn = h.sheet.root.querySelector(".zn-calendar-category-filter");
+    const ctrlToggle = h.sheet.root.querySelector(".zn-calendar-controls-toggle");
+    const controls = h.sheet.root.querySelector(".zn-calendar-controls");
+    const visibleTitles = () => [...h.sheet.root.querySelectorAll(".zn-cal-item-title")].map((el) => el.textContent.trim());
+    const pickMenu = (label) => {
+      const btn = [...h.sheet.root.querySelectorAll(".zn-menu-item")].find((b) => b.textContent.includes(label));
+      assert.ok(btn, `menu item "${label}" exists`);
+      btn.click();
+    };
+
+    viewBtn.click(); pickMenu("Agenda"); await flush();
+
+    // Regular Calendar starts showing all 3 items
+    assert.deepEqual(visibleTitles().sort(), ["Buy Groceries", "Gym Session", "Work Standup"]);
+
+    // Filter regular Calendar to Events + Work, and collapse its controls bar
+    kindBtn.click(); pickMenu("Events"); await flush();
+    catBtn.click(); pickMenu("Work"); await flush();
+    ctrlToggle.click(); await flush();
+    assert.equal(h.store.meta.calendarFilterKind, "event");
+    assert.equal(h.store.meta.calendarFilterCategory, "Work");
+    assert.equal(h.store.meta.calendarFiltersCollapsed, true);
+    assert.equal(controls.hidden, true);
+    assert.deepEqual(visibleTitles(), ["Work Standup"], "regular Calendar shows only Work events");
+
+    // Open Big Picture -> starts with its own default unlinked filters (all items, controls expanded!)
+    h.sheet.openCalendarBigPicture();
+    await flush();
+    assert.equal(kindBtn.dataset.value, "all", "Big Picture does not inherit regular Calendar kind filter");
+    assert.equal(catBtn.dataset.value, "", "Big Picture does not inherit regular Calendar category filter");
+    assert.equal(controls.hidden, false, "Big Picture has independent controls visibility");
+    assert.deepEqual(visibleTitles().sort(), ["Buy Groceries", "Gym Session", "Work Standup"], "Big Picture shows all items initially");
+
+    // Set Big Picture filters to Reminders + Personal
+    kindBtn.click(); pickMenu("Reminders"); await flush();
+    catBtn.click(); pickMenu("Personal"); await flush();
+    assert.equal(h.store.meta.calendarBigPictureFilterKind, "reminder");
+    assert.equal(h.store.meta.calendarBigPictureFilterCategory, "Personal");
+    assert.equal(h.store.meta.calendarFilterKind, "event", "regular Calendar kind filter stays untouched");
+    assert.equal(h.store.meta.calendarFilterCategory, "Work", "regular Calendar category filter stays untouched");
+    assert.deepEqual(visibleTitles(), ["Buy Groceries"], "Big Picture shows only Personal reminders");
+
+    // Close Big Picture -> regular Calendar immediately restores Events + Work + collapsed controls!
+    h.sheet.closeCalendarBigPicture();
+    await flush();
+    assert.equal(kindBtn.dataset.value, "event");
+    assert.equal(catBtn.dataset.value, "Work");
+    assert.equal(controls.hidden, true);
+    assert.deepEqual(visibleTitles(), ["Work Standup"], "closing Big Picture restores regular Calendar filtered items");
+
+    // Reopen Big Picture -> immediately restores Reminders + Personal!
+    h.sheet.openCalendarBigPicture();
+    await flush();
+    assert.equal(kindBtn.dataset.value, "reminder");
+    assert.equal(catBtn.dataset.value, "Personal");
+    assert.equal(controls.hidden, false);
+    assert.deepEqual(visibleTitles(), ["Buy Groceries"], "reopening Big Picture remembers its own filters");
+
+    // Persist to disk and reopen fresh store + sheet -> both filter sets survive reload!
+    h.sheet.closeCalendarBigPicture();
+    await flush();
+    await h.store.flush();
+    h.sheet.destroy();
+    await h.store.close();
+
+    const h2 = makeSheetHarness({ io, sheetW: 960, sheetH: 620 });
+    await h2.store.open();
+    assert.equal(h2.store.meta.calendarFilterKind, "event");
+    assert.equal(h2.store.meta.calendarFilterCategory, "Work");
+    assert.equal(h2.store.meta.calendarFiltersCollapsed, true);
+    assert.equal(h2.store.meta.calendarBigPictureFilterKind, "reminder");
+    assert.equal(h2.store.meta.calendarBigPictureFilterCategory, "Personal");
+    assert.equal(h2.store.meta.calendarBigPictureFiltersCollapsed, false);
+
+    await h2.sheet.open();
+    h2.sheet.openCalendar();
+    await flush();
+    assert.equal(h2.sheet.root.querySelector(".zn-calendar-kind-filter").dataset.value, "event");
+    assert.equal(h2.sheet.root.querySelector(".zn-calendar-category-filter").dataset.value, "Work");
+    h2.sheet.openCalendarBigPicture();
+    await flush();
+    assert.equal(h2.sheet.root.querySelector(".zn-calendar-kind-filter").dataset.value, "reminder");
+    assert.equal(h2.sheet.root.querySelector(".zn-calendar-category-filter").dataset.value, "Personal");
+    h2.sheet.destroy();
+    await h2.store.close();
+  });
+
   console.log(`\nPASS notes-calendar-bigpicture (${passed} tests)`);
 })().catch((err) => {
   console.error(err);

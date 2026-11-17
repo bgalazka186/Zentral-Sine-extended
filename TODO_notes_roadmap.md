@@ -76,7 +76,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
-|    64 | `OW-35`     | `OPEN`    | Med-High            | S      | none              | Independent filter state for regular Calendar pane vs Big Picture popup                                  |
 |    65 | `OW-36`     | `OPEN`    | Med-High            | M      | none              | Spell-check right-click menu: spelling suggestions, add to dictionary / ignore, and language picker      |
 |    12 | `T2.9`      | `PARTIAL` | Med-High            | M      | none              | Daily-note lifecycle and archive policy inside Agenda                                                    |
 |    33 | `T2.10`     | `OPEN`    | Med                 | M      | none              | Work-free-day tint + selectable holiday calendars                                                        |
@@ -112,17 +111,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 ---
 
 ## Task blocks (same order as the Master Order)
-
-#### `OW-35` — Independent filter state for regular Calendar pane vs Big Picture popup
-
-**Status:** `OPEN` · **Impact:** Med-High · **Effort:** S · **Source:** owner live test 2026-11-16
-
-**Problem:** Regular Calendar view and Big Picture popup currently share `calendarFilterKind` and `calendarFilterCategory`, so changing filters inside Big Picture changes the regular Calendar pane (and vice versa).
-
-**Plan:**
-1. Store Big Picture filter state separately (`meta.calendarBigPictureFilterKind`, `meta.calendarBigPictureFilterCategory` — or `meta.calendarBigPictureFilters = { kind, category }`), cleanly validated in `metaFromRaw`.
-2. Route active filter reads/writes (`calendarFilterKind`/`calendarFilterCategory`) to the regular set when inline and the Big Picture set while Big Picture is open, re-rendering cleanly on open and close so each remembers its own filters independently across opens/reloads.
-3. Add tests in `tests/notes-calendar-bigpicture.test.cjs` confirming complete filter isolation and persistence between regular Calendar and Big Picture.
 
 #### `OW-36` — Spell-check right-click menu: spelling suggestions, add to dictionary / ignore, and language picker
 
@@ -429,9 +417,11 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.232.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`190/190` test files) passes in Node/fake-Zen at 3.3.232. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.233.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`190/190` test files) passes in Node/fake-Zen at 3.3.233. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
-Completed this session (3.3.163–3.3.232), every finished item archived in `docs/LEGACY_done_rows.md`:
+Completed this session (3.3.163–3.3.233), every finished item archived in `docs/LEGACY_done_rows.md`:
+
+- `OW-35` (3.3.233) — separated filter & controls-visibility state between the regular inline Calendar pane and the Big Picture popup (`additional/notes/calendar/ZentralNotesCalendar.js`, `additional/notes/ZentralNotes.uc.js`): added pure helpers (`CALENDAR_FILTER_KINDS`, `cleanCalendarFilterKind`, `cleanCalendarFilterCategory`, `calendarFilterKeysFor`, `readCalendarFilters`), persisted independent `meta.calendarBigPictureFilterKind`, `meta.calendarBigPictureFilterCategory`, and `meta.calendarBigPictureFiltersCollapsed` fields (validated in `metaFromRaw`), routed all filter/controls reads and writes through `activeCalendarFilters()` / `setActiveCalendarFilters()`, and refreshed filter controls and rendered items cleanly on Big Picture open/close whenever the two surfaces hold different filters without disturbing scroll/focus when identical. Verified in `tests/notes-calendar-bigpicture.test.cjs` (`190/190` suite).
 
 - `OW-34` (3.3.232) — added one-click quick-hide toggle (`.zn-calendar-controls-toggle`) for the Calendar filter/controls bar (`additional/notes/calendar/ZentralNotesCalendar.js`, `additional/notes/ZentralNotes.uc.js`, `additional/notes/ZentralNotes.css`, `additional/notes/i18n/en.js`, `additional/notes/i18n/pl.js`): collapses `.zn-calendar-controls` and immediately refits the calendar grid (`refitCalendar()`) to reclaim vertical height in small windows; persists per-window `meta.calendarFiltersCollapsed` (validated in `metaFromRaw`); displays an accent active-filter indicator dot (`.zn-calendar-controls-dot`) and active filter count tooltip/aria-label (`calendarActiveFilterCount`) whenever non-default kind or category filters are active while collapsed; and localizes cleanly in EN/PL (`cal.controls.hide`/`show`/`showActive`). Verified in `tests/notes-calendar-controls-toggle.test.cjs` (`190/190` suite).
 

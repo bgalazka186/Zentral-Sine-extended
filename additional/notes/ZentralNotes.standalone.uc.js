@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.232
+// @version 3.3.233
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.232, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.233, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.232";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.233";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -6851,6 +6851,24 @@ const __zentralEmbeddedLoader = (function () {
     if (typeof category === "string" && category.trim()) count++;
     return count;
   }
+  // OW-35: Independent filter & controls-visibility state for regular Calendar pane vs Big Picture popup.
+  const CALENDAR_FILTER_KINDS = Object.freeze(["all", "event", "reminder"]);
+  function cleanCalendarFilterKind(value) { return CALENDAR_FILTER_KINDS.includes(value) ? value : "all"; }
+  function cleanCalendarFilterCategory(value) { return typeof value === "string" ? value.slice(0, 80) : ""; }
+  function calendarFilterKeysFor(isBigPicture) {
+    return isBigPicture
+      ? { kindKey: "calendarBigPictureFilterKind", categoryKey: "calendarBigPictureFilterCategory", collapsedKey: "calendarBigPictureFiltersCollapsed" }
+      : { kindKey: "calendarFilterKind", categoryKey: "calendarFilterCategory", collapsedKey: "calendarFiltersCollapsed" };
+  }
+  function readCalendarFilters(meta, isBigPicture) {
+    const keys = calendarFilterKeysFor(Boolean(isBigPicture));
+    const src = meta && typeof meta === "object" ? meta : {};
+    return {
+      kind: cleanCalendarFilterKind(src[keys.kindKey]),
+      category: cleanCalendarFilterCategory(src[keys.categoryKey]),
+      collapsed: src[keys.collapsedKey] === true,
+    };
+  }
   // T2.6: Calendar Big Picture viewport card sizes (% of browser viewport) and geometry helper.
   const CALENDAR_BIG_PICTURE_SIZES = Object.freeze([70, 80, 90, 95]);
   const DEFAULT_CALENDAR_BIG_PICTURE_SIZE = 90;
@@ -10546,7 +10564,7 @@ const __zentralEmbeddedLoader = (function () {
   const api = {
     KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, translate, t, pluralCategory, tCount, translationKeys, missingTranslationKeys, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, lineScheduleSignature, cleanTextSchedule, scheduleSignatureFromItem, scheduleFromParsedLine, reconcileListItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
     cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
@@ -18228,9 +18246,9 @@ __zentralShim.register = function (def) {
       const backedUp = new Set();
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, dockPx: 0, gapPx: 0, cardDock: "", cardW: 0, cardH: 0, cardHShare: 0,
         allNewChoice: "note", calendarClockMode: "both",
-        calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarFiltersCollapsed: false, calendarTab: "tree",
+        calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarFiltersCollapsed: false, calendarBigPictureFiltersCollapsed: false, calendarTab: "tree",
         calendarBigPictureSize: CALENDAR_PART ? CALENDAR_PART.DEFAULT_CALENDAR_BIG_PICTURE_SIZE : 90,
-        calendarView: "month", calendarWeekStart: 1, calendarWeekNumbers: false, calendarWeekSpan: { days: 7, anchor: "weekStart" }, calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
+        calendarView: "month", calendarWeekStart: 1, calendarWeekNumbers: false, calendarWeekSpan: { days: 7, anchor: "weekStart" }, calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarBigPictureFilterKind: "all", calendarBigPictureFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
         // The hours Week and Day show ({ on, startMin, endMin }; off = the whole day). Replaced as a whole, never changed in place.
         calendarHours: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHours(null) : { on: false, startMin: 480, endMin: 1200 },
         // The size of each calendar view ("auto" = fitted to the pane, or px; OW-03). Replaced as a whole, never changed in place.
@@ -18977,6 +18995,7 @@ __zentralShim.register = function (def) {
             meta.calendarPaneCollapsed = raw.calendarPaneCollapsed === true;
             if (meta.calendarTreeCollapsed && meta.calendarPaneCollapsed) meta.calendarTreeCollapsed = meta.calendarPaneCollapsed = false;
             meta.calendarFiltersCollapsed = raw.calendarFiltersCollapsed === true;
+            meta.calendarBigPictureFiltersCollapsed = raw.calendarBigPictureFiltersCollapsed === true;
             meta.calendarTab = raw.calendarTab === "calendar" ? "calendar" : "tree";
             meta.calendarBigPictureSize = CALENDAR_PART.cleanCalendarBigPictureSize(raw.calendarBigPictureSize);
             meta.calendarView = ["month", "upcoming", "agenda", "week", "day"].includes(raw.calendarView) ? raw.calendarView : "month";
@@ -18990,8 +19009,10 @@ __zentralShim.register = function (def) {
             meta.calendarHours = CALENDAR_PART.cleanCalendarHours(raw.calendarHours);
             const daysForward = Number(raw.calendarDaysForward);
             meta.calendarDaysForward = [3, 7, 14, 30].includes(daysForward) ? daysForward : 7;
-            meta.calendarFilterKind = ["all", "event", "reminder"].includes(raw.calendarFilterKind) ? raw.calendarFilterKind : "all";
-            meta.calendarFilterCategory = typeof raw.calendarFilterCategory === "string" ? raw.calendarFilterCategory.slice(0, 80) : "";
+            meta.calendarFilterKind = CALENDAR_PART.cleanCalendarFilterKind(raw.calendarFilterKind);
+            meta.calendarFilterCategory = CALENDAR_PART.cleanCalendarFilterCategory(raw.calendarFilterCategory);
+            meta.calendarBigPictureFilterKind = CALENDAR_PART.cleanCalendarFilterKind(raw.calendarBigPictureFilterKind);
+            meta.calendarBigPictureFilterCategory = CALENDAR_PART.cleanCalendarFilterCategory(raw.calendarBigPictureFilterCategory);
             meta.calendarCursor = CALENDAR_PART.parseYmd(raw.calendarCursor) ? raw.calendarCursor : "";
             meta.calendarDisplayZone = CALENDAR_PART.cleanZone(raw.calendarDisplayZone) || "";
             meta.calendarRecentZones = CALENDAR_PART.cleanRecentZones(raw.calendarRecentZones);
@@ -27084,14 +27105,39 @@ __zentralShim.register = function (def) {
         const monthSel = calendarContent.querySelector(".zn-cal-month-selection");
         if (monthSel && state.selectionScrollTop !== null) monthSel.scrollTop = Math.max(0, state.selectionScrollTop);
       }
+      function activeCalendarFilterKeys(isBig = Boolean(bigPicture)) {
+        return CALENDAR_PART?.calendarFilterKeysFor?.(Boolean(isBig)) || {
+          kindKey: isBig ? "calendarBigPictureFilterKind" : "calendarFilterKind",
+          categoryKey: isBig ? "calendarBigPictureFilterCategory" : "calendarFilterCategory",
+          collapsedKey: isBig ? "calendarBigPictureFiltersCollapsed" : "calendarFiltersCollapsed",
+        };
+      }
+      function activeCalendarFilters(isBig = Boolean(bigPicture)) {
+        return CALENDAR_PART?.readCalendarFilters?.(store.meta, Boolean(isBig)) || {
+          kind: "all",
+          category: "",
+          collapsed: false,
+        };
+      }
+      function setActiveCalendarFilters(patch, isBig = Boolean(bigPicture)) {
+        const keys = activeCalendarFilterKeys(isBig);
+        const update = {};
+        if ("kind" in patch) update[keys.kindKey] = CALENDAR_PART?.cleanCalendarFilterKind?.(patch.kind) || "all";
+        if ("category" in patch) update[keys.categoryKey] = CALENDAR_PART?.cleanCalendarFilterCategory?.(patch.category) || "";
+        if ("collapsed" in patch) update[keys.collapsedKey] = Boolean(patch.collapsed);
+        if (Object.keys(update).length) store.setMeta(update);
+      }
       function closeCalendarBigPicture({ restoreFocus = true } = {}) {
         if (!bigPicture) return false;
         const bp = bigPicture;
+        const beforeFilters = activeCalendarFilters(true);
         const liveState = captureCalendarViewState();
         const activeEl = document.activeElement;
         const focusedInPane = activeEl && calendarPane.contains(activeEl) ? activeEl : null;
         const focusedDayBtn = focusedInPane?.closest?.(".zn-cal-month-date[data-day]")?.getAttribute("data-day") || "";
         bigPicture = null;
+        const afterFilters = activeCalendarFilters(false);
+        const filtersChanged = beforeFilters.kind !== afterFilters.kind || beforeFilters.category !== afterFilters.category;
         hideCalendarHoverCard();
         if (menu?.calendar) closeMenu();
         if (!restoreFocus && dialog?.dataset.calendarLayer === "true") closeDialog();
@@ -27113,12 +27159,14 @@ __zentralShim.register = function (def) {
         delete calendarPane.dataset.bigPicture;
         delete root.dataset.bigPicture;
         syncCalendarBigPictureButton();
+        syncCalendarControlsToggle();
         // Restore scroll positions immediately after DOM reparenting (which resets scrollTop in real browsers),
         // so updateAllLayout/refitCalendar sees the exact live scroll offset even if a re-render occurs.
         restorePaneScrollSnapshot(liveState);
         if (isOpen && !destroyed) {
           updateAllLayout(true);
           if (!calendarPane.hidden) {
+            if (filtersChanged) renderCalendar();
             restorePaneScrollSnapshot(liveState);
             restoreCalendarViewState(liveState);
           }
@@ -27255,10 +27303,15 @@ __zentralShim.register = function (def) {
           applyCalendarBigPictureBox();
           scheduleCalendarFit();
         });
+        const beforeFilters = activeCalendarFilters(false);
+        const afterFilters = activeCalendarFilters(true);
+        const filtersChanged = beforeFilters.kind !== afterFilters.kind || beforeFilters.category !== afterFilters.category;
         syncCalendarBigPictureButton();
+        syncCalendarControlsToggle();
         applyCalendarBigPictureBox();
         restorePaneScrollSnapshot(enterState);
-        refitCalendar();
+        if (filtersChanged) renderCalendar();
+        else refitCalendar();
         restorePaneScrollSnapshot(enterState);
         restoreCalendarViewState(enterState);
         if (!document.activeElement || !card.contains(document.activeElement)) {
@@ -27267,8 +27320,8 @@ __zentralShim.register = function (def) {
         return true;
       }
       listen(btnCalendarControlsToggle, "click", () => {
-        const next = store.meta.calendarFiltersCollapsed !== true;
-        store.setMeta({ calendarFiltersCollapsed: next });
+        const next = !activeCalendarFilters().collapsed;
+        setActiveCalendarFilters({ collapsed: next });
         syncCalendarControlsToggle();
         if (!calendarPane.hidden) refitCalendar();
       });
@@ -27277,10 +27330,11 @@ __zentralShim.register = function (def) {
         else openCalendarBigPicture();
       });
       function syncCalendarControlsToggle() {
-        const collapsed = store.meta.calendarFiltersCollapsed === true;
-        const kind = ["all", "event", "reminder"].includes(store.meta.calendarFilterKind) ? store.meta.calendarFilterKind : "all";
+        const filters = activeCalendarFilters();
+        const collapsed = filters.collapsed;
+        const kind = filters.kind;
         const categories = store.items?.categoryList?.() || [];
-        const requestedCategory = typeof store.meta.calendarFilterCategory === "string" ? store.meta.calendarFilterCategory : "";
+        const requestedCategory = filters.category;
         const category = categories.some((entry) => entry.name === requestedCategory) ? requestedCategory : "";
         const activeFilters = CALENDAR_PART?.calendarActiveFilterCount?.(kind, category) || 0;
         calendarControls.hidden = collapsed;
@@ -28608,14 +28662,14 @@ __zentralShim.register = function (def) {
         return [...unique.values()].filter((item) => item.status !== "cancelled");
       }
       function calendarFilteredItems() {
-        const kind = ["all", "event", "reminder"].includes(store.meta.calendarFilterKind) ? store.meta.calendarFilterKind : "all";
-        const category = typeof store.meta.calendarFilterCategory === "string" ? store.meta.calendarFilterCategory : "";
+        const { kind, category } = activeCalendarFilters();
         return calendarBaseItems().filter((item) => (kind === "all" || item.x.kind === kind) && (!category || item.x.category === category));
       }
       function syncCalendarFilterOptions() {
-        const kind = ["all", "event", "reminder"].includes(store.meta.calendarFilterKind) ? store.meta.calendarFilterKind : "all";
+        const filters = activeCalendarFilters();
+        const kind = filters.kind;
         const categories = store.items?.categoryList?.() || [];
-        const requestedCategory = typeof store.meta.calendarFilterCategory === "string" ? store.meta.calendarFilterCategory : "";
+        const requestedCategory = filters.category;
         const category = categories.some((entry) => entry.name === requestedCategory) ? requestedCategory : "";
         const view = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
         calendarHeadingEl.textContent = t("cal.heading");
@@ -28642,7 +28696,7 @@ __zentralShim.register = function (def) {
         calendarKindSelect.textContent = t(kind === "event" ? "cal.filter.events" : kind === "reminder" ? "cal.filter.reminders" : "cal.filter.allItems");
         calendarCategorySelect.dataset.value = category;
         calendarCategorySelect.textContent = category || t("cal.filter.allCategories");
-        if (category !== requestedCategory) store.setMeta({ calendarFilterCategory: category });
+        if (category !== requestedCategory) setActiveCalendarFilters({ category });
         syncCalendarControlsToggle();
       }
       function calendarChoiceMenu(anchor, entries, current, choose) {
@@ -31310,12 +31364,12 @@ __zentralShim.register = function (def) {
           { value: "event", label: t("cal.filter.events") },
           { value: "reminder", label: t("cal.filter.reminders") },
         ],
-        store.meta.calendarFilterKind || "all", (value) => { store.setMeta({ calendarFilterKind: value }); renderCalendar(); }));
+        activeCalendarFilters().kind, (value) => { setActiveCalendarFilters({ kind: value }); renderCalendar(); }));
       listen(calendarCategorySelect, "click", () => {
         const categories = store.items?.categoryList?.() || [];
         calendarChoiceMenu(calendarCategorySelect,
           [{ value: "", label: t("cal.filter.allCategories") }, ...categories.map((entry) => ({ value: entry.name, label: entry.name }))],
-          store.meta.calendarFilterCategory || "", (value) => { store.setMeta({ calendarFilterCategory: value }); renderCalendar(); });
+          activeCalendarFilters().category, (value) => { setActiveCalendarFilters({ category: value }); renderCalendar(); });
       });
       function calendarWeekStart() {
         return calendarShownWeekDays()[0];
