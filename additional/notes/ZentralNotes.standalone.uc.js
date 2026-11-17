@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.210
+// @version 3.3.211
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.210, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.211, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.210";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.211";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -9705,6 +9705,121 @@ __zentralShim.register = function (def) {
       };
       walk(root, 0);
       return rows;
+    }
+
+    // ---- Tree multi-selection (T3.2) --------------------------------------------------------------
+    // Pure range/toggle selection and batch target resolution across notes and folders.
+    function applyTreeSelection(state, key, orderedKeys = [], { shift = false, toggle = false } = {}) {
+      const prevSelected = state?.selected instanceof Set ? new Set(state.selected) : new Set(Array.isArray(state?.selected) ? state.selected : []);
+      const prevAnchor = typeof state?.anchor === "string" ? state.anchor : "";
+      const k = typeof key === "string" ? key : "";
+      const order = Array.isArray(orderedKeys) ? orderedKeys : [];
+      if (!k) return { selected: prevSelected, anchor: prevAnchor };
+      if (shift) {
+        const toIdx = order.indexOf(k);
+        const fromIdx = prevAnchor ? order.indexOf(prevAnchor) : -1;
+        if (toIdx >= 0 && fromIdx >= 0) {
+          const lo = Math.min(fromIdx, toIdx), hi = Math.max(fromIdx, toIdx);
+          const next = toggle ? new Set(prevSelected) : new Set();
+          for (let i = lo; i <= hi; i++) next.add(order[i]);
+          return { selected: next, anchor: prevAnchor };
+        }
+        const next = toggle ? new Set(prevSelected) : new Set();
+        next.add(k);
+        return { selected: next, anchor: prevAnchor || k };
+      }
+      if (toggle) {
+        const next = new Set(prevSelected);
+        if (next.has(k)) next.delete(k);
+        else next.add(k);
+        return { selected: next, anchor: k };
+      }
+      return { selected: new Set(), anchor: k };
+    }
+    function resolveTreeSelection(selectedKeys, notes = [], folders = []) {
+      const keys = selectedKeys instanceof Set ? [...selectedKeys] : Array.isArray(selectedKeys) ? selectedKeys : [];
+      const liveNotes = (Array.isArray(notes) ? notes : []).filter((n) => n && !n.trashed);
+      const noteById = new Map(liveNotes.map((n) => [n.id, n]));
+      const validFolders = new Set(allFolderIds(liveNotes, Array.isArray(folders) ? folders : []));
+      const rawFolderIds = new Set();
+      const directNoteIdSet = new Set();
+      for (const k of keys) {
+        if (typeof k !== "string") continue;
+        if (k.startsWith("f:")) {
+          const fid = cleanFolder(k.slice(2));
+          if (fid && validFolders.has(fid)) rawFolderIds.add(fid);
+        } else if (k.startsWith("n:") || k.startsWith("p:")) {
+          const nid = k.slice(2);
+          if (noteById.has(nid)) directNoteIdSet.add(nid);
+        }
+      }
+      const allSelectedFolders = [...rawFolderIds].sort((a, b) => folderDepth(a) - folderDepth(b) || a.localeCompare(b));
+      const topFolderIds = [];
+      for (const fid of allSelectedFolders) {
+        if (topFolderIds.some((parent) => inFolder(fid, parent))) continue;
+        topFolderIds.push(fid);
+      }
+      const effectiveById = new Map();
+      for (const nid of directNoteIdSet) effectiveById.set(nid, noteById.get(nid));
+      for (const n of liveNotes) {
+        const nf = cleanFolder(n.folder);
+        if (nf && topFolderIds.some((fid) => inFolder(nf, fid))) effectiveById.set(n.id, n);
+      }
+      const effectiveNotes = [...effectiveById.values()];
+      const movableNoteIds = [];
+      for (const nid of directNoteIdSet) {
+        const n = noteById.get(nid);
+        if (!n || n._sharedFromOtherSpace) continue;
+        const nf = cleanFolder(n.folder);
+        if (nf && topFolderIds.some((fid) => inFolder(nf, fid))) continue;
+        movableNoteIds.push(nid);
+      }
+      const trashableNotes = effectiveNotes.filter((n) => !n._sharedFromOtherSpace);
+      const standaloneTrashNoteIds = [...directNoteIdSet].filter((nid) => {
+        const n = noteById.get(nid);
+        if (!n || n._sharedFromOtherSpace) return false;
+        const nf = cleanFolder(n.folder);
+        return !(nf && topFolderIds.some((fid) => inFolder(nf, fid)));
+      });
+      const sharedSkipped = effectiveNotes.length - trashableNotes.length;
+      return {
+        folderIds: allSelectedFolders,
+        topFolderIds,
+        directNoteIds: [...directNoteIdSet],
+        movableNoteIds,
+        effectiveNotes,
+        trashableNotes,
+        standaloneTrashNoteIds,
+        counts: {
+          selectedRows: keys.length,
+          folders: allSelectedFolders.length,
+          notes: directNoteIdSet.size,
+          effectiveNotes: effectiveNotes.length,
+          sharedSkipped,
+        },
+      };
+    }
+    const BATCH_TAG_RE = /^[A-Za-z_\u00C0-\uFFFF][\w\u00C0-\uFFFF-]*(?:\/[A-Za-z_\u00C0-\uFFFF][\w\u00C0-\uFFFF-]*)*$/;
+    function cleanBatchTag(raw) {
+      const cleaned = cleanPill(String(raw ?? "").replace(/^#+/, ""));
+      if (!cleaned || !BATCH_TAG_RE.test(cleaned)) return "";
+      if (/^(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(cleaned)) return "";
+      return cleaned;
+    }
+    function appendTagToBody(noteOrBody, rawTag) {
+      const tag = cleanBatchTag(rawTag);
+      const note = typeof noteOrBody === "string" ? { body: noteOrBody } : (noteOrBody || { body: "" });
+      const body = normalizeNewlines(String(note.body ?? ""));
+      if (!tag) return body;
+      if (noteTags(note).some((t) => t.toLowerCase() === tag.toLowerCase())) return body;
+      const trimmedEnd = body.replace(/[ \t\n]+$/, "");
+      if (!trimmedEnd) return "#" + tag;
+      const lines = trimmedEnd.split("\n");
+      const last = lines[lines.length - 1] || "";
+      if (/^(?:#[A-Za-z_\u00C0-\uFFFF][\w\u00C0-\uFFFF-]*(?:\/[A-Za-z_\u00C0-\uFFFF][\w\u00C0-\uFFFF-]*)*)(?:\s+#[A-Za-z_\u00C0-\uFFFF][\w\u00C0-\uFFFF-]*(?:\/[A-Za-z_\u00C0-\uFFFF][\w\u00C0-\uFFFF-]*)*)*$/.test(last.trim())) {
+        return trimmedEnd + " #" + tag;
+      }
+      return trimmedEnd + "\n\n#" + tag;
     }
 
     const MARKERS_RE = /\*\*|==(?:\{(?:\w+|#[0-9a-fA-F]{6})\})?|~~|`/g;
@@ -22126,7 +22241,7 @@ __zentralShim.register = function (def) {
         normalizeCombo, comboFromEvent, parseShortcutMap, effectiveShortcuts, findShortcutConflict,
         matchShortcutAction, assignShortcut, QUICK_OPTIONS, stepOption, PREF,
         alignDelim, buildImage, insertImageMd, pastedWebAddress, CODE_LANGS, CALLOUT_KINDS, calloutId, insertCallout,
-        HIDEABLE_TOOLS, parseHidden, serializeHidden,
+        HIDEABLE_TOOLS, parseHidden, serializeHidden, applyTreeSelection, resolveTreeSelection, cleanBatchTag, appendTagToBody,
         normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, clearOfRect, sideOf, createHoldAction,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
@@ -23164,12 +23279,20 @@ __zentralShim.register = function (def) {
       const chipTrash = h("button", { type: "button", class: "zn-chip" }, "Trash");
       const chipTags = h("button", { type: "button", class: "zn-chip", "aria-haspopup": "menu", "aria-label": "Filter notes by tag" }, "Tags");
       const chipEmpty = h("button", { type: "button", class: "zn-chip zn-chip-danger" }, "Empty trash");
+      const batchCount = h("span", { class: "zn-batch-count", "aria-live": "polite" }, "");
+      const batchMoveBtn = h("button", { type: "button", class: "zn-chip zn-batch-btn" }, "Move\u2026");
+      const batchAssignBtn = h("button", { type: "button", class: "zn-chip zn-batch-btn" }, "Tag / label\u2026");
+      const batchExportBtn = h("button", { type: "button", class: "zn-chip zn-batch-btn", "aria-haspopup": "menu" }, "Export\u2026");
+      const batchTrashBtn = h("button", { type: "button", class: "zn-chip zn-chip-danger zn-batch-btn" }, "Trash");
+      const batchClearBtn = iconButton("x", "Clear selection", "zn-batch-clear");
+      const batchBar = h("div", { class: "zn-batch-bar", role: "toolbar", "aria-label": "Selection actions", hidden: true }, batchCount, h("span", { class: "zn-grow" }), batchMoveBtn, batchAssignBtn, batchExportBtn, batchTrashBtn, batchClearBtn);
       const listItems = h("div", { class: "zn-items", role: "list" });
       const listEl = h(
         "div",
         { class: "zn-list" },
         h("div", { class: "zn-list-head" }, h("span", { class: "zn-search-wrap" }, icon("search", 13), search), btnFolder, newSplit),
         h("div", { class: "zn-chips" }, chipAll, chipRecent, chipTrash, chipTags, h("span", { class: "zn-grow" }), chipEmpty),
+        batchBar,
         listItems,
       );
       // T2.4a: All notes is a responsive two-pane workspace. The folder tree remains the existing list/tree
@@ -27581,6 +27704,11 @@ __zentralShim.register = function (def) {
       item.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         e.stopPropagation();
+        const k = item.dataset?.key || item.getAttribute?.("data-key") || "";
+        if (!trashed && treeSelection.selected.size && k && treeSelection.selected.has(k)) {
+          showMenu(pointAnchor(e), batchMenuItems());
+          return;
+        }
         showMenu(pointAnchor(e), noteMenuItems(n));
       });
       if (n.id === currentId) item.classList.add("is-current");
@@ -27651,11 +27779,22 @@ __zentralShim.register = function (def) {
       const open = () => {
         openNote(n.id);
       };
-      item.addEventListener("click", open);
+      const rowKey = (opts.pinnedRow ? "p:" : "n:") + n.id;
+      if (!trashed && treeSelection.selected.has(rowKey)) {
+        item.classList.add("is-selected");
+        item.setAttribute("aria-selected", "true");
+      }
+      item.addEventListener("click", (e) => {
+        if (!trashed && handleRowSelectionClick(e, rowKey)) return;
+        if (!trashed) { treeSelection = applyTreeSelection(treeSelection, rowKey, selectableListKeys(), {}); paintTreeSelection(); }
+        open();
+      });
       item.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
           e.preventDefault();
           open();
+        } else if (e.key === " " && !trashed && (e.ctrlKey || e.metaKey || e.shiftKey)) {
+          handleRowSelectionClick(e, rowKey);
         } else if (e.key === "ArrowDown") {
           e.preventDefault();
           (item.nextElementSibling || item).focus?.();
@@ -27676,6 +27815,246 @@ __zentralShim.register = function (def) {
       }
       // ---- folder tree (D2) ----------------------------------------------------------------------
       let dragNoteId = "";
+      // ---- T3.2 Tree multi-selection state & batch operations -------------------------------------
+      let treeSelection = { selected: new Set(), anchor: "" };
+      const rowKeyOf = (el) => el?.dataset?.key || el?.getAttribute?.("data-key") || "";
+      const selectableListKeys = () => [...listItems.children].filter((c) => c.classList?.contains?.("zn-item") && rowKeyOf(c)).map(rowKeyOf);
+      function resolvedSelection() {
+        return resolveTreeSelection(treeSelection.selected, store.list(), store.meta.folders);
+      }
+      function paintTreeSelection() {
+        const active = filter !== "trash" && treeSelection.selected.size > 0;
+        for (const row of listItems.children) {
+          const k = rowKeyOf(row);
+          if (!k || !row.classList?.contains?.("zn-item")) continue;
+          const isSel = active && treeSelection.selected.has(k);
+          row.classList.toggle("is-selected", isSel);
+          if (isSel) row.setAttribute("aria-selected", "true");
+          else row.removeAttribute("aria-selected");
+        }
+        batchBar.hidden = !active;
+        if (active) {
+          const res = resolvedSelection();
+          const nCount = res.counts.notes, fCount = res.counts.folders;
+          const parts = [];
+          if (nCount) parts.push(`${nCount} note${nCount === 1 ? "" : "s"}`);
+          if (fCount) parts.push(`${fCount} folder${fCount === 1 ? "" : "s"}`);
+          batchCount.textContent = `${treeSelection.selected.size} selected` + (parts.length ? ` (${parts.join(", ")})` : "");
+          batchMoveBtn.disabled = !res.topFolderIds.length && !res.movableNoteIds.length;
+          batchAssignBtn.disabled = !res.effectiveNotes.length;
+          batchExportBtn.disabled = !res.effectiveNotes.length;
+          batchTrashBtn.disabled = !res.topFolderIds.length && !res.trashableNotes.length;
+        } else {
+          batchCount.textContent = "";
+        }
+      }
+      function clearTreeSelection() {
+        if (!treeSelection.selected.size && !treeSelection.anchor) return;
+        treeSelection = { selected: new Set(), anchor: "" };
+        paintTreeSelection();
+      }
+      function pruneTreeSelection() {
+        if (filter === "trash") {
+          treeSelection = { selected: new Set(), anchor: "" };
+          paintTreeSelection();
+          return;
+        }
+        if (!treeSelection.selected.size) { paintTreeSelection(); return; }
+        const liveNotes = new Set(store.list().map((n) => n.id));
+        const liveFolders = new Set(allFolderIds([...store.tree().notes, ...store.list()], store.meta.folders));
+        const next = new Set();
+        for (const k of treeSelection.selected) {
+          if (k.startsWith("f:") && liveFolders.has(k.slice(2))) next.add(k);
+          else if ((k.startsWith("n:") || k.startsWith("p:")) && liveNotes.has(k.slice(2))) next.add(k);
+        }
+        treeSelection = { selected: next, anchor: next.has(treeSelection.anchor) ? treeSelection.anchor : "" };
+        paintTreeSelection();
+      }
+      function handleRowSelectionClick(e, key) {
+        if (filter === "trash") return false;
+        const shift = !!e.shiftKey;
+        const toggle = !!(e.ctrlKey || e.metaKey);
+        if (!shift && !toggle) return false;
+        e.preventDefault?.();
+        e.stopPropagation?.();
+        treeSelection = applyTreeSelection(treeSelection, key, selectableListKeys(), { shift, toggle });
+        paintTreeSelection();
+        return true;
+      }
+      function askBatchMove() {
+        const res = resolvedSelection();
+        if (!res.topFolderIds.length && !res.movableNoteIds.length) {
+          flash(res.counts.sharedSkipped ? "Shared notes from other spaces cannot be moved here" : "Nothing selected to move");
+          return;
+        }
+        const allFids = folderTargets();
+        const excluded = (id) => res.topFolderIds.some((fid) => id === fid || id.startsWith(fid + "/"));
+        let maxSpan = 0;
+        for (const fid of res.topFolderIds) {
+          const span = Math.max(...allFids.filter((x) => x === fid || x.startsWith(fid + "/")).map(folderDepth), 1) - folderDepth(fid) + 1;
+          if (span > maxSpan) maxSpan = span;
+        }
+        const targets = allFids.filter((id) => !excluded(id) && (maxSpan === 0 || folderDepth(id) + maxSpan <= FOLDER_MAX_DEPTH));
+        const totalItems = res.topFolderIds.length + res.movableNoteIds.length;
+        askFolderPick(`Move ${totalItems} selected item${totalItems === 1 ? "" : "s"} to`, targets, (destId) => {
+          let movedFolders = 0, skippedFolders = 0, movedNotes = 0;
+          for (const fid of res.topFolderIds) {
+            if (parentOfFolder(fid) === destId) continue;
+            if (store.moveFolder(fid, destId)) movedFolders++;
+            else skippedFolders++;
+          }
+          for (const nid of res.movableNoteIds) {
+            if (store.setFolder(nid, destId)) movedNotes++;
+          }
+          clearTreeSelection();
+          scheduleList();
+          const parts = [];
+          if (movedFolders) parts.push(`${movedFolders} folder${movedFolders === 1 ? "" : "s"}`);
+          if (movedNotes) parts.push(`${movedNotes} note${movedNotes === 1 ? "" : "s"}`);
+          if (skippedFolders) parts.push(`${skippedFolders} skipped`);
+          flash(parts.length ? "Moved " + parts.join(", ") : "Nothing moved");
+        });
+      }
+      function askBatchAssign() {
+        const res = resolvedSelection();
+        if (!res.effectiveNotes.length) { flash("No notes in selection"); return; }
+        const nCount = res.effectiveNotes.length;
+        const tagField = field("Add #tag (optional)", "", "e.g. work/q4");
+        const labelField = field("Set label (optional — leave empty to keep)", "", "e.g. Priority");
+        labelField.input.maxLength = LABEL_MAX;
+        const cats = store.items?.categoryList?.() || [];
+        let chosenCat = "";
+        const catRow = h("div", { class: "zn-aligns" });
+        const catButtons = [];
+        const paintCats = () => {
+          for (const { btn, name } of catButtons) btn.classList.toggle("is-on", chosenCat === name);
+        };
+        if (cats.length) {
+          const keepBtn = chip("Keep existing", true);
+          keepBtn.addEventListener("click", () => { chosenCat = ""; paintCats(); });
+          catButtons.push({ btn: keepBtn, name: "" });
+          catRow.append(keepBtn);
+          for (const cat of cats) {
+            const b = chip(cat.name);
+            b.addEventListener("click", () => { chosenCat = cat.name; paintCats(); });
+            catButtons.push({ btn: b, name: cat.name });
+            catRow.append(b);
+          }
+        }
+        const cancel = chip("Cancel");
+        const apply = chip("Apply to " + nCount + " note" + (nCount === 1 ? "" : "s"), true);
+        const bodyParts = [tagField.row, labelField.row];
+        if (cats.length) bodyParts.push(h("div", { class: "zn-field" }, h("label", {}, "Calendar category for linked items"), catRow));
+        openCard(`Assign to ${nCount} note${nCount === 1 ? "" : "s"}`, ...bodyParts, h("div", { class: "zn-dialog-actions" }, cancel, apply));
+        const run = () => {
+          const rawTag = tagField.input.value.trim();
+          const tag = rawTag ? cleanBatchTag(rawTag) : "";
+          if (rawTag && !tag) { flash("Invalid tag name (use letters, numbers, -, _ or /)"); tagField.input.focus?.(); return; }
+          const labelVal = cleanLabel(labelField.input.value);
+          closeDialog();
+          let tagged = 0, labeled = 0, catUpdated = 0;
+          const noteIdSet = new Set();
+          for (const n of res.effectiveNotes) {
+            const live = store.get(n.id);
+            if (!live || live.trashed) continue;
+            noteIdSet.add(live.id);
+            if (tag) {
+              const nextBody = appendTagToBody(live, tag);
+              if (nextBody !== normalizeNewlines(String(live.body ?? ""))) {
+                store.update(live.id, nextBody, null);
+                tagged++;
+              }
+            }
+            if (labelVal) {
+              store.setLabel(live.id, labelVal);
+              labeled++;
+            }
+          }
+          if (chosenCat && store.items?.list && store.items?.update) {
+            for (const item of store.items.list()) {
+              if (item?.x?.noteId && noteIdSet.has(item.x.noteId) && item.category !== chosenCat) {
+                if (store.items.update(item.id, { category: chosenCat })) catUpdated++;
+              }
+            }
+          }
+          scheduleList();
+          const done = [];
+          if (tagged) done.push(`#${tag} added to ${tagged}`);
+          if (labeled) done.push(`label set on ${labeled}`);
+          if (catUpdated) done.push(`${catUpdated} calendar item${catUpdated === 1 ? "" : "s"} set to ${chosenCat}`);
+          flash(done.length ? done.join(", ") : "No changes applied");
+        };
+        cancel.addEventListener("click", closeDialog);
+        apply.addEventListener("click", run);
+        tagField.input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); run(); } });
+        labelField.input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); run(); } });
+        tagField.input.focus?.({ preventScroll: true });
+      }
+      function showBatchExportMenu(anchor) {
+        const res = resolvedSelection();
+        if (!res.effectiveNotes.length) { flash("No notes selected to export"); return; }
+        const snapshot = markdownExportSnapshot(res.effectiveNotes);
+        showMenu(anchor, [
+          { icon: "save", label: `Export ${snapshot.length} as Markdown files\u2026`, action: () => askMarkdownExport(snapshot, (options) => env.exportAll(snapshot, options)) },
+          { icon: "save", label: `Export ${snapshot.length} as ZIP\u2026`, action: () => askMarkdownExport(snapshot, (options) => askExport("zip", async () => { const k = await env.exportZip(snapshot, options); if (k) flash(`Zipped ${k} notes`); })) },
+          { icon: "save", label: `Export ${snapshot.length} as Obsidian vault\u2026`, action: async () => { const r = await env.exportObsidianVault?.({ notes: res.effectiveNotes, readOptions: env.readOpts?.() || {} }); if (r?.ok) { const c = r.counts || {}; flash(`Exported ${c.notes || 0} notes${c.assets ? ` and ${c.assets} files` : ""} to Obsidian vault`); } else if (r && !r.cancelled) { flash(r.error || "Could not export Obsidian vault"); } } },
+        ]);
+      }
+      function askBatchTrash() {
+        const res = resolvedSelection();
+        if (!res.topFolderIds.length && !res.trashableNotes.length) {
+          flash(res.counts.sharedSkipped ? "Shared notes from other spaces cannot be moved to Trash here" : "Nothing selected to move to Trash");
+          return;
+        }
+        const doTrash = () => {
+          const trashedIds = new Set();
+          for (const fid of res.topFolderIds) {
+            for (const n of store.list()) {
+              if (!n._sharedFromOtherSpace && cleanFolder(n.folder) && inFolder(cleanFolder(n.folder), fid)) trashedIds.add(n.id);
+            }
+            store.removeFolder(fid, "toTrash");
+          }
+          for (const nid of res.standaloneTrashNoteIds) {
+            if (store.get(nid) && !store.get(nid).trashed) {
+              store.trash(nid);
+              trashedIds.add(nid);
+            }
+          }
+          if (currentId && trashedIds.has(currentId)) currentId = "";
+          clearTreeSelection();
+          scheduleList();
+          const msg = `Moved ${trashedIds.size} note${trashedIds.size === 1 ? "" : "s"} to Trash` + (res.counts.sharedSkipped ? ` (${res.counts.sharedSkipped} shared skipped)` : "");
+          flash(msg);
+        };
+        askReminderImpact(res.trashableNotes, {
+          bulk: true,
+          title: `Move ${res.trashableNotes.length} selected note${res.trashableNotes.length === 1 ? "" : "s"} to Trash?`,
+          actionLabel: "Move to Trash",
+          run: doTrash,
+        });
+      }
+      function batchMenuItems() {
+        const res = resolvedSelection();
+        const n = res.effectiveNotes.length;
+        return [
+          { icon: "folder", label: "Move selected to folder\u2026", enabled: res.topFolderIds.length > 0 || res.movableNoteIds.length > 0, action: () => queueMicrotask(askBatchMove) },
+          { icon: "hash", label: "Assign tag / label / category\u2026", enabled: n > 0, action: () => queueMicrotask(askBatchAssign) },
+          { icon: "save", label: `Export ${n} selected`, enabled: n > 0, group: [
+            { icon: "save", label: "Export as Markdown files\u2026", action: () => { const snap = markdownExportSnapshot(res.effectiveNotes); askMarkdownExport(snap, (options) => env.exportAll(snap, options)); } },
+            { icon: "save", label: "Export as ZIP\u2026", action: () => { const snap = markdownExportSnapshot(res.effectiveNotes); askMarkdownExport(snap, (options) => askExport("zip", async () => { const k = await env.exportZip(snap, options); if (k) flash(`Zipped ${k} notes`); })); } },
+            { icon: "save", label: "Export as Obsidian vault\u2026", action: async () => { const r = await env.exportObsidianVault?.({ notes: res.effectiveNotes, readOptions: env.readOpts?.() || {} }); if (r?.ok) flash(`Exported ${r.counts?.notes || 0} notes to Obsidian vault`); } },
+          ] },
+          { sep: true },
+          { icon: "trash", label: "Move selected to trash", danger: true, enabled: res.topFolderIds.length > 0 || res.trashableNotes.length > 0, action: () => queueMicrotask(askBatchTrash) },
+          { sep: true },
+          { icon: "x", label: "Clear selection", action: () => clearTreeSelection() },
+        ];
+      }
+      batchMoveBtn.addEventListener("click", () => askBatchMove());
+      batchAssignBtn.addEventListener("click", () => askBatchAssign());
+      batchExportBtn.addEventListener("click", () => showBatchExportMenu(batchExportBtn));
+      batchTrashBtn.addEventListener("click", () => askBatchTrash());
+      batchClearBtn.addEventListener("click", () => clearTreeSelection());
       const treeMode = () => filter === "all" && !query.trim() && !activeTag;
       const folderTargets = (exclude = "") =>
         allFolderIds([...store.tree().notes, ...store.list()], store.meta.folders)
@@ -27711,6 +28090,11 @@ __zentralShim.register = function (def) {
         row.style.setProperty("--d", String(depth));
         applyFolderRowVisual(row, { b: node.color, d: node.parts, o: node.opacity }, depth + 2);
         const toggle = () => store.setFolderCollapsed(node.id, open);
+        const fKey = "f:" + node.id;
+        if (treeSelection.selected.has(fKey)) {
+          row.classList.add("is-selected");
+          row.setAttribute("aria-selected", "true");
+        }
         chev.addEventListener("click", (e) => {
           e.stopPropagation();
           toggle();
@@ -27723,15 +28107,26 @@ __zentralShim.register = function (def) {
           e.stopPropagation();
           showMenu(more, folderMenuItems(node));
         });
-        row.addEventListener("click", toggle);
+        row.addEventListener("click", (e) => {
+          if (handleRowSelectionClick(e, fKey)) return;
+          treeSelection = applyTreeSelection(treeSelection, fKey, selectableListKeys(), {});
+          paintTreeSelection();
+          toggle();
+        });
         row.addEventListener("contextmenu", (e) => {
           e.preventDefault();
           e.stopPropagation();
+          if (treeSelection.selected.size && treeSelection.selected.has(fKey)) {
+            showMenu(pointAnchor(e), batchMenuItems());
+            return;
+          }
           showMenu(pointAnchor(e), folderMenuItems(node));
         });
         row.addEventListener("keydown", (e) => {
           if (e.target !== row) return;
-          if (e.key === "Enter") {
+          if (e.key === " " && (e.ctrlKey || e.metaKey || e.shiftKey)) {
+            handleRowSelectionClick(e, fKey);
+          } else if (e.key === "Enter") {
             e.preventDefault();
             toggle();
           } else if (e.key === "ArrowRight") {
@@ -28778,6 +29173,9 @@ __zentralShim.register = function (def) {
         const keep = listItems.contains?.(document.activeElement) ? document.activeElement?.dataset?.key || "" : "";
         listItems.replaceChildren();
         listItems.setAttribute("role", treeMode() ? "tree" : "list");
+        if (trashed) listItems.removeAttribute("aria-multiselectable");
+        else listItems.setAttribute("aria-multiselectable", "true");
+        pruneTreeSelection();
         if (treeMode()) renderTree();
         else {
           let all = filter === "recent" ? recentNotes() : store.list({ query, trashed });
@@ -32323,6 +32721,7 @@ __zentralShim.register = function (def) {
           else if (dialog) closeDialog();
           else if (menu) closeMenu();
           else if (findOpen) closeFind();
+          else if (view === "list" && treeSelection.selected.size) clearTreeSelection();
           else if (view === "list") showEditor();
           else close();
           e.preventDefault();

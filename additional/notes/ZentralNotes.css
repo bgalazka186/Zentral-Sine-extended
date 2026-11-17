@@ -2735,3 +2735,30 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
 .zn-agenda-toast-close:hover { background: color-mix(in srgb, currentColor 20%, transparent); }
 .zn-agenda-toast-undo:focus-visible,
 .zn-agenda-toast-close:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* ---- T3.2 Tree multi-selection ---------------------------------------------------- */
+.zentral-notes-sheet .zn-batch-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  margin: 0 6px 4px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--zn-accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--zn-accent) 34%, transparent);
+  font-size: 12px;
+}
+.zentral-notes-sheet .zn-batch-bar[hidden] { display: none !important; }
+.zentral-notes-sheet .zn-batch-count { font-weight: 600; padding: 0 4px; white-space: nowrap; }
+.zentral-notes-sheet .zn-batch-btn { padding: 2px 7px; font-size: 11.5px; }
+.zentral-notes-sheet .zn-batch-clear { width: 22px; height: 22px; }
+.zentral-notes-sheet .zn-item.is-selected {
+  background: color-mix(in srgb, var(--zn-accent) 22%, transparent);
+  box-shadow: inset 2px 0 0 var(--zn-accent);
+}
+.zentral-notes-sheet .zn-frow[data-color].is-selected {
+  background: var(--zn-frow-selected, color-mix(in srgb, var(--zn-fc) 26%, transparent));
+  box-shadow: inset 2px 0 0 var(--zn-accent);
+}
+
