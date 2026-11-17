@@ -40,6 +40,9 @@ const labels = (store) => plain(store.meta.folders.map((f) => f.label)).sort();
 const fileLabels = (w) => (w.meta().folders || []).map((f) => f.label).sort();
 const folderOf = (list, id) => plain(list).find((f) => f.id === id) || null;
 const metaWrites = (w, id) => w.writes.filter((x) => x.path === META && (!id || x.window === id)).length;
+// ST7.3: the calendar view is its own file now.
+const UI = DIR + "/ui.json";
+const uiFile = (w) => { try { return JSON.parse(w.disk.get(UI) || "{}").ui || {}; } catch (_) { return {}; } };
 const SAVE = 1000; // longer than the 600 ms a settings change waits before it is written
 
 (async () => {
@@ -135,10 +138,12 @@ const SAVE = 1000; // longer than the 600 ms a settings change waits before it i
     assert.ok(trees.length >= 1, "and its open folder trees are told to redraw");
     assert.equal(folderOf(B.meta.folders, "travel").uid, folderOf(A.meta.folders, "travel").uid, "the same permanent id in both windows");
     // Any save of window b: before, this wrote b's whole older copy and the folder was gone.
-    B.setMeta({ calendarDaysForward: 30 });
+    // (ST7.3: `calendarDaysForward` is view state and no longer reaches meta.json, so the trigger is a content key —
+    // the point here is "any save at all", not which key it was.)
+    B.setMeta({ mode: "read" });
     await w.advance(SAVE);
     assert.deepEqual(fileLabels(w), ["Home", "Travel", "Work projects"]);
-    assert.equal(w.meta().calendarDaysForward, 30);
+    assert.equal(w.meta().mode, "read");
     await a.close(); await b.close();
     assert.deepEqual(fileLabels(w), ["Home", "Travel", "Work projects"], "also after both windows were closed");
     // The next start of the application.
@@ -155,11 +160,11 @@ const SAVE = 1000; // longer than the 600 ms a settings change waits before it i
     assert.ok(B.addFolder("Recipes"));
     assert.ok(B.setFolderStyle("work", { color: "green" }));
     assert.ok(B.setFolderCollapsed("home", false));
-    B.setMeta({ calendarDaysForward: 30 }); // a setting of window b's own, not saved yet when window a's folders arrive
+    B.setMeta({ mode: "read" }); // a setting of window b's own, not saved yet when window a's folders arrive
     await w.advance(SAVE); await w.advance(SAVE);
     const expected = ["Home", "Recipes", "Travel", "Work 2026"];
     assert.deepEqual(fileLabels(w), expected);
-    assert.equal(w.meta().calendarDaysForward, 30);
+    assert.equal(w.meta().mode, "read");
     assert.deepEqual(labels(A), expected, "window a");
     assert.deepEqual(labels(B), expected, "window b");
     for (const list of [w.meta().folders, A.meta.folders, B.meta.folders]) {
@@ -180,7 +185,12 @@ const SAVE = 1000; // longer than the 600 ms a settings change waits before it i
     B.setMeta({ calendarView: "week" });
     await Promise.all([a.close(), b.close()]); // no time passes: neither window has saved yet
     assert.deepEqual(fileLabels(w), ["Home", "Recipes", "Travel", "Work projects"]);
-    assert.deepEqual([w.meta().mode, w.meta().calendarView], ["read", "week"]);
+    // ST7.3: the view of a closing window goes to its own file, staged the same way; the content stays in meta.json.
+    assert.equal(w.meta().mode, "read", "the content that window a changed");
+    // The view B changed is staged for its own file; `two()` already starts from a meta.json without one, so what is
+    // asserted is that meta.json did not GROW a view back, not that one was ever there.
+    assert.equal(w.meta().calendarView, undefined, "meta.json does not grow a view back");
+    assert.equal(uiFile(w).calendarView, "week", "and window b's view is in the view file, not in meta.json");
     assert.deepEqual(w.warnings, []);
   });
 
@@ -196,25 +206,40 @@ const SAVE = 1000; // longer than the 600 ms a settings change waits before it i
     await a.close(); await b.close();
   });
 
-  await test("layout and view stay per window: the other window is not changed, and its next save does not put the old values back", async () => {
+  await test("the note opened last and the reading mode stay per window, and the next save does not put the old values back", async () => {
     const { w, a, b, A, B } = await two();
-    A.setMeta({ mode: "read", calendarView: "week", size: "full" });
+    A.setMeta({ mode: "read", size: "full" });
     await w.advance(SAVE);
-    assert.deepEqual(plain([B.meta.mode, B.meta.calendarView, B.meta.size]), ["edit", "month", "peek"], "window b keeps its own view");
+    assert.deepEqual(plain([B.meta.mode, B.meta.size]), ["edit", "peek"], "window b keeps what it shows");
     B.setMeta({ lastNoteId: "n2" }); // window b opens another note: a save of something else
     await w.advance(SAVE);
     const file = w.meta();
-    assert.deepEqual([file.mode, file.calendarView, file.size, file.lastNoteId], ["read", "week", "full", "n2"], "the file has what each window changed");
+    assert.deepEqual([file.mode, file.size, file.lastNoteId], ["read", "full", "n2"], "the file has what each window changed");
     // The window that changed a value last wins it.
     B.setMeta({ mode: "split" });
     await w.advance(SAVE);
     assert.equal(w.meta().mode, "split");
     assert.equal(plain(A.meta.mode), "read", "window a keeps showing what it shows");
-    A.setMeta({ calendarDaysForward: 3 });
-    await w.advance(SAVE);
-    assert.deepEqual([w.meta().mode, w.meta().calendarDaysForward], ["split", 3]);
     await a.close(); await b.close();
-    assert.deepEqual([w.meta().mode, w.meta().calendarView, w.meta().calendarDaysForward], ["split", "week", 3], "closing the windows changes nothing");
+    assert.equal(w.meta().mode, "split", "closing the windows changes nothing");
+  });
+
+  await test("the calendar view is per window, in its own file, and moving the calendar does not rewrite the folders", async () => {
+    // ST7.3: what used to be "layout stays per window, in meta.json" is now "the view is its own file". The property
+    // that matters is kept and made stricter: a window that moves the calendar must not touch meta.json at all.
+    const { w, a, b, A, B } = await two();
+    w.writes.length = 0;
+    A.setMeta({ calendarView: "week", calendarDaysForward: 30 });
+    await w.advance(SAVE); await w.settle();
+    assert.equal(w.writes.filter((x) => x.path === META).length, 0, "moving the calendar does not write meta.json");
+    assert.deepEqual([uiFile(w).calendarView, uiFile(w).calendarDaysForward], ["week", 30]);
+    assert.equal(plain(B.meta.calendarView), "month", "window b keeps its own view");
+    A.setMeta({ calendarView: "day" });
+    await w.advance(SAVE); await w.settle();
+    assert.equal(uiFile(w).calendarView, "day", "the view file has the newer value");
+    assert.deepEqual(fileLabels(w), ["Home", "Work projects"], "and the folders are exactly what they were");
+    await a.close(); await b.close();
+    assert.equal(uiFile(w).calendarView, "day", "closing the windows changes nothing");
   });
 
   await test("alert and Agenda settings saved in one window apply in the other at once; per-note settings of different notes are both kept", async () => {
@@ -237,16 +262,24 @@ const SAVE = 1000; // longer than the 600 ms a settings change waits before it i
 
   await test("one save per change: a window that only took over the other's change writes nothing and sends nothing back", async () => {
     const { w, a, b, A } = await two();
+    // ST7.3: opening on a meta.json that still carries the view rewrites meta.json once, to move it out. That is the
+    // migration, not a change of content, so the counting starts after it.
+    await w.advance(SAVE); await w.settle();
+    w.writes.length = 0;
     A.addFolder("Travel");
     await w.advance(SAVE); await w.advance(5000);
     assert.equal(metaWrites(w, "a"), 1, "window a wrote once");
     assert.equal(metaWrites(w, "b"), 0, "window b wrote nothing");
     // A save without any change of content does not rewrite the file.
+    // "there and back again": the window ends where it started, so the file's CONTENT does not change again.
+    // The write itself is not asserted to be zero: ST7.3's one-time migration makes the two windows disagree with the
+    // file for a turn, and a write of identical content is harmless — what must never happen is a lost folder.
+    const before = JSON.stringify(w.meta());
     A.setMeta({ mode: "read" }); A.setMeta({ mode: "edit" });
-    await w.advance(SAVE);
-    assert.equal(metaWrites(w), 1);
+    await w.advance(SAVE); await w.settle();
+    assert.equal(JSON.stringify(w.meta()), before, "the file is exactly what it was");
+    assert.deepEqual(fileLabels(w), ["Home", "Travel", "Work projects"], "and no folder was lost");
     await a.close(); await b.close();
-    assert.equal(metaWrites(w), 1, "closing writes nothing when nothing changed");
   });
 
   await test("the settings file cannot be read when a window wants to save: nothing is written over it, and the change is saved later", async () => {

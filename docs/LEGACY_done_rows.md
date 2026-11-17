@@ -1281,3 +1281,60 @@ meta, layout order and `standalone.json` — so they appear in the dialog (the O
 Tests: `tests/notes-agenda-fold.test.cjs` (9 cases) — the empty projection, work in the window, the window question, the
 next-start rule, overnight and same-day quiet ranges with malformed input, the two reasons independently, cleaning, the
 four settings reaching the dialog, and the setter/repaint/hand-unfold contract. Suite `232/232`.
+**`ST7.3` DONE (3.3.296)** — the calendar's view state left notes metadata. `meta.json` holds every folder and up to
+five thousand per-note alert/Agenda overrides, and each save rewrote the whole file; because the view cursor lived in
+it, pressing "Next" in the calendar rewrote all of that 600 ms later. The view is now `ui.json` beside it: the twenty-five
+layout/view keys (`calendarView`, `calendarCursor`, the split, the scale, the filters, the hours, the picker, the zones)
+go there, and `meta.json` keeps everything that is content. The pure contract is in `ZentralNotesCalendar.js`
+(`UI_STATE_KEYS`, `splitUiState`, `migrateUiState`); the store splits at `setMeta`, the one door every caller uses, so
+no call site had to learn about a second file, and `store.meta` still reads as one object through an overlay — nothing
+else in a 34k-line file changed. Three things are worth remembering, all of them found by the new tests rather than by
+reading the code. First, a wrong `uiBase` (what this window last saw) made the migration invisible: the base was taken
+from the migrated state, so the save looked like "nothing changed" and `ui.json` was never written. Second, reading and
+parsing in one `try` made a missing file and a damaged file look alike, and a whole view file was thrown away; they are
+now separate, so a damaged `ui.json` is reported and never written over. Third, leaving the view in `meta` when
+`ui.json` already existed let a second window write its default view back into `meta.json` — the keys are now always
+taken out of `meta`, whether they were migrated or already superseded. A view changed in the last moment before a window
+closes is staged in the unload-recovery folder like the metadata is (`ui` is a fifth unload kind), a backup carries
+`ui.json` (a restore in overwrite mode takes its view), and the file is at version 1 with a wrapper that also accepts a
+bare object. Tests: `tests/notes-ui-state.test.cjs` (12) plus the reworked `notes-meta-windows` (16), `notes-startup`
+(23) and `notes-unload-save` (8), whose assertions had to change because they asserted the coupling this task removes —
+`calendarDaysForward` and friends no longer reach `meta.json`. The property the owner cares about is now a test:
+moving the calendar writes `ui.json` once and `meta.json` zero times.
+
+
+## The Master Order rows that were finished (moved out of the TODO table, 2026-11-17)
+
+The owner asked for the finished rows to leave the TODO list: the working table now holds only what is still
+open, and these rows are kept here with their numbers so that a reference to "row 68" still resolves.
+
+| Order | ID          | Status    | Impact              | Effort | Version           | Task                                                                                                     |
+| ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
+|    67 | `OW-38`     | `DONE`    | Med                 | M-L    | 3.3.262           | Automated test suites for all other Zentral features outside Notes                                       |
+|    46 | `SB6.6`     | `DONE`    | Low-Med             | S      | 3.3.266           | Setting: what the X (close) button does on an Agenda tab                                                 |
+|    47 | `ST7.3`     | `DONE`    | Low-Med             | S      | 3.3.295           | Move calendar UI state out of notes metadata                                                             |
+|    48 | `T3.5`      | `DONE`    | Low-Med             | S      | 3.3.293           | Callout toolbar button: last-used on click, more kinds                                                   |
+|    50 | `UI4.9`     | `DONE`    | Low-Med             | S      | 3.3.264           | Space before the unit in slider values                                                                   |
+|    51 | `OW-49`     | `DONE`    | Low-Med             | S      | 3.3.263           | Clock click reveals one small stopwatch/countdown, not a full card of buttons                              |
+|    52 | `OW-50`     | `DONE`    | Med                 | S-M    | 3.3.263           | Weather: today, tomorrow and the next rain/snow day; the detail swaps on click                            |
+|    53 | `OW-51`     | `DONE`    | Low                 | S      | 3.3.263           | Weather place setting must say a typed name is only a label; the coordinates are what is used             |
+|    54 | `OW-52`     | `DONE`    | High                | S      | 3.3.263           | Status widget shows nothing: battery and memory are never filled in                                       |
+|    51 | `UI4.11`    | `DONE`    | Low-Med             | S      | 3.3.267           | Escape returns the focus to the button that opened a menu                                                |
+|    52 | `ST7.5`     | `DONE`    | Low-Med             | S-M    | 3.3.274           | Reminder history export, prune and inspect UI                                                            |
+|    53 | `UI4.10`    | `DONE`    | Low-Med             | S-M    | 3.3.275           | Settings dialog follows the text size                                                                    |
+|    55 | `SB6.9`     | `DONE`    | Low                 | S      | 3.3.294           | Agenda sidebar quiet hours and 'left' counts                                                             |
+|    56 | `F0.15`     | `DONE`    | Low                 | S      | 3.3.280           | Isolate the time-budget test of the Agenda projection                                                    |
+|    57 | `DOC-1`     | `DONE`    | Low                 | S      | 3.3.268           | README documents a split view that does not exist                                                        |
+|    58 | `TM3.7`     | `DONE`    | Low                 | S      | 3.3.269           | Day range keeps the wall clock on the day the clocks go forward at midnight                              |
+|    59 | `F0.16`     | `DONE`    | Low                 | S-M    | 3.3.280           | Sweep tests that build fixtures around the real clock                                                    |
+|    60 | `SB6.11`    | `DONE`    | Med                 | S      | 3.3.272           | Right-click a Notes or Agenda row in the sidebar for its own menu, not Zen's tab menu |
+|    61 | `ST7.8`     | `DONE`    | Med                 | S      | 3.3.271           | Give one reminder or event its own colour, not only through its note or category          |
+|    62 | `OW-53`     | `DONE`    | Med                 | M      | 3.3.280           | Import a Google Calendar `.ics` file into the calendar (import/export)                                    |
+|    63 | `OW-54`     | `DONE`    | Med                 | S      | 3.3.281           | Weather: "Rain tomorrow" is cut off on a narrow sidebar instead of moving to the next row                  |
+|    64 | `OW-55`     | `DONE`    | Med                 | S-M    | 3.3.282           | —                 | Settings: choose what free days, weekends and holidays look like (tint and how visible)                    |
+|    65 | `OW-56`     | `DONE`    | High                | M      | 3.3.284           | —                 | Clock and stopwatch as ONE widget: click switches mode, countdown alerts, a finished countdown turns the clock red |
+|    66 | `OW-57`     | `DONE`    | Med                 | S-M    | 3.3.283           | —                 | Weather: two or three saved places, cycled by a click                                                      |
+|    67 | `OW-58`     | `DONE`    | High                | S      | 3.3.285           | —                 | An imported `.ics` event or reminder cannot be deleted: the menu says "delete it in its linked note" and there is none |
+|    68 | `OW-59`     | `DONE`    | High                | S-M    | 3.3.287           | —                 | Reminders/events linked to a note cannot be unlinked there, and a date in a note has no way to list what is linked |
+|    69 | `OW-60`     | `DONE`    | High                | M      | 3.3.290           | OW-56 | Clock and stopwatch do not actually replace each other: the second face shows numbers but offers none of the stopwatch/countdown controls, the standalone Timer card still exists beside it, and the quick note is not reachable from the plain clock |
+|    70 | `OW-61`     | `DONE`    | High                | S      | 3.3.288           | OW-56 | The OW-56 clock/timer settings never appeared in Zentral Settings: the four new prefs are in `schema` but have no `settings` entry, so the dialog drops them |

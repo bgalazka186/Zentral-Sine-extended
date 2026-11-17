@@ -340,7 +340,8 @@ const AUTO = { month: "auto", week: "auto", day: "auto", upcoming: "auto", agend
     // Once: from the first save on the sizes are stored, and a size chosen later is not overwritten by the old step.
     extra.setMeta({ calendarScale: { ...plain(extra.meta.calendarScale), week: "auto", month: 90 } });
     await extra.flush(); await extra.close();
-    const text = files.get("/was-extra/meta.json").text;
+    // ST7.3: the sizes are view state, so they are stored in ui.json now, not in meta.json.
+    const text = files.get("/was-extra/ui.json").text;
     assert.match(text, /"calendarScale"/);
     const again = makeStore("/was-extra", "scale-was-extra"); await again.open();
     assert.deepEqual(plain(again.meta.calendarScale), { month: 90, week: "auto", day: 36, upcoming: 36, agenda: 36 });

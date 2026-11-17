@@ -194,7 +194,11 @@ const setSize = async (root, px) => {
   assert.ok(monthCell.classList.contains("is-selected")); assert.equal(monthCell.getAttribute("aria-selected"), "true");
   const selectedList = q(root, ".zn-cal-day-group.is-selected"); assert.ok(selectedList, "the selected-day item list is visible");
   assert.ok(selectedList.textContent.includes("Selection timed")); assert.ok(selectedList.querySelector(".zn-cal-all-day-strip").textContent.includes("Selection all day"));
-  await store.flush(); assert.equal(JSON.parse(files.get("/views/meta.json").text).calendarCursor, tomorrowYmd, "selection persists on disk");
+  // ST7.3: the cursor is view state and is saved to ui.json, beside meta.json.
+  await store.flush();
+  const viewFile = [...files.entries()].find(([name]) => /ui\.json$/.test(name));
+  assert.ok(viewFile, "the view file is written");
+  assert.equal(JSON.parse(viewFile[1].text).ui.calendarCursor, tomorrowYmd, "selection persists on disk");
   monthCell.dispatchEvent(new Ev("dblclick", { bubbles: true }));
   assert.equal(store.meta.calendarView, "day", "double-click opens Day even after the first click");
   await chooseMenu(root, ".zn-calendar-view-select", "Month");

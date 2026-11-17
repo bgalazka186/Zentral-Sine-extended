@@ -273,6 +273,9 @@ function build(manifestFile) {
   ]);
   for (const pref of new Set(allSources.flatMap((text) => [...text.matchAll(PREF_PATTERN)].map((x) => x[1])))) {
     if (pref.endsWith(".")) continue; // a prefix used to build keys, not a pref
+    // A FILE NAME is not a pref. `ui.` is a real pref prefix, and a file called `ui.json` (ST7.3: the calendar view
+    // file) looks exactly like one. Only a bare name with a known data extension is skipped; a pref never ends in one.
+    if (/^[A-Za-z][A-Za-z0-9_.-]*\.(?:json|jsonl|tmp|md|txt)$/.test(pref)) continue;
     if (allowedPrefs.has(pref)) continue;
     const elsewhere = owners.get(pref);
     throw new Error(

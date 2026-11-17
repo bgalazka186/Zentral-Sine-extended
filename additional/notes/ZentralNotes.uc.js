@@ -1574,6 +1574,48 @@
     // Folders and the alert / Agenda rules are the same in every window: a window takes them over (`taken`). All other
     // settings (layout, view, the note opened last) are each window's own, and the file gets a value from the window
     // that changed it last; a window that did not change a value never writes its older copy over the file's.
+    // ST7.3: the calendar view is not notes metadata. It goes to its own small file, next to meta.json and note files.
+    // Note: the file name is spelled out at every use site instead of through a constant. `build-standalone` reads
+    // every string that looks like a pref ("ui." is a real pref prefix), and a constant holding "ui.json" makes the
+    // ownership check believe the package reads a pref called `ui.json`. A file name is not a setting.
+    const UI_FILE_VERSION = 1;
+    // The calendar part is a separate module; when it is not loaded (a bare test of the store, or a build without the
+    // calendar) the view keys still have to be known, or `setMeta` would put them back into meta.json. This list is a
+    // mirror of `CALENDAR_PART.UI_STATE_KEYS` and a test keeps the two equal.
+    const UI_KEYS_FALLBACK = Object.freeze(["calendarView", "calendarCursor", "calendarTab", "calendarLayout",
+      "calendarSplitLR", "calendarSplitTB", "calendarTreeCollapsed", "calendarPaneCollapsed",
+      "calendarFiltersCollapsed", "calendarBigPictureFiltersCollapsed", "calendarBigPictureSize",
+      "calendarScale", "calendarPicker", "calendarWeekStart", "calendarWeekNumbers", "calendarWeekSpan",
+      "calendarSnap", "calendarDaysForward", "calendarFilterKind", "calendarFilterCategory",
+      "calendarBigPictureFilterKind", "calendarBigPictureFilterCategory", "calendarHours",
+      "calendarDisplayZone", "calendarRecentZones"]);
+    const uiKeys = () => (CALENDAR_PART && Array.isArray(CALENDAR_PART.UI_STATE_KEYS) ? CALENDAR_PART.UI_STATE_KEYS : UI_KEYS_FALLBACK);
+    // -> the part of `source` that is view state. Kept here (not in the calendar part) so the store can split a patch
+    // even when the calendar is not loaded; a test keeps `UI_KEYS_FALLBACK` equal to the calendar's own list.
+    function splitUiKeys(source) {
+      const ui = {}, rest = {};
+      for (const key of Object.keys(source || {})) (isUiKey(key) ? ui : rest)[key] = source[key];
+      return { ui, rest };
+    }
+    const isUiKey = (key) => uiKeys().includes(key);
+    // -> what to write to ui.json. `ui` is always a bare object of the moved keys, so a damaged file can never make the
+    // writer put anything else in it.
+    function uiFileText(ui, base) {
+      const state = ui && typeof ui === "object" ? ui : {};
+      const out = { v: UI_FILE_VERSION, ui: {} };
+      for (const key of Object.keys(state)) if (isUiKey(key)) out.ui[key] = state[key];
+      if (base && typeof base === "object") out.base = {};
+      return JSON.stringify(out);
+    }
+    // A view file that is not ours (another version, hand-edited) still gives its own keys, and nothing else.
+    function uiStateFromFile(raw) {
+      if (!raw || typeof raw !== "object") return null;
+      const source = raw.ui && typeof raw.ui === "object" ? raw.ui : raw;
+      const out = {};
+      let any = false;
+      for (const key of Object.keys(source)) if (isUiKey(key)) { out[key] = source[key]; any = true; }
+      return any ? out : null;
+    }
     const META_SHARED_KEYS = Object.freeze(["folders", "calendarAlertSettings", "calendarNoteAlertOverrides", "calendarAgendaDefaults", "calendarNoteAgendaOverrides"]);
     const META_PER_NOTE_KEYS = Object.freeze(["calendarNoteAlertOverrides", "calendarNoteAgendaOverrides"]);
     function mergeMetaMap(base, mine, theirs) {
@@ -7628,6 +7670,18 @@
       let metaBase = null; // this window's settings at its last look at the file; a value that differs is its own change (mergeMeta)
       let metaRetry = 0; // saves of the settings that failed in a row
       let keptDamagedMeta = ""; // the damaged text already copied to meta.json.corrupt
+      // ST7.3: the calendar view (cursor, mode, size, filters, the split) lives in ui.json, not meta.json. meta.json
+      // also holds every folder and every per-note override and is written whole; a press of "Next" used to rewrite
+      // all of it. `uiDirty` is separate on purpose: the two files are saved by the same timer but only the one that
+      // changed is written, so moving around the calendar never touches meta.json.
+      let uiState = {}; // only the view keys (`uiKeys()`); the rest of meta is untouched by it
+      let uiBase = null; // this window's view at its last look at ui.json
+      let uiDirty = false;
+      let uiReady = false; // true once ui.json has been read (or is known to be absent)
+      let uiMigrated = false; // the one-time read of an old meta.json that still held the view
+      let uiTimer = null;
+      let uiRetry = 0;
+      let keptDamagedUi = "";
       let missedMeta = false; // another window saved the settings while this one was reading the folder
       let missedUnloadRecovery = false; // another window closed with staged unload writes while this one was opening
       let closed = false;
@@ -8296,9 +8350,104 @@
         if (read.state === "unreadable")
           throw new Error("The Notes settings file (meta.json) is there but could not be read: " + String(read.error?.message || read.error));
         if (read.state === "ok") meta = read.value;
+        // Only a meta.json that IS there can be carrying the view. With no file (a new folder) the view keys are
+        // defaults, and "migrating" them would write two files on first start for nothing.
+        await loadUiState({ fromFile: read.state === "ok" });
+        // `metaBase` is taken AFTER the view has moved out: it is what this window last saw in meta.json, and meta.json
+        // no longer has the view. Taken before, the split would look like this window's own change and be written back.
         metaBase = cloneJson(meta);
         metaRetry = 0;
         metaReady = true;
+      }
+      // The calendar view file (ST7.3). A missing file is normal: the view then comes out of meta.json once
+      // (`uiMigrated`), after which that copy is never read again.
+      async function loadUiState({ fromFile = false } = {}) {
+        uiReady = false;
+        keptDamagedUi = "";
+        uiState = {};
+        uiDirty = false;
+        uiMigrated = false;
+        const read = await readUiFile();
+        if (read.state === "unreadable") {
+          // Do not overwrite a view file that could not be read: the person may have been looking at something.
+          uiReady = false;
+          warn(new Error("The calendar view file (ui.json) could not be read, so it was not written over: " + String(read.error?.message || read.error)));
+          return;
+        }
+        // The file is `{ v, ui: {…} }`; `uiStateFromFile` is what knows that, and also accepts a bare object (a file
+        // written by hand, or by an older build that stored the view without the wrapper).
+        const stored = read.state === "ok" ? uiStateFromFile(read.value) : null;
+        const split = fromFile ? splitMetaForUi(meta) : { ui: {}, rest: meta };
+        const migrated = CALENDAR_PART && CALENDAR_PART.migrateUiState ? CALENDAR_PART.migrateUiState(stored, split.ui) : { ui: { ...split.ui, ...(stored || {}) }, migrated: false, seen: !!(stored) };
+        uiState = migrated.ui;
+        if (migrated.migrated) {
+          // First run after the split: the view that is in meta.json wins once, and meta.json is rewritten without it.
+          uiMigrated = true;
+          uiDirty = true;
+        }
+        // The view NEVER stays in `meta`, whether it was migrated or the view file already existed. Leaving it there is
+        // how a second window would later save its own default view back into meta.json (the ST7.3 regression): `meta`
+        // is what gets written, so anything still in it is a claim about meta.json.
+        // Nothing to do when the metadata never held the view: no write, and `meta` matches the file as it is.
+        if (!Object.keys(split.ui).length) {
+          uiBase = read.state === "ok" ? cloneJson(uiState) : null;
+          uiRetry = 0;
+          uiReady = true;
+          return;
+        }
+        {
+          // A view file that exists is the authority: whatever meta.json still says is a leftover from before the split
+          // (another window has already moved it), so it is dropped — it must not win over what is really being looked
+          // at. With no view file at all this is the one migration, and then meta.json's copy is the only copy.
+          if (read.state === "ok") uiState = { ...migrated.ui };
+          deleteMany(split.ui);
+          // meta.json still carries the view, so what this window holds no longer matches it: one write takes it out,
+          // and `writeMetaNow` refuses to write before the file has been read (a real change, never a race).
+          metaDirty = true;
+        }
+        // `uiBase` is what the FILE holds, not what this window holds. After a migration the file holds nothing yet, so
+        // a base of the migrated state would look like "already saved" and ui.json would never be written (the view
+        // would then only survive in memory until the next start).
+        uiBase = read.state === "ok" ? cloneJson(uiState) : null;
+        uiRetry = 0;
+        uiReady = true;
+        if (uiDirty && uiTimer === null) uiTimer = setTimer(writeUiNow, 600);
+      }
+      // The view keys as they sit in `meta` right now (whatever metaFromRaw made of them).
+      function splitMetaForUi(source) {
+        const ui = {}, rest = {};
+        for (const key of Object.keys(source)) (isUiKey(key) ? ui : rest)[key] = source[key];
+        return { ui, rest };
+      }
+      function deleteMany(keys) {
+        for (const key of Object.keys(keys)) delete meta[key];
+      }
+      async function readUiFile() {
+        const file = io.join(dir, "ui.json");
+        let absent = 0, failure = null;
+        for (let attempt = 0; attempt < META_READ_TRIES; attempt++) {
+          // The read and the parse are separate on purpose: doing both in one `try` makes a missing file and a damaged
+          // file look the same, and then a whole view file is thrown away as if it had never been there.
+          let text = null;
+          try {
+            text = await io.readUTF8(file);
+          } catch (error) {
+            failure = error;
+            let exists = false;
+            if (typeof io.exists === "function") {
+              try { exists = !!(await io.exists(file)); } catch (_) { exists = true; }
+            }
+            // Asked twice: a file being replaced can be absent for an instant.
+            if (!exists && ++absent >= 2) return { state: "missing" };
+            continue;
+          }
+          try {
+            return { state: "ok", value: JSON.parse(text) };
+          } catch (error) {
+            return { state: "unreadable", error }; // there IS a file, and it is damaged: never write over it
+          }
+        }
+        return absent ? { state: "missing" } : { state: "unreadable", error: failure };
       }
       // A complete settings object: the defaults, with every valid value of `raw` (what a file holds).
       function metaFromRaw(raw) {
@@ -8403,9 +8552,27 @@
           const read = await readMeta("this window's settings are written");
           if (read.state === "unreadable")
             throw new Error("The Notes settings file (meta.json) could not be read, so it was not written over; the change is saved later: " + String(read.error?.message || read.error));
+          // ST7.3: `meta` never holds the view once it has been migrated to ui.json. Dropping the keys here is how
+          // meta.json stops carrying them: the values are already in the view file, so nothing is lost, and the file
+          // gets smaller by the view it no longer repeats on every folder change.
           const mine = cloneJson(meta);
           const { file, taken } = mergeMeta(metaBase, mine, read.state === "ok" ? read.value : null);
           takeMeta(taken);
+          // "there and back again" in one breath is not a change: comparing with what was just read keeps a window from
+          // writing a file it agrees with (this is what ST7.3 first broke, because the migration had already rewritten
+          // the file once and `metaBase` still described the old one).
+          if (read.state === "ok" && sameJson(file, read.value)) {
+            metaBase = { ...mine, ...cloneJson(taken) };
+            metaRetry = 0;
+            return;
+          }
+          // Another window has already taken the view out of meta.json (its migration landed before this window's
+          // first save). This window's `metaBase` still describes the file WITH the view, so every later change would
+          // look like "the view appeared" and be written back. Once the file is read, the truth is the file.
+          if (read.state === "ok" && metaBase && uiKeys().some((key) => Object.hasOwn(metaBase, key) && !Object.hasOwn(read.value, key))) {
+            for (const key of uiKeys()) if (Object.hasOwn(read.value, key)) metaBase[key] = cloneJson(read.value[key]);
+            for (const key of uiKeys()) if (!Object.hasOwn(read.value, key)) delete metaBase[key];
+          }
           if (read.state !== "ok" || !sameJson(file, read.value)) {
             await io.writeUTF8(io.join(dir, "meta.json"), JSON.stringify(file), { tmpPath: io.join(dir, "meta.json.tmp") });
             // The other windows look at the file only when something they share changed (not for every note opened here).
@@ -8441,8 +8608,13 @@
         });
       }
       function setMeta(patch) {
+        // ST7.3: a change to the calendar view is a change to the view file, never to meta.json. The split happens
+        // here, at the one door every caller uses, so no call site has to know which file its value lands in.
+        const uiPatch = {}, rest = {};
+        for (const [k, v] of Object.entries(patch)) (isUiKey(k) ? uiPatch : rest)[k] = v;
+        if (Object.keys(uiPatch).length) setUiState(uiPatch);
         let changed = false;
-        for (const [k, v] of Object.entries(patch))
+        for (const [k, v] of Object.entries(rest))
           if (v && typeof v === "object" ? JSON.stringify(meta[k]) !== JSON.stringify(v) : meta[k] !== v) {
             meta[k] = v;
             changed = true;
@@ -8451,6 +8623,41 @@
         metaDirty = true;
         if (metaTimer !== null) clearTimer(metaTimer);
         metaTimer = setTimer(writeMetaNow, 600);
+      }
+      // The view file's own change door. Same 600 ms coalescing as meta.json, but its own timer and its own dirty flag,
+      // so a press of "Next" that changes nothing else writes ui.json once and never touches meta.json.
+      function setUiState(patch) {
+        let changed = false;
+        for (const [k, v] of Object.entries(patch))
+          if (v && typeof v === "object" ? JSON.stringify(uiState[k]) !== JSON.stringify(v) : uiState[k] !== v) {
+            uiState[k] = v;
+            changed = true;
+          }
+        if (!changed) return;
+        uiDirty = true;
+        if (uiTimer !== null) clearTimer(uiTimer);
+        uiTimer = setTimer(writeUiNow, 600);
+      }
+      async function saveUiState() {
+        try {
+          const text = uiFileText(uiState, uiBase);
+          if (uiBase && sameJson(JSON.parse(text).ui, uiBase)) { uiRetry = 0; return; }
+          await io.writeUTF8(io.join(dir, "ui.json"), text, { tmpPath: io.join(dir, "ui.json.tmp") });
+          uiBase = cloneJson(uiState);
+          uiRetry = 0;
+        } catch (error) {
+          uiDirty = true;
+          if (!uiRetry) warn(error);
+          if (!closed && uiTimer === null) uiTimer = setTimer(writeUiNow, META_RETRY_MS[Math.min(uiRetry, META_RETRY_MS.length - 1)]);
+          uiRetry++;
+        }
+      }
+      function writeUiNow() {
+        if (uiTimer !== null) clearTimer(uiTimer);
+        uiTimer = null;
+        if (!uiDirty || !dir || !uiReady) return Promise.resolve();
+        uiDirty = false;
+        return queue(() => saveUiState());
       }
 
       async function writeNoteFile(note, text) {
@@ -8691,10 +8898,11 @@
       }
       // ---- unload recovery (H1.6): synchronous write staging on window close + safe reconciliation on next open / live sibling ----
       const unloadRoot = () => io.join(dir, BACKUP_DIR, UNLOAD_RECOVERY_DIR);
-      const UNLOAD_KIND_ORDER = { note: 0, calendar: 1, history: 2, meta: 3 };
+      const UNLOAD_KIND_ORDER = { note: 0, calendar: 1, history: 2, meta: 3, ui: 4 };
       function flushOnUnload() {
         autosaver.cancel();
         if (metaTimer !== null) { clearTimer(metaTimer); metaTimer = null; }
+        if (uiTimer !== null) { clearTimer(uiTimer); uiTimer = null; }
         if (retryTimer !== null) { clearTimer(retryTimer); retryTimer = null; }
         items?.cancelTimers?.();
         if (!dir) return false;
@@ -8715,6 +8923,7 @@
         const dirtyCalendar = items?.unloadSnapshot ? items.unloadSnapshot() : null;
         const dirtyHistory = items?.history?.unloadSnapshot ? items.history.unloadSnapshot() : null;
         const dirtyMeta = metaDirty && metaReady ? { base: cloneJson(metaBase), mine: cloneJson(meta) } : null;
+        const dirtyUi = uiDirty && uiReady ? { mine: cloneJson(uiState) } : null;
         const dirsToStage = new Set([dir, ...notesByDir.keys()]);
         let stagedAny = false;
         for (const targetDir of dirsToStage) {
@@ -8726,6 +8935,7 @@
             calendar: isLocal ? dirtyCalendar : ownerEntry?.store?.unloadSnapshot?.() || null,
             history: isLocal ? dirtyHistory : ownerEntry?.store?.history?.unloadSnapshot?.() || null,
             meta: isLocal ? dirtyMeta : null,
+            ui: isLocal ? dirtyUi : null,
             nowMs: now(),
             windowId,
             join: (...parts) => io.join(...parts),
@@ -8750,6 +8960,7 @@
         if (!stagedAny) return false;
         dirty.clear();
         metaDirty = false;
+        uiDirty = false;
         closed = true;
         return true;
       }
@@ -8874,6 +9085,23 @@
                   }
                   await cleanPair(parsed, name);
                 });
+              } catch (error) {
+                warn(error);
+              }
+            } else if (parsed.kind === "ui") {
+              // ST7.3: the view file staged by a window that closed before it could save. It is the whole view, so it
+              // is written as it is — nothing to merge, and a file that cannot be read is left alone (not overwritten).
+              try {
+                const mine = uiStateFromFile({ ui: entry.ui });
+                if (!mine) { await cleanPair(parsed, name); continue; }
+                const read = await readUiFile();
+                if (read.state === "unreadable") continue; // keep the staging file rather than write over a view
+                if (read.state !== "ok" || !sameJson(uiStateFromFile(read.value), mine)) {
+                  await io.writeUTF8(io.join(dir, "ui.json"), uiFileText(mine), { tmpPath: io.join(dir, "ui.json.tmp") });
+                  changedMeta = true;
+                  applied++;
+                }
+                await cleanPair(parsed, name);
               } catch (error) {
                 warn(error);
               }
@@ -9061,8 +9289,11 @@
 
       const api = {
         state,
+        // ST7.3: `meta` reads as one object, but the calendar view lives in its own file. The overlay is what keeps every
+        // `store.meta.calendarView` / `.calendarCursor` read in this file working without naming a second object; writes
+        // go through setMeta, which splits them back out. A fresh object each read — callers never hold this.
         get meta() {
-          return meta;
+          return Object.keys(uiState).length ? { ...meta, ...uiState } : meta;
         },
         get dir() {
           return dir;
@@ -9528,8 +9759,12 @@
               return null;
             }
           };
+          let hasUi = false;
           const metaBytes = await readJsonEntry("meta.json");
           if (metaBytes) { entries.push({ path: "meta.json", bytes: metaBytes, mtime: stamp }); hasMeta = true; }
+          // ST7.3: the calendar view lives in its own file, so the backup carries it too (a restore keeps the view).
+          const uiBytes = await readJsonEntry("ui.json");
+          if (uiBytes) { entries.push({ path: "ui.json", bytes: uiBytes, mtime: stamp }); hasUi = true; }
           const calFile = CALENDAR_PART?.ITEMS_FILE || "calendar.json";
           const calBytes = await readJsonEntry(calFile);
           if (calBytes) { entries.push({ path: calFile, bytes: calBytes, mtime: stamp }); hasCalendar = true; }
@@ -9609,6 +9844,9 @@
             if (liveNote.trashed) localItems?.hideNote?.(liveNote.id);
             else syncItems(liveNote.id, false, false);
           }
+          // ST7.3: the view from the backup, if it has one. Merge keeps what is here now (restoring notes is not a
+          // reason to jump the calendar elsewhere); overwrite takes the backup's view.
+          if (parsed.ui && plan.mode === "overwrite") setUiState(parsed.ui);
           if (plan.foldersChanged) {
             const withUids = ensureFolderUids(plan.mergedFolders, [...notes.values()]);
             setMeta({ folders: withUids.folders });
@@ -10956,7 +11194,7 @@
         setMeta,
         flush() {
           autosaver.cancel();
-          return Promise.all([flushDirty(), writeMetaNow(), items ? items.flush() : null]);
+          return Promise.all([flushDirty(), writeMetaNow(), writeUiNow(), items ? items.flush() : null]);
         },
         flushOnUnload,
         reconcileUnloadRecovery,
@@ -12261,6 +12499,7 @@
       if (!clean) return null;
       if (clean === "manifest.json") return { kind: "manifest", path: clean };
       if (clean === "meta.json") return { kind: "meta", path: clean };
+      if (clean === "ui.json") return { kind: "ui", path: clean };
       if (clean === (CALENDAR_PART?.ITEMS_FILE || "calendar.json")) return { kind: "calendar", path: clean };
       if (clean === (CALENDAR_PART?.REMINDER_HISTORY_FILE || "reminder-history.json")) return { kind: "history", path: clean };
       if (clean === (CALENDAR_PART?.REMINDER_HISTORY_ARCHIVE_FILE || "reminder-history.archive.jsonl")) return { kind: "historyArchive", path: clean };
@@ -12308,7 +12547,7 @@
       const dec = new TextDecoder("utf-8", { fatal: false });
       const skipped = [];
       const seenPaths = new Set();
-      let totalBytes = 0, manifest = null, meta = null, calendar = null, history = null, historyArchive = null;
+      let totalBytes = 0, manifest = null, meta = null, ui = null, calendar = null, history = null, historyArchive = null;
       const notes = [], assets = [];
       for (const raw of rawEntries) {
         const bytes = raw?.bytes instanceof Uint8Array ? raw.bytes : null;
@@ -12320,7 +12559,7 @@
         if (!entry) { skipped.push({ path: rawPath, reason: "unsupported" }); continue; }
         if (seenPaths.has(entry.path)) { skipped.push({ path: rawPath, reason: "duplicate" }); continue; }
         seenPaths.add(entry.path);
-        if (entry.kind === "manifest" || entry.kind === "meta" || entry.kind === "calendar" || entry.kind === "history") {
+        if (entry.kind === "manifest" || entry.kind === "meta" || entry.kind === "ui" || entry.kind === "calendar" || entry.kind === "history") {
           if (bytes.length > BACKUP_MAX_JSON_BYTES) {
             if (entry.kind === "manifest") return { ok: false, error: "Backup manifest is too large." };
             skipped.push({ path: entry.path, reason: "too-big" });
@@ -12344,6 +12583,7 @@
             }
             manifest = parsedJson;
           } else if (entry.kind === "meta") meta = parsedJson;
+          else if (entry.kind === "ui") ui = uiStateFromFile(parsedJson);
           else if (entry.kind === "calendar") calendar = parsedJson;
           else if (entry.kind === "history") history = parsedJson;
           continue;
@@ -12369,7 +12609,7 @@
           assets.push({ rel: entry.rel, noteId: entry.noteId, file: entry.file, assetKind: entry.assetKind, bytes, path: entry.path });
         }
       }
-      if (!notes.length && !assets.length && !meta && !calendar && !history && !historyArchive) {
+      if (!notes.length && !assets.length && !meta && !ui && !calendar && !history && !historyArchive) {
         return { ok: false, error: "This ZIP does not contain any Zentral Notes backup data." };
       }
       let liveCount = 0, trashedCount = 0;
@@ -12381,6 +12621,7 @@
         notes,
         assets,
         meta,
+        ui,
         calendar,
         history,
         historyArchive,
@@ -14129,7 +14370,7 @@
     }
     // ---- unload recovery (H1.6): pure naming, planning and conflict decision helpers ----
     const UNLOAD_RECOVERY_DIR = "unload";
-    const UNLOAD_KINDS = Object.freeze(["note", "calendar", "history", "meta"]);
+    const UNLOAD_KINDS = Object.freeze(["note", "calendar", "history", "meta", "ui"]);
     function unloadEntryStem(ms, seq, windowId, kind, id) {
       if (!UNLOAD_KINDS.includes(kind)) return "";
       if (kind === "note" ? !isAssetNoteId(id) : id !== kind) return "";
@@ -14139,7 +14380,7 @@
       return `${stamp}-${order}-${win}-${kind}~${id}`;
     }
     function parseUnloadEntryName(name) {
-      const m = /^(\d{15})-(\d{4})-([A-Za-z0-9_-]{1,24})-(note|calendar|history|meta)~(.+?)\.(json|prev)$/.exec(String(name ?? ""));
+      const m = /^(\d{15})-(\d{4})-([A-Za-z0-9_-]{1,24})-(note|calendar|history|meta|ui)~(.+?)\.(json|prev)$/.exec(String(name ?? ""));
       if (!m) return null;
       const [, msStr, seqStr, windowId, kind, id, ext] = m;
       if (kind === "note" ? !isAssetNoteId(id) : id !== kind) return null;
@@ -14147,13 +14388,14 @@
       if (!Number.isFinite(ms) || !Number.isFinite(seq)) return null;
       return { ms, seq, windowId, kind, id, ext, stem: String(name).slice(0, -(ext.length + 1)) };
     }
-    function planUnloadWrites({ dir, notes = [], calendar = null, history = null, meta = null, nowMs = 0, windowId = "win", join = (...p) => p.join("/") } = {}) {
+    function planUnloadWrites({ dir, notes = [], calendar = null, history = null, meta = null, ui = null, nowMs = 0, windowId = "win", join = (...p) => p.join("/") } = {}) {
       if (!dir) return [];
       const validNotes = (notes || []).filter((n) => n && isAssetNoteId(n.id) && typeof n.text === "string");
       const hasCalendar = !!(calendar && calendar.local && Array.isArray(calendar.local.items));
       const hasHistory = !!(history && Array.isArray(history.records) && history.records.length);
       const hasMeta = !!(meta && meta.mine && typeof meta.mine === "object");
-      if (!validNotes.length && !hasCalendar && !hasHistory && !hasMeta) return [];
+      const hasUi = !!(ui && ui.mine && typeof ui.mine === "object");
+      if (!validNotes.length && !hasCalendar && !hasHistory && !hasMeta && !hasUi) return [];
       const unloadDir = join(dir, BACKUP_DIR, UNLOAD_RECOVERY_DIR);
       const ops = [{ op: "makeDir", path: unloadDir }];
       let seq = 1;
@@ -14232,6 +14474,19 @@
           opts: { mode: "create" },
           kind: "meta",
           id: "meta",
+        });
+      }
+      // 5. the calendar view (ST7.3): its own file, so it is staged on its own and never blocks meta.json.
+      if (hasUi) {
+        const stem = unloadEntryStem(nowMs, seq++, windowId, "ui", "ui");
+        ops.push({ op: "copy", from: join(dir, "ui.json"), to: join(unloadDir, stem + ".prev"), kind: "ui", id: "ui" });
+        ops.push({
+          op: "write",
+          path: join(unloadDir, stem + ".json"),
+          text: JSON.stringify({ v: 1, kind: "ui", id: "ui", ui: ui.mine, at: nowMs, windowId }),
+          opts: { mode: "create" },
+          kind: "ui",
+          id: "ui",
         });
       }
       return ops;
@@ -15689,7 +15944,7 @@
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, cleanSlotPx, cleanCardPx, cleanCardShare, resolveSlotHeight, resolveCardHeight, hasStartupPanelPref, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, gapPageFloor, gapMaxPx, clampGapPx, GAP_PANEL_MIN_PX, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
-        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, BACKUP_FORMAT, BACKUP_VERSION, BACKUP_MAX_ENTRIES, BACKUP_MAX_TOTAL_BYTES, cleanBackupZipPath, classifyBackupEntry, validateBackupAssetBytes, buildBackupManifest, inspectBackupEntries, planBackupRestore, OBSIDIAN_VAULT_APP_CONFIG, safeObsidianSegment, cleanVaultRelPath, obsidianYamlScalar, splitYamlEntries, planObsidianVaultPaths, buildObsidianFrontMatter, collectObsidianAssetRefs, convertBodyToObsidian, buildObsidianVaultPlan, OBSIDIAN_IMPORT_MAX_FILES, OBSIDIAN_IMPORT_MAX_TOTAL_BYTES, OBSIDIAN_IMPORT_MAX_DEPTH, unquoteYamlScalar, extractObsidianPathFromForeign, parseObsidianFrontMatter, classifyObsidianVaultEntry, planObsidianVaultImport, itemMarkerLineRange, allFolderIds, moveNote, SPLIT_COMPANION_SHARES, DEFAULT_SPLIT_COMPANION, cleanSplitCompanion, nearestSplitShare, splitCompanionAxis, splitCompanionReady, noteDropTarget, noteTabDropPlan, cleanNoteOrder, noteOrderBetween, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, mergeFolders, mergeMeta, META_SHARED_KEYS, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog, FIT_STABLE_TOLERANCE, dialogFitKey, fitDialogStable,
+        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, BACKUP_FORMAT, BACKUP_VERSION, BACKUP_MAX_ENTRIES, BACKUP_MAX_TOTAL_BYTES, cleanBackupZipPath, classifyBackupEntry, validateBackupAssetBytes, buildBackupManifest, inspectBackupEntries, planBackupRestore, OBSIDIAN_VAULT_APP_CONFIG, safeObsidianSegment, cleanVaultRelPath, obsidianYamlScalar, splitYamlEntries, planObsidianVaultPaths, buildObsidianFrontMatter, collectObsidianAssetRefs, convertBodyToObsidian, buildObsidianVaultPlan, OBSIDIAN_IMPORT_MAX_FILES, OBSIDIAN_IMPORT_MAX_TOTAL_BYTES, OBSIDIAN_IMPORT_MAX_DEPTH, unquoteYamlScalar, extractObsidianPathFromForeign, parseObsidianFrontMatter, classifyObsidianVaultEntry, planObsidianVaultImport, itemMarkerLineRange, allFolderIds, moveNote, SPLIT_COMPANION_SHARES, DEFAULT_SPLIT_COMPANION, cleanSplitCompanion, nearestSplitShare, splitCompanionAxis, splitCompanionReady, noteDropTarget, noteTabDropPlan, cleanNoteOrder, noteOrderBetween, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, mergeFolders, mergeMeta, META_SHARED_KEYS, UI_FILE_VERSION, uiKeys, UI_KEYS_FALLBACK, splitUiKeys, uiFileText, uiStateFromFile, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog, FIT_STABLE_TOLERANCE, dialogFitKey, fitDialogStable,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,

@@ -78,40 +78,15 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
 |    36 | `T2.13`     | `OPEN`    | Med                 | M      | all other Track 2 | ICS export/import and Google-sync groundwork (always last in Track 2)                                    |
-|    67 | `OW-38`     | `DONE`    | Med                 | M-L    | 3.3.262           | Automated test suites for all other Zentral features outside Notes                                       |
 |    41 | `T4.3a`     | `OPEN`    | Med                 | M      | none              | Extract calendar UI from `ZentralNotes.uc.js`                                                            |
 |    42 | `T4.3b`     | `OPEN`    | Med                 | M      | T4.3a             | Extract parser/wiki graph and import/export                                                              |
 |    43 | `T4.3c`     | `OPEN`    | Med                 | M      | T4.3b             | Extract Zen sidebar UI; single build entry                                                               |
 |    44 | `OW-21`     | `OPEN`    | Med                 | M      | —                 | [new, lower priority] Find and replace within Notes                                                      |
 |    45 | `OW-22`     | `OPEN`    | Med                 | M      | —                 | [new, lower priority] Find next/previous match outside the visible viewport                              |
-|    46 | `SB6.6`     | `DONE`    | Low-Med             | S      | 3.3.266           | Setting: what the X (close) button does on an Agenda tab                                                 |
-|    47 | `ST7.3`     | `OPEN`    | Low-Med             | S      | none              | Move calendar UI state out of notes metadata                                                             |
-|    48 | `T3.5`      | `DONE`    | Low-Med             | S      | 3.3.293           | Callout toolbar button: last-used on click, more kinds                                                   |
-|    50 | `UI4.9`     | `DONE`    | Low-Med             | S      | 3.3.264           | Space before the unit in slider values                                                                   |
-|    51 | `OW-49`     | `DONE`    | Low-Med             | S      | 3.3.263           | Clock click reveals one small stopwatch/countdown, not a full card of buttons                              |
-|    52 | `OW-50`     | `DONE`    | Med                 | S-M    | 3.3.263           | Weather: today, tomorrow and the next rain/snow day; the detail swaps on click                            |
-|    53 | `OW-51`     | `DONE`    | Low                 | S      | 3.3.263           | Weather place setting must say a typed name is only a label; the coordinates are what is used             |
-|    54 | `OW-52`     | `DONE`    | High                | S      | 3.3.263           | Status widget shows nothing: battery and memory are never filled in                                       |
-|    51 | `UI4.11`    | `DONE`    | Low-Med             | S      | 3.3.267           | Escape returns the focus to the button that opened a menu                                                |
-|    52 | `ST7.5`     | `DONE`    | Low-Med             | S-M    | 3.3.274           | Reminder history export, prune and inspect UI                                                            |
-|    53 | `UI4.10`    | `DONE`    | Low-Med             | S-M    | 3.3.275           | Settings dialog follows the text size                                                                    |
 |    54 | `ST7.4`     | `OPEN`    | Low-Med (long term) | L      | ST7.1             | Render Agenda rows without real tabs (research)                                                          |
-|    55 | `SB6.9`     | `DONE`    | Low                 | S      | 3.3.294           | Agenda sidebar quiet hours and 'left' counts                                                             |
-|    56 | `F0.15`     | `DONE`    | Low                 | S      | 3.3.280           | Isolate the time-budget test of the Agenda projection                                                    |
-|    57 | `DOC-1`     | `DONE`    | Low                 | S      | 3.3.268           | README documents a split view that does not exist                                                        |
-|    58 | `TM3.7`     | `DONE`    | Low                 | S      | 3.3.269           | Day range keeps the wall clock on the day the clocks go forward at midnight                              |
-|    59 | `F0.16`     | `DONE`    | Low                 | S-M    | 3.3.280           | Sweep tests that build fixtures around the real clock                                                    |
-|    60 | `SB6.11`    | `DONE`    | Med                 | S      | 3.3.272           | Right-click a Notes or Agenda row in the sidebar for its own menu, not Zen's tab menu |
-|    61 | `ST7.8`     | `DONE`    | Med                 | S      | 3.3.271           | Give one reminder or event its own colour, not only through its note or category          |
-|    62 | `OW-53`     | `DONE`    | Med                 | M      | 3.3.280           | Import a Google Calendar `.ics` file into the calendar (import/export)                                    |
-|    63 | `OW-54`     | `DONE`    | Med                 | S      | 3.3.281           | Weather: "Rain tomorrow" is cut off on a narrow sidebar instead of moving to the next row                  |
-|    64 | `OW-55`     | `DONE`    | Med                 | S-M    | 3.3.282           | —                 | Settings: choose what free days, weekends and holidays look like (tint and how visible)                    |
-|    65 | `OW-56`     | `DONE`    | High                | M      | 3.3.284           | —                 | Clock and stopwatch as ONE widget: click switches mode, countdown alerts, a finished countdown turns the clock red |
-|    66 | `OW-57`     | `DONE`    | Med                 | S-M    | 3.3.283           | —                 | Weather: two or three saved places, cycled by a click                                                      |
-|    67 | `OW-58`     | `DONE`    | High                | S      | 3.3.285           | —                 | An imported `.ics` event or reminder cannot be deleted: the menu says "delete it in its linked note" and there is none |
-|    68 | `OW-59`     | `DONE`    | High                | S-M    | 3.3.287           | —                 | Reminders/events linked to a note cannot be unlinked there, and a date in a note has no way to list what is linked |
-|    69 | `OW-60`     | `DONE`    | High                | M      | 3.3.290           | OW-56 | Clock and stopwatch do not actually replace each other: the second face shows numbers but offers none of the stopwatch/countdown controls, the standalone Timer card still exists beside it, and the quick note is not reachable from the plain clock |
-|    70 | `OW-61`     | `DONE`    | High                | S      | 3.3.288           | OW-56 | The OW-56 clock/timer settings never appeared in Zentral Settings: the four new prefs are in `schema` but have no `settings` entry, so the dialog drops them |
+|    88 | `OW-63`     | `OPEN`    | High                | M      | OW-60             | Stopwatch face: clicking the running stopwatch does not go back to the clock, and on a narrow widget its text fields push the buttons out of view |
+|    89 | `OW-64`     | `OPEN`    | Med                 | M      | —                 | One language selector for every widget, following the Notes language until the person overrides it |
+|    90 | `OW-62`     | `OPEN`    | High                | S-M    | OW-58             | An imported .ics reminder still cannot be deleted: recreate the missing note instead of refusing |
 
 ---
 
@@ -185,7 +160,7 @@ _Not blocked by the calendar work._
 
 #### `ST7.3` — Move calendar UI state out of notes metadata
 
-**Status:** `OPEN` · **Impact:** Low-Med · **Effort:** S · **Depends on:** none · **Source:** Audit R2 P5
+**Status:** `DONE` (3.3.295) · **Impact:** Low-Med · **Effort:** S · **Depends on:** none · **Source:** Audit R2 P5
 
 **Problem:** `setMeta` rewrites the whole meta file (folders, up to 5000 note agenda overrides) 600 ms after every view/cursor/size/filter change (one write 600 ms after the last change: a drag of the Size slider is one write).
 
@@ -194,6 +169,48 @@ _Not blocked by the calendar work._
 1. Store `calendarView`, `calendarCursor`, scale/range, filters in a small separate file or prefs; migrate once.
 
 **Tests / done when:** Migration test; no meta write on Prev/Next.
+
+#### `OW-63` — Stopwatch face: click returns to the clock, and a narrow widget keeps its buttons
+
+**Status:** `OPEN` · **Impact:** High · **Effort:** M · **Depends on:** OW-60 · **Source:** Owner report (2026-11-17)
+
+**Problem (owner's words):** "clicking on stopwatch doesnt revert it to clock and text field elements of it do not adjust for buttons to be visible in lower width scenarios". OW-60 made the two faces replace each other and put the timer controls on the timer face, but the timer face only leaves by an explicit control, and its number inputs have fixed widths that overflow before the buttons wrap.
+
+**Plan (in this order):**
+
+1. A click on the timer face that is not on a button or a field goes back to the clock face (the same "click the face" gesture OW-60 gave the clock, in the other direction).
+2. The timer face becomes a grid that wraps: the fields take what is left and the buttons move to a second row instead of being pushed out. No fixed pixel widths on the fields; `min-width: 0` so they can shrink.
+3. Check the narrowest sidebar width and the text-size setting.
+
+**Tests / done when:** A fake-DOM test clicks the timer face and asserts the clock is shown; a layout test asserts no control exceeds the card at 200 px; settings for text size do not overflow it.
+
+#### `OW-64` — One language selector for every widget, following Notes until overridden
+
+**Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Depends on:** — · **Source:** Owner request (2026-11-17)
+
+**Problem (owner's words):** "build language selector for all widgets, it should sync with notes language untill user decides that it should not". Only Notes has a language today (`notesLang`), and each other widget is English/Polish by its own rule.
+
+**Plan (in this order):**
+
+1. One pref, `widget_language` (`auto` = follow Notes, else `en`/`pl`), through the whole chain (schema, settings meta, layout, standalone) so it appears in the dialog.
+2. Every widget's `t()` resolves through it: `auto` asks Notes, an explicit value wins and is remembered as the person's choice.
+3. The selector shows "follow Notes" as its own state, and changing the Notes language changes every widget that is still on `auto`.
+
+**Tests / done when:** `auto` follows a Notes language change; an explicit choice survives a Notes change; the pref is in the dialog.
+
+#### `OW-62` — An imported .ics reminder that cannot be deleted: recreate its note
+
+**Status:** `OPEN` · **Impact:** High · **Effort:** S-M · **Depends on:** OW-58 · **Source:** Owner report (2026-11-17)
+
+**Problem (owner's words):** "i still can not delete reminder that was created by ics import, make safeguard for it that will at least try to create such note if it needs one and its not avalible". OW-58 made an item without a note deletable in principle; an imported item still refuses when its linked note is missing rather than making the note it says the person should edit.
+
+**Plan (in this order):**
+
+1. Find the refusal path (the item menu says "delete it in its linked note" when `noteId` is set but the note is not in the store).
+2. When a note is needed and absent, create it (the same way the item's link would have) and then carry out the action — delete, unlink or edit — instead of stopping.
+3. If the note cannot be created, the fallback is the OW-58 path: delete the item itself, saying so.
+
+**Tests / done when:** An imported item whose note is missing can be deleted, and the note is created on the way; the menu never says "edit it in its note" about a note that does not exist.
 
 #### `ST7.4` — Render Agenda rows without real tabs (research)
 
@@ -271,7 +288,7 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.294.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9`, `SB6.6`, `UI4.11`, `DOC-1`, `TM3.7`, `ST7.8`, `SB6.11`, `ST7.5`, `UI4.10`, `OW-53`, `F0.15`, `F0.16`, `OW-54`, `OW-55`, `OW-56`, `OW-57`, `OW-58`, `OW-59`, `OW-60`, `OW-61`, `T3.5` and `SB6.9` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`232/232` test files) passes in Node/fake-Zen at 3.3.294; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.296.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9`, `SB6.6`, `UI4.11`, `DOC-1`, `TM3.7`, `ST7.8`, `SB6.11`, `ST7.5`, `UI4.10`, `OW-53`, `F0.15`, `F0.16`, `OW-54`, `OW-55`, `OW-56`, `OW-57`, `OW-58`, `OW-59`, `OW-60`, `OW-61`, `T3.5`, `SB6.9` and `ST7.3` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`233/233` test files) passes in Node/fake-Zen at 3.3.296; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
 `OW-59` DONE (3.3.287) — a note's reminders and events can now be unlinked from it: one card, reachable from the note's
 menu ("Linked to this note…"), from the date menu ("Everything linked to today…") and from the per-date reminder
@@ -431,4 +448,4 @@ Known debts / owner requirements: LIMITS of `OW-04`: the pointer is held to the 
 
 Planning only, no code (2026-11-17, version 3.3.244): the owner's holiday list added as `OW-43` (holiday sets split from the interface language, any language picks any set, first sets `PL` + `US`), `OW-44` (any number of sets at once), `OW-45` (one-place year table for movable/one-off dates such as the Polish election day and `niedziela handlowa`), `OW-46` (one master off switch) and `T2.13a` (how holidays behave when the `T2.13` ICS/Google groundwork is built: local sets are never imported or synced). They sit at the top of the Master Order; `T3.3` follows them.
 
-Next action: the owner's 2026-11-17 bug reports are all shipped — `OW-58` 3.3.285 (delete an imported `.ics` item), `OW-59` 3.3.287 (unlink an item from its note, list what a note or a date has linked), `OW-61` 3.3.288 (the clock/timer settings finally reach Zentral Settings) and `OW-60` 3.3.290 (the Clock and the stopwatch are one card: the controls are on the timer face, the standalone Timer card is gone, the quick note is on the clock face) — so the queue returns to `ST7.4`, with `T2.13` (the export half) behind it; `ST7.3` (calendar UI state out of notes metadata) stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.
+Next action: `OW-63` (the stopwatch face must return to the clock on a click, and its fields must not push the buttons out), then `OW-62` (an imported `.ics` item whose note is missing must make the note), then `OW-64` (one widget language following Notes), then the rest of the queue. Earlier, the owner's 2026-11-17 bug reports were all shipped — `OW-58` 3.3.285 (delete an imported `.ics` item), `OW-59` 3.3.287 (unlink an item from its note, list what a note or a date has linked), `OW-61` 3.3.288 (the clock/timer settings finally reach Zentral Settings) and `OW-60` 3.3.290 (the Clock and the stopwatch are one card: the controls are on the timer face, the standalone Timer card is gone, the quick note is on the clock face) — so the queue returns to `ST7.4`, with `T2.13` (the export half) behind it; `ST7.3` (calendar UI state out of notes metadata) stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.

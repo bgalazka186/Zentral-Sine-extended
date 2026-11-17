@@ -499,6 +499,10 @@ const baseline = (env) => {
     };
     assert.match(run2('const A = "zen.workspace.zentral.compat.external_library_layout";'), /borrowedSettings/);
     assert.match(run2('const A = "zen.view.compact.nonexistent";'), /externalPrefs/);
+    // ST7.3: a FILE NAME is not a pref. `ui.` is a real pref prefix, so `"ui.json"` used to be rejected as an
+    // unknown pref and the whole Notes package stopped building. A name with a data extension is skipped instead.
+    assert.equal(run2('const f = "ui.json";'), null, "a data file name is not treated as a pref");
+    assert.equal(run2('const f = io.join(dir, "ui.json.tmp");'), null, "nor is its temporary file");
   });
 
   // ---- Video (multi-file module with an embedded loader) --------------------

@@ -600,7 +600,11 @@ function referenceZonedMs(dateKey, timeText, zone) {
 
   await test("the zones chosen lately are kept in the settings file and read back clean", async () => {
     await store.flush();
-    const saved = JSON.parse([...files.entries()].find(([name]) => /meta/i.test(name))[1].text);
+    // ST7.3: `calendarRecentZones` is view state and lives in ui.json, so that is the file that holds it now. The
+    // assertion keeps its meaning (what was chosen lately is on disk and reads back clean) and names the right file.
+    const uiEntry = [...files.entries()].find(([name]) => /ui\.json$/.test(name));
+    assert.ok(uiEntry, "the view file was written");
+    const saved = JSON.parse(uiEntry[1].text).ui;
     assert.deepEqual(saved.calendarRecentZones, [...store.meta.calendarRecentZones]);
     assert.ok(saved.calendarRecentZones.length >= 4 && saved.calendarRecentZones.length <= 6);
   });

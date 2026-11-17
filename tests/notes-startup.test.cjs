@@ -514,7 +514,9 @@ const REAL_FOLDERS = ["Home/fhome00001/", "Work projects/fwork00001/blue"];
       assert.equal(seen(b).length, 1, "window b restored Notes: it knows where it was");
       await a.close(); await b.close();
       assert.deepEqual(folderLabels(w), REAL_FOLDERS, "the file still has every folder with its colour and id");
-      assert.equal(w.meta().calendarDaysForward, 14, "and the other settings");
+      // ST7.3: `calendarDaysForward` is calendar view state and lives in ui.json now, so the "other setting" that is
+      // checked here is a content one — the point is that a held meta.json is not replaced by defaults.
+      assert.equal(w.meta().mode, "edit", "and the other settings");
     }
   });
 
@@ -547,8 +549,9 @@ const REAL_FOLDERS = ["Home/fhome00001/", "Work projects/fwork00001/blue"];
       w.disk.set(DIR + "/n1.md", noteText("One", { folder: "work" }));
       win.start(); await win.seam.ensureStore();
       assert.deepEqual(plain(win.seam.store.meta.folders.map((f) => f.id)), ["work"], "the folder named by a note");
-      win.seam.store.setMeta({ calendarDaysForward: 30 }); await w.advance(1000);
-      assert.equal(w.meta().calendarDaysForward, 30, "and settings are saved");
+      // ST7.3: the view goes to ui.json; a content setting proves the metadata file is the one being written.
+      win.seam.store.setMeta({ mode: "read" }); await w.advance(1000);
+      assert.equal(w.meta().mode, "read", "and settings are saved");
       assert.equal(w.disk.has(META + ".corrupt"), false);
       await win.close();
     }
@@ -560,8 +563,8 @@ const REAL_FOLDERS = ["Home/fhome00001/", "Work projects/fwork00001/blue"];
       win.start(); await win.seam.ensureStore();
       assert.equal(w.disk.get(META + ".corrupt"), damaged, "what was there can still be looked at");
       assert.ok(w.warnings.some((x) => /damaged/.test(x.text)));
-      win.seam.store.setMeta({ calendarDaysForward: 30 }); await w.advance(1000);
-      assert.equal(w.meta().calendarDaysForward, 30, "Notes works and saves again");
+      win.seam.store.setMeta({ mode: "read" }); await w.advance(1000);
+      assert.equal(w.meta().mode, "read", "Notes works and saves again");
       await win.close();
     }
     // An empty file is not worth keeping.
