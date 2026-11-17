@@ -187,7 +187,7 @@ async function test(name, fn) {
     // Two sets at once keep both names on a shared day and never drop one.
     const both = cal.holidayEntriesFor({ enabled: true, locales: ["PL", "US"], weekend: "auto", personalDays: [] }, 2026, "en");
     const may1 = both.filter((e) => e.date === "2026-05-01");
-    assert.equal(may1.length, 1, "one entry per day");
+    assert.equal(may1.length, 1, "only one set names that day");
     assert.deepEqual([...may1[0].locales].sort(), ["PL"], "only Poland has 2026-05-01");
     assert.ok(both.some((e) => e.date === "2026-07-03" && /Independence Day/.test(e.name)));
     const wf = cal.isWorkFree("2026-05-01", { enabled: true, locales: ["PL", "US"], weekend: "auto", personalDays: [] }, "en");
@@ -196,6 +196,30 @@ async function test(name, fn) {
     assert.equal(wf.holiday.name, "Labour Day", "`holiday` still names the first one");
     assert.equal(cal.isWorkFree("2026-07-03", { enabled: true, locales: ["US"], weekend: "auto", personalDays: [] }, "pl").workFree, true);
     assert.equal(cal.isWorkFree("2026-07-03", { enabled: true, locales: ["PL"], weekend: "auto", personalDays: [] }, "pl").workFree, false);
+  });
+
+  await test("OW-44: several holiday sets at once name the set of every holiday in every view", async () => {
+    const prefs = { enabled: true, locales: ["PL", "US"], weekend: "auto", personalDays: [] };
+    // A day that belongs to both sets names both; a single set never repeats its own name.
+    const shared = cal.isWorkFree("2026-11-11", prefs, "en");
+    assert.equal(shared.holidays.length, 2, "Veterans Day and Polish Independence Day are both kept");
+    assert.deepEqual(shared.holidays.map((h) => h.name), ["National Independence Day", "Veterans Day"]);
+    assert.equal(shared.tooltip, "National Independence Day (PL) \u00b7 Veterans Day (US)", "every name says its set");
+    assert.deepEqual(cal.holidaySetsOf(shared), ["PL", "US"]);
+    assert.equal(cal.isWorkFree("2026-11-11", { ...prefs, locales: ["PL"] }, "en").tooltip, "National Independence Day");
+    // Only one set's day keeps that set's name without a suffix list.
+    assert.equal(cal.isWorkFree("2026-11-26", prefs, "en").tooltip, "Thanksgiving Day (US)");
+    // Three sets stay readable and capped.
+    const three = cal.cleanCalendarHolidays({ enabled: true, locales: ["PL", "US", "DE"], personalDays: [] });
+    assert.deepEqual([...three.locales], ["PL", "US", "DE"]);
+    assert.equal(three.region, "PL", "the first set is the primary one");
+    assert.ok(cal.holidayEntriesFor(three, 2026, "pl").length >= 29, "three sets merge into one list");
+    // The live helper caches a merge per year/language and still answers after the sets change.
+    const a = cal.holidayEntriesFor(prefs, 2026, "en");
+    const b = cal.holidayEntriesFor(prefs, 2026, "en");
+    assert.equal(a, b, "same request returns the cached list");
+    assert.notEqual(cal.holidayEntriesFor({ ...prefs, locales: ["PL"] }, 2026, "en").length, a.length);
+    assert.ok(CSS_SRC.includes(".is-multi-holiday"), "a day of several sets has its own style");
   });
 
   await test("pure: Easter algorithm, nthWeekday, region weekends, and offline holidaysFor across PL/DE/GB/US/EG & years", async () => {
@@ -393,6 +417,39 @@ async function test(name, fn) {
     assert.equal(h.store.meta.calendarHolidays.localesExplicit, true, "manual selection is persisted as explicit");
     assert.match(regionStatus.textContent, /Germany \(DE\)/i, "the status follows a changed choice");
     assert.ok(h.store.meta.calendarHolidays.personalDays.some((p) => p.date === "2026-05-15" && p.label === "Berlin trip"));
+    // A day that belongs to two chosen sets carries both names (OW-44). A settings write re-renders through the
+    // sheet's own path (the dialog calls renderCalendar), so each step redraws by picking the Month view.
+    const redrawMonth = async () => {
+      h.sheet.root.querySelector(".zn-calendar-view-select").click();
+      const item = [...h.sheet.root.querySelectorAll(".zn-menu-item")].find((b) => b.textContent.includes("Month"));
+      assert.ok(item, "the view menu offers Month");
+      item.click();
+      await h.flush();
+    };
+    h.store.setMeta({ calendarPicker: { mode: "auto", minWidth: 470, minHeight: 360, colorMode: "count" } });
+    const keepPersonal = () => h.store.meta.calendarHolidays.personalDays;
+    h.store.setMeta({ calendarHolidays: { enabled: true, locales: ["PL", "US"], weekend: "auto", personalDays: keepPersonal() } });
+    await redrawMonth();
+    const mayShared = h.sheet.root.querySelector('.zn-cal-month-cell[data-day="2026-05-01"]');
+    assert.ok(mayShared, "the May grid is drawn");
+    assert.equal(mayShared.getAttribute("data-holiday-sets"), "PL", "Labour Day is Polish only");
+    assert.ok(!mayShared.classList.contains("is-multi-holiday"), "one set on that day is not marked as several");
+    assert.match(mayShared.title, /Labour Day/);
+    // Every drawn cell names only chosen sets, and every cell that names one is a holiday cell.
+    const drawn = [...h.sheet.root.querySelectorAll(".zn-cal-month-cell[data-holiday-sets]")];
+    assert.ok(drawn.length > 0, "the grid marks its holiday days");
+    for (const cell of drawn) {
+      assert.match(cell.getAttribute("data-holiday-sets"), /^(PL|US|PL US|US PL)$/, "only the chosen sets are named");
+      assert.ok(cell.classList.contains("is-holiday"), "a set name always sits on a holiday cell");
+    }
+    h.store.setMeta({ calendarHolidays: { enabled: true, locales: ["PL"], weekend: "auto", personalDays: keepPersonal() } });
+    await redrawMonth();
+    const mayOne = h.sheet.root.querySelector('.zn-cal-month-cell[data-day="2026-05-01"]');
+    assert.equal(mayOne.getAttribute("data-holiday-sets"), "PL", "one set keeps naming its day");
+    assert.ok([...h.sheet.root.querySelectorAll(".zn-cal-month-cell[data-holiday-sets]")].every((cell) => cell.getAttribute("data-holiday-sets") === "PL"), "no dropped set lingers");
+    h.store.setMeta({ calendarHolidays: { enabled: true, locales: ["PL", "DE"], weekend: "auto", personalDays: keepPersonal() } });
+    await redrawMonth();
+
     // The second set tints its own days in the live calendar, not only in the pure helper.
     const wfDe = cal.isWorkFree("2026-05-25", h.store.meta.calendarHolidays, "en");
     assert.equal(wfDe.holiday?.name, "Whit Monday", "the stored sets are what the live calendar reads");

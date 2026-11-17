@@ -2091,6 +2091,15 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-agenda-row.is-holiday {
   background: color-mix(in srgb, #f0b85b 13%, transparent);
 }
+/* OW-44: the same day is a holiday in more than one chosen set — a second accent edge, still one tint. */
+.zentral-notes-sheet .zn-cal-month-cell.is-multi-holiday,
+.zentral-notes-sheet .zn-cal-picker-day.is-multi-holiday {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #f0b85b 55%, transparent);
+}
+.zentral-notes-sheet .zn-cal-holiday-pill.is-multi-holiday,
+.zentral-notes-sheet .zn-cal-month-holiday.is-multi-holiday {
+  color: color-mix(in srgb, #f0b85b 70%, currentColor);
+}
 .zentral-notes-sheet .zn-cal-month-cell.is-personal-off,
 .zentral-notes-sheet .zn-cal-time-day-head.is-personal-off,
 .zentral-notes-sheet .zn-cal-time-allday-cell.is-personal-off,

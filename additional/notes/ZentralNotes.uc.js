@@ -18507,6 +18507,14 @@
           el.dataset.holiday = wf.holiday.name;
           el.setAttribute("data-holiday", wf.holiday.name);
         }
+        // OW-44: every chosen set is named, and a day that belongs to several says which (data-holiday-sets).
+        const holidaySets = CALENDAR_PART?.holidaySetsOf?.(wf) || [];
+        if (holidaySets.length) {
+          const setsText = holidaySets.join(" ");
+          el.dataset.holidaySets = setsText;
+          el.setAttribute("data-holiday-sets", setsText);
+          if (holidaySets.length > 1) el.classList.add("is-multi-holiday");
+        }
         if (wf.personal) {
           const pl = wf.personal.label || "true";
           el.dataset.personalOff = pl;

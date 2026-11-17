@@ -7127,6 +7127,7 @@
   const HOLIDAY_LOCALE_CODES = Object.freeze(HOLIDAY_LOCALES.map((entry) => entry.code));
   const HOLIDAY_LOCALES_MAX = 8;
   const holidayYearCache = new Map();
+  const holidayMergeCache = new Map();
 
   function pad2(n) { return String(Math.max(0, Math.floor(Number(n) || 0))).padStart(2, "0"); }
   function ymdParts(year, month, day) { return `${year}-${pad2(month)}-${pad2(day)}`; }
@@ -7376,22 +7377,41 @@
     const clean = cleanCalendarHolidays(prefs);
     const codes = clean.locales.length ? clean.locales : (clean.region !== "none" ? cleanHolidayLocales([clean.region]) : []);
     if (!codes.length) return Object.freeze([]);
-    const byDate = new Map();
+    // A month draws ~42 days; merging the chosen sets for the same year and language happens once (PF2.1).
+    const mergeKey = `${codes.join("+")}:${Math.trunc(Number(year))}:${cleanNotesLanguage(lang)}`;
+    const cached = holidayMergeCache.get(mergeKey);
+    if (cached) return cached;
+    const out = [];
+    const same = new Map();
     for (const code of codes) {
       for (const entry of holidaysFor(code, year, lang)) {
-        const seen = byDate.get(entry.date);
-        if (!seen) {
-          byDate.set(entry.date, { date: entry.date, name: entry.name, kind: entry.kind, locale: code, locales: [code], names: [entry.name] });
-          continue;
-        }
-        if (seen.names.includes(entry.name)) continue;
-        seen.names.push(entry.name);
-        seen.locales.push(code);
-        seen.name = seen.names.join(" \u00b7 ");
-        seen.kind = "holiday";
+        const key = `${entry.date}|${entry.name}`;
+        const seen = same.get(key);
+        // The same day with the same name in two sets is one holiday of both sets, not two entries.
+        if (seen) { seen.locales.push(code); continue; }
+        const made = { date: entry.date, name: entry.name, kind: entry.kind, locale: code, locales: [code] };
+        same.set(key, made);
+        out.push(made);
       }
     }
-    return Object.freeze([...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).map((entry) => Object.freeze(entry)));
+    const order = new Map(codes.map((code, index) => [code, index]));
+    const merged = Object.freeze(out
+      .sort((a, b) => a.date.localeCompare(b.date) || order.get(a.locale) - order.get(b.locale) || a.name.localeCompare(b.name))
+      .map((entry) => Object.freeze({ ...entry, locales: Object.freeze(entry.locales) })));
+    if (holidayMergeCache.size > 60) holidayMergeCache.clear();
+    holidayMergeCache.set(mergeKey, merged);
+    return merged;
+  }
+  // The sets that give a day its holidays, in the order they are chosen (OW-44): one day may belong to several.
+  function holidaySetsOf(wf) {
+    const list = Array.isArray(wf?.holidays) ? wf.holidays : (wf?.holiday ? [wf.holiday] : []);
+    const out = [];
+    for (const entry of list) {
+      for (const code of (Array.isArray(entry?.locales) ? entry.locales : (entry?.locale ? [entry.locale] : []))) {
+        if (!out.includes(code)) out.push(code);
+      }
+    }
+    return out;
   }
   function isWorkFree(day, prefs, lang = "en") {
     const clean = cleanCalendarHolidays(prefs);
@@ -7406,8 +7426,10 @@
     const holidays = holidayEntriesFor(clean, year, lang).filter((entry) => entry.date === key);
     const holiday = holidays.length ? holidays[0] : null;
     const personal = clean.personalDays.find((p) => p.date === key) || null;
+    // With more than one set chosen every name says which set it comes from, so two calendars are readable apart.
+    const multiSet = clean.locales.length > 1;
     const reasons = [];
-    for (const entry of holidays) reasons.push(entry.name);
+    for (const entry of holidays) reasons.push(multiSet ? `${entry.name} (${entry.locales.join(", ")})` : entry.name);
     if (personal) reasons.push(personal.label ? personal.label : t("cal.holidays.personalDayOff", null, lang));
     const tooltip = reasons.join(" \u00b7 ");
     return {
@@ -7424,7 +7446,7 @@
   const api = {
     KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, translate, t, pluralCategory, tCount, translationKeys, missingTranslationKeys, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, lineScheduleSignature, cleanTextSchedule, scheduleSignatureFromItem, scheduleFromParsedLine, reconcileListItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, holidaySetsOf, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
     cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
