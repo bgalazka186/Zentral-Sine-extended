@@ -3194,6 +3194,12 @@
     "placeholder": "30"
   },
   {
+    "property": "zen.workspace.zentral.notes.archive_daily_notes",
+    "label": "Keep compressed copies of past date notes; never auto-trash them",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
     "label": "Spell-check while typing",
     "type": "checkbox",
     "defaultValue": true,

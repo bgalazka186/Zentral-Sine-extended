@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.240
+// @version 3.3.241
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.240, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.241, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.240";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.241";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11612,6 +11612,7 @@ __zentralShim.register = function (def) {
       HIDDEN_MENU: "zen.workspace.zentral.notes.hidden_tools_menu",
       DATE_MODE: "zen.workspace.zentral.notes.date_notes_mode",
       DATE_DISPLAY: "zen.workspace.zentral.notes.date_display_format",
+      DATE_ARCHIVE: "zen.workspace.zentral.notes.archive_daily_notes",
       NOTES_LANGUAGE: "zen.workspace.zentral.notes.language",
       NOTES_LANGUAGE_ACCEPT_ALL: "zen.workspace.zentral.notes.language_accept_all",
       MD_FLAVOR: "zen.workspace.zentral.notes.markdown_flavor",
@@ -16796,6 +16797,7 @@ __zentralShim.register = function (def) {
           { id: "hiddenMenu", label: "Hidden tools stay reachable in More", pref: PREF.HIDDEN_MENU, kind: "bool", def: true },
           { id: "dateMode", label: "Date notes", pref: PREF.DATE_MODE, kind: "choice", def: "separate", choices: [["separate", "One note per day"], ["single", "All in one Journal note"]] },
           { id: "dateDisplay", label: "Date display format (calendar, chips and Notes by date)", pref: PREF.DATE_DISPLAY, kind: "choice", def: "DD-MM-YYYY", choices: [["DD-MM-YYYY", "14-11-2026 (DD-MM-YYYY)"], ["YYYY-MM-DD", "2026-11-14 (YYYY-MM-DD)"], ["MM/DD/YYYY", "11/14/2026 (MM/DD/YYYY)"], ["DD.MM.YYYY", "14.11.2026 (DD.MM.YYYY)"], ["DD/MM/YYYY", "14/11/2026 (DD/MM/YYYY)"], ["long", "Saturday, November 14, 2026 (long)"]] },
+          { id: "dateArchive", label: "Keep compressed copies of past date notes; never auto-trash them", pref: PREF.DATE_ARCHIVE, kind: "bool", def: false },
           { kind: "heading", i18nKey: "settings.heading.versionHistory", label: "Version history" },
           { id: "histOn", label: "Keep earlier versions", pref: PREF.HISTORY_ON, kind: "bool", def: true },
           S("histKeep", "Versions kept per note", PREF.HISTORY_KEEP, 1, 200, "", 20),
@@ -18791,6 +18793,7 @@ __zentralShim.register = function (def) {
       getWorkspaces = () => [],
       getMaxSaveMs,
       getTrashDays = () => TRASH_DAYS,
+      getArchiveDailyNotes = () => false,
       setTimer,
       clearTimer,
       warn = () => {},
@@ -20159,7 +20162,7 @@ __zentralShim.register = function (def) {
       }
 
       function purgeBlankDateNotes({ onlyIds = null } = {}) {
-        if (!CALENDAR_PART || typeof CALENDAR_PART.isBlankDateNote !== "function" || !notes.size) return [];
+        if (!CALENDAR_PART || typeof CALENDAR_PART.isBlankDateNote !== "function" || !notes.size || getArchiveDailyNotes()) return [];
         const only = Array.isArray(onlyIds) ? new Set(onlyIds.filter((id) => typeof id === "string" && id)) : null;
         const live = [...notes.values()].filter((note) => note && !note.trashed);
         if (!live.length) return [];
@@ -20207,6 +20210,69 @@ __zentralShim.register = function (def) {
           removed.push(note.id);
         }
         return removed;
+      }
+
+      async function archivePastDateNotes() {
+        if (!getArchiveDailyNotes()) return { archived: 0, unchanged: 0, failed: 0 };
+        if (!dir || !CALENDAR_PART || typeof io.writeZip !== "function" || typeof io.makeDir !== "function")
+          return { archived: 0, unchanged: 0, failed: 0, unavailable: true };
+        const todayKey = CALENDAR_PART.localDateKey(now());
+        const candidates = [...notes.values()].filter((note) => {
+          if (!note || note.trashed || note._sharedFromOtherSpace) return false;
+          const folder = cleanFolder(note.folder);
+          if (folder !== DATE_FOLDER && !folder.startsWith(DATE_FOLDER + "/")) return false;
+          const key = dateOfNote(note, getDateFormat());
+          return !!key && key < todayKey;
+        });
+        if (!candidates.length) return { archived: 0, unchanged: 0, failed: 0 };
+        const archiveRoot = io.join(dir, "daily-archive");
+        await io.makeDir(archiveRoot);
+        const indexPath = io.join(archiveRoot, "index.json");
+        let index = { version: 1, notes: {} };
+        try {
+          if (io.exists && await io.exists(indexPath)) {
+            const raw = JSON.parse(await io.readUTF8(indexPath));
+            if (raw && raw.version === 1 && raw.notes && typeof raw.notes === "object" && !Array.isArray(raw.notes)) index = raw;
+          }
+        } catch (_) {}
+        const nextNotes = { ...index.notes };
+        let assets = [];
+        try { assets = await api.assetInventory(); }
+        catch (error) { warn(error); return { archived: 0, unchanged: 0, failed: candidates.length }; }
+        let archived = 0, unchanged = 0, failed = 0;
+        for (const note of candidates) {
+          try {
+            if (!isAssetNoteId(note.id)) { failed++; continue; }
+            const key = dateOfNote(note, getDateFormat());
+            const updated = Number(note.updated) || 0;
+            const archivePath = io.join(archiveRoot, note.id + ".zip");
+            if (nextNotes[note.id]?.updated === updated && io.exists && await io.exists(archivePath)) { unchanged++; continue; }
+            const stamp = updated || now();
+            const entries = [
+              { path: "note.md", bytes: utf8Bytes(serializeNote(note)), mtime: stamp },
+              { path: "manifest.json", bytes: utf8Bytes(JSON.stringify({ noteId: note.id, date: key, updated })), mtime: stamp },
+            ];
+            for (const rel of assets) {
+              const asset = classifyBackupEntry(rel);
+              if (!asset || asset.kind !== "asset" || asset.noteId !== note.id || !io.readBytes) continue;
+              try {
+                const bytes = await io.readBytes(io.join(dir, ASSET_DIR, note.id, asset.file));
+                if (validateBackupAssetBytes(asset, bytes).ok) entries.push({ path: "assets/" + asset.file, bytes, mtime: stamp });
+              } catch (error) { warn(error); }
+            }
+            await io.writeZip(archivePath, entries);
+            nextNotes[note.id] = { date: key, updated };
+            archived++;
+          } catch (error) {
+            failed++;
+            warn(error);
+          }
+        }
+        if (archived) {
+          try { await io.writeUTF8(indexPath, JSON.stringify({ version: 1, notes: nextNotes }, null, 2) + "\n", { tmpPath: indexPath + ".tmp" }); }
+          catch (error) { warn(error); failed += archived; }
+        }
+        return { archived, unchanged, failed };
       }
 
       const api = {
@@ -20279,6 +20345,7 @@ __zentralShim.register = function (def) {
               if (df && df.label === "Daily") api.renameFolder(DATE_FOLDER, DATE_FOLDER_LABEL);
             } catch (error) { warn(error); }
             api.ensureFolderUids(); // every folder has its permanent uid before anything (tree, Zen sidebar) is built from it
+            await archivePastDateNotes().catch(warn);
             await purgeOldTrash();
             await purgeBackups().catch(warn);
             if (typeof startup === "function") {
@@ -20563,6 +20630,7 @@ __zentralShim.register = function (def) {
         get(id) {
           return notes.get(id) || null;
         },
+        archivePastDateNotes,
         setActiveNote(owner, id) {
           if (!owner || (id && !notes.has(id))) return false;
           if (id) activeNotes.set(owner, id);
@@ -40436,6 +40504,25 @@ __zentralShim.register = function (def) {
       makeDir: (p) => IOUtils.makeDirectory(p, { createAncestors: true, ignoreExisting: true }),
       writeBytes: (p, bytes) => IOUtils.write(p, bytes, { mode: "create" }),
       readBytes: (p) => IOUtils.read(p),
+      writeZip: (p, entries) => {
+        const zw = Cc["@mozilla.org/zipwriter;1"].createInstance(Ci.nsIZipWriter);
+        try {
+          zw.open(p, 0x04 | 0x08 | 0x20);
+          for (const entry of entries || []) {
+            const bytes = entry.bytes instanceof Uint8Array ? entry.bytes : new Uint8Array(entry.bytes || []);
+            let bin = "";
+            for (let j = 0; j < bytes.length; j += 8192) bin += String.fromCharCode(...bytes.subarray(j, j + 8192));
+            const stream = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(Ci.nsIStringInputStream);
+            stream.setData(bin, bin.length);
+            const precompressed = /\.(?:png|jpe?g|webp|gif|mp4|m4v|webm|ogv|ogg|zip)$/i.test(entry.path);
+            const level = precompressed ? Ci.nsIZipWriter.COMPRESSION_NONE : Ci.nsIZipWriter.COMPRESSION_DEFAULT;
+            zw.addEntryStream(entry.path, (entry.mtime || Date.now()) * 1000, level, stream, false);
+          }
+          return true;
+        } finally {
+          try { zw.close(); } catch (_) {}
+        }
+      },
       removeTree: (p) => IOUtils.remove(p, { recursive: true, ignoreAbsent: true }),
       moveTree: (from, to) => IOUtils.move(from, to),
       copy: (from, to) => IOUtils.copy(from, to),
@@ -40549,6 +40636,7 @@ __zentralShim.register = function (def) {
         getMaxSaveMs: () =>
           Math.max(2, Math.min(60, prefInt(PREF.AUTOSAVE, DEFAULT_MAX_SAVE_SECONDS))) * 1000,
         getTrashDays: () => cleanTrashDays(prefInt(PREF.TRASH_DAYS, TRASH_DAYS)),
+        getArchiveDailyNotes: () => prefBool(PREF.DATE_ARCHIVE, false),
         getHistory: () => ({
           on: prefBool(PREF.HISTORY_ON, true),
           ...historyOptions({ keep: prefInt(PREF.HISTORY_KEEP, HISTORY_DEFAULTS.keep), minutes: prefInt(PREF.HISTORY_MINUTES, HISTORY_DEFAULTS.minutes), capKB: prefInt(PREF.HISTORY_CAP_KB, HISTORY_DEFAULTS.capKB), warnMB: prefInt(PREF.HISTORY_WARN_MB, HISTORY_DEFAULTS.warnMB) }),
