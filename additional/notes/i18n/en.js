@@ -563,6 +563,15 @@
       "tree.empty.trashEmpty": "Trash is empty.",
       "tree.empty.noRecent": "Nothing opened yet.",
       "tree.empty.truncated": "Showing the first {shown} of {total}. Use search to narrow down.",
+      "tree.folder.hideFromZen": "Hide from Zen sidebar",
+      "tree.folder.showInZen": "Show in Zen sidebar",
+      "tree.folder.overrideShowInZen": "Show in Zen sidebar (override parent)",
+      "tree.folder.inheritHideFromZen": "Hide from Zen sidebar (inherit parent)",
+      "tree.folder.zenHiddenFlash": "Folder hidden from Zen NOTES sidebar",
+      "tree.folder.zenShownFlash": "Folder shown in Zen NOTES sidebar",
+      "tree.folder.zenHiddenBadge": "No sidebar",
+      "tree.folder.zenHiddenBadgeTitle": "Hidden from the Zen NOTES sidebar (still in All notes, search, calendar, and wiki links)",
+      "tree.folder.zenHiddenInheritedTitle": "Hidden from the Zen NOTES sidebar (inherited from parent folder)",
 
       // Area 7: Settings & Quick settings
       "settings.title": "Settings",

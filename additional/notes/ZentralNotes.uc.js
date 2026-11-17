@@ -1024,6 +1024,44 @@
     }
     const EMOJI_ONE = /^(?:\p{Extended_Pictographic}(?:\uFE0F|[\u{1F3FB}-\u{1F3FF}])?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|[\u{1F3FB}-\u{1F3FF}])?)*|[\u{1F1E6}-\u{1F1FF}]{2}|[0-9#*]\uFE0F?\u20E3)$/u;
     const cleanFolderIcon = (v) => (typeof v === "string" && v.length <= 24 && EMOJI_ONE.test(v) ? v : "");
+    // T2.11: Per-folder Zen NOTES sidebar exclusion ("hide" = excluded, "show" = explicitly shown overriding a hidden ancestor, "" = inherit parent).
+    const FOLDER_ZEN_SIDEBAR_VALUES = Object.freeze(["hide", "show"]);
+    const cleanFolderZenSidebar = (v) => (v === "hide" || v === "show" ? v : "");
+    function resolveFolderZenSidebar(folderId, folders) {
+      const fid = cleanFolder(folderId);
+      if (!fid) return { own: "", hidden: false, inherited: false, inheritedHidden: false, inheritedFrom: "" };
+      const byId = new Map();
+      for (const f of folders || []) {
+        const id = cleanFolder(f && f.id);
+        if (id && !byId.has(id)) byId.set(id, cleanFolderZenSidebar(f && f.zenSidebar));
+      }
+      const segs = fid.split("/");
+      let inheritedHidden = false;
+      let inheritedFrom = "";
+      let path = "";
+      for (let i = 0; i < segs.length - 1; i++) {
+        path = i === 0 ? segs[0] : path + "/" + segs[i];
+        const v = byId.get(path) || "";
+        if (v === "hide") { inheritedHidden = true; inheritedFrom = path; }
+        else if (v === "show") { inheritedHidden = false; inheritedFrom = path; }
+      }
+      const own = byId.get(fid) || "";
+      const hidden = own === "hide" ? true : own === "show" ? false : inheritedHidden;
+      return { own, hidden, inherited: !own && !!inheritedFrom, inheritedHidden, inheritedFrom };
+    }
+    function folderZenSidebarMenuAction(folderId, folders) {
+      const state = resolveFolderZenSidebar(folderId, folders);
+      if (!state.hidden) {
+        if (state.own === "show" && state.inheritedHidden) {
+          return { state, nextValue: "", labelKey: "tree.folder.inheritHideFromZen", flashKey: "tree.folder.zenHiddenFlash" };
+        }
+        return { state, nextValue: "hide", labelKey: "tree.folder.hideFromZen", flashKey: "tree.folder.zenHiddenFlash" };
+      }
+      if (state.inherited) {
+        return { state, nextValue: "show", labelKey: "tree.folder.overrideShowInZen", flashKey: "tree.folder.zenShownFlash" };
+      }
+      return { state, nextValue: state.inheritedHidden ? "show" : "", labelKey: "tree.folder.showInZen", flashKey: "tree.folder.zenShownFlash" };
+    }
     function cleanFolder(v) {
       if (typeof v !== "string" || !v) return "";
       const segs = v.split("/").filter(Boolean);
@@ -1051,13 +1089,14 @@
           path = i === 0 ? segs[0] : path + "/" + segs[i];
           const isTarget = i === segs.length - 1 && explicitMeta;
           if (!folderNodes.has(path)) {
-            folderNodes.set(path, { id: path, uid: isTarget ? explicitMeta.uid || "" : "", color: isTarget ? cleanFolderColor(explicitMeta.color) : "", icon: isTarget ? cleanFolderIcon(explicitMeta.icon) : "", ...(isTarget && Object.keys(cleanFolderParts(explicitMeta.parts)).length ? { parts: cleanFolderParts(explicitMeta.parts) } : {}), ...(isTarget && Object.keys(cleanFolderOpacity(explicitMeta.opacity)).length ? { opacity: cleanFolderOpacity(explicitMeta.opacity) } : {}), label: isTarget && explicitMeta.label ? String(explicitMeta.label).slice(0, 60) : segs[i], collapsed: isTarget ? Boolean(explicitMeta.collapsed) : false, children: [], notes: [], _listed: !!isTarget, _order: isTarget && typeof explicitMeta.order === "number" ? explicitMeta.order : 0 });
+            folderNodes.set(path, { id: path, uid: isTarget ? explicitMeta.uid || "" : "", color: isTarget ? cleanFolderColor(explicitMeta.color) : "", icon: isTarget ? cleanFolderIcon(explicitMeta.icon) : "", zenSidebar: isTarget ? cleanFolderZenSidebar(explicitMeta.zenSidebar) : "", ...(isTarget && Object.keys(cleanFolderParts(explicitMeta.parts)).length ? { parts: cleanFolderParts(explicitMeta.parts) } : {}), ...(isTarget && Object.keys(cleanFolderOpacity(explicitMeta.opacity)).length ? { opacity: cleanFolderOpacity(explicitMeta.opacity) } : {}), label: isTarget && explicitMeta.label ? String(explicitMeta.label).slice(0, 60) : segs[i], collapsed: isTarget ? Boolean(explicitMeta.collapsed) : false, children: [], notes: [], _listed: !!isTarget, _order: isTarget && typeof explicitMeta.order === "number" ? explicitMeta.order : 0 });
           } else if (isTarget) {
             const existing = folderNodes.get(path);
             if (explicitMeta.label) existing.label = String(explicitMeta.label).slice(0, 60);
             existing.uid = explicitMeta.uid || existing.uid || "";
             existing.color = cleanFolderColor(explicitMeta.color);
             existing.icon = cleanFolderIcon(explicitMeta.icon);
+            existing.zenSidebar = cleanFolderZenSidebar(explicitMeta.zenSidebar);
             const parts = cleanFolderParts(explicitMeta.parts);
             if (Object.keys(parts).length) existing.parts = parts;
             else delete existing.parts;
@@ -1121,6 +1160,8 @@
         if (Object.keys(parts).length) entry.parts = parts;
         const opacity = cleanFolderOpacity(f && f.opacity);
         if (Object.keys(opacity).length) entry.opacity = opacity;
+        const zenSidebar = cleanFolderZenSidebar(f && f.zenSidebar);
+        if (zenSidebar) entry.zenSidebar = zenSidebar;
         out.push(entry);
       }
       return out;
@@ -1195,6 +1236,7 @@
       if (typeof patch.icon === "string") { const i = cleanFolderIcon(patch.icon); if (i) next.icon = i; else delete next.icon; }
       if (patch.parts && typeof patch.parts === "object") { const parts = cleanFolderParts(patch.parts); if (Object.keys(parts).length) next.parts = parts; else delete next.parts; }
       if (patch.opacity && typeof patch.opacity === "object") { const opacity = cleanFolderOpacity(patch.opacity); if (Object.keys(opacity).length) next.opacity = opacity; else delete next.opacity; }
+      if (typeof patch.zenSidebar === "string") { const zs = cleanFolderZenSidebar(patch.zenSidebar); if (zs) next.zenSidebar = zs; else delete next.zenSidebar; }
       if (at >= 0) list[at] = next;
       else if (list.length < MAX_FOLDERS) list.push(next);
       else return null;
@@ -1970,15 +2012,23 @@
     // Notes tree -> flat, ordered list of entries. Keys come from note ids and folder ids, never from titles.
     function projectNotesFolder(notes, folders) {
       const out = [];
-      const walk = (node, parent) => {
+      const walk = (node, parent, parentHidden = false) => {
         for (const f of node.children) {
+          const own = cleanFolderZenSidebar(f.zenSidebar);
+          const hidden = own === "hide" ? true : own === "show" ? false : parentHidden;
+          if (hidden) {
+            walk(f, parent, true);
+            continue;
+          }
           const key = projKey("folder", f.id);
           out.push({ key, kind: "folder", id: f.id, label: f.label, parent });
-          walk(f, key); // collapsed or not, children are projected: collapsing is a display state, not identity
+          walk(f, key, false); // collapsed or not, children are projected: collapsing is a display state, not identity
         }
-        for (const nt of node.notes) out.push({ key: projKey("note", nt.id), kind: "note", id: nt.id, label: titleOf(nt.body) || "Untitled note", parent });
+        if (!parentHidden) {
+          for (const nt of node.notes) out.push({ key: projKey("note", nt.id), kind: "note", id: nt.id, label: titleOf(nt.body) || "Untitled note", parent });
+        }
       };
-      walk(buildTree(notes, folders), "");
+      walk(buildTree(notes, folders), "", false);
       return out;
     }
     // What to do to make `current` (entries found in the browser, same shape) equal `wanted`. Running it again
@@ -9974,6 +10024,13 @@
           emit("tree", id);
           return true;
         },
+        setFolderZenSidebar(id, zenSidebar) {
+          const list = patchFolderMeta(meta.folders, id, { zenSidebar: cleanFolderZenSidebar(zenSidebar) });
+          if (!list) return false;
+          setMeta({ folders: list });
+          emit("tree", id);
+          return true;
+        },
         removeFolder(id, mode = "toRoot") {
           const r = deleteFolder(meta.folders, [...notes.values()], id, mode);
           if (!r) return false;
@@ -13514,26 +13571,38 @@
       mode = cleanZenMode(mode);
       if (mode === "off") return [];
       let root = buildTree(notes, folders);
+      let startHidden = false;
       if (mode === "selected") {
         root = root.children.find((c) => c.id === TABBAR_FOLDER);
         if (!root) return [];
+        startHidden = resolveFolderZenSidebar(root.id, folders).hidden;
       }
       const out = [];
       // Same order as the sheet's tree (childSequence); a parent always comes before its children, and entries that
       // share a parent appear in the order the person sees them in Notes.
       // A note without a colour of its own takes the colour of the folder it sits in (its favicon in the sidebar, S6 W1).
-      const walk = (node, parent, inherit = "") => {
+      // T2.11: excluded folders (and their inherited children/notes) are omitted from Zen NOTES; explicitly shown child
+      // folders override a hidden ancestor and project under the nearest visible ancestor.
+      const walk = (node, parent, inherit = "", parentHidden = false) => {
         for (const m of childSequence(node, order, true)) {
           if (m.folder) {
+            const own = cleanFolderZenSidebar(m.folder.zenSidebar);
+            const hidden = own === "hide" ? true : own === "show" ? false : parentHidden;
+            if (hidden) {
+              walk(m.folder, parent, m.folder.color || inherit, true);
+              continue;
+            }
             // Keyed by the folder's permanent uid (path id only for a folder that has none yet): a rename or a move keeps the key,
             // so the Zen sidebar folder is the same folder afterwards. Colour and icon travel with the entry (Cycle H #6b / S6 W2).
             const key = projKey("folder", m.folder.uid || m.folder.id);
             out.push({ key, kind: "folder", id: m.folder.id, label: m.folder.label, parent, color: m.folder.color || "", icon: m.folder.icon || "", ...(Object.keys(cleanFolderParts(m.folder.parts)).length ? { parts: cleanFolderParts(m.folder.parts) } : {}), ...(Object.keys(cleanFolderOpacity(m.folder.opacity)).length ? { opacity: cleanFolderOpacity(m.folder.opacity) } : {}) });
-            walk(m.folder, key, m.folder.color || inherit);
-          } else out.push({ key: projKey("note", m.note.id), kind: "note", id: m.note.id, label: titleOf(m.note.body) || "Untitled note", parent, color: m.note.color && m.note.color !== "none" ? m.note.color : inherit });
+            walk(m.folder, key, m.folder.color || inherit, false);
+          } else if (!parentHidden) {
+            out.push({ key: projKey("note", m.note.id), kind: "note", id: m.note.id, label: titleOf(m.note.body) || "Untitled note", parent, color: m.note.color && m.note.color !== "none" ? m.note.color : inherit });
+          }
         }
       };
-      walk(root, "");
+      walk(root, "", mode === "selected" ? root.color || "" : "", startHidden);
       return out.slice(0, ZEN_MAX_ENTRIES);
     }
     // Which parents hold their entries in a different order than wanted. `current` is in browser order. Only keys found
@@ -14120,6 +14189,7 @@
         makeFolderUid, ensureFolderUids, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_STYLE, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, SPACE_MODES, cleanSpaceMode, SPACES_DIR, SPACE_REGISTRY_FILE, SPACE_SHARES_FILE, cleanWorkspaceId, workspaceDirKey, readZenWorkspaces, resolveActiveWorkspaceIdentity, cleanSpaceRegistry, reconcileSpaceRegistry, cleanShareTargets, cleanShareRecord, cleanSpaceShares, mergeSpaceShares, isSharedWithSpace, planSpaceSharesForSpace, resolveSpaceStorageTarget, canShareCalendarItemWithoutNote, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
+        FOLDER_ZEN_SIDEBAR_VALUES, cleanFolderZenSidebar, resolveFolderZenSidebar, folderZenSidebarMenuAction,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition, calendarMenuPosition, normalizeContextMenuItems,
         highlightCode, codeLangKey, texNodes, mapPosition, mergeAnchors, insertCodeBlock, buildLink, insertLink,
         pastedLink, richPaste, repairPastedTable, PASTE_HTML_PART, fragmentLabel, insertImage, makeTable, insertTable, SHORTCUT_ACTIONS, formatCombo,
@@ -20413,15 +20483,34 @@
       }
       function buildFolderRow(node, depth, count) {
         const open = !node.collapsed;
+        const zenVis = resolveFolderZenSidebar(node.id, store.meta.folders);
         const chev = iconButton("caret", open ? "Collapse" : "Expand", "zn-chev");
         const add = iconButton("plus", "New note here", "zn-fadd");
         const more = iconButton("more", "Folder menu", "zn-fmore");
+        const mainChildren = [h("span", { class: "zn-item-title" }, node.label)];
+        if (zenVis.hidden) {
+          mainChildren.push(h("span", {
+            class: "zn-frow-zen-badge" + (zenVis.inherited ? " is-inherited" : ""),
+            title: t(zenVis.inherited ? "tree.folder.zenHiddenInheritedTitle" : "tree.folder.zenHiddenBadgeTitle"),
+          }, t("tree.folder.zenHiddenBadge")));
+        }
         const row = h(
           "div",
-          { class: "zn-item zn-frow", role: "treeitem", tabindex: "0", "data-fid": node.id, "data-key": "f:" + node.id, "aria-level": String(depth + 1), "aria-expanded": open ? "true" : "false" },
+          {
+            class: "zn-item zn-frow",
+            role: "treeitem",
+            tabindex: "0",
+            "data-fid": node.id,
+            "data-key": "f:" + node.id,
+            "aria-level": String(depth + 1),
+            "aria-expanded": open ? "true" : "false",
+            ...(zenVis.hidden ? { "data-zen-hidden": "true" } : {}),
+            ...(zenVis.hidden && zenVis.inherited ? { "data-zen-hidden-inherited": "true" } : {}),
+            ...(!zenVis.hidden && zenVis.own === "show" && zenVis.inheritedHidden ? { "data-zen-override": "show" } : {}),
+          },
           chev,
           h("span", { class: "zn-frow-icon" + (node.icon ? " is-emoji" : " is-folder") }, node.icon ? h("span", { class: "zn-frow-emoji" }, node.icon) : icon("folder", 14)),
-          h("span", { class: "zn-item-main" }, h("span", { class: "zn-item-title" }, node.label)),
+          h("span", { class: "zn-item-main" }, ...mainChildren),
           h("span", { class: "zn-item-time" }, String(count)),
           h("span", { class: "zn-item-actions" }, add, more),
         );
@@ -20512,6 +20601,7 @@
         return row;
       }
       function folderMenuItems(node) {
+        const zenAction = folderZenSidebarMenuAction(node.id, store.meta.folders);
         const items = [{ icon: "plus", label: "New note here", action: () => newNote(node.id) }, { icon: "plus", label: "Quick capture to today\u2019s note\u2026", action: () => queueMicrotask(() => askQuickCapture("")) }];
         if (folderDepth(node.id) < FOLDER_MAX_DEPTH)
           items.push({ icon: "folder", label: "New subfolder\u2026", action: () => askFolderName("New subfolder", "", (name) => store.addFolder(name, node.id)) });
@@ -20524,6 +20614,7 @@
             : node.id !== TABBAR_FOLDER && parentOfFolder(node.id) === TABBAR_FOLDER
               ? [{ icon: "folder", label: "Remove from Notes (tabbar)", action: () => { const r = store.moveFolder(node.id, ""); flash(r ? "Moved out of the Zen sidebar folder" : "Cannot move it out"); scheduleList(); } }]
               : []),
+          { icon: "folder", label: t(zenAction.labelKey), action: () => { if (store.setFolderZenSidebar(node.id, zenAction.nextValue)) { flash(t(zenAction.flashKey)); scheduleList(); } } },
           { sep: true },
           { icon: "trash", label: "Delete\u2026", danger: true, action: () => askFolderDelete(node) },
         );
@@ -30759,6 +30850,21 @@
         });
         menu.append(exportItem);
         if (!isRoot) {
+          const zenAction = folderZenSidebarMenuAction(meta.id, store.meta.folders);
+          const hideItem = document.createXULElement("menuitem");
+          hideItem.setAttribute("label", t(zenAction.labelKey));
+          hideItem.setAttribute("zentral-notes-folder-own", "zen-hide");
+          const hideUid = meta.uid;
+          hideItem.addEventListener("command", () => {
+            withStore(() => {
+              if (disposed || zen.dead || zenMode() === "off") return;
+              const current = store.meta.folders.find((folder) => folder.uid === hideUid);
+              if (!current) return;
+              const liveAction = folderZenSidebarMenuAction(current.id, store.meta.folders);
+              if (store.setFolderZenSidebar(current.id, liveAction.nextValue)) zen.schedule(0);
+            });
+          });
+          menu.append(hideItem);
           const remove = document.createXULElement("menuitem");
           remove.setAttribute("label", t("sidebar.note.deleteFolder"));
           remove.setAttribute("zentral-notes-folder-own", "delete");
@@ -31556,8 +31662,8 @@
             for (const b of [...bindings.values(), floating]) {
               const sh = typeof b?.sheet === "function" ? b.sheet() : b?.sheet;
               sh?.applyState?.();
-              sh?.renderList?.();
-              sh?.renderCalendar?.();
+              sh?.refreshList?.();
+              sh?.refreshCalendar?.();
               sh?.refreshRead?.();
             }
             if (zenMode() !== "off") zenSoon();

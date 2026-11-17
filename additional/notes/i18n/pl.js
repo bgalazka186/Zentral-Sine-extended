@@ -576,6 +576,15 @@
       "tree.empty.trashEmpty": "Kosz jest pusty.",
       "tree.empty.noRecent": "Jeszcze niczego nie otwierano.",
       "tree.empty.truncated": "Wy\u015bwietlanie pierwszych {shown} z {total}. U\u017cyj wyszukiwania, aby zaw\u0119zi\u0107 wyniki.",
+      "tree.folder.hideFromZen": "Ukryj na pasku bocznym Zen",
+      "tree.folder.showInZen": "Poka\u017c na pasku bocznym Zen",
+      "tree.folder.overrideShowInZen": "Poka\u017c na pasku bocznym Zen (nadpisz nadrz\u0119dny)",
+      "tree.folder.inheritHideFromZen": "Ukryj na pasku bocznym Zen (dziedzicz z nadrz\u0119dnego)",
+      "tree.folder.zenHiddenFlash": "Folder ukryty na pasku bocznym NOTES w Zen",
+      "tree.folder.zenShownFlash": "Folder widoczny na pasku bocznym NOTES w Zen",
+      "tree.folder.zenHiddenBadge": "Bez paska",
+      "tree.folder.zenHiddenBadgeTitle": "Ukryty na pasku bocznym NOTES w Zen (nadal we Wszystkich notatkach, wyszukiwaniu, kalendarzu i linkach wiki)",
+      "tree.folder.zenHiddenInheritedTitle": "Ukryty na pasku bocznym NOTES w Zen (odziedziczone z folderu nadrz\u0119dnego)",
 
       // Area 7: Settings & Quick settings
       "settings.title": "Ustawienia",

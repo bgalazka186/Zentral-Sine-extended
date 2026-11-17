@@ -3005,5 +3005,28 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
   color: var(--zn-muted);
 }
 
+/* T2.11: Folder hidden from Zen NOTES sidebar badge in All notes tree */
+.zentral-notes-sheet .zn-frow .zn-item-main {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.zentral-notes-sheet .zn-frow-zen-badge {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border-radius: 999px;
+  border: 1px solid var(--zn-line);
+  background: color-mix(in srgb, var(--zn-hover) 32%, transparent);
+  color: var(--zn-muted);
+  font-size: 0.74em;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.zentral-notes-sheet .zn-frow-zen-badge.is-inherited {
+  border-style: dashed;
+}
+
+
 
 
