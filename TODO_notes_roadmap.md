@@ -77,8 +77,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
-|    60 | `OW-47`     | `OPEN`    | High                | S-M    | —                 | Split view: linked scrolling desyncs on long notes                                                       |
-|    61 | `OW-48`     | `OPEN`    | High                | S      | —                 | Calendar menu resizes and jitters between two sizes at some sheet sizes                                    |
 |    36 | `T2.13`     | `OPEN`    | Med                 | M      | all other Track 2 | ICS export/import and Google-sync groundwork (always last in Track 2)                                    |
 |    67 | `OW-38`     | `OPEN`    | Med                 | M-L    | none              | Automated test suites for all other Zentral features outside Notes                                       |
 |    41 | `T4.3a`     | `OPEN`    | Med                 | M      | none              | Extract calendar UI from `ZentralNotes.uc.js`                                                            |
@@ -103,58 +101,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 ---
 
 ## Task blocks (same order as the Master Order)
-
-#### `OW-47` — Split view: linked scrolling desyncs on long notes
-
-**Status:** `OPEN` · **Impact:** High · **Effort:** S-M · **Deps:** — · **Source:** owner live test 2026-11-17
-
-**Report:** "Linked scrolling is broken, for example in longer demo notes: it does work but can desync easily."
-
-**Problem:** with `syncScroll` on, editor and preview are two independent scrollports whose content heights differ
-(the preview is rendered markdown, the editor is source text; wrapped long lines are taller in one than the other).
-Today `syncScroll` maps one `scrollTop` to the other instead of a shared position, and `revealInPreview` moves the
-preview on its own, so the two drift apart after a few moves and never come back.
-
-**Plan:**
-1. Pure first, in `ZentralNotes.uc.js` next to the split helpers: `syncScrollPlan({source, sourceTop, sourceMax, targetMax, carried})`
-   that (a) maps the position as a fraction of the scrollable range, (b) returns `{top, carried}` where `carried` is the
-   sub-pixel remainder nobody can scroll to yet, so repeated small moves cannot lose position rounding, and (c) returns
-   `top: null` when either port cannot scroll (nothing to sync). Export it on `__zentralNotesTestSeam.core`.
-2. Anchor mode for long notes: while the preview is visible, the block nearest the top of the editor (heading first,
-   then paragraph line) is the anchor; the plan may return `{anchor}` in which case the preview is scrolled to that
-   block's offset instead of a fraction. Falls back to the fraction when no anchor exists.
-3. A visible feedback loop guard: every programmatic scroll sets a short flag so the `scroll` handler of the other
-   port ignores its own echo (one direction per gesture, no ping-pong).
-4. `revealInPreview` (already used by the caret/find) keeps priority: a reveal sets the shared position, so a later
-   scroll continues from the revealed place instead of jumping back.
-5. `tests/notes-split-scroll.test.cjs`: pure mapping/clamping, the carried remainder (100 tiny moves land exactly),
-   the echo guard, anchor choice, and a no-scroll-port case.
-
-**Done when:** the new test passes, `syncScroll` off leaves both ports untouched, and the full suite is green.
-
-#### `OW-48` — Calendar menu resizes and jitters between two sizes at some sheet sizes
-
-**Status:** `OPEN` · **Impact:** High · **Effort:** S · **Deps:** — · **Source:** owner live test 2026-11-17
-
-**Report:** "In some sizes the calendar menu can go into a loop of resizing and jitter between two states."
-
-**Problem:** the calendar popup/dialog is fitted to the sheet on every render (`fitDialog` and the popup placement
-code), and the fit result changes the element's own size, which re-triggers a fit. At some sheet sizes the two fits
-disagree by a pixel or two, so the dialog alternates — the classic fit → measure → fit loop.
-
-**Plan:**
-1. Pure first in `ZentralNotes.uc.js`/`additional/notes/calendar/ZentralNotesCalendar.js`: `fitDialogStable(prev, next, tolerance = 2)`
-   returns the previous box when `next` is within the tolerance on both axes, and otherwise the new box; plus
-   `dialogFitKey(area, target, textScale)` so an unchanged key never re-fits. Export on the seam.
-2. Apply it in the one place that runs the fit (`fitDialog`), and make the fit idempotent: fitting twice to the same
-   available area performs zero style writes the second time (a test asserts the write count).
-3. Never fit from inside a fit: the resize observer callback that starts a fit is dropped while a fit is in flight.
-4. `tests/notes-calendar-dialog-fit.test.cjs`: the tolerance rule (a 1-2 px oscillation settles on the first box),
-   a real oscillation run (measure → fit → measure must converge in one step), zero writes on a repeated fit, and the
-   in-flight guard.
-
-**Done when:** the new test passes, the existing `notes-calendar-dialog-layer` / `notes-calendar-context-position`
-tests stay green, and the full suite is green.
 
 #### `T2.13a` — Holidays and the future Google Calendar sync/import
 
@@ -422,7 +368,7 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.258.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-39` and `OW-42` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`202/202` test files) passes in Node/fake-Zen at 3.3.258; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.260.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-39`, `OW-42`, `OW-47` and `OW-48` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`207/207` test files) passes in Node/fake-Zen at 3.3.260; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
 Completed this session (3.3.163–3.3.244), every finished item archived in `docs/LEGACY_done_rows.md`:
 
@@ -555,6 +501,8 @@ Known debts / owner requirements: LIMITS of `OW-04`: the pointer is held to the 
 - `T3.9c` DONE (3.3.253) — Weather sidebar widget: `weatherCodeInfo`/`cleanWeatherPlace`/`weatherRequestUrl`/`readWeatherPayload`/`formatWeatherParts`/`isWeatherCacheFresh`/`nextWeatherDelayMs`/`readGeocodePayload` in `additional/widgets/ZentralWidgets.uc.js`, Open-Meteo over one host with no key and no account (`credentials: omit`, `no-referrer`), place resolved once from a name into stored numbers (never behind the person's back per refresh), units `auto` settled by the place's country, refresh 15-180 min through the existing scheduler (no timer of its own), cached value drawn dimmer while it is the cached one, six new settings in a **Weather** section, plain glyph icons, `tests/widgets-weather.test.cjs` (9 tests; 200/200 suite).
 - `T3.9d` DONE (3.3.257) — Timer widget + Clock click + quick note: `parseTimerDuration`/`formatDuration`, wall-clock stopwatch with laps (`stopwatchElapsed`/`Start`/`Stop`/`Lap`), countdown that rings once across a sleep (`timerTick`), `resolveClockClick` (plain click = stopwatch start/stop, long press or right click = "in X", click while a quick timer runs = stop), five presets, a free field, `tests/widgets-timer.test.cjs` (9 tests); Notes gained `quickCapture` behind the existing opener symbol, sharing one `openNoteFromOutside` body with the reminder path; three settings in a **Timer** section (201/201 suite).
 - `T3.9e` DONE (3.3.258) — Status widget (battery and memory) and the widgets settings section: `batteryParts`/`memoryParts`/`statusLineParts`/`nextStatusDelayMs` are pure readings (clamped percentages, no limit printed when Firefox reports none, low/critical levels never silently green), battery changes ride the platform's own `levelchange`/`chargingchange` events, memory rides the scheduler on a five-minute cadence, no interval of its own; three settings in a **Status** section next to **Weather** and **Timer**, completing the widgets settings surface (`tests/widgets-status.test.cjs`, 6 tests; 202/202 suite).
+- `OW-47` DONE (3.3.260) — linked scrolling no longer drifts: `syncScrollPlan` maps a position as a share of the scrollable range and carries the sub-pixel remainder between moves (a hundred small moves land exactly where one big move would), reports `no-range` instead of guessing when a pane cannot scroll, and refuses to answer its own echo; the live `linkScroll` reads the echo flag synchronously (a second event of our own is dropped, not answered a frame later), keeps the anchor interpolation for the fine-grained part, and every reveal clears the carried remainder. `tests/notes-split-scroll.test.cjs` (7 tests).
+- `OW-48` DONE (3.3.260) — the calendar dialog can no longer resize in a loop: `fitDialogStable` keeps the box already on screen while a new measurement stays within `FIT_STABLE_TOLERANCE` (2 px), `dialogFitKey` skips the measurement entirely when nothing that matters changed, `fitCard()` remembers the applied box, and the card's ResizeObserver ignores the fit's own write and any size the fit already applied. `tests/notes-calendar-dialog-fit.test.cjs` (7 tests); `tests/notes-settings-layout.test.cjs` still green.
 - `T2.11b2` DONE (3.3.250) — DEMO set rebuilt to 9 notes: `Where is a function?` (the whole discoverability list, Settings tabs correct), `Calendar and Agenda tour` (a live `%%calendar%%` section with an event range, a reminder and an all-day line, plus the control table, holidays, the Agenda folder), links both ways, and the shortcuts note now points at the list. Tests assert the live demo lines parse into real items (`tests/notes-showcase.test.cjs`), and the count/title expectations were updated in `notes-cycle-f`/`notes-p4-ui` (197/197 suite).
 - `T2.11b1` DONE (3.3.249) — `docs/NOTES_DISCOVERABILITY.md` (one place per function across the editor, All notes, every calendar view, `Tools`, the Zen sidebar and Settings, with the four findings the audit accepted and the input list for `T2.11b2`), the same list reachable in the app (`More → Where is a function?`, stable note id, follows the shipped text), the two Markdown-mode labels made distinguishable, and `tests/notes-discoverability.test.cjs` checking the document against the code (197/197 suite).
 - `OW-46` DONE (3.3.248) — one master switch: `isWorkFree` returns the shared `NO_WORK_FREE` before any lookup (no weekend, set, year or table work), `applyWorkFreeAttrs` draws nothing while off, the dialog explains what off hides and that sets/personal days are kept, and the chosen sets survive a restart. Verified in `tests/notes-calendar-holidays.test.cjs` (196/196 suite).
@@ -564,4 +512,4 @@ Known debts / owner requirements: LIMITS of `OW-04`: the pointer is held to the 
 
 Planning only, no code (2026-11-17, version 3.3.244): the owner's holiday list added as `OW-43` (holiday sets split from the interface language, any language picks any set, first sets `PL` + `US`), `OW-44` (any number of sets at once), `OW-45` (one-place year table for movable/one-off dates such as the Polish election day and `niedziela handlowa`), `OW-46` (one master off switch) and `T2.13a` (how holidays behave when the `T2.13` ICS/Google groundwork is built: local sets are never imported or synced). They sit at the top of the Master Order; `T3.3` follows them.
 
-Next action: continue with `OW-47` then `OW-48` (the two owner-reported bugs of 2026-11-17, both `OPEN` and unblocked; `T2.13` stays last in Track 2).
+Next action: continue with `OW-38` (its theme, library and RSS parts are done; the remaining parts are the video, panels and settings-shell suites; `T2.13` stays last in Track 2).

@@ -4445,6 +4445,36 @@
       const span = b[from] - a[from];
       return span > 0 ? a[to] + ((value - a[from]) / span) * (b[to] - a[to]) : a[to];
     }
+    // ---- OW-47: linked scrolling that cannot drift -----------------------------------------------------------
+    // Two panes never scroll the same distance (the preview is rendered markdown, the editor is source text), so a
+    // plain copy of `scrollTop` drifts after a few moves. The plan below maps the position as a fraction of the
+    // scrollable range and carries the sub-pixel remainder of every move, so a hundred small moves land exactly where
+    // one big move would; `samePane` marks a scroll that is our own echo and must not be answered.
+    const SYNC_SCROLL_EPS = 1; // a difference this small is not worth a write
+    function syncScrollPlan(opts = {}) {
+      const fromTop = Number(opts.fromTop) || 0;
+      const fromMax = Math.max(0, Number(opts.fromMax) || 0);
+      const toMax = Math.max(0, Number(opts.toMax) || 0);
+      const carried = Number(opts.carried) || 0;
+      const current = Number(opts.toTop) || 0;
+      if (opts.echo) return { top: null, carried, reason: "echo" };
+      if (!(fromMax > 0) || !(toMax > 0)) return { top: null, carried, reason: "no-range" };
+      const share = Math.min(1, Math.max(0, fromTop / fromMax));
+      const wanted = share * toMax + carried;
+      const top = Math.min(toMax, Math.max(0, wanted));
+      const rest = wanted - top; // kept for the next move: nothing is lost to rounding
+      return { top: Math.abs(top - current) < SYNC_SCROLL_EPS ? null : top, carried: rest, reason: "fraction" };
+    }
+    // A reveal (find, caret, a link) sets the shared place: both panes agree on where they are again.
+    function syncScrollAnchorPlan(opts = {}) {
+      const lines = Math.max(1, Number(opts.lines) || 1);
+      const line = Math.min(lines, Math.max(0, Number(opts.line) || 0));
+      const toMax = Math.max(0, Number(opts.toMax) || 0);
+      if (!(toMax > 0)) return { top: null, line, share: 0 };
+      const share = line / lines;
+      return { top: share * toMax, line, share };
+    }
+
     // Anchors for the rendered pane: one per top-level block (or list item) with its source line and
     // the offset of its first node; `ends` closes the list at the total line count / scroll height.
     function mergeAnchors(list, endLine, endY) {
@@ -11012,6 +11042,29 @@
       return { spill: true, left: Math.round(x - sheet.left), top: Math.round(y - sheet.top), width: Math.round(width), height: Math.round(height), scroll: size.width > maxW || size.height > maxH };
     }
 
+    // ---- OW-48: a dialog fit that cannot oscillate ------------------------------------------------------
+    // Fitting changes the card's own size, which is what a ResizeObserver reports, which asks for another fit. At some
+    // sheet sizes the two fits disagree by a pixel or two (a scrollbar that appears and takes width, a rounded edge),
+    // so the card alternated between two sizes. The fit now remembers what it applied: a new measurement within
+    // the tolerance of the applied box keeps the applied box and writes nothing, and an unchanged key skips the whole
+    // measurement.
+    const FIT_STABLE_TOLERANCE = 2;
+    function dialogFitKey({ sheet, viewport, size, extra = "" } = {}) {
+      const r = (v) => Math.round(Number(v) || 0);
+      return [r(sheet?.width), r(sheet?.height), r(sheet?.left), r(sheet?.top), r(viewport?.width), r(viewport?.height), r(size?.width), r(size?.height), String(extra)].join("|");
+    }
+    function fitDialogStable(prev, next, tolerance = FIT_STABLE_TOLERANCE) {
+      if (!next) return prev || null;
+      if (!prev) return next;
+      const close = (a, b) => Math.abs((Number(a) || 0) - (Number(b) || 0)) <= tolerance;
+      const sameBox = Boolean(prev.spill) === Boolean(next.spill)
+        && close(prev.left, next.left) && close(prev.top, next.top)
+        && close(prev.width, next.width) && close(prev.height, next.height);
+      if (!sameBox) return next;
+      // Within the tolerance the box that is already on screen wins: nothing is written, so nothing can move.
+      return { ...prev, scroll: prev.scroll || next.scroll };
+    }
+
     // ---- V4-R2: window modes + hover timing (pure) ------------------------------------------------------
     // pin = stays open over the panel (overlay, no push); hover = a thin real strip, opens on hover and closes
     // after a grace; dock = stays open and keeps its own slot (pushes the page / panels).
@@ -15493,7 +15546,7 @@
         FOLDER_ZEN_SIDEBAR_VALUES, cleanFolderZenSidebar, resolveFolderZenSidebar, folderZenSidebarMenuAction,
         BIRTHDAY_CATEGORY, BIRTHDAY_FOLDER_ID, resolveNoteZenSidebar, parseBirthdayDate, cleanBirthdayTime, formatBirthdayLine, buildBirthdayNoteBody, appendBirthdayEntry,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition, calendarMenuPosition, normalizeContextMenuItems,
-        highlightCode, codeLangKey, texNodes, mapPosition, mergeAnchors, insertCodeBlock, buildLink, insertLink,
+        highlightCode, codeLangKey, texNodes, mapPosition, syncScrollPlan, syncScrollAnchorPlan, mergeAnchors, insertCodeBlock, buildLink, insertLink,
         pastedLink, richPaste, repairPastedTable, PASTE_HTML_PART, fragmentLabel, insertImage, makeTable, insertTable, SHORTCUT_ACTIONS, formatCombo,
         normalizeCombo, comboFromEvent, parseShortcutMap, effectiveShortcuts, findShortcutConflict,
         matchShortcutAction, assignShortcut, QUICK_OPTIONS, stepOption, PREF,
@@ -15504,7 +15557,7 @@
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, cleanSlotPx, cleanCardPx, cleanCardShare, resolveSlotHeight, resolveCardHeight, hasStartupPanelPref, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, gapPageFloor, gapMaxPx, clampGapPx, GAP_PANEL_MIN_PX, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
-        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, BACKUP_FORMAT, BACKUP_VERSION, BACKUP_MAX_ENTRIES, BACKUP_MAX_TOTAL_BYTES, cleanBackupZipPath, classifyBackupEntry, validateBackupAssetBytes, buildBackupManifest, inspectBackupEntries, planBackupRestore, OBSIDIAN_VAULT_APP_CONFIG, safeObsidianSegment, cleanVaultRelPath, obsidianYamlScalar, splitYamlEntries, planObsidianVaultPaths, buildObsidianFrontMatter, collectObsidianAssetRefs, convertBodyToObsidian, buildObsidianVaultPlan, OBSIDIAN_IMPORT_MAX_FILES, OBSIDIAN_IMPORT_MAX_TOTAL_BYTES, OBSIDIAN_IMPORT_MAX_DEPTH, unquoteYamlScalar, extractObsidianPathFromForeign, parseObsidianFrontMatter, classifyObsidianVaultEntry, planObsidianVaultImport, itemMarkerLineRange, allFolderIds, moveNote, SPLIT_COMPANION_SHARES, DEFAULT_SPLIT_COMPANION, cleanSplitCompanion, nearestSplitShare, splitCompanionAxis, splitCompanionReady, noteDropTarget, noteTabDropPlan, cleanNoteOrder, noteOrderBetween, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, mergeFolders, mergeMeta, META_SHARED_KEYS, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
+        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, BACKUP_FORMAT, BACKUP_VERSION, BACKUP_MAX_ENTRIES, BACKUP_MAX_TOTAL_BYTES, cleanBackupZipPath, classifyBackupEntry, validateBackupAssetBytes, buildBackupManifest, inspectBackupEntries, planBackupRestore, OBSIDIAN_VAULT_APP_CONFIG, safeObsidianSegment, cleanVaultRelPath, obsidianYamlScalar, splitYamlEntries, planObsidianVaultPaths, buildObsidianFrontMatter, collectObsidianAssetRefs, convertBodyToObsidian, buildObsidianVaultPlan, OBSIDIAN_IMPORT_MAX_FILES, OBSIDIAN_IMPORT_MAX_TOTAL_BYTES, OBSIDIAN_IMPORT_MAX_DEPTH, unquoteYamlScalar, extractObsidianPathFromForeign, parseObsidianFrontMatter, classifyObsidianVaultEntry, planObsidianVaultImport, itemMarkerLineRange, allFolderIds, moveNote, SPLIT_COMPANION_SHARES, DEFAULT_SPLIT_COMPANION, cleanSplitCompanion, nearestSplitShare, splitCompanionAxis, splitCompanionReady, noteDropTarget, noteTabDropPlan, cleanNoteOrder, noteOrderBetween, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, mergeFolders, mergeMeta, META_SHARED_KEYS, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog, FIT_STABLE_TOLERANCE, dialogFitKey, fitDialogStable,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,
@@ -17990,11 +18043,13 @@
         readAnchY = readAnchY || measureRead();
         const y = mapPosition(readAnchY, lineOfOffset(ta.value, m.start), "line", "y");
         const next = revealScroll({ y, top: readEl.scrollTop, height: readEl.clientHeight });
-        if (next !== null) readEl.scrollTop = next;
+        if (next !== null) { readEl.scrollTop = next; syncCarried = 0; }
       }
       function revealSourceMatch(m) {
         findAnchor = m.start;
         ta.setSelectionRange(m.start, m.end);
+        // OW-47: a reveal is a new shared place, so the remainder of the last gesture must not drag it off.
+        syncCarried = 0;
         let y = null;
         try { y = measureCaretY(m.start); } catch (_) {}
         if (y === null) y = (lineOfOffset(ta.value, m.start) / Math.max(1, ta.value.split("\n").length)) * (ta.scrollHeight || 0);
@@ -23841,33 +23896,66 @@
         );
       }
       const atEnd = (el) => el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
-      const linkScroll = (from, to) => () => {
-        if (mode !== "split" || !store.meta.syncScroll || syncLock) return;
-        const max = from.scrollHeight - from.clientHeight;
-        if (!(max > 0)) return;
-        syncLock = true;
-        let target = null;
-        try {
-          if (from.scrollTop > 0 && !atEnd(from) && readAnch.length) {
-            taAnchY = taAnchY || measureEditor();
-            readAnchY = readAnchY || measureRead();
-            if (taAnchY && readAnchY) {
-              const fromEditor = from === ta;
-              const line = mapPosition(fromEditor ? taAnchY : readAnchY, from.scrollTop, "y", "line");
-              target = mapPosition(fromEditor ? readAnchY : taAnchY, line, "line", "y");
-            }
-          }
-        } catch (_) {
-          target = null;
-        }
-        if (target === null) target = (from.scrollTop / max) * Math.max(0, to.scrollHeight - to.clientHeight);
-        to.scrollTop = target;
-        if (!rafSync)
-          rafSync = window.requestAnimationFrame(() => {
-            rafSync = 0;
+      // OW-47: one shared place for the two panes. `syncCarried` keeps the sub-pixel remainder of the last move (so
+      // a hundred small moves cannot shed position), `syncLock` marks the scroll we caused ourselves, and every
+      // reveal resets the carried remainder.
+      let syncCarried = 0;
+      function linkScroll(from, to) {
+        return () => {
+          if (mode !== "split" || !store.meta.syncScroll) return;
+          // Our own write comes back as a scroll event: it must never be answered.
+          if (syncLock) {
             syncLock = false;
-          });
-      };
+            return;
+          }
+          const fromMax = from.scrollHeight - from.clientHeight;
+          const toMax = to.scrollHeight - to.clientHeight;
+          let wanted = null;
+          let reason = "";
+          try {
+            if (readAnch.length && fromMax > 0 && toMax > 0) {
+              taAnchY = taAnchY || measureEditor();
+              readAnchY = readAnchY || measureRead();
+              if (taAnchY && readAnchY) {
+                const fromEditor = from === ta;
+                const line = mapPosition(fromEditor ? taAnchY : readAnchY, from.scrollTop, "y", "line");
+                const mapped = mapPosition(fromEditor ? readAnchY : taAnchY, line, "line", "y");
+                if (Number.isFinite(mapped)) { wanted = mapped; reason = "anchor"; }
+              }
+            }
+          } catch (_) {
+            wanted = null;
+          }
+          let plan;
+          if (wanted !== null) {
+            const top = Math.min(toMax, Math.max(0, wanted));
+            plan = {
+              top: Math.abs(top - to.scrollTop) < SYNC_SCROLL_EPS ? null : top,
+              carried: 0,
+            };
+          } else {
+            plan = syncScrollPlan({
+              fromTop: from.scrollTop,
+              fromMax,
+              toMax,
+              toTop: to.scrollTop,
+              carried: syncCarried,
+              echo: false,
+            });
+          }
+          if (plan.reason === "no-range") return;
+          syncCarried = plan.carried || 0;
+          if (plan.top === null) return;
+          syncLock = true;
+          to.scrollTop = plan.top;
+          // A pane that has no scrollable range, or refuses the value, leaves nothing to echo: free the flag now.
+          if (!rafSync)
+            rafSync = window.requestAnimationFrame(() => {
+              rafSync = 0;
+              syncLock = false;
+            });
+        };
+      }
       listen(ta, "scroll", linkScroll(ta, readEl));
       listen(ta, "scroll", syncBackdropScroll);
       listen(ta, "scroll", scheduleOutline);
@@ -24210,6 +24298,8 @@
         } catch (_) {}
         cardROOff = null;
         cardRO = null;
+        appliedFitKey = "";
+        appliedFitBox = null;
         window.cancelAnimationFrame(rafFit);
         rafFit = 0;
         window.cancelAnimationFrame(rafFitReset);
@@ -24227,6 +24317,8 @@
       let cardROOff = null;
       let rafFit = 0;
       let fitting = false;
+      let appliedFitKey = "";
+      let appliedFitBox = null;
       const FIT_PROPS = ["position", "left", "top", "width", "height", "minWidth", "maxWidth", "maxHeight"];
       // The size a card would have with nothing holding it back. scrollWidth / scrollHeight leave out the card's
       // border, so a card set to exactly that size was two pixels short and scrolled.
@@ -24271,7 +24363,18 @@
         const sheet = { left: sr.left, top: sr.top, width: sr.width, height: sr.height };
         // If the platform cannot raise the dialog, keep it within the panel
         // rather than allowing an invisible spill behind a browser surface.
-        const fit = viewport.width > 0 && dialog.dataset.calendarConstrained !== "true" ? fitDialog({ sheet, viewport, size }) : { spill: false };
+        const measured = viewport.width > 0 && dialog.dataset.calendarConstrained !== "true" ? fitDialog({ sheet, viewport, size }) : { spill: false };
+        // OW-48: the fit that is already on screen wins while the new one stays within two pixels of it. Writing the
+        // nearly identical box is what made a ResizeObserver ask for the next fit, over and over.
+        const cardEl = card;
+        const key = dialogFitKey({ sheet, viewport, size, extra: cardEl.className + "|" + Math.round(root.clientHeight || 0) });
+        if (key === appliedFitKey && appliedFitBox) {
+          card.style.maxWidth = "";
+          return appliedFitBox;
+        }
+        const fit = fitDialogStable(appliedFitBox, measured, FIT_STABLE_TOLERANCE);
+        appliedFitKey = key;
+        appliedFitBox = fit;
         card.style.maxWidth = "";
         if (fit.spill) {
           dialog.dataset.spill = "true";
@@ -24732,6 +24835,8 @@
       function openCard(label, ...kids) {
         closeMenu();
         closeDialog();
+        appliedFitKey = "";
+        appliedFitBox = null;
         const folderStyleCard = kids.some((kid) => kid?.classList?.contains?.("zn-fstyle"));
         const card = h("div", { class: "zn-dialog-card" + (folderStyleCard ? " zn-folder-style-card" : ""), role: "dialog", "aria-label": label }, h("strong", {}, label), ...kids);
         dialog = h("div", { class: "zn-dialog" }, card);
@@ -24744,7 +24849,13 @@
           const RO = window.ResizeObserver;
           if (RO) {
             cardRO = new RO(() => {
-              if (!fitting) scheduleFit();
+              // OW-48: our own fit is not a reason to fit again, and neither is a size the fit already applied.
+              if (fitting) return;
+              // Only a spilled box has a size the fit itself set; a card that simply fits must still be re-measured.
+              if (appliedFitBox?.spill
+                && Math.abs(card.offsetWidth - appliedFitBox.width) <= FIT_STABLE_TOLERANCE
+                && Math.abs(card.offsetHeight - appliedFitBox.height) <= FIT_STABLE_TOLERANCE) return;
+              scheduleFit();
             });
             cardRO.observe(card);
             cardROOff = resources.observer("sheet:dialogCardRO", "ResizeObserver", () => cardRO?.disconnect());

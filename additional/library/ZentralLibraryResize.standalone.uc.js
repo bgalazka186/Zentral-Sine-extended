@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Library Resize
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.258
+// @version 3.3.260
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.258, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.260, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.258";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.260";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1158,6 +1158,8 @@ function nativeSidebarSide() {
     return { source: null, value: "" };
   }
 
+  // A test seam: the pure decision and the compatibility switch it depends on, without a browser.
+  window.__zentralLibraryTestSeam = { resolveLibraryBackground, PREF, COMPAT_PREF, BG_ARC_PREF, BG_CUSTOM_PREF };
   function startBackground() {
     const root = document.documentElement;
     let style = null,

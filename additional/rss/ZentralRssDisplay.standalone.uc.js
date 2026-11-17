@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral RSS Display
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.258
+// @version 3.3.260
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.258, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.260, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.258";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.260";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1169,7 +1169,41 @@ function nativeSidebarSide() {
     if (!current) return "bind";
     return current === next ? "keep" : "replace";
   }
-  if (window.__zentralRssTestSeam) window.__zentralRssTestSeam.readerBindingAction = readerBindingAction;
+  // Small pure helpers the card's behaviour is built from, exported for the suite: a clamped delay, a known side,
+  // and a URL that is only a URL when the platform agrees.
+  // The bounds the running card uses (see CARD_DELAY_LIMITS in start()); kept here so the seam has no inner state.
+  const CARD_DELAY_BOUNDS = Object.freeze({ hover: [0, 2000], hide: [0, 5000] });
+  function clampCardDelay(name, raw) {
+    const [min, max] = CARD_DELAY_BOUNDS[name] || [0, 0];
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return null;
+    return Math.max(min, Math.min(max, Math.round(value)));
+  }
+  function cleanReaderSide(value) {
+    return ["auto", "left", "right"].includes(value) ? value : "auto";
+  }
+  function cleanCardGap(raw) {
+    const value = parseFloat(raw);
+    return Number.isFinite(value) ? Math.max(0, Math.min(32, value)) : 6;
+  }
+  function urlsInText(text, hrefOf) {
+    const re = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+    const out = [];
+    let match;
+    while ((match = re.exec(String(text ?? "")))) {
+      const href = typeof hrefOf === "function" ? hrefOf(match[0]) : "";
+      if (href) out.push(href);
+    }
+    return out;
+  }
+  if (window.__zentralRssTestSeam) {
+    window.__zentralRssTestSeam.readerBindingAction = readerBindingAction;
+    window.__zentralRssTestSeam.clampCardDelay = clampCardDelay;
+    window.__zentralRssTestSeam.cleanReaderSide = cleanReaderSide;
+    window.__zentralRssTestSeam.cleanCardGap = cleanCardGap;
+    window.__zentralRssTestSeam.urlsInText = urlsInText;
+    window.__zentralRssTestSeam.LIMITS = CARD_DELAY_BOUNDS;
+  }
   (function () {
     function start({ lifecycle, runtime: hostRuntime } = {}) {
       const cleanups = [];
