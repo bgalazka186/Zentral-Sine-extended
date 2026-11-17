@@ -34,11 +34,19 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   // calls advanceClock. With the real clock running underneath, a delay computed as "due - now" depended on how busy
   // the machine was: a debounce re-armed 30 ms later asked for 220 ms instead of 250, fireTimer(250) no longer found
   // it, and a test failed only when the whole suite ran in parallel.
-  const clockBase = Date.now();
-  class FakeDate extends Date {
+  // Every window of one run shares one base: two windows built a millisecond apart otherwise disagreed about the time,
+  // which a conflict test reads as one window being newer than the other (F0.16 found this under the pinned clock).
+  // `globalThis.__zentralFakeClockBase` is what the pinned clock of `tests/helpers/fake-clock-preload.cjs` sets.
+  const clockBase = globalThis.__zentralFakeClockBase ?? (globalThis.__zentralFakeClockBase = Date.now());
+  // `Date` in the module is the real one from the sandbox's global, which a pinned clock replaces; the base above is a
+  // number, so the subclass works either way.
+  const RealDate = globalThis.Date;
+  class FakeDate extends RealDate {
     constructor(...args) { super(...(args.length ? args : [clockBase + clockOffset])); }
     static now() { return clockBase + clockOffset; }
   }
+  FakeDate.parse = RealDate.parse;
+  FakeDate.UTC = RealDate.UTC;
   const record = (node, parent) => {
     if (!node || !["tab", "zen-folder"].includes(node.localName)) return;
     operations.push({ type: node.parentElement ? "move" : "add", node, from: node.parentElement, parent });

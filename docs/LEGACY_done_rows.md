@@ -228,6 +228,17 @@
   a projection run three times more must not creep. The behaviour test keeps what it is good at — the items land in the
   right day and nothing spills — and `SERIAL_PERF_TESTS` in `run-all.cjs` is now empty, since nothing else there depends
   on an isolated clock. Full suite 224/224.
+- `F0.16` DONE (3.3.280) — A sweep now answers the question this row asked. `tools/audit-test-clock.cjs` runs each
+  candidate test file at three awkward instants (23:55, 00:05 and 03:30 UTC) in the four zones the suite already uses,
+  with the global clock pinned by `tests/helpers/fake-clock-preload.cjs`, and reports the files whose result *differs
+  between instants* — which is what a fixture built around the real clock does. A file that fails at every instant is
+  reported as such and does not fail the sweep: it has a problem of its own, and the suite already sees it. A file that
+  pins its own clock (F0.14's pattern) is skipped, since overriding it would measure the tool. The preload is inert
+  unless `FAKE_NOW_ISO` is set, and it gives the fake browser's windows one shared clock base (two windows built a
+  millisecond apart otherwise disagreed about the time and a conflict test read that as one window being newer).
+  The sweep of every calendar/Agenda/reminder test file at twelve zone-and-instant pairs found **no** file whose result
+  depends on the hour. `tests/notes-test-clock-audit.test.cjs` (4 cases) holds the tool itself in place, including a
+  probe that is deliberately written against the hour and must be caught. Full suite 225/225.
 | #   | Track ID | Ref           | Item                                                         | Impact   | Effort | Implementation Plan & Dependencies                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | :-- | :------- | :------------ | :----------------------------------------------------------- | :------- | :----- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 20  | `T1.14`  | `Cycle G #37` | Inline `#tag` index & front-matter `tags:` unification       | Med      | M      | **DONE in 3.3.47.** Unified `inlineTags`, `noteTags` and `tagSummary` index YAML and inline tags case-insensitively; the Tags chip opens a counted menu, supports clearing/selection, and filters All and Recent views. Headings, code, URLs, HTML attributes/comments, hidden comments, inequalities and hex colours are excluded. Covered by `notes-audit-bugfixes.test.cjs` and existing list-view tests.                                                                                        |
