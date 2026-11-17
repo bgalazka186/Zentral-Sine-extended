@@ -1228,3 +1228,23 @@ the four entries (section: Clock & Date / Timer / Weather) in schema order, decl
 (`the three settings exist and reach Sine's own page`) checked `schema` and `layout.order` and never `settings`; it now
 asserts every widget `schema` property has a `settings` entry pointing at a category and section the layout really
 declares. Suite `230/230`.
+
+**`OW-60` DONE (3.3.290)** — the Clock and the stopwatch are one card, which is what OW-56 promised and did not deliver.
+OW-56 drew the numbers on a second face but left every control on the standalone Timer card, so the two did not replace
+each other and the owner had to enable the old card to do anything. The timer face is now the whole panel — Start/Stop,
+Lap, Reset, the five preset chips, the typed duration, the laps list — and each action calls the pure helper that
+already existed (`stopwatchStart/Stop/Lap/Reset`, `timerStart/Stop`, `quickTimerFromText`, `clockPanelControls`,
+`nextTimerTickDelayMs`), so there is no second state machine and no `setInterval`. A preset starts a countdown, so the
+stopwatch keeps its countdown function. The quick note moved to the CLOCK face behind its own chip, same
+`openQuickNote` channel, same `TIMER_QUICK_NOTE` gate, and no chip at all without Notes.
+The standalone `"timer"` card is gone from the registry, `settings.json`, `layout.json` and `standalone.json`; its pref
+is read exactly once, through `externalPrefs` with a reason, so an owner who had it on lands on the timer face instead of
+losing the feature. Two traps this slice caught in its own code: a module-level hook (`clockBadgeElement`) declared
+*below* the factory that assigns it (the OW-56 TDZ rule, in reverse), and a per-`create` window listener that leaked —
+`registerWidget` mounts the card before wiring is finished and a discarded instance never reaches `dispose`, so the
+availability listener is now one module-level registration with a `registerCleanup`, which is what the clock/date test's
+"availability listener must be removed on destroy" assertion exists to catch. `data-zw-widget="timer"` no longer exists;
+`tests/widgets-timer.test.cjs` keeps its state-machine coverage and now asserts that absence instead of the old card.
+Tests: `tests/widgets-clock-timer.test.cjs` (10 + 1 live) drives the real mounted card — the stopwatch starts, its
+numbers advance, it stops keeping its elapsed time, a preset starts a countdown, and the note chip on the clock face
+reveals its row — plus the migration assertions; suite `230/230`.

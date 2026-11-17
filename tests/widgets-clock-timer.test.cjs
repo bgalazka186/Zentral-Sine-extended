@@ -134,6 +134,23 @@ test("the three settings exist and reach Sine's own page", () => {
   }
 });
 
+test("the retired Timer card moved its settings, and kept its owner's intent", () => {
+  // The old pref is read once for migration and is deliberately not a setting any more.
+  const standalone = JSON.parse(fs.readFileSync(path.join(root, "additional/widgets/standalone.json"), "utf8"));
+  assert.ok((standalone.externalPrefs || []).includes("zen.workspace.zentral.widgets.timer.enabled"),
+    "the old pref is declared external, so the build knows why the code still reads it");
+  assert.ok(!SETTINGS.schema.some((x) => x.property === "zen.workspace.zentral.widgets.timer.enabled"),
+    "and it is not offered in settings any more");
+  assert.ok(!LAYOUT.order.includes("zen.workspace.zentral.widgets.timer.enabled"), "nor placed on the page");
+  assert.ok(/function adoptLegacyTimerCard\(\)/.test(SRC), "one migration step carries the intent over");
+  assert.ok(/writeStringPref\(WIDGET_PREFS.CLOCK_MODE, "timer"\)/.test(SRC), "to the Clock's own face setting");
+  // The three settings that stayed are still real settings with a home in the dialog (the OW-61 rule).
+  for (const property of ["zen.workspace.zentral.widgets.clock.mode", "zen.workspace.zentral.widgets.timer.end_sound", "zen.workspace.zentral.widgets.timer.end_notice"]) {
+    assert.ok(SETTINGS.schema.some((x) => x.property === property), property + " is still declared");
+    assert.ok(SETTINGS.settings[property], property + " still has a settings entry");
+  }
+});
+
 test("nothing about a finished countdown is written to prefs", () => {
   // Only the face is a setting. The alert, the ring and the toast are state in the window.
   assert.ok(/const clockAlert = \{ ringing: false \};/.test(SRC), "the flag is per window");
@@ -186,6 +203,54 @@ test("the end sound has a real tone behind the beep, and falls back to the beep"
   cardClicks[0][1]({ button: 0, stopPropagation() {}, preventDefault() {} });
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(h.prefs.get("zen.workspace.zentral.widgets.clock.mode"), "clock", "a second click turns it back");
+
+  // ---- OW-60: the two cards really are one. The owner's three complaints, each driven on the real card. ----
+  assert.equal(api.getTray().children.some((el) => el.getAttribute("data-zw-widget") === "timer"), false,
+    "there is no second Timer card in the tray");
+
+  cardClicks[0][1]({ button: 0, stopPropagation() {}, preventDefault() {} });
+  await new Promise((r) => setTimeout(r, 20));
+  const face = clock.querySelector(".zw-clock-timer-face");
+  assert.ok(face, "the timer face is part of the clock card");
+  // 1a. the controls are here, not on another card
+  const startBtn = face.querySelector(".zw-timer-btn");
+  assert.ok(startBtn, "Start/Stop is on the face");
+  assert.equal(face.querySelectorAll(".zw-timer-preset").length, 5, "so are the five presets");
+  assert.ok(face.querySelector(".zw-timer-field"), "and the typed duration");
+  // 1b. Start really starts the stopwatch, and the numbers move
+  const clickAll = (el) => (el._listeners || []).filter(([t]) => t === "click").forEach(([, fn]) => fn({ stopPropagation() {} }));
+  clickAll(startBtn);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(body.getAttribute("data-zw-timer"), "stopwatch", "the stopwatch is running");
+  const valueEl = face.querySelector(".zw-timer-value");
+  const before = valueEl.textContent;
+  h.advanceTime(3000);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.notEqual(valueEl.textContent, before, "and its numbers advance with the clock");
+  clickAll(startBtn);
+  await new Promise((r) => setTimeout(r, 20));
+  // A stopped stopwatch is idle as far as "something moves" is concerned, but it keeps its elapsed time on the face.
+  assert.equal(body.getAttribute("data-zw-timer"), "idle", "stopping stops it");
+  assert.equal(face.querySelector(".zw-timer-mode").textContent, "stopped", "and the face still says it is a stopped stopwatch");
+  // `formatDuration` prints `0:03` (no padded hour), so assert the time is kept, not a particular padding.
+  assert.notEqual(valueEl.textContent, "0:00", "the elapsed time is kept, not thrown away");
+  // 1c. a preset starts the countdown: the stopwatch still has its countdown function
+  clickAll(face.querySelectorAll(".zw-timer-preset")[0]);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(body.getAttribute("data-zw-timer"), "countdown", "1m starts a countdown from the same face");
+  assert.equal(face.querySelector(".zw-timer-mode").textContent, "countdown", "and the face says so");
+  assert.match(valueEl.textContent, /^1:00$|^0:59$/, "counting down from a minute");
+
+  // 3. the quick note is reachable from the CLOCK face
+  cardClicks[0][1]({ button: 0, stopPropagation() {}, preventDefault() {} });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(body.getAttribute("data-zw-clock-face"), "clock");
+  const noteChip = body.querySelector(".zw-clock-note-chip");
+  assert.ok(noteChip, "the clock face carries the note chip");
+  const noteRow = body.querySelector(".zw-clock-note-row");
+  assert.equal(noteRow.hidden, true, "the row ships hidden");
+  clickAll(noteChip);
+  assert.equal(noteRow.hidden, false, "the chip reveals it");
 
   api.destroy();
   console.log(`PASS widgets-clock-timer (${passed} tests, 1 live)`);

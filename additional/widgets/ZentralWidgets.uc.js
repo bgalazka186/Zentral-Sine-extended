@@ -2868,6 +2868,20 @@
 
       // ---- Event & pref wiring (no permanent polling) ----
 
+      // OW-60: the standalone Timer card is gone, but people have it switched on. That intent must not be lost: an
+      // owner who had `timer.enabled` (or `"timer"` in disabled_ids) gets the Clock resting on its timer face, once.
+      // The old pref is left alone rather than cleared — uninstalling this version must not silently change a setting.
+      function adoptLegacyTimerCard() {
+        try {
+          const def = registry.get("clock");
+          if (!def || !isWidgetEnabled(def)) return;
+          const wasOn = getBool(WIDGET_PREFS.TIMER_ENABLED, DEFAULTS.TIMER_ENABLED);
+          if (!wasOn) return;
+          if (getString(WIDGET_PREFS.CLOCK_MODE, DEFAULTS.CLOCK_MODE) === "timer") return;
+          writeStringPref(WIDGET_PREFS.CLOCK_MODE, "timer");
+        } catch (_) {}
+      }
+
       const onShellPref = () => syncWidgetsAndLayout();
       for (const pref of [
         WIDGET_PREFS.ENABLED,
@@ -2881,10 +2895,26 @@
         watchPref(pref, onShellPref);
       }
 
+      adoptLegacyTimerCard();
+      // One listener for the whole module: when Notes appears or leaves, the mounted Clock card re-checks its note chip.
+      // It is registered with the module's own cleanups, so `destroy` removes it like every other shell listener.
+      const onCalendarAvailability = () => {
+        try { clockNoteSync?.(); } catch (_) {}
+      };
+      if (typeof window.addEventListener === "function") {
+        window.addEventListener(CALENDAR_AVAILABILITY_EVENT, onCalendarAvailability);
+        registerCleanup(() => window.removeEventListener(CALENDAR_AVAILABILITY_EVENT, onCalendarAvailability));
+      }
+
       // ---- Built-in widgets: Clock & Date (T3.9b) ----
 
       // OW-56: the Clock card's own painter, registered by the clock widget so the timer can repaint the face it owns.
       let clockFacePainter = null;
+      // OW-60: the badge element lives on the Clock card now. Declared here, ABOVE the card that assigns it — the OW-56
+      // factory-order trap in reverse: a module-level hook must be declared before the factory that uses it runs.
+      let clockBadgeElement = null;
+      // OW-60: the Clock card's availability refresh, published here so exactly ONE window listener serves it.
+      let clockNoteSync = null;
       // The ended-countdown flag lives here (per window, per run): the clock reads it, the timer sets it, a click clears
       // it. Nothing is written to prefs — a finished countdown is a moment, not a setting.
       const clockAlert = { ringing: false };
@@ -2988,17 +3018,106 @@
           clockBadgeElement = badgeEl;
           let staticRenderKey = "";
 
-          // OW-56: the second face. It is not a second widget: the same numbers, the same state (timerState), drawn
-          // on the card the owner already watches. A click turns the card over; the setting says which face it rests on.
+          // OW-60: the second face is the whole stopwatch/countdown panel, not a readout. OW-56 drew the numbers here
+          // but left every control on a second card, so the two faces did not replace each other at all. The parts are
+          // the ones the old Timer card had (same classes, same pure helpers); the click still turns the card over and
+          // the setting still says which face it rests on.
           const timerFace = doc.createElement("div");
-          timerFace.className = "zw-clock-timer-face";
+          timerFace.className = "zw-clock-timer-face zw-timer";
           timerFace.hidden = true;
+
+          const readout = doc.createElement("div");
+          readout.className = "zw-timer-readout";
           const timerValueEl = doc.createElement("span");
-          timerValueEl.className = "zw-clock-timer-value";
+          timerValueEl.className = "zw-timer-value zw-clock-timer-value";
           const timerKindEl = doc.createElement("span");
-          timerKindEl.className = "zw-clock-timer-kind";
-          timerFace.appendChild(timerValueEl);
-          timerFace.appendChild(timerKindEl);
+          timerKindEl.className = "zw-timer-mode zw-clock-timer-kind";
+          readout.appendChild(timerValueEl);
+          readout.appendChild(timerKindEl);
+
+          const timerActions = doc.createElement("div");
+          timerActions.className = "zw-timer-actions";
+          const timerButtons = {};
+          const mkTimerButton = (name, text, title) => {
+            const b = doc.createElement("button");
+            b.type = "button";
+            b.className = "zw-timer-btn";
+            b.textContent = text;
+            b.title = title;
+            b.setAttribute("aria-label", title);
+            timerButtons[name] = b;
+            timerActions.appendChild(b);
+            return b;
+          };
+          const startBtn = mkTimerButton("start", "Start", "Start the stopwatch");
+          const lapBtn = mkTimerButton("lap", "Lap", "Take a lap");
+          const resetBtn = mkTimerButton("reset", "Reset", "Reset to zero");
+
+          // The same five durations the old card offered, as short chips.
+          const presets = doc.createElement("div");
+          presets.className = "zw-timer-presets";
+          const CHIP_TEXT = ["1m", "5m", "10m", "30m", "1h"];
+          const presetButtons = TIMER_PRESETS_MS.map((ms, index) => {
+            const b = doc.createElement("button");
+            b.type = "button";
+            b.className = "zw-timer-preset";
+            b.textContent = CHIP_TEXT[index] || formatDuration(ms);
+            b.title = "Start a countdown of " + formatDuration(ms);
+            b.setAttribute("aria-label", "Start a countdown of " + formatDuration(ms));
+            presets.appendChild(b);
+            return { ms, button: b };
+          });
+
+          const fieldRow = doc.createElement("div");
+          fieldRow.className = "zw-timer-field-row";
+          const field = doc.createElement("input");
+          field.type = "text";
+          field.className = "zw-timer-field";
+          field.placeholder = "in 5 min";
+          field.setAttribute("aria-label", "A duration for the timer, for example 5 min or 1:30");
+          field.spellcheck = false;
+          const setBtn = doc.createElement("button");
+          setBtn.type = "button";
+          setBtn.className = "zw-timer-btn";
+          setBtn.textContent = "Set";
+          setBtn.title = "Start the countdown with the typed duration";
+          fieldRow.appendChild(field);
+          fieldRow.appendChild(setBtn);
+
+          const laps = doc.createElement("ol");
+          laps.className = "zw-timer-laps";
+          laps.hidden = true;
+
+          timerFace.appendChild(readout);
+          timerFace.appendChild(timerActions);
+          timerFace.appendChild(presets);
+          timerFace.appendChild(fieldRow);
+          timerFace.appendChild(laps);
+
+          // OW-60: the quick note is reachable from the CLOCK face, which is the owner's third complaint. It is the
+          // same one opener channel (`openQuickNote`) the old card used, and it disappears entirely without Notes.
+          const clockNoteRow = doc.createElement("div");
+          clockNoteRow.className = "zw-clock-note-row";
+          clockNoteRow.hidden = true;
+          const clockNoteField = doc.createElement("input");
+          clockNoteField.type = "text";
+          clockNoteField.className = "zw-clock-note";
+          clockNoteField.placeholder = "Quick note";
+          clockNoteField.setAttribute("aria-label", "Write a quick note");
+          clockNoteField.spellcheck = false;
+          const clockNoteBtn = doc.createElement("button");
+          clockNoteBtn.type = "button";
+          clockNoteBtn.className = "zw-clock-note-btn";
+          clockNoteBtn.textContent = "Save";
+          clockNoteBtn.title = "Save this text as a note";
+          clockNoteRow.appendChild(clockNoteField);
+          clockNoteRow.appendChild(clockNoteBtn);
+          const clockNoteChip = doc.createElement("button");
+          clockNoteChip.type = "button";
+          clockNoteChip.className = "zw-clock-chip zw-clock-note-chip";
+          clockNoteChip.textContent = "Note";
+          clockNoteChip.title = "Write a quick note";
+          clockNoteChip.setAttribute("aria-label", "Write a quick note");
 
           const modeHintEl = doc.createElement("div");
           modeHintEl.className = "zw-card-meta zw-clock-mode-hint";
@@ -3008,7 +3127,9 @@
           wrap.appendChild(badgeEl);
           wrap.appendChild(zoneEl);
           wrap.appendChild(timerFace);
+          wrap.appendChild(clockNoteRow);
           wrap.appendChild(modeHintEl);
+          presets.appendChild(clockNoteChip);
 
           // T3.9d: the Clock is also a shortcut. A plain click starts/stops the stopwatch, a long press (or a
           // right click) asks for "in X", and a click while a quick timer runs stops it. The rule itself lives in
@@ -3050,7 +3171,8 @@
             if (acknowledged) clockAlert.ringing = false;
             if (next !== readMode()) writeStringPref(WIDGET_PREFS.CLOCK_MODE, next);
             paintFace();
-            if (timerState.timer?.running || timerState.stopwatch?.running) paintTimerCard(() => mountedCards.get("timer")?.instance?.render?.());
+            // The timer loop lives on this card now, so turning it over is enough to keep the countdown moving.
+            paintFace();
             return { next, acknowledged };
           };
 
@@ -3058,6 +3180,16 @@
           // flag; it is cleared by a click, never by time.
           const faceState = { mode: "clock" };
           const readMode = () => cleanWidgetMode(getString(WIDGET_PREFS.CLOCK_MODE, DEFAULTS.CLOCK_MODE));
+          // OW-60: one timer loop for the whole card, on the card that is actually always there. The old card owned a
+          // timer of its own; this one is woken by the shared rule (`nextTimerTickDelayMs`) and only while something
+          // moves, so a stopped clock still does no work.
+          let pendingTick = null;
+          const clearTick = () => {
+            if (pendingTick !== null && typeof window.clearTimeout === "function") window.clearTimeout(pendingTick);
+            pendingTick = null;
+          };
+          const nowMs = () => Date.now();
+
           const paintFace = () => {
             const mode = readMode();
             const alert = clockAlertState({ ringing: clockAlert.ringing }, {});
@@ -3067,30 +3199,178 @@
             timerFace.hidden = !timerFaceUp;
             wrap.setAttribute("data-zw-clock-face", mode);
             wrap.setAttribute("data-zw-clock-alert", alert.ringing ? "true" : "false");
-            if (timerFaceUp) {
-              const t = timerState.timer;
-              const sw = timerState.stopwatch;
-              const nowMs = Date.now();
-              if (t && t.running) {
-                timerValueEl.textContent = formatDuration(timerRemaining(t, nowMs));
-                timerKindEl.textContent = "countdown";
-              } else if (t && t.durationMs) {
-                timerValueEl.textContent = formatDuration(t.remainingMs);
-                timerKindEl.textContent = "paused";
-              } else {
-                timerValueEl.textContent = formatDuration(stopwatchElapsed(sw, nowMs));
-                timerKindEl.textContent = sw.running ? "stopwatch" : "stopwatch, stopped";
+
+            // The panel is drawn whatever the face is: the state it shows must be right the instant it is turned over,
+            // and the Clock line's badge is read from it while the panel is hidden.
+            const sw = timerState.stopwatch;
+            const t = timerState.timer;
+            const usingTimer = t.running || (t.remainingMs > 0 && t.remainingMs < t.durationMs);
+            const value = usingTimer ? timerRemaining(t, nowMs()) : stopwatchElapsed(sw, nowMs());
+            timerValueEl.textContent = formatDuration(value);
+            timerKindEl.textContent = usingTimer ? "countdown" : sw.running ? "stopwatch" : sw.accumulatedMs > 0 ? "stopped" : "";
+            startBtn.textContent = usingTimer ? (t.running ? "Stop" : "Resume") : sw.running ? "Stop" : "Start";
+            startBtn.title = usingTimer ? "Stop the countdown" : sw.running ? "Stop the stopwatch" : "Start the stopwatch";
+            startBtn.setAttribute("aria-label", startBtn.title);
+            // The face changes with the state instead of showing every control at once (OW-49's rule, kept).
+            const wide = (() => {
+              try {
+                const width = getArea?.()?.width;
+                return typeof width === "number" ? width >= 200 : true;
+              } catch (_) {
+                return true;
               }
+            })();
+            const controls = clockPanelControls(timerState, { wide, quickNote: clockNoteRow.getAttribute("data-zw-forced-off") !== "true" });
+            lapBtn.hidden = !controls.lap;
+            lapBtn.disabled = !sw.running;
+            resetBtn.disabled = !controls.reset;
+            fieldRow.hidden = !controls.field;
+            presets.hidden = !controls.presets;
+            laps.hidden = !sw.laps.length || !sw.running;
+            if (sw.laps.length) {
+              const doc2 = laps.ownerDocument || doc;
+              laps.replaceChildren(...sw.laps.map((at, i) => {
+                const li = doc2.createElement("li");
+                li.textContent = "#" + (i + 1) + "  " + formatDuration(at);
+                return li;
+              }));
+            }
+            wrap.setAttribute("data-zw-timer", usingTimer ? (t.running ? "countdown" : "countdown-stopped") : sw.running ? "stopwatch" : "idle");
+            // OW-49: a running countdown is readable on the Clock line while the panel is closed, so it is never invisible.
+            const badge = clockBadge(timerState, nowMs());
+            wrap.dataset.zwBadge = badge.text;
+            if (clockBadgeElement) {
+              clockBadgeElement.textContent = badge.text;
+              clockBadgeElement.hidden = !badge.text;
+              clockBadgeElement.setAttribute("data-zw-badge", badge.kind);
+              if (badge.text) clockBadgeElement.title = badge.kind === "countdown" ? "Countdown running" : "Stopwatch running";
+            }
+
+            if (timerFaceUp) {
               wrap.setAttribute("aria-label", "Timer " + timerValueEl.textContent + (timerKindEl.textContent ? ", " + timerKindEl.textContent : "") + ". Click for the clock.");
             } else {
               wrap.setAttribute("aria-label", (alert.ringing ? "Countdown finished. " : "") + "Clock. Click for the timer.");
             }
             modeHintEl.hidden = true;
+
+            // One wake-up at a time, and only while something moves.
+            clearTick();
+            const moving = usingTimer ? t.running : sw.running;
+            if (moving && typeof window.setTimeout === "function") {
+              const delay = usingTimer ? nextTimerTickDelayMs(t, nowMs()) : 1000;
+              pendingTick = window.setTimeout(() => {
+                pendingTick = null;
+                const tick = usingTimer ? timerTick(timerState.timer, nowMs()) : { state: timerState.timer, finished: false };
+                if (usingTimer && tick.state !== timerState.timer) timerState.timer = tick.state;
+                if (tick.finished) ringTimer();
+                try { paintFace(); } catch (_) {}
+              }, Math.max(200, delay));
+            }
           };
           faceState.paint = paintFace;
-          // The timer card (a separate widget) moves the state; the clock face has to follow it without a timer of
-          // its own. One hook, one call site.
+          // OW-60: nothing else paints this state any more — the card owns it, so the hook is just its own draw.
           clockFacePainter = paintFace;
+
+          // ---- the panel's actions: every one of these is a pure helper that already existed on the old card ----
+          const repaint = () => paintFace();
+          const startStop = () => {
+            const t = timerState.timer;
+            if (t.running) {
+              timerState.timer = timerStop(t, nowMs());
+            } else if (t.remainingMs > 0 && t.durationMs) {
+              timerState.timer = timerStart(t.remainingMs, nowMs());
+            } else {
+              timerState.stopwatch = timerState.stopwatch.running ? stopwatchStop(timerState.stopwatch, nowMs()) : stopwatchStart(timerState.stopwatch, nowMs());
+            }
+            repaint();
+          };
+          startBtn.addEventListener("click", (e) => { e?.stopPropagation?.(); startStop(); });
+          lapBtn.addEventListener("click", (e) => {
+            e?.stopPropagation?.();
+            timerState.stopwatch = stopwatchLap(timerState.stopwatch, nowMs());
+            repaint();
+          });
+          resetBtn.addEventListener("click", (e) => {
+            e?.stopPropagation?.();
+            timerState.stopwatch = stopwatchReset();
+            timerState.timer = timerReset();
+            repaint();
+          });
+          const startFromField = () => {
+            const next = quickTimerFromText(field.value, nowMs());
+            if (!next) { field.select?.(); return; }
+            timerState.timer = next;
+            field.value = "";
+            repaint();
+          };
+          setBtn.addEventListener("click", (e) => { e?.stopPropagation?.(); startFromField(); });
+          field.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") { e.preventDefault(); startFromField(); }
+          });
+          // A click inside the panel is not a click on the card: it must not turn the panel over.
+          for (const el of [timerFace, fieldRow, presets, timerActions, laps]) {
+            el.addEventListener?.("click", (e) => e?.stopPropagation?.());
+          }
+          for (const { ms, button } of presetButtons) {
+            button.addEventListener("click", (e) => {
+              e?.stopPropagation?.();
+              timerState.timer = timerStart(ms, nowMs());
+              repaint();
+            });
+          }
+
+          // OW-56: a countdown that ends answers the two settings once, and marks the card so the end is not missed.
+          const ringTimer = () => {
+            const plan = timerEndPlan({
+              sound: getString(WIDGET_PREFS.TIMER_END_SOUND, DEFAULTS.TIMER_END_SOUND),
+              notice: getString(WIDGET_PREFS.TIMER_END_NOTICE, DEFAULTS.TIMER_END_NOTICE),
+              alreadyRung: clockAlert.ringing,
+              text: timerNoticeText(),
+            });
+            wrap.setAttribute("data-zw-rang", "true");
+            if (typeof window.setTimeout === "function") {
+              window.setTimeout(() => wrap.removeAttribute("data-zw-rang"), 4000);
+            }
+            playTimerEndSound(plan.sound);
+            showTimerEndNotice(plan.notice, plan.text);
+            if (plan.markClock) {
+              clockAlert.ringing = true;
+              paintFace();
+            }
+          };
+
+          // OW-60: the quick note lives on the clock face now. Same opener channel, same gate, and no button at all
+          // when Notes is not installed (a button that cannot work is worse than none).
+          const saveClockNote = () => {
+            const text = String(clockNoteField.value || "").trim();
+            const opener = resolveCalendarOpener(window);
+            if (!opener || typeof opener.openQuickNote !== "function") return;
+            try { opener.openQuickNote(text); } catch (_) {}
+            clockNoteField.value = "";
+            clockNoteRow.hidden = true;
+          };
+          const syncClockNote = () => {
+            const opener = resolveCalendarOpener(window);
+            const ok = Boolean(opener && typeof opener.openQuickNote === "function") && getBool(WIDGET_PREFS.TIMER_QUICK_NOTE, DEFAULTS.TIMER_QUICK_NOTE);
+            clockNoteChip.hidden = !ok;
+            clockNoteRow.setAttribute("data-zw-forced-off", ok ? "false" : "true");
+            if (!ok) clockNoteRow.hidden = true;
+          };
+          clockNoteChip.addEventListener("click", (e) => {
+            e?.stopPropagation?.();
+            clockNoteRow.hidden = !clockNoteRow.hidden;
+            if (!clockNoteRow.hidden) clockNoteField.focus?.();
+          });
+          clockNoteRow.addEventListener("click", (e) => e?.stopPropagation?.());
+          clockNoteBtn.addEventListener("click", (e) => { e?.stopPropagation?.(); saveClockNote(); });
+          clockNoteField.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") { e.preventDefault(); saveClockNote(); }
+          });
+          syncClockNote();
+          // OW-60: the availability listener is NOT registered here. `create` runs again on every `registerWidget`, and
+          // an instance discarded by that path never reaches `dispose`, so a per-card listener leaks by construction
+          // (the 3-listener leak the clock/date test caught). One module-level listener re-paints the mounted card.
+          clockNoteSync = syncClockNote;
 
           return {
             element: wrap,
@@ -3122,6 +3402,24 @@
               );
               // OW-56: the face is drawn after the clock's own text, so the two never fight over the same elements.
               paintFace();
+            },
+            // OW-60: the old Timer card answered these (the Clock's long press / right click used to land there).
+            // Now that the card is gone, the Clock answers them itself.
+            clockClick(kind) {
+              if (kind === "stopwatch-start") timerState.stopwatch = stopwatchStart(timerState.stopwatch, nowMs());
+              else if (kind === "stopwatch-stop") timerState.stopwatch = stopwatchStop(timerState.stopwatch, nowMs());
+              else if (kind === "timer-stop") timerState.timer = timerStop(timerState.timer, nowMs());
+              else if (kind === "ask-duration") {
+                if (readMode() !== "timer") writeStringPref(WIDGET_PREFS.CLOCK_MODE, "timer");
+                field.focus?.();
+              }
+              paintFace();
+              return true;
+            },
+            state: timerState,
+            dispose() {
+              clearTick();
+              if (clockNoteSync === syncClockNote) clockNoteSync = null;
             },
           };
         },
@@ -3603,7 +3901,6 @@
       // list. Its state lives here (not in prefs): a stopwatch is a moment, not a setting.
       const timerState = { stopwatch: stopwatchReset(), timer: timerReset(), lapsOpen: false };
       // The Clock line's small badge; the timer panel writes into it so a running countdown survives a closed panel.
-      let clockBadgeElement = null;
       // Ids revealed by a Clock click even though their own pref is off: a glance, not a setting.
       const transientCards = new Set();
       const clockClickState = { timer: null };
@@ -3690,398 +3987,24 @@
           }, 5000);
         } catch (_) {}
       }
-      function paintTimerCard(paint) {
-        if (typeof paint === "function") {
-          try { paint(); } catch (err) { console.warn("[ZentralWidgets] timer paint failed:", err); }
-        }
-      }
-      registerWidget({
-        id: "timer",
-        title: "Timer",
-        showHeader: false,
-        order: 40,
-        pref: WIDGET_PREFS.TIMER_ENABLED,
-        defaultEnabled: false,
-        // The card has no refresh of its own: it repaints on the second its own state asks for.
-        refreshMs: 0,
-        watchPrefs: [WIDGET_PREFS.TIMER_CLICK_STOPWATCH],
-        create({ document: doc }) {
-          const wrap = doc.createElement("div");
-          wrap.className = "zw-timer";
 
-          const readout = doc.createElement("div");
-          readout.className = "zw-timer-readout";
-          const clockEl = doc.createElement("span");
-          clockEl.className = "zw-timer-value";
-          const modeEl = doc.createElement("span");
-          modeEl.className = "zw-timer-mode";
-          readout.appendChild(clockEl);
-          readout.appendChild(modeEl);
-
-          const actions = doc.createElement("div");
-          actions.className = "zw-timer-actions";
-
-          const buttons = {};
-          const mk = (name, text, title) => {
-            const b = doc.createElement("button");
-            b.type = "button";
-            b.className = "zw-timer-btn";
-            b.textContent = text;
-            b.title = title;
-            b.setAttribute("aria-label", title);
-            buttons[name] = b;
-            actions.appendChild(b);
-            return b;
-          };
-          const startBtn = mk("start", "Start", "Start the stopwatch");
-          const lapBtn = mk("lap", "Lap", "Take a lap");
-          const resetBtn = mk("reset", "Reset", "Reset to zero");
-
-          // OW-49: five full-size preset buttons became one line of short chips. Same five durations, a tenth of the
-          // visual weight.
-          const presets = doc.createElement("div");
-          presets.className = "zw-timer-presets";
-          const CHIP_TEXT = ["1m", "5m", "10m", "30m", "1h"];
-          const presetButtons = TIMER_PRESETS_MS.map((ms, index) => {
-            const b = doc.createElement("button");
-            b.type = "button";
-            b.className = "zw-timer-preset";
-            b.textContent = CHIP_TEXT[index] || formatDuration(ms);
-            b.title = "Start a countdown of " + formatDuration(ms);
-            b.setAttribute("aria-label", "Start a countdown of " + formatDuration(ms));
-            presets.appendChild(b);
-            return { ms, button: b };
-          });
-
-          const fieldRow = doc.createElement("div");
-          fieldRow.className = "zw-timer-field-row";
-          const field = doc.createElement("input");
-          field.type = "text";
-          field.className = "zw-timer-field";
-          field.placeholder = "in 5 min";
-          field.setAttribute("aria-label", "A duration for the timer, for example 5 min or 1:30");
-          field.spellcheck = false;
-          const setBtn = doc.createElement("button");
-          setBtn.type = "button";
-          setBtn.className = "zw-timer-btn";
-          setBtn.textContent = "Set";
-          setBtn.title = "Start the countdown with the typed duration";
-          fieldRow.appendChild(field);
-          fieldRow.appendChild(setBtn);
-
-          const noteRow = doc.createElement("div");
-          noteRow.className = "zw-timer-note-row";
-          noteRow.hidden = true; // the note is a chip away, not a permanent row (OW-49)
-          const noteField = doc.createElement("input");
-          noteField.type = "text";
-          noteField.className = "zw-timer-note";
-          noteField.placeholder = "Quick note";
-          noteField.setAttribute("aria-label", "Write a quick note");
-          noteField.spellcheck = false;
-          const noteBtn = doc.createElement("button");
-          noteBtn.type = "button";
-          noteBtn.className = "zw-timer-btn";
-          noteBtn.textContent = "Save";
-          noteBtn.title = "Save this text as a note";
-          noteRow.appendChild(noteField);
-          noteRow.appendChild(noteBtn);
-
-          const laps = doc.createElement("ol");
-          laps.className = "zw-timer-laps";
-          laps.hidden = true;
-
-          // A note chip next to the presets: it shows the note row only when somebody wants it.
-          const noteChip = doc.createElement("button");
-          noteChip.type = "button";
-          noteChip.className = "zw-timer-chip zw-timer-note-chip";
-          noteChip.textContent = "Note";
-          noteChip.title = "Write a quick note";
-          noteChip.setAttribute("aria-label", "Write a quick note");
-
-          wrap.appendChild(readout);
-          wrap.appendChild(actions);
-          wrap.appendChild(presets);
-          wrap.appendChild(fieldRow);
-          wrap.appendChild(noteRow);
-          wrap.appendChild(laps);
-          presets.appendChild(noteChip);
-
-          let repaint = () => {};
-          let pendingTick = null;
-          const clearTick = () => {
-            if (pendingTick !== null && typeof window.clearTimeout === "function") window.clearTimeout(pendingTick);
-            pendingTick = null;
-          };
-          const nowMs = () => Date.now();
-
-          const draw = () => {
-            const sw = timerState.stopwatch;
-            const t = timerState.timer;
-            const usingTimer = t.running || (t.remainingMs > 0 && t.remainingMs < t.durationMs);
-            const value = usingTimer ? timerRemaining(t, nowMs()) : stopwatchElapsed(sw, nowMs());
-            clockEl.textContent = formatDuration(value);
-            modeEl.textContent = usingTimer ? "countdown" : sw.running ? "stopwatch" : sw.accumulatedMs > 0 ? "stopped" : "";
-            startBtn.textContent = usingTimer ? (t.running ? "Stop" : "Resume") : sw.running ? "Stop" : "Start";
-            startBtn.title = usingTimer ? "Stop the countdown" : sw.running ? "Stop the stopwatch" : "Start the stopwatch";
-            startBtn.setAttribute("aria-label", startBtn.title);
-            // OW-49: the face changes with the state instead of showing everything at once.
-            const wide = (() => {
-              try {
-                const width = getArea?.()?.width;
-                return typeof width === "number" ? width >= 200 : true;
-              } catch (_) {
-                return true;
-              }
-            })();
-            const controls = clockPanelControls(timerState, {
-              wide,
-              quickNote: !noteRow.dataset.zwForcedOff,
-            });
-            lapBtn.hidden = !controls.lap;
-            lapBtn.disabled = !sw.running;
-            resetBtn.disabled = !controls.reset;
-            // While a countdown runs the readout is the whole middle: the field goes, not the numbers.
-            fieldRow.hidden = !controls.field;
-            presets.hidden = !controls.presets;
-            laps.hidden = !sw.laps.length || !sw.running;
-            if (sw.laps.length) {
-              const doc2 = laps.ownerDocument;
-              laps.replaceChildren(...sw.laps.map((at, i) => {
-                const li = doc2.createElement("li");
-                li.textContent = "#" + (i + 1) + "  " + formatDuration(at);
-                return li;
-              }));
-            }
-            wrap.setAttribute("data-zw-timer", usingTimer ? (t.running ? "countdown" : "countdown-stopped") : sw.running ? "stopwatch" : "idle");
-            // The Clock line reads this while the panel is closed, so a running timer is never invisible.
-            const badge = clockBadge(timerState, nowMs());
-            wrap.dataset.zwBadge = badge.text;
-            if (clockBadgeElement) {
-              clockBadgeElement.textContent = badge.text;
-              clockBadgeElement.hidden = !badge.text;
-              clockBadgeElement.setAttribute("data-zw-badge", badge.kind);
-              if (badge.text) clockBadgeElement.title = badge.kind === "countdown" ? "Countdown running" : "Stopwatch running";
-            }
-            wrap.setAttribute("aria-label", "Timer " + formatDuration(value) + (modeEl.textContent ? ", " + modeEl.textContent : ""));
-            // OW-56: the Clock card may be showing this timer's face; it follows the same state.
-            clockFacePainter?.();
-            // One wake-up at a time, and only while something moves.
-            clearTick();
-            const moving = usingTimer ? t.running : sw.running;
-            if (moving && typeof window.setTimeout === "function") {
-              const delay = usingTimer ? nextTimerTickDelayMs(t, nowMs()) : 1000;
-              pendingTick = window.setTimeout(() => {
-                pendingTick = null;
-                const tick = usingTimer ? timerTick(timerState.timer, nowMs()) : { state: timerState.timer, finished: false };
-                if (usingTimer && tick.state !== timerState.timer) timerState.timer = tick.state;
-                if (tick.finished) ringTimer();
-                try { draw(); } catch (_) {}
-              }, Math.max(200, delay));
-            }
-          };
-          repaint = draw;
-
-          // OW-56: a countdown that ends says so through the two settings, once, and marks the Clock card so the end
-          // cannot pass unseen while the card is on its clock face.
-          const ringTimer = () => {
-            const plan = timerEndPlan({
-              sound: getString(WIDGET_PREFS.TIMER_END_SOUND, DEFAULTS.TIMER_END_SOUND),
-              notice: getString(WIDGET_PREFS.TIMER_END_NOTICE, DEFAULTS.TIMER_END_NOTICE),
-              alreadyRung: clockAlert.ringing,
-              text: timerNoticeText(),
-            });
-            wrap.setAttribute("data-zw-rang", "true");
-            if (typeof window.setTimeout === "function") {
-              window.setTimeout(() => wrap.removeAttribute("data-zw-rang"), 4000);
-            }
-            playTimerEndSound(plan.sound);
-            showTimerEndNotice(plan.notice, plan.text);
-            if (plan.markClock) {
-              clockAlert.ringing = true;
-              paintTimerCard(() => clockFacePainter?.());
-            }
-          };
-
-          const startStop = () => {
-            const t = timerState.timer;
-            if (t.running) {
-              timerState.timer = timerStop(t, nowMs());
-            } else if (t.remainingMs > 0 && t.durationMs) {
-              timerState.timer = timerStart(t.remainingMs, nowMs());
-            } else {
-              timerState.stopwatch = timerState.stopwatch.running ? stopwatchStop(timerState.stopwatch, nowMs()) : stopwatchStart(timerState.stopwatch, nowMs());
-            }
-            draw();
-          };
-          startBtn.addEventListener("click", startStop);
-          lapBtn.addEventListener("click", () => {
-            timerState.stopwatch = stopwatchLap(timerState.stopwatch, nowMs());
-            draw();
-          });
-          resetBtn.addEventListener("click", () => {
-            timerState.stopwatch = stopwatchReset();
-            timerState.timer = timerReset();
-            draw();
-          });
-          const startFromField = () => {
-            const next = quickTimerFromText(field.value, nowMs());
-            if (!next) { field.select?.(); return; }
-            timerState.timer = next;
-            field.value = "";
-            draw();
-          };
-          setBtn.addEventListener("click", startFromField);
-          field.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") { e.preventDefault(); startFromField(); }
-          });
-          for (const { ms, button } of presetButtons) {
-            button.addEventListener("click", () => {
-              timerState.timer = timerStart(ms, nowMs());
-              draw();
-            });
-          }
-
-          // A quick note leaves through the notes opener; the text is the person's, nothing is typed for them.
-          const saveNote = () => {
-            const text = String(noteField.value || "").trim();
-            const opener = resolveCalendarOpener(window);
-            if (!opener || typeof opener.openQuickNote !== "function") return;
-            try { opener.openQuickNote(text); } catch (_) {}
-            noteField.value = "";
-          };
-          noteBtn.addEventListener("click", saveNote);
-          noteField.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") { e.preventDefault(); saveNote(); }
-          });
-          // The quick-note row disappears when Notes is not installed: a button that cannot work is worse than none.
-          const syncNoteRow = () => {
-            const opener = resolveCalendarOpener(window);
-            const ok = Boolean(opener && typeof opener.openQuickNote === "function") && getBool(WIDGET_PREFS.TIMER_QUICK_NOTE, DEFAULTS.TIMER_QUICK_NOTE);
-            // The chip is the way in; without Notes there is no chip at all.
-            noteChip.hidden = !ok;
-            noteRow.dataset.zwForcedOff = ok ? "" : "true";
-            if (!ok) noteRow.hidden = true;
-          };
-          noteChip.addEventListener("click", () => {
-            noteRow.hidden = !noteRow.hidden;
-            if (!noteRow.hidden) noteField.focus?.();
-          });
-
-          // OW-49: the panel dismisses on Escape and on a click outside it, the way a small popover should. A running
-          // countdown keeps the panel's readout alive on the Clock line, so closing never hides a timer.
-          const dismissPanel = (event) => {
-            if (event?.type === "keydown" && event.key !== "Escape") return;
-            delete wrap.dataset.zwOpen;
-            wrap.setAttribute("data-zw-open", "false");
-          };
-          const onDocumentDown = (event) => {
-            if (wrap.dataset.zwOpen !== "true") return;
-            if (wrap.contains?.(event.target)) return;
-            dismissPanel(event);
-          };
-          const onKeyDown = (event) => {
-            if (wrap.dataset.zwOpen !== "true") return;
-            if (event.key === "Escape") dismissPanel(event);
-          };
-          if (typeof doc.addEventListener === "function") {
-            doc.addEventListener("pointerdown", onDocumentDown, true);
-            doc.addEventListener("keydown", onKeyDown, true);
-          }
-          syncNoteRow();
-          if (typeof window.addEventListener === "function") {
-            window.addEventListener(CALENDAR_AVAILABILITY_EVENT, syncNoteRow);
-          }
-
-          draw();
-          return {
-            element: wrap,
-            fetch: () => null,
-            render: () => draw(),
-            // The Clock click lands here: start/stop the stopwatch, stop a quick timer, or ask for a duration.
-            clockClick(kind) {
-              // OW-49: opening the panel is the normal answer; the panel itself starts and stops.
-              if (kind === "open" || kind === "close-panel") {
-                if (kind === "open") {
-                  wrap.dataset.zwOpen = "true";
-                  wrap.setAttribute("data-zw-open", "true");
-                } else {
-                  delete wrap.dataset.zwOpen;
-                  wrap.setAttribute("data-zw-open", "false");
-                }
-                draw();
-                return;
-              }
-              if (kind === "stopwatch-start") timerState.stopwatch = stopwatchStart(timerState.stopwatch, nowMs());
-              else if (kind === "stopwatch-stop") timerState.stopwatch = stopwatchStop(timerState.stopwatch, nowMs());
-              else if (kind === "timer-stop") timerState.timer = timerStop(timerState.timer, nowMs());
-              else if (kind === "ask-duration") field.focus?.();
-              draw();
-            },
-            state: timerState,
-            dispose() {
-              clearTick();
-              if (typeof window.removeEventListener === "function") window.removeEventListener(CALENDAR_AVAILABILITY_EVENT, syncNoteRow);
-              if (typeof doc.removeEventListener === "function") {
-                doc.removeEventListener("pointerdown", onDocumentDown, true);
-                doc.removeEventListener("keydown", onKeyDown, true);
-              }
-            },
-          };
-        },
-      });
-
-      const clockPanel = () => mountedCards.get("timer")?.instance?.element || null;
-      // OW-49: a Clock click reveals the timer panel. If a countdown is running, the same click stops it — the person
-      // is looking at the number they want to stop, and a stop that needs a panel opened first is a trap.
-      function revealTimerCard() {
-        const def = registry.get("timer");
-        if (!def) return false;
-        if (!isWidgetEnabled(def)) {
-          // The panel is a glance, not a setting: it may appear without turning the widget's pref on. It leaves again
-          // when the person closes it.
-          transientCards.add("timer");
-          syncWidgetsAndLayout();
-        }
-        return mountedCards.has("timer");
-      }
+      // OW-60: the panel is part of the Clock card, so a Clock click has nowhere to travel. One function, one card.
       function clockClick(action) {
-        const mounted = mountedCards.get("timer");
-        const wrap = mounted?.instance?.element || null;
-        const isOpen = Boolean(wrap && (wrap.dataset?.zwOpen === "true" || wrap.getAttribute?.("data-zw-open") === "true"));
-        if (!mounted) {
-          if (!revealTimerCard()) return false;
-          const fresh = mountedCards.get("timer");
-          if (fresh?.instance?.element) {
-            fresh.instance.element.dataset.zwOpen = "true";
-            fresh.instance.element.setAttribute("data-zw-open", "true");
-          }
-          // Opening is all a plain click does until the person chooses something in the panel.
-          if (action === "stopwatch-start" || action === "stopwatch-stop" || action === "timer-stop") return true;
-          fresh?.instance?.clockClick?.(action);
+        const clock = mountedCards.get("clock")?.instance;
+        if (!clock || typeof clock.clockClick !== "function") return false;
+        // "open"/"close-panel" only mean "show the panel" now: the panel is the other face of this same card.
+        if (action === "open" || action === "close-panel") {
+          const wanted = action === "open" ? "timer" : "clock";
+          if (readWidgetModePref() !== wanted) writeStringPref(WIDGET_PREFS.CLOCK_MODE, wanted);
+          clockFacePainter?.();
           return true;
         }
-        if (action === "close-panel") {
-          if (wrap) {
-            delete wrap.dataset.zwOpen;
-            wrap.setAttribute("data-zw-open", "false");
-          }
-          if (transientCards.delete("timer")) syncWidgetsAndLayout();
-          return true;
-        }
-        if (!isOpen && (action === "stopwatch-start" || action === "ask-duration")) {
-          if (wrap) {
-            wrap.dataset.zwOpen = "true";
-            wrap.setAttribute("data-zw-open", "true");
-          }
-          return true;
-        }
-        if (typeof mounted.instance?.clockClick !== "function") return false;
-        mounted.instance.clockClick(action);
-        return true;
+        return clock.clockClick(action) !== false;
       }
+      const readWidgetModePref = () => cleanWidgetMode(getString(WIDGET_PREFS.CLOCK_MODE, DEFAULTS.CLOCK_MODE));
       function clockClickKind(event) {
         return resolveClockClick({
-          clickEnabled: getBool(WIDGET_PREFS.TIMER_CLICK_STOPWATCH, DEFAULTS.TIMER_CLICK_STOPWATCH) && isWidgetEnabled(registry.get("timer")),
+          clickEnabled: getBool(WIDGET_PREFS.TIMER_CLICK_STOPWATCH, DEFAULTS.TIMER_CLICK_STOPWATCH),
           timerRunning: Boolean(timerState.timer?.running),
           stopwatchRunning: Boolean(timerState.stopwatch?.running),
           long: Boolean(event?.shiftKey),

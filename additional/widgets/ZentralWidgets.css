@@ -493,6 +493,50 @@
   opacity: 0.62 !important;
 }
 
+/* OW-60: the timer face is the whole panel now, so it stacks like the old card did instead of sitting on one line. */
+#zentral-sidebar-widgets .zw-clock-timer-face {
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 4px !important;
+}
+
+/* OW-60: the quick note on the clock face. It is the same row shape as the timer card's, on the face that is
+   always one click away, and it is gone entirely when Notes is not installed. */
+#zentral-sidebar-widgets .zw-clock-note-row {
+  display: flex !important;
+  gap: 4px !important;
+  align-items: center !important;
+  margin-top: 4px !important;
+}
+#zentral-sidebar-widgets .zw-clock-note-row[hidden] {
+  display: none !important;
+}
+#zentral-sidebar-widgets .zw-clock-note {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  font: inherit !important;
+  padding: 2px 6px !important;
+  border-radius: var(--zw-radius, 6px) !important;
+  border: 1px solid var(--zw-line, rgba(255, 255, 255, 0.2)) !important;
+  background: var(--zw-hover, rgba(255, 255, 255, 0.08)) !important;
+  color: inherit !important;
+}
+#zentral-sidebar-widgets .zw-clock-note-btn,
+#zentral-sidebar-widgets .zw-clock-chip {
+  flex: 0 0 auto !important;
+  font: inherit !important;
+  font-size: 11px !important;
+  padding: 2px 6px !important;
+  border-radius: var(--zw-radius, 6px) !important;
+  border: 1px solid var(--zw-line, rgba(255, 255, 255, 0.2)) !important;
+  background: transparent !important;
+  color: inherit !important;
+  cursor: pointer !important;
+}
+#zentral-sidebar-widgets .zw-clock-chip[hidden] {
+  display: none !important;
+}
+
 /* OW-56: a countdown that ended while the clock was up. Bright red until the card is clicked, on the numbers
    themselves; the colour is a token so a theme can answer it (`--zw-clock-alert`). */
 #zentral-sidebar-widgets .zw-clock[data-zw-clock-alert="true"] .zw-clock-time,

@@ -49,6 +49,19 @@ function createFakeSidebarHarness(initialPrefs = {}, { fetch: fetchImpl = null }
         removeProperty(k) { this._props.delete(k); },
         getPropertyValue(k) { return this._props.get(k) || ""; },
       };
+      // The real DOM's `dataset` is a live view of `data-*` attributes. Its absence here was a harness gap, not a
+      // code smell: production code that writes `el.dataset.x` is correct, so the fake has to behave like the DOM.
+      const self = this;
+      this.dataset = new Proxy({}, {
+        get(_t, key) {
+          const value = self.getAttribute("data-" + String(key).replace(/[A-Z]/g, (m) => "-" + m.toLowerCase()));
+          return value === null ? undefined : value;
+        },
+        set(_t, key, value) {
+          self.setAttribute("data-" + String(key).replace(/[A-Z]/g, (m) => "-" + m.toLowerCase()), String(value));
+          return true;
+        },
+      });
     }
     get parentElement() { return this.parentNode; }
     get isConnected() {

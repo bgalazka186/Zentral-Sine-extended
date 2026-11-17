@@ -142,13 +142,17 @@ test("the live card reads the platform it actually runs in, and paints its first
 });
 
 test("the settings section exists and every pref is declared", () => {
+  // OW-60 retired the standalone Timer card, so `timer.enabled` is no longer a setting; the Timer FACE setting took
+  // its place. Asserting the old pref here would pin the very thing the owner asked to be removed.
   const wanted = [
     c.WIDGET_PREFS.STATUS_ENABLED,
     c.WIDGET_PREFS.STATUS_SHOW_BATTERY,
     c.WIDGET_PREFS.STATUS_SHOW_MEMORY,
-    c.WIDGET_PREFS.TIMER_ENABLED,
+    c.WIDGET_PREFS.CLOCK_MODE,
     c.WIDGET_PREFS.WEATHER_ENABLED,
   ];
+  assert.equal(SETTINGS.schema.some((x) => x.property === c.WIDGET_PREFS.TIMER_ENABLED), false,
+    "the retired standalone Timer card pref is gone from settings");
   for (const property of wanted) {
     const item = SETTINGS.schema.find((x) => x.property === property);
     assert.ok(item, property + " is declared in settings.json");

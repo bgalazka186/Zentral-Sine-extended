@@ -169,12 +169,6 @@
     "size": "16px"
   },
   {
-    "property": "zen.workspace.zentral.widgets.timer.enabled",
-    "label": "Show Timer widget (stopwatch, countdown, quick note)",
-    "type": "checkbox",
-    "defaultValue": false
-  },
-  {
     "property": "zen.workspace.zentral.widgets.timer.click_stopwatch",
     "label": "Clicking the Clock starts and stops the stopwatch (long press asks for a duration)",
     "type": "checkbox",

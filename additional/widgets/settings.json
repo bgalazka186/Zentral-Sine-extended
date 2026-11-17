@@ -211,12 +211,6 @@
       "description": "One JSON list: [{\"id\":\"home\",\"name\":\"Home\",\"latitude\":50.67,\"longitude\":17.92}, …]. A click on the weather card shows the next place; the name stays on the card. Max three. The place, latitude and longitude below are the first place of an older install and are copied in here once."
     },
     {
-      "property": "zen.workspace.zentral.widgets.timer.enabled",
-      "label": "Show Timer widget (stopwatch, countdown, quick note)",
-      "type": "checkbox",
-      "defaultValue": false
-    },
-    {
       "property": "zen.workspace.zentral.widgets.timer.click_stopwatch",
       "label": "Clicking the Clock starts and stops the stopwatch (long press asks for a duration)",
       "type": "checkbox",
@@ -413,11 +407,6 @@
     "zen.workspace.zentral.widgets.weather.places": {
       "category": "widgets",
       "section": "Weather",
-      "owner": "widgets"
-    },
-    "zen.workspace.zentral.widgets.timer.enabled": {
-      "category": "widgets",
-      "section": "Timer",
       "owner": "widgets"
     },
     "zen.workspace.zentral.widgets.timer.click_stopwatch": {

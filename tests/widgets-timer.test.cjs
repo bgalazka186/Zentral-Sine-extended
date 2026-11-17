@@ -1,5 +1,6 @@
 "use strict";
-/* T3.9d tests: the Timer widget, the Clock click and the Quick note.
+/* T3.9d tests: the timer state machine, the Clock click and the Quick note. OW-60 merged the Timer card into the
+ * Clock card, so the wiring assertions below point at the Clock's own bounds.
  * Everything that decides anything is pure here: the parser, the stopwatch state machine, the countdown (which must
  * survive a sleeping window and ring exactly once), and the presets. The wiring checks that the widget owns no timer
  * of its own, that the Clock click is only a shortcut, and that a quick note reaches Notes through the same opener
@@ -110,21 +111,27 @@ test("the presets are the five people actually ask for", () => {
   assert.deepEqual(json(c.TIMER_PRESETS_MS), [60000, 300000, 600000, 1800000, 3600000]);
 });
 
-test("the widget owns no timer and the Clock click is only a shortcut", () => {
-  const timerWidgetStart = SRC.indexOf('id: "timer"');
-  const timerWidget = SRC.slice(timerWidgetStart, SRC.indexOf('id: "status"', timerWidgetStart));
-  assert.ok(timerWidget.length > 1000, "the timer widget exists");
-  assert.ok(!/setInterval/.test(timerWidget), "no interval of its own");
-  assert.ok(/nextTimerTickDelayMs/.test(timerWidget), "its next wake-up comes from the shared rule");
-  // The Clock click must not become the only way to do anything: the timer widget carries the same controls.
+test("the Clock owns the timer loop, and no standalone Timer card is left", () => {
+  // OW-60: the two cards became one. The loop moved onto the Clock, so these bounds are the CLOCK's own (the OW-54
+  // lesson: slice to the widget's real bounds, never a fixed width).
+  const clockStart = SRC.indexOf('id: "clock"');
+  const clock = SRC.slice(clockStart, SRC.indexOf('id: "date"', clockStart));
+  assert.ok(clock.length > 3000, "the Clock card exists and carries the panel");
+  assert.ok(!/setInterval/.test(clock), "no interval of its own");
+  assert.ok(/nextTimerTickDelayMs/.test(clock), "its next wake-up comes from the shared rule");
+  assert.ok(/stopwatchStart\(/.test(clock) && /timerStart\(/.test(clock), "the controls live on this card");
+  // The card that used to hold them is gone from the registry, not merely hidden from the tray.
+  assert.equal(SRC.indexOf('id: "timer"'), -1, "no standalone Timer card is registered any more");
+  assert.ok(!/mountedCards\.get\("timer"\)/.test(SRC), "and nothing still looks for one");
   assert.ok(/TIMER_CLICK_STOPWATCH/.test(SRC), "the Clock click is a setting");
-  const clock = SRC.slice(SRC.indexOf('id: "clock"'), SRC.indexOf('id: "date"'));
-  assert.ok(/onClockClick|resolveClockClick/.test(clock), "the click is decided by a pure function");
+  assert.ok(/resolveClockClick/.test(SRC), "the click is decided by a pure function");
 });
 
 test("a quick note goes through the one opener channel Notes already publishes", () => {
   assert.ok(/openQuickNote/.test(SRC), "the widget asks the opener for a quick note");
   assert.ok(/typeof opener\.openQuickNote !== "function"/.test(SRC), "and only offers it when Notes is there");
+  // OW-60: the row that calls it now lives on the Clock card; the channel is unchanged.
+  assert.ok(/clockNoteField/.test(SRC), "the note field is on the Clock card");
   assert.ok(/quickCapture: \(text\) =>/.test(NOTES), "Notes exposes exactly that one entry point");
   assert.ok(/function openNoteFromOutside\(/.test(NOTES), "and one body decides the start view for notes opened from outside");
   assert.ok(/function openQuickNoteFromHost\(text\)/.test(NOTES));
@@ -182,17 +189,13 @@ test("a running timer is visible on the Clock line even with the panel closed", 
 });
 
 test("the panel is compact: chips instead of five full presets, and the note is a chip", () => {
-  // Slice to the widget's own bounds, never a fixed width: a fixed window silently stops covering the end of the
-  // widget as soon as anything above it grows (the OW-54 lesson).
-  const timerStart = SRC.indexOf('id: "timer"');
-  const timer = SRC.slice(timerStart, SRC.indexOf('id: "status"', timerStart));
-  assert.match(timer, /CHIP_TEXT = \["1m", "5m", "10m", "30m", "1h"\]/, "the presets are short chips");
-  assert.match(timer, /noteRow\.hidden = true/, "the note row ships hidden");
-  assert.match(timer, /noteChip\.addEventListener\("click"/, "and is revealed by its own chip");
-  assert.ok(!/noteRow\.hidden = !ok;/.test(timer), "Notes availability hides the chip, not a permanent row");
-  assert.match(timer, /laps\.hidden = !sw\.laps\.length \|\| !sw\.running/, "laps only while the stopwatch runs");
-  // The panel may appear without turning its own widget pref on, and must leave again on close.
-  assert.ok(/transientCards/.test(SRC), "a revealed panel is transient, not a hidden setting change");
+  const clockStart = SRC.indexOf('id: "clock"');
+  const clock = SRC.slice(clockStart, SRC.indexOf('id: "date"', clockStart));
+  assert.match(clock, /CHIP_TEXT = \["1m", "5m", "10m", "30m", "1h"\]/, "the presets are short chips");
+  assert.match(clock, /clockNoteRow\.hidden = true/, "the note row ships hidden");
+  assert.match(clock, /clockNoteChip\.addEventListener\("click"/, "and is revealed by its own chip");
+  assert.ok(!/clockNoteRow\.hidden = !ok;/.test(clock), "Notes availability hides the chip, not a permanent row");
+  assert.match(clock, /laps\.hidden = !sw\.laps\.length \|\| !sw\.running/, "laps only while the stopwatch runs");
 });
 
 console.log("\nPASS widgets-timer (" + passed + " tests)");

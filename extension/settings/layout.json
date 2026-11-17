@@ -1004,7 +1004,6 @@
       "label": "**Sidebar Widgets · Timer**",
       "size": "16px"
     },
-    "zen.workspace.zentral.widgets.timer.enabled",
     "zen.workspace.zentral.widgets.timer.click_stopwatch",
     "zen.workspace.zentral.widgets.clock.mode",
     "zen.workspace.zentral.widgets.timer.end_sound",
