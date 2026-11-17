@@ -1264,3 +1264,20 @@ than as a second kind that would round-trip as something else. Tests: `tests/not
 every offered kind round-trips through `calloutKind`, the fold set matches the kinds that read a fold, the memory moves
 with what was inserted and is never stored, the toolbar tap prefers the caret, the picker honours hidden tools, and the
 extended kinds are hideable), plus `notes-writing-ui` (10) and `notes-flavors` (34) unchanged. Suite `231/231`.
+
+**`SB6.9` DONE (3.3.294)** — the Agenda sidebar's quiet hours, the second half of the audit's S5/D3 idea (the 'left'
+counts shipped at 3.3.276). The Agenda folder can now fold itself away for two independent reasons, either of which is
+enough: quiet hours (a real overnight range, `22:00`-`07:00` by default when enabled) or nothing due within a chosen
+window. Pure in `ZentralNotesCalendar.js`: `cleanAgendaFold`, `inQuietHours`, `agendaFoldPlan`. Two decisions are worth
+keeping. First, the fold uses **Zen's own `collapsed` setter** and repaints nothing — the browser owns the folder's child
+layout and its animation, which is the same rule `ZentralColorfulFolders` already learned the hard way; faking a fold
+with styling or a `hidden` attribute was tried first and rejected. Second, "nothing soon" is measured from the next start
+**at or after now**, not the earliest start of the day: taking the minimum let a 09:00 item keep the folder open at 18:00.
+A window of 0 means "this reason is off" rather than "nothing at all is ahead", because the feature ships off and a
+setting that quietly hides a folder on day one is exactly what the owner keeps reporting. A person who unfolds the
+folder by hand is respected (`foldUnfoldedByHand` stands the feature down until it is closed again). Four new prefs
+(`agenda_fold_quiet`, `…_quiet_start`, `…_quiet_end`, `…_due_hours`) went through the full chain — schema, settings
+meta, layout order and `standalone.json` — so they appear in the dialog (the OW-61 lesson applied before shipping).
+Tests: `tests/notes-agenda-fold.test.cjs` (9 cases) — the empty projection, work in the window, the window question, the
+next-start rule, overnight and same-day quiet ranges with malformed input, the two reasons independently, cleaning, the
+four settings reaching the dialog, and the setter/repaint/hand-unfold contract. Suite `232/232`.

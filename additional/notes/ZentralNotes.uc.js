@@ -226,6 +226,10 @@
       AGENDA_HIDE_TRASHED: "zen.workspace.zentral.notes.agenda_hide_trashed",
       AGENDA_MAX_ITEMS: "zen.workspace.zentral.notes.agenda_max_items",
       AGENDA_CLOSE_ACTION: "zen.workspace.zentral.notes.agenda_close_action",
+      AGENDA_FOLD_QUIET: "zen.workspace.zentral.notes.agenda_fold_quiet",
+      AGENDA_FOLD_QUIET_START: "zen.workspace.zentral.notes.agenda_fold_quiet_start",
+      AGENDA_FOLD_QUIET_END: "zen.workspace.zentral.notes.agenda_fold_quiet_end",
+      AGENDA_FOLD_DUE_HOURS: "zen.workspace.zentral.notes.agenda_fold_due_hours",
       SPACE_MODE: "zen.workspace.zentral.notes.space_mode",
       MISSED_DAYS: "zen.workspace.zentral.notes.missed_reminder_days",
       REMINDER_HISTORY_DAYS: "zen.workspace.zentral.notes.reminder_history_days",
@@ -5577,6 +5581,12 @@
           S("agendaMaxItems", "Max items in sidebar", PREF.AGENDA_MAX_ITEMS, 1, 200, "items", 40),
           { id: "agendaCloseAction", label: "Closing an Agenda tab", pref: PREF.AGENDA_CLOSE_ACTION, kind: "choice", def: "hide-today",
             choices: [["hide-today", "Hide that item for today"], ["dismiss", "Dismiss the reminder (or hide it for today)"], ["reappear", "Let it come back right away"]] },
+          // SB6.9: the Agenda folder folds itself away when there is nothing to look at. Both reasons are optional and
+          // independent; a folder with something due inside the window stays open, because a fold that hides work is a bug.
+          { id: "agendaFoldQuiet", label: "Fold the Agenda folder during quiet hours", pref: PREF.AGENDA_FOLD_QUIET, kind: "bool", def: false },
+          { id: "agendaFoldQuietStart", label: "Quiet hours start", pref: PREF.AGENDA_FOLD_QUIET_START, kind: "text", def: "22:00" },
+          { id: "agendaFoldQuietEnd", label: "Quiet hours end", pref: PREF.AGENDA_FOLD_QUIET_END, kind: "text", def: "07:00" },
+          S("agendaFoldDueHours", "Fold when nothing is due within (hours; 0 = only when nothing is left)", PREF.AGENDA_FOLD_DUE_HOURS, 0, 168, "hours", 0),
           { kind: "heading", i18nKey: "settings.heading.diagnostics", label: "Diagnostics" },
           { id: "perf", label: "Sample layout / drag timings (read __zentralNotesPerf.report())", pref: PREF.DEBUG_PERF, kind: "bool", def: false },
         ],
@@ -31643,6 +31653,67 @@
       // SB6.6: closing an Agenda tab. The preference says what happens; a closed projection key is remembered for the
       // local day only, so an item hidden today is back tomorrow without a timer and without touching the item.
       const agendaCloseAction = () => CALENDAR_PART?.cleanAgendaCloseAction?.(prefStr(PREF.AGENDA_CLOSE_ACTION, "hide-today")) || "hide-today";
+      // SB6.9 (the LEFT half): the preference that lets the Agenda folder fold itself away, and the one place that
+      // applies it. Nothing is stored on the folder beyond one attribute, so a person who unfolds it by hand is not
+      // fighting a saved state: the next evaluation simply happens again from the clock and the projection.
+      const agendaFoldOptions = () => CALENDAR_PART?.cleanAgendaFold?.({
+        quiet: prefBool(PREF.AGENDA_FOLD_QUIET, false),
+        quietStart: prefStr(PREF.AGENDA_FOLD_QUIET_START, "22:00"),
+        quietEnd: prefStr(PREF.AGENDA_FOLD_QUIET_END, "07:00"),
+        dueWithinHours: prefInt(PREF.AGENDA_FOLD_DUE_HOURS, 0),
+      }) || null;
+      // Last plan, for the tooltip and for the tests; recomputed on every projection update, never on a timer of its own.
+      let agendaFoldState = { fold: false, quiet: false, nothingSoon: false, reasons: [] };
+      // What we last asked the folder to do, and whether the person has since opened it themselves.
+      let agendaFoldAsked = false;
+      let foldUnfoldedByHand = false;
+      // A person who unfolds the folder by hand has decided for now: stop asking it to close until it is closed again.
+      // Captured once per folder element, on the capture phase so Zen's own handler cannot swallow it first.
+      function agendaWatchHandUnfold(root) {
+        if (!root || root.__znFoldWatch) return;
+        root.__znFoldWatch = true;
+        root.addEventListener?.("click", () => {
+          // The folder's own toggle runs on this click; read its state just after, never before.
+          Promise.resolve().then(() => {
+            try {
+              if (agendaFoldAsked && root.collapsed === false) foldUnfoldedByHand = true;
+            } catch (_) {}
+          });
+        }, true);
+      }
+      function agendaApplyFold(days) {
+        const opts = agendaFoldOptions();
+        const root = agendaEnabled() ? agendaRootEl() : null;
+        if (!root) return agendaFoldState;
+        agendaWatchHandUnfold(root);
+        const plan = opts ? CALENDAR_PART.agendaFoldPlan(Date.now(), days, opts) : { fold: false, quiet: false, nothingSoon: false, reasons: [] };
+        agendaFoldState = plan;
+        // The attribute is the only thing touched: CSS does the folding, so an unfolded folder is never a lie about
+        // what the person asked for, and Zen's own folder state stays Zen's.
+        // Zen's native collapsed setter is the only honest way to fold a real folder: the browser owns the child layout
+        // and the animation, so nothing here repaints, remeasures or rebuilds (the ZentralColorfulFolders rule, which
+        // says the same thing for the same reason). The attribute is only a marker so the state can be read and styled;
+        // it is never what does the folding.
+        const wantFolded = Boolean(plan.fold);
+        let changed = false;
+        try {
+          if (typeof root.collapsed === "boolean" && root.collapsed !== wantFolded) { root.collapsed = wantFolded; changed = true; }
+        } catch (_) {}
+        // A person can unfold the folder by hand at any moment. While they have it open, the fold stays out of the way:
+        // only a fresh evaluation that still says "fold" after they closed it again may close it, which is what the
+        // marker records.
+        if (wantFolded && !foldUnfoldedByHand) {
+          root.setAttribute("bgalazka-notes-agenda-folded", plan.quiet ? "quiet" : "nothing-soon");
+          root.setAttribute("title", plan.quiet ? t("sidebar.agenda.foldedQuiet") : t("sidebar.agenda.foldedNothingSoon"));
+        } else {
+          root.removeAttribute("bgalazka-notes-agenda-folded");
+          root.removeAttribute("title");
+        }
+        // Remember what we last asked for, so a hand-unfold can be told apart from our own write.
+        agendaFoldAsked = wantFolded;
+        if (!wantFolded) foldUnfoldedByHand = false;
+        return plan;
+      }
       let agendaClosedDay = "", agendaClosedKeys = new Set();
       const agendaTodayKey = () => CALENDAR_PART?.localDateKey?.(Date.now()) || "";
       function agendaClosedSet() {
@@ -32515,6 +32586,9 @@
         },
         reorder(parentKey, keys) {
           const root = agendaRootEl(), parent = parentKey ? agendaDayEl(parentKey) : root;
+          // SB6.9: the last step of a projection pass, which is the only moment the whole day list is known. Deciding
+          // the fold here (rather than on a timer) means it can never disagree with what is on screen.
+          if (!parentKey) { try { agendaApplyFold(agendaDays()); } catch (_) {} }
           if (!parent) return true;
           const els = keys.map((key) => String(key).startsWith("day:") ? agendaDayEl(key) : agendaTabFor(key, parentKey)).filter(Boolean);
           if (els.length < 2) return true;

@@ -1281,6 +1281,10 @@
     "zen.workspace.zentral.notes.agenda_hide_trashed",
     "zen.workspace.zentral.notes.agenda_max_items",
     "zen.workspace.zentral.notes.agenda_close_action",
+    "zen.workspace.zentral.notes.agenda_fold_quiet",
+    "zen.workspace.zentral.notes.agenda_fold_quiet_start",
+    "zen.workspace.zentral.notes.agenda_fold_quiet_end",
+    "zen.workspace.zentral.notes.agenda_fold_due_hours",
     {
       "type": "text",
       "label": "**Notes appearance · Size & shape**",

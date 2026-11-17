@@ -561,6 +561,8 @@
       "sidebar.agenda.root.refresh": "Od\u015bwie\u017c Agend\u0119",
       "sidebar.agenda.root.settings": "Ustawienia Agendy",
       "sidebar.agenda.leftOfCount": "pozosta\u0142o {left} z {count}",
+      "sidebar.agenda.foldedQuiet": "Zwinięte na czas ciszy. Rozwiń, aby zobaczyć Agendę.",
+      "sidebar.agenda.foldedNothingSoon": "Zwinięte, bo nic nie jest wkrótce. Rozwiń, aby zobaczyć Agendę.",
       "sidebar.agenda.root.hide": "Ukryj Agend\u0119",
       "sidebar.agenda.itemUnavailable": "Element Agendy nie jest ju\u017c dost\u0119pny",
       "sidebar.agenda.previewAria": "Podgl\u0105d Agendy",

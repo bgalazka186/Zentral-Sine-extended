@@ -548,6 +548,8 @@
       "sidebar.agenda.root.refresh": "Refresh Agenda",
       "sidebar.agenda.root.settings": "Agenda settings",
       "sidebar.agenda.leftOfCount": "{left} of {count} left today",
+      "sidebar.agenda.foldedQuiet": "Folded for quiet hours. Open it to see the Agenda.",
+      "sidebar.agenda.foldedNothingSoon": "Folded because nothing is due soon. Open it to see the Agenda.",
       "sidebar.agenda.root.hide": "Hide Agenda",
       "sidebar.agenda.itemUnavailable": "Agenda item no longer available",
       "sidebar.agenda.previewAria": "Agenda preview",

@@ -2610,6 +2610,18 @@ zen-folder[bgalazka-notes-agenda-day]::after {
   line-height: 1.5;
   background: color-mix(in srgb, currentColor 14%, transparent);
 }
+/* SB6.9: the folder is folded by Zen's own `collapsed` setter (the browser owns the animation); this only dims the
+   label a little so a folded Agenda reads as deliberately quiet rather than as an empty one. */
+zen-folder[bgalazka-notes-agenda-folder][bgalazka-notes-agenda-folded] > .zen-folder-label,
+zen-folder[bgalazka-notes-agenda-folder][bgalazka-notes-agenda-folded] {
+  font-style: italic;
+}
+zen-folder[bgalazka-notes-agenda-folder][bgalazka-notes-agenda-folded="quiet"]::after {
+  content: "\1F319";
+  margin-inline-start: .35em;
+  opacity: .7;
+}
+
 zen-folder[bgalazka-notes-agenda-day][bgalazka-notes-agenda-left]::after {
   content: attr(bgalazka-notes-agenda-left) "/" attr(bgalazka-notes-agenda-count);
   background: color-mix(in srgb, currentColor 22%, transparent);

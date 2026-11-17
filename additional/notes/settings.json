@@ -1306,6 +1306,33 @@
       ]
     },
     {
+      "property": "zen.workspace.zentral.notes.agenda_fold_quiet",
+      "label": "Fold the Agenda folder during quiet hours",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.notes.agenda_fold_quiet_start",
+      "label": "Quiet hours start (HH:MM)",
+      "type": "string",
+      "defaultValue": "22:00"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.agenda_fold_quiet_end",
+      "label": "Quiet hours end (HH:MM)",
+      "type": "string",
+      "defaultValue": "07:00"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.agenda_fold_due_hours",
+      "label": "Fold when nothing is due within (hours; 0 = only when nothing is left)",
+      "type": "number",
+      "defaultValue": 0,
+      "min": 0,
+      "max": 168,
+      "unit": "hours"
+    },
+    {
       "property": "zen.workspace.zentral.notes.debug_perf",
       "label": "DEBUG: sample how long Notes layout, drag and read-view work take (performance.now). Read the result with __zentralNotesPerf.report() in the Browser Console",
       "type": "checkbox",
@@ -1874,6 +1901,26 @@
       "owner": "notes"
     },
     "zen.workspace.zentral.notes.agenda_close_action": {
+      "category": "notes",
+      "section": "Experiments (off by default)",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.agenda_fold_quiet": {
+      "category": "notes",
+      "section": "Experiments (off by default)",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.agenda_fold_quiet_start": {
+      "category": "notes",
+      "section": "Experiments (off by default)",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.agenda_fold_quiet_end": {
+      "category": "notes",
+      "section": "Experiments (off by default)",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.agenda_fold_due_hours": {
       "category": "notes",
       "section": "Experiments (off by default)",
       "owner": "notes"

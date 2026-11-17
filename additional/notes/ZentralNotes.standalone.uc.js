@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.293
+// @version 3.3.294
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.293, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.294, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.293";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.294";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2239,6 +2239,8 @@ const __zentralEmbeddedLoader = (function () {
       "sidebar.agenda.root.refresh": "Refresh Agenda",
       "sidebar.agenda.root.settings": "Agenda settings",
       "sidebar.agenda.leftOfCount": "{left} of {count} left today",
+      "sidebar.agenda.foldedQuiet": "Folded for quiet hours. Open it to see the Agenda.",
+      "sidebar.agenda.foldedNothingSoon": "Folded because nothing is due soon. Open it to see the Agenda.",
       "sidebar.agenda.root.hide": "Hide Agenda",
       "sidebar.agenda.itemUnavailable": "Agenda item no longer available",
       "sidebar.agenda.previewAria": "Agenda preview",
@@ -3257,6 +3259,8 @@ const __zentralEmbeddedLoader = (function () {
       "sidebar.agenda.root.refresh": "Od\u015bwie\u017c Agend\u0119",
       "sidebar.agenda.root.settings": "Ustawienia Agendy",
       "sidebar.agenda.leftOfCount": "pozosta\u0142o {left} z {count}",
+      "sidebar.agenda.foldedQuiet": "Zwinięte na czas ciszy. Rozwiń, aby zobaczyć Agendę.",
+      "sidebar.agenda.foldedNothingSoon": "Zwinięte, bo nic nie jest wkrótce. Rozwiń, aby zobaczyć Agendę.",
       "sidebar.agenda.root.hide": "Ukryj Agend\u0119",
       "sidebar.agenda.itemUnavailable": "Element Agendy nie jest ju\u017c dost\u0119pny",
       "sidebar.agenda.previewAria": "Podgl\u0105d Agendy",
@@ -9781,6 +9785,71 @@ const __zentralEmbeddedLoader = (function () {
   function agendaVisibleDays(projection) {
     return (projection || []).filter((day) => day && day.count > 0);
   }
+  // SB6.9 (the LEFT half): should the Agenda folder fold itself away right now? Two independent reasons, either of
+  // which is enough, and none of them is allowed to fold a folder that has something due in the window they exist for:
+  //   quiet hours      — outside the person's own hours (an overnight range crosses midnight)
+  //   nothing soon     — every remaining item is further away than `dueWithinHours`
+  // The rule is pure: it takes the clock and the projection, so the behaviour can be tested at any hour. A folder with
+  // nothing in it never folds (there is nothing to hide, and an empty folder is already quiet).
+  const AGENDA_FOLD_DEFAULTS = Object.freeze({ quiet: false, quietStart: "22:00", quietEnd: "07:00", dueWithinHours: 0 });
+  function cleanClockText(value, fallback) {
+    const m = /^(\d{1,2})[:.](\d{2})$/.exec(String(value ?? "").trim());
+    if (!m) return fallback;
+    const h = Number(m[1]), min = Number(m[2]);
+    if (!(h >= 0 && h <= 23) || !(min >= 0 && min <= 59)) return fallback;
+    return String(h).padStart(2, "0") + ":" + String(min).padStart(2, "0");
+  }
+  function cleanAgendaFold(raw = {}) {
+    const src = raw && typeof raw === "object" ? raw : {};
+    const hours = Number(src.dueWithinHours);
+    return {
+      quiet: src.quiet === true,
+      quietStart: cleanClockText(src.quietStart, AGENDA_FOLD_DEFAULTS.quietStart),
+      quietEnd: cleanClockText(src.quietEnd, AGENDA_FOLD_DEFAULTS.quietEnd),
+      dueWithinHours: Number.isFinite(hours) && hours >= 0 ? Math.min(168, Math.round(hours)) : 0,
+    };
+  }
+  const clockMinutes = (text) => {
+    const clean = cleanClockText(text, "");
+    if (!clean) return null;
+    const [h, m] = clean.split(":").map(Number);
+    return h * 60 + m;
+  };
+  // A range whose end is before its start crosses midnight (22:00 -> 07:00 is the normal case).
+  function inQuietHours(nowMs, startText, endText) {
+    const start = clockMinutes(startText), end = clockMinutes(endText);
+    if (start === null || end === null || start === end) return false;
+    const d = new Date(nowMs);
+    const minute = d.getHours() * 60 + d.getMinutes();
+    return start < end ? minute >= start && minute < end : minute >= start || minute < end;
+  }
+  // `days` is the Agenda projection (each day carries `from`, `to` and `items`); an item's own start decides whether it
+  // is inside the window, because a day bucket can hold tomorrow's item.
+  function agendaFoldPlan(nowMs, days, rawOptions = {}) {
+    const opts = cleanAgendaFold(rawOptions);
+    const list = (days || []).filter((day) => day && Array.isArray(day.items) && day.items.length > 0);
+    if (!list.length) return { fold: false, quiet: false, nothingSoon: false, nextMs: 0, reasons: [] };
+    // The NEXT start at or after now, not simply the earliest one: an item that already began is not something the
+    // folder has to stay open for, and taking the minimum would let a morning item keep an evening folder open.
+    let nextMs = Infinity;
+    for (const day of list) {
+      for (const item of day.items) {
+        const start = Number(item?.start ?? item?.from ?? day.from);
+        if (Number.isFinite(start) && start >= nowMs && start < nextMs) nextMs = start;
+      }
+    }
+    const quiet = opts.quiet && inQuietHours(nowMs, opts.quietStart, opts.quietEnd);
+    const windowMs = opts.dueWithinHours * 60 * 60 * 1000;
+    // "Nothing soon" is about the window, not about the next item: an item that already started (or one that is
+    // further away than the window) is not something the folder needs to stay open for.
+    // A window of 0 means "no window" — this reason is OFF. That is deliberate: a feature that hides a folder must not
+    // ship on by default, and 0 is the value the setting starts at. A person who wants it picks real hours.
+    const nothingSoon = windowMs > 0 && (!Number.isFinite(nextMs) || nextMs > nowMs + windowMs);
+    const reasons = [];
+    if (quiet) reasons.push("quiet-hours");
+    if (nothingSoon) reasons.push("nothing-soon");
+    return { fold: reasons.length > 0, quiet, nothingSoon, nextMs: Number.isFinite(nextMs) ? nextMs : 0, reasons };
+  }
   // SB6.6: what closing an Agenda tab does. "hide-today" is the default: the row stays gone until tomorrow, because a
   // tab that reappears the instant it is closed reads as a bug. "dismiss" runs the Dismiss command where the item
   // has one and hides it for the day otherwise (an event has no dismiss). "reappear" keeps the old behaviour.
@@ -11825,7 +11894,7 @@ const __zentralEmbeddedLoader = (function () {
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, itemIdTokens, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, cleanHistoryFilter, filterHistoryRecords, historyPruneSurvey, exportHistoryLines, historySummaryLine, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_TABLE, HOLIDAY_TABLE_KINDS, holidayTableEntries, holidayTableYears, holidaySetCoverage, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, holidaySetsOf, NO_WORK_FREE, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     DEFAULT_DAY_LOOK, DAY_LOOK_KINDS, DAY_LOOK_MAX_STRENGTH, cleanDayLookColor, cleanDayLookStrength, cleanDayLook, dayLookTint, CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaLeftCount, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, itemOwnsNoteText, itemIsFreeStanding, noteLinkedItems, unlinkPlan, unlinkLineText, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle, icsUnfold, icsText, icsProperty, icsDateValue, icsZonedMs, icsStamp, icsRecurrence, parseIcs, icsToItem, planIcsImport,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaLeftCount, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, AGENDA_FOLD_DEFAULTS, cleanAgendaFold, inQuietHours, agendaFoldPlan, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, itemOwnsNoteText, itemIsFreeStanding, noteLinkedItems, unlinkPlan, unlinkLineText, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle, icsUnfold, icsText, icsProperty, icsDateValue, icsZonedMs, icsStamp, icsRecurrence, parseIcs, icsToItem, planIcsImport,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -12608,6 +12677,10 @@ __zentralShim.register = function (def) {
       AGENDA_HIDE_TRASHED: "zen.workspace.zentral.notes.agenda_hide_trashed",
       AGENDA_MAX_ITEMS: "zen.workspace.zentral.notes.agenda_max_items",
       AGENDA_CLOSE_ACTION: "zen.workspace.zentral.notes.agenda_close_action",
+      AGENDA_FOLD_QUIET: "zen.workspace.zentral.notes.agenda_fold_quiet",
+      AGENDA_FOLD_QUIET_START: "zen.workspace.zentral.notes.agenda_fold_quiet_start",
+      AGENDA_FOLD_QUIET_END: "zen.workspace.zentral.notes.agenda_fold_quiet_end",
+      AGENDA_FOLD_DUE_HOURS: "zen.workspace.zentral.notes.agenda_fold_due_hours",
       SPACE_MODE: "zen.workspace.zentral.notes.space_mode",
       MISSED_DAYS: "zen.workspace.zentral.notes.missed_reminder_days",
       REMINDER_HISTORY_DAYS: "zen.workspace.zentral.notes.reminder_history_days",
@@ -17959,6 +18032,12 @@ __zentralShim.register = function (def) {
           S("agendaMaxItems", "Max items in sidebar", PREF.AGENDA_MAX_ITEMS, 1, 200, "items", 40),
           { id: "agendaCloseAction", label: "Closing an Agenda tab", pref: PREF.AGENDA_CLOSE_ACTION, kind: "choice", def: "hide-today",
             choices: [["hide-today", "Hide that item for today"], ["dismiss", "Dismiss the reminder (or hide it for today)"], ["reappear", "Let it come back right away"]] },
+          // SB6.9: the Agenda folder folds itself away when there is nothing to look at. Both reasons are optional and
+          // independent; a folder with something due inside the window stays open, because a fold that hides work is a bug.
+          { id: "agendaFoldQuiet", label: "Fold the Agenda folder during quiet hours", pref: PREF.AGENDA_FOLD_QUIET, kind: "bool", def: false },
+          { id: "agendaFoldQuietStart", label: "Quiet hours start", pref: PREF.AGENDA_FOLD_QUIET_START, kind: "text", def: "22:00" },
+          { id: "agendaFoldQuietEnd", label: "Quiet hours end", pref: PREF.AGENDA_FOLD_QUIET_END, kind: "text", def: "07:00" },
+          S("agendaFoldDueHours", "Fold when nothing is due within (hours; 0 = only when nothing is left)", PREF.AGENDA_FOLD_DUE_HOURS, 0, 168, "hours", 0),
           { kind: "heading", i18nKey: "settings.heading.diagnostics", label: "Diagnostics" },
           { id: "perf", label: "Sample layout / drag timings (read __zentralNotesPerf.report())", pref: PREF.DEBUG_PERF, kind: "bool", def: false },
         ],
@@ -44025,6 +44104,67 @@ __zentralShim.register = function (def) {
       // SB6.6: closing an Agenda tab. The preference says what happens; a closed projection key is remembered for the
       // local day only, so an item hidden today is back tomorrow without a timer and without touching the item.
       const agendaCloseAction = () => CALENDAR_PART?.cleanAgendaCloseAction?.(prefStr(PREF.AGENDA_CLOSE_ACTION, "hide-today")) || "hide-today";
+      // SB6.9 (the LEFT half): the preference that lets the Agenda folder fold itself away, and the one place that
+      // applies it. Nothing is stored on the folder beyond one attribute, so a person who unfolds it by hand is not
+      // fighting a saved state: the next evaluation simply happens again from the clock and the projection.
+      const agendaFoldOptions = () => CALENDAR_PART?.cleanAgendaFold?.({
+        quiet: prefBool(PREF.AGENDA_FOLD_QUIET, false),
+        quietStart: prefStr(PREF.AGENDA_FOLD_QUIET_START, "22:00"),
+        quietEnd: prefStr(PREF.AGENDA_FOLD_QUIET_END, "07:00"),
+        dueWithinHours: prefInt(PREF.AGENDA_FOLD_DUE_HOURS, 0),
+      }) || null;
+      // Last plan, for the tooltip and for the tests; recomputed on every projection update, never on a timer of its own.
+      let agendaFoldState = { fold: false, quiet: false, nothingSoon: false, reasons: [] };
+      // What we last asked the folder to do, and whether the person has since opened it themselves.
+      let agendaFoldAsked = false;
+      let foldUnfoldedByHand = false;
+      // A person who unfolds the folder by hand has decided for now: stop asking it to close until it is closed again.
+      // Captured once per folder element, on the capture phase so Zen's own handler cannot swallow it first.
+      function agendaWatchHandUnfold(root) {
+        if (!root || root.__znFoldWatch) return;
+        root.__znFoldWatch = true;
+        root.addEventListener?.("click", () => {
+          // The folder's own toggle runs on this click; read its state just after, never before.
+          Promise.resolve().then(() => {
+            try {
+              if (agendaFoldAsked && root.collapsed === false) foldUnfoldedByHand = true;
+            } catch (_) {}
+          });
+        }, true);
+      }
+      function agendaApplyFold(days) {
+        const opts = agendaFoldOptions();
+        const root = agendaEnabled() ? agendaRootEl() : null;
+        if (!root) return agendaFoldState;
+        agendaWatchHandUnfold(root);
+        const plan = opts ? CALENDAR_PART.agendaFoldPlan(Date.now(), days, opts) : { fold: false, quiet: false, nothingSoon: false, reasons: [] };
+        agendaFoldState = plan;
+        // The attribute is the only thing touched: CSS does the folding, so an unfolded folder is never a lie about
+        // what the person asked for, and Zen's own folder state stays Zen's.
+        // Zen's native collapsed setter is the only honest way to fold a real folder: the browser owns the child layout
+        // and the animation, so nothing here repaints, remeasures or rebuilds (the ZentralColorfulFolders rule, which
+        // says the same thing for the same reason). The attribute is only a marker so the state can be read and styled;
+        // it is never what does the folding.
+        const wantFolded = Boolean(plan.fold);
+        let changed = false;
+        try {
+          if (typeof root.collapsed === "boolean" && root.collapsed !== wantFolded) { root.collapsed = wantFolded; changed = true; }
+        } catch (_) {}
+        // A person can unfold the folder by hand at any moment. While they have it open, the fold stays out of the way:
+        // only a fresh evaluation that still says "fold" after they closed it again may close it, which is what the
+        // marker records.
+        if (wantFolded && !foldUnfoldedByHand) {
+          root.setAttribute("bgalazka-notes-agenda-folded", plan.quiet ? "quiet" : "nothing-soon");
+          root.setAttribute("title", plan.quiet ? t("sidebar.agenda.foldedQuiet") : t("sidebar.agenda.foldedNothingSoon"));
+        } else {
+          root.removeAttribute("bgalazka-notes-agenda-folded");
+          root.removeAttribute("title");
+        }
+        // Remember what we last asked for, so a hand-unfold can be told apart from our own write.
+        agendaFoldAsked = wantFolded;
+        if (!wantFolded) foldUnfoldedByHand = false;
+        return plan;
+      }
       let agendaClosedDay = "", agendaClosedKeys = new Set();
       const agendaTodayKey = () => CALENDAR_PART?.localDateKey?.(Date.now()) || "";
       function agendaClosedSet() {
@@ -44897,6 +45037,9 @@ __zentralShim.register = function (def) {
         },
         reorder(parentKey, keys) {
           const root = agendaRootEl(), parent = parentKey ? agendaDayEl(parentKey) : root;
+          // SB6.9: the last step of a projection pass, which is the only moment the whole day list is known. Deciding
+          // the fold here (rather than on a timer) means it can never disagree with what is on screen.
+          if (!parentKey) { try { agendaApplyFold(agendaDays()); } catch (_) {} }
           if (!parent) return true;
           const els = keys.map((key) => String(key).startsWith("day:") ? agendaDayEl(key) : agendaTabFor(key, parentKey)).filter(Boolean);
           if (els.length < 2) return true;
