@@ -3,7 +3,7 @@
   "themeId": "zentral-widgets",
   "name": "Zentral Sidebar Widgets",
   "description": "New-tab-page-style sidebar widgets with automatic free-area sizing, video-player avoidance, pause-when-hidden, and cached values. Standalone part of Zentral Extended.",
-  "version": "3.3.241",
+  "version": "3.3.242",
   "entry": "ZentralWidgets.uc.js",
   "output": "ZentralWidgets.standalone.uc.js",
   "settings": "settings.json",
