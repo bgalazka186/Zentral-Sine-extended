@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.251
+// @version 3.3.252
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.251, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.252, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.251";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.252";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -12994,6 +12994,41 @@ __zentralShim.register = function (def) {
       for (const n of notes || []) if (n && !n.trashed) add(n.folder);
       return [...ids];
     }
+    // ---- T3.8: two notes side by side (equal halves, one reference and one being written) -------------------------
+    // The pane is vertical when the sheet is wider than it is tall, horizontal otherwise; both halves share the
+    // space equally, and the share of the reference may be moved from 25% to 75% (a fixed 50% is the default).
+    const SPLIT_COMPANION_SHARES = Object.freeze([25, 33, 50, 67, 75]);
+    const DEFAULT_SPLIT_COMPANION = Object.freeze({ id: "", share: 50, side: "auto" });
+    function cleanSplitCompanion(raw) {
+      const src = raw && typeof raw === "object" ? raw : {};
+      const wanted = typeof src.id === "string" ? src.id.trim() : "";
+      const id = wanted && wanted.length <= 64 && !/[\s\u0000-\u001f]/.test(wanted) ? wanted : "";
+      const share = SPLIT_COMPANION_SHARES.includes(Math.round(Number(src.share))) ? Math.round(Number(src.share)) : 50;
+      const side = ["auto", "side", "stack"].includes(src.side) ? src.side : "auto";
+      return { id, share, side };
+    }
+    // The divider snaps to the allowed shares, never thinner than a quarter and never past three quarters.
+    function nearestSplitShare(percent) {
+      const pct = Number(percent);
+      if (!Number.isFinite(pct)) return 50;
+      let best = 50;
+      for (const share of SPLIT_COMPANION_SHARES) if (Math.abs(share - pct) < Math.abs(best - pct)) best = share;
+      return best;
+    }
+    // Which way the two panes sit: never guessed from a stored value that no longer fits the sheet.
+    function splitCompanionAxis(companion, width, height) {
+      const mode = cleanSplitCompanion(companion).side;
+      if (mode === "side") return "side";
+      if (mode === "stack") return "stack";
+      return Number(width) >= Number(height) ? "side" : "stack";
+    }
+    // True when the companion is usable: another note, in the store, not in the Trash, and not the note being edited.
+    function splitCompanionReady(companion, notes, activeId) {
+      const id = cleanSplitCompanion(companion).id;
+      if (!id || id === activeId) return false;
+      const note = (notes || []).find((n) => n && n.id === id);
+      return Boolean(note && !note.trashed);
+    }
     function moveNote(note, folderId, order) {
       const next = { ...note, folder: cleanFolder(folderId) };
       if (order !== undefined) {
@@ -19096,6 +19131,8 @@ __zentralShim.register = function (def) {
         return "";
       })();
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, dockPx: 0, gapPx: 0, cardDock: "", cardW: 0, cardH: 0, cardHShare: 0,
+        // T3.8: the note shown beside the edited one ("" = no second pane).
+        splitCompanion: { id: "", share: 50, side: "auto" },
         allNewChoice: "note", calendarClockMode: "both", spellLanguages: [],
         calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarFiltersCollapsed: false, calendarBigPictureFiltersCollapsed: false, calendarTab: "tree",
         calendarBigPictureSize: CALENDAR_PART ? CALENDAR_PART.DEFAULT_CALENDAR_BIG_PICTURE_SIZE : 90,
@@ -19814,6 +19851,7 @@ __zentralShim.register = function (def) {
           if (raw.mode === "read" || raw.mode === "edit" || raw.mode === "split") meta.mode = raw.mode;
           if (cleanHighlightColor(raw.highlight)) meta.highlight = cleanHighlightColor(raw.highlight);
           if (typeof raw.syncScroll === "boolean") meta.syncScroll = raw.syncScroll;
+          if (raw.splitCompanion !== undefined) meta.splitCompanion = cleanSplitCompanion(raw.splitCompanion);
           if (typeof raw.pinned === "boolean") meta.pinned = raw.pinned;
           if (DOCK_MODES.includes(raw.dock)) meta.dock = raw.dock;
           if (raw.hideTrigger === "click" || raw.hideTrigger === "leave") meta.hideTrigger = raw.hideTrigger;
@@ -27103,7 +27141,7 @@ __zentralShim.register = function (def) {
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, cleanSlotPx, cleanCardPx, cleanCardShare, resolveSlotHeight, resolveCardHeight, hasStartupPanelPref, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, gapPageFloor, gapMaxPx, clampGapPx, GAP_PANEL_MIN_PX, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
-        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, BACKUP_FORMAT, BACKUP_VERSION, BACKUP_MAX_ENTRIES, BACKUP_MAX_TOTAL_BYTES, cleanBackupZipPath, classifyBackupEntry, validateBackupAssetBytes, buildBackupManifest, inspectBackupEntries, planBackupRestore, OBSIDIAN_VAULT_APP_CONFIG, safeObsidianSegment, cleanVaultRelPath, obsidianYamlScalar, splitYamlEntries, planObsidianVaultPaths, buildObsidianFrontMatter, collectObsidianAssetRefs, convertBodyToObsidian, buildObsidianVaultPlan, OBSIDIAN_IMPORT_MAX_FILES, OBSIDIAN_IMPORT_MAX_TOTAL_BYTES, OBSIDIAN_IMPORT_MAX_DEPTH, unquoteYamlScalar, extractObsidianPathFromForeign, parseObsidianFrontMatter, classifyObsidianVaultEntry, planObsidianVaultImport, itemMarkerLineRange, allFolderIds, moveNote, noteDropTarget, noteTabDropPlan, cleanNoteOrder, noteOrderBetween, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, mergeFolders, mergeMeta, META_SHARED_KEYS, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
+        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, BACKUP_FORMAT, BACKUP_VERSION, BACKUP_MAX_ENTRIES, BACKUP_MAX_TOTAL_BYTES, cleanBackupZipPath, classifyBackupEntry, validateBackupAssetBytes, buildBackupManifest, inspectBackupEntries, planBackupRestore, OBSIDIAN_VAULT_APP_CONFIG, safeObsidianSegment, cleanVaultRelPath, obsidianYamlScalar, splitYamlEntries, planObsidianVaultPaths, buildObsidianFrontMatter, collectObsidianAssetRefs, convertBodyToObsidian, buildObsidianVaultPlan, OBSIDIAN_IMPORT_MAX_FILES, OBSIDIAN_IMPORT_MAX_TOTAL_BYTES, OBSIDIAN_IMPORT_MAX_DEPTH, unquoteYamlScalar, extractObsidianPathFromForeign, parseObsidianFrontMatter, classifyObsidianVaultEntry, planObsidianVaultImport, itemMarkerLineRange, allFolderIds, moveNote, SPLIT_COMPANION_SHARES, DEFAULT_SPLIT_COMPANION, cleanSplitCompanion, nearestSplitShare, splitCompanionAxis, splitCompanionReady, noteDropTarget, noteTabDropPlan, cleanNoteOrder, noteOrderBetween, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, mergeFolders, mergeMeta, META_SHARED_KEYS, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,
@@ -28137,6 +28175,22 @@ __zentralShim.register = function (def) {
         "aria-label": "Note text",
       });
       const readEl = h("div", { class: "zn-read", tabindex: "0" });
+      // T3.8: the second note, side by side with the first (its own read view, so editing and reading stay apart).
+      const companionDivider = h("div", {
+        class: "zn-companion-divider", role: "separator", tabindex: "0", "aria-orientation": "vertical",
+        "aria-label": "Resize the reference pane", title: "Drag to resize, arrow keys to step",
+      });
+      const companionEl = h("section", { class: "zn-companion", hidden: true, "aria-label": "Reference note" },
+        companionDivider,
+        h("div", { class: "zn-companion-head" },
+          h("strong", { class: "zn-companion-title" }, ""),
+          h("span", { class: "zn-grow" }),
+          h("button", { type: "button", class: "zn-chip zn-companion-open", title: "Open this note in the main pane" }, "Open here"),
+          h("button", { type: "button", class: "zn-chip zn-companion-turn", title: "Side by side or stacked" }, "Turn"),
+          h("button", { type: "button", class: "zn-chip zn-companion-close", title: "Close the second pane" }, "\u00d7"),
+        ),
+        h("div", { class: "zn-companion-body" }),
+      );
       const search = h("input", {
         type: "text",
         class: "zn-search",
@@ -28230,7 +28284,7 @@ __zentralShim.register = function (def) {
         h("div", { class: "zn-outline-head" }, h("strong", {}, "Outline"), h("span", { class: "zn-grow" }), outlineClose),
         outlineNav
       );
-      const body = h("div", { class: "zn-body" }, hlEl, ta, readEl, allLayout, tocPill, outlinePanel);
+      const body = h("div", { class: "zn-body" }, hlEl, ta, readEl, companionEl, allLayout, tocPill, outlinePanel);
       const statusEl = h("span", { class: "zn-status", "aria-live": "polite" });
       const countEl = h("span", { class: "zn-count" });
       const foot = h("div", { class: "zn-foot" }, statusEl, h("span", { class: "zn-grow" }), countEl);
@@ -28827,6 +28881,7 @@ __zentralShim.register = function (def) {
         ta.readOnly = !!n?.trashed;
         ta.hidden = mode === "read";
         readEl.hidden = mode === "edit";
+        if (typeof renderCompanion === "function") renderCompanion();
         search.placeholder = t("tree.searchPlaceholder");
         search.setAttribute("aria-label", t("tree.searchAria"));
         btnNewMenu.title = t("tree.createMenuAria");
@@ -28999,6 +29054,111 @@ __zentralShim.register = function (def) {
         readNodes = [...readNodes.slice(0, prefix), ...fresh, ...tail];
         readSigs = sigs;
         buildReadAnchors(blocks);
+      }
+      // ---- T3.8: the reference pane -------------------------------------------------------------------------
+      const splitCompanion = () => cleanSplitCompanion(store.meta.splitCompanion);
+      const companionBodyEl = companionEl.querySelector(".zn-companion-body");
+      const companionTitleEl = companionEl.querySelector(".zn-companion-title");
+      function companionNote() {
+        const c = splitCompanion();
+        if (!c.id || c.id === currentId) return null;
+        const found = (store.list({ trashed: false }) || []).some((it) => it && it.id === c.id);
+        return found ? store.get(c.id) || null : null;
+      }
+      let companionSig = "";
+      function renderCompanion(force = false) {
+        const c = splitCompanion();
+        const other = view === "editor" ? companionNote() : null;
+        root.dataset.companion = other ? "on" : "off";
+        companionEl.hidden = !other;
+        if (!other) { companionBodyEl.replaceChildren(); companionSig = ""; return null; }
+        const sig = [other.id, other.body, other.flavor || "", c.share, view].join("\u0000");
+        const axis = splitCompanionAxis(c, root.clientWidth || 0, root.clientHeight || 0);
+        if (!force && sig === companionSig && root.dataset.companionAxis === axis) return other;
+        companionSig = sig;
+        root.dataset.companionShare = String(c.share);
+        root.style.setProperty("--zn-companion-share", String(c.share));
+        root.dataset.companionAxis = axis;
+        companionDivider.setAttribute("aria-orientation", root.dataset.companionAxis === "side" ? "vertical" : "horizontal");
+        companionDivider.setAttribute("aria-valuenow", String(c.share));
+        companionTitleEl.textContent = titleOf(other.body) || "Untitled note";
+        const wrap = h("div", { class: "zn-print" }, h("div", { class: "zn-read zn-companion-read", tabindex: "0" }));
+        const target = wrap.firstChild;
+        const readOpts = { ...(env.readOpts?.() || {}) };
+        if (other.flavor) readOpts.flavor = other.flavor; // the pane's own note decides its markdown mode
+        const blocks = parseBlocks(hideFrontMatter(other.body), false, readOpts);
+        const readEnv = Object.assign(Object.create(env), {
+          slugFor: (text) => headingSlug(text),
+          jumpFootnote: () => {},
+          onReadCleanup: () => {},
+        });
+        renderBlocks(target, blocks, readEnv, () => {});
+        companionBodyEl.replaceChildren(wrap);
+        return other;
+      }
+      function setCompanion(id) {
+        const next = cleanSplitCompanion({ ...splitCompanion(), id });
+        store.setMeta({ splitCompanion: next });
+        applyState();
+        renderCompanion();
+        scheduleLayout();
+      }
+      function setCompanionShare(percent) {
+        const next = cleanSplitCompanion({ ...splitCompanion(), share: nearestSplitShare(percent) });
+        if (next.share === splitCompanion().share) return;
+        store.setMeta({ splitCompanion: next });
+        root.dataset.companionShare = String(next.share);
+        root.style.setProperty("--zn-companion-share", String(next.share));
+      }
+      // Drag the divider: the share follows the pointer, snapped to the five allowed values and remembered.
+      let companionDrag = null;
+      function companionPercentFromEvent(e) {
+        const rect = body.getBoundingClientRect();
+        const side = root.dataset.companionAxis === "side";
+        const span = side ? rect.width : rect.height;
+        if (!span) return 50;
+        const pos = side ? e.clientX - rect.left : e.clientY - rect.top;
+        return Math.max(25, Math.min(75, (pos / span) * 100));
+      }
+      listen(companionDivider, "pointerdown", (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        companionDrag = { pointerId: e.pointerId };
+        try { companionDivider.setPointerCapture(e.pointerId); } catch (_) {}
+        root.dataset.companionDragging = "true";
+      });
+      listen(companionDivider, "pointermove", (e) => {
+        if (!companionDrag || e.pointerId !== companionDrag.pointerId) return;
+        const pct = Math.round(companionPercentFromEvent(e));
+        root.style.setProperty("--zn-companion-share", String(Math.max(25, Math.min(75, pct))));
+      });
+      const endCompanionDrag = (e) => {
+        if (!companionDrag) return;
+        if (e && e.pointerId !== companionDrag.pointerId) return;
+        companionDrag = null;
+        delete root.dataset.companionDragging;
+        try { companionDivider.releasePointerCapture?.(e?.pointerId); } catch (_) {}
+        const shown = Number(root.style.getPropertyValue("--zn-companion-share")) || splitCompanion().share;
+        setCompanionShare(shown);
+      };
+      listen(companionDivider, "pointerup", endCompanionDrag);
+      listen(companionDivider, "pointercancel", endCompanionDrag);
+      listen(companionDivider, "keydown", (e) => {
+        const step = splitCompanion().share;
+        if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); setCompanionShare(step - 1); }
+        else if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); setCompanionShare(step + 1); }
+        else if (e.key === "Home") { e.preventDefault(); setCompanionShare(25); }
+        else if (e.key === "End") { e.preventDefault(); setCompanionShare(75); }
+      });
+      // One idle render per burst of store events, so typing in the main pane cannot repaint the reference per key.
+      let companionTimer = 0;
+      function scheduleCompanion() {
+        window.clearTimeout(companionTimer);
+        companionTimer = window.setTimeout(() => {
+          companionTimer = 0;
+          if (!isOpen || destroyed || view !== "editor") return;
+          renderCompanion();
+        }, PREVIEW_IDLE_MS);
       }
       function schedulePreview() {
         window.clearTimeout(previewTimer);
@@ -29316,6 +29476,7 @@ __zentralShim.register = function (def) {
         if (!note()?.trashed) store.setMeta({ mode });
         if (mode !== "edit") renderRead();
         applyState();
+        renderCompanion();
         scheduleLayout();
         if (findOpen) refreshFind({ jump: true, keep: false });
         else focusEditor();
@@ -35020,8 +35181,13 @@ __zentralShim.register = function (def) {
             shareRows.push({ icon: "x", label: "Remove from this space", enabled: !store.spaceStorageState().sharesWriteBlocked, action: () => { store.unshareNote(n.id).then((ok) => { if (ok) { if (n.id === currentId) currentId = ""; scheduleList(); flash("Removed from this space"); } }); } });
           }
         }
+        const companionHere = splitCompanion().id === n.id && n.id !== currentId;
         return [
           { icon: "note", label: "Open", action: () => openNote(n.id) },
+          // T3.8: the note can also open beside the one being edited (and hand its place back).
+          ...(n.id !== currentId
+            ? [{ icon: "split", label: companionHere ? "Close the second pane" : "Open beside this note", action: () => queueMicrotask(() => { if (companionHere) setCompanion(""); else setCompanionOpenBeside(n); }) }]
+            : []),
           { icon: "pin", label: n.pinned ? "Unpin" : "Pin", action: () => { store.setPinned(n.id, !n.pinned); scheduleList(); } },
           { icon: n.calendarOnly ? "note" : "calendar", label: t(n.calendarOnly ? "tree.note.zenShow" : "tree.note.zenHide"), action: () => toggleNoteCalendarOnly(n) },
           { icon: "plus", label: "Quick capture here\u2026", action: () => queueMicrotask(() => askQuickCapture(n.id)) },
@@ -35037,6 +35203,19 @@ __zentralShim.register = function (def) {
           { icon: "link", label: "Copy link", action: () => { env.copyText?.("[[" + (titleOf(n.body) || "Untitled note") + "]]"); flash("Link copied"); } },
           ...(!shareInfo?.sharedFromOtherSpace ? [{ sep: true }, { icon: "trash", label: "Move to trash", danger: true, action: () => askNoteTrash(n.id, () => { if (n.id === currentId) currentId = ""; scheduleList(); }) }] : []),
         ];
+      }
+      // T3.8: put the picked note in the reference pane, keeping the edited note where it is.
+      function setCompanionOpenBeside(n) {
+        if (!n || n.id === currentId) return;
+        const was = currentId;
+        if (was && store.get(was) && !store.get(was).trashed) {
+          store.setMeta({ splitCompanion: cleanSplitCompanion({ ...splitCompanion(), id: n.id }) });
+          applyState();
+          renderCompanion();
+          scheduleLayout();
+        } else {
+          openNote(n.id);
+        }
       }
       function trashMenuItems() {
         const days = Number(getPref(PREF.TRASH_DAYS, TRASH_DAYS));
@@ -35327,6 +35506,26 @@ __zentralShim.register = function (def) {
         applyState();
       });
       listen(tSplit, "click", () => setMode(mode === "split" ? "edit" : "split"));
+      // T3.8: Open here / Swap / Close of the reference pane.
+      // Open here: the reference takes the main pane and the note that held it becomes the reference.
+      listen(companionEl.querySelector(".zn-companion-open"), "click", () => {
+        const other = companionNote();
+        const was = currentId;
+        if (!other) return;
+        store.setMeta({ splitCompanion: cleanSplitCompanion({ ...splitCompanion(), id: was }) });
+        openNote(other.id);
+        renderCompanion();
+      });
+      // Turn: flip the two panes between side by side and stacked and remember the choice.
+      listen(companionEl.querySelector(".zn-companion-turn"), "click", () => {
+        const c = splitCompanion();
+        const axis = splitCompanionAxis(c, root.clientWidth || 0, root.clientHeight || 0);
+        const side = axis === "side" ? "stack" : "side";
+        store.setMeta({ splitCompanion: cleanSplitCompanion({ ...c, side }) });
+        renderCompanion();
+        scheduleLayout();
+      });
+      listen(companionEl.querySelector(".zn-companion-close"), "click", () => setCompanion(""));
       listen(tRule, "mousedown", (e) => e.preventDefault());
       listen(tRule, "click", needEdit(fmt.rule));
       // The "More" menu. Opened by a tap on the caret (see the hold list above: holding it lists the callouts instead).
@@ -39129,6 +39328,11 @@ __zentralShim.register = function (def) {
           else scheduleList();
           return;
         }
+        // T3.8: the reference pane follows the note it shows, whoever edits it.
+        if (ev.type === "change" || ev.type === "remove" || ev.type === "reset" || ev.type === "tree") {
+          const shown = splitCompanion().id;
+          if (shown && (ev.type !== "change" || ev.id === shown)) scheduleCompanion();
+        }
         if ((ev.type === "remove" || ev.type === "tree" || (ev.type === "change" && ev.id !== currentId)) && view === "editor" && mode !== "edit" && readEl.querySelector?.(".zn-notelink")) refreshRead();
         if (ev.type === "tree") return view === "list" ? scheduleList() : undefined;
         if (ev.type === "remove") {
@@ -40050,6 +40254,7 @@ __zentralShim.register = function (def) {
       function cancelAllAsync() {
         window.clearTimeout(confirmTimer); confirmTimer = 0;
         window.clearTimeout(previewTimer); previewTimer = 0;
+        window.clearTimeout(companionTimer); companionTimer = 0;
         window.clearTimeout(flashTimer); flashTimer = 0;
         window.clearTimeout(findTimer); findTimer = 0;
         window.clearTimeout(graceTimer); graceTimer = 0;

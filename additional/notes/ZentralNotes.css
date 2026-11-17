@@ -720,6 +720,92 @@
 .zentral-notes-sheet[data-mode="split"][data-split="side"] .zn-read { border-left: 1px solid var(--zn-line); }
 .zentral-notes-sheet[data-mode="split"][data-split="stack"] .zn-read { border-top: 1px solid var(--zn-line); }
 
+/* T3.8: the reference note beside the one being edited. The main area keeps whatever it shows (editor, preview or
+   both) and the reference takes the other half; the divider moves its share between a quarter and three quarters. */
+.zentral-notes-sheet[data-companion="on"][data-view="editor"] .zn-body { display: flex; flex-direction: row; }
+.zentral-notes-sheet[data-companion="on"][data-view="editor"][data-companion-axis="stack"] .zn-body { flex-direction: column; }
+.zentral-notes-sheet[data-companion="on"][data-view="editor"] .zn-body > .zn-editor,
+.zentral-notes-sheet[data-companion="on"][data-view="editor"] .zn-body > .zn-read {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  width: auto;
+  height: auto;
+}
+/* Editor and preview stay inside the main half: a grid, so the two of them never become a third column beside
+   the reference. The reference always keeps its full share. */
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"] .zn-body {
+  display: grid;
+  grid-template-columns: calc(100% - var(--zn-companion-share, 50) * 1%) calc(var(--zn-companion-share, 50) * 1%);
+  grid-template-rows: 1fr 1fr;
+}
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"] > .zn-body > .zn-editor { grid-column: 1; grid-row: 1; }
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"] > .zn-body > .zn-read { grid-column: 1; grid-row: 2; }
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"] > .zn-body > .zn-companion { grid-column: 2; grid-row: 1 / span 2; flex: 1 1 auto; }
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"][data-companion-axis="stack"] .zn-body {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: calc(100% - var(--zn-companion-share, 50) * 1%) calc(var(--zn-companion-share, 50) * 1%);
+}
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"][data-companion-axis="stack"] > .zn-body > .zn-editor { grid-column: 1; grid-row: 1; }
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"][data-companion-axis="stack"] > .zn-body > .zn-read { grid-column: 2; grid-row: 1; }
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"][data-companion-axis="stack"] > .zn-body > .zn-companion { grid-column: 1 / span 2; grid-row: 2; }
+.zentral-notes-sheet .zn-companion {
+  --zn-companion-share: 50;
+  position: relative;
+  display: flex;
+  flex: 0 0 calc(var(--zn-companion-share, 50) * 1%);
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--zn-line);
+  overflow: hidden;
+}
+.zentral-notes-sheet .zn-companion[hidden] { display: none !important; }
+.zentral-notes-sheet[data-companion-axis="stack"] .zn-companion,
+.zentral-notes-sheet[data-companion="on"][data-companion-axis="stack"] > .zn-body > .zn-companion {
+  border-left: 0;
+  border-top: 1px solid var(--zn-line);
+}
+/* The divider is a thin grip on the shared edge: it takes the keyboard and grows under the pointer. */
+.zentral-notes-sheet .zn-companion-divider {
+  position: absolute;
+  z-index: 2;
+  touch-action: none;
+  cursor: col-resize;
+}
+.zentral-notes-sheet[data-companion-axis="side"] .zn-companion-divider { top: 0; bottom: 0; left: -3px; width: 7px; }
+.zentral-notes-sheet[data-companion-axis="stack"] .zn-companion-divider { left: 0; right: 0; top: -3px; height: 7px; cursor: row-resize; }
+.zentral-notes-sheet .zn-companion-divider:hover,
+.zentral-notes-sheet .zn-companion-divider:focus-visible,
+.zentral-notes-sheet[data-companion-dragging="true"] .zn-companion-divider {
+  background: color-mix(in srgb, var(--zn-accent, currentColor) 35%, transparent);
+  outline: none;
+}
+.zentral-notes-sheet[data-companion-dragging="true"] { user-select: none; }
+.zentral-notes-sheet .zn-companion-head {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--zn-line);
+  font-size: 0.92em;
+}
+.zentral-notes-sheet .zn-companion-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zentral-notes-sheet .zn-companion-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding: 4px 8px;
+}
+
 /* ---- export notice ------------------------------------------------------------- */
 .zentral-notes-sheet .zn-dialog {
   position: absolute;

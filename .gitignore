@@ -19,6 +19,7 @@ docs/*
 !docs/LEGACY_done_rows.md
 !docs/LEGACY_handoff_3.1.3.md
 !docs/NOTES_PERFORMANCE_AUDIT.md
+!docs/NOTES_DISCOVERABILITY.md
 patches/
 zentral/upstream/
 
