@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Widgets
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.243
+// @version 3.3.244
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.243, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.244, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.243";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.244";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1285,6 +1285,88 @@ function nativeSidebarSide() {
     return String(Math.max(0, Math.floor(Number(n) || 0))).padStart(2, "0");
   }
 
+  // A bounded LRU keeps Intl formatter construction out of the 1 Hz seconds path.
+  const CLOCK_FORMATTER_CACHE_LIMIT = 24;
+  const clockFormatterCache = new Map();
+  function getClockDateTimeFormat(locale, options) {
+    const key = JSON.stringify([locale || "", options || {}]);
+    let formatter = clockFormatterCache.get(key);
+    if (formatter) {
+      clockFormatterCache.delete(key);
+      clockFormatterCache.set(key, formatter);
+      return formatter;
+    }
+    formatter = new Intl.DateTimeFormat(locale || undefined, options || {});
+    clockFormatterCache.set(key, formatter);
+    if (clockFormatterCache.size > CLOCK_FORMATTER_CACHE_LIMIT) {
+      clockFormatterCache.delete(clockFormatterCache.keys().next().value);
+    }
+    return formatter;
+  }
+  function clearClockDateTimeFormatCache() {
+    clockFormatterCache.clear();
+  }
+
+  function setClockTextIfChanged(element, rawValue) {
+    if (!element) return false;
+    const value = rawValue == null ? "" : String(rawValue);
+    if (element.textContent === value) return false;
+    element.textContent = value;
+    return true;
+  }
+  function setClockHiddenIfChanged(element, hidden) {
+    if (!element) return false;
+    const value = Boolean(hidden);
+    if (Boolean(element.hidden) === value) return false;
+    element.hidden = value;
+    return true;
+  }
+  function setClockAttributeIfChanged(element, name, rawValue) {
+    if (!element || typeof element.setAttribute !== "function") return false;
+    const value = String(rawValue == null ? "" : rawValue);
+    if (element.getAttribute?.(name) === value) return false;
+    element.setAttribute(name, value);
+    return true;
+  }
+
+  /**
+   * Applies a clock snapshot without layout reads or redundant DOM writes.
+   * The static presentation changes only when the minute or display options change;
+   * on a steady 1 Hz tick, only the seconds text node is touched.
+   */
+  function renderClockElements(elements, value, previousStaticKey = "") {
+    if (!elements || !value) return previousStaticKey;
+    const minuteKey = value.minuteKey || value.key || "";
+    const staticKey = [
+      minuteKey,
+      value.time || "",
+      value.meridiem || "",
+      value.zoneLabel || "",
+      value.format || "",
+      value.showSeconds ? "1" : "0",
+      value.showZone ? "1" : "0",
+    ].join("\\u001f");
+    if (staticKey !== previousStaticKey) {
+      setClockTextIfChanged(elements.timeEl, value.time || "");
+      setClockHiddenIfChanged(elements.secEl, !value.showSeconds);
+      setClockTextIfChanged(elements.merEl, value.meridiem || "");
+      setClockHiddenIfChanged(elements.merEl, !value.meridiem);
+      setClockTextIfChanged(elements.zoneEl, value.zoneLabel || "");
+      setClockHiddenIfChanged(elements.zoneEl, !value.zoneLabel);
+      setClockAttributeIfChanged(elements.wrap, "data-zw-clock-key", minuteKey);
+      setClockAttributeIfChanged(
+        elements.wrap,
+        "aria-label",
+        value.accessibleText || value.time || "Clock",
+      );
+    }
+    setClockTextIfChanged(
+      elements.secEl,
+      value.showSeconds && value.seconds ? ":" + value.seconds : "",
+    );
+    return staticKey;
+  }
+
   /**
    * DST-safe ISO 8601 week number (Monday-first, week 1 contains Jan 4).
    */
@@ -1300,7 +1382,7 @@ function nativeSidebarSide() {
     const d = new Date(nowMs);
     if (timeZone) {
       try {
-        const fmt = new Intl.DateTimeFormat(locale || "en-US", {
+        const fmt = getClockDateTimeFormat(locale || "en-US", {
           timeZone,
           year: "numeric",
           month: "2-digit",
@@ -1361,7 +1443,7 @@ function nativeSidebarSide() {
     if (showZone) intlOpts.timeZoneName = "short";
 
     try {
-      const parts = new Intl.DateTimeFormat(locale, intlOpts).formatToParts(d);
+      const parts = getClockDateTimeFormat(locale, intlOpts).formatToParts(d);
       const map = {};
       for (const p of parts) {
         if (!(p.type in map)) map[p.type] = p.value;
@@ -1381,9 +1463,8 @@ function nativeSidebarSide() {
     const time = `${hours}:${minutes}`;
     const fullTime = showSeconds ? `${time}:${seconds}` : time;
     const text = meridiem ? `${fullTime} ${meridiem}` : fullTime;
-    const key = showSeconds
-      ? `${civil.year}-${pad2(civil.month)}-${pad2(civil.day)}T${pad2(civil.hour)}:${pad2(civil.minute)}:${pad2(civil.second)}`
-      : `${civil.year}-${pad2(civil.month)}-${pad2(civil.day)}T${pad2(civil.hour)}:${pad2(civil.minute)}`;
+    const minuteKey = `${civil.year}-${pad2(civil.month)}-${pad2(civil.day)}T${pad2(civil.hour)}:${pad2(civil.minute)}`;
+    const key = showSeconds ? `${minuteKey}:${pad2(civil.second)}` : minuteKey;
 
     return {
       time,
@@ -1393,7 +1474,9 @@ function nativeSidebarSide() {
       meridiem,
       zoneLabel: showZone ? zoneLabel : "",
       text,
+      accessibleText: meridiem ? `${time} ${meridiem}` : time,
       key,
+      minuteKey,
       format,
       showSeconds,
       showZone,
@@ -2482,6 +2565,9 @@ function nativeSidebarSide() {
     cleanClockFormat,
     cleanDateFormat,
     isoWeekNumber,
+    getClockDateTimeFormat,
+    clearClockDateTimeFormatCache,
+    renderClockElements,
     formatClockParts,
     formatDateParts,
     nextClockDelayMs,
@@ -3150,6 +3236,7 @@ function nativeSidebarSide() {
           const zoneEl = doc.createElement("div");
           zoneEl.className = "zw-card-meta zw-clock-zone";
           zoneEl.hidden = true;
+          let staticRenderKey = "";
 
           wrap.appendChild(main);
           wrap.appendChild(zoneEl);
@@ -3167,30 +3254,11 @@ function nativeSidebarSide() {
             },
             render(value) {
               if (!value) return;
-              timeEl.textContent = value.time || "";
-              if (value.seconds) {
-                secEl.textContent = ":" + value.seconds;
-                secEl.hidden = false;
-              } else {
-                secEl.textContent = "";
-                secEl.hidden = true;
-              }
-              if (value.meridiem) {
-                merEl.textContent = value.meridiem;
-                merEl.hidden = false;
-              } else {
-                merEl.textContent = "";
-                merEl.hidden = true;
-              }
-              if (value.zoneLabel) {
-                zoneEl.textContent = value.zoneLabel;
-                zoneEl.hidden = false;
-              } else {
-                zoneEl.textContent = "";
-                zoneEl.hidden = true;
-              }
-              wrap.setAttribute("data-zw-clock-key", value.key || "");
-              wrap.setAttribute("aria-label", value.text || "Clock");
+              staticRenderKey = renderClockElements(
+                { wrap, timeEl, secEl, merEl, zoneEl },
+                value,
+                staticRenderKey,
+              );
             },
           };
         },
