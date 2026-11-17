@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.215
+// @version 3.3.216
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.215, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.216, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.215";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.216";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1997,8 +1997,13 @@ const __zentralEmbeddedLoader = (function () {
       "menu.snooze3d": "Snooze +3 days",
       "menu.snoozeMonday": "Snooze until next Monday",
       "menu.snoozeCustom": "Custom date and time…",
-      "menu.snoozeRecurringReason": "Recurring occurrences need exception support before they can be snoozed",
+      "menu.snoozeUnexpandedReason": "Choose an expanded recurrence occurrence before snoozing it",
       "menu.snoozeAllDayReason": "All-day reminders snooze by day",
+      "snooze.scope.label": "Apply to",
+      "snooze.scope.aria": "Apply snooze to",
+      "snooze.scope.this": "This occurrence only",
+      "snooze.scope.following": "This and following occurrences",
+      "snooze.scope.series": "Entire series",
       "menu.new.unavailableReason": "Calendar item storage is unavailable",
       "menu.new.note": "New note",
       "menu.new.noteShortcut": "New note (Ctrl+N)",
@@ -2759,8 +2764,13 @@ const __zentralEmbeddedLoader = (function () {
       "menu.snooze3d": "Drzemka +3 dni",
       "menu.snoozeMonday": "Drzemka do nast\u0119pnego poniedzia\u0142ku",
       "menu.snoozeCustom": "W\u0142asna data i godzina\u2026",
-      "menu.snoozeRecurringReason": "Wyst\u0105pienia cykliczne wymagaj\u0105 obs\u0142ugi wyj\u0105tk\u00f3w, aby u\u017cy\u0107 drzemki",
+      "menu.snoozeUnexpandedReason": "Wybierz rozwini\u0119te wyst\u0105pienie cykliczne, aby u\u017cy\u0107 drzemki",
       "menu.snoozeAllDayReason": "Przypomnienia ca\u0142odniowe odk\u0142ada si\u0119 o ca\u0142e dni",
+      "snooze.scope.label": "Zastosuj do",
+      "snooze.scope.aria": "Zastosuj drzemk\u0119 do",
+      "snooze.scope.this": "Tylko to wyst\u0105pienie",
+      "snooze.scope.following": "To i kolejne wyst\u0105pienia",
+      "snooze.scope.series": "Ca\u0142a seria",
       "menu.new.unavailableReason": "Pami\u0119\u0107 element\u00f3w kalendarza jest niedost\u0119pna",
       "menu.new.note": "Nowa notatka",
       "menu.new.noteShortcut": "Nowa notatka (Ctrl+N)",
@@ -8287,7 +8297,8 @@ const __zentralEmbeddedLoader = (function () {
     if (reminder) {
       const writable = !!historyWritable;
       const historyReason = tr("menu.historyProtectedReason");
-      const recurringReason = tr("menu.snoozeRecurringReason");
+      const canSnoozeOccurrence = !recurring || !!item.x?.recurrenceId;
+      const unexpandedReason = tr("menu.snoozeUnexpandedReason");
       rows.push(
         { sep: true },
         { heading: true, label: tr("menu.reminderHeading." + lifecycle) },
@@ -8295,11 +8306,11 @@ const __zentralEmbeddedLoader = (function () {
         action("dismiss", tr("menu.dismiss"), writable && lifecycle !== "dismissed", !writable ? historyReason : tr("menu.alreadyDismissed")),
         action("reopen", tr("menu.reopen"), writable && lifecycle !== "pending", !writable ? historyReason : tr("menu.alreadyPending")),
         { id: "snooze", command: "snooze", label: tr("menu.snooze"), group: [
-          action("snooze-1h", tr("menu.snooze1h"), writable && !recurring && !item.start?.date, !writable ? historyReason : recurring ? recurringReason : tr("menu.snoozeAllDayReason")),
-          action("snooze-1d", tr("menu.snooze1d"), writable && !recurring, !writable ? historyReason : recurringReason),
-          action("snooze-3d", tr("menu.snooze3d"), writable && !recurring, !writable ? historyReason : recurringReason),
-          action("snooze-monday", tr("menu.snoozeMonday"), writable && !recurring, !writable ? historyReason : recurringReason),
-          action("snooze-custom", tr("menu.snoozeCustom"), writable && !recurring, !writable ? historyReason : recurringReason),
+          action("snooze-1h", tr("menu.snooze1h"), writable && canSnoozeOccurrence && !item.start?.date, !writable ? historyReason : !canSnoozeOccurrence ? unexpandedReason : tr("menu.snoozeAllDayReason")),
+          action("snooze-1d", tr("menu.snooze1d"), writable && canSnoozeOccurrence, !writable ? historyReason : unexpandedReason),
+          action("snooze-3d", tr("menu.snooze3d"), writable && canSnoozeOccurrence, !writable ? historyReason : unexpandedReason),
+          action("snooze-monday", tr("menu.snoozeMonday"), writable && canSnoozeOccurrence, !writable ? historyReason : unexpandedReason),
+          action("snooze-custom", tr("menu.snoozeCustom"), writable && canSnoozeOccurrence, !writable ? historyReason : unexpandedReason),
         ] },
       );
     }
@@ -19406,9 +19417,7 @@ __zentralShim.register = function (def) {
           }
 
           if (cmd === "snooze-1h" || cmd === "snooze-1d" || cmd === "snooze-3d" || cmd === "snooze-monday") {
-            if (item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length)) {
-              return { ok: false, command: cmd, reason: t("menu.snoozeRecurringReason", null, lang) };
-            }
+            const isRecurring = !!item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length > 0);
             let nextStart = null;
             if (cmd === "snooze-1h") {
               if (item.start?.date) return { ok: false, command: cmd, reason: t("menu.snoozeAllDayReason", null, lang) };
@@ -19421,6 +19430,53 @@ __zentralShim.register = function (def) {
             }
             if (!nextStart) return { ok: false, command: cmd, reason: "That reminder time could not be changed" };
             const message = C.agendaActionMessage(cmd, { lang });
+            if (isRecurring) {
+              const master = items?.get?.(item.x?.series || item.id);
+              if (!master) return { ok: false, command: cmd, reason: "That reminder is no longer available" };
+              if (!item.x?.recurrenceId) {
+                return { ok: false, command: cmd, reason: t("menu.snoozeUnexpandedReason", null, lang) };
+              }
+              const [occStart, occEnd] = C.itemRange(item);
+              const occFrom = occStart - 2 * 86400000;
+              const occTo = Math.max(occStart + 1, occEnd) + 2 * 86400000;
+              const occurrence = C.expandItem(master, occFrom, occTo).find((o) => o.x?.recurrenceId === item.x.recurrenceId) || item;
+              if (!occurrence || occurrence.x?.series !== master.id || !occurrence.x?.recurrenceId) {
+                return { ok: false, command: cmd, reason: t("menu.snoozeUnexpandedReason", null, lang) };
+              }
+              const prevExceptions = JSON.parse(JSON.stringify(master.x?.recurrenceExceptions || []));
+              const prevMoved = master.x?.moved;
+              const prevOccurrenceStart = occurrence.start ? { ...occurrence.start } : null;
+              const stamp = Math.max(at, Date.parse(master.updated) || 0);
+              const moved = C.moveOccurrence(master, occurrence, nextStart, "this", stamp);
+              if (!moved) return { ok: false, command: cmd, reason: "The reminder could not be snoozed" };
+              const saved = items.upsert({
+                ...moved,
+                historyAction: "snoozed",
+                occurrenceId: identity.occurrenceId,
+                historyStart: nextStart,
+              });
+              if (!saved) return { ok: false, command: cmd, reason: "The reminder could not be snoozed" };
+              history?.flush?.().catch?.(warn);
+              const afterRev = saved.rev, afterEtag = saved.etag, afterHead = headId();
+              return {
+                ok: true, command: cmd, message, undoLabel: t("common.undo", null, lang),
+                undo() {
+                  const latest = items?.get?.(saved.id);
+                  if (!latest || latest.rev !== afterRev || latest.etag !== afterEtag || headId() !== afterHead) {
+                    return { ok: false, message: "Cannot undo: reminder changed" };
+                  }
+                  const restored = items.upsert({
+                    ...latest,
+                    x: { ...latest.x, moved: prevMoved, recurrenceExceptions: prevExceptions },
+                    historyAction: "rescheduled",
+                    occurrenceId: identity.occurrenceId,
+                    historyStart: prevOccurrenceStart,
+                  });
+                  if (restored) history?.flush?.().catch?.(warn);
+                  return { ok: !!restored, message: restored ? "Snooze undone" : "Could not undo snooze" };
+                },
+              };
+            }
             if (item.x?.src === "note" && item.x?.noteId) {
               const note = notes.get(item.x.noteId);
               if (!note) return { ok: false, command: cmd, reason: "That note reminder is no longer available" };
@@ -26523,13 +26579,39 @@ __zentralShim.register = function (def) {
         flash(action === "done" ? "Reminder marked done" : action === "dismissed" ? "Reminder dismissed" : action === "reopened" ? "Reminder reopened" : action === "snoozed" ? "Reminder snoozed" : "Reminder rescheduled");
         return true;
       }
-      function snoozeReminderItem(item, days, customStart = null) {
-        if (item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length)) return flash("This recurring occurrence needs exception support before it can be snoozed");
-        const start = customStart || CALENDAR_PART.snoozedItemStart(item, days);
+      function snoozeReminderItem(item, days, customStart = null, scope = "this") {
+        const C = CALENDAR_PART;
+        const recurring = !!item?.x?.series || (Array.isArray(item?.recurrence) && item.recurrence.length > 0);
+        if (recurring) {
+          const master = currentCalendarItem(item);
+          if (!master) return flash("That reminder is no longer available");
+          const occurrence = currentCalendarOccurrence(item);
+          if (!occurrence || occurrence.x?.series !== master.id || !occurrence.x?.recurrenceId) {
+            return flash(t("menu.snoozeUnexpandedReason"));
+          }
+          const start = customStart || C.snoozedItemStart(occurrence, days);
+          if (!start) return flash("That reminder time could not be changed");
+          const cleanScope = ["this", "following", "series"].includes(scope) ? scope : "this";
+          const stamp = Math.max(nowMs(), Date.parse(master.updated) || 0);
+          const next = C.moveOccurrence(master, occurrence, start, cleanScope, stamp);
+          if (!next) return flash("That recurrence change is invalid. Reopen the item and try again.");
+          const identity = reminderLifecycleIdentity(occurrence);
+          const saved = !!store.items.upsert({
+            ...next,
+            historyAction: "snoozed",
+            occurrenceId: identity.occurrenceId,
+            historyStart: start,
+          });
+          if (!saved) return flash("The reminder could not be snoozed. Check its history storage and try again.");
+          renderCalendar();
+          flash("Reminder snoozed");
+          return true;
+        }
+        const start = customStart || C.snoozedItemStart(item, days);
         if (!start) return flash("That reminder time could not be changed");
         let saved = false;
         if (item.x?.src === "note" && item.x?.noteId) {
-          const at = start.date ? CALENDAR_PART.parseYmd(start.date)?.getTime() : Date.parse(start.dateTime || "");
+          const at = start.date ? C.parseYmd(start.date)?.getTime() : Date.parse(start.dateTime || "");
           saved = Number.isFinite(at) && at > 0 && store.setReminder(item.x.noteId, at, "snoozed");
         } else {
           const current = store.items?.get(item.id);
@@ -26558,37 +26640,53 @@ __zentralShim.register = function (def) {
         return { nodes: [part.row, clock], entry, read: () => entry.read() || time };
       }
       function askCustomReminderSnooze(item) {
-        if (item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length)) return flash("Recurring occurrences need exception support before they can be snoozed");
-        const startMs = CALENDAR_PART.itemRange(item)[0];
-        const allDay = CALENDAR_PART.isAllDay(item);
+        const C = CALENDAR_PART;
+        const recurring = !!item?.x?.series || (Array.isArray(item?.recurrence) && item.recurrence.length > 0);
+        const master = recurring ? currentCalendarItem(item) : null;
+        const occurrence = recurring ? currentCalendarOccurrence(item) : item;
+        if (recurring && (!master || !occurrence || occurrence.x?.series !== master.id || !occurrence.x?.recurrenceId)) {
+          return flash(t("menu.snoozeUnexpandedReason"));
+        }
+        const scheduled = occurrence || item;
+        const startMs = C.itemRange(scheduled)[0];
+        const allDay = C.isAllDay(scheduled);
         const initialDate = allDay
-          ? (calendarItemDate(item) || CALENDAR_PART.ymd(new Date(startMs)))
-          : (CALENDAR_PART.zonedDateKey(startMs, item.x?.tz || "") || CALENDAR_PART.ymd(new Date(startMs)));
+          ? (calendarItemDate(scheduled) || C.ymd(new Date(startMs)))
+          : (C.zonedDateKey(startMs, scheduled.x?.tz || "") || C.ymd(new Date(startMs)));
         const dateField = field("New date", initialDate, "14, 14.11 or 2026-11-14");
         const dateEntry = bindEntry(dateField, { kind: "date" });
         const datePick = chip("Choose date…");
         const dateHost = h("div", { class: "zn-cal-snooze-date" }, dateField.row, datePick);
         datePick.addEventListener("click", () => {
-          const selected = CALENDAR_PART.parseYmd(dateEntry.read());
-          toggleDatePicker(datePick, dateHost, { selected: selected || startMs, items: calendarPickerItems(), onPick: (day) => { dateEntry.set(CALENDAR_PART.ymd(new Date(day))); } });
+          const selected = C.parseYmd(dateEntry.read());
+          toggleDatePicker(datePick, dateHost, { selected: selected || startMs, items: calendarPickerItems(), onPick: (day) => { dateEntry.set(C.ymd(new Date(day))); } });
         });
-        const time = allDay ? null : buildTypedClock("New time", calendarItemTime(item));
+        const time = allDay ? null : buildTypedClock("New time", calendarItemTime(scheduled));
+        let scopeSelect = null, scopeRow = null;
+        if (recurring) {
+          scopeSelect = h("select", { class: "zn-input", "aria-label": t("snooze.scope.aria") },
+            h("option", { value: "this" }, t("snooze.scope.this")),
+            h("option", { value: "following" }, t("snooze.scope.following")),
+            h("option", { value: "series" }, t("snooze.scope.series")));
+          scopeSelect.value = "this";
+          scopeRow = h("label", { class: "zn-field-row zn-cal-recurrence-scope" }, h("span", {}, t("snooze.scope.label")), scopeSelect);
+        }
         const summary = h("p", { class: "zn-empty" }, "The source note text is not rewritten. The reminder's scheduled wall-clock time is preserved unless you change it.");
         const save = chip("Snooze reminder", true), cancel = chip("Cancel");
-        openCalendarCard("Custom reminder snooze", summary, dateHost, ...(time ? time.nodes : []), h("div", { class: "zn-dialog-actions" }, cancel, save));
+        openCalendarCard("Custom reminder snooze", summary, dateHost, ...(time ? time.nodes : []), ...(scopeRow ? [scopeRow] : []), h("div", { class: "zn-dialog-actions" }, cancel, save));
         const submit = () => {
           const held = settleEntries([dateEntry, ...(time ? [time.entry] : [])]);
           if (held) { held.input.focus(); return; }
           const day = dateField.input.value.trim();
-          if (!CALENDAR_PART.parseYmd(day)) { dateField.input.dataset.bad = "true"; dateField.input.focus(); return; }
+          if (!C.parseYmd(day)) { dateField.input.dataset.bad = "true"; dateField.input.focus(); return; }
           let targetMs;
-          if (allDay) targetMs = CALENDAR_PART.parseYmd(day).getTime();
-          else targetMs = CALENDAR_PART.zonedDateTimeToMs(day, time.read(), item.x?.tz || "");
+          if (allDay) targetMs = C.parseYmd(day).getTime();
+          else targetMs = C.zonedDateTimeToMs(day, time.read(), item.x?.tz || "");
           if (!Number.isFinite(targetMs) || targetMs <= 0) { dateField.input.dataset.bad = "true"; dateField.input.focus(); return; }
-          const start = CALENDAR_PART.snoozedItemStart(item, 0, targetMs);
+          const start = C.snoozedItemStart(scheduled, 0, targetMs);
           if (!start) return flash("That reminder date and time is invalid");
           closeDialog();
-          snoozeReminderItem(item, 0, start);
+          snoozeReminderItem(scheduled, 0, start, scopeSelect?.value || "this");
         };
         save.addEventListener("click", submit);
         cancel.addEventListener("click", closeDialog);
@@ -26778,6 +26876,14 @@ __zentralShim.register = function (def) {
           "mark-done": () => recordReminderLifecycle(item, "done"),
           dismiss: () => recordReminderLifecycle(item, "dismissed"),
           reopen: () => recordReminderLifecycle(item, "reopened"),
+          "snooze-1h": () => {
+            if (item.start?.date) return flash(t("menu.snoozeAllDayReason"));
+            const [baseStart] = CALENDAR_PART.itemRange(item);
+            const at = nowMs();
+            const baseMs = Number.isFinite(baseStart) && baseStart > at ? baseStart : at;
+            const start = CALENDAR_PART.snoozedItemStart(item, 0, baseMs + 3600000);
+            return snoozeReminderItem(item, 0, start);
+          },
           "snooze-1d": () => snoozeReminderItem(item, 1),
           "snooze-3d": () => snoozeReminderItem(item, 3),
           "snooze-monday": () => snoozeReminderItem(item, nextMonday),

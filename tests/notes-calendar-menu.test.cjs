@@ -41,7 +41,9 @@ const find = (rows, id) => rows.flatMap((row) => row.group ? [row, ...row.group]
   assert.match(find(recurringMenu, "change-time").reason, /expanded recurrence occurrence/);
   const recurringOccurrence = cal.expandItem(recurring, Date.parse("2026-11-12T00:00:00"), Date.parse("2026-11-16T00:00:00")).find((item) => item.x?.recurrenceId);
   assert.equal(find(cal.calendarItemMenuModel(recurringOccurrence, { historyWritable: true }), "change-time").enabled, true, "expanded recurring occurrences offer an explicit scope choice");
-  assert.equal(find(recurringMenu, "snooze-3d").enabled, false);
+  assert.equal(find(cal.calendarItemMenuModel(recurringOccurrence, { historyWritable: true }), "snooze-1d").enabled, true, "T2.19: expanded recurring occurrences support quick snooze via recurrenceExceptions");
+  assert.equal(find(cal.calendarItemMenuModel(recurringOccurrence, { historyWritable: true }), "snooze-custom").enabled, true, "T2.19: expanded recurring occurrences support custom snooze with scope choice");
+  assert.equal(find(recurringMenu, "snooze-3d").enabled, false, "unexpanded recurring master still requires a visible occurrence");
   assert.equal(find(recurringMenu, "mark-done").enabled, false, "already-done lifecycle actions are disabled");
   assert.equal(find(recurringMenu, "reopen").enabled, true);
   assert.equal(find(recurringMenu, "convert").enabled, true, "manual recurring series may be converted as a whole");
@@ -154,7 +156,11 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   const recIdentity = { ...cal.reminderIdentity(recurringOcc), recordId: recurringMaster.id, start: cal.itemRange(recurringOcc)[0], end: cal.itemRange(recurringOcc)[1] };
   assert.equal(sheet.runAgendaItemAction(recIdentity, "agenda-visibility"), true);
   assert.equal(store.items.get(recurringMaster.id).x.agendaWindow.enabled, false, "recurrence visibility applies to the master series");
-  assert.equal(sheet.runAgendaItemAction(recIdentity, "snooze-1d"), false, "unsupported recurring snooze stays disabled");
+  assert.equal(sheet.runAgendaItemAction(recIdentity, "snooze-1d"), true, "T2.19: expanded recurring occurrence snoozes via recurrenceExceptions");
+  assert.equal(store.items.get(recurringMaster.id).x.recurrenceExceptions.length, 1, "recurring snooze creates a single-occurrence exception");
+  assert.equal(store.items.get(recurringMaster.id).x.recurrenceExceptions[0].scope, "this");
+  // Restore master exceptions before subsequent calendar-menu reschedule tests use the original schedule.
+  store.items.upsert({ ...store.items.get(recurringMaster.id), x: { ...store.items.get(recurringMaster.id).x, recurrenceExceptions: [] } });
   store.items.remove(actionable.id);
   assert.equal(sheet.runAgendaItemAction(actionIdentity, "dismiss"), false, "removed targets are not acted on");
   const listBody = `## Plan\n%%calendar: Work%%\n- ${dayKey} 11:00 Linked visibility`;
@@ -301,12 +307,11 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
     ? cal.localDateKey(Date.parse(afterOccurrences.find((item) => item.x.recurrenceId === originalFirst.x.recurrenceId).start.dateTime))
     : afterOccurrences.find((item) => item.x.recurrenceId === originalFirst.x.recurrenceId).start.date, targetOccurrenceDate);
   assert.equal(afterOccurrences.find((item) => item.x.recurrenceId !== originalFirst.x.recurrenceId).x.recurrenceId, String(originalFirst.x.recurrenceId === "" ? 0 : Number(originalFirst.x.recurrenceId) + 86400000));
-  // Reopen the row menu after rendering; snooze remains separate from recurrence move semantics.
+  // Reopen the row menu after rendering; T2.19 enables snooze on expanded recurring occurrences.
   openRowMenu(root, "menu-recurring-reminder", "keydown");
   menuItem(root, "Snooze").click(); await flush();
   const snoozeRecurring = menuItem(root, "Snooze +1 day");
-  assert.ok(snoozeRecurring?.disabled);
-  assert.match(snoozeRecurring.textContent, /exception support/);
+  assert.ok(snoozeRecurring && !snoozeRecurring.disabled, "T2.19: expanded recurring reminder exposes enabled Snooze +1 day");
   const escape = new Ev("keydown", { key: "Escape", bubbles: true });
   snoozeRecurring.dispatchEvent(escape);
   assert.equal(q(root, ".zn-menu"), null, "Escape dismisses the nested context menu");

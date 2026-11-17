@@ -5085,7 +5085,8 @@
     if (reminder) {
       const writable = !!historyWritable;
       const historyReason = tr("menu.historyProtectedReason");
-      const recurringReason = tr("menu.snoozeRecurringReason");
+      const canSnoozeOccurrence = !recurring || !!item.x?.recurrenceId;
+      const unexpandedReason = tr("menu.snoozeUnexpandedReason");
       rows.push(
         { sep: true },
         { heading: true, label: tr("menu.reminderHeading." + lifecycle) },
@@ -5093,11 +5094,11 @@
         action("dismiss", tr("menu.dismiss"), writable && lifecycle !== "dismissed", !writable ? historyReason : tr("menu.alreadyDismissed")),
         action("reopen", tr("menu.reopen"), writable && lifecycle !== "pending", !writable ? historyReason : tr("menu.alreadyPending")),
         { id: "snooze", command: "snooze", label: tr("menu.snooze"), group: [
-          action("snooze-1h", tr("menu.snooze1h"), writable && !recurring && !item.start?.date, !writable ? historyReason : recurring ? recurringReason : tr("menu.snoozeAllDayReason")),
-          action("snooze-1d", tr("menu.snooze1d"), writable && !recurring, !writable ? historyReason : recurringReason),
-          action("snooze-3d", tr("menu.snooze3d"), writable && !recurring, !writable ? historyReason : recurringReason),
-          action("snooze-monday", tr("menu.snoozeMonday"), writable && !recurring, !writable ? historyReason : recurringReason),
-          action("snooze-custom", tr("menu.snoozeCustom"), writable && !recurring, !writable ? historyReason : recurringReason),
+          action("snooze-1h", tr("menu.snooze1h"), writable && canSnoozeOccurrence && !item.start?.date, !writable ? historyReason : !canSnoozeOccurrence ? unexpandedReason : tr("menu.snoozeAllDayReason")),
+          action("snooze-1d", tr("menu.snooze1d"), writable && canSnoozeOccurrence, !writable ? historyReason : unexpandedReason),
+          action("snooze-3d", tr("menu.snooze3d"), writable && canSnoozeOccurrence, !writable ? historyReason : unexpandedReason),
+          action("snooze-monday", tr("menu.snoozeMonday"), writable && canSnoozeOccurrence, !writable ? historyReason : unexpandedReason),
+          action("snooze-custom", tr("menu.snoozeCustom"), writable && canSnoozeOccurrence, !writable ? historyReason : unexpandedReason),
         ] },
       );
     }

@@ -404,13 +404,20 @@ function tabForItem(h, itemId) {
     }
   });
 
-  await test("store.runAgendaCommand rejects disabled / recurring-snooze commands safely", async () => {
+  await test("store.runAgendaCommand rejects unexpanded recurring masters / sheet-only commands safely, and snoozes expanded recurring occurrences with Undo", async () => {
     const h = await createZenHost();
     try {
       await h.seam.ensureStore();
-      const rec = h.seam.store.items.upsert(makeReminder("rec1", date(1, 9, 0), { summary: "Daily pills", recurrence: ["RRULE:FREQ=DAILY"] }));
+      const rec = h.seam.store.items.upsert(makeReminder("rec1", date(1, 9, 0), { summary: "Daily pills", recurrence: ["RRULE:FREQ=DAILY;COUNT=4"] }));
       const res1 = h.seam.store.runAgendaCommand(rec, "snooze-1d");
-      assert.equal(res1.ok, false, "recurring snooze rejected");
+      assert.equal(res1.ok, false, "unexpanded recurring master snooze rejected");
+      const occs = C.expandItem(rec, date(0, 0, 0), date(5, 23, 59));
+      const firstOcc = occs[0];
+      const resOcc = h.seam.store.runAgendaCommand(firstOcc, "snooze-1d");
+      assert.equal(resOcc.ok, true, "T2.19: expanded recurring occurrence snoozes headlessly");
+      assert.equal(h.seam.store.items.get("rec1").x.recurrenceExceptions.length, 1);
+      assert.equal(resOcc.undo().ok, true, "recurring snooze Undo restores exceptions");
+      assert.equal(h.seam.store.items.get("rec1").x.recurrenceExceptions.length, 0);
       const res2 = h.seam.store.runAgendaCommand(rec, "edit");
       assert.equal(res2.ok, false, "sheet-only command rejected by headless runner");
       assert.equal(sheetIsOpen(h), false);

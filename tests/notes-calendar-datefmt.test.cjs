@@ -149,8 +149,13 @@ test("T2.19 exposes quick snooze choices only for supported reminder occurrences
   assert.equal(enRows.find((r) => r.command === "snooze-3d")?.label, "Snooze +3 days");
   assert.equal(enRows.find((r) => r.command === "snooze-monday")?.label, "Snooze until next Monday");
   assert.equal(enRows.find((r) => r.command === "snooze-custom")?.label, "Custom date and time…");
-  const recRows = flat(cal.calendarItemMenuModel({ ...reminder, recurrence: ["RRULE:FREQ=DAILY"] }, { state: "pending", historyWritable: true, agendaWritable: true, lang: "en" }));
-  assert.equal(recRows.find((r) => r.command === "snooze-1d")?.enabled, false);
+  const recMaster = cal.makeItem({ ...reminder, recurrence: ["RRULE:FREQ=DAILY;COUNT=3"] }, 0);
+  const recRows = flat(cal.calendarItemMenuModel(recMaster, { state: "pending", historyWritable: true, agendaWritable: true, lang: "en" }));
+  assert.equal(recRows.find((r) => r.command === "snooze-1d")?.enabled, false, "unexpanded master requires a visible occurrence");
+  const recOcc = cal.expandItem(recMaster, Date.parse("2026-11-16T00:00:00Z"), Date.parse("2026-11-19T00:00:00Z"))[0];
+  const recOccRows = flat(cal.calendarItemMenuModel(recOcc, { state: "pending", historyWritable: true, agendaWritable: true, lang: "en" }));
+  assert.equal(recOccRows.find((r) => r.command === "snooze-1d")?.enabled, true, "expanded recurring occurrence supports quick snooze");
+  assert.equal(recOccRows.find((r) => r.command === "snooze-custom")?.enabled, true, "expanded recurring occurrence supports custom snooze");
   assert.match(source, /"snooze-1d":\s*\(\)\s*=>\s*snoozeReminderItem\(item,\s*1\)/);
   assert.match(source, /"snooze-3d":\s*\(\)\s*=>\s*snoozeReminderItem\(item,\s*3\)/);
   assert.match(source, /"snooze-monday":\s*\(\)\s*=>\s*snoozeReminderItem\(item,\s*nextMonday\)/);
