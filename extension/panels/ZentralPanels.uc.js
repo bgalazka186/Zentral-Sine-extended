@@ -11,10 +11,11 @@
  *   notification activity independently of input/render visibility.
  * Registration: panels
  * Loaded/created by: loader/ZentralCatalog.js
- * Direct local resource paths: extension/panels/interaction/ZentralPanelAudio.js; extension/panels/interaction/ZentralPanelHover.js;
- *   extension/panels/interaction/ZentralPanelInput.js; extension/panels/interaction/ZentralPanelPopupRouting.js
- * Constructed factory IDs: panel-popup-routing; panels/ZentralPanelAudio; panels/ZentralPanelHover;
- *   panels/ZentralPanelInput
+ * Direct local resource paths: extension/panels/interaction/ZentralAppShortcuts.js; extension/panels/interaction/ZentralPanelAudio.js;
+ *   extension/panels/interaction/ZentralPanelHover.js; extension/panels/interaction/ZentralPanelInput.js;
+ *   extension/panels/interaction/ZentralPanelPopupRouting.js
+ * Constructed factory IDs: panel-popup-routing; panels/ZentralAppShortcuts; panels/ZentralPanelAudio;
+ *   panels/ZentralPanelHover; panels/ZentralPanelInput
  * Published lazy ctx API: BGALAZKA_EXT_PREFS; EXT_KEYBIND_ACTIONS; EXT_KEYBIND_DEFAULTS; EXT_PREFS;
  *   PREF_ICONS; PROFILE_DEFAULTS; applyAttributes; cleanupFns; clearInterval; clearTimeout;
  *   computeOppositeDockingSafeMaxWidth; ensureNativeAudioButton; ensurePillAllSidesResizeButton;
@@ -382,6 +383,7 @@
         KEYBIND_ZOOM_OUT: "zen.workspace.bgalazka.keybind.zoom_out",
         KEYBIND_ZOOM_RESET: "zen.workspace.bgalazka.keybind.zoom_reset",
         KEYBIND_OPEN_SETTINGS: "zen.workspace.bgalazka.keybind.open_settings",
+        APP_SHORTCUTS: "zen.workspace.bgalazka.app_shortcuts",
       };
 
       const ATTR_MAP = [
@@ -1463,6 +1465,7 @@
         KEYBIND_ZOOM_OUT: "zen.workspace.bgalazka.keybind.zoom_out",
         KEYBIND_ZOOM_RESET: "zen.workspace.bgalazka.keybind.zoom_reset",
         KEYBIND_OPEN_SETTINGS: "zen.workspace.bgalazka.keybind.open_settings",
+        APP_SHORTCUTS: "zen.workspace.bgalazka.app_shortcuts",
       };
       if (typeof EXT_PREFS !== "undefined") {
         Object.assign(EXT_PREFS, BGALAZKA_EXT_PREFS);
@@ -2215,6 +2218,7 @@
 
       const extensionKeybindHandler = (e) => {
         if (e.defaultPrevented || e.repeat) return;
+        if (ctx.appShortcuts?.isPromptOpen?.()) return;
         if (
           document.activeElement?.closest?.(
             "#zentral-video-preview[data-enlarged]",
@@ -2246,6 +2250,21 @@
       registerCleanup(() =>
         window.removeEventListener("keydown", extensionKeybindHandler, true),
       );
+
+      // Custom per-app / per-panel keyboard shortcuts (T3.10).
+      window.ZentralModuleLoader.load(
+        "extension/panels/interaction/ZentralAppShortcuts.js",
+        { owner: "panels" },
+      );
+      window.ZentralModuleLoader.create("panels/ZentralAppShortcuts", {
+        BGALAZKA_EXT_PREFS,
+        EXT_KEYBIND_ACTIONS,
+        EXT_KEYBIND_DEFAULTS,
+        ctx,
+        getPref,
+        setPref,
+        registerCleanup,
+      });
 
       window.ZentralRuntime.runPart("extension-settings");
 

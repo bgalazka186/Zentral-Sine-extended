@@ -1575,6 +1575,107 @@
               pref: "zen.workspace.zentral.tabs.background_drag",
               def: true,
             });
+
+            // Custom per-app / per-panel keyboard shortcuts (T3.10)
+            const appShortcutsCard = document.createElement("div");
+            appShortcutsCard.className = "zs-app-shortcuts-card";
+            appShortcutsCard.dataset.settingKey =
+              ctx.BGALAZKA_EXT_PREFS.APP_SHORTCUTS ||
+              "zen.workspace.bgalazka.app_shortcuts";
+
+            const appShortcutsHeader = document.createElement("div");
+            appShortcutsHeader.className = "zs-label-container";
+            const appShortcutsLabel = document.createElement("span");
+            appShortcutsLabel.className = "zs-label";
+            appShortcutsLabel.textContent = "Custom App & Panel Shortcuts";
+            const appShortcutsSublabel = document.createElement("span");
+            appShortcutsSublabel.className = "zs-sublabel";
+            appShortcutsSublabel.textContent =
+              "Assign a 2+ key shortcut to reveal or hide any Zentral app or panel (also available from each app tile's right-click menu).";
+            appShortcutsHeader.append(appShortcutsLabel, appShortcutsSublabel);
+
+            const appShortcutsList = document.createElement("div");
+            appShortcutsList.className = "zs-app-shortcuts-list";
+            appShortcutsCard.append(appShortcutsHeader, appShortcutsList);
+            content.appendChild(appShortcutsCard);
+
+            const renderAppShortcutsList = () => {
+              appShortcutsList.replaceChildren();
+              const api = ctx.appShortcuts;
+              const appsList = api?.listKnownApps ? api.listKnownApps() : [];
+              if (!appsList.length) {
+                const empty = document.createElement("div");
+                empty.className = "zs-app-shortcuts-empty";
+                empty.textContent =
+                  "No Zentral apps yet. Add an app to the sidebar or right-click any app tile to assign a custom keyboard shortcut.";
+                appShortcutsList.appendChild(empty);
+                return;
+              }
+              for (const entry of appsList) {
+                const item = document.createElement("div");
+                item.className = "zs-app-shortcut-item";
+                item.dataset.appId = entry.id;
+
+                const info = document.createElement("div");
+                info.className = "zs-app-shortcut-info";
+                const nameEl = document.createElement("span");
+                nameEl.className = "zs-app-shortcut-name";
+                nameEl.textContent = entry.title;
+                const metaEl = document.createElement("span");
+                metaEl.className = "zs-app-shortcut-meta";
+                metaEl.textContent = entry.unavailable
+                  ? "Saved shortcut (app not currently in sidebar)"
+                  : entry.url || (entry.kind === "essential" ? "Essential panel" : "Sidebar app");
+                info.append(nameEl, metaEl);
+
+                const controls = document.createElement("div");
+                controls.className = "zs-app-shortcut-actions";
+
+                const assignBtn = document.createElement("button");
+                assignBtn.type = "button";
+                assignBtn.className = "zs-app-shortcut-btn";
+                assignBtn.dataset.assigned = entry.shortcut ? "true" : "false";
+                assignBtn.textContent = entry.shortcut || "Add shortcut";
+                assignBtn.title = entry.shortcut
+                  ? `Click to change shortcut (${entry.shortcut})`
+                  : `Add custom keyboard shortcut for ${entry.title}`;
+                assignBtn.addEventListener("click", () => {
+                  api?.openShortcutPrompt?.(entry.id, entry.title);
+                });
+                controls.appendChild(assignBtn);
+
+                if (entry.shortcut) {
+                  const removeBtn = document.createElement("button");
+                  removeBtn.type = "button";
+                  removeBtn.className =
+                    "zs-app-shortcut-btn zs-app-shortcut-remove";
+                  removeBtn.textContent = "Remove";
+                  removeBtn.title = `Remove ${entry.shortcut} from ${entry.title}`;
+                  removeBtn.addEventListener("click", () => {
+                    api?.removeAppShortcut?.(entry.id);
+                  });
+                  controls.appendChild(removeBtn);
+                }
+
+                item.append(info, controls);
+                appShortcutsList.appendChild(item);
+              }
+            };
+            renderAppShortcutsList();
+            panel._syncAppShortcuts = renderAppShortcutsList;
+            const onAppShortcutsChanged = () => renderAppShortcutsList();
+            window.addEventListener(
+              ctx.appShortcuts?.CHANGED_EVENT || "zentral-app-shortcuts-changed",
+              onAppShortcutsChanged,
+            );
+            ctx.registerCleanup(() =>
+              window.removeEventListener(
+                ctx.appShortcuts?.CHANGED_EVENT ||
+                  "zentral-app-shortcuts-changed",
+                onAppShortcutsChanged,
+              ),
+            );
+
             const tKeybindsEnabled = createToggleRow(
               "Enable Extension Keybinds",
               "Shortcuts only apply while the floating app panel is open and focused; click any binding below and press a new combination",
@@ -3921,6 +4022,7 @@
 
           panel._syncEntryAvailability?.();
           panel._syncBacking?.();
+          panel._syncAppShortcuts?.();
           modal.querySelector("#zs-panel-extension-look")?._syncLook?.();
           // Modern categories already own navigation. Reopening must not recreate
           // legacy headings/tabs or trigger the full organizer again.

@@ -2283,6 +2283,17 @@
   },
   {
     "type": "text",
+    "label": "**Keyboard & Mouse · App & panel shortcuts**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.bgalazka.app_shortcuts",
+    "label": "Custom app & panel shortcuts (JSON)",
+    "type": "string",
+    "defaultValue": "{}"
+  },
+  {
+    "type": "text",
     "label": "**Keyboard & Mouse · Panel shortcuts & mouse actions**",
     "size": "16px"
   },

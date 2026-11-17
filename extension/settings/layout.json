@@ -343,6 +343,9 @@
           "label": "Insta Peek"
         },
         {
+          "label": "App & panel shortcuts"
+        },
+        {
           "label": "Panel shortcuts & mouse actions"
         }
       ],
@@ -1087,6 +1090,12 @@
       "size": "16px"
     },
     "zen.workspace.apps.insta_peek.shortcut",
+    {
+      "type": "text",
+      "label": "**Keyboard & Mouse · App & panel shortcuts**",
+      "size": "16px"
+    },
+    "zen.workspace.bgalazka.app_shortcuts",
     {
       "type": "text",
       "label": "**Keyboard & Mouse · Panel shortcuts & mouse actions**",
