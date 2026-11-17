@@ -33,15 +33,15 @@ function fakeIO() {
 async function main() {
   const note = { id: "date-note", body: "# 2026-11-16 Monday\n\nText", folder: "daily", updated: 1, trashed: 0 };
   const folders = [{ id: "daily", label: "Agenda" }];
-  const legacy = core.resolveWikiTarget([note], folders, core.parseWikiTarget("Daily/2026-11-16"));
-  const current = core.resolveWikiTarget([note], folders, core.parseWikiTarget("Agenda/2026-11-16"));
+  const legacy = core.resolveWikiTarget([note], folders, core.parseWikiTarget("Daily/2026-11-16 Monday"));
+  const current = core.resolveWikiTarget([note], folders, core.parseWikiTarget("Agenda/2026-11-16 Monday"));
   assert.equal(legacy?.id, note.id, "legacy Daily path still resolves after relabelling");
   assert.equal(current?.id, note.id, "the current Agenda path still resolves");
   assert.equal(core.resolveWikiTarget([{ ...note, id: "other", folder: "agenda" }], [{ id: "agenda", label: "Agenda" }], core.parseWikiTarget("Daily/2026-11-16")), null, "a user Agenda folder is not a Daily alias");
 
   const nested = { ...note, id: "nested-date-note", folder: "daily/work" };
   const nestedFolders = [{ id: "daily", label: "My days" }, { id: "daily/work", label: "Work" }];
-  assert.equal(core.resolveWikiTarget([nested], nestedFolders, core.parseWikiTarget("Daily/Work/2026-11-16"))?.id, nested.id);
+  assert.equal(core.resolveWikiTarget([nested], nestedFolders, core.parseWikiTarget("Daily/Work/2026-11-16 Monday"))?.id, nested.id);
   assert.equal(core.folderPathMatchesNote(nested, nestedFolders, ["Daily", "Work"]), true);
   assert.equal(core.folderPathMatchesNote({ ...nested, folder: "work" }, nestedFolders, ["Daily", "Work"]), false);
 
