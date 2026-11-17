@@ -43,7 +43,11 @@ const item = (id, summary, hour = 12) => C.makeItem({ id, summary, start: { date
   h.emit("mouseover", foreign); assert.equal(card(h).hidden, true); assert.equal(foreign.getAttribute("title"), "foreign title");
   h.emit("mouseover", a); h.emit("mouseout", a, { relatedTarget: foreign }); assert.equal(h.fireTimer(350), false, "leaving before hover delay cancels the card");
   h.emit("focusin", b); h.window.gBrowser.removeTab(b); assert.equal(card(h).hidden, true, "tab removal closes the card");
-  h.seam.agendaController.runNow(); const restoredB = tabFor(h, "second"); h.emit("focusin", restoredB); restoredB.remove(); h.triggerMutations();
+  // SB6.6: closing a row hides it for today, so it does not come back here. Rebuild the host with the old behaviour to
+  // keep testing what this file is about: an out-of-band DOM removal (not a close) must still bring its row back.
+  h.seam.agendaClosedSet().clear(); h.seam.agendaController.runNow();
+  const restoredB = tabFor(h, "second"); assert.ok(restoredB, "a rebuild keeps the row once today's hide is forgotten");
+  h.emit("focusin", restoredB); restoredB.remove(); h.triggerMutations();
   assert.equal(card(h).hidden, true, "out-of-band DOM removal closes the card");
   h.emit("focusin", a); h.setPref(PREF, false); assert.equal(card(h).hidden, true, "disable closes the card");
   await h.destroy(); assert.equal(card(h), null); assert.equal(a.getAttribute("aria-describedby"), "existing-description");

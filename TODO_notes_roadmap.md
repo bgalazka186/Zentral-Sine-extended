@@ -84,7 +84,7 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 |    43 | `T4.3c`     | `OPEN`    | Med                 | M      | T4.3b             | Extract Zen sidebar UI; single build entry                                                               |
 |    44 | `OW-21`     | `OPEN`    | Med                 | M      | —                 | [new, lower priority] Find and replace within Notes                                                      |
 |    45 | `OW-22`     | `OPEN`    | Med                 | M      | —                 | [new, lower priority] Find next/previous match outside the visible viewport                              |
-|    46 | `SB6.6`     | `OPEN`    | Low-Med             | S      | SB6.3             | Setting: what the X (close) button does on an Agenda tab                                                 |
+|    46 | `SB6.6`     | `DONE`    | Low-Med             | S      | 3.3.266           | Setting: what the X (close) button does on an Agenda tab                                                 |
 |    47 | `ST7.3`     | `OPEN`    | Low-Med             | S      | none              | Move calendar UI state out of notes metadata                                                             |
 |    48 | `T3.5`      | `PARTIAL` | Low-Med             | S      | —                 | Callout toolbar button: last-used on click, more kinds                                                   |
 |    50 | `UI4.9`     | `DONE`    | Low-Med             | S      | 3.3.264           | Space before the unit in slider values                                                                   |
@@ -166,18 +166,6 @@ uses while a tab is being dragged cannot be reproduced in the fake sidebar; it n
 **Tests / done when:** Geometry and real-sheet tests include several visible matches, offscreen matches in both directions, wrap/no-offscreen cases and accessible controls; verify live layout where possible.
 
 _Not blocked by the calendar work._
-
-#### `SB6.6` — Setting: what the X (close) button does on an Agenda tab
-
-**Status:** `OPEN` · **Impact:** Low-Med · **Effort:** S · **Depends on:** SB6.3 · **Source:** Proposal D5
-
-**Problem:** Closing an Agenda tab makes it reappear (`TabClose` -> `schedule(400)`).
-
-**Plan (do in this order):**
-
-1. Options: hide this item today / dismiss / do nothing (default hide today).
-
-**Tests / done when:** Harness test for each option.
 
 #### `ST7.3` — Move calendar UI state out of notes metadata
 
@@ -352,7 +340,7 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.264.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52` and `UI4.9` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`214/214` test files) passes in Node/fake-Zen at 3.3.264; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.266.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9` and `SB6.6` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`215/215` test files) passes in Node/fake-Zen at 3.3.266; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
 Completed this session (3.3.163–3.3.244), every finished item archived in `docs/LEGACY_done_rows.md`:
 
@@ -496,4 +484,4 @@ Known debts / owner requirements: LIMITS of `OW-04`: the pointer is held to the 
 
 Planning only, no code (2026-11-17, version 3.3.244): the owner's holiday list added as `OW-43` (holiday sets split from the interface language, any language picks any set, first sets `PL` + `US`), `OW-44` (any number of sets at once), `OW-45` (one-place year table for movable/one-off dates such as the Polish election day and `niedziela handlowa`), `OW-46` (one master off switch) and `T2.13a` (how holidays behave when the `T2.13` ICS/Google groundwork is built: local sets are never imported or synced). They sit at the top of the Master Order; `T3.3` follows them.
 
-Next action: `UI4.9` is DONE at 3.3.264. The remaining small rows (`SB6.6`, `ST7.3`, `UI4.11`, `DOC-1`, `TM3.7`) are safe single slices; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.
+Next action: `SB6.6` is DONE at 3.3.266. The remaining small rows (`ST7.3`, `UI4.11`, `DOC-1`, `TM3.7`) are safe single slices; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.

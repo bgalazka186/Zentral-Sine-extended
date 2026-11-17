@@ -1229,6 +1229,26 @@
       "unit": "items"
     },
     {
+      "property": "zen.workspace.zentral.notes.agenda_close_action",
+      "label": "Closing an Agenda tab",
+      "type": "dropdown",
+      "defaultValue": "hide-today",
+      "options": [
+        {
+          "label": "Hide that item for today (default)",
+          "value": "hide-today"
+        },
+        {
+          "label": "Dismiss the reminder; hide an event for today",
+          "value": "dismiss"
+        },
+        {
+          "label": "Let it come back right away",
+          "value": "reappear"
+        }
+      ]
+    },
+    {
       "property": "zen.workspace.zentral.notes.debug_perf",
       "label": "DEBUG: sample how long Notes layout, drag and read-view work take (performance.now). Read the result with __zentralNotesPerf.report() in the Browser Console",
       "type": "checkbox",
@@ -1762,6 +1782,11 @@
       "owner": "notes"
     },
     "zen.workspace.zentral.notes.agenda_max_items": {
+      "category": "notes",
+      "section": "Experiments (off by default)",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.agenda_close_action": {
       "category": "notes",
       "section": "Experiments (off by default)",
       "owner": "notes"

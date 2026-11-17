@@ -99,6 +99,15 @@
   declare, and fails if a hand-rolled `value + unit` comes back.
 > **Recovery note (2026-11-12):** Earlier handoff text included Track 2 completion claims that must be checked against the actual source and tests before relying on them. The verified working tree is now version **3.3.113**; its release state is governed by the source, generated-build checks and test suites in this archive, not by older handoff claims.
 
+- `SB6.6` DONE (3.3.266) — Closing an Agenda tab no longer puts it straight back. A new Settings > Notes > Experiments
+  row, "Closing an Agenda tab", picks between hiding that item for the rest of the local day (the default), running
+  Dismiss for a reminder (events fall back to the day hide, they have no Dismiss), and the old "come back right away".
+  A closed projection key carries its date, so a multi-day event keeps its other days and a repeating reminder returns
+  tomorrow without a timer; a day that loses its last row loses its folder. A row the projection removes itself, and a
+  pseudo-tab the router closes on the way to a real page, are never mistaken for a person's close. `agendaClosedSet`/
+  `agendaOnTabClosed` and the pure `cleanAgendaCloseAction`/`applyAgendaClosedDays`/`AGENDA_CLOSE_ACTIONS` live in the
+  host and the calendar module; `tests/notes-agenda-close-action.test.cjs` (12 tests) covers each option, the multi-day
+  and per-day rules, the self-removal guard and the routing guard.
 ## Ordered Execution Backlog (DONE rows)
 
 | Order | Global # | Track ID     | Status | Item                                                                                   | Dependencies & Remaining Scope                                                                                                                                               |

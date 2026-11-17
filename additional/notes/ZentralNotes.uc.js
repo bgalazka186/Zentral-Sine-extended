@@ -218,6 +218,7 @@
       AGENDA_OVERDUE_CAP: "zen.workspace.zentral.notes.agenda_overdue_cap",
       AGENDA_HIDE_TRASHED: "zen.workspace.zentral.notes.agenda_hide_trashed",
       AGENDA_MAX_ITEMS: "zen.workspace.zentral.notes.agenda_max_items",
+      AGENDA_CLOSE_ACTION: "zen.workspace.zentral.notes.agenda_close_action",
       SPACE_MODE: "zen.workspace.zentral.notes.space_mode",
       MISSED_DAYS: "zen.workspace.zentral.notes.missed_reminder_days",
       REMINDER_HISTORY_DAYS: "zen.workspace.zentral.notes.reminder_history_days",
@@ -5537,6 +5538,8 @@
           S("agendaOverdueCap", "Overdue items shown before More", PREF.AGENDA_OVERDUE_CAP, 1, 100, "items", 10),
           { id: "agendaHideTrashed", label: "Hide Agenda items whose source note is in Trash", pref: PREF.AGENDA_HIDE_TRASHED, kind: "bool", def: true },
           S("agendaMaxItems", "Max items in sidebar", PREF.AGENDA_MAX_ITEMS, 1, 200, "items", 40),
+          { id: "agendaCloseAction", label: "Closing an Agenda tab", pref: PREF.AGENDA_CLOSE_ACTION, kind: "choice", def: "hide-today",
+            choices: [["hide-today", "Hide that item for today"], ["dismiss", "Dismiss the reminder (or hide it for today)"], ["reappear", "Let it come back right away"]] },
           { kind: "heading", i18nKey: "settings.heading.diagnostics", label: "Diagnostics" },
           { id: "perf", label: "Sample layout / drag timings (read __zentralNotesPerf.report())", pref: PREF.DEBUG_PERF, kind: "bool", def: false },
         ],
@@ -30728,8 +30731,13 @@
         } catch (error) { warn(error); }
         return true;
       }
+      // Closing one of our own tabs fires the same TabClose the user's close does: SB6.6 must be able to tell them apart,
+      // or dropping a row from the projection would hide that item for the rest of the day.
+      let managedTabRemoval = 0;
       const zenRemoveTab = (tab) => {
+        managedTabRemoval++;
         try { window.gBrowser.removeTab(tab, { animate: false, skipPermitUnload: true, skipSessionStore: true }); } catch (error) { warn(error); }
+        finally { managedTabRemoval--; }
       };
       // Sub-folders must sit INSIDE their parent folder. createFolder's parentId option is not guaranteed in every Zen
       // build, so after creating, verify the real DOM parent and try the two known ways of adopting a folder.
@@ -31114,6 +31122,36 @@
         const url = agendaTabUrl(key), tab = addManagedPseudoTab(url);
         if (!tab) return null;
         tab.setAttribute(AGENDA_ATTR, key); tab._zentralNotesUrl = url; window.gBrowser.pinTab(tab); return tab;
+      }
+      // SB6.6: closing an Agenda tab. The preference says what happens; a closed projection key is remembered for the
+      // local day only, so an item hidden today is back tomorrow without a timer and without touching the item.
+      const agendaCloseAction = () => CALENDAR_PART?.cleanAgendaCloseAction?.(prefStr(PREF.AGENDA_CLOSE_ACTION, "hide-today")) || "hide-today";
+      let agendaClosedDay = "", agendaClosedKeys = new Set();
+      const agendaTodayKey = () => CALENDAR_PART?.localDateKey?.(Date.now()) || "";
+      function agendaClosedSet() {
+        const today = agendaTodayKey();
+        if (agendaClosedDay !== today) { agendaClosedDay = today; agendaClosedKeys = new Set(); }
+        return agendaClosedKeys;
+      }
+      // The preference, applied to a tab the person closed (never to one we closed ourselves).
+      function agendaOnTabClosed(tab) {
+        if (disposed || !agendaEnabled() || managedTabRemoval || !tab) return false;
+        const key = String(tab.getAttribute?.(AGENDA_ATTR) || agendaTabKey(tab) || "");
+        if (!key || key.startsWith("seed:")) return false;
+        const action = agendaCloseAction();
+        if (action === "reappear") return false;
+        const kind = String(tab.getAttribute?.("bgalazka-notes-agenda-kind") || "");
+        const history = store.items?.history;
+        if (action === "dismiss" && kind === "reminder" && history && !history.storageState().writeBlocked) {
+          const result = runHeadlessAgendaAction(agendaTabIdentity(tab), "dismiss");
+          if (result?.ok) { agendaController.invalidate?.(); agendaController.schedule(0); return true; }
+        }
+        // Hide that one row for the rest of the local day: the key carries its date, so a multi-day event keeps its
+        // other days and a repeating reminder is back tomorrow without a timer.
+        agendaClosedSet().add(key);
+        agendaController.invalidate?.();
+        agendaController.schedule(0);
+        return true;
       }
       let agendaMutationCount = 0, agendaReordering = false;
       function agendaPlaceRoot(root, position) {
@@ -32026,6 +32064,7 @@
         getItems: agendaItems,
         getDays: agendaDays,
         getMaxItems: () => Math.max(1, Math.min(200, prefInt(PREF.AGENDA_MAX_ITEMS, 40))),
+        getHiddenKeys: agendaClosedSet,
         getLanguage: () => { try { return CALENDAR_PART.cleanNotesLanguage(Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en")); } catch (_) { return "en"; } },
         getOverdue: () => ({ enabled: prefBool(PREF.AGENDA_OVERDUE, true), days: Math.max(1, Math.min(31, prefInt(PREF.AGENDA_OVERDUE_DAYS, 7))), cap: Math.max(1, Math.min(100, prefInt(PREF.AGENDA_OVERDUE_CAP, 10))) }),
         getEnabled: agendaEnabled,
@@ -32447,6 +32486,7 @@
         if (!on) {
           agendaTitleCard.hide();
           agendaActionToast.hide();
+          agendaClosedDay = ""; agendaClosedKeys = new Set();
           clearAgendaPress();
           window.clearTimeout(agendaSelectTimer); agendaSelectTimer = 0; agendaLastContent.clear();
           for (const id of agendaIconTimers) window.clearTimeout(id);
@@ -32597,10 +32637,13 @@
         routedPseudoTabs.add(tab);
         // Close the transient about:blank tab before any async store or UI work, and put the user back on the site
         // they were on: closing the selected tab would otherwise let the browser pick a neighbour (or leave a blank page).
+        // This tab is one we routed, not one the person closed, so SB6.6 must not hide the item it points at.
         let wasSelected = false, owner = null;
         try { wasSelected = window.gBrowser.selectedTab === tab; owner = tab.owner || null; } catch (_) {}
+        managedTabRemoval++;
         try { window.gBrowser.removeTab(tab, { animate: false }); }
         catch (_) { try { tab.remove?.(); } catch (_) {} }
+        finally { managedTabRemoval--; }
         if (wasSelected) {
           const back = returnTabFor(owner);
           if (back) try { window.gBrowser.selectedTab = back; } catch (_) {}
@@ -32925,7 +32968,10 @@
         }, 0);
       }
       function onAgendaTabEvent(ev) {
-        if (ev.type === "TabClose") agendaTitleCard.removed(ev.target);
+        if (ev.type === "TabClose") {
+          agendaTitleCard.removed(ev.target);
+          agendaOnTabClosed(ev.target);
+        }
         if (disposed || !agendaEnabled() || agendaController.busy || agendaReordering) return;
         const tab = ev.target;
         const root = agendaRootEl();
@@ -34571,7 +34617,7 @@
       // Opt-in test seam: the real per-window coordinator and native adapters,
       // without opening a Notes sheet or publishing privileged objects normally.
       if (window.__zentralNotesTestSeam) {
-        const sidebar = { store, ensureStore, storeWhenReady, withStore, zenApi, zen, agendaApi, agendaController, tick, reminders,
+        const sidebar = { store, ensureStore, storeWhenReady, withStore, zenApi, zen, agendaApi, agendaController, agendaCloseAction, agendaClosedSet, agendaOnTabClosed, tick, reminders,
           onAgendaMouse, onAgendaSelect, onAgendaTabEvent, onAgendaAttr, agendaEnsureVisuals, onAgendaFolderMenuShowing,
           onAgendaFolderMenuHidden, onAgendaTabMenuShowing, runAgendaAction: runHeadlessAgendaAction, agendaToast: agendaActionToast,
           agendaHoverCard, notesHoverCard, nextAgendaItem, nextNotesItem, inspectAgenda, repairAgenda };

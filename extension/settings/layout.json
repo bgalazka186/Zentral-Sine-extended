@@ -1273,6 +1273,7 @@
     "zen.workspace.zentral.notes.agenda_overdue_cap",
     "zen.workspace.zentral.notes.agenda_hide_trashed",
     "zen.workspace.zentral.notes.agenda_max_items",
+    "zen.workspace.zentral.notes.agenda_close_action",
     {
       "type": "text",
       "label": "**Notes appearance · Size & shape**",
