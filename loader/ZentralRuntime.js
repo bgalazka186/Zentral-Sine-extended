@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Zentral Core and Settings
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.263
+// @version 3.3.264
 // ==/UserScript==
 /*
  * ZENTRAL FILE GUIDE - loader/ZentralRuntime.js
@@ -38,7 +38,7 @@
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
-  const VERSION = "3.3.263";
+  const VERSION = "3.3.264";
   // Sine installs this package under theme.json's id. Resolve from the
   // executing script so local folders and installed copies use their own files.
   // Keep this universal: never hard-code a mod id, folder name, or profile path.
@@ -1939,6 +1939,8 @@
     return segment;
   }
   runtime.ensureSettingsSection = ensureSettingsSection;
+  // UI4.9: one formatter for every slider's "value unit" phrase, shared by the settings rows.
+  runtime.formatSchemaValue = formatSchemaValue;
   function ensureSettingsCategory(modal, id) {
     const definition = SETTINGS_ORGANIZATION.categories.find(
       (category) => category.id === id,
@@ -2099,6 +2101,18 @@
   // get a slider / colour picker and a Reset button. The "off" value (numeric.min for a slider, "" for a
   // colour) means "no override", so the module keeps its own default there. Sine shows the same pref as
   // a plain text box; both write the same preference.
+  // UI4.9: a value and its unit read as one phrase, and the phrase needs a space: "7 days", not "7days". The two
+  // exceptions are the ones typography keeps tight — a percentage and a pixel count are read as one token.
+  const TIGHT_UNITS = Object.freeze(["%", "px"]);
+  function formatSchemaValue(value, unit) {
+    const text = String(value ?? "").trim();
+    if (!text) return "";
+    const suffix = String(unit ?? "").trim();
+    if (!suffix) return text;
+    if (TIGHT_UNITS.includes(suffix)) return text + suffix;
+    return text + " " + suffix;
+  }
+
   function createSchemaControlRow(item, row) {
     const key = item.property;
     row.classList.add("zs-schema-control");
@@ -2141,7 +2155,7 @@
       const isOff = isSlider ? !(Number(value) > off) : !/^#[0-9a-f]{6}$/i.test(String(value));
       if (isSlider) {
         if (!isOff) input.value = String(value);
-        readout.textContent = isOff ? "Default" : value + unit;
+        readout.textContent = isOff ? "Default" : formatSchemaValue(value, unit);
       } else if (!isOff) input.value = String(value).toLowerCase();
       row.dataset.schemaOff = isOff ? "true" : "false";
       reset.disabled = isOff;

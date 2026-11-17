@@ -90,6 +90,13 @@
     `clockPanelControls`, `clockBadge`) are seam-tested; `widgets-timer` grew to 13 tests.
 ## Old recovery note
 
+- `UI4.9` DONE (3.3.264) — Slider badges read `7days` and `100000chars`; they now read `7 days` and `100000 chars`.
+  One rule owns the space: `formatSliderValue` in the native settings rows and `formatSchemaValue` in the runtime's
+  schema rows, with the same two tight exceptions typography actually keeps (`80%`, `12px`). A caller that passes
+  `" px"` and one that passes `"px"` now produce the same badge, an empty value never prints a bare unit, and the three
+  call sites that used to concatenate by hand all route through the shared helper. `tests/settings-slider-units.test.cjs`
+  (5 tests) parses the shipped functions out of the sources, checks them against every unit the settings actually
+  declare, and fails if a hand-rolled `value + unit` comes back.
 > **Recovery note (2026-11-12):** Earlier handoff text included Track 2 completion claims that must be checked against the actual source and tests before relying on them. The verified working tree is now version **3.3.113**; its release state is governed by the source, generated-build checks and test suites in this archive, not by older handoff claims.
 
 ## Ordered Execution Backlog (DONE rows)
