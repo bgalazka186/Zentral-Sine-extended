@@ -181,6 +181,63 @@
     "defaultValue": true
   },
   {
+    "property": "zen.workspace.zentral.widgets.clock.mode",
+    "label": "Clock card face — a click turns it over",
+    "type": "dropdown",
+    "defaultValue": "clock",
+    "options": [
+      {
+        "label": "Clock (click for the timer)",
+        "value": "clock"
+      },
+      {
+        "label": "Timer (click for the clock)",
+        "value": "timer"
+      }
+    ],
+    "description": "The Clock card has two faces. This is the one it rests on; a click on the card turns it over, and a finished countdown turns the numbers red until the card is clicked."
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.timer.end_sound",
+    "label": "When a countdown ends: sound",
+    "type": "dropdown",
+    "defaultValue": "beep",
+    "options": [
+      {
+        "label": "No sound",
+        "value": "none"
+      },
+      {
+        "label": "The system beep",
+        "value": "beep"
+      },
+      {
+        "label": "A short two-note tone",
+        "value": "chime"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.timer.end_notice",
+    "label": "When a countdown ends: notice",
+    "type": "dropdown",
+    "defaultValue": "none",
+    "options": [
+      {
+        "label": "No notice",
+        "value": "none"
+      },
+      {
+        "label": "A line in the sidebar",
+        "value": "toast"
+      },
+      {
+        "label": "A system notification",
+        "value": "system"
+      }
+    ]
+  },
+  {
     "property": "zen.workspace.zentral.widgets.quick_note.enabled",
     "label": "Show the quick note row in the Timer widget",
     "type": "checkbox",

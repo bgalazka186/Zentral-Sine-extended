@@ -111,7 +111,8 @@ test("the presets are the five people actually ask for", () => {
 });
 
 test("the widget owns no timer and the Clock click is only a shortcut", () => {
-  const timerWidget = SRC.slice(SRC.indexOf('id: "timer"'), SRC.indexOf('id: "timer"') + 9000);
+  const timerWidgetStart = SRC.indexOf('id: "timer"');
+  const timerWidget = SRC.slice(timerWidgetStart, SRC.indexOf('id: "status"', timerWidgetStart));
   assert.ok(timerWidget.length > 1000, "the timer widget exists");
   assert.ok(!/setInterval/.test(timerWidget), "no interval of its own");
   assert.ok(/nextTimerTickDelayMs/.test(timerWidget), "its next wake-up comes from the shared rule");
@@ -181,7 +182,10 @@ test("a running timer is visible on the Clock line even with the panel closed", 
 });
 
 test("the panel is compact: chips instead of five full presets, and the note is a chip", () => {
-  const timer = SRC.slice(SRC.indexOf('id: "timer"'), SRC.indexOf('id: "timer"') + 12000);
+  // Slice to the widget's own bounds, never a fixed width: a fixed window silently stops covering the end of the
+  // widget as soon as anything above it grows (the OW-54 lesson).
+  const timerStart = SRC.indexOf('id: "timer"');
+  const timer = SRC.slice(timerStart, SRC.indexOf('id: "status"', timerStart));
   assert.match(timer, /CHIP_TEXT = \["1m", "5m", "10m", "30m", "1h"\]/, "the presets are short chips");
   assert.match(timer, /noteRow\.hidden = true/, "the note row ships hidden");
   assert.match(timer, /noteChip\.addEventListener\("click"/, "and is revealed by its own chip");

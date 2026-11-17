@@ -1159,3 +1159,27 @@ junk positions, name-only entries, unique ids, the cycle and wrap, migration,
 JSON round-trip, the per-place cache key, the click ownership, the CSS
 affordance and the pref's schema/page entry; the live case mounts the real
 host, clicks the real card and asserts one fetch for the new place.
+
+`OW-56` DONE (3.3.284) — the clock and the stopwatch are one card.
+`WIDGET_MODES`/`cleanWidgetMode`/`nextWidgetMode` decide the face; a click on
+the Clock card turns it over and writes `CLOCK_MODE`, while a long press and a
+right click still reach the panel. A person who turned
+`TIMER_CLICK_STOPWATCH` off keeps the setting as the only way to change it.
+The second face is drawn on the clock card (`data-zw-clock-face`) off the same
+`timerState`, so nothing is duplicated.
+A countdown that ends now answers two independent settings through one pure
+`timerEndPlan`: `TIMER_END_SOUND` (none / beep / chime — chime is the WebAudio
+two-note path the reminder alert already uses, beep the fallback) and
+`TIMER_END_NOTICE` (none / toast on the tray / a system notification through
+`Services.alerts`). One end, one alert (`alreadyRung`), the same rule H1.5
+applies to reminders. A finished countdown also paints the clock numbers with
+`--zw-clock-alert` (fallback `#ff2d2d`) plus a glow, and the mark survives clock
+mode until the card is clicked — `clockAlertState` is the pure rule, the flag
+lives in the window and is never written to prefs. `tests/widgets-timer.test.cjs`
+slices now end at the widget's own bound (`id: "status"`), not at a fixed 9000
+or 12000 chars — the OW-54 lesson, caught here by a real failure.
+Tests: `tests/widgets-clock-timer.test.cjs` (9 cases + 1 live) — the two faces,
+the click-off rule, one alert per end, both choices, the red state and its
+token, the three settings in schema and Sine's page, "nothing stored", the
+toast, the chime fallback; the live case mounts the real host and flips the
+real card twice, asserting the pref and the face both follow.

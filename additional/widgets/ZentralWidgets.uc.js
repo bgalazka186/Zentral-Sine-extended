@@ -53,6 +53,10 @@
     TIMER_ENABLED: "zen.workspace.zentral.widgets.timer.enabled",
     TIMER_CLICK_STOPWATCH: "zen.workspace.zentral.widgets.timer.click_stopwatch",
     TIMER_QUICK_NOTE: "zen.workspace.zentral.widgets.quick_note.enabled",
+    // OW-56: one Clock card, two faces; and what a finished countdown does.
+    CLOCK_MODE: "zen.workspace.zentral.widgets.clock.mode",
+    TIMER_END_SOUND: "zen.workspace.zentral.widgets.timer.end_sound",
+    TIMER_END_NOTICE: "zen.workspace.zentral.widgets.timer.end_notice",
     STATUS_ENABLED: "zen.workspace.zentral.widgets.status.enabled",
     STATUS_SHOW_BATTERY: "zen.workspace.zentral.widgets.status.show_battery",
     STATUS_SHOW_MEMORY: "zen.workspace.zentral.widgets.status.show_memory",
@@ -84,6 +88,9 @@
     TIMER_ENABLED: true,
     TIMER_CLICK_STOPWATCH: true,
     TIMER_QUICK_NOTE: true,
+    CLOCK_MODE: "clock",
+    TIMER_END_SOUND: "beep",
+    TIMER_END_NOTICE: "none",
     STATUS_ENABLED: false,
     STATUS_SHOW_BATTERY: true,
     STATUS_SHOW_MEMORY: true,
@@ -293,11 +300,14 @@
       setClockTextIfChanged(elements.zoneEl, value.zoneLabel || "");
       setClockHiddenIfChanged(elements.zoneEl, !value.zoneLabel);
       setClockAttributeIfChanged(elements.wrap, "data-zw-clock-key", minuteKey);
+      // OW-56: the card labels itself for whichever face is up; the clock's own text only wins while the clock is up.
+    if (elements.wrap?.getAttribute?.("data-zw-clock-face") !== "timer") {
       setClockAttributeIfChanged(
         elements.wrap,
         "aria-label",
         value.accessibleText || value.time || "Clock",
       );
+    }
     }
     setClockTextIfChanged(
       elements.secEl,
@@ -1602,6 +1612,58 @@
     return { action: "open", open: true };
   }
 
+  // OW-56: one card with two faces. The mode is a setting (`clock` | `timer`), and a click on the card turns it over.
+  // A person who turned the Clock click off keeps the setting as the only way to change it (the click answers
+  // "none"), which is the promise TIMER_CLICK_STOPWATCH always made.
+  const WIDGET_MODES = Object.freeze(["clock", "timer"]);
+  function cleanWidgetMode(raw) {
+    const mode = String(raw ?? "").trim().toLowerCase();
+    return WIDGET_MODES.includes(mode) ? mode : "clock";
+  }
+  // `event`: "click" (the card is turned over), or anything else (a setting change) which never flips it.
+  function nextWidgetMode(mode, event, opts = {}) {
+    const current = cleanWidgetMode(mode);
+    if (event !== "click") return current;
+    if (opts.clickEnabled === false) return current;
+    return current === "clock" ? "timer" : "clock";
+  }
+
+  // OW-56: what a finished countdown does. Two independent choices, one alert per end:
+  //   sound:  none | beep (the platform beep) | chime (a short two-note tone through WebAudio, the reminder path)
+  //   notice: none | toast (a line in the window) | system (Services.alerts, when the platform has it)
+  const TIMER_END_SOUNDS = Object.freeze(["none", "beep", "chime"]);
+  const TIMER_END_NOTICES = Object.freeze(["none", "toast", "system"]);
+  function cleanTimerEndSound(raw) {
+    const v = String(raw ?? "").trim().toLowerCase();
+    return TIMER_END_SOUNDS.includes(v) ? v : "beep";
+  }
+  function cleanTimerEndNotice(raw) {
+    const v = String(raw ?? "").trim().toLowerCase();
+    return TIMER_END_NOTICES.includes(v) ? v : "none";
+  }
+  // Every question a finished countdown asks, answered once: what to play, what to show, and whether the clock turns
+  // red. `alreadyRung` is the guard that makes a second tick (or a second window event) silent, the same rule H1.5
+  // applies to reminders: one end, one alert.
+  function timerEndPlan(opts = {}) {
+    const sound = cleanTimerEndSound(opts.sound);
+    const notice = cleanTimerEndNotice(opts.notice);
+    const alreadyRung = Boolean(opts.alreadyRung);
+    return {
+      sound: alreadyRung ? "none" : sound,
+      notice: alreadyRung ? "none" : notice,
+      markClock: !alreadyRung,
+      text: String(opts.text ?? "").trim() || "Time is up",
+    };
+  }
+
+  // OW-56: the clock's face while a countdown has ended and nobody has looked at it yet. The state is a flag on the
+  // card (per window, per run): a finished countdown is a moment, not a setting, so nothing is stored.
+  function clockAlertState(state = {}, opts = {}) {
+    const ringing = Boolean(state.ringing);
+    if (opts.clicked) return { ringing: false, tone: "none" };
+    return { ringing, tone: ringing ? "alert" : "none" };
+  }
+
   // What the panel's own buttons are, in the order they are drawn. Deliberately few: one primary button, a lap button
   // that exists only while the stopwatch runs, and a reset that is disabled when there is nothing to reset.
   function clockPanelControls(state = {}, opts = {}) {
@@ -2184,6 +2246,15 @@
     nextStatusDelayMs,
     resolveClockClick,
     resolveClockPanelState,
+    WIDGET_MODES,
+    cleanWidgetMode,
+    nextWidgetMode,
+    TIMER_END_SOUNDS,
+    TIMER_END_NOTICES,
+    cleanTimerEndSound,
+    cleanTimerEndNotice,
+    timerEndPlan,
+    clockAlertState,
     clockPanelControls,
     clockBadge,
     quickTimerFromText,
@@ -2812,6 +2883,12 @@
 
       // ---- Built-in widgets: Clock & Date (T3.9b) ----
 
+      // OW-56: the Clock card's own painter, registered by the clock widget so the timer can repaint the face it owns.
+      let clockFacePainter = null;
+      // The ended-countdown flag lives here (per window, per run): the clock reads it, the timer sets it, a click clears
+      // it. Nothing is written to prefs — a finished countdown is a moment, not a setting.
+      const clockAlert = { ringing: false };
+
       function readClockOpts() {
         return {
           format: cleanClockFormat(
@@ -2879,6 +2956,7 @@
           WIDGET_PREFS.CLOCK_FORMAT,
           WIDGET_PREFS.CLOCK_SHOW_SECONDS,
           WIDGET_PREFS.CLOCK_SHOW_ZONE,
+          WIDGET_PREFS.CLOCK_MODE,
         ],
         resolveIntervalMs: () =>
           getBool(WIDGET_PREFS.CLOCK_SHOW_SECONDS, false) ? 1000 : 60000,
@@ -2910,9 +2988,27 @@
           clockBadgeElement = badgeEl;
           let staticRenderKey = "";
 
+          // OW-56: the second face. It is not a second widget: the same numbers, the same state (timerState), drawn
+          // on the card the owner already watches. A click turns the card over; the setting says which face it rests on.
+          const timerFace = doc.createElement("div");
+          timerFace.className = "zw-clock-timer-face";
+          timerFace.hidden = true;
+          const timerValueEl = doc.createElement("span");
+          timerValueEl.className = "zw-clock-timer-value";
+          const timerKindEl = doc.createElement("span");
+          timerKindEl.className = "zw-clock-timer-kind";
+          timerFace.appendChild(timerValueEl);
+          timerFace.appendChild(timerKindEl);
+
+          const modeHintEl = doc.createElement("div");
+          modeHintEl.className = "zw-card-meta zw-clock-mode-hint";
+          modeHintEl.hidden = true;
+
           wrap.appendChild(main);
           wrap.appendChild(badgeEl);
           wrap.appendChild(zoneEl);
+          wrap.appendChild(timerFace);
+          wrap.appendChild(modeHintEl);
 
           // T3.9d: the Clock is also a shortcut. A plain click starts/stops the stopwatch, a long press (or a
           // right click) asks for "in X", and a click while a quick timer runs stops it. The rule itself lives in
@@ -2944,24 +3040,70 @@
             const kind = clockClickKind({ shiftKey: true });
             if (kind.action !== "none") clockClick(kind.action);
           });
-          wrap.addEventListener("click", (e) => {
-            if (longPressFired) { longPressFired = false; return; }
-            if (e && ((e.button != null && e.button !== 0) || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey)) return;
-            // OW-49: the click reveals the one small panel; a running countdown is stopped by the same click.
-            const mountedTimer = mountedCards.get("timer");
-            const open = Boolean(mountedTimer && (mountedTimer.instance?.element?.dataset?.zwOpen === "true"));
-            const decision = resolveClockPanelState({ open, timerRunning: Boolean(timerState.timer?.running) });
-            if (!getBool(WIDGET_PREFS.TIMER_CLICK_STOPWATCH, DEFAULTS.TIMER_CLICK_STOPWATCH)) return;
-            e.preventDefault();
-            e.stopPropagation();
-            if (decision.action === "stop-timer") { clockClick("timer-stop"); return; }
-            if (decision.action === "close") { clockClick("close-panel"); return; }
-            clockClick("open");
-            clockPanel()?.dataset && (clockPanel().dataset.zwOpen = "true");
-          });
+          // OW-56: one click, one meaning. It turns the card over (the owner's request), and it is also the answer to
+          // a finished countdown: the red numbers go back to their colour. The panel is still reachable — from the
+          // timer face's own hint line and from a long press — but it no longer swallows the click.
+          const flipFace = () => {
+            const clickEnabled = getBool(WIDGET_PREFS.TIMER_CLICK_STOPWATCH, DEFAULTS.TIMER_CLICK_STOPWATCH);
+            const next = nextWidgetMode(readMode(), "click", { clickEnabled });
+            const acknowledged = clockAlert.ringing;
+            if (acknowledged) clockAlert.ringing = false;
+            if (next !== readMode()) writeStringPref(WIDGET_PREFS.CLOCK_MODE, next);
+            paintFace();
+            if (timerState.timer?.running || timerState.stopwatch?.running) paintTimerCard(() => mountedCards.get("timer")?.instance?.render?.());
+            return { next, acknowledged };
+          };
+
+          // OW-56: which face is up, and the alert that a countdown ended while nobody was looking. `alert` is the
+          // flag; it is cleared by a click, never by time.
+          const faceState = { mode: "clock" };
+          const readMode = () => cleanWidgetMode(getString(WIDGET_PREFS.CLOCK_MODE, DEFAULTS.CLOCK_MODE));
+          const paintFace = () => {
+            const mode = readMode();
+            const alert = clockAlertState({ ringing: clockAlert.ringing }, {});
+            const timerFaceUp = mode === "timer";
+            main.hidden = timerFaceUp;
+            zoneEl.hidden = timerFaceUp || !getBool(WIDGET_PREFS.CLOCK_SHOW_ZONE, false);
+            timerFace.hidden = !timerFaceUp;
+            wrap.setAttribute("data-zw-clock-face", mode);
+            wrap.setAttribute("data-zw-clock-alert", alert.ringing ? "true" : "false");
+            if (timerFaceUp) {
+              const t = timerState.timer;
+              const sw = timerState.stopwatch;
+              const nowMs = Date.now();
+              if (t && t.running) {
+                timerValueEl.textContent = formatDuration(timerRemaining(t, nowMs));
+                timerKindEl.textContent = "countdown";
+              } else if (t && t.durationMs) {
+                timerValueEl.textContent = formatDuration(t.remainingMs);
+                timerKindEl.textContent = "paused";
+              } else {
+                timerValueEl.textContent = formatDuration(stopwatchElapsed(sw, nowMs));
+                timerKindEl.textContent = sw.running ? "stopwatch" : "stopwatch, stopped";
+              }
+              wrap.setAttribute("aria-label", "Timer " + timerValueEl.textContent + (timerKindEl.textContent ? ", " + timerKindEl.textContent : "") + ". Click for the clock.");
+            } else {
+              wrap.setAttribute("aria-label", (alert.ringing ? "Countdown finished. " : "") + "Clock. Click for the timer.");
+            }
+            modeHintEl.hidden = true;
+          };
+          faceState.paint = paintFace;
+          // The timer card (a separate widget) moves the state; the clock face has to follow it without a timer of
+          // its own. One hook, one call site.
+          clockFacePainter = paintFace;
 
           return {
             element: wrap,
+            onMountCard(card) {
+              // The card, not only its body: a click anywhere on the Clock card turns it over.
+              if (!card || typeof card.addEventListener !== "function") return;
+              card.addEventListener("click", (e) => {
+                if (longPressFired) return; // a long press asked for a duration; that is not a flip
+                if (e && ((e.button != null && e.button !== 0) || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey)) return;
+                if (e && typeof e.stopPropagation === "function") e.stopPropagation();
+                flipFace();
+              });
+            },
             fetch({ now }) {
               return formatClockParts(now, readClockOpts());
             },
@@ -2978,6 +3120,8 @@
                 value,
                 staticRenderKey,
               );
+              // OW-56: the face is drawn after the clock's own text, so the two never fight over the same elements.
+              paintFace();
             },
           };
         },
@@ -3376,6 +3520,15 @@
       // numbers are the truth. The first entry also mirrors into the three single prefs, so someone who edits those
       // by hand still sees what they edited.
       let placeLookupToken = 0;
+      // OW-56: the face is a setting, so it is written the one way this file writes settings.
+      function writeStringPref(pref, value) {
+        try {
+          Services.prefs.setStringPref(pref, String(value));
+          return true;
+        } catch (_) {
+          return false;
+        }
+      }
       function writeWeatherPlaces(list) {
         try {
           Services.prefs.setStringPref(WIDGET_PREFS.WEATHER_PLACES, serializeWeatherPlaces(list));
@@ -3454,6 +3607,89 @@
       // Ids revealed by a Clock click even though their own pref is off: a glance, not a setting.
       const transientCards = new Set();
       const clockClickState = { timer: null };
+
+      // OW-56: the two halves of "a countdown that ends". Both are best-effort and silent on a platform that has
+      // neither; a missing alert must never make the timer fail to end.
+      let timerSoundCtx = null;
+      function playTimerEndSound(kind) {
+        const sound = cleanTimerEndSound(kind);
+        if (sound === "none") return;
+        if (sound === "beep") {
+          try { Services.sound.beep(); } catch (_) {}
+          return;
+        }
+        // A short two-note tone: the same WebAudio path the reminder alert uses, so it is louder than a beep but
+        // still one gesture long. A platform without WebAudio falls back to the beep.
+        try {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          if (!Ctx) throw new Error("no audio");
+          const ctx = timerSoundCtx || (timerSoundCtx = new Ctx());
+          if (ctx.state === "suspended") ctx.resume?.().catch?.(() => {});
+          for (const [at, hz] of [[0, 880], [0.22, 1174]]) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.frequency.value = hz;
+            gain.gain.setValueAtTime(0.0001, ctx.currentTime + at);
+            gain.gain.exponentialRampToValueAtTime(0.22, ctx.currentTime + at + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + at + 0.2);
+            osc.connect(gain).connect(ctx.destination);
+            osc.start(ctx.currentTime + at);
+            osc.stop(ctx.currentTime + at + 0.22);
+          }
+        } catch (_) {
+          try { Services.sound.beep(); } catch (err) {}
+        }
+      }
+      function timerNoticeText() {
+        const t = timerState.timer;
+        const minutes = t && t.durationMs ? Math.round(t.durationMs / 60000) : 0;
+        return minutes >= 1 ? `Countdown finished (${minutes} min)` : "Countdown finished";
+      }
+      function showTimerEndNotice(kind, text) {
+        const notice = cleanTimerEndNotice(kind);
+        if (notice === "none") return;
+        if (notice === "system") {
+          // The platform's own alert: outside the window, so it is seen while Zen is in the background.
+          try {
+            const alerts = Services.alerts;
+            if (alerts && typeof alerts.showAlertNotification === "function") {
+              alerts.showAlertNotification(null, "Timer", text, false, "", null, null, null, null, null, null);
+              return;
+            }
+            if (typeof window.Notification === "function") {
+              new window.Notification("Timer", { body: text });
+              return;
+            }
+          } catch (_) {}
+        }
+        showWidgetToast(text);
+      }
+      // A line in the window, on the widget tray, that leaves by itself. No pref, no timer of its own: one
+      // setTimeout that a second end replaces.
+      let widgetToastEl = null;
+      let widgetToastTimer = null;
+      function showWidgetToast(text) {
+        try {
+          const doc = window.document;
+          const host = tray || doc?.getElementById?.(TRAY_ID) || doc?.body;
+          if (!doc || !host || typeof doc.createElement !== "function") return;
+          if (!widgetToastEl || !widgetToastEl.isConnected) {
+            widgetToastEl = doc.createElement("div");
+            widgetToastEl.className = "zw-toast";
+            widgetToastEl.setAttribute("role", "status");
+            host.appendChild(widgetToastEl);
+          }
+          widgetToastEl.textContent = String(text || "");
+          widgetToastEl.hidden = false;
+          if (widgetToastTimer !== null && typeof window.clearTimeout === "function") window.clearTimeout(widgetToastTimer);
+          widgetToastTimer = null;
+          if (typeof window.setTimeout !== "function") return;
+          widgetToastTimer = window.setTimeout(() => {
+            widgetToastTimer = null;
+            if (widgetToastEl) widgetToastEl.hidden = true;
+          }, 5000);
+        } catch (_) {}
+      }
       function paintTimerCard(paint) {
         if (typeof paint === "function") {
           try { paint(); } catch (err) { console.warn("[ZentralWidgets] timer paint failed:", err); }
@@ -3627,6 +3863,8 @@
               if (badge.text) clockBadgeElement.title = badge.kind === "countdown" ? "Countdown running" : "Stopwatch running";
             }
             wrap.setAttribute("aria-label", "Timer " + formatDuration(value) + (modeEl.textContent ? ", " + modeEl.textContent : ""));
+            // OW-56: the Clock card may be showing this timer's face; it follows the same state.
+            clockFacePainter?.();
             // One wake-up at a time, and only while something moves.
             clearTick();
             const moving = usingTimer ? t.running : sw.running;
@@ -3643,12 +3881,25 @@
           };
           repaint = draw;
 
+          // OW-56: a countdown that ends says so through the two settings, once, and marks the Clock card so the end
+          // cannot pass unseen while the card is on its clock face.
           const ringTimer = () => {
+            const plan = timerEndPlan({
+              sound: getString(WIDGET_PREFS.TIMER_END_SOUND, DEFAULTS.TIMER_END_SOUND),
+              notice: getString(WIDGET_PREFS.TIMER_END_NOTICE, DEFAULTS.TIMER_END_NOTICE),
+              alreadyRung: clockAlert.ringing,
+              text: timerNoticeText(),
+            });
             wrap.setAttribute("data-zw-rang", "true");
             if (typeof window.setTimeout === "function") {
               window.setTimeout(() => wrap.removeAttribute("data-zw-rang"), 4000);
             }
-            try { Services.sound.beep(); } catch (_) {}
+            playTimerEndSound(plan.sound);
+            showTimerEndNotice(plan.notice, plan.text);
+            if (plan.markClock) {
+              clockAlert.ringing = true;
+              paintTimerCard(() => clockFacePainter?.());
+            }
           };
 
           const startStop = () => {

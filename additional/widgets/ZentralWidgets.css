@@ -422,6 +422,23 @@
   outline-offset: 2px !important;
 }
 
+/* OW-56: the line that says a countdown ended. It sits at the foot of the tray, leaves by itself, and never
+   pushes the cards around (it is the last child of the tray, in normal flow). */
+#zentral-sidebar-widgets .zw-toast {
+  flex: 0 0 auto !important;
+  margin-top: 4px !important;
+  padding: 4px 6px !important;
+  border-inline-start: 2px solid var(--zw-clock-alert, #ff2d2d) !important;
+  font-size: 11px !important;
+  line-height: 1.25 !important;
+  opacity: 0.9 !important;
+  overflow-wrap: anywhere !important;
+}
+
+#zentral-sidebar-widgets .zw-toast[hidden] {
+  display: none !important;
+}
+
 /* ---- Built-in Clock widget (T3.9b) ---- */
 
 #zentral-sidebar-widgets .zw-clock {
@@ -447,6 +464,46 @@
   font-weight: 700 !important;
   letter-spacing: -0.025em !important;
   white-space: nowrap !important;
+}
+
+/* OW-56: one Clock card, two faces. The clock face is hidden while the timer face is up and the other way round;
+   the timer face is drawn in the clock's own type so flipping does not change the shape of the card. */
+#zentral-sidebar-widgets .zw-clock[data-zw-clock-face="timer"] .zw-clock-time,
+#zentral-sidebar-widgets .zw-clock[data-zw-clock-face="timer"] .zw-clock-main {
+  display: none !important;
+}
+
+#zentral-sidebar-widgets .zw-clock-timer-face {
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 6px !important;
+  min-width: 0 !important;
+}
+
+#zentral-sidebar-widgets .zw-clock-timer-value {
+  font-size: 28px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.025em !important;
+  font-variant-numeric: tabular-nums !important;
+  white-space: nowrap !important;
+}
+
+#zentral-sidebar-widgets .zw-clock-timer-kind {
+  font-size: 10px !important;
+  opacity: 0.62 !important;
+}
+
+/* OW-56: a countdown that ended while the clock was up. Bright red until the card is clicked, on the numbers
+   themselves; the colour is a token so a theme can answer it (`--zw-clock-alert`). */
+#zentral-sidebar-widgets .zw-clock[data-zw-clock-alert="true"] .zw-clock-time,
+#zentral-sidebar-widgets .zw-clock[data-zw-clock-alert="true"] .zw-clock-seconds,
+#zentral-sidebar-widgets .zw-clock[data-zw-clock-alert="true"] .zw-clock-meridiem,
+#zentral-sidebar-widgets .zw-clock[data-zw-clock-alert="true"] .zw-clock-timer-value {
+  color: var(--zw-clock-alert, #ff2d2d) !important;
+}
+
+#zentral-sidebar-widgets .zw-clock[data-zw-clock-alert="true"] .zw-clock-time {
+  text-shadow: 0 0 12px var(--zw-clock-alert, #ff2d2d) !important;
 }
 
 #zentral-sidebar-widgets .zw-clock-seconds {
