@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Logger
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.261
+// @version 3.3.262
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.261, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.262, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.261";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.262";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1470,6 +1470,21 @@ function nativeSidebarSide() {
           },
         };
 
+        // A seam for the suites: the classification, the ring buffer and the redaction are the parts a test can own
+        // without a live console.
+        if (window.__zentralLoggerTestSeam) {
+          Object.assign(window.__zentralLoggerTestSeam, {
+            MAX_ENTRIES,
+            ringBuffer,
+            record,
+            redactSensitive,
+            classifyModuleFromTag,
+            isModuleEnabled,
+            generateLogString,
+            clear: () => ZentralLogger.clear(),
+            entries: () => ZentralLogger.entries,
+          });
+        }
         window.ZentralLogger = ZentralLogger;
         window.ZenzeiLogger = ZentralLogger; // Backward compatibility alias
         window.ZenTabPeekLogger = ZentralLogger; // Backward compatibility alias

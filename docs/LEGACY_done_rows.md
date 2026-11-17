@@ -30,6 +30,33 @@
 >    - `S6 B5 / B2` (Card right-edge clipping & layout) — resolved and verified in commit `9c5f67c35a791fe08bebb6c7c8cae7376c571836`.
 >    - `Cycle G #5` (armed toolbar buttons), `Cycle H #6b` (stable folder uid), `S6 W2` (folder colour / emoji) and `S6 W1` (coloured note favicons) — done in the chunk after 3.2.0; details in the handoff. Not tried in a real Zen: see the handoff.
 
+- `OW-38` DONE (3.3.262) — The audit is finished: every Zentral feature outside Notes now has a behavioural suite that
+  runs in the plain Node suite. The five last parts:
+  * Compact sidebar hover (`tests/compact-hover.test.cjs`, 7 tests) — the window-entry reveal is now a set of plain
+    functions instead of inline comparisons: a pointer must arrive at the window's own side edge, away from the
+    corners, level with the sidebar, and a fast return is forgiven only after an exit on the same side; the three
+    tunables (edge margin 0–64, exit grace 0–2000, native keep-hover 0–2000) are clamped in one place, and a test
+    proves the live handlers call those rules rather than keeping a second copy.
+  * Background tab dragging (`tests/tab-drag-background.test.cjs`, 8 tests) — the real `attach()` is wired to a fake
+    tab strip: a press on a background tab is silent until it becomes a drag, a click still selects, the drag payload
+    is the pressed tab and not the active one, a multiselection keeps its members without dragging the active tab
+    along, a sleeping source tab is not captured but the caller still gets a resolving promise, control presses and
+    modified presses stay native, the pref switch returns native behaviour, and teardown restores every wrapped
+    member and removes the listeners.
+  * Load at Startup (`tests/startup-load.test.cjs`, 7 tests) — only chosen pinned/essential tabs are woken, an
+    ordinary tab marked at startup is ignored, empty and add-on-host tabs are never woken, a wake happens once per
+    tab, a running page is left alone, the context-menu choice is stored explicitly through SessionStore and applies
+    at the next startup, the off switch stops the scan, and teardown removes the menu item and the handle.
+  * Diagnostics Logger (`tests/diagnostics-logger.test.cjs`, 9 tests) — nothing is collected while logging is off; a
+    line keeps its level, tag and message with the redundant tag stripped; consecutive repeats are compressed into
+    one line with a count; a module switch silences only its module; tags classify into the modules an export
+    filters by; the 8 000-entry ring buffer drops the oldest line; and a shared export carries no account name,
+    address-bar query, e-mail, path user name or token, with `raw: true` the only way past redaction.
+  * Video Preview (`tests/video-preview-rules.test.cjs`, 7 tests) — the capture rates and their intervals, the human
+    sentence each rate carries, the fixed renderer order, blocked-source exclusion, an explicit renderer being
+    honoured, the power-saving cadence, and that every pref read is declared in settings.
+  Reaching these required two small production seams (`window.__zentralCompactHoverTestSeam`,
+  `window.__zentralLoggerTestSeam`) and one refactor that removed duplicated hit-tests from the hover module.
 - `T1.4` (safe HTML paste to Markdown), `T1.5` (foreign YAML front matter and tags / aliases pills), `T1.6` (interactive `[!bingo]` / `[!poll]`), and `T1.7` (aligned display-math environments) — done and covered by focused Notes tests.
 - `T1.8` (physical and floating Table of Contents), `T1.9` (docked live Outline panel, now an option in the ToC menu), `T1.10` (extended wiki-links), `T1.11` (reciprocal section links), `T1.12` (wiki autocomplete, backlinks and unlinked mentions), and `T1.3` (inline footnotes `^[text]`) — done and covered by focused Notes tests.
 - `T1.1` (lazy continuation and fenced code inside list items / quotes) and `T1.2` (minor Markdown fixes: double-backtick code, `~sub~` / `^sup^`, readable-text rule; the readable-text rule already holds: tags, armed buttons and highlights use text-colour mixes) — done in 3.3.0, see the handoff.
