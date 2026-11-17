@@ -1275,10 +1275,14 @@
     if (!Number.isFinite(px) || !(px > 0)) return null;
     const step = cleanCalendarSnap(snapMin);
     const minMinute = Math.max(0, gridStartMin(grid));
-    const maxMinute = Math.max(minMinute, Math.min(1440 - step, gridEndMin(grid)));
+    const timeline = grid?.timeline || null;
+    const endCap = timeline ? Math.max(0, timeline.totalMinutes - step) : 1440 - step;
+    const maxMinute = Math.max(minMinute, Math.min(endCap, gridEndMin(grid)));
     const rawMinute = gridMinuteAt(offsetPx, px, grid);
     const snapped = Math.max(minMinute, Math.min(maxMinute, Math.round(rawMinute / step) * step));
-    const startMs = zonedDateTimeToMs(dateKey, clockOfMinutes(snapped), validZone);
+    const startMs = timeline
+      ? timelineMsAt(dateKey, snapped, timeline, validZone)
+      : zonedDateTimeToMs(dateKey, clockOfMinutes(snapped), validZone);
     if (!Number.isFinite(startMs)) return null;
     const resolvedDate = zonedDateKey(startMs, validZone);
     const startTime = clockIn(startMs, validZone);
@@ -1294,7 +1298,7 @@
       endDate: zonedDateKey(endMs, validZone),
       endTime: clockIn(endMs, validZone),
       tz: validZone,
-      minute: resolvedMin >= 0 ? resolvedMin : snapped,
+      minute: timeline ? snapped : (resolvedMin >= 0 ? resolvedMin : snapped),
     };
   }
 
@@ -3420,12 +3424,16 @@
   // for the draft), null where it was not widened.
   function visibleHourRange(settingRange, itemsInView, zone = "", opts = {}) {
     const set = cleanCalendarHours(settingRange);
-    if (!set.on) return { startMin: 0, endMin: 1440, extendedTop: false, extendedBottom: false, top: null, bottom: null };
+    const timeline = opts?.timeline || null;
+    const totalMin = Number.isFinite(timeline?.totalMinutes) && timeline.totalMinutes > 0 ? timeline.totalMinutes : 1440;
+    if (!set.on) return { startMin: 0, endMin: totalMin, extendedTop: false, extendedBottom: false, top: null, bottom: null };
+    const setStart = timeline ? timelineCivilToGridMin(timeline, set.startMin) : set.startMin;
+    const setEnd = timeline ? timelineCivilToGridMin(timeline, set.endMin) : set.endMin;
     let first = null, last = null;
     const take = (startMin, endMin, item, day) => {
       const a = Number(startMin), b = Number(endMin);
       if (!Number.isFinite(a) || !Number.isFinite(b)) return;
-      const lo = Math.max(0, Math.min(1440, a)), hi = Math.max(lo, Math.min(1440, b));
+      const lo = Math.max(0, Math.min(totalMin, a)), hi = Math.max(lo, Math.min(totalMin, b));
       if (!first || lo < first.startMin) first = { item, day, startMin: lo, endMin: hi };
       if (!last || hi > last.endMin) last = { item, day, startMin: lo, endMin: hi };
     };
@@ -3445,9 +3453,9 @@
       for (const e of layoutDay(spans, d.day, zone)) take(e.startMin, Math.max(e.endMin, e.startMin + 1), originals.get(e.item) || e.item, d.day);
     }
     if (opts?.draft) take(opts.draft.startMin, opts.draft.endMin, null, opts.draft.day);
-    const startMin = first ? Math.min(set.startMin, Math.floor(first.startMin / 60) * 60) : set.startMin;
-    const endMin = last ? Math.max(set.endMin, Math.ceil(last.endMin / 60) * 60) : set.endMin;
-    const extendedTop = startMin < set.startMin, extendedBottom = endMin > set.endMin;
+    const startMin = first ? Math.min(setStart, Math.floor(first.startMin / 60) * 60) : setStart;
+    const endMin = last ? Math.max(setEnd, Math.ceil(last.endMin / 60) * 60) : setEnd;
+    const extendedTop = startMin < setStart, extendedBottom = endMin > setEnd;
     return { startMin, endMin, extendedTop, extendedBottom, top: extendedTop ? first : null, bottom: extendedBottom ? last : null };
   }
   // A position in the grid <-> a minute of the day, for a grid that shows `range` ({ startMin, endMin }; none = the
@@ -3686,6 +3694,253 @@
   function clockIn(ms, zone) {
     const parts = zoneParts(ms, zone);
     return parts ? p2(parts.hour) + ":" + p2(parts.minute) : "--:--";
+  }
+  // ---- Real 23/24/25-hour DST time-grid model (T2.4c4) ------------------------------------------------
+  function shortZoneOffset(offsetMin) {
+    if (!Number.isFinite(offsetMin)) return "";
+    if (offsetMin === 0) return "UTC";
+    const sign = offsetMin > 0 ? "+" : "-";
+    const abs = Math.abs(Math.round(offsetMin));
+    const h = Math.floor(abs / 60), m = abs % 60;
+    return sign + h + (m ? ":" + p2(m) : "");
+  }
+  // Real elapsed hour slots for one civil day in `zone` (23 on spring-forward, 24 normal, 25 on fall-back).
+  function dayTimelineHours(dateKey, zone = "") {
+    const bounds = zonedDayBounds(dateKey, zone);
+    if (!bounds) return null;
+    const [d0, d1] = bounds;
+    const validZone = zone ? cleanZone(zone) : "";
+    const hours = [];
+    const seenCounts = new Map();
+    let t = d0;
+    let cursorMin = 0;
+    const HOUR_MS = 60 * MIN;
+    while (t < d1 && hours.length < 48) {
+      const off0 = zoneOffsetAt(validZone, t);
+      let stepMs = Math.min(HOUR_MS, d1 - t);
+      if (stepMs === HOUR_MS) {
+        const midOff = zoneOffsetAt(validZone, t + 30 * MIN);
+        if (midOff !== off0) stepMs = 30 * MIN;
+      }
+      const parts = zoneParts(t, validZone);
+      const hour = parts ? parts.hour : new Date(t).getHours();
+      const minute = parts ? parts.minute : new Date(t).getMinutes();
+      const key = hour * 60 + minute;
+      const count = (seenCounts.get(key) || 0) + 1;
+      seenCounts.set(key, count);
+      const durationMin = Math.round(stepMs / MIN);
+      hours.push({
+        index: hours.length,
+        startMs: t,
+        endMs: t + stepMs,
+        gridStartMin: cursorMin,
+        gridEndMin: cursorMin + durationMin,
+        durationMin,
+        hour,
+        minute,
+        clock: p2(hour) + ":" + p2(minute),
+        offsetMin: off0,
+        offsetText: zoneOffsetText(off0),
+        offsetShort: shortZoneOffset(off0),
+        repeated: 0,
+        transition: "",
+        skippedBefore: [],
+      });
+      t += stepMs;
+      cursorMin += durationMin;
+    }
+    const repeatedHours = [];
+    const presentHours = new Set();
+    for (const slot of hours) {
+      presentHours.add(slot.hour);
+      const key = slot.hour * 60 + slot.minute;
+      if ((seenCounts.get(key) || 0) > 1) {
+        const prior = hours.filter((s) => s.index < slot.index && s.hour === slot.hour && s.minute === slot.minute).length;
+        slot.repeated = prior + 1;
+        slot.transition = slot.repeated === 1 ? "fall-first" : "fall-second";
+        if (!repeatedHours.includes(slot.hour)) repeatedHours.push(slot.hour);
+      }
+    }
+    const skippedHours = [];
+    for (let h = 0; h < 24; h++) if (!presentHours.has(h)) skippedHours.push(h);
+    if (skippedHours.length) {
+      for (const slot of hours) {
+        const prevHour = slot.index > 0 ? hours[slot.index - 1].hour : -1;
+        const missing = skippedHours.filter((h) => h > prevHour && h < slot.hour);
+        if (missing.length) {
+          slot.transition = "spring-after";
+          slot.skippedBefore = missing;
+        }
+      }
+    }
+    const totalMinutes = cursorMin;
+    const kind = totalMinutes < 1440 ? "spring" : totalMinutes > 1440 ? "fall" : "normal";
+    return { dateKey, zone: validZone, startMs: d0, endMs: d1, totalMinutes, kind, hours, skippedHours, repeatedHours };
+  }
+  // Shared Y-axis row sequence across one day (Day view: 23/24/25 real rows) or multiple days (Week view:
+  // aligns identical civil hours across columns while giving repeated fall-back hours two real rows and marking
+  // skipped spring-forward hours on the transition column).
+  function buildGridTimeline(days = [], zone = "") {
+    const validZone = zone ? cleanZone(zone) : "";
+    const keys = (Array.isArray(days) ? days : [])
+      .map((d) => (typeof d === "string" ? d : localDateKey(d)))
+      .filter((k) => !!parseYmd(k));
+    const dayTimelines = new Map();
+    for (const key of keys) dayTimelines.set(key, dayTimelineHours(key, validZone));
+    const slots = [];
+    const skippedHours = [];
+    const repeatedHours = [];
+    let cursorMin = 0;
+    for (let h = 0; h < 24; h++) {
+      let maxPasses = 0;
+      let samplePasses = null;
+      for (const dt of dayTimelines.values()) {
+        if (!dt) continue;
+        const matches = dt.hours.filter((s) => s.hour === h && s.minute === 0);
+        if (matches.length > maxPasses) {
+          maxPasses = matches.length;
+          samplePasses = matches;
+        }
+      }
+      if (maxPasses === 0) {
+        skippedHours.push(h);
+        continue;
+      }
+      if (maxPasses === 1) {
+        const sample = samplePasses[0];
+        slots.push({
+          index: slots.length,
+          hour: h,
+          minute: 0,
+          pass: 0,
+          repeated: 0,
+          clock: p2(h) + ":00",
+          offsetMin: sample.offsetMin,
+          offsetText: sample.offsetText,
+          offsetShort: sample.offsetShort,
+          gridStartMin: cursorMin,
+          gridEndMin: cursorMin + 60,
+          durationMin: 60,
+          transition: "",
+          springBefore: [],
+        });
+        cursorMin += 60;
+      } else {
+        repeatedHours.push(h);
+        for (let p = 0; p < maxPasses; p++) {
+          const sample = samplePasses[p] || samplePasses[samplePasses.length - 1];
+          slots.push({
+            index: slots.length,
+            hour: h,
+            minute: 0,
+            pass: p + 1,
+            repeated: p + 1,
+            clock: p2(h) + ":00",
+            offsetMin: sample.offsetMin,
+            offsetText: sample.offsetText,
+            offsetShort: sample.offsetShort,
+            gridStartMin: cursorMin,
+            gridEndMin: cursorMin + 60,
+            durationMin: 60,
+            transition: p === 0 ? "fall-first" : "fall-second",
+            springBefore: [],
+          });
+          cursorMin += 60;
+        }
+      }
+    }
+    if (skippedHours.length) {
+      for (const slot of slots) {
+        const prevHour = slot.index > 0 ? slots[slot.index - 1].hour : -1;
+        const missing = skippedHours.filter((h) => h > prevHour && h < slot.hour);
+        if (missing.length) {
+          slot.transition = slot.transition || "spring-after";
+          slot.springBefore = missing;
+        }
+      }
+    }
+    const dayGaps = new Map();
+    for (const [key, dt] of dayTimelines) {
+      const gaps = [];
+      if (dt) {
+        for (const slot of slots) {
+          const dayMatches = dt.hours.filter((s) => s.hour === slot.hour);
+          if (!dayMatches.length) {
+            gaps.push({ kind: "skipped", gridStartMin: slot.gridStartMin, gridEndMin: slot.gridEndMin, hour: slot.hour, clock: slot.clock, label: `${slot.clock} skipped (DST)` });
+          } else if (slot.pass > 1 && dayMatches.length < slot.pass) {
+            gaps.push({ kind: "spacer", gridStartMin: slot.gridStartMin, gridEndMin: slot.gridEndMin, hour: slot.hour, clock: slot.clock, label: `Extra DST hour (${slot.clock} ${slot.offsetText})` });
+          }
+        }
+      }
+      dayGaps.set(key, gaps);
+    }
+    return { zone: validZone, days: keys, slots, totalMinutes: cursorMin || 1440, skippedHours, repeatedHours, dayTimelines, dayGaps };
+  }
+  function timelineMinuteOfMs(ms, dateKey, timeline, zone = "") {
+    if (!timeline || !Array.isArray(timeline.slots) || !timeline.slots.length) return zonedMinuteOfDay(ms, dateKey, zone);
+    const dt = timeline.dayTimelines?.get(dateKey) || dayTimelineHours(dateKey, zone);
+    if (!dt) return zonedMinuteOfDay(ms, dateKey, zone);
+    const t = Number(ms);
+    if (!Number.isFinite(t)) return NaN;
+    if (t <= dt.startMs) return 0;
+    if (t >= dt.endMs) return timeline.totalMinutes;
+    const daySlot = dt.hours.find((s) => t >= s.startMs && t < s.endMs) || dt.hours[dt.hours.length - 1];
+    if (!daySlot) return zonedMinuteOfDay(t, dateKey, zone);
+    const desiredPass = daySlot.repeated > 0 ? daySlot.repeated : 1;
+    const gridSlot = timeline.slots.find((s) => s.hour === daySlot.hour && (s.pass === 0 || s.pass === desiredPass))
+      || timeline.slots.find((s) => s.hour === daySlot.hour);
+    if (!gridSlot) return zonedMinuteOfDay(t, dateKey, zone);
+    const offsetInHour = (t - daySlot.startMs) / MIN + daySlot.minute;
+    return gridSlot.gridStartMin + Math.max(0, Math.min(gridSlot.durationMin, offsetInHour));
+  }
+  function timelineCivilToGridMin(timeline, civilMin) {
+    const m = Number(civilMin);
+    if (!Number.isFinite(m) || m <= 0) return 0;
+    if (!timeline || !Array.isArray(timeline.slots) || !timeline.slots.length) return Math.min(1440, m);
+    if (m >= 1440) return timeline.totalMinutes;
+    const h = Math.floor(m / 60), rem = m % 60;
+    const exact = timeline.slots.find((s) => s.hour === h);
+    if (exact) return exact.gridStartMin + rem;
+    const after = timeline.slots.find((s) => s.hour > h);
+    return after ? after.gridStartMin : timeline.totalMinutes;
+  }
+  function timelineToCivilMinute(timeline, gridMin) {
+    const g = Number(gridMin);
+    if (!Number.isFinite(g) || g <= 0) return 0;
+    if (!timeline || !Array.isArray(timeline.slots) || !timeline.slots.length) return Math.max(0, Math.min(1440, g));
+    if (g >= timeline.totalMinutes) return 1440;
+    const slot = timeline.slots.find((s) => g >= s.gridStartMin && g < s.gridEndMin) || timeline.slots[timeline.slots.length - 1];
+    return Math.min(1440, slot.hour * 60 + Math.max(0, Math.min(59.999, g - slot.gridStartMin)));
+  }
+  function timelineClockLabel(timeline, gridMin) {
+    const g = Number(gridMin);
+    if (!Number.isFinite(g) || g <= 0) return "00:00";
+    if (!timeline || !Array.isArray(timeline.slots) || !timeline.slots.length) {
+      const m = Math.floor(Math.min(1440, g));
+      return p2(Math.floor(m / 60)) + ":" + p2(m % 60);
+    }
+    if (g >= timeline.totalMinutes) return "24:00";
+    const slot = timeline.slots.find((s) => g >= s.gridStartMin && g < s.gridEndMin) || timeline.slots[timeline.slots.length - 1];
+    const rem = Math.max(0, Math.min(59, Math.floor(g - slot.gridStartMin)));
+    return p2(slot.hour) + ":" + p2(rem);
+  }
+  function timelineMsAt(dateKey, gridMin, timeline, zone = "") {
+    const dt = timeline?.dayTimelines?.get(dateKey) || dayTimelineHours(dateKey, zone);
+    if (!dt) return zonedDateTimeToMs(dateKey, clockOfMinutes(Math.max(0, Math.min(1439, Math.round(gridMin)))), zone);
+    const g = Number(gridMin);
+    if (!Number.isFinite(g)) return NaN;
+    if (g <= 0) return dt.startMs;
+    if (g >= timeline.totalMinutes) return dt.endMs;
+    const slot = timeline.slots.find((s) => g >= s.gridStartMin && g < s.gridEndMin);
+    if (!slot) return dt.endMs;
+    const rem = Math.max(0, g - slot.gridStartMin);
+    const matches = dt.hours.filter((s) => s.hour === slot.hour);
+    if (matches.length) {
+      const chosen = slot.pass > 1 ? (matches[slot.pass - 1] || matches[matches.length - 1]) : matches[0];
+      return chosen.startMs + Math.round(rem) * MIN;
+    }
+    const nextSlot = dt.hours.find((s) => s.hour > slot.hour);
+    return nextSlot ? nextSlot.startMs : dt.endMs;
   }
 
   // ---------- choosing a time zone (OW-23) ----------
@@ -5618,7 +5873,7 @@
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

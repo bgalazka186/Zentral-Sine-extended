@@ -76,7 +76,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
-|    10 | `T2.4c4`    | `PARTIAL` | Med-High            | M      | —                 | Time-zone and DST correctness in time grid                                                               |
 |    11 | `T2.5`      | `PARTIAL` | Med-High            | M      | —                 | Drag, resize and create items in the calendar                                                            |
 |    12 | `T2.9`      | `PARTIAL` | Med-High            | M      | none              | Daily-note lifecycle and archive policy inside Agenda                                                    |
 |    13 | `T1.19b`    | `OPEN`    | Med-High            | M      | —                 | Obsidian vault export                                                                                    |
@@ -136,14 +135,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 **Status:** `OPEN` · **Impact:** Med-High · **Effort:** M each · **Depends on:** none (b), then b to c · **Source:** split of T1.19 (`T1.19a` DONE in `docs/LEGACY_done_rows.md`)
 
 `b`: export a vault folder mapping YAML front matter, `[[Note#Heading|alias]]`, `![[embeds]]`, callouts, tags. `c`: import such a vault, with a re-import that does not duplicate notes.
-
-#### `T2.4c4` — Time-zone and DST correctness in time grid
-
-**Status:** `PARTIAL` · **Impact:** Med-High · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
-
-**Current state and what is LEFT:** DONE: display-zone selection and zoned day bounds. LEFT: real 23/25-hour timeline labels and ambiguous/skipped-hour rendering (a clock grid has one place for 02:30, so on the day the clocks go back an event that begins in the first pass of the repeated hour and ends in the second at an earlier clock time is drawn 20 px high). `T2.4c1` is closed; this row owns the rest of the grid. Earlier claims about repeated/skipped labels were incorrect.
-
-**Full specification (original row):** **PARTIAL.** Saved IANA display-zone selector drives Week/Day day columns, event clipping/positioning, grid labels, free-slot calculations and week export without changing stored UTC instants. Zoned day bounds handle 23-hour spring and 25-hour fall days; the UI currently draws 24 fixed wall-clock labels, so skipped/repeated hour display remains to be addressed; overnight and midnight-crossing events clip correctly; all-day items remain civil dates; recurring items retain their wall-clock time through DST. Core and view tests cover zone selection and cross-midnight behavior, but do not establish repeated/skipped labels in the UI. Live Firefox/Zen timezone UI verification remains manual.
 
 #### `T2.5` — Drag, resize and create items in the calendar
 

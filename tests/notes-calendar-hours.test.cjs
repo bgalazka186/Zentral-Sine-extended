@@ -452,10 +452,11 @@ const span = (r) => [r.startMin, r.endMin, r.extendedTop, r.extendedBottom];
     assert.equal(topOf("Late show"), 15 * PX, "and is drawn in the last one, not below the grid");
     assert.equal(hint().textContent, "Extended: until 23:30 Late show");
     assert.deepEqual(inTrack(trackOf(AUTUMN), "zn-cal-now-line").map(styleOf), [{ top: 13.25 * PX + "px" }], "21:15 is among the hours now: a line at 21:15");
-    await press(); // all 24 hours
-    assert.equal(topOf("Late show"), 23 * PX);
-    assert.equal(topOf("Dinner"), 19 * PX);
-    assert.deepEqual(root.querySelectorAll(".zn-cal-now-line").map(styleOf), [{ top: 21.25 * PX + "px" }]);
+    await press(); // T2.4c4: all 25 real hours on the autumn DST fall-back day (02:00 occurs twice)
+    assert.equal(labels().length, 25);
+    assert.equal(topOf("Late show"), 24 * PX);
+    assert.equal(topOf("Dinner"), 20 * PX);
+    assert.deepEqual(root.querySelectorAll(".zn-cal-now-line").map(styleOf), [{ top: 22.25 * PX + "px" }]);
   }, "warsaw");
 
   await test("off (the default): Week and Day are the whole day, as before; the toolbar button is there for them only", async () => {

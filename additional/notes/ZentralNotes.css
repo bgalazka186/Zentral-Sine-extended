@@ -2105,6 +2105,13 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-hours-extra.is-top { border-bottom: 1px dashed color-mix(in srgb, var(--zn-accent) 60%, transparent); }
 .zentral-notes-sheet .zn-cal-hours-extra.is-bottom { border-top: 1px dashed color-mix(in srgb, var(--zn-accent) 60%, transparent); }
 .zentral-notes-sheet .zn-cal-hour-label.is-extended { color: var(--zn-accent); font-style: italic; }
+.zentral-notes-sheet .zn-cal-hour-label.is-dst-repeated { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.05; }
+.zentral-notes-sheet .zn-cal-hour-dst-tag { font-size: .82em; opacity: .78; color: var(--zn-accent); }
+.zentral-notes-sheet .zn-cal-dst-gap { position: absolute; right: 0; left: 0; pointer-events: none; background: repeating-linear-gradient(135deg, transparent 0, transparent 5px, color-mix(in srgb, var(--zn-muted) 16%, transparent) 5px, color-mix(in srgb, var(--zn-muted) 16%, transparent) 10px); border-top: 1px dashed color-mix(in srgb, var(--zn-muted) 42%, transparent); border-bottom: 1px dashed color-mix(in srgb, var(--zn-muted) 42%, transparent); }
+.zentral-notes-sheet .zn-cal-dst-gap.is-spacer { opacity: .55; }
+.zentral-notes-sheet .zn-cal-dst-band { position: absolute; right: 0; left: 0; pointer-events: none; background: color-mix(in srgb, var(--zn-accent) 6%, transparent); }
+.zentral-notes-sheet .zn-cal-dst-band.is-repeated-2 { background: color-mix(in srgb, var(--zn-accent) 11%, transparent); border-top: 1px dashed color-mix(in srgb, var(--zn-accent) 55%, transparent); }
+.zentral-notes-sheet .zn-cal-dst-divider.is-spring { position: absolute; right: 0; left: 0; height: 0; border-top: 2px dashed color-mix(in srgb, var(--zn-accent) 70%, transparent); pointer-events: none; }
 .zentral-notes-sheet .zn-cal-hours-hint { flex: 0 0 auto; min-width: 0; overflow: hidden; padding: 2px 8px 2px 45px; border-bottom: 1px solid var(--zn-line); color: var(--zn-muted); font-size: .7em; text-overflow: ellipsis; white-space: nowrap; }
 /* The current time lies before / after the hours shown: no line, but a dotted mark on that edge of today's column
  * with a small arrow that points to where the time is (up = earlier, down = later). It has a tooltip, so it takes the

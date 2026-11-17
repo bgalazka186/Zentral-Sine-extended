@@ -15865,7 +15865,9 @@
         g.active = true;
         g.button.classList.add("is-dragging");
         const point = calendarDragPoint(g, event);
-        const placement = point && (g.create ? { date: point.day, minute: point.minute } : g.allDay ? { date: point.day } : g.edge ? CALENDAR_PART.calendarResizePlacement(g.before, g.edge, g.originDay, g.originMinute, point.day, point.minute, g.zone, g.snap) : CALENDAR_PART.calendarMovePlacement(g.before, g.originDay, g.originMinute, point.day, point.minute, g.zone, g.snap));
+        const originCivilMin = g.allDay ? 0 : CALENDAR_PART.timelineToCivilMinute(g.grid?.timeline, g.originMinute);
+        const targetCivilMin = !point || g.allDay ? 0 : CALENDAR_PART.timelineToCivilMinute(g.grid?.timeline, point.minute);
+        const placement = point && (g.create ? { date: point.day, minute: point.minute } : g.allDay ? { date: point.day } : g.edge ? CALENDAR_PART.calendarResizePlacement(g.before, g.edge, g.originDay, originCivilMin, point.day, targetCivilMin, g.zone, g.snap) : CALENDAR_PART.calendarMovePlacement(g.before, g.originDay, originCivilMin, point.day, targetCivilMin, g.zone, g.snap));
         g.placement = placement;
         if (!placement) { g.preview?.remove(); g.preview = null; return; }
         if (!g.preview) g.preview = h("div", { class: "zn-cal-drag-preview", "aria-hidden": "true" });
@@ -15885,7 +15887,7 @@
         releaseCalendarSuppressedClick(event);
         if (!placement) return;
         if (g.create) {
-          const range = CALENDAR_PART.calendarDraftRange(g.originDay, g.originMinute, placement.date, placement.minute, g.zone, g.snap);
+          const range = CALENDAR_PART.calendarDraftRange(g.originDay, CALENDAR_PART.timelineToCivilMinute(g.grid?.timeline, g.originMinute), placement.date, CALENDAR_PART.timelineToCivilMinute(g.grid?.timeline, placement.minute), g.zone, g.snap);
           if (!range) return flash("Select a valid non-empty calendar time range");
           queueMicrotask(() => { if (isOpen && !destroyed) askCalendarComposer({ date: range.startDate, startTime: range.startTime, endDate: range.endDate, endTime: range.endTime, tz: g.zone, kind: "event", linkCurrent: false }); });
           return;
@@ -16112,17 +16114,16 @@
         // day begins in the zone); in Day view that is every all-day reminder.
         const from = Math.min(firstBounds[0], firstDay), until = Math.max(lastBounds[1], C.addDays(lastDay, 1));
         const expanded = C.expandRange(items, from, until);
-        // OW-04, OW-03. Four steps, in this order: (1) the times of the timed items of every day that is drawn, (2) the
-        // hours of the grid from those times, (3) the height of an hour, (4) the lanes of each day inside those hours.
-        // (1) Minutes on the clock of the day, cut off at its ends. A reminder has no length: it counts as one minute,
-        // so that one at 20:00 sharp lies after a grid that ends at 20:00.
+        // OW-04, OW-03, T2.4c4. Build the real 23/24/25-hour DST timeline for the visible days first so
+        // repeated fall-back hours get distinct rows and skipped spring-forward hours are represented honestly.
+        const timeline = C.buildGridTimeline(days, zone);
         const timed = new Map();
         for (const day of workDays) {
           const dayKey = C.localDateKey(day), bounds = C.zonedDayBounds(dayKey, zone) || [day, C.addDays(day, 1)];
           const spans = C.itemsInRange(expanded, bounds[0], bounds[1]).filter((it) => !C.isAllDay(it)).map((item) => {
             const [start, end] = C.itemRange(item), reminder = C.isReminder(item);
-            const startMin = Math.round(C.zonedMinuteOfDay(Math.max(start, bounds[0]), dayKey, zone));
-            const endMin = reminder ? startMin : Math.round(C.zonedMinuteOfDay(Math.min(end, bounds[1]), dayKey, zone));
+            const startMin = Math.round(C.timelineMinuteOfMs(Math.max(start, bounds[0]), dayKey, timeline, zone));
+            const endMin = reminder ? startMin : Math.round(C.timelineMinuteOfMs(Math.min(end, bounds[1]), dayKey, timeline, zone));
             return { item, reminder, start: Math.max(start, bounds[0]), startMin, endMin };
           });
           timed.set(dayKey, { bounds, spans });
@@ -16132,12 +16133,15 @@
         // (2) The hours follow the times of the items, not the size of their boxes: a reminder at 19:50 lies inside
         // 08:00-20:00 although its box is 20px high.
         const hoursSet = C.cleanCalendarHours(store.meta.calendarHours);
-        const grid = C.visibleHourRange(hoursSet, days.map((day) => ({ day, entries: calendarGridEntries.get(C.localDateKey(day)) || [] })), zone);
+        const grid = C.visibleHourRange(hoursSet, days.map((day) => ({ day, entries: calendarGridEntries.get(C.localDateKey(day)) || [] })), zone, { timeline });
+        grid.timeline = timeline;
         // An update of single days keeps the other columns and the scroll element, so it is only possible while the
         // hours stay the ones that are drawn. Otherwise the caller draws the whole grid again.
         if (patch && (!calendarGridHours || calendarGridHours.startMin !== grid.startMin || calendarGridHours.endMin !== grid.endMin)) return false;
         const gridHours = (grid.endMin - grid.startMin) / 60;
-        const gridClock = (minute) => { const m = Math.floor(minute); return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
+        const gridClock = (minute) => C.timelineClockLabel(timeline, minute);
+        const setStartGridMin = C.timelineCivilToGridMin(timeline, hoursSet.startMin);
+        const setEndGridMin = C.timelineCivilToGridMin(timeline, hoursSet.endMin);
         const fmt = (day) => calendarDayLabel(day, { weekday: mode === "week" ? "short" : "long", year: true });
         calendarPeriod.textContent = mode === "week" && days.length > 1 ? `${fmt(days[0])} – ${fmt(days[days.length - 1])}` : fmt(days[0]);
         const cols = `42px repeat(${days.length}, minmax(0, 1fr))`;
@@ -16177,7 +16181,7 @@
           }
           allDayRow.append(cell);
         }
-        const scroll = h("div", { class: "zn-cal-time-scroll", tabindex: "0", "aria-label": hoursSet.on ? `Timeline ${gridClock(grid.startMin)} to ${gridClock(grid.endMin)}` : "24-hour timeline" });
+        const scroll = h("div", { class: "zn-cal-time-scroll", tabindex: "0", "aria-label": hoursSet.on ? `Timeline ${gridClock(grid.startMin)} to ${gridClock(grid.endMin)}` : `${gridHours}-hour timeline` });
         // Why the grid shows more than the chosen hours: one line above the timeline, only while it does.
         let hint = null;
         if (grid.extendedTop || grid.extendedBottom) {
@@ -16187,7 +16191,7 @@
             : [grid.top ? `${gridClock(grid.top.startMin)} ${name(grid.top)}` : "",
                grid.bottom ? `${C.isReminder(grid.bottom.item) ? gridClock(grid.bottom.startMin) : "until " + gridClock(grid.bottom.endMin)} ${name(grid.bottom)}` : ""].filter(Boolean);
           const text = "Extended: " + parts.join(" · ");
-          hint = h("div", { class: "zn-cal-hours-hint", role: "status", title: `${text}. Week and Day show ${gridClock(hoursSet.startMin)}–${gridClock(hoursSet.endMin)} and more hours while a day in view has something outside them.` }, text);
+          hint = h("div", { class: "zn-cal-hours-hint", role: "status", title: `${text}. Week and Day show ${gridClock(setStartGridMin)}–${gridClock(setEndGridMin)} and more hours while a day in view has something outside them.` }, text);
         }
         root.append(header, allDayRow, ...(hint ? [hint] : []), scroll);
         calendarContent.dataset.compact = "false";
@@ -16208,9 +16212,10 @@
         const hourPx = patch ? calendarGridHours.hourPx : size !== "auto" ? size : C.fitHourHeight(room, gridHours, { minPx: calendarMinHourPx() });
         if (!patch) {
           const firstMin = Math.min(...[...timed.values()].flatMap((data) => data.spans.map((span) => span.startMin)));
-          const nowMin = days.some((day) => C.localDateKey(day) === todayKey) ? C.zonedMinuteOfDay(nowMs(), todayKey, zone) : NaN;
-          const openMin = C.gridOpenMinute(grid, { nowMin, workStartMin: C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK).startMin, firstMin });
-          calendarGridHours = { startMin: grid.startMin, endMin: grid.endMin, hourPx, linesPx, fontPx: calendarFontPx(), fit: size === "auto", openMin };
+          const nowMin = days.some((day) => C.localDateKey(day) === todayKey) ? C.timelineMinuteOfMs(nowMs(), todayKey, timeline, zone) : NaN;
+          const workStartForOpen = C.timelineCivilToGridMin(timeline, C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK).startMin);
+          const openMin = C.gridOpenMinute(grid, { nowMin, workStartMin: workStartForOpen, firstMin });
+          calendarGridHours = { startMin: grid.startMin, endMin: grid.endMin, hourPx, linesPx, fontPx: calendarFontPx(), fit: size === "auto", openMin, timeline };
           calendarContent.style.setProperty("--zn-cal-hour-height", hourPx + "px");
           if (calendarFit) calendarFit.hourPx = hourPx;
           // The hours fit: the timeline has nothing to scroll and shows no scrollbar, also not for the one frame in
@@ -16240,10 +16245,23 @@
         // Only the gutter and the columns wrapper are direct children; the wrapper owns all day tracks.
         gridRow.style.gridTemplateColumns = "42px minmax(0, 1fr)";
         const hours = h("div", { class: "zn-cal-hour-gutter" });
-        for (let hour = grid.startMin / 60; hour < grid.endMin / 60; hour++) {
+        const visibleSlots = timeline.slots.filter((s) => s.gridStartMin >= grid.startMin && s.gridStartMin < grid.endMin);
+        for (const slot of visibleSlots) {
           // An hour outside the chosen ones: it is shown only because something in view lies in it.
-          const extra = hoursSet.on && (hour * 60 < hoursSet.startMin || hour * 60 >= hoursSet.endMin);
-          hours.append(h("span", { class: "zn-cal-hour-label" + (extra ? " is-extended" : "") }, String(hour).padStart(2, "0") + ":00"));
+          const extra = hoursSet.on && (slot.gridStartMin < setStartGridMin || slot.gridStartMin >= setEndGridMin);
+          const attrs = { class: "zn-cal-hour-label" + (extra ? " is-extended" : "") + (slot.repeated ? " is-dst-repeated" : "") };
+          if (slot.repeated) {
+            attrs["data-dst"] = "fall-" + slot.repeated;
+            attrs.title = `${slot.clock} (${slot.offsetText}, ${slot.repeated === 1 ? "first pass before DST change" : "second pass after DST change"})`;
+          } else if (slot.springBefore?.length) {
+            const skippedList = slot.springBefore.map((hr) => String(hr).padStart(2, "0") + ":00").join(", ");
+            attrs["data-dst"] = "spring";
+            attrs.title = `${skippedList} skipped (DST)`;
+          }
+          const labelEl = slot.repeated
+            ? h("span", attrs, slot.clock, h("span", { class: "zn-cal-hour-dst-tag" }, slot.offsetShort))
+            : h("span", attrs, slot.clock);
+          hours.append(labelEl);
         }
         gridRow.append(hours);
         const columns = h("div", { class: "zn-cal-time-columns" });
@@ -16261,12 +16279,31 @@
           for (let hour = 0; hour < gridHours; hour++) {
             track.append(h("span", { class: "zn-cal-time-hour-line", style: `top:${hour * hourPx}px` }));
           }
+          // T2.4c4: render skipped/spacer DST gaps, repeated fall-back bands and spring-forward jump dividers.
+          const gaps = timeline.dayGaps?.get(dayKey) || [];
+          const gapStartSet = new Set(gaps.map((gap) => gap.gridStartMin));
+          for (const gap of gaps) {
+            if (gap.gridEndMin <= grid.startMin || gap.gridStartMin >= grid.endMin) continue;
+            const top = Math.max(0, gridY(gap.gridStartMin));
+            const height = Math.max(1, (Math.min(grid.endMin, gap.gridEndMin) - Math.max(grid.startMin, gap.gridStartMin)) / 60 * hourPx);
+            track.append(h("span", { class: "zn-cal-dst-gap is-" + gap.kind, "data-dst-gap": gap.kind, "data-dst-clock": gap.clock, title: gap.label, style: `top:${top}px;height:${height}px`, "aria-hidden": "true" }));
+          }
+          for (const slot of visibleSlots) {
+            if (slot.repeated && !gapStartSet.has(slot.gridStartMin)) {
+              const top = Math.max(0, gridY(slot.gridStartMin));
+              track.append(h("span", { class: "zn-cal-dst-band is-repeated-" + slot.repeated, "data-dst-repeated": String(slot.repeated), title: `${slot.clock} (${slot.offsetText})`, style: `top:${top}px;height:${hourPx}px`, "aria-hidden": "true" }));
+            }
+            if (slot.springBefore?.length) {
+              const skippedList = slot.springBefore.map((hr) => String(hr).padStart(2, "0") + ":00").join(", ");
+              track.append(h("span", { class: "zn-cal-dst-divider is-spring", "data-dst-skipped": skippedList, title: `Clocks skip ${skippedList} → ${slot.clock} (DST)`, style: `top:${gridY(slot.gridStartMin)}px`, "aria-hidden": "true" }));
+            }
+          }
           // The part of the grid beyond the chosen hours, there because something in view lies in it.
-          if (grid.extendedTop) track.append(h("span", { class: "zn-cal-hours-extra is-top", style: `top:0;height:${gridY(hoursSet.startMin)}px`, "aria-hidden": "true" }));
-          if (grid.extendedBottom) track.append(h("span", { class: "zn-cal-hours-extra is-bottom", style: `top:${gridY(hoursSet.endMin)}px;bottom:0`, "aria-hidden": "true" }));
+          if (grid.extendedTop) track.append(h("span", { class: "zn-cal-hours-extra is-top", style: `top:0;height:${gridY(setStartGridMin)}px`, "aria-hidden": "true" }));
+          if (grid.extendedBottom) track.append(h("span", { class: "zn-cal-hours-extra is-bottom", style: `top:${gridY(setEndGridMin)}px;bottom:0`, "aria-hidden": "true" }));
           const workRange = C.workRange(day, work, zone);
-          const workStart = workRange ? Math.max(0, Math.round(C.zonedMinuteOfDay(workRange[0], dayKey, zone))) : 0;
-          const workEnd = workRange ? Math.min(1440, Math.round(C.zonedMinuteOfDay(workRange[1], dayKey, zone))) : 0;
+          const workStart = workRange ? Math.max(0, Math.round(C.timelineMinuteOfMs(workRange[0], dayKey, timeline, zone))) : 0;
+          const workEnd = workRange ? Math.min(timeline.totalMinutes, Math.round(C.timelineMinuteOfMs(workRange[1], dayKey, timeline, zone))) : 0;
           if (!workRange) {
             track.append(h("span", { class: "zn-cal-off-hours is-all-day", "aria-hidden": "true" }));
           } else {
@@ -16275,14 +16312,14 @@
           }
           const busy = C.busyRanges(expanded.filter((it) => !C.isAllDay(it)), bounds[0], bounds[1]);
           for (const [start, end] of busy) {
-            const startMinute = C.zonedMinuteOfDay(start, dayKey, zone);
+            const startMinute = C.timelineMinuteOfMs(start, dayKey, timeline, zone);
             const top = Math.max(0, gridY(startMinute));
-            const bottom = Math.min(grid.endMin, C.zonedMinuteOfDay(end, dayKey, zone));
+            const bottom = Math.min(grid.endMin, C.timelineMinuteOfMs(end, dayKey, timeline, zone));
             const height = Math.max(1, (bottom - Math.max(grid.startMin, startMinute)) / 60 * hourPx);
             track.append(h("span", { class: "zn-cal-busy-range", style: `top:${top}px;height:${height}px`, "aria-hidden": "true" }));
           }
           if (isToday) {
-            const nowMinutes = C.zonedMinuteOfDay(nowMs(), dayKey, zone);
+            const nowMinutes = C.timelineMinuteOfMs(nowMs(), dayKey, timeline, zone);
             if (!hoursSet.on || (nowMinutes >= grid.startMin && nowMinutes <= grid.endMin)) {
               track.append(h("div", { class: "zn-cal-now-line", style: `top:${gridY(nowMinutes)}px`, "aria-label": "Current time" }, h("span", { class: "zn-cal-now-dot" })));
             } else if (Number.isFinite(nowMinutes)) {

@@ -302,8 +302,8 @@ async function test(name, fn) {
     await flush();
   };
 
-  await test("Day view in Europe/Warsaw renders 23h spring-forward without false lane collision and 25h fall-back repeated hour side-by-side", async () => {
-    // 1. Spring-forward Sunday 2026-03-29 in Europe/Warsaw (fixed 36px/h so 20px minBox = 34m)
+  await test("Day view in Europe/Warsaw renders 23h spring-forward and 25h fall-back with real elapsed hour rows (T2.4c4)", async () => {
+    // 1. Spring-forward Sunday 2026-03-29 in Europe/Warsaw (23 real hours; fixed 36px/h so 20px minBox = 34m)
     store.setMeta({
       calendarDisplayZone: "Europe/Warsaw",
       calendarView: "day",
@@ -314,28 +314,31 @@ async function test(name, fn) {
     assert.ok(store.items.upsert({
       id: "spring-rem-0150",
       summary: "Pre-gap check",
-      start: { dateTime: "2026-03-29T00:50:00.000Z" }, // 01:50 CET
+      start: { dateTime: "2026-03-29T00:50:00.000Z" }, // 01:50 CET (110 elapsed min)
       x: { kind: "reminder", src: "manual", tz: "Europe/Warsaw" },
     }));
     assert.ok(store.items.upsert({
       id: "spring-ev-0305",
       summary: "Post-gap deploy",
-      start: { dateTime: "2026-03-29T01:05:00.000Z" }, // 03:05 CEST
+      start: { dateTime: "2026-03-29T01:05:00.000Z" }, // 03:05 CEST (125 elapsed min — 15 real min after 01:50)
       end: { dateTime: "2026-03-29T02:00:00.000Z" },   // 04:00 CEST
       x: { kind: "event", src: "manual", tz: "Europe/Warsaw" },
     }));
     await flush();
 
+    assert.equal(root.querySelectorAll(".zn-cal-hour-label").length, 23, "spring-forward day shows 23 real hour labels");
     const springButtons = root.querySelectorAll(".zn-cal-time-track .zn-cal-item");
     const preGapBtn = springButtons.find((n) => n.textContent.includes("Pre-gap check"));
     const postGapBtn = springButtons.find((n) => n.textContent.includes("Post-gap deploy"));
     assert.ok(preGapBtn && postGapBtn, "both spring-forward items render in Day view");
-    assert.equal(preGapBtn.style.width, "100%", "01:50 CET reminder does not falsely collide with 03:05 CEST event");
-    assert.equal(postGapBtn.style.width, "100%", "03:05 CEST event keeps full column width");
-    assert.match(preGapBtn.getAttribute("aria-label"), /01:50 reminder, lane 1 of 1/);
-    assert.match(postGapBtn.getAttribute("aria-label"), /03:05 to 04:00, lane 1 of 1/);
+    // 01:50 CET and 03:05 CEST are 15 real minutes apart (9px at 36px/h < 20px minBox), so they share side-by-side lanes without covering each other.
+    assert.equal(preGapBtn.style.width, "50%", "01:50 CET reminder (20px box) shares side-by-side lane with 03:05 CEST event 15 real minutes later");
+    assert.equal(postGapBtn.style.width, "50%", "03:05 CEST event sits beside the 01:50 CET reminder box");
+    assert.equal(parseFloat(postGapBtn.style.top) - parseFloat(preGapBtn.style.top), 9, "01:50 CET -> 03:05 CEST is 15 real minutes (9px at 36px/h)");
+    assert.match(preGapBtn.getAttribute("aria-label"), /01:50 reminder, lane 1 of 2/);
+    assert.match(postGapBtn.getAttribute("aria-label"), /03:05 to 04:00, lane 2 of 2/);
 
-    // 2. Fall-back Sunday 2026-10-25 in Europe/Warsaw: two events at 02:15–02:45 in CEST vs CET
+    // 2. Fall-back Sunday 2026-10-25 in Europe/Warsaw (25 real hours): 02:15 CEST and 02:15 CET live in distinct hour rows
     store.setMeta({ calendarCursor: "2026-10-25" });
     assert.ok(store.items.upsert({
       id: "fall-ev-cest",
@@ -353,15 +356,16 @@ async function test(name, fn) {
     }));
     await flush();
 
+    assert.equal(root.querySelectorAll(".zn-cal-hour-label").length, 25, "fall-back day shows 25 real hour labels");
     const fallButtons = root.querySelectorAll(".zn-cal-time-track .zn-cal-item");
     const firstPassBtn = fallButtons.find((n) => n.textContent.includes("First 02:15 (CEST)"));
     const secondPassBtn = fallButtons.find((n) => n.textContent.includes("Second 02:15 (CET)"));
     assert.ok(firstPassBtn && secondPassBtn, "both repeated-hour fall-back events render");
-    assert.equal(firstPassBtn.style.top, secondPassBtn.style.top, "both repeated-hour events sit at 02:15 on the clock grid");
-    assert.equal(firstPassBtn.style.width, "50%", "1st-pass CEST event gets 50% width");
-    assert.equal(secondPassBtn.style.width, "50%", "2nd-pass CET event gets 50% width");
-    assert.equal(firstPassBtn.style.left, "0%", "1st-pass CEST event sits in lane 1");
-    assert.equal(secondPassBtn.style.left, "50%", "2nd-pass CET event sits in lane 2 instead of burying lane 1");
+    assert.equal(parseFloat(secondPassBtn.style.top) - parseFloat(firstPassBtn.style.top), 36, "2nd-pass CET event sits one full hour row (36px) below 1st-pass CEST event");
+    assert.equal(firstPassBtn.style.width, "100%", "1st-pass CEST event gets full width in its own hour row");
+    assert.equal(secondPassBtn.style.width, "100%", "2nd-pass CET event gets full width in its own hour row");
+    assert.equal(firstPassBtn.style.left, "0%");
+    assert.equal(secondPassBtn.style.left, "0%");
   });
 
   await test("When am I free? formats free slots and prefills composer in calendarDisplayZone across DST", async () => {
