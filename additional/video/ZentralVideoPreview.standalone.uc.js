@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Video Preview
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.260
+// @version 3.3.261
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.260, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.261, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.260";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.261";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11136,6 +11136,22 @@ __zentralShim.register = function (def) {
           document.getElementById("zs-tab-btn-extension-video-dev")?.remove();
           document.getElementById("zs-panel-extension-video-dev")?.remove();
           delete window.ZentralVideoPreview;
+        }
+        // A seam for the suites: the capture-rate rules are the part a test can own without a real video element.
+        if (window.__zentralVideoTestSeam) {
+          Object.assign(window.__zentralVideoTestSeam, {
+            CAPTURE_RATES: [...CAPTURE_RATES],
+            captureRateTenths,
+            captureIntervalMs,
+            captureRateDescription,
+            captureWidth,
+            RENDER_MODES: [...RENDER_MODES],
+            LIVE_MODES: [...LIVE_MODES],
+            renderCandidates,
+            methodName,
+            healthIntervalMs,
+            visibilityIntervalMs,
+          });
         }
         window.ZentralVideoPreview = {
           destroy,

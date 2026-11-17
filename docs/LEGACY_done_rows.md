@@ -12,6 +12,20 @@
 - `OW-38` (part, 3.3.260) — Three Zentral features outside Notes gained their first behavioural suites, all against fake windows rather than a live browser. Theme: `tests/theme-service.test.cjs` (6 tests) loads the pure policy through both its loaders, proves the six source cases and the unknown-value fallback, starts the service against a fake root and asserts the attributes it writes, the runtime state, the one-frame coalescing of pref changes, and that a teardown restores exactly what it found. Library Resize: `tests/library-resize.test.cjs` (6 tests) proves the background priority (an explicit colour beats Arc 2.0, Arc beats Zen's own paint), the opacity mixing, the invalid-colour fallbacks through the real `supportsColor` argument, and a full start/stop cycle that leaves the root, the custom property, the style sheet and every pref observer clean; the pure decision is now on `window.__zentralLibraryTestSeam`. RSS: `tests/rss-reader-behaviour.test.cjs` (6 tests) proves the one-strip reader binding, the clamped hover/hide delays, the side and gap bounds, the URL picker that refuses `javascript:` and `ftp:`, and that the module reads the Look custom properties without ever writing them.
 ## Completed-work notes from the old file header
 
+- `OW-38` (part, 3.3.261) — Two more features outside Notes gained behavioural suites. Video Preview: the module is the
+  largest in the tree and cannot start without a real `<video>`, so `tests/video-preview-rules.test.cjs` (7 tests) boots
+  the real module against a fake window and proves the decisions it makes before it touches a player — the capture rates
+  (tenths of a capture per second, 1…600) and the interval each implies, the human sentence every rate carries, the
+  fixed engineering renderer order with native cloning first and the still fallbacks last, that a blocked source drops
+  native cloning but keeps the still path, that an explicit renderer is honoured instead of a better one being tried
+  behind the person's back, the power-saving health/visibility cadence, and that every pref the module reads is declared
+  in its settings. Panels geometry: `tests/panels-geometry.test.cjs` (7 tests) resumes the real `geometry` part from
+  `extension/panels/geometry/ZentralPanelGeometry.uc.js` and drives it — the fresh-panel 12 px side gap versus a saved
+  offset, the right-anchored sign mirror, the clamp to the sidebar-safe area measured from `offsetLeft`/`offsetWidth`
+  so a hover translate cannot move the panel, the position offset moving the panel up while the height stays put, the
+  Notes sheet's reserve subtracted from a docked panel's bottom margin (and skipped in quad view, where CSS allocates a
+  slot), a pref write from outside moving the panel through the cache, cleanup restoring every margin, and a locked
+  geometry refusing the gesture instead of editing hidden saved values.
 > 3. **Recently Completed & Removed from Backlog:**
 >    - `S6 B5 / B2` (Card right-edge clipping & layout) — resolved and verified in commit `9c5f67c35a791fe08bebb6c7c8cae7376c571836`.
 >    - `Cycle G #5` (armed toolbar buttons), `Cycle H #6b` (stable folder uid), `S6 W2` (folder colour / emoji) and `S6 W1` (coloured note favicons) — done in the chunk after 3.2.0; details in the handoff. Not tried in a real Zen: see the handoff.

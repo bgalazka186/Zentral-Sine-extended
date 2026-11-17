@@ -3912,6 +3912,22 @@
           document.getElementById("zs-panel-extension-video-dev")?.remove();
           delete window.ZentralVideoPreview;
         }
+        // A seam for the suites: the capture-rate rules are the part a test can own without a real video element.
+        if (window.__zentralVideoTestSeam) {
+          Object.assign(window.__zentralVideoTestSeam, {
+            CAPTURE_RATES: [...CAPTURE_RATES],
+            captureRateTenths,
+            captureIntervalMs,
+            captureRateDescription,
+            captureWidth,
+            RENDER_MODES: [...RENDER_MODES],
+            LIVE_MODES: [...LIVE_MODES],
+            renderCandidates,
+            methodName,
+            healthIntervalMs,
+            visibilityIntervalMs,
+          });
+        }
         window.ZentralVideoPreview = {
           destroy,
           refresh: scan,
