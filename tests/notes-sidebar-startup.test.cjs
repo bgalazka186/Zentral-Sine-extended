@@ -170,7 +170,7 @@ const structural = (h) => h.operations.filter((op) => op.type === "add" || op.ty
     const menu = h.document.createXULElement("menupopup"); menu.id = "tabContextMenu"; h.document.body.append(menu);
     h.window.TabContextMenu = { contextTab: noteTab }; h.emit("popupshowing", menu);
     assert.equal(h.document.documentElement.getAttribute("zentral-notes-ctx"), "item", "its right-click menu is ours");
-    assert.deepEqual(menu.querySelectorAll("[zentral-notes-own]").map((row) => row.getAttribute("label")), ["Open note", "Remove from sidebar folder", "Move note to trash"]);
+    assert.deepEqual(menu.querySelectorAll("[zentral-notes-own]").map((row) => row.getAttribute("label")), ["Open note", "Remove from sidebar folder", "Hide from Zen NOTES", "Move note to trash"]);
     await h.destroy();
   });
 

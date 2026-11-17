@@ -3027,6 +3027,54 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
   border-style: dashed;
 }
 
+/* T2.11a: Per-note Calendar-only badge, editor pill, and Birthday preset list */
+.zentral-notes-sheet .zn-item-cal-only,
+.zentral-notes-sheet .zn-cal-only-chip {
+  border-color: color-mix(in srgb, var(--zn-accent) 45%, var(--zn-line));
+  background: color-mix(in srgb, var(--zn-accent) 12%, transparent);
+  color: var(--zn-muted);
+}
+.zentral-notes-sheet .zn-cal-only-chip {
+  flex: 0 0 auto;
+}
+.zentral-notes-sheet .zn-cal-only-chip:hover {
+  background: color-mix(in srgb, var(--zn-accent) 20%, transparent);
+  color: inherit;
+}
+.zentral-notes-sheet .zn-bday-add-row {
+  justify-content: flex-start;
+  margin-top: 2px;
+}
+.zentral-notes-sheet .zn-bday-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--zn-line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--zn-hover) 24%, transparent);
+}
+.zentral-notes-sheet .zn-bday-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.9em;
+}
+.zentral-notes-sheet .zn-bday-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zentral-notes-sheet .zn-bday-remove {
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  font-size: 0.82em;
+}
+
 
 
 

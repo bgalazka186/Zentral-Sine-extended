@@ -33,7 +33,7 @@ const settle = async (turns = 8) => { for (let i = 0; i < turns; i++) await new 
     await settle();
   };
   for (const note of [plain, linked, shown, kept]) assert.ok(entryOf(note), `"${note.body}" has a sidebar entry`);
-  assert.deepEqual(rows(plain).map((row) => row.getAttribute("label")), ["Open note", "Remove from sidebar folder", "Move note to trash"]);
+  assert.deepEqual(rows(plain).map((row) => row.getAttribute("label")), ["Open note", "Remove from sidebar folder", "Hide from Zen NOTES", "Move note to trash"]);
 
   // A note without reminders: gone at once, restorable from Trash, and Notes does not open for it.
   await choose(plain, "trash");

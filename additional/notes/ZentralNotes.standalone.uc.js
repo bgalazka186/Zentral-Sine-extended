@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.221
+// @version 3.3.222
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.221, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.222, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.221";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.222";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2499,6 +2499,51 @@ const __zentralEmbeddedLoader = (function () {
       "doctor.duplicateEntry": "{key} (×{count})",
       "doctor.duplicateRootEntry": "Duplicate root: {label}",
       "doctor.unavailable": "Agenda diagnostics are unavailable in this host.",
+      "tree.note.calendarOnlyBadge": "Calendar-only",
+      "tree.note.calendarOnlyTitle": "Hidden from the Zen NOTES sidebar; remains in All notes, search, backlinks, and Calendar",
+      "tree.note.calendarOnlyFolderHiddenTitle": "Calendar-only (also inside a folder excluded from Zen NOTES)",
+      "tree.note.zenHide": "Calendar-only (hide from Zen NOTES)",
+      "tree.note.zenShow": "Show in Zen NOTES",
+      "tree.note.zenHiddenFlash": "Note marked calendar-only (hidden from Zen NOTES)",
+      "tree.note.zenShownFlash": "Note shown in Zen NOTES",
+      "tree.note.zenShownFolderHiddenFlash": "Calendar-only cleared (note stays hidden by its folder)",
+      "tree.note.batchZenHide": "Mark calendar-only (hide from Zen NOTES)",
+      "tree.note.batchZenShow": "Show selected in Zen NOTES",
+      "tree.note.batchZenHiddenFlash": "{count} note(s) hidden from Zen NOTES",
+      "tree.note.batchZenShownFlash": "{count} note(s) shown in Zen NOTES",
+      "tree.folder.newCalendarOnlyNote": "New calendar-only note here",
+      "tree.folder.newBirthdayNote": "New birthday note…",
+      "sidebar.note.hideFromZen": "Hide from Zen NOTES",
+      "sidebar.note.newCalendarOnlyInFolder": "New calendar-only note here",
+      "compose.note.newCalendarOnly": "New calendar-only note",
+      "compose.note.hideFromZen": "Calendar-only (hide new note from Zen NOTES)",
+      "cal.menu.newBirthdayNote": "New birthday note…",
+      "birthday.menu.addEntry": "Add birthday reminder…",
+      "birthday.dialog.title": "New birthday note",
+      "birthday.dialog.intro": "Creates a calendar-only note using the Birthdays category. Add as many independent yearly birthday reminders as you like.",
+      "birthday.dialog.defaultTitle": "Birthdays",
+      "birthday.dialog.titleField": "Note title",
+      "birthday.dialog.titlePlaceholder": "e.g. Birthdays or Anna Kowalska",
+      "birthday.dialog.nameField": "Person / reminder name",
+      "birthday.dialog.namePlaceholder": "e.g. Anna Kowalska",
+      "birthday.dialog.dateField": "Birthday date (DD-MM or YYYY-MM-DD)",
+      "birthday.dialog.datePlaceholder": "e.g. 14-05 or 1992-05-14",
+      "birthday.dialog.timeField": "Reminder time (optional)",
+      "birthday.dialog.timePlaceholder": "All day (or e.g. 09:00)",
+      "birthday.dialog.addAnother": "+ Add birthday to list",
+      "birthday.dialog.removeEntry": "Remove",
+      "birthday.dialog.folderField": "Folder",
+      "birthday.dialog.folderRoot": "No folder (root)",
+      "birthday.dialog.folderCreateBirthdays": "Create \"Birthdays\" folder (excluded from Zen NOTES)",
+      "birthday.dialog.calendarOnly": "Calendar-only (hide from Zen NOTES)",
+      "birthday.dialog.create": "Create birthday note",
+      "birthday.dialog.errEntry": "Enter a name and a valid date (DD-MM or YYYY-MM-DD).",
+      "birthday.dialog.errTime": "Enter a valid time (e.g. 09:00) or leave it empty for all day.",
+      "birthday.dialog.createdFlash": "Birthday note created",
+      "birthday.dialog.createdWithCountFlash": "Birthday note created with {count} yearly reminder(s)",
+      "birthday.add.title": "Add birthday reminder",
+      "birthday.add.submit": "Add reminder",
+      "birthday.add.addedFlash": "Added yearly birthday reminder for {name}",
     }),
   });
 
@@ -3337,6 +3382,51 @@ const __zentralEmbeddedLoader = (function () {
       "doctor.duplicateEntry": "{key} (\u00d7{count})",
       "doctor.duplicateRootEntry": "Zduplikowany folder g\u0142\u00f3wny: {label}",
       "doctor.unavailable": "Diagnostyka Agendy nie jest dost\u0119pna w tym oknie.",
+      "tree.note.calendarOnlyBadge": "Tylko w Kalendarzu",
+      "tree.note.calendarOnlyTitle": "Ukryta na pasku bocznym Zen NOTES; pozostaje w zak\u0142adce Wszystkie notatki, wyszukiwaniu, linkach zwrotnych i Kalendarzu",
+      "tree.note.calendarOnlyFolderHiddenTitle": "Tylko w Kalendarzu (dodatkowo w folderze wykluczonym z Zen NOTES)",
+      "tree.note.zenHide": "Tylko w Kalendarzu (ukryj w Zen NOTES)",
+      "tree.note.zenShow": "Poka\u017c w Zen NOTES",
+      "tree.note.zenHiddenFlash": "Notatka oznaczona jako tylko w Kalendarzu (ukryta w Zen NOTES)",
+      "tree.note.zenShownFlash": "Notatka pokazana w Zen NOTES",
+      "tree.note.zenShownFolderHiddenFlash": "Zdj\u0119to oznaczenie tylko w Kalendarzu (notatka pozostaje ukryta przez folder)",
+      "tree.note.batchZenHide": "Oznacz jako tylko w Kalendarzu (ukryj w Zen NOTES)",
+      "tree.note.batchZenShow": "Poka\u017c zaznaczone w Zen NOTES",
+      "tree.note.batchZenHiddenFlash": "Ukryto {count} notatek w Zen NOTES",
+      "tree.note.batchZenShownFlash": "Pokazano {count} notatek w Zen NOTES",
+      "tree.folder.newCalendarOnlyNote": "Nowa notatka tylko w Kalendarzu",
+      "tree.folder.newBirthdayNote": "Nowa notatka urodzinowa\u2026",
+      "sidebar.note.hideFromZen": "Ukryj w Zen NOTES",
+      "sidebar.note.newCalendarOnlyInFolder": "Nowa notatka tylko w Kalendarzu",
+      "compose.note.newCalendarOnly": "Nowa notatka tylko w Kalendarzu",
+      "compose.note.hideFromZen": "Tylko w Kalendarzu (ukryj now\u0105 notatk\u0119 w Zen NOTES)",
+      "cal.menu.newBirthdayNote": "Nowa notatka urodzinowa\u2026",
+      "birthday.menu.addEntry": "Dodaj przypomnienie urodzinowe\u2026",
+      "birthday.dialog.title": "Nowa notatka urodzinowa",
+      "birthday.dialog.intro": "Tworzy notatk\u0119 tylko w Kalendarzu z kategori\u0105 Urodziny. Mo\u017cesz doda\u0107 dowoln\u0105 liczb\u0119 niezale\u017cnych corocznych przypomnie\u0144 urodzinowych.",
+      "birthday.dialog.defaultTitle": "Urodziny",
+      "birthday.dialog.titleField": "Tytu\u0142 notatki",
+      "birthday.dialog.titlePlaceholder": "np. Urodziny lub Anna Kowalska",
+      "birthday.dialog.nameField": "Osoba / nazwa przypomnienia",
+      "birthday.dialog.namePlaceholder": "np. Anna Kowalska",
+      "birthday.dialog.dateField": "Data urodzin (DD-MM lub RRRR-MM-DD)",
+      "birthday.dialog.datePlaceholder": "np. 14-05 lub 1992-05-14",
+      "birthday.dialog.timeField": "Godzina przypomnienia (opcjonalnie)",
+      "birthday.dialog.timePlaceholder": "Ca\u0142y dzie\u0144 (lub np. 09:00)",
+      "birthday.dialog.addAnother": "+ Dodaj urodziny do listy",
+      "birthday.dialog.removeEntry": "Usu\u0144",
+      "birthday.dialog.folderField": "Folder",
+      "birthday.dialog.folderRoot": "Bez folderu (g\u0142\u00f3wny)",
+      "birthday.dialog.folderCreateBirthdays": "Utw\u00f3rz folder \u201eUrodziny\u201d (ukryty w Zen NOTES)",
+      "birthday.dialog.calendarOnly": "Tylko w Kalendarzu (ukryj w Zen NOTES)",
+      "birthday.dialog.create": "Utw\u00f3rz notatk\u0119 urodzinow\u0105",
+      "birthday.dialog.errEntry": "Podaj nazw\u0119 oraz poprawn\u0105 dat\u0119 (DD-MM lub RRRR-MM-DD).",
+      "birthday.dialog.errTime": "Podaj poprawn\u0105 godzin\u0119 (np. 09:00) lub pozostaw puste dla ca\u0142ego dnia.",
+      "birthday.dialog.createdFlash": "Utworzono notatk\u0119 urodzinow\u0105",
+      "birthday.dialog.createdWithCountFlash": "Utworzono notatk\u0119 urodzinow\u0105 ({count} corocznych przypomnie\u0144)",
+      "birthday.add.title": "Dodaj przypomnienie urodzinowe",
+      "birthday.add.submit": "Dodaj przypomnienie",
+      "birthday.add.addedFlash": "Dodano coroczne przypomnienie urodzinowe: {name}",
     }),
   });
 
@@ -10640,6 +10730,7 @@ __zentralShim.register = function (def) {
       "flavor",
       "trashed",
       "folder",
+      "calendar_only",
       "remind",
       "reminded",
     ]);
@@ -10872,6 +10963,7 @@ __zentralShim.register = function (def) {
         label: cleanLabel(meta.label),
         folder: cleanFolder(meta.folder),
         pinned: meta.pinned === "true",
+        calendarOnly: meta.calendar_only === "true",
         flavor: meta.flavor && FLAVORS_PART && FLAVORS_PART.MODES.includes(meta.flavor) ? meta.flavor : "",
         trashed: meta.trashed ? toTime(meta.trashed, mtime) : 0,
         remind: meta.remind ? cleanRemind(toTime(meta.remind, 0)) : 0,
@@ -10893,6 +10985,7 @@ __zentralShim.register = function (def) {
       if (cleanLabel(n.label)) lines.push("label: " + cleanLabel(n.label));
       if (cleanFolder(n.folder)) lines.push("folder: " + cleanFolder(n.folder));
       if (n.pinned) lines.push("pinned: true");
+      if (n.calendarOnly) lines.push("calendar_only: true");
       if (n.flavor && FLAVORS_PART && FLAVORS_PART.MODES.includes(n.flavor)) lines.push("flavor: " + n.flavor);
       if (n.trashed) lines.push("trashed: " + iso(n.trashed));
       if (n.remind > 0) {
@@ -11370,6 +11463,123 @@ __zentralShim.register = function (def) {
         return { state, nextValue: "show", labelKey: "tree.folder.overrideShowInZen", flashKey: "tree.folder.zenShownFlash" };
       }
       return { state, nextValue: state.inheritedHidden ? "show" : "", labelKey: "tree.folder.showInZen", flashKey: "tree.folder.zenShownFlash" };
+    }
+    // T2.11a: Per-note Calendar-only / Hide from Zen NOTES coexistence with T2.11 folder exclusion,
+    // plus practical Birthday note preset builders (unlimited independent yearly birthday reminders).
+    const BIRTHDAY_CATEGORY = "Birthdays";
+    const BIRTHDAY_FOLDER_ID = "birthdays";
+    const BIRTHDAY_MAX_DAYS = Object.freeze([0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]);
+    function resolveNoteZenSidebar(note, folders) {
+      const ownHidden = Boolean(note?.calendarOnly);
+      const folderVis = resolveFolderZenSidebar(cleanFolder(note?.folder), folders);
+      const folderHidden = Boolean(folderVis.hidden);
+      const hidden = ownHidden || folderHidden;
+      const reason = ownHidden && folderHidden ? "both" : ownHidden ? "note" : folderHidden ? "folder" : "visible";
+      return { hidden, ownHidden, folderHidden, reason };
+    }
+    function parseBirthdayDate(raw) {
+      const s = String(raw ?? "").trim();
+      if (!s) return null;
+      let day = 0, month = 0, birthYear = 0;
+      let m = /^(\d{4})[./-](\d{1,2})[./-](\d{1,2})$/.exec(s);
+      if (m) {
+        birthYear = +m[1]; month = +m[2]; day = +m[3];
+      } else if ((m = /^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/.exec(s))) {
+        day = +m[1]; month = +m[2]; birthYear = +m[3];
+      } else if ((m = /^(\d{1,2})[./-](\d{1,2})\.?$/.exec(s))) {
+        day = +m[1]; month = +m[2];
+      } else {
+        return null;
+      }
+      if (!Number.isInteger(month) || month < 1 || month > 12) return null;
+      if (!Number.isInteger(day) || day < 1 || day > BIRTHDAY_MAX_DAYS[month]) return null;
+      if (birthYear) {
+        if (birthYear < 1000 || birthYear > 9999) return null;
+        const d = new Date(birthYear, month - 1, day);
+        if (d.getFullYear() !== birthYear || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+      }
+      return { day, month, birthYear };
+    }
+    function cleanBirthdayTime(raw) {
+      const s = String(raw ?? "").trim();
+      if (!s) return "";
+      if (CALENDAR_PART?.parseClock && CALENDAR_PART?.clockOfMinutes) {
+        const mins = CALENDAR_PART.parseClock(s);
+        return mins >= 0 ? CALENDAR_PART.clockOfMinutes(mins) : null;
+      }
+      const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(s);
+      return m ? String(+m[1]).padStart(2, "0") + ":" + m[2] : null;
+    }
+    function formatBirthdayLine(entry) {
+      if (!entry || typeof entry !== "object") return "";
+      const name = String(entry.name ?? "").replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
+      if (!name) return "";
+      let parsed = null;
+      if (entry.date !== undefined && entry.date !== null && String(entry.date).trim() !== "") {
+        parsed = parseBirthdayDate(entry.date);
+      } else if (Number.isInteger(entry.month) && Number.isInteger(entry.day)) {
+        const m = entry.month, d = entry.day;
+        if (m >= 1 && m <= 12 && d >= 1 && d <= BIRTHDAY_MAX_DAYS[m]) parsed = { day: d, month: m, birthYear: 0 };
+      }
+      if (!parsed) return "";
+      const clock = cleanBirthdayTime(entry.time);
+      if (clock === null) return "";
+      const dm = String(parsed.day).padStart(2, "0") + "-" + String(parsed.month).padStart(2, "0");
+      return `- ${dm}${clock ? " " + clock : ""} ${name}`;
+    }
+    function buildBirthdayNoteBody({ title = BIRTHDAY_CATEGORY, entries = [] } = {}) {
+      const cleanTitle = String(title ?? "").replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim() || BIRTHDAY_CATEGORY;
+      const lines = (Array.isArray(entries) ? entries : []).map(formatBirthdayLine).filter(Boolean);
+      const bodyLines = lines.length ? lines : ["- "];
+      return `# ${cleanTitle}\n\n%%calendar: ${BIRTHDAY_CATEGORY}%%\n${bodyLines.join("\n")}\n`;
+    }
+    function appendBirthdayEntry(body, entry) {
+      const line = formatBirthdayLine(entry);
+      const text = normalizeNewlines(String(body ?? ""));
+      if (!line) return { body: text, line: "", changed: false };
+      const lines = text.split("\n");
+      const markerRe = /^\s*%%\s*calendar\s*:\s*([^%]*?)\s*%%\s*$/i;
+      const listRe = /^\s*(?:[-*+]|\d+[.)])\s+/;
+      let fence = "", markerIndex = -1, sectionEnd = lines.length, markerHeadingLevel = 0, currentHeadingLevel = 0;
+      for (let i = 0; i < lines.length; i++) {
+        const f = /^\s*(`{3,}|~{3,})/.exec(lines[i]);
+        if (f) { fence = !fence ? f[1][0] : (f[1][0] === fence ? "" : fence); continue; }
+        if (fence) continue;
+        const hm = /^(#{1,6})\s/.exec(lines[i]);
+        if (hm) {
+          currentHeadingLevel = hm[1].length;
+          if (markerIndex >= 0 && markerHeadingLevel > 0 && currentHeadingLevel <= markerHeadingLevel) {
+            sectionEnd = i;
+            break;
+          }
+          continue;
+        }
+        const mk = markerRe.exec(lines[i]);
+        if (mk && mk[1].trim().toLowerCase() === BIRTHDAY_CATEGORY.toLowerCase()) {
+          markerIndex = i;
+          markerHeadingLevel = currentHeadingLevel;
+          sectionEnd = lines.length;
+        } else if (mk && markerIndex >= 0) {
+          sectionEnd = i;
+          break;
+        }
+      }
+      if (markerIndex >= 0) {
+        let insertAt = markerIndex + 1;
+        while (insertAt < sectionEnd && listRe.test(lines[insertAt])) insertAt++;
+        // Replace an untouched placeholder "- " line if that is the only entry right after the marker.
+        if (insertAt === markerIndex + 2 && /^-\s*$/.test(lines[markerIndex + 1])) {
+          lines[markerIndex + 1] = line;
+        } else {
+          lines.splice(insertAt, 0, line);
+        }
+        let next = lines.join("\n");
+        if (!next.endsWith("\n")) next += "\n";
+        return { body: next, line, changed: true };
+      }
+      const trimmed = text.replace(/\s+$/, "");
+      const prefix = trimmed ? trimmed + "\n\n" : "";
+      return { body: `${prefix}%%calendar: ${BIRTHDAY_CATEGORY}%%\n${line}\n`, line, changed: true };
     }
     function cleanFolder(v) {
       if (typeof v !== "string" || !v) return "";
@@ -12334,7 +12544,10 @@ __zentralShim.register = function (def) {
           walk(f, key, false); // collapsed or not, children are projected: collapsing is a display state, not identity
         }
         if (!parentHidden) {
-          for (const nt of node.notes) out.push({ key: projKey("note", nt.id), kind: "note", id: nt.id, label: titleOf(nt.body) || "Untitled note", parent });
+          for (const nt of node.notes) {
+            if (nt.calendarOnly) continue;
+            out.push({ key: projKey("note", nt.id), kind: "note", id: nt.id, label: titleOf(nt.body) || "Untitled note", parent });
+          }
         }
       };
       walk(buildTree(notes, folders), "", false);
@@ -18680,7 +18893,7 @@ __zentralShim.register = function (def) {
           // A generated date note is always put in the Daily folder. Do not infer ownership from a date-shaped title alone.
           if (cleanFolder(note.folder) !== DATE_FOLDER) continue;
           // Protect all user metadata and attachments, not just the fields understood by the pure predicate.
-          if (note.remind || note.reminded || note.label || note.pinned || note.flavor || (note.color && note.color !== "none")) continue;
+          if (note.remind || note.reminded || note.label || note.pinned || note.calendarOnly || note.flavor || (note.color && note.color !== "none")) continue;
           if (noteTags(note).length || assetRefs(note.body || "", note.id).size) continue;
           if ((Array.isArray(note.files) && note.files.length) || (Array.isArray(note.attachments) && note.attachments.length)) continue;
           const key = dateOfNote(note);
@@ -19452,22 +19665,24 @@ __zentralShim.register = function (def) {
         },
         // Creates a note with a fixed id unless that id already exists (even trashed): used for the demo notes, so
         // installing twice never duplicates or overwrites what the person edited. Returns the note and whether it is new.
-        ensureNote(id, body, folder = "") {
+        ensureNote(id, body, folder = "", opts = {}) {
           if (!NOTE_ID_RE.test(String(id))) return { note: null, created: false };
           const have = notes.get(id);
           if (have) return { note: have, created: false };
           const t = now();
-          const note = decorateNoteOwnership({ id, body, created: t, updated: t, touched: false, color: "none", label: "", folder: cleanFolder(folder), pinned: false, trashed: 0, remind: 0, reminded: 0, _onDisk: false, _mtime: t }, { ownerSpaceId: activeSpaceId, ownerDir: dir, foreign: false });
+          const calendarOnly = Boolean(opts && opts.calendarOnly);
+          const note = decorateNoteOwnership({ id, body, created: t, updated: t, touched: false, color: "none", label: "", folder: cleanFolder(folder), pinned: false, calendarOnly, trashed: 0, remind: 0, reminded: 0, _onDisk: false, _mtime: t }, { ownerSpaceId: activeSpaceId, ownerDir: dir, foreign: false });
           notes.set(id, note);
-          if (body) markDirty(id);
+          if (body || calendarOnly) markDirty(id);
           if (body) syncItems(id, true, true);
           emit("change", id, { created: true });
           return { note, created: true };
         },
-        create(body = "", folder = "") {
+        create(body = "", folder = "", opts = {}) {
           let id = makeId(now());
           while (notes.has(id) || (activeSpaceMode === "space" && spaceShares.notes[id])) id = makeId(now());
           const t = now();
+          const calendarOnly = Boolean(opts && opts.calendarOnly);
           const note = decorateNoteOwnership({
             id,
             body,
@@ -19478,6 +19693,7 @@ __zentralShim.register = function (def) {
             label: "",
             folder: cleanFolder(folder),
             pinned: false,
+            calendarOnly,
             trashed: 0,
             remind: 0,
             reminded: 0,
@@ -19485,7 +19701,7 @@ __zentralShim.register = function (def) {
             _mtime: t,
           }, { ownerSpaceId: activeSpaceId, ownerDir: dir, foreign: false });
           notes.set(id, note);
-          if (body) markDirty(id);
+          if (body || calendarOnly) markDirty(id);
           if (body) syncItems(id, true, true);
           emit("change", id, { created: true });
           return note;
@@ -19557,6 +19773,16 @@ __zentralShim.register = function (def) {
           note.pinned = !!pinned;
           if (note.body.trim() || note._onDisk) markDirty(id);
           emit("change", id, { meta: true });
+        },
+        // T2.11a: per-note Calendar-only / Hide from Zen NOTES flag (written as `calendar_only: true` in front matter).
+        setCalendarOnly(id, calendarOnly) {
+          const note = notes.get(id);
+          const next = !!calendarOnly;
+          if (!note || !!note.calendarOnly === next) return false;
+          note.calendarOnly = next;
+          if (note.body.trim() || note._onDisk || next) markDirty(id);
+          emit("change", id, { meta: true, zenSidebar: true });
+          return true;
         },
         // ---- reminders (P2) ---------------------------------------------------------------------------
         // setReminder(id, time) sets (or with 0 clears) a reminder; the time snaps to 5 minutes and any earlier
@@ -22035,6 +22261,7 @@ __zentralShim.register = function (def) {
       const label = cleanLabel(note?.label);
       if (label && !seenKeys.has("zentral_label")) lines.push("zentral_label: " + obsidianYamlScalar(label, { forceString: true }));
       if (note?.pinned && !seenKeys.has("zentral_pinned")) lines.push("zentral_pinned: true");
+      if (note?.calendarOnly && !seenKeys.has("zentral_calendar_only")) lines.push("zentral_calendar_only: true");
       if (note?.flavor && FLAVORS_PART && FLAVORS_PART.MODES.includes(note.flavor) && !seenKeys.has("zentral_flavor")) {
         lines.push("zentral_flavor: " + obsidianYamlScalar(note.flavor, { forceString: true }));
       }
@@ -22325,14 +22552,15 @@ __zentralShim.register = function (def) {
         color: "none",
         label: "",
         pinned: false,
+        calendarOnly: false,
         flavor: "",
         remind: 0,
         obsidianPath: "",
       };
       const foreignEntries = [];
       const OBS_OWNED_KEYS = new Set([
-        "zentral_id", "zentral_color", "zentral_label", "zentral_pinned", "zentral_flavor", "zentral_remind",
-        "obsidian_path", "id", "created", "updated", "touched", "color", "label", "folder", "pinned", "flavor", "trashed", "remind", "reminded",
+        "zentral_id", "zentral_color", "zentral_label", "zentral_pinned", "zentral_calendar_only", "zentral_flavor", "zentral_remind",
+        "obsidian_path", "id", "created", "updated", "touched", "color", "label", "folder", "pinned", "calendar_only", "flavor", "trashed", "remind", "reminded",
       ]);
       if (fm) {
         for (const entry of splitYamlEntries(fm.raw)) {
@@ -22351,6 +22579,8 @@ __zentralShim.register = function (def) {
             const l = cleanLabel(val); if (l) meta.label = l;
           } else if (k === "zentral_pinned" || k === "pinned") {
             if (val.toLowerCase() === "true") meta.pinned = true;
+          } else if (k === "zentral_calendar_only" || k === "calendar_only") {
+            if (val.toLowerCase() === "true") meta.calendarOnly = true;
           } else if (k === "zentral_flavor" || k === "flavor") {
             if (FLAVORS_PART && FLAVORS_PART.MODES.includes(val)) meta.flavor = val;
           } else if (k === "zentral_remind" || k === "remind") {
@@ -22808,6 +23038,7 @@ __zentralShim.register = function (def) {
           label: pn.meta.label || (pn.matched ? pn.matched.label : ""),
           folder: pn.folder,
           pinned: pn.meta.pinned || (pn.matched ? !!pn.matched.pinned : false),
+          calendarOnly: pn.meta.calendarOnly || (pn.matched ? !!pn.matched.calendarOnly : false),
           flavor: pn.meta.flavor || (pn.matched ? (pn.matched.flavor || "") : ""),
           trashed: 0,
           remind: pn.meta.remind || (pn.matched ? (pn.matched.remind || 0) : 0),
@@ -22827,6 +23058,7 @@ __zentralShim.register = function (def) {
               cleanNoteColor(ex.color) === cleanNoteColor(nextNote.color) &&
               cleanLabel(ex.label) === cleanLabel(nextNote.label) &&
               !!ex.pinned === !!nextNote.pinned &&
+              !!ex.calendarOnly === !!nextNote.calendarOnly &&
               (ex.flavor || "") === (nextNote.flavor || "") &&
               (ex.remind || 0) === (nextNote.remind || 0) &&
               String(ex.foreign || "").trim() === String(nextNote.foreign || "").trim() &&
@@ -23906,7 +24138,7 @@ __zentralShim.register = function (def) {
             const key = projKey("folder", m.folder.uid || m.folder.id);
             out.push({ key, kind: "folder", id: m.folder.id, label: m.folder.label, parent, color: m.folder.color || "", icon: m.folder.icon || "", ...(Object.keys(cleanFolderParts(m.folder.parts)).length ? { parts: cleanFolderParts(m.folder.parts) } : {}), ...(Object.keys(cleanFolderOpacity(m.folder.opacity)).length ? { opacity: cleanFolderOpacity(m.folder.opacity) } : {}) });
             walk(m.folder, key, m.folder.color || inherit, false);
-          } else if (!parentHidden) {
+          } else if (!parentHidden && !m.note.calendarOnly) {
             out.push({ key: projKey("note", m.note.id), kind: "note", id: m.note.id, label: titleOf(m.note.body) || "Untitled note", parent, color: m.note.color && m.note.color !== "none" ? m.note.color : inherit });
           }
         }
@@ -24499,6 +24731,7 @@ __zentralShim.register = function (def) {
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         FOLDER_ZEN_SIDEBAR_VALUES, cleanFolderZenSidebar, resolveFolderZenSidebar, folderZenSidebarMenuAction,
+        BIRTHDAY_CATEGORY, BIRTHDAY_FOLDER_ID, resolveNoteZenSidebar, parseBirthdayDate, cleanBirthdayTime, formatBirthdayLine, buildBirthdayNoteBody, appendBirthdayEntry,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition, calendarMenuPosition, normalizeContextMenuItems,
         highlightCode, codeLangKey, texNodes, mapPosition, mergeAnchors, insertCodeBlock, buildLink, insertLink,
         pastedLink, richPaste, repairPastedTable, PASTE_HTML_PART, fragmentLabel, insertImage, makeTable, insertTable, SHORTCUT_ACTIONS, formatCombo,
@@ -25315,9 +25548,11 @@ __zentralShim.register = function (def) {
       const btnClose = iconButton("x", "Close notes (Esc)");
       const labelEl = h("button", { type: "button", class: "zn-label", title: "Edit label" });
       labelEl.hidden = true;
+      const calOnlyEl = h("button", { type: "button", class: "zn-label zn-cal-only-chip" }, t("tree.note.calendarOnlyBadge"));
+      calOnlyEl.hidden = true;
       const remindEl = h("button", { type: "button", class: "zn-remind", title: "Reminder" });
       remindEl.hidden = true;
-      const head = h("div", { class: "zn-head" }, btnList, titleEl, labelEl, btnCategory, remindEl, btnPin, btnColor, btnKeep, btnHover, btnDock, btnClick, btnSize, btnMore, btnClose);
+      const head = h("div", { class: "zn-head" }, btnList, titleEl, labelEl, calOnlyEl, btnCategory, remindEl, btnPin, btnColor, btnKeep, btnHover, btnDock, btnClick, btnSize, btnMore, btnClose);
 
       const tBold = iconButton("bold", "Bold (Ctrl+B)");
       const tItalic = iconButton("italic", "Italic (Ctrl+I)");
@@ -26054,6 +26289,13 @@ __zentralShim.register = function (def) {
         root.dataset.size = store.meta.size;
         labelEl.hidden = !n?.label || view === "list";
         labelEl.textContent = n?.label || "";
+        const showCalOnlyChip = Boolean(n && !n.trashed && n.calendarOnly && view === "editor");
+        calOnlyEl.hidden = !showCalOnlyChip;
+        if (showCalOnlyChip) {
+          const noteZenVis = resolveNoteZenSidebar(n, store.meta.folders);
+          calOnlyEl.textContent = t("tree.note.calendarOnlyBadge");
+          calOnlyEl.title = t(noteZenVis.folderHidden ? "tree.note.calendarOnlyFolderHiddenTitle" : "tree.note.calendarOnlyTitle");
+        }
         btnCategory.hidden = !store.items || !n || !!n.trashed || view !== "editor" || mode === "read";
         const categorySection = store.items && n && mode !== "read" ? CALENDAR_PART?.calendarSectionAt?.(ta.value, ta.selectionStart) : null;
         const activeCategory = categorySection?.category || "";
@@ -26589,15 +26831,16 @@ __zentralShim.register = function (def) {
         const allow = { heading: gate.on("C03") && gate.on("C06"), self: gate.on("C04"), path: gate.on("C08") };
         return expandWikiLinks(body, wikiResolver(store.list().concat(store.list({ trashed: true })), store.meta.folders, { allow }), { self: { body }, allow });
       }
-      function newNote(folderId, { focus = true } = {}) {
+      function newNote(folderId, { focus = true, calendarOnly = false } = {}) {
         const folder = typeof folderId === "string" ? cleanFolder(folderId) : "";
         if (folder && store.meta.folders.find((f) => f.id === folder)?.collapsed) store.setFolderCollapsed(folder, false);
-        const n = store.create("", folder);
+        const n = store.create("", folder, { calendarOnly: !!calendarOnly });
         // A new note starts in the chosen default view; an empty note has nothing to read, so "read" and
         // "last" start in the editor.
         mode = cleanDefaultView(getPref(PREF.DEFAULT_VIEW, "last")) === "split" ? "split" : "edit";
         store.setMeta({ mode });
         openNote(n.id, { focus });
+        return n;
       }
       function setMode(next) {
         if (mode === next) return;
@@ -27607,6 +27850,7 @@ __zentralShim.register = function (def) {
           { icon: "bell", label: "New all-day reminder…", action: () => askCalendarComposer({ date: key, kind: "reminder", allDay: true, linkCurrent: false }) },
           { icon: "calendar-plus", label: "New event…", action: () => askCalendarComposer({ date: key, kind: "event", linkCurrent: false }) },
           { icon: "calendar-plus", label: "New all-day event…", action: () => askCalendarComposer({ date: key, kind: "event", allDay: true, linkCurrent: false }) },
+          { icon: "calendar-plus", label: t("cal.menu.newBirthdayNote"), action: () => queueMicrotask(() => askNewBirthdayNote("", { date: key })) },
           { icon: "note", label: "Open or create date note", action: () => openDay(day, key, true) },
           { sep: true },
           ...[[-1, "Previous day"], [1, "Next day"]].map(([offset, label]) => ({ icon: "calendar", label, action: () => { store.setMeta({ calendarCursor: CALENDAR_PART.localDateKey(CALENDAR_PART.addDays(day, offset)), calendarView: "day" }); renderCalendar(); } })),
@@ -28952,6 +29196,11 @@ __zentralShim.register = function (def) {
           noteSelect.append(h("option", { value: newFolderNoteOption }, t("compose.note.newInFolder", { folder: folderLabel })));
         }
         noteSelect.append(h("option", { value: "" }, t("compose.note.none")));
+        let newCalOnlyNoteOption = "__zentral_new_calendar_only_note__";
+        if (!original) {
+          while (store.get(newCalOnlyNoteOption) || newCalOnlyNoteOption === newFolderNoteOption) newCalOnlyNoteOption += "_";
+          noteSelect.append(h("option", { value: newCalOnlyNoteOption }, t("compose.note.newCalendarOnly")));
+        }
         const linkedNotes = store.list({ trashed: false }).slice().sort((a, b) => titleOf(a.body).localeCompare(titleOf(b.body)));
         for (const linked of linkedNotes) noteSelect.append(h("option", { value: linked.id }, titleOf(linked.body) || t("compose.note.untitled")));
         if (defaultNoteId && !linkedNotes.some((n) => n.id === defaultNoteId)) {
@@ -28959,8 +29208,16 @@ __zentralShim.register = function (def) {
           if (linked) noteSelect.append(h("option", { value: linked.id }, titleOf(linked.body) || t("compose.note.untitled")));
         }
         noteSelect.value = createInFolder && !defaultNoteId ? newFolderNoteOption : (defaultNoteId || "");
-        const selectedExistingNoteId = () => (createInFolder && noteSelect.value === newFolderNoteOption ? "" : noteSelect.value);
+        const selectedExistingNoteId = () => ((createInFolder && noteSelect.value === newFolderNoteOption) || (!original && noteSelect.value === newCalOnlyNoteOption) ? "" : noteSelect.value);
         const noteRow = h("label", { class: "zn-field-row" }, h("span", {}, t("compose.field.linkedNote")), noteSelect);
+        const calOnlyNewNoteCheck = h("input", { type: "checkbox", "aria-label": t("compose.note.hideFromZen") });
+        calOnlyNewNoteCheck.checked = options.calendarOnly === true;
+        const calOnlyNewNoteRow = h("label", { class: "zn-field-row zn-cal-compose-check zn-cal-compose-calonly" }, calOnlyNewNoteCheck, h("span", {}, t("compose.note.hideFromZen")));
+        const syncCalOnlyNewNoteRow = () => {
+          calOnlyNewNoteRow.hidden = !(createInFolder && noteSelect.value === newFolderNoteOption);
+        };
+        calOnlyNewNoteCheck.addEventListener("change", () => { calOnlyNewNoteCheck.dataset.userChanged = "true"; });
+        syncCalOnlyNewNoteRow();
         const noteAlertDefaults = chip(t("compose.btn.noteAlertDefaults"));
         const noteAgendaDefaults = chip(t("compose.btn.noteAgendaDefaults"));
         const noteAlertRow = h("div", { class: "zn-cal-note-alert-row" }, noteAlertDefaults, noteAgendaDefaults);
@@ -29105,7 +29362,7 @@ __zentralShim.register = function (def) {
         const intro = h("p", { class: "zn-empty" }, t("compose.intro"));
         const card = openCalendarCard(t(original ? "compose.title.edit" : "compose.title.create"), intro, title.row, kindRow, allDayRow,
           startDateHost, endDateHost, startTimeHost, endTimeHost, scheduleBoard,
-          noteRow, noteAlertRow, agendaWindowSection, categoryRow, colorRow, descriptionRow, calNoteRow, zoneField.row,
+          noteRow, calOnlyNewNoteRow, noteAlertRow, agendaWindowSection, categoryRow, colorRow, descriptionRow, calNoteRow, zoneField.row,
           recurrenceBox, notifySection, preview, status, actions);
         card.classList.add("zn-cal-compose-card");
         if (dialog?.dataset.calendarLayer === "true") scheduleFit();
@@ -29188,11 +29445,14 @@ __zentralShim.register = function (def) {
             if (!notifyInputs[stage].dataset.userChanged) notifyInputs[stage].checked = defaults[stage].enabled;
             if (numberKey && !notifySelects[stage].dataset.userChanged) notifySelects[stage].value = String(defaults[stage][numberKey]);
           }
+          if (createInFolder && !calOnlyNewNoteCheck.dataset.userChanged && selectedCategory().toLowerCase() === BIRTHDAY_CATEGORY.toLowerCase()) {
+            calOnlyNewNoteCheck.checked = true;
+          }
           paintPreview();
         });
         for (const [stage, input] of Object.entries(notifyInputs)) input.addEventListener("change", () => { input.dataset.userChanged = "true"; });
         for (const select of Object.values(notifySelects)) select.addEventListener("change", () => { select.dataset.userChanged = "true"; });
-        noteSelect.addEventListener("change", paintColor);
+        noteSelect.addEventListener("change", () => { syncCalOnlyNewNoteRow(); paintColor(); });
 
         const submit = () => {
           // OW-24: the fields that count are read as they stand (Enter in the title leaves no field). A text that
@@ -29237,6 +29497,7 @@ __zentralShim.register = function (def) {
             notify.followup = { enabled: notifyInputs.followup.checked, delayMinutes: Number(notifySelects.followup.value), ...(sounds.followup || {}) };
           }
           const wantsNewFolderNote = createInFolder && noteSelect.value === newFolderNoteOption;
+          const wantsNewCalOnlyNote = !original && noteSelect.value === newCalOnlyNoteOption;
           let resolvedFolderId = "";
           if (wantsNewFolderNote && options.folderId) {
             const currentFolder = store.meta.folders.find((f) => (options.folderUid ? f.uid === options.folderUid : f.id === options.folderId));
@@ -29265,8 +29526,12 @@ __zentralShim.register = function (def) {
           if (noteSync?.error) { status.textContent = noteSync.error; return; }
           let itemToSave = item;
           if (wantsNewFolderNote) {
-            const createdNote = store.create("# " + title.input.value.trim() + "\n", resolvedFolderId);
+            const createdNote = store.create("# " + title.input.value.trim() + "\n", resolvedFolderId, { calendarOnly: calOnlyNewNoteCheck.checked });
             if (!createdNote) { status.textContent = "Could not create note in the selected folder."; return; }
+            itemToSave = { ...item, x: { ...item.x, noteId: createdNote.id } };
+          } else if (wantsNewCalOnlyNote) {
+            const createdNote = store.create("# " + title.input.value.trim() + "\n", "", { calendarOnly: true });
+            if (!createdNote) { status.textContent = "Could not create calendar-only note."; return; }
             itemToSave = { ...item, x: { ...item.x, noteId: createdNote.id } };
           }
           const saved = store.items.upsert(itemToSave);
@@ -30477,6 +30742,12 @@ __zentralShim.register = function (def) {
       const rowShareBadge = rowShareInfo?.sharedFromOtherSpace
         ? ("Shared" + (rowShareInfo.ownerLabel ? " \u00b7 " + rowShareInfo.ownerLabel : ""))
         : (rowShareInfo?.isOwner && (rowShareInfo.allSpaces || rowShareInfo.spaces.length > 0) ? "Shared" : "");
+      const noteZenVis = trashed ? null : resolveNoteZenSidebar(n, store.meta.folders);
+      if (!trashed && n.calendarOnly) item.setAttribute("data-calendar-only", "true");
+      if (noteZenVis?.hidden) {
+        item.setAttribute("data-zen-hidden", "true");
+        item.setAttribute("data-zen-hidden-reason", noteZenVis.reason);
+      }
       item.append(
         h("span", { class: "zn-item-bar" }),
         h(
@@ -30484,6 +30755,7 @@ __zentralShim.register = function (def) {
           { class: "zn-item-main" },
           h("span", { class: "zn-item-title" }, (n.pinned ? "\u{1F4CC} " : "") + (titleOf(n.body) || "Untitled note")),
           ...(rowShareBadge ? [h("span", { class: "zn-item-label zn-item-shared" }, rowShareBadge)] : []),
+          ...(!trashed && n.calendarOnly ? [h("span", { class: "zn-item-label zn-item-cal-only", title: t(noteZenVis?.folderHidden ? "tree.note.calendarOnlyFolderHiddenTitle" : "tree.note.calendarOnlyTitle") }, t("tree.note.calendarOnlyBadge"))] : []),
           ...(n.label ? [h("span", { class: "zn-item-label" }, n.label)] : []),
           ...(!opts.tree && !n._sharedFromOtherSpace && cleanFolder(n.folder) ? [h("span", { class: "zn-item-label zn-item-folder" }, cleanFolder(n.folder))] : []),
           h("span", { class: "zn-item-snippet" }, snippetOf(n.body)),
@@ -30753,9 +31025,21 @@ __zentralShim.register = function (def) {
       function batchMenuItems() {
         const res = resolvedSelection();
         const n = res.effectiveNotes.length;
+        const canHide = res.effectiveNotes.some((note) => !note.calendarOnly);
+        const canShow = res.effectiveNotes.some((note) => !!note.calendarOnly);
         return [
           { icon: "folder", label: "Move selected to folder\u2026", enabled: res.topFolderIds.length > 0 || res.movableNoteIds.length > 0, action: () => queueMicrotask(askBatchMove) },
           { icon: "hash", label: "Assign tag / label / category\u2026", enabled: n > 0, action: () => queueMicrotask(askBatchAssign) },
+          ...(canHide ? [{ icon: "calendar", label: t("tree.note.batchZenHide"), action: () => {
+            let changed = 0;
+            for (const note of res.effectiveNotes) if (store.setCalendarOnly(note.id, true)) changed++;
+            if (changed) { flash(t("tree.note.batchZenHiddenFlash", { count: changed })); scheduleList(); applyState(); }
+          } }] : []),
+          ...(canShow ? [{ icon: "note", label: t("tree.note.batchZenShow"), action: () => {
+            let changed = 0;
+            for (const note of res.effectiveNotes) if (store.setCalendarOnly(note.id, false)) changed++;
+            if (changed) { flash(t("tree.note.batchZenShownFlash", { count: changed })); scheduleList(); applyState(); }
+          } }] : []),
           { icon: "save", label: `Export ${n} selected`, enabled: n > 0, group: [
             { icon: "save", label: "Export as Markdown files\u2026", action: () => { const snap = markdownExportSnapshot(res.effectiveNotes); askMarkdownExport(snap, (options) => env.exportAll(snap, options)); } },
             { icon: "save", label: "Export as ZIP\u2026", action: () => { const snap = markdownExportSnapshot(res.effectiveNotes); askMarkdownExport(snap, (options) => askExport("zip", async () => { const k = await env.exportZip(snap, options); if (k) flash(`Zipped ${k} notes`); })); } },
@@ -30911,7 +31195,12 @@ __zentralShim.register = function (def) {
       }
       function folderMenuItems(node) {
         const zenAction = folderZenSidebarMenuAction(node.id, store.meta.folders);
-        const items = [{ icon: "plus", label: "New note here", action: () => newNote(node.id) }, { icon: "plus", label: "Quick capture to today\u2019s note\u2026", action: () => queueMicrotask(() => askQuickCapture("")) }];
+        const items = [
+          { icon: "plus", label: "New note here", action: () => newNote(node.id) },
+          { icon: "calendar-plus", label: t("tree.folder.newCalendarOnlyNote"), action: () => newNote(node.id, { calendarOnly: true }) },
+          { icon: "calendar-plus", label: t("tree.folder.newBirthdayNote"), action: () => queueMicrotask(() => askNewBirthdayNote(node.id)) },
+          { icon: "plus", label: "Quick capture to today\u2019s note\u2026", action: () => queueMicrotask(() => askQuickCapture("")) },
+        ];
         if (folderDepth(node.id) < FOLDER_MAX_DEPTH)
           items.push({ icon: "folder", label: "New subfolder\u2026", action: () => askFolderName("New subfolder", "", (name) => store.addFolder(name, node.id)) });
         items.push(
@@ -31847,6 +32136,199 @@ __zentralShim.register = function (def) {
         stopBtn.addEventListener("click", () => apply([]));
         cancelBtn.addEventListener("click", closeDialog);
       }
+      function toggleNoteCalendarOnly(n) {
+        if (!n || n.trashed) return false;
+        const next = !n.calendarOnly;
+        if (!store.setCalendarOnly(n.id, next)) return false;
+        const updated = store.get(n.id);
+        const vis = resolveNoteZenSidebar(updated, store.meta.folders);
+        flash(t(next ? "tree.note.zenHiddenFlash" : (vis.folderHidden ? "tree.note.zenShownFolderHiddenFlash" : "tree.note.zenShownFlash")));
+        applyState();
+        scheduleList();
+        return true;
+      }
+      function askNewBirthdayNote(folderId = "", opts = {}) {
+        closeMenu();
+        closeDialog();
+        const titleField = field(t("birthday.dialog.titleField"), opts.title || t("birthday.dialog.defaultTitle"), t("birthday.dialog.titlePlaceholder"));
+        const nameField = field(t("birthday.dialog.nameField"), opts.name || "", t("birthday.dialog.namePlaceholder"));
+        let initialDate = "";
+        if (opts.date) {
+          const parsed = parseBirthdayDate(opts.date);
+          if (parsed) initialDate = String(parsed.day).padStart(2, "0") + "-" + String(parsed.month).padStart(2, "0");
+        }
+        const dateField = field(t("birthday.dialog.dateField"), initialDate, t("birthday.dialog.datePlaceholder"));
+        const timeField = field(t("birthday.dialog.timeField"), opts.time || "", t("birthday.dialog.timePlaceholder"));
+        const addBtn = chip(t("birthday.dialog.addAnother"));
+        const entriesList = h("div", { class: "zn-bday-list" });
+        entriesList.hidden = true;
+        const status = h("p", { class: "zn-empty zn-cal-compose-status", role: "status", "aria-live": "polite" });
+        const staged = [];
+        const renderStaged = () => {
+          entriesList.replaceChildren();
+          entriesList.hidden = staged.length === 0;
+          staged.forEach((entry, index) => {
+            const line = formatBirthdayLine(entry).replace(/^- /, "");
+            const removeBtn = chip(t("birthday.dialog.removeEntry"));
+            removeBtn.classList.add("zn-bday-remove");
+            removeBtn.addEventListener("click", () => { staged.splice(index, 1); renderStaged(); });
+            entriesList.append(h("div", { class: "zn-bday-row" }, h("span", { class: "zn-bday-text" }, line), removeBtn));
+          });
+        };
+        const readDraft = () => {
+          const name = nameField.input.value.trim();
+          const date = dateField.input.value.trim();
+          const time = timeField.input.value.trim();
+          if (!name && !date && !time) return { empty: true };
+          if (!name || !parseBirthdayDate(date)) return { error: t("birthday.dialog.errEntry"), target: !name ? nameField.input : dateField.input };
+          if (time && cleanBirthdayTime(time) === null) return { error: t("birthday.dialog.errTime"), target: timeField.input };
+          return { entry: { name, date, time } };
+        };
+        addBtn.addEventListener("click", () => {
+          status.textContent = "";
+          const draft = readDraft();
+          if (draft.empty) { status.textContent = t("birthday.dialog.errEntry"); nameField.input.focus(); return; }
+          if (draft.error) { status.textContent = draft.error; draft.target?.focus(); return; }
+          staged.push(draft.entry);
+          nameField.input.value = "";
+          dateField.input.value = "";
+          timeField.input.value = "";
+          renderStaged();
+          nameField.input.focus();
+        });
+        const folderSelect = h("select", { class: "zn-select", "aria-label": t("birthday.dialog.folderField") });
+        const createBirthdaysFolderOption = "__zentral_create_birthdays_folder__";
+        folderSelect.append(h("option", { value: "" }, t("birthday.dialog.folderRoot")));
+        const existingFolders = folderTargets();
+        const hasBirthdaysFolder = existingFolders.includes(BIRTHDAY_FOLDER_ID);
+        if (!hasBirthdaysFolder) {
+          folderSelect.append(h("option", { value: createBirthdaysFolderOption }, t("birthday.dialog.folderCreateBirthdays")));
+        }
+        for (const fid of existingFolders) {
+          const meta = store.meta.folders.find((f) => f.id === fid);
+          folderSelect.append(h("option", { value: fid }, meta ? meta.label + (fid.includes("/") ? " (" + fid + ")" : "") : fid));
+        }
+        const cleanInitialFolder = cleanFolder(folderId);
+        folderSelect.value = cleanInitialFolder && existingFolders.includes(cleanInitialFolder) ? cleanInitialFolder : "";
+        const folderRow = h("label", { class: "zn-field-row" }, h("span", {}, t("birthday.dialog.folderField")), folderSelect);
+        const calOnlyBox = h("input", { type: "checkbox", "aria-label": t("birthday.dialog.calendarOnly") });
+        calOnlyBox.checked = opts.calendarOnly !== false;
+        const calOnlyRow = h("label", { class: "zn-field-row zn-cal-compose-check" }, calOnlyBox, h("span", {}, t("birthday.dialog.calendarOnly")));
+        const createBtn = chip(t("birthday.dialog.create"), true);
+        const cancelBtn = chip(t("common.cancel"));
+        const card = openCard(
+          t("birthday.dialog.title"),
+          h("p", { class: "zn-empty" }, t("birthday.dialog.intro")),
+          titleField.row,
+          nameField.row,
+          dateField.row,
+          timeField.row,
+          h("div", { class: "zn-dialog-actions zn-bday-add-row" }, addBtn),
+          entriesList,
+          folderRow,
+          calOnlyRow,
+          status,
+          h("div", { class: "zn-dialog-actions" }, cancelBtn, createBtn),
+        );
+        card.classList.add("zn-bday-dialog-card");
+        const submit = () => {
+          status.textContent = "";
+          const draft = readDraft();
+          if (draft.error) { status.textContent = draft.error; draft.target?.focus(); return; }
+          const allEntries = draft.entry ? [...staged, draft.entry] : [...staged];
+          let targetFolder = "";
+          if (folderSelect.value === createBirthdaysFolderOption) {
+            const added = store.addFolder(BIRTHDAY_CATEGORY, "");
+            if (added) {
+              store.setFolderZenSidebar(added, "hide");
+              targetFolder = added;
+            }
+          } else {
+            targetFolder = cleanFolder(folderSelect.value);
+          }
+          if (targetFolder && store.meta.folders.find((f) => f.id === targetFolder)?.collapsed) {
+            store.setFolderCollapsed(targetFolder, false);
+          }
+          const body = buildBirthdayNoteBody({ title: titleField.input.value.trim() || t("birthday.dialog.defaultTitle"), entries: allEntries });
+          const created = store.create(body, targetFolder, { calendarOnly: calOnlyBox.checked });
+          closeDialog();
+          mode = "edit";
+          store.setMeta({ mode: "edit" });
+          openNote(created.id);
+          renderCalendar();
+          flash(allEntries.length ? t("birthday.dialog.createdWithCountFlash", { count: allEntries.length }) : t("birthday.dialog.createdFlash"));
+        };
+        createBtn.addEventListener("click", submit);
+        cancelBtn.addEventListener("click", () => { closeDialog(); focusEditor(); });
+        for (const input of [titleField.input, nameField.input, dateField.input, timeField.input]) {
+          input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } });
+        }
+        nameField.input.focus({ preventScroll: true });
+        return card;
+      }
+      function askAddBirthdayEntry(noteId, opts = {}) {
+        const target = store.get(noteId);
+        if (!target || target.trashed) return null;
+        closeMenu();
+        closeDialog();
+        const nameField = field(t("birthday.dialog.nameField"), opts.name || "", t("birthday.dialog.namePlaceholder"));
+        let initialDate = "";
+        if (opts.date) {
+          const parsed = parseBirthdayDate(opts.date);
+          if (parsed) initialDate = String(parsed.day).padStart(2, "0") + "-" + String(parsed.month).padStart(2, "0");
+        }
+        const dateField = field(t("birthday.dialog.dateField"), initialDate, t("birthday.dialog.datePlaceholder"));
+        const timeField = field(t("birthday.dialog.timeField"), opts.time || "", t("birthday.dialog.timePlaceholder"));
+        const status = h("p", { class: "zn-empty zn-cal-compose-status", role: "status", "aria-live": "polite" });
+        const okBtn = chip(t("birthday.add.submit"), true);
+        const cancelBtn = chip(t("common.cancel"));
+        const card = openCard(
+          t("birthday.add.title"),
+          nameField.row,
+          dateField.row,
+          timeField.row,
+          status,
+          h("div", { class: "zn-dialog-actions" }, cancelBtn, okBtn),
+        );
+        card.classList.add("zn-bday-add-card");
+        const submit = () => {
+          status.textContent = "";
+          const name = nameField.input.value.trim();
+          const date = dateField.input.value.trim();
+          const time = timeField.input.value.trim();
+          if (!name || !parseBirthdayDate(date)) { status.textContent = t("birthday.dialog.errEntry"); (!name ? nameField.input : dateField.input).focus(); return; }
+          if (time && cleanBirthdayTime(time) === null) { status.textContent = t("birthday.dialog.errTime"); timeField.input.focus(); return; }
+          const liveNote = store.get(noteId);
+          if (!liveNote || liveNote.trashed) { closeDialog(); return; }
+          const next = appendBirthdayEntry(liveNote.body, { name, date, time });
+          if (!next.changed) { status.textContent = t("birthday.dialog.errEntry"); return; }
+          store.update(noteId, next.body);
+          store.stabilizeItems?.(noteId);
+          if (currentId === noteId) {
+            ta.value = store.get(noteId)?.body || next.body;
+            if (mode !== "edit") renderRead();
+          }
+          closeDialog();
+          renderCalendar();
+          scheduleList();
+          flash(t("birthday.add.addedFlash", { name }));
+        };
+        okBtn.addEventListener("click", submit);
+        cancelBtn.addEventListener("click", () => { closeDialog(); focusEditor(); });
+        for (const input of [nameField.input, dateField.input, timeField.input]) {
+          input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } });
+        }
+        nameField.input.focus({ preventScroll: true });
+        return card;
+      }
+      listen(calOnlyEl, "click", () => {
+        const n = note();
+        if (!n || n.trashed) return;
+        showMenu(calOnlyEl, [
+          { icon: "note", label: t("tree.note.zenShow"), action: () => toggleNoteCalendarOnly(n) },
+          { icon: "calendar-plus", label: t("birthday.menu.addEntry"), action: () => queueMicrotask(() => askAddBirthdayEntry(n.id)) },
+        ]);
+      });
       function askMoveNote(n) {
         askFolderPick("Move note to folder", folderTargets(), (fid) => { store.setFolder(n.id, fid); applyState(); scheduleList(); }, cleanFolder(n.folder));
       }
@@ -31872,13 +32354,15 @@ __zentralShim.register = function (def) {
         return [
           { icon: "note", label: "Open", action: () => openNote(n.id) },
           { icon: "pin", label: n.pinned ? "Unpin" : "Pin", action: () => { store.setPinned(n.id, !n.pinned); scheduleList(); } },
+          { icon: n.calendarOnly ? "note" : "calendar", label: t(n.calendarOnly ? "tree.note.zenShow" : "tree.note.zenHide"), action: () => toggleNoteCalendarOnly(n) },
           { icon: "plus", label: "Quick capture here\u2026", action: () => queueMicrotask(() => askQuickCapture(n.id)) },
           { icon: "plus", label: "Quick capture to today\u2019s note\u2026", action: () => queueMicrotask(() => askQuickCapture("")) },
           { icon: "calendar-plus", label: "Add to Calendar…", action: () => queueMicrotask(() => composeFromNote(n.id)) },
+          { icon: "calendar-plus", label: t("birthday.menu.addEntry"), action: () => queueMicrotask(() => askAddBirthdayEntry(n.id)) },
           ...(shareRows.length ? [{ sep: true }, ...shareRows] : []),
           { sep: true },
           ...(!shareInfo?.sharedFromOtherSpace ? [{ icon: "folder", label: "Move to folder\u2026", action: () => queueMicrotask(() => askMoveNote(n)) }] : []),
-          { icon: "duplicate", label: "Duplicate", action: () => { const c = store.create(n.body, shareInfo?.sharedFromOtherSpace ? "" : n.folder); store.setColor(c.id, n.color); store.setLabel(c.id, n.label); scheduleList(); } },
+          { icon: "duplicate", label: "Duplicate", action: () => { const c = store.create(n.body, shareInfo?.sharedFromOtherSpace ? "" : n.folder, { calendarOnly: !!n.calendarOnly }); store.setColor(c.id, n.color); store.setLabel(c.id, n.label); scheduleList(); } },
           { label: "Colour", group: [...NOTE_COLORS.map((c) => ({ label: c, action: () => { store.setColor(n.id, c); scheduleList(); } })), ...quickColors().map((c) => ({ label: c, action: () => { store.setColor(n.id, c); scheduleList(); } })), { label: "Custom color\u2026", action: () => queueMicrotask(() => askCustomColor("Custom note color", cleanHex(n.color), (v) => { store.setColor(n.id, v); scheduleList(); })) }] },
           ...(FLAVORS_PART ? [{ label: "Markdown mode", group: [["", "Follow the setting"], ...FLAVORS_PART.MODES.map((m) => [m, FLAVORS_PART.MODE_LABELS[m]])].map(([m, label]) => ({ label: (n.flavor || "") === m ? "\u2713 " + label : label, action: () => { store.setFlavor(n.id, m); scheduleList(); } })) }] : []),
           { icon: "link", label: "Copy link", action: () => { env.copyText?.("[[" + (titleOf(n.body) || "Untitled note") + "]]"); flash("Link copied"); } },
@@ -34740,9 +35224,15 @@ __zentralShim.register = function (def) {
                 ? { icon: "folder", label: "Remove from Notes (tabbar)", action: () => { store.setFolder(n.id, ""); applyState(); flash("Moved out of the Zen sidebar folder"); } }
                 : { icon: "folder", label: "Move to Notes (tabbar)", action: () => { store.ensureTabbarFolder(); store.setFolder(n.id, TABBAR_FOLDER); applyState(); flash("Shown in the Zen sidebar folder"); } }]
             : []),
+          ...(!n.trashed ? [
+            { icon: n.calendarOnly ? "note" : "calendar", label: t(n.calendarOnly ? "tree.note.zenShow" : "tree.note.zenHide"), action: () => toggleNoteCalendarOnly(n) },
+            { icon: "calendar-plus", label: t("birthday.menu.addEntry"), action: () => queueMicrotask(() => askAddBirthdayEntry(n.id)) },
+          ] : []),
           { sep: true },
           { icon: "plus", label: "New note", action: () => newNote() },
-          { icon: "duplicate", label: "Duplicate", action: () => { const c = store.create(n.body); store.setColor(c.id, n.color); store.setLabel(c.id, n.label); openNote(c.id); } },
+          { icon: "calendar-plus", label: t("compose.note.newCalendarOnly"), action: () => newNote("", { calendarOnly: true }) },
+          { icon: "calendar-plus", label: t("tree.folder.newBirthdayNote"), action: () => queueMicrotask(() => askNewBirthdayNote()) },
+          { icon: "duplicate", label: "Duplicate", action: () => { const c = store.create(n.body, "", { calendarOnly: !!n.calendarOnly }); store.setColor(c.id, n.color); store.setLabel(c.id, n.label); openNote(c.id); } },
           { icon: "folder", label: "Move to folder\u2026", action: () => askNoteFolder() },
           ...(FLAVORS_PART ? [{ icon: "sliders", label: "Markdown mode", group: [["", "Follow the setting"], ...FLAVORS_PART.MODES.map((m) => [m, FLAVORS_PART.MODE_LABELS[m]])].map(([m, label]) => ({ label: (n.flavor || "") === m ? "\u2713 " + label : label, action: () => { store.setFlavor(n.id, m); renderRead(); } })) }] : []),
           ...(adapter.geoKey || adapter.pushPanel ? [{ icon: "maximize", label: "Window", group: [
@@ -35232,6 +35722,9 @@ __zentralShim.register = function (def) {
           day("tomorrow", "Tomorrow"),
           { icon: "bell", label: "Pick date\u2026", action: () => queueMicrotask(askOtherDate) },
           { icon: "note", label: "From template\u2026", group: templateMenuItems() },
+          { sep: true },
+          { icon: "calendar-plus", label: t("compose.note.newCalendarOnly"), action: () => newNote("", { calendarOnly: true }) },
+          { icon: "calendar-plus", label: t("tree.folder.newBirthdayNote"), action: () => queueMicrotask(() => askNewBirthdayNote()) },
         ]);
       }
       listen(btnNew, "click", () => newNoteChooser());
@@ -41040,6 +41533,7 @@ __zentralShim.register = function (def) {
       const ZEN_MENU_ITEMS = [
         ["open", "sidebar.note.open", (tab) => activateZenTab(tab)],
         ["out", "sidebar.note.removeFromFolder", (tab) => { const id = zenNoteIdFromTab(tab); if (id && zenMode() === "selected") withStore(() => { store.setFolder(id, ""); zen.schedule(0); }); }],
+        ["zen-hide", "sidebar.note.hideFromZen", (tab) => { const id = zenNoteIdFromTab(tab); if (id) withStore(() => { store.setCalendarOnly(id, true); zen.schedule(0); }); }],
         ["trash", "sidebar.note.moveToTrash", (tab) => { const id = zenNoteIdFromTab(tab); if (id) trashNoteFromSidebar(id); }],
       ];
       // A note without reminders goes to Trash at once (it can be restored there). A note with reminders asks first,
@@ -41100,6 +41594,20 @@ __zentralShim.register = function (def) {
         item.setAttribute("zentral-notes-folder-own", "new");
         item.addEventListener("command", () => withStore(() => { store.create("", isRoot ? (zenMode() === "selected" ? TABBAR_FOLDER : "") : meta.id); }));
         menu.append(item);
+        const calOnlyItem = document.createXULElement("menuitem");
+        calOnlyItem.setAttribute("label", t("sidebar.note.newCalendarOnlyInFolder"));
+        calOnlyItem.setAttribute("zentral-notes-folder-own", "new-cal-only");
+        const calOnlyUid = meta?.uid || "";
+        const calOnlyMode = zenMode();
+        calOnlyItem.addEventListener("command", () => {
+          withStore(() => {
+            const target = isRoot ? (calOnlyMode === "selected" ? TABBAR_FOLDER : "") : (store.meta.folders.find((f) => f.uid === calOnlyUid)?.id || "");
+            if (!isRoot && !target) return;
+            const created = store.create("", target, { calendarOnly: true });
+            if (created) showNotes(created.id).catch(warn);
+          });
+        });
+        menu.append(calOnlyItem);
         const menuMode = zenMode();
         const parentId = isRoot ? (menuMode === "selected" ? TABBAR_FOLDER : "") : meta.id;
         if (folderDepth(parentId) < FOLDER_MAX_DEPTH) {
