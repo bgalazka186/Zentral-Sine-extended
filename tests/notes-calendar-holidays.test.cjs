@@ -174,7 +174,9 @@ async function test(name, fn) {
     assert.equal(cal.defaultHolidayRegion("de-AT"), "none", "unsupported country is not guessed from its language");
     assert.equal(cal.defaultHolidayRegion("fr-FR"), "none");
     assert.equal(cal.cleanCalendarHolidays(null, "pl-PL").region, "PL", "fresh profile picks the supported locale region");
-    assert.equal(cal.cleanCalendarHolidays({ region: "none" }, "pl-PL").region, "none", "an explicitly stored no-calendar selection is preserved");
+    assert.equal(cal.cleanCalendarHolidays({ region: "none" }, "pl-PL").region, "PL", "legacy region:none defaults migrate to the app locale");
+    assert.equal(cal.cleanCalendarHolidays({ region: "none", regionExplicit: true }, "pl-PL").region, "none", "a current explicit no-calendar choice is preserved");
+    assert.equal(cal.cleanCalendarHolidays({ region: "DE" }, "pl-PL").region, "DE", "an existing selected region is retained");
 
     // Poland 2024 vs 2025/2026 (Wigilia Dec 24 added from 2025 onward; Corpus Christi = Easter + 60)
     const pl2024 = cal.holidaysFor("PL", 2024, "pl");
@@ -344,6 +346,7 @@ async function test(name, fn) {
     await h.flush();
 
     assert.equal(h.store.meta.calendarHolidays.region, "DE");
+    assert.equal(h.store.meta.calendarHolidays.regionExplicit, true, "manual selection is persisted as explicit");
     assert.match(regionStatus.textContent, /Germany/i, "region status follows a changed selection");
     assert.ok(h.store.meta.calendarHolidays.personalDays.some((p) => p.date === "2026-05-15" && p.label === "Berlin trip"));
 

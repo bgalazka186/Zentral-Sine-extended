@@ -20953,7 +20953,7 @@
           regionSelect.append(opt);
         }
         regionSelect.value = state.region;
-        regionSelect.addEventListener("change", () => save({ ...state, region: regionSelect.value }));
+        regionSelect.addEventListener("change", () => save({ ...state, region: regionSelect.value, regionExplicit: true }));
         regionStatus = h("p", { class: "zn-cal-holidays-region-status", "aria-live": "polite" }, "");
         renderRegionStatus();
 

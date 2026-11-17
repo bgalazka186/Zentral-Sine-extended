@@ -7187,7 +7187,9 @@
   function cleanCalendarHolidays(raw, locale = "") {
     const src = raw && typeof raw === "object" ? raw : {};
     const enabled = src.enabled !== false;
-    const region = HOLIDAY_REGIONS.includes(src.region) ? src.region : defaultHolidayRegion(locale);
+    const regionExplicit = src.regionExplicit === true;
+    const storedRegion = HOLIDAY_REGIONS.includes(src.region) ? src.region : null;
+    const region = storedRegion && (storedRegion !== "none" || regionExplicit) ? storedRegion : defaultHolidayRegion(locale);
     const weekend = WEEKEND_PRESETS.includes(src.weekend) ? src.weekend : "auto";
     const personalMap = new Map();
     const list = Array.isArray(src.personalDays) ? src.personalDays : [];
@@ -7199,7 +7201,7 @@
       personalMap.set(date, { date, label });
     }
     const personalDays = [...personalMap.values()].sort((a, b) => a.date.localeCompare(b.date));
-    return { enabled, region, weekend, personalDays };
+    return { enabled, region, regionExplicit, weekend, personalDays };
   }
   function addPersonalDayOff(prefs, dateKey, label = "") {
     const clean = cleanCalendarHolidays(prefs);
