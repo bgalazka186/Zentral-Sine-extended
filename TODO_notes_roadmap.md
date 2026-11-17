@@ -77,6 +77,7 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
 |    12 | `T2.9`      | `PARTIAL` | Med-High            | M      | none              | Daily-note lifecycle and archive policy inside Agenda                                                    |
+|    68 | `OW-39`     | `OPEN`    | Med-High            | S-M    | none              | Work-free-day contrast & holiday visibility polish from live tests (distinct subtle tint + holidays)     |
 |    34 | `T2.11b1`   | `OPEN`    | High                | M      | Track 1-2 UI done | Audit UI discoverability of all Notes functions                                                          |
 |    35 | `T2.11b2`   | `OPEN`    | Med                 | M      | T2.11b1           | Rebuild the Notes DEMO notes                                                                             |
 |    36 | `T2.13`     | `OPEN`    | Med                 | M      | all other Track 2 | ICS export/import and Google-sync groundwork (always last in Track 2)                                    |
@@ -118,6 +119,17 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 **Full specification (original row):** **OPEN.** Depends on `T2.2c`, `T2.8`. Migrate existing Daily notes/folder and preserve links. Past daily notes move to Trash the next day and stay 30 days, then live only in the 48-hour rolling backup. Setting _always archive, never trash_ keeps compressed copies in a separate archive folder. No duplicate Daily pseudo-folder beside Agenda.
 
 **Owner decision needed first (2026-11-16):** past date notes that are not blank are never cleaned up today. Decide whether they may ever go to Trash automatically (the safe default is never; only the archive setting moves them).
+
+#### `OW-39` — Work-free-day contrast & holiday visibility polish from live tests
+
+**Status:** `OPEN` · **Impact:** Med-High · **Effort:** S-M · **Source:** owner live test 2026-11-16
+
+**Owner feedback verbatim:** *"non work days have to have diferent color then work days , more contrasting ones, it shiould only be slight tint, it doesnt have hollydays in it yet so its not finished"*
+
+**Requirements:**
+- Make non-work days (weekends, public holidays, personal days off) clearly distinct in color/hue from normal work days with stronger contrast (especially on dark Zen surfaces), while keeping it a tasteful, slight tint that never obscures text, events, heat map, or selection.
+- Ensure public holidays are visibly active/discoverable (e.g. sensible locale-based default or prominent region prompt/indicator, clear holiday color/badge differentiation from ordinary weekends, and full holiday sets verified across views in live Zen).
+- Add/update CSS & behavioral regression tests covering work-day vs weekend vs public-holiday visual differentiation.
 
 #### `T3.9c`..`T3.9e` — Sidebar widgets (split of T3.9; `T3.9a` DONE at 3.3.223, `T3.9b` DONE at 3.3.224)
 

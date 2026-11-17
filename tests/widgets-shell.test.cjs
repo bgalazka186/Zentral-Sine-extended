@@ -867,5 +867,158 @@ function createFakeSidebarHarness(initialPrefs = {}) {
     });
   });
 
+  await test("real Zen 1.24.1b sidebar DOM: skips hidden Firefox #vertical-tabs, measures #tabbrowser-tabs & .zen-workspace-empty-space without flicker", () => {
+    const h = createFakeSidebarHarness({ "zen.workspace.zentral.widgets.enabled": true });
+    const { document, window, core } = h;
+    const setRect = (el, { left = 2389, top = 78, width = 166, height = 0 } = {}) => {
+      el._rect = { left, top, width, height, right: left + width, bottom: top + height };
+      el.getBoundingClientRect = () => el._rect;
+    };
+    const setStyle = (el, st) => {
+      el._computedStyle = { display: "flex", visibility: "visible", position: "static", paddingTop: "0px", paddingBottom: "0px", paddingLeft: "0px", paddingRight: "0px", marginTop: "0px", marginBottom: "0px", ...st };
+    };
+    const origGetCS = window.getComputedStyle;
+    window.getComputedStyle = (el) => el?._computedStyle || origGetCS(el);
+
+    // Clear default harness children so we build the EXACT Zen 1.24.1b hierarchy
+    for (const c of [...document.documentElement.children]) c.remove();
+
+    // 1. Firefox's hidden legacy #vertical-tabs stub (display: none, 0x0)
+    const sidebarMain = document.createElement("sidebar-main");
+    const legacyVerticalTabs = document.createElement("box");
+    legacyVerticalTabs.id = "vertical-tabs";
+    setRect(legacyVerticalTabs, { left: 0, top: 0, width: 0, height: 0 });
+    setStyle(legacyVerticalTabs, { display: "none" });
+    sidebarMain.appendChild(legacyVerticalTabs);
+    document.documentElement.appendChild(sidebarMain);
+
+    // 2. Real Zen sidebar: hbox#TabsToolbar-customization-target (166x1310)
+    const target = document.createElement("hbox");
+    target.id = "TabsToolbar-customization-target";
+    setRect(target, { left: 2389, top: 78, width: 166, height: 1310 });
+    setStyle(target, { display: "flex", flexDirection: "column" });
+    document.documentElement.appendChild(target);
+
+    const tabbrowserTabs = document.createElement("tabs");
+    tabbrowserTabs.id = "tabbrowser-tabs";
+    setRect(tabbrowserTabs, { left: 2389, top: 78, width: 166, height: 1283 });
+    setStyle(tabbrowserTabs, { display: "flex", flexDirection: "column" });
+
+    const tabsWrapper = document.createElement("div");
+    tabsWrapper.id = "zen-tabs-wrapper";
+    tabsWrapper.clientHeight = 1282;
+    tabsWrapper.scrollHeight = 1282;
+    setRect(tabsWrapper, { left: 2384, top: 78, width: 176, height: 1282 });
+    setStyle(tabsWrapper, { display: "block" });
+
+    const arrowBox = document.createElement("arrowscrollbox");
+    arrowBox.id = "tabbrowser-arrowscrollbox";
+    arrowBox.clientHeight = 1282;
+    arrowBox.scrollHeight = 1282;
+    setRect(arrowBox, { left: 2384, top: 78, width: 176, height: 1282 });
+    setStyle(arrowBox, { display: "flex" });
+
+    // Active Zen workspace with 279px of tabs + 1004px of vbox.zen-workspace-empty-space
+    const activeWs = document.createElement("zen-workspace");
+    activeWs.setAttribute("active", "true");
+    setRect(activeWs, { left: 2389, top: 78, width: 166, height: 1282 });
+    setStyle(activeWs, { display: "flex", flexDirection: "column" });
+
+    const normalSec = document.createElement("vbox");
+    normalSec.className = "zen-workspace-normal-tabs-section";
+    const tab1 = document.createElement("tab");
+    setRect(tab1, { left: 2389, top: 78, width: 166, height: 36 });
+    setStyle(tab1, { display: "flex" });
+    const emptySpace = document.createElement("vbox");
+    emptySpace.className = "zen-workspace-empty-space";
+    setRect(emptySpace, { left: 2384, top: 357, width: 176, height: 1004 });
+    setStyle(emptySpace, { display: "flex" });
+    normalSec.appendChild(tab1);
+    normalSec.appendChild(emptySpace);
+    activeWs.appendChild(normalSec);
+
+    // Inactive workspace slid off-screen horizontally with overflowing tall tab (must be ignored!)
+    const inactiveWs = document.createElement("zen-workspace");
+    setRect(inactiveWs, { left: 2600, top: 78, width: 166, height: 1282 });
+    setStyle(inactiveWs, { display: "flex" });
+    const offTab = document.createElement("tab");
+    setRect(offTab, { left: 2600, top: 1250, width: 166, height: 40 });
+    setStyle(offTab, { display: "flex" });
+    inactiveWs.appendChild(offTab);
+
+    arrowBox.appendChild(activeWs);
+    arrowBox.appendChild(inactiveWs);
+    tabsWrapper.appendChild(arrowBox);
+    tabbrowserTabs.appendChild(tabsWrapper);
+
+    // Hidden #zen-media-controls-toolbar + 26px #zentral-video-preview + toolbarspring
+    const media = document.createElement("toolbar");
+    media.id = "zen-media-controls-toolbar";
+    media.hidden = true;
+    setRect(media, { left: 0, top: 0, width: 0, height: 0 });
+    setStyle(media, { display: "none" });
+
+    const video = document.createElement("div");
+    video.id = "zentral-video-preview";
+    setRect(video, { left: 2389, top: 1361, width: 166, height: 26 });
+    setStyle(video, { display: "flex" });
+
+    const spring = document.createElement("toolbarspring");
+    setRect(spring, { left: 2389, top: 1387, width: 166, height: 1 });
+    setStyle(spring, { display: "flex" });
+
+    target.appendChild(tabbrowserTabs);
+    target.appendChild(media);
+    target.appendChild(video);
+    target.appendChild(spring);
+
+    // 1. resolveTabsHost MUST pick visible #tabbrowser-tabs and ignore hidden #vertical-tabs
+    assert.equal(core.resolveTabsHost(document, window, target), tabbrowserTabs);
+
+    // 2. Start widgets shell -> mounts before #zen-media-controls-toolbar, becomes VISIBLE!
+    const { api } = h.start();
+    const tray = api.getTray();
+    assert.equal(tray.parentNode, target, "mounted inside hbox#TabsToolbar-customization-target");
+    assert.equal(video.previousSibling, media, "#zentral-video-preview anchor untouched");
+
+    const area1 = api.getArea();
+    assert.equal(area1.visible, true, "widgets tray MUST be visible with 1004px of Zen empty space");
+    assert.equal(area1.reason, "visible");
+    assert.equal(area1.sidebarWidth, 166);
+    assert.equal(area1.sidebarHeight, 1310);
+    assert.equal(area1.otherChromeHeight, 0, "#tabbrowser-tabs and toolbarspring not counted as chrome");
+    assert.equal(area1.videoReservedHeight, 26);
+    assert.equal(area1.tabsContentHeight, 279, "occupied tabs height = 1283 - 1004 = 279px");
+    assert.equal(area1.rawFreeHeight, 1005, "free height = 1310 - 0 - 26 - 279 = 1005px");
+    assert.equal(area1.maxTrayHeight, Math.floor(1005 * 0.45));
+    assert.equal(area1.density, "compact");
+    assert.equal(tray.hidden, false);
+
+    // 3. Simulate flex layout AFTER tray opens at 130px:
+    //    #tabbrowser-tabs shrinks 1283 -> 1153, .zen-workspace-empty-space shrinks 1004 -> 874.
+    //    Remeasuring MUST yield the EXACT SAME tabsContentHeight (279) and rawFreeHeight (1005) — ZERO flicker!
+    setRect(tabbrowserTabs, { left: 2389, top: 78, width: 166, height: 1153 });
+    setRect(tabsWrapper, { left: 2384, top: 78, width: 176, height: 1152 });
+    tabsWrapper.clientHeight = 1152;
+    tabsWrapper.scrollHeight = 1152;
+    setRect(emptySpace, { left: 2384, top: 357, width: 176, height: 874 });
+    api.remeasure();
+    const area2 = api.getArea();
+    assert.equal(area2.visible, true);
+    assert.equal(area2.tabsContentHeight, 279, "invariant occupied tabs height after tray opens");
+    assert.equal(area2.rawFreeHeight, 1005, "invariant free height -> zero shrink/hide flicker");
+
+    // 4. Simulate many tabs filling & overflowing #zen-tabs-wrapper (emptySpace collapses to 0, scrollHeight > clientHeight)
+    setRect(emptySpace, { left: 2384, top: 1360, width: 176, height: 0 });
+    tabsWrapper.scrollHeight = 1650;
+    api.remeasure();
+    const areaOverflow = api.getArea();
+    assert.equal(areaOverflow.visible, false, "auto-hides when Zen tabs overflow");
+    assert.equal(areaOverflow.reason, "low-free-height");
+    assert.equal(tray.hidden, true);
+
+    api.destroy();
+  });
+
   console.log(`\nPASS widgets-shell (${passed} tests)`);
 })();

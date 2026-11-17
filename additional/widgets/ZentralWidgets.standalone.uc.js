@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Widgets
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.236
+// @version 3.3.237
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.236, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.237, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.236";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.237";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1753,9 +1753,7 @@ function nativeSidebarSide() {
     }
 
     const video = doc.getElementById(VIDEO_PLAYER_ID);
-    const tabs =
-      doc.getElementById("vertical-tabs") ||
-      doc.getElementById("tabbrowser-tabs");
+    const tabs = resolveTabsHost(doc, win, null);
 
     if (tabs?.parentNode && isAncestorVisible(tabs, win)) {
       let next = tabs.nextSibling;
@@ -1852,10 +1850,147 @@ function nativeSidebarSide() {
     return false;
   }
 
+  function isFlexibleSpacerElement(el) {
+    if (!el) return false;
+    const tag = String(el.localName || el.tagName || "").toLowerCase();
+    if (tag === "toolbarspring" || tag === "spacer") return true;
+    return Boolean(el.classList?.contains?.("zen-workspace-empty-space"));
+  }
+
+  /**
+   * Resolves the real visible tabs container inside the sidebar.
+   * In Zen Browser, Firefox's legacy #vertical-tabs element still exists in the
+   * DOM as a hidden 0x0 box (display: none) while Zen's live sidebar tabs live
+   * inside #tabbrowser-tabs. Always prefer a visible, connected host inside
+   * mountHost rather than blindly short-circuiting on a hidden #vertical-tabs.
+   */
+  function resolveTabsHost(doc, win, mountHost = null) {
+    if (!doc || typeof doc.getElementById !== "function") return null;
+    const candidates = [
+      doc.getElementById("tabbrowser-tabs"),
+      doc.getElementById("vertical-tabs"),
+    ].filter(Boolean);
+    if (!candidates.length) return null;
+
+    if (mountHost) {
+      for (const el of candidates) {
+        if (
+          (el === mountHost || mountHost.contains?.(el)) &&
+          !isElementHidden(el, win)
+        ) {
+          const r = safeRect(el);
+          if (!r || r.height > 0) return el;
+        }
+      }
+    }
+    for (const el of candidates) {
+      if (!isElementHidden(el, win)) {
+        const r = safeRect(el);
+        if (!r || r.height > 0) return el;
+      }
+    }
+    for (const el of candidates) {
+      if (!isElementHidden(el, win)) return el;
+    }
+    return candidates[0];
+  }
+
+  function isRectHorizontallyInHost(rect, hostRect) {
+    if (!rect || !hostRect || hostRect.width <= 0) return true;
+    // Inactive Zen workspaces may be slid off-screen horizontally via scroll or
+    // transform rather than display:none; ignore off-screen workspace elements.
+    if (rect.width <= 0) return false;
+    return rect.right > hostRect.left + 1 && rect.left < hostRect.right - 1;
+  }
+
+  function findActiveZenWorkspace(tabsHost, win, hostRect) {
+    if (!tabsHost || typeof tabsHost.querySelectorAll !== "function")
+      return null;
+    let workspaces = [];
+    try {
+      workspaces = Array.from(
+        tabsHost.querySelectorAll("zen-workspace, .zen-workspace-tabs-section"),
+      ).filter((el) => String(el?.localName || el?.tagName || "").toLowerCase() === "zen-workspace");
+    } catch (_) {
+      workspaces = [];
+    }
+    if (!workspaces.length) return null;
+
+    const explicit = workspaces.find(
+      (ws) =>
+        (ws.getAttribute?.("active") === "true" ||
+          (ws.hasAttribute?.("active") && ws.getAttribute?.("active") !== "false")) &&
+        !isElementHidden(ws, win),
+    );
+    if (explicit) return explicit;
+
+    return (
+      workspaces.find((ws) => {
+        if (isElementHidden(ws, win)) return false;
+        const r = safeRect(ws);
+        return Boolean(r && r.height > 0 && isRectHorizontallyInHost(r, hostRect));
+      }) || null
+    );
+  }
+
   function measureTabsContentHeight(tabsHost, win) {
     if (!tabsHost || isElementHidden(tabsHost, win)) return 0;
     const hostRect = safeRect(tabsHost);
     if (!hostRect) return 0;
+
+    const activeWs = findActiveZenWorkspace(tabsHost, win, hostRect);
+    const scopeRoot = activeWs || tabsHost;
+
+    // Check overflow on tabsHost AND Zen's inner scroll wrappers (#zen-tabs-wrapper,
+    // #tabbrowser-arrowscrollbox, active zen-workspace).
+    let overflowHeight = 0;
+    const scrollContainers = [tabsHost];
+    if (typeof tabsHost.querySelectorAll === "function") {
+      try {
+        for (const sc of tabsHost.querySelectorAll(
+          "#zen-tabs-wrapper, #tabbrowser-arrowscrollbox",
+        )) {
+          if (sc && !isElementHidden(sc, win)) scrollContainers.push(sc);
+        }
+      } catch (_) {}
+    }
+    if (activeWs && !scrollContainers.includes(activeWs)) {
+      scrollContainers.push(activeWs);
+    }
+    for (const sc of scrollContainers) {
+      const r = safeRect(sc);
+      const cH = Number(sc.clientHeight) || r?.height || 0;
+      const sH = Number(sc.scrollHeight) || 0;
+      if (sH > cH + 1) {
+        const scTop = r ? Math.max(0, r.top - hostRect.top) : 0;
+        overflowHeight = Math.max(overflowHeight, Math.ceil(scTop + sH));
+      }
+    }
+
+    // In Zen Browser, the active workspace renders a flex-grow spacer
+    // (vbox.zen-workspace-empty-space) filling the exact unused space below tabs,
+    // folders, and Essentials. When visible and non-overflowing,
+    // (hostRect.height - emptySpace.height) equals the exact occupied height of
+    // all tab chrome — and stays invariant before AND after the widget tray opens
+    // (preventing shrink-then-hide oscillation).
+    if (overflowHeight === 0 && typeof scopeRoot.querySelectorAll === "function") {
+      let emptyNodes = [];
+      try {
+        emptyNodes = Array.from(
+          scopeRoot.querySelectorAll(".zen-workspace-empty-space"),
+        );
+      } catch (_) {
+        emptyNodes = [];
+      }
+      for (const emptyEl of emptyNodes) {
+        if (!emptyEl || isElementHidden(emptyEl, win)) continue;
+        const er = safeRect(emptyEl);
+        if (!er || er.height <= 0) continue;
+        if (!isRectHorizontallyInHost(er, hostRect)) continue;
+        const occupied = Math.max(0, Math.ceil(hostRect.height - er.height));
+        return occupied;
+      }
+    }
 
     let maxBottom = 0;
     const scrollTop = Number.isFinite(tabsHost.scrollTop)
@@ -1863,12 +1998,12 @@ function nativeSidebarSide() {
       : 0;
 
     // Inspect concrete visible tab/folder/action items so stretched flex wrappers
-    // inside #vertical-tabs do not falsely consume all free space.
+    // inside #tabbrowser-tabs / #vertical-tabs do not falsely consume all free space.
     let items = [];
-    if (typeof tabsHost.querySelectorAll === "function") {
+    if (typeof scopeRoot.querySelectorAll === "function") {
       try {
         items = Array.from(
-          tabsHost.querySelectorAll(
+          scopeRoot.querySelectorAll(
             "tab, .tabbrowser-tab, zen-folder, #tabs-newtab-button, #vertical-tabs-newtab-button, .zen-workspace-pinned-tabs-section > *, .zen-workspace-normal-tabs-section > *, toolbarseparator",
           ),
         );
@@ -1878,27 +2013,25 @@ function nativeSidebarSide() {
     }
 
     for (const item of items) {
-      if (!item || item === tabsHost || isElementHidden(item, win)) continue;
+      if (
+        !item ||
+        item === tabsHost ||
+        isFlexibleSpacerElement(item) ||
+        isElementHidden(item, win)
+      )
+        continue;
       const r = safeRect(item);
       if (!r || r.height <= 0) continue;
+      if (!isRectHorizontallyInHost(r, hostRect)) continue;
       const bottom = r.bottom - hostRect.top + scrollTop;
       if (bottom > maxBottom) maxBottom = bottom;
     }
 
-    // If the tabs container itself overflows its own viewport (many open tabs),
-    // scrollHeight reflects the true full height demanded by tabs & folders.
-    const clientH = Number(tabsHost.clientHeight) || hostRect.height;
-    const scrollH = Number(tabsHost.scrollHeight) || 0;
-    if (scrollH > clientH + 1) {
-      maxBottom = Math.max(maxBottom, scrollH);
-    } else if (maxBottom === 0 && scrollH > 0 && items.length === 0) {
-      // Fallback for minimal/mock tabs containers that expose scrollHeight directly.
+    if (overflowHeight > 0) {
+      maxBottom = Math.max(maxBottom, overflowHeight);
+    } else if (maxBottom === 0 && items.length === 0) {
       const attrH = Number(tabsHost.getAttribute?.("data-zw-tabs-height"));
       if (Number.isFinite(attrH) && attrH >= 0) maxBottom = attrH;
-    } else {
-      const attrH = Number(tabsHost.getAttribute?.("data-zw-tabs-height"));
-      if (Number.isFinite(attrH) && attrH >= 0 && items.length === 0)
-        maxBottom = attrH;
     }
 
     return Math.max(0, Math.ceil(maxBottom));
@@ -1979,15 +2112,13 @@ function nativeSidebarSide() {
       ? Math.ceil(outerVerticalSize(videoEl, win))
       : 0;
 
-    const tabsHost =
-      doc.getElementById?.("vertical-tabs") ||
-      doc.getElementById?.("tabbrowser-tabs") ||
-      null;
+    const tabsHost = resolveTabsHost(doc, win, mountHost);
 
     let otherChromeHeight = 0;
     const children = mountHost.children ? Array.from(mountHost.children) : [];
     for (const child of children) {
       if (!child || child === tray || child === videoEl) continue;
+      if (isFlexibleSpacerElement(child)) continue;
       if (
         tabsHost &&
         (child === tabsHost || child.contains?.(tabsHost))
@@ -2342,6 +2473,7 @@ function nativeSidebarSide() {
     resolveWidgetRefreshMs,
     computeWidgetArea,
     chooseWidgetMountTarget,
+    resolveTabsHost,
     measureTabsContentHeight,
     measureSidebarMetrics,
     createWidgetScheduler,
@@ -2587,9 +2719,12 @@ function nativeSidebarSide() {
                     isVideoPlayerElement(rec.target) ||
                     rec.target?.id === "zen-media-controls-toolbar" ||
                     rec.target?.id === "zen-essentials-container" ||
+                    rec.target?.id === "zen-essentials" ||
                     rec.target?.id === "zen-sidebar-bottom-buttons" ||
                     rec.target?.id === "vertical-tabs" ||
-                    rec.target?.id === "tabbrowser-tabs"
+                    rec.target?.id === "tabbrowser-tabs" ||
+                    String(rec.target?.localName || rec.target?.tagName || "").toLowerCase() ===
+                      "zen-workspace"
                   ) {
                     relevant = true;
                     break;
@@ -2614,7 +2749,13 @@ function nativeSidebarSide() {
               childList: true,
               subtree: true,
               attributes: true,
-              attributeFilter: ["hidden", "style", "data-enlarged", "collapsed"],
+              attributeFilter: [
+                "hidden",
+                "style",
+                "data-enlarged",
+                "collapsed",
+                "active",
+              ],
             });
           } catch (_) {
             hostMutationObserver = null;
