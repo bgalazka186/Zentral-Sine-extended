@@ -333,6 +333,8 @@
       "flavor",
       "trashed",
       "folder",
+      // T3.3: the place a note was dragged to inside its folder (absent = last-change order).
+      "order",
       "calendar_only",
       "remind",
       "reminded",
@@ -565,6 +567,8 @@
         color: cleanNoteColor(meta.color),
         label: cleanLabel(meta.label),
         folder: cleanFolder(meta.folder),
+        // T3.3: where the user dragged the note inside its folder (absent = the usual last-change order).
+        order: cleanNoteOrder(meta.order),
         pinned: meta.pinned === "true",
         calendarOnly: meta.calendar_only === "true",
         flavor: meta.flavor && FLAVORS_PART && FLAVORS_PART.MODES.includes(meta.flavor) ? meta.flavor : "",
@@ -587,6 +591,7 @@
       if (n.color && n.color !== "none") lines.push("color: " + (cleanHex(n.color) ? '"' + cleanHex(n.color) + '"' : n.color));
       if (cleanLabel(n.label)) lines.push("label: " + cleanLabel(n.label));
       if (cleanFolder(n.folder)) lines.push("folder: " + cleanFolder(n.folder));
+      if (cleanNoteOrder(n.order)) lines.push("order: " + cleanNoteOrder(n.order));
       if (n.pinned) lines.push("pinned: true");
       if (n.calendarOnly) lines.push("calendar_only: true");
       if (n.flavor && FLAVORS_PART && FLAVORS_PART.MODES.includes(n.flavor)) lines.push("flavor: " + n.flavor);
@@ -1196,8 +1201,38 @@
       segs.pop();
       return segs.join("/");
     }
-    function sortNotes(a, b) {
+    // T3.3: a note's own place in its folder. 0 = not placed by hand (it follows the last-change order), a
+    // positive number = the place the user dragged it to. Fractional values let a drop land between two notes
+    // without renumbering the rest of the folder.
+    const NOTE_ORDER_MAX = 1e9;
+    function cleanNoteOrder(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n) || n <= 0 || n > NOTE_ORDER_MAX) return 0;
+      return Math.round(n * 1e6) / 1e6;
+    }
+    // The place between `before` (the row above the drop) and `after` (the row below it), in the order the two
+    // already have. A placed note keeps its number; an unplaced one takes the start or the end of the placed run.
+    function noteOrderBetween(before, after) {
+      const lo = cleanNoteOrder(before);
+      const hi = cleanNoteOrder(after);
+      if (lo && hi) return lo < hi ? (lo + hi) / 2 : 0; // an impossible pair (never produced here) is not guessed
+      if (lo) return lo + 1;
+      if (hi) return hi > 1 ? hi / 2 : 0.5;
+      return 1;
+    }
+    // Hand-placed notes come first in their own order; the rest keep the existing last-change order.
+    function compareNotes(a, b) {
+      const oa = cleanNoteOrder(a && a.order), ob = cleanNoteOrder(b && b.order);
+      if (oa || ob) {
+        // A note the user placed comes before the notes that still follow the last-change order.
+        if (oa && !ob) return -1;
+        if (!oa && ob) return 1;
+        if (oa !== ob) return oa - ob;
+      }
       return Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || (b.updated || 0) - (a.updated || 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    }
+    function sortNotes(a, b) {
+      return compareNotes(a, b);
     }
     function buildTree(notes, folders) {
       const root = { id: "", label: "", collapsed: false, children: [], notes: [] };
@@ -1322,8 +1357,40 @@
       for (const n of notes || []) if (n && !n.trashed) add(n.folder);
       return [...ids];
     }
-    function moveNote(note, folderId) {
-      return { ...note, folder: cleanFolder(folderId) };
+    function moveNote(note, folderId, order) {
+      const next = { ...note, folder: cleanFolder(folderId) };
+      if (order !== undefined) {
+        const placed = cleanNoteOrder(order);
+        if (placed) next.order = placed;
+        else delete next.order;
+      }
+      return next;
+    }
+    // T3.3: the tree a drag-and-drop needs. `rows` is what the tree draws right now (type/note/node/depth); a drop
+    // names the row it landed on and whether that row's folder is open. Returns null for a drop that must do nothing.
+    function noteDropTarget(rows, sourceId, targetKey, position = "before", folded = false) {
+      const list = Array.isArray(rows) ? rows : [];
+      const src = list.find((row) => row?.type === "note" && row.note?.id === sourceId);
+      if (!src) return null;
+      if (targetKey === "root") return src.note.folder ? { kind: "folder", folder: "", order: undefined } : null;
+      const target = list.find((row) => row?.key === targetKey || (row?.type === "note" && row.note?.id === targetKey));
+      if (!target) return null;
+      if (target.type === "folder") return src.note.folder === target.node?.id ? null : { kind: "into", folder: target.node?.id || "", order: 1 };
+      if (target.type !== "note") return null;
+      const targetNote = target.note;
+      if (!targetNote || targetNote.id === sourceId) return null;
+      const folder = cleanFolder(targetNote.folder);
+      const siblings = list.filter((row) => row?.type === "note" && cleanFolder(row.note?.folder) === folder);
+      const at = siblings.findIndex((row) => row.note.id === targetNote.id);
+      const before = position === "after" ? targetNote : siblings[at - 1]?.note;
+      const after = position === "after" ? siblings[at + 1]?.note : targetNote;
+      return {
+        kind: "order",
+        folder,
+        order: noteOrderBetween(before?.order, after?.order),
+        // A folded folder hides its notes: a drop between two of its closed rows is still a place in that folder.
+        folded: Boolean(folded),
+      };
     }
     // New folder under `parentId`. Returns {folders, id} or null (invalid parent, too deep, or MAX_FOLDERS).
     function addFolderMeta(folders, notes, parentId, label, rand = Math.random) {
@@ -8005,6 +8072,7 @@
       async function readNote(file) {
         const name = io.filename(file);
         const id = name.slice(0, -3);
+        if (/^meta\.json|^calendar\.json/.test(name) && !/\.md$/.test(name)) return null;
         let text = null;
         for (const candidate of [file, file + ".bak"]) {
           try {
@@ -10465,6 +10533,19 @@
           const viewNotes = [...notes.values()].map((n) => (n._sharedFromOtherSpace ? { ...n, folder: "" } : n));
           return buildTree(viewNotes, meta.folders);
         },
+        // T3.3: the place a note was dragged to inside its folder; 0 hands it back to the last-change order.
+        setNoteOrder(id, order) {
+          const note = notes.get(id);
+          if (!note) return false;
+          const next = cleanNoteOrder(order);
+          if (cleanNoteOrder(note.order) === next) return false;
+          if (next) note.order = next;
+          else delete note.order;
+          if (note.body.trim() || note._onDisk) markDirty(id);
+          emit("change", id, { meta: true });
+          emit("tree", id);
+          return true;
+        },
         setFolder(id, folderId) {
           const note = notes.get(id);
           const next = cleanFolder(folderId);
@@ -11589,7 +11670,7 @@
     // does not hide ordinary Obsidian comments.
     function mapExportHidden(segment, options, convert) {
       return segment.replace(/%%[^%\n]+%%/g, (marker) => {
-        const calendar = /^%%\s*(?:calendar(?:\s*:[^%\n]*)?|zn-item-id:[\w-]+|zn-item-category:[^%\n]*|zn-date-ignore:[^%\n]*|not-date)\s*%%$/i.test(marker);
+        const calendar = /^%%\s*(?:calendar(?:\s*:[^%\n]*)?|zn-item-id:[\w-]+|zn-item-category:[^%\n]*|zn-date-ignore:[^%\n]*|(?<!zn-)order:[^%\n]*|not-date)\s*%%$/i.test(marker);
         return calendar || options.gate.on("A31") ? convert(marker, calendar) : marker;
       });
     }
@@ -13370,6 +13451,18 @@
     }
     // T2.11b2: the DEMO set follows docs/NOTES_DISCOVERABILITY.md §8 — every section names the control it shows, and
     // every surface (editor, All notes, every calendar view, Tools, holidays, the Agenda folder, Settings) has a note.
+    // T3.3: dragging a note tab in the Zen sidebar reorders the notes tree (a pure model, wired at the sidebar).
+    // `rows` is the tree as drawn now; a drop names a row and whether it lands before or after it.
+    function noteTabDropPlan(rows, sourceKey, targetKey, position = "before") {
+      const target = noteDropTarget(rows, typeof sourceKey === "string" && sourceKey.startsWith("n:") ? sourceKey.slice(2) : sourceKey, targetKey, position);
+      if (!target) return null;
+      const src = Array.isArray(rows) ? rows.find((row) => row?.type === "note" && `n:${row.note?.id}` === sourceKey) : null;
+      if (!src) return null;
+      const sameFolder = cleanFolder(src.note?.folder) === cleanFolder(target.folder || "");
+      if (!sameFolder) return { kind: "move", noteId: src.note.id, folder: target.folder || "", order: target.order === undefined ? 1 : target.order };
+      if (target.order === undefined) return null;
+      return { kind: "order", noteId: src.note.id, order: target.order };
+    }
     const DEMO_CALENDAR_NOTE_ID = "zn-demo-calendar";
     const DEMO_WHERE_NOTE_ID = "zn-demo-where";
     function buildCalendarDemoBody() {
@@ -15373,7 +15466,7 @@
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, cleanSlotPx, cleanCardPx, cleanCardShare, resolveSlotHeight, resolveCardHeight, hasStartupPanelPref, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, gapPageFloor, gapMaxPx, clampGapPx, GAP_PANEL_MIN_PX, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
-        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, BACKUP_FORMAT, BACKUP_VERSION, BACKUP_MAX_ENTRIES, BACKUP_MAX_TOTAL_BYTES, cleanBackupZipPath, classifyBackupEntry, validateBackupAssetBytes, buildBackupManifest, inspectBackupEntries, planBackupRestore, OBSIDIAN_VAULT_APP_CONFIG, safeObsidianSegment, cleanVaultRelPath, obsidianYamlScalar, splitYamlEntries, planObsidianVaultPaths, buildObsidianFrontMatter, collectObsidianAssetRefs, convertBodyToObsidian, buildObsidianVaultPlan, OBSIDIAN_IMPORT_MAX_FILES, OBSIDIAN_IMPORT_MAX_TOTAL_BYTES, OBSIDIAN_IMPORT_MAX_DEPTH, unquoteYamlScalar, extractObsidianPathFromForeign, parseObsidianFrontMatter, classifyObsidianVaultEntry, planObsidianVaultImport, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, mergeFolders, mergeMeta, META_SHARED_KEYS, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
+        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, BACKUP_FORMAT, BACKUP_VERSION, BACKUP_MAX_ENTRIES, BACKUP_MAX_TOTAL_BYTES, cleanBackupZipPath, classifyBackupEntry, validateBackupAssetBytes, buildBackupManifest, inspectBackupEntries, planBackupRestore, OBSIDIAN_VAULT_APP_CONFIG, safeObsidianSegment, cleanVaultRelPath, obsidianYamlScalar, splitYamlEntries, planObsidianVaultPaths, buildObsidianFrontMatter, collectObsidianAssetRefs, convertBodyToObsidian, buildObsidianVaultPlan, OBSIDIAN_IMPORT_MAX_FILES, OBSIDIAN_IMPORT_MAX_TOTAL_BYTES, OBSIDIAN_IMPORT_MAX_DEPTH, unquoteYamlScalar, extractObsidianPathFromForeign, parseObsidianFrontMatter, classifyObsidianVaultEntry, planObsidianVaultImport, itemMarkerLineRange, allFolderIds, moveNote, noteDropTarget, noteTabDropPlan, cleanNoteOrder, noteOrderBetween, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, mergeFolders, mergeMeta, META_SHARED_KEYS, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,
