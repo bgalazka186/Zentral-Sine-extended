@@ -265,6 +265,24 @@ async function test(name, fn) {
     assert.ok(CSS_SRC.includes(".is-trading-sunday") && CSS_SRC.includes(".is-election-day"), "marked days have a style of their own");
   });
 
+  await test("OW-46: the master switch stops every holiday feature and keeps the chosen sets", async () => {
+    const on = cal.cleanCalendarHolidays({ enabled: true, locales: ["PL"], weekend: "auto", personalDays: [{ date: "2026-05-04", label: "Bridge" }] });
+    const off = cal.cleanCalendarHolidays({ ...on, enabled: false });
+    assert.deepEqual([...off.locales], ["PL"], "the chosen sets are kept while off");
+    assert.equal(off.personalDays.length, 1, "personal days off are kept while off");
+    // Nothing is computed at all: no weekend, no set, no year table, no personal day.
+    assert.equal(cal.isWorkFree("2026-05-01", off, "pl"), cal.NO_WORK_FREE, "one shared empty answer");
+    assert.equal(cal.isWorkFree("2026-05-01", off, "pl").workFree, false);
+    assert.equal(cal.isWorkFree("2026-05-02", off, "pl").weekend, false, "not even the weekend is claimed");
+    assert.equal(cal.isWorkFree("2026-05-04", off, "pl").personal, null);
+    assert.deepEqual(cal.isWorkFree("2026-05-01", off, "pl").holidays, []);
+    assert.equal(cal.isWorkFree("2026-05-01", on, "pl").workFree, true, "switching back on restores the day");
+    // A fresh profile keeps today's behaviour: the switch is on unless turned off.
+    assert.equal(cal.cleanCalendarHolidays(null, "pl-PL").enabled, true);
+    assert.equal(cal.cleanCalendarHolidays({ enabled: 1 }, "pl-PL").enabled, true, "a truthy value stays on");
+    assert.equal(cal.cleanCalendarHolidays({ enabled: "false" }, "pl-PL").enabled, true, "only a real false turns it off");
+  });
+
   await test("pure: Easter algorithm, nthWeekday, region weekends, and offline holidaysFor across PL/DE/GB/US/EG & years", async () => {
     // Verified Gregorian Easter Sundays 2024–2028
     assert.equal(cal.easterSundayYmd(2024), "2024-03-31");
@@ -462,6 +480,20 @@ async function test(name, fn) {
     assert.equal(h.store.meta.calendarHolidays.localesExplicit, true, "manual selection is persisted as explicit");
     assert.match(regionStatus.textContent, /Germany \(DE\)/i, "the status follows a changed choice");
     assert.ok(h.store.meta.calendarHolidays.personalDays.some((p) => p.date === "2026-05-15" && p.label === "Berlin trip"));
+    // OW-46: the dialog's switch turns every holiday feature off in the live grid, and the sets stay chosen.
+    const enableBox = h.sheet.root.querySelector(".zn-cal-holidays-enable");
+    assert.ok(enableBox && enableBox.checked, "the switch is on for a fresh installation");
+    enableBox.checked = false;
+    enableBox.dispatchEvent(new h.Event("change", { bubbles: true }));
+    await h.flush();
+    assert.equal(h.store.meta.calendarHolidays.enabled, false);
+    assert.deepEqual([...h.store.meta.calendarHolidays.locales], ["PL", "DE"], "the sets survive the switch");
+    assert.equal([...h.sheet.root.querySelectorAll(".zn-cal-month-cell[data-holiday-sets]")].length, 0, "no cell names a holiday");
+    enableBox.checked = true;
+    enableBox.dispatchEvent(new h.Event("change", { bubbles: true }));
+    await h.flush();
+    assert.equal(h.store.meta.calendarHolidays.enabled, true);
+
     // A day that belongs to two chosen sets carries both names (OW-44). A settings write re-renders through the
     // sheet's own path (the dialog calls renderCalendar), so each step redraws by picking the Month view.
     const redrawMonth = async () => {

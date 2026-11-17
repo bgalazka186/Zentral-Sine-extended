@@ -883,6 +883,8 @@
       "cal.holidays.setsHint": "Pick any number of sets. The language of the names follows the Notes language, not the set.",
       "cal.holidays.noneSelected": "No holiday set chosen: only weekends and personal days off are shown.",
       "cal.holidays.setsActive": "Showing public holidays: {sets}.",
+      "cal.holidays.enableAllHint": "Off hides every holiday feature: no tint, no holiday names, no trading Sundays. Personal days off are kept.",
+      "cal.holidays.localOnly": "Holiday sets are local: they are never imported from or written to a synced calendar.",
       "cal.holidays.coverage": "Set {region}: its own dates run to {newest}; years with a written table: {years}.",
       "cal.holidays.coverageRulesOnly": "none yet",
       "cal.holidays.tradingSunday": "Trading Sunday",

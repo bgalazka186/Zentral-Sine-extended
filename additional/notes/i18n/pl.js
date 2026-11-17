@@ -896,6 +896,8 @@
       "cal.holidays.setsHint": "Wybierz dowoln\u0105 liczb\u0119 zestaw\u00f3w. J\u0119zyk nazw zale\u017cy od j\u0119zyka notatek, nie od zestawu.",
       "cal.holidays.noneSelected": "Nie wybrano \u017cadnego zestawu \u015bwi\u0105t: pokazywane s\u0105 tylko weekendy i w\u0142asne dni wolne.",
       "cal.holidays.setsActive": "Wy\u015bwietlane \u015bwi\u0119ta: {sets}.",
+      "cal.holidays.enableAllHint": "Wy\u0142\u0105czone ukrywa wszystkie funkcje \u015bwi\u0105t: brak wyr\u00f3\u017cnienia, nazw \u015bwi\u0105t i niedziel handlowych. W\u0142asne dni wolne zostaj\u0105.",
+      "cal.holidays.localOnly": "Zestawy \u015bwi\u0105t s\u0105 lokalne: nigdy nie s\u0105 importowane ani zapisywane do synchronizowanego kalendarza.",
       "cal.holidays.coverage": "Zestaw {region}: w\u0142asne daty si\u0119gaj\u0105 {newest}; lata z zapisan\u0105 tabel\u0105: {years}.",
       "cal.holidays.coverageRulesOnly": "brak",
       "cal.holidays.tradingSunday": "Niedziela handlowa",

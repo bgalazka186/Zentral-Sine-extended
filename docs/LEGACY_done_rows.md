@@ -892,3 +892,5 @@ Resolved note/category colours (`resolveItemColor` + `colorHex`) flow from `agen
 - `OW-44` (3.3.246) — show any number of holiday sets at once: merged `holidayEntriesFor` (one entry per holiday, a name shared by two sets becomes one entry of both), `holidaySetsOf`, per-set names in tooltips, `data-holiday-sets`/`is-multi-holiday` on every view's cells, a bounded merge cache and a second-accent style for shared days.
 
 - `OW-45` (3.3.247) — one-place year table (`HOLIDAY_TABLE`) for dates no rule computes: bilingual entries with `kind` (`holiday`/`trading-sunday`/`election`), laid over the rule list by `overlayHolidayTable`, Polish trading Sundays for 2026-2027, coverage reporting in the dialog, and a marked-but-not-tinted style so a trading Sunday never reads as a day off.
+
+- `OW-46` (3.3.248) — one master off switch for every holiday feature: an early `NO_WORK_FREE` return before any lookup, a dialog hint that names what is hidden, and kept sets/personal days so switching back on restores the previous choice.

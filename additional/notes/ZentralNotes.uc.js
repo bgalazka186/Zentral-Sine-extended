@@ -18496,7 +18496,8 @@
       const calendarHolidayPrefs = () => CALENDAR_PART?.cleanCalendarHolidays?.(store.meta.calendarHolidays) || { enabled: true, region: "none", locales: [], weekend: "auto", personalDays: [] };
       const calendarWorkFreeInfo = (day) => CALENDAR_PART?.isWorkFree?.(day, calendarHolidayPrefs(), notesLang()) || { workFree: false, weekend: false, holiday: null, holidays: [], personal: null, reasons: [], tooltip: "" };
       function applyWorkFreeAttrs(el, wf, { appendTitle = false } = {}) {
-        if (!el || !wf || !wf.workFree) return;
+        // OW-46: with the master switch off nothing is drawn — not even a personal day off, never a holiday marker.
+        if (!el || !wf || !wf.workFree || calendarHolidayPrefs().enabled === false) return;
         el.classList.add("is-workfree");
         if (wf.weekend) el.classList.add("is-weekend");
         if (wf.holiday) el.classList.add("is-holiday");
@@ -20975,7 +20976,10 @@
         const enableCheck = h("input", { type: "checkbox", class: "zn-cal-holidays-enable" });
         enableCheck.checked = state.enabled !== false;
         enableCheck.addEventListener("change", () => save({ ...state, enabled: enableCheck.checked }));
-        const enableRow = h("label", { class: "zn-check-row" }, enableCheck, h("span", {}, t("cal.holidays.enableTint")));
+        const enableRow = h("label", { class: "zn-check-row" },
+          enableCheck,
+          h("span", {}, t("cal.holidays.enableTint")),
+          h("small", { class: "zn-hint zn-cal-holidays-enable-note" }, t("cal.holidays.enableAllHint")));
 
         // OW-43: the holiday SET is chosen apart from the interface language, and any number of sets at once (OW-44).
         const setsList = h("div", { class: "zn-cal-holidays-sets" });
