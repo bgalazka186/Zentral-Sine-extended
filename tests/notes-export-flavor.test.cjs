@@ -332,4 +332,102 @@ assert.deepEqual(scan(quotedMathFence, { flavor: 'mixed', ignore: 'G08' }), []);
 assert.deepEqual(scan('>      ```math\n>      x\n>      ```', { flavor: 'mixed' }), [], 'excess quote indentation is not a fenced math block');
 assert.deepEqual(scan('> ```text\n> ```math\n> x\n> ```\n> ```', { flavor: 'mixed' }), [], 'math examples inside quoted code do not warn');
 assert.deepEqual(scan(quotedMathFence, { flavor: 'mixed', ignore: '> ```math' }), []);
+
+// --- T1.18 remaining Zentral syntax & per-note flavor/ignore audit ---
+// 1. Complete calendar / date-ignore metadata markers (including OW-16 item-category, zn-date-ignore, not-date, whitespace variants)
+for (const marker of [
+  '%% calendar: Work %%',
+  '%% zn-item-id:abcd1 %%',
+  '%%zn-item-category: Work%%',
+  '%%zn-item-category:%%',
+  '%%zn-date-ignore:2026-11-16%%',
+  '%%not-date%%',
+]) {
+  assert.deepEqual(scan(`- 2026-11-16 Call ${marker}`, { flavor: 'github' }), ['calendar'], `calendar marker warns even when A31 is off: ${marker}`);
+  assert.equal(convert(`- 2026-11-16 Call ${marker}`, { flavor: 'github' }), `- 2026-11-16 Call <!-- ${marker} -->`, `calendar marker stays concealed in portable export: ${marker}`);
+}
+
+// 2. E12 bare checkboxes & E19 pasted Unicode bullets
+const shorthand = '[ ] Bare task\n  [x] Nested done\n• Bullet one\n  · Sub dot\n◦ Circle\n▪ Square\n‣ Triangle\n';
+assert.deepEqual(scan(shorthand, { flavor: 'mixed' }), ['list shorthand']);
+assert.equal(
+  convert(shorthand, { flavor: 'mixed' }),
+  '- [ ] Bare task\n  - [x] Nested done\n- Bullet one\n  - Sub dot\n- Circle\n- Square\n- Triangle\n',
+  'E12/E19 shorthands convert to portable Markdown list items',
+);
+assert.deepEqual(scan(shorthand, { flavor: 'github' }), [], 'GitHub flavor leaves E12/E19 literal');
+assert.equal(convert(shorthand, { flavor: 'github' }), shorthand);
+assert.deepEqual(scan(shorthand, { flavor: 'obsidian' }), [], 'Obsidian flavor leaves E12/E19 literal');
+assert.deepEqual(scan(shorthand, { flavor: 'reddit' }), [], 'Reddit flavor leaves E12/E19 literal');
+assert.equal(convert(shorthand, { flavor: 'mixed', ignore: 'E12' }), '[ ] Bare task\n  [x] Nested done\n- Bullet one\n  - Sub dot\n- Circle\n- Square\n- Triangle\n');
+assert.equal(convert(shorthand, { flavor: 'mixed', ignore: 'E19' }), '- [ ] Bare task\n  - [x] Nested done\n• Bullet one\n  · Sub dot\n◦ Circle\n▪ Square\n‣ Triangle\n');
+assert.equal(convert('[ ] Bare task', { flavor: 'mixed', ignore: 'E08' }), '[ ] Bare task', 'disabled tasks suppress bare checkbox rewrite');
+assert.equal(convert('[ ] Bare task', { flavor: 'mixed', ignore: '[ ]' }), '[ ] Bare task', 'ignored literal [ ] suppresses bare checkbox rewrite');
+assert.deepEqual(scan(String.raw`\[ ] Escaped` + '\n> [ ] Quoted\n```\n• code\n[ ] code\n```\n`[ ] inline`\n<!--\n• hidden\n-->', { flavor: 'mixed' }), []);
+assert.equal(convert('[ ] Bare task', { flavor: 'github' }, { flavor: 'mixed' }), '- [ ] Bare task', 'per-note mixed flavor enables E12');
+assert.equal(convert('[ ] Bare ==task==\n• Bullet ==item==', { flavor: 'mixed' }), '- [ ] Bare **task**\n- Bullet **item**', 'list shorthands compose cleanly with inline formatting');
+assert.equal(convert('#Title ==hi==', { flavor: 'mixed+reddit' }), '# Title **hi**', 'D02 headings compose cleanly with inline formatting');
+assert.equal(convert('![Both|300](assets/n1/pic.png#w=320&a=right)', { flavor: 'mixed' }), '![Both](assets/n1/pic.png)', 'both B17 pipe size and Zentral asset hash are stripped together');
+assert.equal(convert('::: note Box\n[ ] Inside\n![Demo](https://youtu.be/dQw4w9WgXcQ)\n:::\n', { flavor: 'mixed' }), '> **NOTE** — Box\n> - [ ] Inside\n> [Demo](https://www.youtube.com/watch?v=dQw4w9WgXcQ)\n', 'list shorthands and media embeds convert inside ::: containers');
+
+// 3. D02 Reddit no-space headings
+assert.deepEqual(scan('#Title\n###Sub heading', { flavor: 'reddit' }), ['no-space heading']);
+assert.equal(convert('#Title\n###Sub heading', { flavor: 'reddit' }), '# Title\n### Sub heading');
+assert.deepEqual(scan('#Title', { flavor: 'mixed+reddit' }), ['no-space heading']);
+assert.deepEqual(scan('#Title', { flavor: 'mixed' }), [], 'mixed mode treats #Title as tag/text, not D02 heading');
+assert.equal(convert('#Title', { flavor: 'mixed' }), '#Title');
+assert.deepEqual(scan('#Title', { flavor: 'github' }), []);
+assert.deepEqual(scan('#Title', { flavor: 'reddit', ignore: 'D02' }), []);
+assert.deepEqual(scan('#Title', { flavor: 'reddit', ignore: '#' }), []);
+assert.deepEqual(scan(String.raw`\#Title` + '\n```\n#Code\n```\n`#inline`', { flavor: 'reddit' }), []);
+assert.equal(convert('#Title', { flavor: 'mixed' }, { flavor: 'reddit' }), '# Title', 'per-note reddit flavor enables D02');
+
+// 4. L04 Reddit r/sub and u/user shorthand
+const redditMentions = 'Visit r/zen and /r/firefox with u/alice or /u/bob.';
+assert.deepEqual(scan(redditMentions, { flavor: 'reddit' }), ['Reddit link']);
+assert.equal(
+  convert(redditMentions, { flavor: 'reddit' }),
+  'Visit [r/zen](https://www.reddit.com/r/zen) and [r/firefox](https://www.reddit.com/r/firefox) with [u/alice](https://www.reddit.com/user/alice) or [u/bob](https://www.reddit.com/user/bob).',
+);
+assert.deepEqual(scan(redditMentions, { flavor: 'mixed' }), [], 'mixed mode does not enable L04');
+assert.equal(convert(redditMentions, { flavor: 'mixed' }), redditMentions);
+assert.deepEqual(scan(redditMentions, { flavor: 'mixed+reddit' }), ['Reddit link']);
+assert.deepEqual(scan(redditMentions, { flavor: 'reddit', ignore: 'L04' }), []);
+assert.deepEqual(scan('See r/zen', { flavor: 'reddit', ignore: 'r/' }), ['Reddit link'], 'slash is not an escapable ignore literal in the reader (use L04)');
+assert.deepEqual(scan('See r/zen-sub', { flavor: 'reddit', ignore: '-' }), [], 'ignored punctuation inside a Reddit name leaves it unchanged conservatively');
+assert.equal(convert('See r/zen-sub', { flavor: 'reddit', ignore: '-' }), 'See r/zen-sub');
+assert.deepEqual(scan('See [r/zen](https://example.com) and https://example.com/r/zen and `r/zen`', { flavor: 'reddit' }), [], 'existing links, URLs and code do not warn as Reddit shorthand');
+assert.equal(convert('See [r/zen](https://example.com) and `r/zen`', { flavor: 'reddit' }), 'See [r/zen](https://example.com) and `r/zen`');
+assert.equal(convert('See r/zen', { flavor: 'mixed' }, { flavor: 'reddit' }), 'See [r/zen](https://www.reddit.com/r/zen)', 'per-note reddit flavor enables L04');
+
+// 5. Media image-syntax embeds (YouTube & video assets) + B17 / Zentral image sizing
+const media = '![Intro|400](https://www.youtube.com/watch?v=dQw4w9WgXcQ)\n![](https://youtu.be/dQw4w9WgXcQ)\n![Demo clip](assets/n1/clip.mp4)\n![](assets/n1/clip.mp4)\n';
+assert.deepEqual(scan(media, { flavor: 'mixed' }), ['media embed']);
+assert.equal(
+  convert(media, { flavor: 'mixed' }),
+  '[Intro](https://www.youtube.com/watch?v=dQw4w9WgXcQ)\n[YouTube video](https://www.youtube.com/watch?v=dQw4w9WgXcQ)\n[Demo clip](assets/n1/clip.mp4)\n[clip.mp4](assets/n1/clip.mp4)\n',
+);
+assert.deepEqual(scan('`![Demo](https://youtu.be/dQw4w9WgXcQ)`\n' + String.raw`\![Demo](assets/n1/clip.mp4)`, { flavor: 'mixed' }), []);
+
+const sizedImgs = '![Photo|300](https://example.com/a.png)\n![Wide|300x200](assets/n1/pic.png "cap")\n![Zentral](assets/n1/pic.png#w=320&a=center)\n';
+assert.deepEqual(scan(sizedImgs, { flavor: 'mixed' }), ['image sizing']);
+assert.equal(
+  convert(sizedImgs, { flavor: 'mixed' }),
+  '![Photo](https://example.com/a.png)\n![Wide](assets/n1/pic.png "cap")\n![Zentral](assets/n1/pic.png)\n',
+);
+assert.deepEqual(scan('![Photo|300](https://example.com/a.png)', { flavor: 'github' }), [], 'GitHub flavor leaves |300 as literal alt text');
+assert.equal(convert('![Photo|300](https://example.com/a.png)', { flavor: 'github' }), '![Photo|300](https://example.com/a.png)');
+assert.deepEqual(scan('![Photo|300](https://example.com/a.png)', { flavor: 'mixed', ignore: 'B17' }), []);
+assert.deepEqual(scan('![Photo|300](https://example.com/a.png)', { flavor: 'mixed', ignore: '|' }), []);
+assert.deepEqual(scan('![Zentral](assets/n1/pic.png#w=320&a=center)', { flavor: 'github' }), ['image sizing'], 'Zentral asset sizing fragment warns in every flavor');
+assert.equal(convert('![Zentral](assets/n1/pic.png#w=320&a=center)', { flavor: 'github' }), '![Zentral](assets/n1/pic.png)');
+assert.deepEqual(scan('![Plain](assets/n1/pic.png)', { flavor: 'mixed' }), [], 'plain image without sizing triggers no warning');
+
+// 6. Per-note flavor semantics in markdownExportWarnings(noteObj, globalOpts) and exportBody(..., readOpts)
+assert.deepEqual(Array.from(c.markdownExportWarnings({ id: 'n1', body: '-# tiny\n', flavor: 'github' }, { flavor: 'mixed' })), [], 'markdownExportWarnings accepts a note object and honors per-note flavor');
+assert.deepEqual(Array.from(c.markdownExportWarnings({ id: 'n1', body: '#Title\n', flavor: 'reddit' }, { flavor: 'mixed' })), ['no-space heading']);
+assert.equal(c.exportBody({ id: 'source', body: '[[Other note]]', flavor: 'reddit' }, [wikiTarget], wikiNames, [], { flavor: 'mixed' }), '[[Other note]]', 'exportBody honors per-note flavor when readOptions are supplied');
+assert.equal(c.exportBody({ id: 'source', body: '[[Other note]]', flavor: 'mixed' }, [wikiTarget], wikiNames, [], { flavor: 'reddit' }), '[Other note](Other%20note.md)');
+assert.equal(c.exportBody({ id: 'source', body: '[[Other note]]' }, [wikiTarget], wikiNames, [], { flavor: 'mixed', ignore: 'C01' }), '[[Other note]]');
+
 console.log('Markdown export flavor tests passed');

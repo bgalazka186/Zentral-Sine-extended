@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.203
+// @version 3.3.204
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.203, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.204, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.203";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.204";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -10327,8 +10327,10 @@ __zentralShim.register = function (def) {
     const urlNoteBody = (title, url) => cleanLinkLabel(title || url) + "\n\n" + buildLink(cleanLinkLabel(title || url), url) + "\n";
     // The text an export writes for a note: [[shorthand]] becomes the canonical link (or plain words when
     // nothing matches), and links to exported notes point at the exported file names (`names`: id -> file).
-    const exportBody = (n, all, names = new Map(), folders = []) =>
-      rewriteNoteLinks(expandWikiLinks(n.body, wikiResolver(all, folders), { unresolved: "text", self: n }), names);
+    const exportBody = (n, all, names = new Map(), folders = [], readOptions = null) =>
+      readOptions
+        ? rewriteMarkdownExportLinks(n.body, n, all, names, folders, readOptions)
+        : rewriteNoteLinks(expandWikiLinks(n.body, wikiResolver(all, folders), { unresolved: "text", self: n }), names);
     // Notes that link here (linked) and notes that mention the title without linking (mentions).
     function findBacklinks(notes, target, folders = []) {
       const title = titleOf(target.body);
@@ -18162,7 +18164,7 @@ __zentralShim.register = function (def) {
     }
     // Apply transformations only outside fenced code, inline code and HTML
     // comments. Comment state spans lines and fences inside a comment are inert.
-    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}, onMathFence = () => {}, mapBlockId = (marker) => marker, onAmbiguousBlockId = () => {}, mapComment = (comment) => comment, onAmbiguousContainer = () => {}, onAmbiguousCallout = () => {}) {
+    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}, onMathFence = () => {}, mapBlockId = (marker) => marker, onAmbiguousBlockId = () => {}, mapComment = (comment) => comment, onAmbiguousContainer = () => {}, onAmbiguousCallout = () => {}, mapImage = null) {
       const lines = String(text).split("\n"), result = [], codeRuns = indexMarkdownCodeRuns(lines);
       const mathOptions = exportScriptOptions(readOptions);
       const hasProtectedDollar = (line) => {
@@ -18356,7 +18358,7 @@ __zentralShim.register = function (def) {
               }
             }
             if (!ambiguous && end < lines.length && end - row <= 2000 && nextContainerClose[row] === end) {
-              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint, readOptions, onMathFence, mapBlockId, onAmbiguousBlockId, mapComment, onAmbiguousContainer, onAmbiguousCallout);
+              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint, readOptions, onMathFence, mapBlockId, onAmbiguousBlockId, mapComment, onAmbiguousContainer, onAmbiguousCallout, mapImage);
               result.push(mapContainer({ open: line, inner, close: lines[end], kind: head[1], title: head[2].replace(/\s*:::\s*$/, "").trim() }));
               row = end; continue;
             }
@@ -18400,8 +18402,15 @@ __zentralShim.register = function (def) {
         // small-print prefix, then scan the rest of the original line normally.
         let smallPrefix = !comment && smallRows.has(row) && /^-#[ \t]+(?=\S)/.exec(line)?.[0] || "";
         let separateSmall = false, protectedLine = null;
-        let out = "", visible = smallPrefix, pos = smallPrefix.length;
-        const flush = () => { if (visible) { out += fn(visible, { readerCallout: calloutRows.has(row) }); visible = ""; } };
+        let out = "", visible = smallPrefix, pos = smallPrefix.length, segmentStart = true, visibleStart = 0;
+        const flush = () => {
+          if (visible) {
+            out += fn(visible, { readerCallout: calloutRows.has(row), lineStart: segmentStart && !smallPrefix && visibleStart === 0, fullLine: line, lineOffset: visibleStart });
+            visible = "";
+            segmentStart = false;
+          }
+          visibleStart = pos;
+        };
         const finishSmallPrint = () => {
           if (smallPrefix && out.startsWith(smallPrefix)) {
             const rest = out.slice(smallPrefix.length);
@@ -18415,16 +18424,16 @@ __zentralShim.register = function (def) {
         while (pos < line.length) {
           if (comment) {
             const end = line.indexOf("-->", pos);
-            if (end < 0) { out += mapComment(line.slice(pos)); pos = line.length; continue; }
-            out += mapComment(line.slice(pos, end + 3)); pos = end + 3; comment = false; continue;
+            if (end < 0) { out += mapComment(line.slice(pos)); pos = line.length; segmentStart = false; visibleStart = pos; continue; }
+            out += mapComment(line.slice(pos, end + 3)); pos = end + 3; comment = false; segmentStart = false; visibleStart = pos; continue;
           }
-          if (line.startsWith("<!--", pos)) { flush(); comment = true; continue; }
+          if (line.startsWith("<!--", pos)) { flush(); comment = true; segmentStart = false; continue; }
           if (line.startsWith("\\(", pos) && (pos === 0 || line[pos - 1] !== "\\") && mathOptions.gate.on("I04") && mathOptions.gate.on("I01")) {
             const latex = /^\\\((?=\S)([^\n]*?\S)\\\)/.exec(line.slice(pos));
             if (latex && !latex[1].includes("$")) {
               const ignored = exportProtectedPositions(line, mathOptions.literals, false), end = pos + latex[0].length;
               if (![pos, pos + 1, end - 2, end - 1].some((i) => ignored.has(i))) {
-                flush(); out += mapMath(latex[0], false); pos = end; continue;
+                flush(); out += mapMath(latex[0], false); pos = end; segmentStart = false; visibleStart = pos; continue;
               }
             }
           }
@@ -18436,24 +18445,44 @@ __zentralShim.register = function (def) {
               const active = mathOptions.gate.on(width === 2 ? "I03" : "I01");
               const end = pos + math[0].length;
               const protectedDelimiter = Array.from({ length: width }, (_, n) => protectedLine.has(pos + n) || protectedLine.has(end - n - 1)).some(Boolean);
-              if (active && !protectedDelimiter) { flush(); out += mapMath(math[0], false); pos = end; continue; }
+              if (active && !protectedDelimiter) { flush(); out += mapMath(math[0], false); pos = end; segmentStart = false; visibleStart = pos; continue; }
+            }
+          }
+          if (mapImage && line[pos] === "!" && line[pos + 1] === "[" && line[pos + 2] !== "[") {
+            let close = -1;
+            for (let j = pos + 2; j < line.length; j++) {
+              if (line[j] === "\\") { j++; continue; }
+              if (line[j] === "]") { close = j; break; }
+            }
+            if (close > pos + 1 && line[close + 1] === "(") {
+              const end = destinationEnd(line, close + 1);
+              if (end > close + 1) {
+                if (!protectedLine) protectedLine = exportProtectedPositions(line, mathOptions.literals);
+                if (!protectedLine.has(pos) && !protectedLine.has(pos + 1)) {
+                  const raw = line.slice(pos, end);
+                  const mapped = mapImage({ raw, alt: line.slice(pos + 2, close), destWithParens: line.slice(close + 1, end), line, start: pos, altStart: pos + 2, close, end, protectedLine });
+                  if (mapped !== null && mapped !== undefined) {
+                    flush(); out += mapped; pos = end; segmentStart = false; visibleStart = pos; continue;
+                  }
+                }
+              }
             }
           }
           const spoilerOpen = line.startsWith(">!", pos) ? ">!" : line.startsWith("||", pos) ? "||" : "";
           if (spoilerOpen) {
             const endToken = spoilerOpen === ">!" ? "!<" : "||", end = line.indexOf(endToken, pos + 2);
-            if (end >= 0) { flush(); out += fn(line.slice(pos, end + 2), { line, offset: pos, spoilerToken: true }); pos = end + 2; continue; }
+            if (end >= 0) { flush(); out += fn(line.slice(pos, end + 2), { line, offset: pos, spoilerToken: true, fullLine: line, lineOffset: pos }); pos = end + 2; segmentStart = false; visibleStart = pos; continue; }
           }
           if (line[pos] === "(" && pos > 0 && line[pos - 1] === "]") {
             const end = destinationEnd(line, pos);
-            if (end > pos) { flush(); out += mapDestination(line.slice(pos, end)); pos = end; continue; }
+            if (end > pos) { flush(); out += mapDestination(line.slice(pos, end)); pos = end; segmentStart = false; visibleStart = pos; continue; }
           }
           if (line[pos] === "<") {
             const end = tagEnd(line, pos);
-            if (end > pos) { flush(); out += line.slice(pos, end); pos = end; continue; }
+            if (end > pos) { flush(); out += line.slice(pos, end); pos = end; segmentStart = false; visibleStart = pos; continue; }
           }
           const url = /[hHmM]/.test(line[pos]) ? /^(?:https?:\/\/|mailto:)[^\s<>"']+/i.exec(line.slice(pos)) : null;
-          if (url) { flush(); out += url[0]; pos += url[0].length; continue; }
+          if (url) { flush(); out += url[0]; pos += url[0].length; segmentStart = false; visibleStart = pos; continue; }
           if (line[pos] === "`") {
             const run = /^`+/.exec(line.slice(pos))[0];
             let close = findClose(line, run, pos + run.length), endRow = row;
@@ -18465,13 +18494,15 @@ __zentralShim.register = function (def) {
             }
             if (close >= 0) {
               flush();
-              if (endRow === row) { out += line.slice(pos, close + run.length); pos = close + run.length; continue; }
+              if (endRow === row) { out += line.slice(pos, close + run.length); pos = close + run.length; segmentStart = false; visibleStart = pos; continue; }
               out += line.slice(pos); finishSmallPrint(); result.push(out);
               for (let k = row + 1; k < endRow; k++) result.push(lines[k]);
-              row = endRow; line = exportLine(row); protectedLine = null; out = line.slice(0, close + run.length); pos = close + run.length; continue;
+              row = endRow; line = exportLine(row); protectedLine = null; out = line.slice(0, close + run.length); pos = close + run.length; segmentStart = false; visibleStart = pos; continue;
             }
+            if (!visible) visibleStart = pos;
             visible += run; pos += run.length; continue;
           }
+          if (!visible) visibleStart = pos;
           visible += line[pos++];
         }
         flush(); finishSmallPrint(); result.push(out);
@@ -18525,8 +18556,100 @@ __zentralShim.register = function (def) {
     // does not hide ordinary Obsidian comments.
     function mapExportHidden(segment, options, convert) {
       return segment.replace(/%%[^%\n]+%%/g, (marker) => {
-        const calendar = /^%%(?:calendar(?::[^%\n]*)?|zn-item-id:[\w-]+)%%$/i.test(marker);
+        const calendar = /^%%\s*(?:calendar(?:\s*:[^%\n]*)?|zn-item-id:[\w-]+|zn-item-category:[^%\n]*|zn-date-ignore:[^%\n]*|not-date)\s*%%$/i.test(marker);
         return calendar || options.gate.on("A31") ? convert(marker, calendar) : marker;
+      });
+    }
+    function mapExportListShorthand(segment, options, convert, context = {}) {
+      if (!context?.lineStart) return segment;
+      const gate = options.gate;
+      if (gate.on("E19")) {
+        const bullet = /^(\s*)([\u2022\u00b7\u25e6\u25aa\u2023])(\s+)(?=\S)/.exec(segment);
+        if (bullet) return convert(bullet[0], "bullet", bullet[1], "-") + segment.slice(bullet[0].length);
+      }
+      if (gate.on("E12") && gate.on("E08")) {
+        const box = /^(\s*)\[( |x|X)\](\s+)(?=\S)/.exec(segment);
+        if (box) {
+          const protectedAt = exportProtectedPositions(segment, options.literals);
+          const start = box[1].length;
+          if (!protectedAt.has(start) && !protectedAt.has(start + 2)) {
+            return convert(box[0], "box", box[1], box[2], box[3]) + segment.slice(box[0].length);
+          }
+        }
+      }
+      return segment;
+    }
+    function mapExportNoSpaceHeading(segment, options, convert, context = {}) {
+      if (!context?.lineStart || !options.gate.on("D02")) return segment;
+      const match = /^(#{1,6})(?!#)(\S.*)$/.exec(segment);
+      if (!match) return segment;
+      const protectedAt = exportProtectedPositions(segment, options.literals);
+      for (let i = 0; i < match[1].length; i++) if (protectedAt.has(i)) return segment;
+      return convert(match[0], match[1], match[2]);
+    }
+    function insideExportLinkLabel(line, offset) {
+      if (!line) return false;
+      let open = -1;
+      for (let i = offset - 1; i >= 0; i--) {
+        if (line[i] === "]" && (i === 0 || line[i - 1] !== "\\")) return false;
+        if (line[i] === "[" && (i === 0 || line[i - 1] !== "\\")) { open = i; break; }
+      }
+      if (open < 0) return false;
+      for (let i = offset; i < line.length; i++) {
+        if (line[i] === "\\" ) { i++; continue; }
+        if (line[i] === "]") return line[i + 1] === "(" || line[i + 1] === "[";
+      }
+      return false;
+    }
+    function mapExportRedditLinks(segment, options, convert, context = {}) {
+      if (!options.gate.on("L04")) return segment;
+      const fullLine = context?.fullLine ?? segment, base = context?.lineOffset || 0;
+      const protectedAt = exportProtectedPositions(fullLine, options.literals);
+      return segment.replace(/(?<![\w/])\/?([ur])\/([A-Za-z0-9_-]{2,30})(?![\w/])/g, (raw, kind, name, offset) => {
+        const at = base + offset;
+        if (at > 0 && /[\w/]/.test(fullLine[at - 1])) return raw;
+        if (at + raw.length < fullLine.length && /[\w/]/.test(fullLine[at + raw.length])) return raw;
+        if (insideExportLinkLabel(fullLine, at)) return raw;
+        for (let i = at; i < at + raw.length; i++) if (protectedAt.has(i)) return raw;
+        const label = raw.replace(/^\//, "");
+        const href = "https://www.reddit.com/" + (kind === "u" ? "user" : "r") + "/" + name;
+        return convert(raw, label, href);
+      });
+    }
+    function mapExportImageMedia(info, options, convert) {
+      const inner = info.destWithParens.slice(1, -1).trim();
+      if (!inner) return null;
+      const destMatch = /^(<[^>\n]+>|[^\s)]+)([\s\S]*)$/.exec(inner);
+      if (!destMatch) return null;
+      const rawUrl = destMatch[1], trailing = destMatch[2] || "";
+      const src = unAngle(rawUrl);
+      const size = options.gate.on("B17") ? /\|(\d{1,4})(?:x(\d{1,4}))?$/.exec(info.alt) : null;
+      const sizeProtected = size && info.protectedLine?.has(info.altStart + size.index);
+      const activeSize = size && !sizeProtected ? size : null;
+      const cleanAlt = activeSize ? info.alt.slice(0, activeSize.index) : info.alt;
+      const youtube = parseYouTubeUrl(src);
+      if (youtube) {
+        const label = cleanAlt.trim() ? cleanLinkLabel(cleanAlt) : "YouTube video";
+        return convert("media", {
+          raw: info.raw,
+          portable: "[" + label + "](https://www.youtube.com/watch?v=" + youtube.id + ")",
+        });
+      }
+      const videoAsset = parseVideoAssetLink(src);
+      if (videoAsset) {
+        const label = cleanAlt.trim() ? cleanLinkLabel(cleanAlt) : cleanLinkLabel(videoAsset.file);
+        return convert("media", {
+          raw: info.raw,
+          portable: "[" + label + "](" + videoAsset.rel + ")",
+        });
+      }
+      const asset = parseAssetLink(src);
+      const hasAssetSizing = !!(asset && (asset.width || asset.align));
+      if (!activeSize && !hasAssetSizing) return null;
+      const portableUrl = hasAssetSizing ? (rawUrl.startsWith("<") ? "<" + asset.rel + ">" : asset.rel) : rawUrl;
+      return convert("sizing", {
+        raw: info.raw,
+        portable: "![" + cleanAlt + "](" + portableUrl + trailing + ")",
       });
     }
     function mapExportFormatting(segment, options, convert) {
@@ -18636,15 +18759,18 @@ __zentralShim.register = function (def) {
     }
     // Identify live Zentral extensions without interpreting examples inside code.
     // This reports categories only; it does not modify or export the source.
-    function markdownExportWarnings(body, readOptions = {}) {
-      const found = new Set(), scriptOptions = exportScriptOptions(readOptions);
+    function markdownExportWarnings(source, readOptions = {}) {
+      const isNote = source && typeof source === "object";
+      const body = isNote ? String(source.body ?? "") : String(source ?? "");
+      const effectiveOptions = isNote ? { ...readOptions, flavor: source.flavor || readOptions.flavor } : readOptions;
+      const found = new Set(), scriptOptions = exportScriptOptions(effectiveOptions);
       const content = splitMarkdownExportFrontMatter(body).body;
       // Container syntax nested in a quote cannot safely be flattened here.
       // Confirm a nested callout in the reader's AST before warning, so quoted
       // examples inside fenced code do not trigger a false positive.
       if (scriptOptions.gate.on("O04") && /^>(?:[ \t]*>)*[ \t]*:::\s*[A-Za-z]/m.test(content) && /^>(?:[ \t]*>)*[ \t]*:::[ \t\r]*$/m.test(content)) {
         const lines = normalizeNewlines(content).split("\n");
-        const blocks = parseBlocks(content, false, readOptions).filter((block) => Number.isInteger(block.src));
+        const blocks = parseBlocks(content, false, effectiveOptions).filter((block) => Number.isInteger(block.src));
         const hasNestedCallout = (node) => (node?.blocks || []).some((child) => !!child.callout || hasNestedCallout(child));
         blocks.forEach((block, index) => {
           if (block.type !== "quote" || !hasNestedCallout(block)) return;
@@ -18658,16 +18784,20 @@ __zentralShim.register = function (def) {
         });
         mapExportToc(visible, scriptOptions, (raw) => { found.add("toc"); return raw; });
         if (context?.readerCallout) mapExportCallout(visible, scriptOptions, (raw) => { found.add("callout"); return raw; });
+        mapExportListShorthand(visible, scriptOptions, (raw) => { found.add("list shorthand"); return raw; }, context);
+        mapExportNoSpaceHeading(visible, scriptOptions, (raw) => { found.add("no-space heading"); return raw; }, context);
         mapExportEmbeds(visible, scriptOptions, (raw) => { found.add("transclusion"); return raw; });
         mapExportFormatting(visible, scriptOptions, (raw) => { found.add("formatting"); return raw; });
         mapExportSpoilers(context?.spoilerToken ? segment : visible, scriptOptions, (raw) => { found.add("spoiler"); return raw; }, context);
         mapExportScripts(visible, scriptOptions, (raw, kind) => { found.add(kind === "strike" ? "single-tilde strike" : "subscript / superscript"); return raw; });
         mapExportInlineFootnotes(visible, scriptOptions, (raw, kind) => { found.add(kind === "footnote" ? "inline footnote" : "subscript / superscript"); return raw; });
+        mapExportRedditLinks(visible, scriptOptions, (raw) => { found.add("Reddit link"); return raw; }, context);
         mapExportTask(visible, scriptOptions, (raw) => { found.add("extended task"); return raw; });
         return segment;
       }, undefined, undefined, (math) => { found.add("math"); return math; }, (container) => {
         found.add("callout"); return container.open + "\n" + container.inner + "\n" + container.close;
-      }, (prefix) => { found.add("small print"); return prefix; }, readOptions, () => found.add("math"), (marker) => { found.add("block ID"); return "<!-- " + marker + " -->"; }, () => found.add("block ID"), undefined, () => found.add("callout"), () => found.add("callout"));
+      }, (prefix) => { found.add("small print"); return prefix; }, effectiveOptions, () => found.add("math"), (marker) => { found.add("block ID"); return "<!-- " + marker + " -->"; }, () => found.add("block ID"), undefined, () => found.add("callout"), () => found.add("callout"), (info) =>
+        mapExportImageMedia(info, scriptOptions, (kind, entry) => { found.add(kind === "media" ? "media embed" : "image sizing"); return entry.raw; }));
       return [...found];
     }
     // Export is a copy: convert the documented extensions conservatively and
@@ -18710,6 +18840,8 @@ __zentralShim.register = function (def) {
         const toc = mapExportToc(segment, scriptOptions, exportToc);
         if (toc !== segment) return toc;
         if (context?.readerCallout) segment = mapExportCallout(segment, scriptOptions, (_raw, quote, kind, title) => quote + "**" + kind.toUpperCase() + "**" + (title ? " — " + title : ""));
+        segment = mapExportListShorthand(segment, scriptOptions, (_raw, kind, indent, mark, gap) => kind === "bullet" ? indent + "- " : indent + "- [" + mark + "]" + gap, context);
+        segment = mapExportNoSpaceHeading(segment, scriptOptions, (_raw, hashes, rest) => hashes + " " + rest, context);
         segment = mapExportTask(segment, scriptOptions, (_raw, prefix, status) => prefix + "[ ] (" + TASK_STATUS_NAMES[status] + ")");
         segment = mapExportFormatting(segment, scriptOptions, (_raw, content) => "**" + content + "**");
         segment = mapExportScripts(segment, scriptOptions, (_raw, kind, content) => kind === "strike" ? "~~" + content + "~~" : "<" + kind + ">" + escHtml(content) + "</" + kind + ">");
@@ -18737,6 +18869,7 @@ __zentralShim.register = function (def) {
           footnotes.push("[^" + id + "]: " + content);
           return "[^" + id + "]";
         });
+        segment = mapExportRedditLinks(segment, scriptOptions, (_raw, label, href) => "[" + label + "](" + href + ")", context);
         return segment;
       }, undefined, undefined, (math, block) => {
         const maxRun = (math.match(/`+/g) || []).reduce((max, run) => Math.max(max, run.length), 0);
@@ -18749,7 +18882,8 @@ __zentralShim.register = function (def) {
         // block. A zero-width entity prevents accidental block interpretation.
         const prefix = /^(?:#{1,6}(?:[ \t]|$)|>|[-+*][ \t]+|\d{1,9}[.)][ \t]+|`{3,}|~{3,}|(?:[-*_][ \t]*){3,}$|\[[^\]\n]+\]:|<(?:!--|\/?[A-Za-z]))/.test(rest) ? "&#8203;" : "";
         return { prefix, separate: true };
-      }, effectiveReadOptions, undefined, (marker) => "<!-- " + marker + " -->");
+      }, effectiveReadOptions, undefined, (marker) => "<!-- " + marker + " -->", undefined, undefined, undefined, undefined, (info) =>
+        mapExportImageMedia(info, scriptOptions, (_kind, entry) => entry.portable));
       const rewritten = rewriteMarkdownExportLinks(converted, note, notes, names, folders, effectiveReadOptions);
       const suffix = footnotes.length ? (rewritten.endsWith("\n\n") ? "" : rewritten.endsWith("\n") ? "\n" : "\n\n") + footnotes.join("\n") + "\n" : "";
       return parts.prefix + rewritten + suffix;
@@ -27639,7 +27773,7 @@ __zentralShim.register = function (def) {
         if (!warnings.size) { Promise.resolve(run({ markdownReadOpts })).catch((error) => console.warn("[ZentralNotes] export failed", error)); return; }
         const cancel = chip("Cancel"), raw = chip("Keep raw syntax"), portable = chip("Convert to portable Markdown", true);
         openCard("Markdown export compatibility",
-          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, subscript/superscript use HTML tags, single-tilde strike uses double tildes, inline footnotes become numbered references when safe (otherwise literal text), math becomes literal code, block IDs become comments, and small print becomes ordinary text. Block-level links may not transfer; spoiler headings are omitted from the generated table of contents. Ignored, disabled or ambiguous syntax may remain as written. Sizing, formatting and reminder scheduling may not transfer. Folder exports flatten the folder structure; linked assets and notes outside the selection are not copied."),
+          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts, media embeds and transclusions with ordinary Markdown links/text, strips image sizing hints, normalizes list shorthands and Reddit headings/links, and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, subscript/superscript use HTML tags, single-tilde strike uses double tildes, inline footnotes become numbered references when safe (otherwise literal text), math becomes literal code, block IDs become comments, and small print becomes ordinary text. Block-level links may not transfer; spoiler headings are omitted from the generated table of contents. Ignored, disabled or ambiguous syntax may remain as written. Sizing, formatting and reminder scheduling may not transfer. Folder exports flatten the folder structure; linked assets and notes outside the selection are not copied."),
           h("div", { class: "zn-dialog-actions" }, cancel, raw, portable));
         const choose = (markdownMode) => { closeDialog(); Promise.resolve(run({ markdownMode, markdownReadOpts })).catch((error) => console.warn("[ZentralNotes] export failed", error)); };
         cancel.addEventListener("click", closeDialog);
@@ -32288,8 +32422,9 @@ __zentralShim.register = function (def) {
         const file = await pick(Ci.nsIFilePicker.modeSave, "Save note", safeFileName(titleOf(n.body), "note") + "." + info.ext, format);
         if (!file) return;
         try {
-          const body = format === "md" ? markdownBody(n, allNotesForExport(), new Map(), markdownMode, markdownReadOpts) : exportBody(n, allNotesForExport(), new Map(), store.meta.folders);
-          const text = format === "html" ? exportHtml(body, readOpts()) : format === "txt" ? exportText(body, readOpts()) : withNewline(body);
+          const noteReadOpts = { ...readOpts(), flavor: n?.flavor || readOpts().flavor };
+          const body = format === "md" ? markdownBody(n, allNotesForExport(), new Map(), markdownMode, markdownReadOpts) : exportBody(n, allNotesForExport(), new Map(), store.meta.folders, noteReadOpts);
+          const text = format === "html" ? exportHtml(body, noteReadOpts) : format === "txt" ? exportText(body, noteReadOpts) : withNewline(body);
           await IOUtils.writeUTF8(file.path, text);
         } catch (error) {
           warn(error);
@@ -32303,7 +32438,8 @@ __zentralShim.register = function (def) {
           await IOUtils.makeDirectory(dir, { ignoreExisting: true });
           for (const old of await IOUtils.getChildren(dir).catch(() => [])) await IOUtils.remove(old, { ignoreAbsent: true }).catch(() => {});
           const path = PathUtils.join(dir, safeFileName(titleOf(n.body), "note") + ".html");
-          await IOUtils.writeUTF8(path, exportHtml(exportBody(n, allNotesForExport(), new Map(), store.meta.folders), readOpts(), { print: true }));
+          const noteReadOpts = { ...readOpts(), flavor: n?.flavor || readOpts().flavor };
+          await IOUtils.writeUTF8(path, exportHtml(exportBody(n, allNotesForExport(), new Map(), store.meta.folders, noteReadOpts), noteReadOpts, { print: true }));
           window.gBrowser.addTab(PathUtils.toFileURI(path), {
             triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
           });

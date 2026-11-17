@@ -76,8 +76,7 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
-|     7 | `T1.18`     | `PARTIAL` | Med-High            | S      | —                 | Export syntax-mismatch warning dialog                                                                    |
-|     8 | `T1.19a`    | `OPEN`    | High                | M      | T1.18             | Full ZIP backup of notes + assets                                                                        |
+|     8 | `T1.19a`    | `OPEN`    | High                | M      | —                 | Full ZIP backup of notes + assets                                                                        |
 |     9 | `T3.4`      | `PARTIAL` | Med-High            | S-M    | —                 | Context menu on Notes & Agenda folders/pseudo-tabs in Zen tab bar                                        |
 |    10 | `T2.4c4`    | `PARTIAL` | Med-High            | M      | —                 | Time-zone and DST correctness in time grid                                                               |
 |    11 | `T2.5`      | `PARTIAL` | Med-High            | M      | —                 | Drag, resize and create items in the calendar                                                            |
@@ -134,17 +133,9 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 ## Task blocks (same order as the Master Order)
 
-#### `T1.18` — Export syntax-mismatch warning dialog
-
-**Status:** `PARTIAL` · **Impact:** Med-High · **Effort:** S · **Source:** carried over from the previous roadmap (unchanged requirement)
-
-**Current state and what is LEFT:** DONE: code-aware scan, portable conversion and raw/convert/cancel dialog for single, folder and ZIP Markdown exports covering ToC, blockquote and known closed `:::` container callouts (ambiguous or oversized recognized containers warn and stay raw), transclusions, hidden/calendar markers, extended tasks, highlights/underline, spoilers, subscript/superscript, inline footnotes and math-as-literal-code; warning and export use the same note snapshots; exported files retain note IDs, reminder metadata and foreign front matter; exact-length inline code spans, including spans across paragraph lines, link destinations and HTML attributes are protected from conversion; backtick runs are indexed to avoid quadratic lookahead. LEFT: audit other Zentral-only syntax and per-note flavor/ignore semantics in the converter (live export checks are not tasks).
-
-**Full specification (original row):** **PARTIAL.** DONE: code-aware scan, conservative portable conversion (including extended tasks, highlights, spoilers, subscript/superscript, inline footnotes and math-as-literal-code), snapshot-consistent raw/convert/cancel export dialogs, metadata-preserving Markdown files indexed exact-length multiline inline-code protection and safe link/attribute handling. LEFT: remaining Zentral syntax and conversion fidelity audit, per-note flavor/ignore semantics, live export/asset validation.
-
 #### `T1.19a` / `T1.19b` / `T1.19c` — ZIP backup, Obsidian export, Obsidian import
 
-**Status:** `OPEN` · **Impact:** High · **Effort:** M each · **Depends on:** T1.18 (a), then a to b to c · **Source:** split of T1.19 (must run last in Track 1)
+**Status:** `OPEN` · **Impact:** High · **Effort:** M each · **Depends on:** none (a), then a to b to c · **Source:** split of T1.19 (must run last in Track 1)
 
 `a`: bundle notes + `assets/` into a ZIP and restore it. `b`: export a vault folder mapping YAML front matter, `[[Note#Heading|alias]]`, `![[embeds]]`, callouts, tags. `c`: import such a vault, with a re-import that does not duplicate notes.
 
@@ -615,13 +606,15 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.203, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.204, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.203.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B5`, `SB6.1`, `SB6.3`, `SB6.8`, `T2.8b`, `T3.1`, `T3.4a`, `T3.6a`, `T4.1`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-30`, `AU-B4a`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`162/162` test files) passes in Node/fake-Zen at 3.3.203. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.204.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B5`, `SB6.1`, `SB6.3`, `SB6.8`, `T1.18`, `T2.8b`, `T3.1`, `T3.4a`, `T3.6a`, `T4.1`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-30`, `AU-B4a`, `OW-27`, `T2.4c1`, `B3.3.32-7` and `T2.18` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`162/162` test files) passes in Node/fake-Zen at 3.3.204. Live Zen cold-restart fix verified by owner at 3.3.202. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
-Completed this session (3.3.163–3.3.203), every finished item archived in `docs/LEGACY_done_rows.md`:
+Completed this session (3.3.163–3.3.204), every finished item archived in `docs/LEGACY_done_rows.md`:
+
+- `T1.18` (3.3.204) — completed the remaining export syntax-mismatch & per-note flavor/ignore audit in `ZentralNotes.uc.js`: protected all Zentral calendar metadata markers (`%%calendar:...%%`, `%%zn-item-id:...%%`, `%%zn-item-category:...%%`, `%%zn-date-ignore:...%%`, `%%not-date%%`) as HTML comments even when `A31` is off; added warning + portable conversion for `E12`/`E19` list shorthands, `D02` Reddit no-space headings, `L04` Reddit `r/`/`u/` links (guarded against link labels), YouTube/video `![alt](...)` media embeds, and `B17` / Zentral `#w=&a=` image sizing; propagated per-note `flavor` into `markdownExportWarnings(noteObj, opts)`, `exportBody(..., readOpts)`, HTML/TXT `exportNote`, and PDF `printNote`. Expanded `tests/notes-export-flavor.test.cjs` (`162/162` suite).
 
 - Hotfix follow-up chores & futureproofing (3.3.203) — added cross-root `sameRoot` guard before `parent.moveBefore(...)` in `ZentralSecondaryViews.uc.js` (`moveBrowser`), updated `loader/README.md` startup-barrier docs and `ZentralBrowserIntegrations.uc.js` ownership guide, and expanded `tests/panels-addon-host-root-protection.test.cjs` to 11 behavioral tests including full end-to-end Triple View (`OW-30`) + Real Tab IDs (`ZentralBrowserIntegrations` + `ZentralSecondaryViews` + `ZentralPanelLifecycle`) cold-start host-tab chaos recovery, real `ZentralPanels` `pruneRestoredAddonHosts` + late `SSTabRestored` execution, and real `ZentralNotes` `pseudoEventInside` non-Node `composedPath` testing (`162/162` suite).
 
