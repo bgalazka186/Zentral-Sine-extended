@@ -1,6 +1,6 @@
 # extension/panels/interaction
 
-Owner and local file guide for Extended 3.3.267. Original Zentral reference: 1.1.0.
+Owner and local file guide for Extended 3.3.268. Original Zentral reference: 1.1.0.
 
 | File                          | Responsibility                                                                                  |
 | ----------------------------- | ----------------------------------------------------------------------------------------------- |

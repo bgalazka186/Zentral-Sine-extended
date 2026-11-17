@@ -17207,7 +17207,7 @@
         const key = drag.orientation === "lr" ? "calendarSplitLR" : "calendarSplitTB";
         store.setMeta({ [key]: drag.share });
       }
-      // Split view as two windows: only where the sheet floats over a host and the option is on.
+      // The "All notes" menu's new-item row: the label depends on what the store and the Agenda offer.
       function syncAllNewButton() {
         const opts = { agendaEnabled: !!getPref(PREF.AGENDA_ENABLED, false), calendarAvailable: !!store.items, lang: notesLang() };
         const choice = CALENDAR_PART ? CALENDAR_PART.cleanAllNotesNewChoice(store.meta.allNewChoice, opts) : "note";

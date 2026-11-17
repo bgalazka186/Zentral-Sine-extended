@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.267
+// @version 3.3.268
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.267, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.268, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.267";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.268";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -28871,7 +28871,7 @@ __zentralShim.register = function (def) {
         const key = drag.orientation === "lr" ? "calendarSplitLR" : "calendarSplitTB";
         store.setMeta({ [key]: drag.share });
       }
-      // Split view as two windows: only where the sheet floats over a host and the option is on.
+      // The "All notes" menu's new-item row: the label depends on what the store and the Agenda offer.
       function syncAllNewButton() {
         const opts = { agendaEnabled: !!getPref(PREF.AGENDA_ENABLED, false), calendarAvailable: !!store.items, lang: notesLang() };
         const choice = CALENDAR_PART ? CALENDAR_PART.cleanAllNotesNewChoice(store.meta.allNewChoice, opts) : "note";

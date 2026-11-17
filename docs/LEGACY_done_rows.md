@@ -130,6 +130,10 @@
 | 10    | Hotfix   | `B3.3.50-10` | `DONE` | Unbind RSS reader card listeners when `reader_card` is toggled off                     | Disables all six listeners and pending card timers, rebinds once when enabled, and transfers ownership when the native tab strip changes.                                    |
 | 10a   | Hotfix   | `B3.3.64-1`  | `DONE` | Align week/day calendar headers and all-day cells with the hourly grid                 | Matching stable native scrollbar gutters and thin scrollbar widths across all three rows; live Zen geometry remains to be checked.                                           |
 
+- `DOC-1` DONE (3.3.268) — `additional/notes/README.md` promised a "Split view as a second window" setting that no code
+  ever implemented, and an orphan comment above `syncAllNewButton` still claimed "Split view as two windows". The line
+  and the comment are gone; the split view that exists is the in-sheet one, which the same README documents and `T3.8`
+  later extended with the companion pane. The standalone README test stays green and the bundles are rebuilt.
 ## Track 1 (DONE rows)
 
 | #   | Track ID | Ref           | Item                                                         | Impact   | Effort | Implementation Plan & Dependencies                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
