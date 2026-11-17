@@ -14,12 +14,15 @@ const core = win.__zentralNotesTestSeam.core;
 
 function fakeIO() {
   const files = new Map();
+  const zipEntries = new Map();
   return {
     files,
+    zipEntries,
     join: (...p) => p.join("/"),
     filename: (p) => p.split("/").pop(),
     readUTF8: async (p) => { if (!files.has(p)) throw new Error("nf " + p); return files.get(p).text; },
     writeUTF8: async (p, text) => { files.set(p, { text }); },
+    writeZip: async (p, entries) => { zipEntries.set(p, entries); files.set(p, { text: "zip" }); return true; },
     remove: async (p) => { files.delete(p); },
     exists: async (p) => files.has(p) || [...files.keys()].some((k) => k.startsWith(p + "/")),
     children: async (d) => [...new Set([...files.keys()].filter((k) => k.startsWith(d + "/")).map((k) => d + "/" + k.slice(d.length + 1).split("/")[0]))],
@@ -59,6 +62,21 @@ async function main() {
   assert.equal(removed.includes(saved.id), false, "nonblank past date notes are never automatically trashed");
   assert.equal(store.get(saved.id)?.trashed, 0);
   await store.flush();
-  console.log("PASS notes-daily-lifecycle (7 assertions)");
+  const archiveIO = fakeIO();
+  const archiveStore = core.createStore({ io: archiveIO, notify() {}, windowId: "daily-archive-test", now: () => clock, getDir: async () => "/archive-notes", getMaxSaveMs: () => 5000, getArchiveDailyNotes: () => true, setTimer: () => 0, clearTimer() {}, warn(error) { throw error; } });
+  await archiveStore.open();
+  const archivedNote = archiveStore.create("# " + oldKey + " Monday\n\nPreserve this compressed copy", "daily");
+  await archiveStore.flush();
+  const archiveResult = await archiveStore.archivePastDateNotes();
+  assert.equal(archiveResult.archived, 1, "past date note is archived when the setting is enabled");
+  const archivePath = "/archive-notes/daily-archive/" + archivedNote.id + ".zip";
+  const zipEntries = archiveIO.zipEntries.get(archivePath);
+  assert.ok(Array.isArray(zipEntries), "compressed archive is stored in its own folder");
+  const noteEntry = zipEntries.find((entry) => entry.path === "note.md");
+  assert.match(new TextDecoder().decode(noteEntry.bytes), /Preserve this compressed copy/);
+  assert.equal(archiveStore.purgeBlankDateNotes().includes(archivedNote.id), false, "archive mode never moves date notes to Trash");
+  const archiveAgain = await archiveStore.archivePastDateNotes();
+  assert.equal(archiveAgain.unchanged, 1, "unchanged notes are not recompressed on every startup");
+  console.log("PASS notes-daily-lifecycle (13 assertions)");
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });
