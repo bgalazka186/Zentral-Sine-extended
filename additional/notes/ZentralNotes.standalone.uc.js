@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.242
+// @version 3.3.243
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.242, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.243, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.242";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.243";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -10725,7 +10725,9 @@ const __zentralEmbeddedLoader = (function () {
   function cleanCalendarHolidays(raw, locale = "") {
     const src = raw && typeof raw === "object" ? raw : {};
     const enabled = src.enabled !== false;
-    const region = HOLIDAY_REGIONS.includes(src.region) ? src.region : defaultHolidayRegion(locale);
+    const regionExplicit = src.regionExplicit === true;
+    const storedRegion = HOLIDAY_REGIONS.includes(src.region) ? src.region : null;
+    const region = storedRegion && (storedRegion !== "none" || regionExplicit) ? storedRegion : defaultHolidayRegion(locale);
     const weekend = WEEKEND_PRESETS.includes(src.weekend) ? src.weekend : "auto";
     const personalMap = new Map();
     const list = Array.isArray(src.personalDays) ? src.personalDays : [];
@@ -10737,7 +10739,7 @@ const __zentralEmbeddedLoader = (function () {
       personalMap.set(date, { date, label });
     }
     const personalDays = [...personalMap.values()].sort((a, b) => a.date.localeCompare(b.date));
-    return { enabled, region, weekend, personalDays };
+    return { enabled, region, regionExplicit, weekend, personalDays };
   }
   function addPersonalDayOff(prefs, dateKey, label = "") {
     const clean = cleanCalendarHolidays(prefs);
@@ -32395,7 +32397,7 @@ __zentralShim.register = function (def) {
           regionSelect.append(opt);
         }
         regionSelect.value = state.region;
-        regionSelect.addEventListener("change", () => save({ ...state, region: regionSelect.value }));
+        regionSelect.addEventListener("change", () => save({ ...state, region: regionSelect.value, regionExplicit: true }));
         regionStatus = h("p", { class: "zn-cal-holidays-region-status", "aria-live": "polite" }, "");
         renderRegionStatus();
 
