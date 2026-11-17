@@ -165,6 +165,17 @@ async function test(name, fn) {
     assert.equal(cal.easterSundayYmd(2027), "2027-03-28");
     assert.equal(cal.easterSundayYmd(2028), "2028-04-16");
 
+    assert.equal(cal.defaultHolidayRegion("pl-PL"), "PL");
+    assert.equal(cal.defaultHolidayRegion("pl"), "PL");
+    assert.equal(cal.defaultHolidayRegion("de-DE"), "DE");
+    assert.equal(cal.defaultHolidayRegion("en-GB"), "GB");
+    assert.equal(cal.defaultHolidayRegion("en-US"), "US");
+    assert.equal(cal.defaultHolidayRegion("ar-EG"), "EG");
+    assert.equal(cal.defaultHolidayRegion("de-AT"), "none", "unsupported country is not guessed from its language");
+    assert.equal(cal.defaultHolidayRegion("fr-FR"), "none");
+    assert.equal(cal.cleanCalendarHolidays(null, "pl-PL").region, "PL", "fresh profile picks the supported locale region");
+    assert.equal(cal.cleanCalendarHolidays({ region: "none" }, "pl-PL").region, "none", "an explicitly stored no-calendar selection is preserved");
+
     // Poland 2024 vs 2025/2026 (Wigilia Dec 24 added from 2025 onward; Corpus Christi = Easter + 60)
     const pl2024 = cal.holidaysFor("PL", 2024, "pl");
     const pl2026En = cal.holidaysFor("PL", 2026, "en");
@@ -323,6 +334,8 @@ async function test(name, fn) {
     const labelIn = h.sheet.root.querySelector(".zn-cal-holidays-label");
     const addBtn = h.sheet.root.querySelector(".zn-cal-holidays-add");
     assert.ok(regionSel && dateIn && labelIn && addBtn, "Holidays dialog controls rendered");
+    const regionStatus = h.sheet.root.querySelector(".zn-cal-holidays-region-status");
+    assert.match(regionStatus?.textContent || "", /Showing public holidays for Poland/i, "selected public calendar is explained");
     regionSel.value = "DE";
     regionSel.dispatchEvent(new h.Event("change", { bubbles: true }));
     dateIn.value = "2026-05-15";
@@ -331,6 +344,7 @@ async function test(name, fn) {
     await h.flush();
 
     assert.equal(h.store.meta.calendarHolidays.region, "DE");
+    assert.match(regionStatus.textContent, /Germany/i, "region status follows a changed selection");
     assert.ok(h.store.meta.calendarHolidays.personalDays.some((p) => p.date === "2026-05-15" && p.label === "Berlin trip"));
 
     await h.store.flush();
@@ -344,6 +358,9 @@ async function test(name, fn) {
     assert.ok(h2.store.meta.calendarHolidays.personalDays.some((p) => p.date === "2026-05-15" && p.label === "Berlin trip"));
     assert.ok(CSS_SRC.includes(".zn-cal-month-cell.is-workfree"), "work-free CSS tint rule present");
     assert.ok(CSS_SRC.includes(".zn-cal-picker-day.is-workfree"), "picker work-free CSS rule present");
+    assert.ok(CSS_SRC.includes(".zn-cal-month-cell.is-weekend") && CSS_SRC.includes("#6ca8ff"), "weekends use a distinct cool tint");
+    assert.ok(CSS_SRC.includes(".zn-cal-month-cell.is-holiday") && CSS_SRC.includes("#f0b85b"), "public holidays use a distinct warm tint");
+    assert.ok(CSS_SRC.includes(".zn-cal-month-cell.is-personal-off") && CSS_SRC.includes("#b48bea"), "personal days off use a distinct violet tint");
     await h2.store.close();
   });
 

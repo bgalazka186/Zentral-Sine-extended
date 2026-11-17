@@ -7384,6 +7384,11 @@
       const dirty = new Set();
       const listeners = new Set();
       const backedUp = new Set();
+      const calendarHolidayLocale = (() => {
+        try { const locale = Services.locale?.appLocaleAsBCP47; if (locale) return String(locale); } catch (_) {}
+        try { const locale = window.navigator?.language; if (locale) return String(locale); } catch (_) {}
+        return "";
+      })();
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, dockPx: 0, gapPx: 0, cardDock: "", cardW: 0, cardH: 0, cardHShare: 0,
         allNewChoice: "note", calendarClockMode: "both", spellLanguages: [],
         calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarFiltersCollapsed: false, calendarBigPictureFiltersCollapsed: false, calendarTab: "tree",
@@ -7394,7 +7399,7 @@
         // The size of each calendar view ("auto" = fitted to the pane, or px; OW-03). Replaced as a whole, never changed in place.
         calendarScale: CALENDAR_PART ? CALENDAR_PART.cleanCalendarScale(null) : { month: "auto", week: "auto", day: "auto", upcoming: "auto", agenda: "auto" },
         calendarPicker: CALENDAR_PART ? CALENDAR_PART.cleanCalendarPicker(null) : { mode: "auto", minWidth: 470, minHeight: 360, colorMode: "count" },
-        calendarHolidays: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHolidays(null) : { enabled: true, region: "none", weekend: "auto", personalDays: [] },
+        calendarHolidays: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHolidays(null, calendarHolidayLocale) : { enabled: true, region: "none", weekend: "auto", personalDays: [] },
         calendarAlertSettings: CALENDAR_PART ? CALENDAR_PART.cleanAlertSettings(null) : {}, calendarNoteAlertOverrides: {},
         calendarAgendaDefaults: {}, calendarNoteAgendaOverrides: {} };
       let meta = { ...DEFAULT_META };
@@ -8147,7 +8152,7 @@
             // `calendarDensity` (one of three steps for all views, until 3.3.175) is read only where no size is stored yet.
             meta.calendarScale = CALENDAR_PART.cleanCalendarScale(raw.calendarScale, raw.calendarDensity);
             meta.calendarPicker = CALENDAR_PART.cleanCalendarPicker(raw.calendarPicker);
-            meta.calendarHolidays = CALENDAR_PART.cleanCalendarHolidays(raw.calendarHolidays);
+            meta.calendarHolidays = CALENDAR_PART.cleanCalendarHolidays(raw.calendarHolidays, calendarHolidayLocale);
             meta.calendarSnap = CALENDAR_PART.cleanCalendarSnap(raw.calendarSnap);
             meta.calendarHours = CALENDAR_PART.cleanCalendarHours(raw.calendarHours);
             const daysForward = Number(raw.calendarDaysForward);
@@ -20923,10 +20928,18 @@
         const C = CALENDAR_PART;
         if (!C) return;
         let state = calendarHolidayPrefs();
+        let regionStatus = null;
+        const renderRegionStatus = () => {
+          if (!regionStatus) return;
+          regionStatus.textContent = state.region === "none"
+            ? t("cal.holidays.regionPrompt")
+            : t("cal.holidays.regionActive", { region: t("cal.holidays.region." + state.region) });
+        };
         const save = (next) => {
           state = C.cleanCalendarHolidays(next);
           store.setMeta({ calendarHolidays: state });
           renderCalendar();
+          renderRegionStatus();
         };
         const enableCheck = h("input", { type: "checkbox", class: "zn-cal-holidays-enable" });
         enableCheck.checked = state.enabled !== false;
@@ -20941,6 +20954,8 @@
         }
         regionSelect.value = state.region;
         regionSelect.addEventListener("change", () => save({ ...state, region: regionSelect.value }));
+        regionStatus = h("p", { class: "zn-cal-holidays-region-status", "aria-live": "polite" }, "");
+        renderRegionStatus();
 
         const weekendSelect = h("select", { class: "zn-field zn-cal-holidays-weekend", "aria-label": t("cal.holidays.weekendLabel") });
         for (const preset of C.WEEKEND_PRESETS) {
@@ -21009,6 +21024,7 @@
         openCalendarCard(
           t("cal.holidays.title"),
           enableRow,
+          regionStatus,
           h("label", { class: "zn-dialog-label" }, t("cal.holidays.regionLabel"), regionSelect),
           h("label", { class: "zn-dialog-label" }, t("cal.holidays.weekendLabel"), weekendSelect),
           h("div", { class: "zn-cal-holidays-section" },
@@ -21034,7 +21050,7 @@
         { id: "agenda-visibility-defaults", label: t("cal.toolsMenu.agendaVisibility"), icon: "calendar-check", run: askAgendaVisibilityDefaults },
         { sep: true },
         { id: "calendar-week-settings", icon: "calendar", label: t("cal.toolsMenu.weekSettings", { day: t(calendarWeekStartDay() === 0 ? "common.sunday" : "common.monday"), weeks: calendarShowWeekNumbers() ? ", " + t("cal.weekNumber.short") : "" }), run: askCalendarWeekSettings },
-        { id: "calendar-holidays", icon: "calendar", label: holPrefs.region !== "none" ? t("cal.toolsMenu.holidaysRegion", { region: holPrefs.region }) : t("cal.toolsMenu.holidays"), run: () => queueMicrotask(askCalendarHolidaysDialog) },
+        { id: "calendar-holidays", icon: "calendar", label: holPrefs.region !== "none" ? t("cal.toolsMenu.holidaysRegion", { region: t("cal.holidays.region." + holPrefs.region) }) : t("cal.toolsMenu.holidaysSetup"), run: () => queueMicrotask(askCalendarHolidaysDialog) },
         { icon: "clock", label: t("cal.toolsMenu.visibleHours", { hours: CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours).on ? calendarHoursText(store.meta.calendarHours).long : t("cal.toolsMenu.all24") }), action: () => queueMicrotask(askCalendarHours) },
         { icon: "globe", label: t("cal.toolsMenu.displayZone", { zone: calendarDisplayZone() || t("cal.toolsMenu.zoneLocal") }), action: () => queueMicrotask(askCalendarDisplayZone) },
         { icon: "clock", label: t("cal.toolsMenu.freeSlots"), action: () => queueMicrotask(askCalendarFreeSlots) },

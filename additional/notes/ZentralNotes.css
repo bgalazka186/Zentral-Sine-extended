@@ -2066,37 +2066,54 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-calendar-controls-toggle { position: relative; flex: 0 0 auto; }
 .zentral-notes-sheet .zn-calendar-controls-dot { position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 999px; background: var(--zn-accent); pointer-events: none; }
 .zentral-notes-sheet .zn-calendar-controls-dot[hidden] { display: none !important; }
-/* T2.10: Subtle greenish tint for weekends, public holidays and personal days off. */
+/* OW-39: Keep work-free days distinct without washing out events, text, or selection. */
 .zentral-notes-sheet .zn-cal-month-cell.is-workfree,
 .zentral-notes-sheet .zn-cal-time-day-head.is-workfree,
 .zentral-notes-sheet .zn-cal-time-allday-cell.is-workfree,
 .zentral-notes-sheet .zn-cal-time-column.is-workfree,
 .zentral-notes-sheet .zn-cal-day-group.is-workfree,
 .zentral-notes-sheet .zn-cal-agenda-row.is-workfree {
-  background: color-mix(in srgb, #38b87c 8%, transparent);
+  background: color-mix(in srgb, #78a9c8 4%, transparent);
+}
+.zentral-notes-sheet .zn-cal-month-cell.is-weekend,
+.zentral-notes-sheet .zn-cal-time-day-head.is-weekend,
+.zentral-notes-sheet .zn-cal-time-allday-cell.is-weekend,
+.zentral-notes-sheet .zn-cal-time-column.is-weekend,
+.zentral-notes-sheet .zn-cal-day-group.is-weekend,
+.zentral-notes-sheet .zn-cal-agenda-row.is-weekend {
+  background: color-mix(in srgb, #6ca8ff 10%, transparent);
 }
 .zentral-notes-sheet .zn-cal-month-cell.is-holiday,
-.zentral-notes-sheet .zn-cal-month-cell.is-personal-off,
 .zentral-notes-sheet .zn-cal-time-day-head.is-holiday,
-.zentral-notes-sheet .zn-cal-time-day-head.is-personal-off,
 .zentral-notes-sheet .zn-cal-time-allday-cell.is-holiday,
-.zentral-notes-sheet .zn-cal-time-allday-cell.is-personal-off,
 .zentral-notes-sheet .zn-cal-time-column.is-holiday,
-.zentral-notes-sheet .zn-cal-time-column.is-personal-off,
 .zentral-notes-sheet .zn-cal-day-group.is-holiday,
+.zentral-notes-sheet .zn-cal-agenda-row.is-holiday {
+  background: color-mix(in srgb, #f0b85b 13%, transparent);
+}
+.zentral-notes-sheet .zn-cal-month-cell.is-personal-off,
+.zentral-notes-sheet .zn-cal-time-day-head.is-personal-off,
+.zentral-notes-sheet .zn-cal-time-allday-cell.is-personal-off,
+.zentral-notes-sheet .zn-cal-time-column.is-personal-off,
 .zentral-notes-sheet .zn-cal-day-group.is-personal-off,
-.zentral-notes-sheet .zn-cal-agenda-row.is-holiday,
 .zentral-notes-sheet .zn-cal-agenda-row.is-personal-off {
-  background: color-mix(in srgb, #38b87c 15%, transparent);
+  background: color-mix(in srgb, #b48bea 12%, transparent);
 }
 .zentral-notes-sheet .zn-cal-picker-day.is-workfree {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #38b87c 42%, transparent);
-  background: color-mix(in srgb, #38b87c 11%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #78a9c8 36%, transparent);
+  background: color-mix(in srgb, #78a9c8 7%, transparent);
 }
-.zentral-notes-sheet .zn-cal-picker-day.is-holiday,
+.zentral-notes-sheet .zn-cal-picker-day.is-weekend {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #6ca8ff 58%, transparent);
+  background: color-mix(in srgb, #6ca8ff 13%, transparent);
+}
+.zentral-notes-sheet .zn-cal-picker-day.is-holiday {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #f0b85b 78%, transparent);
+  background: color-mix(in srgb, #f0b85b 17%, transparent);
+}
 .zentral-notes-sheet .zn-cal-picker-day.is-personal-off {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #38b87c 68%, transparent);
-  background: color-mix(in srgb, #38b87c 20%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #b48bea 70%, transparent);
+  background: color-mix(in srgb, #b48bea 16%, transparent);
 }
 .zentral-notes-sheet .zn-cal-month-holiday {
   position: absolute;
@@ -2110,8 +2127,8 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
   line-height: 1.25;
   padding: 0 3px;
   border-radius: 3px;
-  color: color-mix(in srgb, #38b87c 75%, var(--zn-text));
-  background: color-mix(in srgb, #38b87c 16%, transparent);
+  color: color-mix(in srgb, #f0b85b 92%, var(--zn-text));
+  background: color-mix(in srgb, #f0b85b 23%, transparent);
   pointer-events: none;
 }
 .zentral-notes-sheet .zn-cal-holiday-pill {
@@ -2124,11 +2141,12 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
   border-radius: 999px;
   font-size: .72em;
   font-weight: 600;
-  color: color-mix(in srgb, #38b87c 78%, var(--zn-text));
-  background: color-mix(in srgb, #38b87c 18%, transparent);
+  color: color-mix(in srgb, #f0b85b 92%, var(--zn-text));
+  background: color-mix(in srgb, #f0b85b 24%, transparent);
 }
 .zentral-notes-sheet .zn-cal-holidays-section { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
 .zentral-notes-sheet .zn-cal-holidays-heading { font-size: .92em; }
+.zentral-notes-sheet .zn-cal-holidays-region-status { margin: 2px 0; padding: 6px 8px; border-left: 2px solid color-mix(in srgb, var(--zn-accent) 65%, transparent); border-radius: 0 5px 5px 0; color: var(--zn-muted); background: color-mix(in srgb, var(--zn-accent) 7%, transparent); font-size: .86em; }
 .zentral-notes-sheet .zn-cal-holidays-personal-list { display: flex; flex-direction: column; gap: 4px; max-height: 150px; overflow: auto; }
 .zentral-notes-sheet .zn-cal-holidays-personal-row { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border: 1px solid var(--zn-line); border-radius: 6px; font-size: .88em; }
 .zentral-notes-sheet .zn-cal-holidays-personal-label { color: var(--zn-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
