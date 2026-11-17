@@ -49,6 +49,7 @@
     WEATHER_LONGITUDE: "zen.workspace.zentral.widgets.weather.longitude",
     WEATHER_UNITS: "zen.workspace.zentral.widgets.weather.units",
     WEATHER_REFRESH_MINUTES: "zen.workspace.zentral.widgets.weather.refresh_minutes",
+    WEATHER_PLACES: "zen.workspace.zentral.widgets.weather.places",
     TIMER_ENABLED: "zen.workspace.zentral.widgets.timer.enabled",
     TIMER_CLICK_STOPWATCH: "zen.workspace.zentral.widgets.timer.click_stopwatch",
     TIMER_QUICK_NOTE: "zen.workspace.zentral.widgets.quick_note.enabled",
@@ -1185,6 +1186,12 @@
     let disposed = false;
 
     function cacheKeyOf(def) {
+      if (typeof def.cacheKey === "function") {
+        try {
+          const custom = def.cacheKey();
+          if (custom) return String(custom);
+        } catch (_) {}
+      }
       return def.cacheKey || def.id;
     }
 
@@ -1823,6 +1830,83 @@
     return { latitude: Math.round(lat * 10000) / 10000, longitude: Math.round(lon * 10000) / 10000 };
   }
 
+  // OW-57: up to three places, cycled by a click. One JSON pref holds the list; the old single place (name +
+  // latitude + longitude) is migrated as the first entry, so a saved place is never lost. Each entry carries its own
+  // id, which is what makes the cache key differ per place: the old place's numbers can never show for the new one.
+  const WEATHER_PLACES_MAX = 3;
+  const WEATHER_PLACE_NAME_MAX = 60;
+  function cleanWeatherPlaceName(raw) {
+    return String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, WEATHER_PLACE_NAME_MAX);
+  }
+  function cleanWeatherPlaceId(raw, fallback) {
+    const id = String(raw ?? "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+    return id ? id.slice(0, 40) : fallback;
+  }
+  // `raw` is the stored JSON (string) or an already-parsed value. Returns [] for junk, at most three entries, each
+  // { id, name, latitude, longitude } with a unique id. A entry without real numbers is dropped: no place, no request.
+  function cleanWeatherPlaces(raw) {
+    let value = raw;
+    if (typeof raw === "string") {
+      const text = raw.trim();
+      if (!text) return [];
+      try {
+        value = JSON.parse(text);
+      } catch (_) {
+        return [];
+      }
+    }
+    const list = Array.isArray(value) ? value : Array.isArray(value?.places) ? value.places : [];
+    const out = [];
+    const seen = new Set();
+    for (const entry of list) {
+      if (out.length >= WEATHER_PLACES_MAX) break;
+      const named = cleanWeatherPlaceName(entry?.name);
+      const place = cleanWeatherPlace(entry?.latitude, entry?.longitude);
+      // A typed name with no numbers yet is still a place: the lookup fills it in. Nothing is requested from it.
+      if (!place && !named) continue;
+      const name = named || `${place.latitude}, ${place.longitude}`;
+      let id = cleanWeatherPlaceId(entry?.id, "place-" + (out.length + 1));
+      while (seen.has(id)) id += "-2";
+      seen.add(id);
+      out.push(place ? { id, name, latitude: place.latitude, longitude: place.longitude } : { id, name, latitude: null, longitude: null });
+    }
+    return out;
+  }
+  function serializeWeatherPlaces(list) {
+    return JSON.stringify(cleanWeatherPlaces(list));
+  }
+  // The place that is showing: the one the person last cycled to, if it still exists, else the first ready one. An
+  // entry whose name was typed but whose numbers are still being looked up is skipped: there is nothing to fetch yet.
+  const weatherPlaceReady = (p) => Boolean(cleanWeatherPlace(p?.latitude, p?.longitude));
+  function currentWeatherPlace(list, currentId) {
+    const places = cleanWeatherPlaces(list);
+    if (!places.length) return null;
+    const ready = places.filter(weatherPlaceReady);
+    const pool = ready.length ? ready : places;
+    return pool.find((p) => p.id === currentId) || pool[0];
+  }
+  // A click moves to the next place and wraps; one place (or none) is a no-op that still answers a place or null.
+  function nextWeatherPlace(list, currentId) {
+    const places = cleanWeatherPlaces(list);
+    if (!places.length) return null;
+    const ready = places.filter(weatherPlaceReady);
+    const pool = ready.length ? ready : places;
+    const at = pool.findIndex((p) => p.id === currentId);
+    if (at < 0) return pool[0];
+    return pool[(at + 1) % pool.length];
+  }
+  // The old three prefs are one place: the reader for a build that has not migrated yet.
+  function weatherPlacesFromLegacy(name, latitude, longitude) {
+    const place = cleanWeatherPlace(latitude, longitude);
+    if (!place) return [];
+    return cleanWeatherPlaces([{ id: "place-1", name: cleanWeatherPlaceName(name) || `${place.latitude}, ${place.longitude}`, ...place }]);
+  }
+  // The cache key of the weather card: one entry per place, or the plain id when there is no place yet.
+  function weatherCacheKeyFor(baseId, place) {
+    const p = cleanWeatherPlace(place?.latitude, place?.longitude);
+    return p ? `${baseId}:${p.latitude},${p.longitude}` : baseId;
+  }
+
   function weatherRequestUrl(place, units) {
     const p = cleanWeatherPlace(place?.latitude, place?.longitude);
     if (!p) return "";
@@ -2070,6 +2154,14 @@
     resolveWeatherUnits,
     cleanRefreshMinutes,
     cleanWeatherPlace,
+    cleanWeatherPlaces,
+    serializeWeatherPlaces,
+    currentWeatherPlace,
+    nextWeatherPlace,
+    weatherPlaceReady,
+    weatherPlacesFromLegacy,
+    weatherCacheKeyFor,
+    WEATHER_PLACES_MAX,
     weatherRequestUrl,
     readWeatherPayload,
     WEATHER_FORECAST_DAYS,
@@ -2740,14 +2832,37 @@
         };
       }
 
+      // OW-57: which place is showing. Per-window state like the timer's: the place a person glanced at is not a
+      // setting, and two windows may look at two places. -1 / a missing card means "the list decides" (first entry).
+      const weatherView = { placeId: "", mounted: false };
+
+      // The saved places. The JSON pref is the truth once it exists; a build that only ever had the three single
+      // prefs reads them as one place, and the first read writes that place into the JSON pref so nothing is lost.
+      function readWeatherPlaces() {
+        const stored = cleanWeatherPlaces(getString(WIDGET_PREFS.WEATHER_PLACES, ""));
+        if (stored.length) return stored;
+        const legacy = weatherPlacesFromLegacy(
+          getString(WIDGET_PREFS.WEATHER_PLACE, ""),
+          getString(WIDGET_PREFS.WEATHER_LATITUDE, ""),
+          getString(WIDGET_PREFS.WEATHER_LONGITUDE, ""),
+        );
+        if (legacy.length) {
+          try {
+            Services.prefs.setStringPref(WIDGET_PREFS.WEATHER_PLACES, serializeWeatherPlaces(legacy));
+          } catch (_) {}
+        }
+        return legacy;
+      }
+
       // T3.9c: everything the weather card needs, read once per refresh.
       function readWeatherOpts() {
+        const places = readWeatherPlaces();
+        const active = currentWeatherPlace(places, weatherView.placeId);
         return {
-          place: String(getString(WIDGET_PREFS.WEATHER_PLACE, "") || "").trim(),
-          place_: cleanWeatherPlace(
-            getString(WIDGET_PREFS.WEATHER_LATITUDE, ""),
-            getString(WIDGET_PREFS.WEATHER_LONGITUDE, ""),
-          ),
+          places,
+          placeId: active?.id || "",
+          place: active?.name || "",
+          place_: active ? cleanWeatherPlace(active.latitude, active.longitude) : null,
           units: cleanWeatherUnits(getString(WIDGET_PREFS.WEATHER_UNITS, "auto")),
           refreshMinutes: cleanRefreshMinutes(getInt(WIDGET_PREFS.WEATHER_REFRESH_MINUTES, DEFAULTS.WEATHER_REFRESH_MINUTES)),
         };
@@ -3068,10 +3183,17 @@
           WIDGET_PREFS.WEATHER_PLACE,
           WIDGET_PREFS.WEATHER_LATITUDE,
           WIDGET_PREFS.WEATHER_LONGITUDE,
+          WIDGET_PREFS.WEATHER_PLACES,
           WIDGET_PREFS.WEATHER_UNITS,
           WIDGET_PREFS.WEATHER_REFRESH_MINUTES,
         ],
-        create({ document: doc }) {
+        // OW-57: the cache holds one entry per place, or the place switched in the same card would show the old
+        // place's numbers for a moment (the scheduler looks the cache up by this key before every paint).
+        cacheKey() {
+          const opts = readWeatherOpts();
+          return weatherCacheKeyFor("weather", opts.place_);
+        },
+        create({ document: doc, requestRefresh }) {
           const wrap = doc.createElement("div");
           wrap.className = "zw-weather";
 
@@ -3151,6 +3273,18 @@
           const paint = (value, info = {}) => {
             const opts = readWeatherOpts();
             placeEl.textContent = opts.place || "Set a place in Settings";
+            // A control only when a click can do something: one place is a label, not a button.
+            const readyPlaces = opts.places.filter(weatherPlaceReady);
+            const cyclable = readyPlaces.length > 1;
+            wrap.setAttribute("data-zw-places", String(readyPlaces.length));
+            if (cyclable) {
+              wrap.setAttribute("role", "button");
+              wrap.setAttribute("tabindex", "0");
+              wrap.setAttribute("aria-label", `${opts.place || ""}: click for the next place (${readyPlaces.length} saved)`);
+            } else {
+              wrap.removeAttribute("role");
+              wrap.removeAttribute("tabindex");
+            }
             wrap.setAttribute("data-zw-weather", value ? (info.cached ? "cached" : "live") : info.error ? "error" : "empty");
             if (!value) {
               iconEl.textContent = "\u2601";
@@ -3178,8 +3312,37 @@
             wrap.setAttribute("aria-label", (opts.place ? opts.place + ": " : "") + parts.text);
           };
 
+          // OW-57: the whole card is the control. A click shows the next place; one place (or none) leaves it alone.
+          // The outlook no longer owns a click (OW-54), so there is nothing left to collide with.
+          const cyclePlace = () => {
+            const places = readWeatherPlaces().filter(weatherPlaceReady);
+            if (places.length < 2) return false;
+            const active = currentWeatherPlace(places, weatherView.placeId);
+            const next = nextWeatherPlace(places, active?.id);
+            if (!next || next.id === active?.id) return false;
+            weatherView.placeId = next.id;
+            requestRefresh({ force: true });
+            return true;
+          };
+          wrap.addEventListener("click", () => {
+            try {
+              cyclePlace();
+            } catch (err) {
+              console.warn("[ZentralWidgets] weather place cycle failed:", err);
+            }
+          });
+          wrap.addEventListener("keydown", (e) => {
+            if (e.key !== "Enter" && e.key !== " ") return;
+            e.preventDefault();
+            cyclePlace();
+          });
+
           return {
             element: wrap,
+            cacheKey() {
+              const opts = readWeatherOpts();
+              return weatherCacheKeyFor("weather", opts.place_);
+            },
             fetch({ now, cachedValue }) {
               const opts = readWeatherOpts();
               if (!opts.place_) return null; // no place, no request, no network
@@ -3208,15 +3371,41 @@
         },
       });
 
-      // A place name is looked up once, when the person types it (a setting change, never a poll) and on load if a
-      // name is stored without numbers. The answer only fills the two numeric prefs; the card never sees a name-only place.
+      // A place name is looked up once, when the person types it (a setting change, never a poll) and on load if an
+      // entry is stored without numbers. The answer fills that entry in the places list: a name is a label, the
+      // numbers are the truth. The first entry also mirrors into the three single prefs, so someone who edits those
+      // by hand still sees what they edited.
       let placeLookupToken = 0;
-      function resolveWeatherPlaceFromName() {
-        const name = String(getString(WIDGET_PREFS.WEATHER_PLACE, "") || "").trim();
-        if (!name) return Promise.resolve(false);
-        if (cleanWeatherPlace(getString(WIDGET_PREFS.WEATHER_LATITUDE, ""), getString(WIDGET_PREFS.WEATHER_LONGITUDE, ""))) {
-          return Promise.resolve(false);
+      function writeWeatherPlaces(list) {
+        try {
+          Services.prefs.setStringPref(WIDGET_PREFS.WEATHER_PLACES, serializeWeatherPlaces(list));
+          return true;
+        } catch (_) {
+          return false;
         }
+      }
+      function applyGeocodeHit(hit, placeId) {
+        const places = readWeatherPlaces();
+        if (!places.length) return false;
+        const at = places.findIndex((p) => p.id === placeId);
+        if (at < 0) return false;
+        const target = places[at];
+        const name = hit.name && hit.name !== target.name ? hit.name : target.name;
+        const filled = places.map((p) =>
+          p.id === target.id ? { ...p, name, latitude: hit.latitude, longitude: hit.longitude } : p,
+        );
+        if (!writeWeatherPlaces(filled)) return false;
+        if (at === 0) {
+          try {
+            Services.prefs.setStringPref(WIDGET_PREFS.WEATHER_LATITUDE, String(hit.latitude));
+            Services.prefs.setStringPref(WIDGET_PREFS.WEATHER_LONGITUDE, String(hit.longitude));
+            if (name) Services.prefs.setStringPref(WIDGET_PREFS.WEATHER_PLACE, name);
+          } catch (_) {}
+        }
+        return true;
+      }
+      // One name -> one place. `placeId` empty means "the legacy single place", which becomes entry one.
+      function geocodeWeatherName(name, placeId) {
         const url = geocodeUrl(name);
         if (!url || typeof fetch !== "function") return Promise.resolve(false);
         const token = ++placeLookupToken;
@@ -3226,21 +3415,35 @@
             if (disposed || token !== placeLookupToken) return false;
             const hit = readGeocodePayload(payload);
             if (!hit) return false;
-            try {
-              Services.prefs.setStringPref(WIDGET_PREFS.WEATHER_LATITUDE, String(hit.latitude));
-              Services.prefs.setStringPref(WIDGET_PREFS.WEATHER_LONGITUDE, String(hit.longitude));
-              if (hit.name && hit.name !== name) Services.prefs.setStringPref(WIDGET_PREFS.WEATHER_PLACE, hit.name);
-            } catch (_) {
-              return false;
-            }
-            return true;
+            if (placeId) return applyGeocodeHit(hit, placeId);
+            // The legacy name has no entry yet: make it entry one, then fill it.
+            const seeded = weatherPlacesFromLegacy(name, hit.latitude, hit.longitude);
+            if (!seeded.length || !writeWeatherPlaces(seeded)) return false;
+            return applyGeocodeHit(hit, seeded[0].id);
           })
           .catch(() => false);
       }
-      watchPref(WIDGET_PREFS.WEATHER_PLACE, () => {
-        resolveWeatherPlaceFromName();
+      function lookupMissingWeatherPlaces() {
+        const places = readWeatherPlaces();
+        if (places.length) {
+          const missing = places.find((p) => !cleanWeatherPlace(p.latitude, p.longitude));
+          return missing ? geocodeWeatherName(missing.name, missing.id) : Promise.resolve(false);
+        }
+        const legacyName = String(getString(WIDGET_PREFS.WEATHER_PLACE, "") || "").trim();
+        return legacyName ? geocodeWeatherName(legacyName, "") : Promise.resolve(false);
+      }
+      watchPref(WIDGET_PREFS.WEATHER_PLACES, () => {
+        lookupMissingWeatherPlaces();
       });
-      if (getBool(WIDGET_PREFS.WEATHER_ENABLED, DEFAULTS.WEATHER_ENABLED)) resolveWeatherPlaceFromName();
+      watchPref(WIDGET_PREFS.WEATHER_PLACE, () => {
+        // Typing a name in the single pref after a list exists fills the first entry, not a phantom place.
+        const places = readWeatherPlaces();
+        const name = String(getString(WIDGET_PREFS.WEATHER_PLACE, "") || "").trim();
+        if (!name || !places.length) return;
+        if (cleanWeatherPlace(getString(WIDGET_PREFS.WEATHER_LATITUDE, ""), getString(WIDGET_PREFS.WEATHER_LONGITUDE, ""))) return;
+        geocodeWeatherName(name, places[0].id);
+      });
+      if (getBool(WIDGET_PREFS.WEATHER_ENABLED, DEFAULTS.WEATHER_ENABLED)) lookupMissingWeatherPlaces();
 
       // ---- T3.9d: timer, stopwatch and quick note --------------------------------------------------------------
       // One card: a stopwatch and a countdown that share a single readout, five presets, one free field and a laps

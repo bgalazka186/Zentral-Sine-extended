@@ -993,6 +993,7 @@
     "zen.workspace.zentral.widgets.weather.latitude",
     "zen.workspace.zentral.widgets.weather.longitude",
     "zen.workspace.zentral.widgets.weather.units",
+    "zen.workspace.zentral.widgets.weather.places",
     "zen.workspace.zentral.widgets.weather.refresh_minutes",
     {
       "type": "text",

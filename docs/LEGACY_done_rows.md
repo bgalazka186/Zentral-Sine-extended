@@ -1135,3 +1135,27 @@ calendar call, so a build without the calendar file still reads its prefs.
 Tests: `tests/notes-day-look.test.cjs` (9 cases) — defaults, per-field junk
 fallback and clamping, no-variable-for-defaults, the CSS fallbacks, six places
 per kind, the six prefs in the schema/Sine page/settings card, and the guard.
+
+`OW-57` DONE (3.3.283) — two or three weather places, cycled by a click.
+One JSON pref (`weather.places`) holds up to three `{id, name, latitude,
+longitude}` entries; the old single place (name + latitude + longitude) is
+migrated as entry one on the first read, so a saved place is never lost. A
+typed name with no numbers yet is kept as an entry and skipped by
+`currentWeatherPlace`/`nextWeatherPlace` until the geocoding lookup fills it,
+so the card always shows something it can fetch. The card owns the click
+(OW-54 freed it): `cyclePlace` moves to `nextWeatherPlace`, sets per-window
+`weatherView.placeId` and forces a refresh; one place stays a label, with
+`role`/`tabindex`/pointer only when there is somewhere to go. The cache key is
+now `weather:<lat>,<lon>` from `cacheKey()` on both the widget definition and
+the card instance, and `cacheKeyOf` accepts a function key — without it the
+place just switched to would show the old place's numbers. The geocoder fills
+the entry it looked up (mirroring entry one into the three legacy prefs) and
+never overwrites a different place.
+Refactor: the fake sidebar moved out of `tests/widgets-shell.test.cjs` into
+`tests/helpers/fake-widgets-harness.cjs` (same 7 shell tests, now importable)
+and it takes an optional `fetch`, so the live case can count network calls.
+Tests: `tests/widgets-weather-places.test.cjs` (13 cases + 1 live) — the cap,
+junk positions, name-only entries, unique ids, the cycle and wrap, migration,
+JSON round-trip, the per-place cache key, the click ownership, the CSS
+affordance and the pref's schema/page entry; the live case mounts the real
+host, clicks the real card and asserts one fetch for the new place.

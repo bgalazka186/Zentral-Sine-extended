@@ -150,6 +150,13 @@
     ]
   },
   {
+    "property": "zen.workspace.zentral.widgets.weather.places",
+    "label": "Weather places — up to three, cycled by a click on the card",
+    "type": "string",
+    "defaultValue": "",
+    "description": "One JSON list: [{\"id\":\"home\",\"name\":\"Home\",\"latitude\":50.67,\"longitude\":17.92}, …]. A click on the weather card shows the next place; the name stays on the card. Max three. The place, latitude and longitude below are the first place of an older install and are copied in here once."
+  },
+  {
     "property": "zen.workspace.zentral.widgets.weather.refresh_minutes_text",
     "label": "Weather refresh interval (minutes) [15 to 180 min]",
     "type": "string",

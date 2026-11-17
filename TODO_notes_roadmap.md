@@ -107,7 +107,7 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 |    63 | `OW-54`     | `DONE`    | Med                 | S      | 3.3.281           | Weather: "Rain tomorrow" is cut off on a narrow sidebar instead of moving to the next row                  |
 |    64 | `OW-55`     | `DONE`    | Med                 | S-M    | 3.3.282           | —                 | Settings: choose what free days, weekends and holidays look like (tint and how visible)                    |
 |    65 | `OW-56`     | `OPEN`    | High                | M      | —                 | Clock and stopwatch as ONE widget: click switches mode, countdown alerts, a finished countdown turns the clock red |
-|    66 | `OW-57`     | `OPEN`    | Med                 | S-M    | —                 | Weather: two or three saved places, cycled by a click                                                      |
+|    66 | `OW-57`     | `DONE`    | Med                 | S-M    | 3.3.283           | —                 | Weather: two or three saved places, cycled by a click                                                      |
 
 ---
 
@@ -139,29 +139,6 @@ second `data-zw-rang` attribute.
 **Tests / done when:** `tests/widgets-clock-timer.test.cjs` — the mode switch (a click, a pref, and the two not fighting),
 one alert per end with both choices, the red state set on end and cleared by the click, and no double alert when the
 panel is open or closed. A harness test drives the real fake window so the click path is the real one.
-
-#### `OW-57` — Weather: two or three places, cycled by a click
-
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S-M · **Source:** owner request 2026-11-17
-
-**Problem:** Weather has exactly one place (`WEATHER_PLACE` + latitude/longitude), so checking home and work means
-re-typing a name and re-geocoding, twice a day.
-
-**Plan (do in this order):**
-
-1. Pure layer: `cleanWeatherPlaces(raw)` → an ordered list of up to three `{ id, name, latitude, longitude }`, and
-   `nextWeatherPlace(list, currentId)` that cycles and never returns nothing. The existing three prefs migrate as the
-   first place, so a person's saved place is place one, not lost.
-2. Storage: one JSON preference (`WEATHER_PLACES`) rather than nine scalars, with the current single-place prefs kept
-   readable (the migration in step 1 is the reader).
-3. The settings card lists the places (name, lookup-on-type like today) with add / remove and a cap of three.
-4. The card's click cycles to the next place; the place name stays on the card (`zw-weather-place`) so a glance says
-   which one is showing. The cache key must include the place id, or the old place's numbers would show for a moment.
-5. Do not collide with OW-54: the outlook line stops owning the click, the card does.
-
-**Tests / done when:** `tests/widgets-weather-places.test.cjs` — the cleaning bounds (four places in, three out; junk
-positions), the cycle (wrap-around, one place is a no-op), the migration from the three old prefs, and the cache key
-changing with the place.
 
 #### `T2.13a` — Holidays and the future Google Calendar sync/import
 
@@ -341,7 +318,7 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.282.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9`, `SB6.6`, `UI4.11`, `DOC-1`, `TM3.7`, `ST7.8`, `SB6.11`, `ST7.5`, `UI4.10`, the 'left' half of `SB6.9`, `OW-53`, `F0.15`, `F0.16`, `OW-54` and `OW-55` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`226/226` test files) passes in Node/fake-Zen at 3.3.282; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.283.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9`, `SB6.6`, `UI4.11`, `DOC-1`, `TM3.7`, `ST7.8`, `SB6.11`, `ST7.5`, `UI4.10`, the 'left' half of `SB6.9`, `OW-53`, `F0.15`, `F0.16`, `OW-54`, `OW-55` and `OW-57` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`227/227` test files) passes in Node/fake-Zen at 3.3.283; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
 Completed this session (3.3.163–3.3.244), every finished item archived in `docs/LEGACY_done_rows.md`:
 
@@ -485,4 +462,4 @@ Known debts / owner requirements: LIMITS of `OW-04`: the pointer is held to the 
 
 Planning only, no code (2026-11-17, version 3.3.244): the owner's holiday list added as `OW-43` (holiday sets split from the interface language, any language picks any set, first sets `PL` + `US`), `OW-44` (any number of sets at once), `OW-45` (one-place year table for movable/one-off dates such as the Polish election day and `niedziela handlowa`), `OW-46` (one master off switch) and `T2.13a` (how holidays behave when the `T2.13` ICS/Google groundwork is built: local sets are never imported or synced). They sit at the top of the Master Order; `T3.3` follows them.
 
-Next action: the owner reports, the reminder-history card, the text-size follow-up, the Agenda 'left' counts and the owner's `.ics` import are shipped (`ST7.8` 3.3.271, `SB6.11` 3.3.272, `ST7.5` 3.3.274, `UI4.10` 3.3.275, `SB6.9` 3.3.278, `OW-53` 3.3.280), so the queue takes the owner's 2026-11-17 widget rows next (`OW-57` weather places, then `OW-56` clock+stopwatch, the largest of the four), with `ST7.4` and `T2.13` behind them; `ST7.3` (calendar UI state out of notes metadata) stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.
+Next action: the owner reports, the reminder-history card, the text-size follow-up, the Agenda 'left' counts and the owner's `.ics` import are shipped (`ST7.8` 3.3.271, `SB6.11` 3.3.272, `ST7.5` 3.3.274, `UI4.10` 3.3.275, `SB6.9` 3.3.278, `OW-53` 3.3.280), so the queue takes the last of the owner's 2026-11-17 widget rows next (`OW-56` clock+stopwatch, the largest of the four), with `ST7.4` and `T2.13` behind it; `ST7.3` (calendar UI state out of notes metadata) stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.

@@ -406,6 +406,22 @@
   opacity: 0.62 !important;
 }
 
+/* OW-57: a card with two or three places is a control; one place stays a plain reading. */
+#zentral-sidebar-widgets .zw-weather[data-zw-places]:not([data-zw-places="0"]):not([data-zw-places="1"]) {
+  cursor: pointer !important;
+}
+
+#zentral-sidebar-widgets .zw-weather[data-zw-places]:not([data-zw-places="0"]):not([data-zw-places="1"]):hover .zw-weather-place {
+  opacity: 0.86 !important;
+  text-decoration: underline dotted !important;
+  text-underline-offset: 2px !important;
+}
+
+#zentral-sidebar-widgets .zw-weather[data-zw-places]:not([data-zw-places="0"]):not([data-zw-places="1"]):focus-visible {
+  outline: 2px solid var(--zw-accent, #6ca8ff) !important;
+  outline-offset: 2px !important;
+}
+
 /* ---- Built-in Clock widget (T3.9b) ---- */
 
 #zentral-sidebar-widgets .zw-clock {
