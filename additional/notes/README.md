@@ -2,6 +2,8 @@
 
 Quick notes that open **over the panel you are looking at**, without touching its page. Several notes, highlights, checklists, search, trash and Save to file. Start at `ZentralNotes.uc.js`.
 
+**Source layout (T4.3a):** `calendar/ZentralNotesCalendar.js` owns the pure item/date logic, `calendar/ZentralNotesCalendarUI.js` owns the calendar UI's pure geometry, label, colour, fit and drag decisions, and `ZentralNotes.uc.js` owns the DOM, store, listeners and lifecycle. Both parts are loaded by the full pack's module loader and embedded in the standalone bundle; `window.__zentralNotesTestSeam.core` still exposes the same names plus `CALENDAR_UI_PART` / `CALENDAR_UI`. A host that omits the UI part uses a small compatibility shim, never a crash.
+
 ## Using it
 
 - Press the **note button** at the far left of a panel's URL bar (also on the Triple View and Super Pin bars), or press **Alt+Shift+N**.

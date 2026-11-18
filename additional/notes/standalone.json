@@ -17,6 +17,7 @@
     "i18n/en.js",
     "i18n/pl.js",
     "calendar/ZentralNotesCalendar.js",
+    "calendar/ZentralNotesCalendarUI.js",
     "paste/ZentralNotesPasteHtml.js"
   ],
   "settings": "settings.json",

@@ -64,6 +64,101 @@
   for (const code of NOTES_LANG_CODES) loadOptional("additional/notes/i18n/" + code + ".js");
   // The calendar core (items, parsing, overlap lanes, month grid; roadmap T2.1). Pure logic; a missing file means no calendar.
   const CALENDAR_PART = loadPart("additional/notes/calendar/ZentralNotesCalendar.js", "notes-calendar");
+  // T4.3a: calendar UI decisions (geometry, labels, colours, fit and drag maths) live in their own pure part. The
+  // sheet still owns the DOM and the store; this part answers questions from arguments. The test seam is unchanged.
+  const CALENDAR_UI_PART = loadPart("additional/notes/calendar/ZentralNotesCalendarUI.js", "notes-calendar-ui");
+  // Compatibility shim for a host that has not loaded the part (a minimal test window, or a damaged full pack).
+  // The real runtime always uses CALENDAR_UI_PART above; these are the same answers, kept here so a missing file
+  // degrades to the old behaviour instead of a ReferenceError. No new state, listener or timer.
+  const CALENDAR_UI_FALLBACK_SPAN = Object.freeze({ days: 7, anchor: "weekStart" });
+  const CALENDAR_UI_FALLBACK_HOLIDAYS = Object.freeze({ enabled: true, region: "none", locales: [], weekend: "auto", personalDays: [] });
+  const CALENDAR_UI_FALLBACK_WORKFREE = Object.freeze({ workFree: false, weekend: false, holiday: null, holidays: [], personal: null, reasons: [], tooltip: "" });
+  const CALENDAR_UI_FALLBACK = {
+    menuPosition({ anchor, viewport, size, pad = 6 }) {
+      const width = Math.max(0, viewport.width), height = Math.max(0, viewport.height);
+      const minX = Math.min(pad, width / 2), minY = Math.min(pad, height / 2);
+      const usableWidth = Math.max(0, width - 2 * minX), usableHeight = Math.max(0, height - 2 * minY);
+      const w = Math.min(Math.max(0, size.width), usableWidth), h = Math.min(Math.max(0, size.height), usableHeight);
+      const x = anchor.left + w <= width - minX ? anchor.left : anchor.right - w;
+      const y = anchor.bottom + 4 + h <= height - minY ? anchor.bottom + 4 : anchor.top - 4 - h;
+      return { left: Math.round(Math.max(minX, Math.min(x, width - minX - w))), top: Math.round(Math.max(minY, Math.min(y, height - minY - h))), maxHeight: Math.floor(usableHeight) };
+    },
+    weekSpanConfig(C, span) { return C ? C.cleanWeekSpan(span) : CALENDAR_UI_FALLBACK_SPAN; },
+    shownWeekDays(C, { cursorOverride, storedCursor, today, weekStart, span, widthPx, panDay }) {
+      if (!C) return [];
+      const cursor = cursorOverride !== undefined ? cursorOverride : (storedCursor ? storedCursor.getTime() : today);
+      return C.resolveWeekVisibleDays({ cursor, today, weekStart, span, widthPx, panDay });
+    },
+    weekAutoWidth({ content, pane } = {}) {
+      const cw = Number(content?.clientWidth);
+      if (cw > 0) return cw;
+      const cr = content?.getBoundingClientRect?.(), pr = pane?.getBoundingClientRect?.();
+      if (cr && Number(cr.width) > 0) return Number(cr.width);
+      if (pr && Number(pr.width) > 0) return Number(pr.width);
+      return 0;
+    },
+    dayLabel(C, day, { formatDateKey, locale, weekday = "long" } = {}) {
+      if (!C) return String(day);
+      const key = C.localDateKey(day), date = typeof formatDateKey === "function" ? formatDateKey(key) : key;
+      if (weekday === false) return date;
+      const word = new Date(day).toLocaleDateString(locale, { weekday });
+      return word ? word + ", " + date : date;
+    },
+    itemColor(C, item, { linkedNote = null, categoryColor = "", colorHex } = {}) {
+      if (!C) return "";
+      const resolved = C.resolveItemColor(item?.x?.color || "", linkedNote?.color || "", categoryColor);
+      return (typeof colorHex === "function" ? colorHex(resolved) : "") || resolved;
+    },
+    itemTime(C, item, { allDayLabel = "All day" } = {}) {
+      if (!C) return allDayLabel;
+      if (C.isAllDay(item)) return allDayLabel;
+      const [start, end] = C.itemRange(item), first = C.clockIn(start, item.x?.tz);
+      return C.isReminder(item) || !(end > start) ? first : first + "–" + C.clockIn(end, item.x?.tz);
+    },
+    sourceTitle(note) {
+      const lines = String(note?.body || "").split("\n");
+      return (lines.find((line) => /^\s*#\s+/.test(line)) || lines.find((line) => line.trim()) || "").replace(/^\s*#\s+/, "").trim() || "Untitled note";
+    },
+    monthRowPx(grid) { const h = Number(grid?.clientHeight); return h > 0 ? (h - 15) / 6 : NaN; },
+    timelineRoom(scroll) { const h = Number(scroll?.clientHeight); return h > 0 ? Math.max(1, h - 3) : NaN; },
+    fontPx(win, el) { let v = NaN; try { v = parseFloat(win?.getComputedStyle?.(el)?.fontSize); } catch (_) {} return v > 0 ? v : NaN; },
+    paneWidth(pane, bigPicture) {
+      const rect = pane?.getBoundingClientRect?.();
+      const measured = Math.max(0, Number(pane?.clientWidth) || Number(rect?.width) || 0);
+      return measured > 0 ? measured : bigPicture?.box?.width || 0;
+    },
+    paneHeight(pane, bigPicture) {
+      const rect = pane?.getBoundingClientRect?.();
+      const measured = Math.max(0, Number(pane?.clientHeight) || Number(rect?.height) || Number(pane?.offsetHeight) || 0);
+      return measured > 0 ? measured : (bigPicture?.box?.height ? Math.max(0, bigPicture.box.height - 44) : 0);
+    },
+    sizedView(name, compact) { return name === "week" || name === "day" || (name === "month" && !compact); },
+    dragPoint(C, g, event) {
+      if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return null;
+      const clip = g.scroll.getBoundingClientRect();
+      if (event.clientX < clip.left || event.clientX >= clip.right || event.clientY < clip.top || event.clientY >= clip.bottom) return null;
+      for (const track of g.columns.querySelectorAll(g.allDay ? ".zn-cal-time-allday-cell" : ".zn-cal-time-track")) {
+        const rect = track.getBoundingClientRect();
+        if (event.clientX < rect.left || event.clientX >= rect.right || event.clientY < rect.top || event.clientY >= rect.bottom) continue;
+        return { track, day: track.getAttribute("data-day"), minute: g.allDay ? 0 : C.gridMinuteAt(event.clientY - rect.top, g.hourHeight, g.grid) };
+      }
+      return null;
+    },
+    interacting({ drag, noteDrop, dialog, menu }) { return !!(drag || noteDrop || dialog || menu?.calendar); },
+    monthNarrow(C, meta, width, height) {
+      const picker = C?.cleanCalendarPicker?.(meta?.calendarPicker) || { mode: "auto", minWidth: 470, minHeight: 360 };
+      if (picker.mode === "picker") return true;
+      if (picker.mode === "month") return false;
+      return (width > 0 && width < picker.minWidth) || (height > 0 && height < picker.minHeight);
+    },
+    displayZone(C, meta) { return C?.cleanZone?.(meta?.calendarDisplayZone) || ""; },
+    todayLabel(C, lang, fallback) { try { return C.notesLanguageTable(lang).todayLabel; } catch (_) { return fallback; } },
+    todayKey(C, now, zone) { return C ? C.zonedDateKey(now, zone) : ""; },
+    todayDay(C, now, zone) { return C ? (C.parseYmd(C.zonedDateKey(now, zone))?.getTime() || C.dayStart(now)) : new Date(now).setHours(0, 0, 0, 0); },
+    holidayPrefs(C, value) { return C?.cleanCalendarHolidays?.(value) || CALENDAR_UI_FALLBACK_HOLIDAYS; },
+    workFreeInfo(C, day, prefs, lang) { return C?.isWorkFree?.(day, prefs, lang) || CALENDAR_UI_FALLBACK_WORKFREE; },
+  };
+  const CALENDAR_UI = CALENDAR_UI_PART || CALENDAR_UI_FALLBACK;
   // Pasted web / AI-chat HTML becomes clean Markdown (roadmap T1.4). Pure logic; a missing file keeps the plain-text paste.
   const PASTE_HTML_PART = loadPart("additional/notes/paste/ZentralNotesPasteHtml.js", "notes-paste-html");
 
@@ -11553,16 +11648,8 @@
       };
     }
 
-    function calendarMenuPosition({ anchor, viewport, size, pad = 6 }) {
-      const width = Math.max(0, viewport.width), height = Math.max(0, viewport.height);
-      const minX = Math.min(pad, width / 2), minY = Math.min(pad, height / 2);
-      const usableWidth = Math.max(0, width - 2 * minX), usableHeight = Math.max(0, height - 2 * minY);
-      const w = Math.min(Math.max(0, size.width), usableWidth), h = Math.min(Math.max(0, size.height), usableHeight);
-      const x = anchor.left + w <= width - minX ? anchor.left : anchor.right - w;
-      const y = anchor.bottom + 4 + h <= height - minY ? anchor.bottom + 4 : anchor.top - 4 - h;
-      return { left: Math.round(Math.max(minX, Math.min(x, width - minX - w))),
-        top: Math.round(Math.max(minY, Math.min(y, height - minY - h))), maxHeight: Math.floor(usableHeight) };
-    }
+    // T4.3a: pure geometry lives in notes-calendar-ui; the name stays on the test seam.
+    const calendarMenuPosition = (geometry) => CALENDAR_UI.menuPosition(geometry);
 
     // Normalize every Notes pop-up into one stable action model. The UI may keep accepting older
     // call sites (`action`, `disabled`, `group`) while new surfaces use `{ id, label, enabled, run }`.
@@ -16124,7 +16211,7 @@
 
     if (window.__zentralNotesTestSeam) {
       window.__zentralNotesTestSeam.core = {
-        flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART, notesLang, notesLocale, t, tCount,
+        flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART, CALENDAR_UI_PART, CALENDAR_UI, notesLang, notesLocale, t, tCount,
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS, SHARED_TURN_WAIT_MS, STARTUP_TURN_WAIT_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, DEMO_WHERE_NOTE_ID, DEMO_CALENDAR_NOTE_ID, buildCalendarDemoBody, buildWhereDemoBody, SHOWCASE_NOTE_ID, buildShowcaseNote, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, SPELL_MAX_SUGGESTIONS, wordRangeAtOffset, replaceWordRange, cleanSpellLanguages, toggleSpellLanguage, formatSpellLanguageLabel, collectSpellSuggestions, buildEditorSpellMenuModel, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
@@ -19289,31 +19376,17 @@
       let calendarWeekPanDay = "";
       const calendarWeekStartDay = () => (CALENDAR_PART ? CALENDAR_PART.cleanWeekStart(store.meta.calendarWeekStart) : 1);
       const calendarShowWeekNumbers = () => (CALENDAR_PART ? CALENDAR_PART.cleanWeekNumbers(store.meta.calendarWeekNumbers) : false);
-      function calendarWeekAutoWidth() {
-        const cw = Number(calendarContent?.clientWidth);
-        if (cw > 0) return cw;
-        const cr = calendarContent?.getBoundingClientRect?.();
-        if (cr && Number(cr.width) > 0) return Number(cr.width);
-        const pr = calendarPane?.getBoundingClientRect?.();
-        if (pr && Number(pr.width) > 0) return Number(pr.width);
-        return 0;
-      }
-      function calendarWeekSpanConfig() {
-        return CALENDAR_PART ? CALENDAR_PART.cleanWeekSpan(store.meta.calendarWeekSpan) : { days: 7, anchor: "weekStart" };
-      }
-      function calendarShownWeekDays(cursorOverride) {
-        const C = CALENDAR_PART;
-        const stored = C.parseYmd(store.meta.calendarCursor);
-        const cursor = cursorOverride !== undefined ? cursorOverride : (stored ? stored.getTime() : calendarTodayDay());
-        return C.resolveWeekVisibleDays({
-          cursor,
-          today: calendarTodayDay(),
-          weekStart: calendarWeekStartDay(),
-          span: store.meta.calendarWeekSpan,
-          widthPx: calendarWeekAutoWidth(),
-          panDay: calendarWeekPanDay,
-        });
-      }
+      const calendarWeekAutoWidth = () => CALENDAR_UI.weekAutoWidth({ content: calendarContent, pane: calendarPane });
+      const calendarWeekSpanConfig = () => CALENDAR_UI.weekSpanConfig(CALENDAR_PART, store.meta.calendarWeekSpan);
+      const calendarShownWeekDays = (cursorOverride) => CALENDAR_UI.shownWeekDays(CALENDAR_PART, {
+        cursorOverride,
+        storedCursor: CALENDAR_PART?.parseYmd?.(store.meta.calendarCursor) || null,
+        today: calendarTodayDay(),
+        weekStart: calendarWeekStartDay(),
+        span: store.meta.calendarWeekSpan,
+        widthPx: calendarWeekAutoWidth(),
+        panDay: calendarWeekPanDay,
+      });
       function syncCalendarDaysControl(viewName) {
         if (viewName === "week" && CALENDAR_PART) {
           const span = calendarWeekSpanConfig();
@@ -19497,31 +19570,22 @@
           action: () => choose(entry.value),
         })));
       }
-      function calendarDisplayZone() { return CALENDAR_PART?.cleanZone?.(store.meta.calendarDisplayZone) || ""; }
-      function calendarTodayLabel() { try { return CALENDAR_PART.notesLanguageTable(notesLang()).todayLabel; } catch (_) { return t("common.today"); } }
-      function calendarTodayKey() { return CALENDAR_PART.zonedDateKey(nowMs(), calendarDisplayZone()); }
-      function calendarTodayDay() { return CALENDAR_PART.parseYmd(calendarTodayKey())?.getTime() || CALENDAR_PART.dayStart(nowMs()); }
-      function calendarDayLabel(day, options = {}) {
-        const d = new Date(day);
-        const date = displayDateKey(CALENDAR_PART.localDateKey(day));
-        const locale = notesLocale();
-        const weekday = options.weekday === false ? "" : d.toLocaleDateString(locale, { weekday: options.weekday || "long" });
-        return weekday ? weekday + ", " + date : date;
-      }
-      function calendarItemColor(item) {
+      const calendarDisplayZone = () => CALENDAR_UI.displayZone(CALENDAR_PART, store.meta);
+      const calendarTodayLabel = () => CALENDAR_UI.todayLabel(CALENDAR_PART, notesLang(), t("common.today"));
+      const calendarTodayKey = () => CALENDAR_UI.todayKey(CALENDAR_PART, nowMs(), calendarDisplayZone());
+      const calendarTodayDay = () => CALENDAR_UI.todayDay(CALENDAR_PART, nowMs(), calendarDisplayZone());
+      const calendarDayLabel = (day, options = {}) => CALENDAR_UI.dayLabel(CALENDAR_PART, day, {
+        formatDateKey: displayDateKey,
+        locale: notesLocale(),
+        weekday: options.weekday === false ? false : (options.weekday || "long"),
+      });
+      const calendarItemColor = (item) => {
         const linked = item?.x?.noteId ? store.get(item.x.noteId) : null;
         const category = item?.x?.category ? store.items?.category?.(item.x.category)?.color || "" : "";
         // ST7.8: the item's own colour wins, then its note's, then its category's.
-        const resolved = CALENDAR_PART.resolveItemColor(item?.x?.color || "", linked?.color || "", category);
-        return colorHex(resolved) || resolved;
-      }
-      function calendarItemTime(item) {
-        if (CALENDAR_PART.isAllDay(item)) return t("cal.allDay");
-        const [start, end] = CALENDAR_PART.itemRange(item);
-        const first = CALENDAR_PART.clockIn(start, item.x?.tz);
-        if (CALENDAR_PART.isReminder(item) || !(end > start)) return first;
-        return first + "–" + CALENDAR_PART.clockIn(end, item.x?.tz);
-      }
+        return CALENDAR_UI.itemColor(CALENDAR_PART, item, { linkedNote: linked, categoryColor: category, colorHex });
+      };
+      const calendarItemTime = (item) => CALENDAR_UI.itemTime(CALENDAR_PART, item, { allDayLabel: t("cal.allDay") });
       function openCalendarItem(item) {
         const noteId = item.x?.noteId || "";
         if (noteId) {
@@ -19545,12 +19609,7 @@
         calendarHoverCard?.remove();
         calendarHoverCard = calendarHoverAnchor = null;
       }
-      function calendarSourceTitle(note) {
-        const body = String(note?.body || "");
-        const lines = body.split("\n");
-        const heading = lines.find((line) => /^\s*#\s+/.test(line));
-        return (heading || lines.find((line) => line.trim()) || "").replace(/^\s*#\s+/, "").trim() || "Untitled note";
-      }
+      const calendarSourceTitle = (note) => CALENDAR_UI.sourceTitle(note);
       function showCalendarHoverCard(item, anchor) {
         hideCalendarHoverCard();
         const noteId = item.x?.noteId || "", note = noteId ? store.get(noteId) : null;
@@ -19864,8 +19923,8 @@
       }
       // T2.10: Work-free day tint & holiday tooltips across Month, Week, Day, Upcoming, and Agenda views.
       // The holiday names follow the Notes interface language (OW-43); the sets themselves are the user's choice.
-      const calendarHolidayPrefs = () => CALENDAR_PART?.cleanCalendarHolidays?.(store.meta.calendarHolidays) || { enabled: true, region: "none", locales: [], weekend: "auto", personalDays: [] };
-      const calendarWorkFreeInfo = (day) => CALENDAR_PART?.isWorkFree?.(day, calendarHolidayPrefs(), notesLang()) || { workFree: false, weekend: false, holiday: null, holidays: [], personal: null, reasons: [], tooltip: "" };
+      const calendarHolidayPrefs = () => CALENDAR_UI.holidayPrefs(CALENDAR_PART, store.meta.calendarHolidays);
+      const calendarWorkFreeInfo = (day) => CALENDAR_UI.workFreeInfo(CALENDAR_PART, day, calendarHolidayPrefs(), notesLang());
 
       // OW-96: the forecast the calendar shows. It reads what the widget already holds and never asks the weather
       // service for anything — a calendar repaint must not become a network event. `null` means "do not draw" (the
@@ -20154,10 +20213,7 @@
       // hold (null: not measured); the next Month starts from it.
       let calendarMonth = null, calendarMonthLines = null;
       // The height a week of the Month grid has: six weeks and five gaps of 3px (the style sheet) share the grid.
-      function calendarMonthRowPx(grid) {
-        const height = Number(grid?.clientHeight);
-        return height > 0 ? (height - 15) / 6 : NaN;
-      }
+      const calendarMonthRowPx = (grid) => CALENDAR_UI.monthRowPx(grid);
       // Fits what the Month grid shows to the height its weeks have (the chosen px, or what the pane gives them): the
       // look of the cells (paddings, text sizes) and how many lines of items a cell holds. Run when the grid is drawn
       // and whenever the pane changes. Nothing is built again but the items of the cells whose lines change.
@@ -20506,43 +20562,20 @@
         if (node) { try { calendarFitWatch?.observe(node); } catch (_) {} }
       }
       // Where a size in px applies: Week, Day and the Month grid (Month in a narrow pane is a list).
-      const calendarSizedView = (name, compact) => name === "week" || name === "day" || (name === "month" && !compact);
+      const calendarSizedView = (name, compact) => CALENDAR_UI.sizedView(name, compact);
       // The height the hours can fill: that of the timeline without the 2px above the first hour label, and without
       // one px more, because the height is reported as a whole number and may be half a px over the real one (a
       // zoomed window). NaN where nothing is laid out (a hidden pane).
-      function calendarTimelineRoom(scroll) {
-        const height = Number(scroll?.clientHeight);
-        return height > 0 ? Math.max(1, height - 3) : NaN;
-      }
-      const calendarPaneHeight = () => {
-        const rect = calendarPane.getBoundingClientRect?.();
-        const measured = Math.max(0, Number(calendarPane.clientHeight) || Number(rect?.height) || Number(calendarPane.offsetHeight) || 0);
-        if (measured > 0) return measured;
-        return bigPicture?.box?.height ? Math.max(0, bigPicture.box.height - 44) : 0;
-      };
-      const calendarMonthNarrow = () => {
-        const picker = CALENDAR_PART?.cleanCalendarPicker?.(store.meta.calendarPicker) || { mode: "auto", minWidth: 470, minHeight: 360 };
-        if (picker.mode === "picker") return true;
-        if (picker.mode === "month") return false;
-        const width = calendarPaneWidth(), height = calendarPaneHeight();
-        return (width > 0 && width < picker.minWidth) || (height > 0 && height < picker.minHeight);
-      };
+      const calendarTimelineRoom = (scroll) => CALENDAR_UI.timelineRoom(scroll);
+      const calendarPaneHeight = () => CALENDAR_UI.paneHeight(calendarPane, bigPicture);
+      const calendarMonthNarrow = () => CALENDAR_UI.monthNarrow(CALENDAR_PART, store.meta, calendarPaneWidth(), calendarPaneHeight());
       // The text size of the calendar in px (NaN where it cannot be read).
-      function calendarFontPx() {
-        let fontPx = NaN;
-        try { fontPx = parseFloat(window.getComputedStyle?.(calendarContent)?.fontSize); } catch (_) {}
-        return fontPx > 0 ? fontPx : NaN;
-      }
+      const calendarFontPx = () => CALENDAR_UI.fontPx(window, calendarContent);
       // The smallest hour a fit may produce: it follows the text size of the calendar.
       const calendarMinHourPx = () => CALENDAR_PART.fitMinHourPx(calendarFontPx());
-      function calendarPaneWidth() {
-        const rect = calendarPane.getBoundingClientRect?.();
-        const measured = Math.max(0, Number(calendarPane.clientWidth) || Number(rect?.width) || 0);
-        if (measured > 0) return measured;
-        return bigPicture?.box?.width || 0;
-      }
+      const calendarPaneWidth = () => CALENDAR_UI.paneWidth(calendarPane, bigPicture);
       let calendarBackgroundPending = false, calendarFlushQueued = false;
-      const calendarInteracting = () => !!(calendarDrag || calendarNoteDrop || dialog || menu?.calendar);
+      const calendarInteracting = () => CALENDAR_UI.interacting({ drag: calendarDrag, noteDrop: calendarNoteDrop, dialog, menu });
       function queueCalendarBackgroundFlush() {
         if (!calendarBackgroundPending || calendarFlushQueued) return;
         calendarFlushQueued = true;
@@ -20579,18 +20612,7 @@
         try { if (g.button.hasPointerCapture?.(g.pointerId)) g.button.releasePointerCapture(g.pointerId); } catch (_) {}
         queueCalendarBackgroundFlush();
       }
-      function calendarDragPoint(g, event) {
-        if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return null;
-        const clip = g.scroll.getBoundingClientRect();
-        if (event.clientX < clip.left || event.clientX >= clip.right || event.clientY < clip.top || event.clientY >= clip.bottom) return null;
-        for (const track of g.columns.querySelectorAll(g.allDay ? ".zn-cal-time-allday-cell" : ".zn-cal-time-track")) {
-          const rect = track.getBoundingClientRect();
-          if (event.clientX < rect.left || event.clientX >= rect.right || event.clientY < rect.top || event.clientY >= rect.bottom) continue;
-          const minute = g.allDay ? 0 : CALENDAR_PART.gridMinuteAt(event.clientY - rect.top, g.hourHeight, g.grid);
-          return { track, day: track.getAttribute("data-day"), minute };
-        }
-        return null;
-      }
+      const calendarDragPoint = (g, event) => CALENDAR_UI.dragPoint(CALENDAR_PART, g, event);
       function updateCalendarDrag(event) {
         const g = calendarDrag;
         if (!g || (event.pointerId !== undefined && event.pointerId !== g.pointerId)) return;
