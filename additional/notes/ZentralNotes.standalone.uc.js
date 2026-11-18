@@ -43516,17 +43516,16 @@ __zentralShim.register = function (def) {
         if (mode !== store.meta.mode) store.setMeta({ mode });
         if (adapter.kind) store.setMeta({ openIn: adapter.kind });
         store.refresh().catch(() => {});
-        // OW-103: switching the Zentral web panel destroys and rebuilds the sheet, and this used to finish every open by
-        // opening a note — so anyone working in All notes or the calendar was thrown back into the editor, half-typed
-        // drafts lost with the panel. The view they left is view state now; come back to it. The last note still opens
-        // behind the list (the tabs and the editor need it), so leaving All notes lands on the same note as before.
-        const wasList = store.meta.sheetView === "list" && !!CALENDAR_PART;
+        // OW-106: All notes is the default landing page whenever Notes/Calendar opens, even if the last
+        // sheet view was the editor. Keep the most recent note selected behind the list (the editor and tab
+        // context need it); an intentional openNoteById/openNote action after opening still opens its target.
+        const showAllNotes = !!CALENDAR_PART && !!adapter.kind;
         sheetViewRestored = true;
         rememberedView = "";
         const id = store.latestId();
-        if (id) openNote(id, { focus: openFocus && !wasList, keepView: wasList });
-        else newNote("", { focus: openFocus && !wasList });
-        if (wasList && CALENDAR_PART) {
+        if (id) openNote(id, { focus: openFocus && !showAllNotes, keepView: showAllNotes });
+        else newNote("", { focus: openFocus && !showAllNotes });
+        if (showAllNotes) {
           filter = cleanListFilter(store.meta.sheetFilter);
           view = "list";
           applyState();
