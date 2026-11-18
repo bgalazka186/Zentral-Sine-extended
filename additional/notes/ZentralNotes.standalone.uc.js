@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.310
+// @version 3.3.311
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.310, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.311, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.310";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.311";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11467,7 +11467,11 @@ const __zentralEmbeddedLoader = (function () {
     const isLight = relativeLuminance(surface) > 0.35;
     const scheme = isLight ? "light" : "dark";
     if (!baseEntry.surface) base = baseEntry[scheme];
-    const rawText = ov.text || (cleanTheme === "zentral" || cleanTheme === "recommended" ? options.hostText : "") || (isLight ? "#1c1c22" : "#e9e9f0");
+    // OW-78: the theme's OWN text colour, not a hardcoded pair. The stylesheet's per-theme hexes (`#1d1d22` for light,
+    // `#3b3226` for paper) are the fallback a rule shows before the resolver runs, so the resolver has to answer with
+    // the same colour or the sheet changes shade the moment JS sets `--zn-text-resolved`. `base` is already resolved for
+    // the scheme above, so `base.text` is the right entry here.
+    const rawText = ov.text || (cleanTheme === "zentral" || cleanTheme === "recommended" ? options.hostText : "") || base.text;
     const text = ensureContrastHex(rawText, surface, 7.0);
     const mutedSeed = mixSrgb(text, surface, 0.68);
     const muted = ensureContrastHex(mutedSeed, surface, 4.55);

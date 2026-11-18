@@ -99,7 +99,7 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 |   101 | `OW-75`     | `DONE`    | Med                 | M      | —                 | Re-see every calendar menu — they are unreadable: regroup by how often each option is used, move the "create … from calendar" extras under Notes "+" |
 |   102 | `OW-76`     | `DONE`    | Med                 | M      | —                 | Calendar and notes must copy the style of Zentral's appearance themes by default, with extra customisation only if the person opts in |
 |   103 | `OW-77`     | `OPEN`    | Med                 | M      | —                 | A visual audit of every calendar/notes menu in real Chromium (the fit-audit harness) so "unreadable" is measured, not argued, and stays measured |
-|   104 | `OW-78`     | `OPEN`    | Med                 | S      | —                 | One theme-resolution path: the CSS `--zn-*` variables and the JS resolver must agree, so `zentral` cannot mean two different palettes |
+|   104 | `OW-78`     | `DONE`    | Med                 | S      | —                 | One theme-resolution path: the CSS `--zn-*` variables and the JS resolver must agree, so `zentral` cannot mean two different palettes |
 |   105 | `OW-79`     | `OPEN`    | Low-Med             | M      | —                 | More languages without code: a language file must be droppable in, and a missing translation must never show a raw key like `cal.todayBtn` |
 |   106 | `OW-80`     | `DONE`    | High                | L      | —                 | Big Picture: the Notes tree must be there too, on the left edge, with all of its functions — including drag of a note into the calendar to create an item |
 |   107 | `OW-81`     | `DONE`    | Med                 | S      | —                 | Quick settings: choose whether dragging a note into the calendar creates an event or a reminder by default |
@@ -323,7 +323,7 @@ row height and a verdict, and the recipe is documented so the next session can r
 
 #### `OW-78` — One palette: the CSS variables and the JS resolver must agree
 
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Depends on:** OW-76 · **Source:** Owner decision (2026-11-18), "okey, plan it as to do after those few adjustments"
+**Status:** `DONE` (3.3.311) · **Impact:** Med · **Effort:** S · **Depends on:** OW-76 · **Source:** Owner decision (2026-11-18), "okey, plan it as to do after those few adjustments"
 
 **Problem:** After OW-76 the sheet has two ways to arrive at a surface. The JS resolver (`resolveThemeSurface`) reads
 `--zen-colors-base` / `--zen-colors-text` / `--zen-colors-border` / `--zen-primary-color`, applies contrast guarantees
@@ -346,6 +346,30 @@ the "how do the themes interact" complaint. It works today only because the reso
 **Tests / done when:** With `--zen-colors-base` set, the computed `--zn-surface`, `--zn-panel` and `--zn-surface-resolved`
 are all that colour; with the tokens removed the documented fallback appears in all three; a test fails if the stylesheet
 starts reading a non-resolved source first.
+
+**Done at 3.3.311** — and the row earned its keep by finding a real bug, not just a reordering.
+
+**The chain, now read from one end in every rule that sets it:** `--zn-surface: var(--zn-surface-resolved, var(--zen-colors-base, var(--bgalazka-look-…, #1e1e24)))`
+and the same shape for `--zn-text`. All four theme rules (`recommended`, `light`, `dark`, `paper`) gained the resolved
+token as their first rung; the fixed themes' own hexes stay as the second rung, so a sheet whose JS never ran still
+paints exactly as before. The RSS card's `--bgalazka-look-*` set is now the **last** rung and is documented as such —
+in the CSS header comment beside the tokens, which names this row and points at `resolveThemeSurface`.
+
+**The bug it found:** `resolveThemeSurface` ended its text chain with `isLight ? "#1c1c22" : "#e9e9f0"` — a hardcoded
+pair that only matched two of the four themes. `paper`'s stylesheet text is `#3b3226` and `light`'s is `#1d1d22`, so the
+moment the resolved token started winning (step 1 of this plan), **the paper theme's text would have jumped from warm
+brown to near-black and the light theme's by one step**, silently. The resolver now reads `base.text` — the theme's own
+entry, already resolved for the scheme. Every theme now agrees with its stylesheet hex: light `#fbfbfd`/`#1d1d22`,
+dark `#17171c`/`#e9e9f0`, paper `#f4ecd8`/`#3b3226`, zentral `#1e1e24`/`#e9e9f0`, recommended `#1f1f24`/`#eeeeee`.
+
+**The one deliberate exception, written down:** an explicit override the person chose (`--zentral-notes-ov-bg` /
+`-ov-text`) still opens its chain directly. A colour the owner picked is the last word and must not be mediated by the
+resolver; the test allows exactly those two names and asserts there is no third.
+
+**Tests:** `tests/notes-one-palette.test.cjs` (10). Static: the order of every `--zn-surface`/`--zn-text` chain in the
+whole file, and that no rule opens with a foreign palette. Agreement: the resolver's per-theme fallback equals the
+stylesheet's hex for every theme. Live: a real sheet, read back from its inline custom properties, with the theme it
+says it is on resolved by the same function. Verified by negative check — restoring the hardcoded pair fails 1 of 10.
 
 #### `OW-79` — More languages, and never a raw key on screen
 
@@ -704,4 +728,4 @@ Known debts / owner requirements: LIMITS of `OW-04`: the pointer is held to the 
 
 Planning only, no code (2026-11-17, version 3.3.244): the owner's holiday list added as `OW-43` (holiday sets split from the interface language, any language picks any set, first sets `PL` + `US`), `OW-44` (any number of sets at once), `OW-45` (one-place year table for movable/one-off dates such as the Polish election day and `niedziela handlowa`), `OW-46` (one master off switch) and `T2.13a` (how holidays behave when the `T2.13` ICS/Google groundwork is built: local sets are never imported or synced). They sit at the top of the Master Order; `T3.3` follows them.
 
-Next action: `OW-78` — one palette: the CSS `--zn-*` variables and the JS resolver must agree. Then `OW-78` (one palette: the CSS `--zn-*` variables and the JS resolver must agree) and `OW-77` (a real-Chromium audit of every Notes and calendar menu, so "unreadable" stays measured), then `OW-79` (more languages, and never a raw key on screen — the owner asked to be prepared for more languages), then `ST7.4` and the `T4.3a`→`b`→`c` extraction chain. `OW-66` is the owner's live check of `OW-58`–`OW-65` and `OW-73`–`OW-76` in the real sidebar and needs no code from a session. Finished lately: `OW-21` (find and replace, 3.3.300), `OW-65` (the Clock card's shape, 3.3.301), `OW-22` (next match not on screen, 3.3.302), `OW-67`–`OW-72` (the six widget reports, 3.3.303) and `OW-73`–`OW-76` (the four calendar reports, 3.3.304: the one-line toolbar, the header controls that outlive the strip, the regrouped menus and the Zentral appearance theme). Then 3.3.307: `OW-80`/`OW-86` (the tree in Big Picture — moved, not copied; a click selects there, a double click opens, and a multi-note drop asks), `OW-81` (the quick-settings default for a dropped note, measured to still fit the card), `OW-82` (drop on empty space asks, with a five-minute silent window), and the owner's three corrections `OW-83` (small bare chevrons), `OW-84` (no creation offered twice in the `+` menu) and `OW-85` (**`OW-73` reverted** — it targeted the Notes rows; the layout buttons now sit in the bar under the title, where nothing is cut at 420, 340 or 300px). `ST7.3` stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.
+Next action: `OW-77` (a real-Chromium audit of every Notes and calendar menu, so "unreadable" stays measured), then `OW-79` (more languages, and never a raw key on screen — the owner asked to be prepared for more languages), then `ST7.4` and the `T4.3a`→`b`→`c` extraction chain. `OW-66` is the owner's live check of `OW-58`–`OW-65` and `OW-73`–`OW-76` in the real sidebar and needs no code from a session. Finished lately: `OW-21` (find and replace, 3.3.300), `OW-65` (the Clock card's shape, 3.3.301), `OW-22` (next match not on screen, 3.3.302), `OW-67`–`OW-72` (the six widget reports, 3.3.303) and `OW-73`–`OW-76` (the four calendar reports, 3.3.304: the one-line toolbar, the header controls that outlive the strip, the regrouped menus and the Zentral appearance theme). Then 3.3.307: `OW-80`/`OW-86` (the tree in Big Picture — moved, not copied; a click selects there, a double click opens, and a multi-note drop asks), `OW-81` (the quick-settings default for a dropped note, measured to still fit the card), `OW-82` (drop on empty space asks, with a five-minute silent window), and the owner's three corrections `OW-83` (small bare chevrons), `OW-84` (no creation offered twice in the `+` menu) and `OW-85` (**`OW-73` reverted** — it targeted the Notes rows; the layout buttons now sit in the bar under the title, where nothing is cut at 420, 340 or 300px). `ST7.3` stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.

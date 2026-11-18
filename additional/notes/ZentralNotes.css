@@ -60,10 +60,15 @@
 /* ---- sheet ------------------------------------------------------------- */
 .zentral-notes-sheet {
   color-scheme: light dark;
+  /* OW-78: ONE chain, read from one end. The resolved value the JS resolver computed wins; before it is computed (or in
+     a document where the sheet was never opened) Zen's own palette answers, and --bgalazka-look-* is the LAST fallback
+     only — it is the RSS card's private palette, another module's look. Never put an RSS token before --zen-colors-*:
+     that is how the same sheet came to have two palettes. The resolver reads exactly these three names (see
+     resolveThemeSurface in ZentralNotesCalendar.js), so both paths answer with the same colour. */
   --zn-accent: var(--zn-accent-safe, var(--zen-primary-color, #83a5ff));
-  --zn-surface: var(--bgalazka-look-toolbar-surface, var(--bgalazka-look-surface, #1e1e24));
+  --zn-surface: var(--zn-surface-resolved, var(--zen-colors-base, var(--bgalazka-look-toolbar-surface, var(--bgalazka-look-surface, #1e1e24))));
   --zn-panel: var(--zn-surface);
-  --zn-text: var(--bgalazka-look-text, #e9e9f0);
+  --zn-text: var(--zn-text-resolved, var(--zen-colors-text, var(--bgalazka-look-text, #e9e9f0)));
   --zn-muted: var(--zn-muted-resolved, color-mix(in srgb, var(--zn-text) 64%, transparent));
   --zn-line: color-mix(in srgb, var(--zn-text) 16%, transparent);
   --zn-hover: color-mix(in srgb, var(--zn-text) 10%, transparent);
@@ -1240,8 +1245,8 @@
 :root[zentral-notes-theme="recommended"] .zentral-notes-sheet {
   /* The popup's light/dark palette, rather than Zen's sometimes-black primary color, chooses the accent. */
   color-scheme: var(--zl-input-scheme, light dark);
-  --zn-surface: var(--zl-popup, var(--arrowpanel-background, light-dark(#ffffff, #1f1f24)));
-  --zn-text: var(--zl-popup-text, var(--arrowpanel-color, light-dark(#18181b, #eeeeee)));
+  --zn-surface: var(--zn-surface-resolved, var(--zl-popup, var(--arrowpanel-background, light-dark(#ffffff, #1f1f24))));
+  --zn-text: var(--zn-text-resolved, var(--zl-popup-text, var(--arrowpanel-color, light-dark(#18181b, #eeeeee))));
   --zn-muted: var(--zn-muted-resolved, color-mix(in srgb, var(--zn-text) 66%, transparent));
   --zn-hover: color-mix(in srgb, var(--zn-text) 10%, transparent);
   --zn-accent: light-dark(#2459b4, #9bbdff);
@@ -1252,15 +1257,15 @@
 }
 :root[zentral-notes-theme="light"] .zentral-notes-sheet {
   color-scheme: light;
-  --zn-surface: #fbfbfd; --zn-text: #1d1d22; --zn-accent: #3b6df0; --zn-tint: #fbfbfd;
+  --zn-surface: var(--zn-surface-resolved, #fbfbfd); --zn-text: var(--zn-text-resolved, #1d1d22); --zn-accent: #3b6df0; --zn-tint: #fbfbfd;
 }
 :root[zentral-notes-theme="dark"] .zentral-notes-sheet {
   color-scheme: dark;
-  --zn-surface: #17171c; --zn-text: #e9e9f0; --zn-accent: #83a5ff; --zn-tint: #17171c;
+  --zn-surface: var(--zn-surface-resolved, #17171c); --zn-text: var(--zn-text-resolved, #e9e9f0); --zn-accent: #83a5ff; --zn-tint: #17171c;
 }
 :root[zentral-notes-theme="paper"] .zentral-notes-sheet {
   color-scheme: light;
-  --zn-surface: #f4ecd8; --zn-text: #3b3226; --zn-accent: #9a6b2f; --zn-tint: #f4ecd8;
+  --zn-surface: var(--zn-surface-resolved, #f4ecd8); --zn-text: var(--zn-text-resolved, #3b3226); --zn-accent: #9a6b2f; --zn-tint: #f4ecd8;
 }
 
 /* ---- Notes appearance menu: one rule per flag in :root[zentral-notes-ov] ------------------------------
