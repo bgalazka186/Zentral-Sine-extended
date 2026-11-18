@@ -3363,12 +3363,13 @@
         registry.set(id, cleanDef);
         if (cleanDef.pref) {
           watchPref(cleanDef.pref, () => {
-            // Invalidate before syncWidgetsAndLayout unmounts the Weather card. Re-enabling creates
-            // the card again, whose own startup path resolves any saved name-only places.
-            if (cleanDef.id === "weather" && !getBool(WIDGET_PREFS.WEATHER_ENABLED, DEFAULTS.WEATHER_ENABLED)) {
-              placeLookupToken++;
-            }
+            const weatherEnabled = cleanDef.id === "weather"
+              && getBool(WIDGET_PREFS.WEATHER_ENABLED, DEFAULTS.WEATHER_ENABLED);
+            // Invalidate before syncWidgetsAndLayout unmounts the Weather card. Enabling it
+            // resolves a saved name-only place after the layout has been reconciled.
+            if (cleanDef.id === "weather" && !weatherEnabled) placeLookupToken++;
             syncWidgetsAndLayout();
+            if (weatherEnabled) lookupMissingWeatherPlaces();
           });
         }
         if (cleanDef.refreshPref) {
