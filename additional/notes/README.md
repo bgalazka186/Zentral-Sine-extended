@@ -2,7 +2,7 @@
 
 Quick notes that open **over the panel you are looking at**, without touching its page. Several notes, highlights, checklists, search, trash and Save to file. Start at `ZentralNotes.uc.js`.
 
-**Source layout (T4.3a):** `calendar/ZentralNotesCalendar.js` owns the pure item/date logic, `calendar/ZentralNotesCalendarUI.js` owns the calendar UI's pure geometry, label, colour, fit and drag decisions, and `ZentralNotes.uc.js` owns the DOM, store, listeners and lifecycle. Both parts are loaded by the full pack's module loader and embedded in the standalone bundle; `window.__zentralNotesTestSeam.core` still exposes the same names plus `CALENDAR_UI_PART` / `CALENDAR_UI`. A host that omits the UI part uses a small compatibility shim, never a crash.
+**Source layout (T4.3a/T4.3b):** `calendar/ZentralNotesCalendar.js` owns the pure item/date logic, `calendar/ZentralNotesCalendarUI.js` owns the calendar UI's pure geometry, label, colour, fit and drag decisions, `parser/ZentralNotesParserGraph.js` owns the pure parser / wiki-graph / import-export decisions, and `ZentralNotes.uc.js` owns the DOM, store, listeners, full Markdown reader and lifecycle. All three parts are loaded by the full pack's module loader and embedded in the standalone bundle; `window.__zentralNotesTestSeam.core` still exposes the same names plus `CALENDAR_UI_PART` / `CALENDAR_UI` and `PARSER_PART` / `PARSER_UI`. A host that omits a part keeps the original inline answers, never a crash.
 
 ## Using it
 

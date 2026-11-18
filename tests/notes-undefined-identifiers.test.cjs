@@ -60,6 +60,7 @@ const SOURCES = {
   "additional/notes/ZentralNotes.uc.js": [...WEB, ...FIREFOX_CHROME],
   "additional/notes/calendar/ZentralNotesCalendar.js": [...PART, "setTimeout", "clearTimeout", "require"],
   "additional/notes/calendar/ZentralNotesCalendarUI.js": PART,
+  "additional/notes/parser/ZentralNotesParserGraph.js": PART,
   "additional/notes/i18n/en.js": PART,
   "additional/notes/i18n/pl.js": PART,
   "additional/notes/i18n/de.js": PART,

@@ -159,6 +159,9 @@
     workFreeInfo(C, day, prefs, lang) { return C?.isWorkFree?.(day, prefs, lang) || CALENDAR_UI_FALLBACK_WORKFREE; },
   };
   const CALENDAR_UI = CALENDAR_UI_PART || CALENDAR_UI_FALLBACK;
+  // T4.3b: parser / wiki-graph / import-export decisions live in their own pure part. The sheet keeps the full
+  // Markdown reader and the DOM; this part answers link, fence, title, folder, export and backup questions.
+  const PARSER_PART = loadPart("additional/notes/parser/ZentralNotesParserGraph.js", "notes-parser");
   // Pasted web / AI-chat HTML becomes clean Markdown (roadmap T1.4). Pure logic; a missing file keeps the plain-text paste.
   const PASTE_HTML_PART = loadPart("additional/notes/paste/ZentralNotesPasteHtml.js", "notes-paste-html");
 
@@ -205,6 +208,26 @@
   }
 
   (function () {
+    // T4.3b: bind the parser part's few host helpers lazily. They are declared later in THIS core closure;
+    // a getter/arrow keeps the temporal dead zone away. PARSER_PART itself was loaded in the outer closure.
+    const PARSER_DEPS = {
+      cleanAnchor: (...a) => cleanAnchor(...a),
+      titleOf: (...a) => titleOf(...a),
+      cleanFolder: (...a) => cleanFolder(...a),
+      safeFileName: (...a) => safeFileName(...a),
+      parseBlocks: (...a) => parseBlocks(...a),
+      hideFrontMatter: (...a) => hideFrontMatter(...a),
+      blocksText: (...a) => blocksText(...a),
+      cleanSpaceMode: (...a) => cleanSpaceMode(...a),
+      wikiResolver: (...a) => wikiResolver(...a),
+      expandWikiLinks: (...a) => expandWikiLinks(...a),
+      mentionRe: (...a) => mentionRe(...a),
+      hasMention: (...a) => hasMention(...a),
+      noteLinksIn: (...a) => PARSER_UI.noteLinksIn(...a),
+      get format() { return BACKUP_FORMAT; },
+      get version() { return BACKUP_VERSION; },
+    };
+    const PARSER_UI = PARSER_PART ? PARSER_PART.createParserGraph(PARSER_DEPS) : null;
     // ======================================================================
     // Constants
     // ======================================================================
@@ -2328,6 +2351,7 @@
     // link on export, so no exported file contains it. Opening a note link never touches the network.
     const NOTE_ID_RE = /^[A-Za-z0-9_][A-Za-z0-9_ .-]{0,120}$/;
     function noteLinkTarget(href) {
+      if (PARSER_PART) return PARSER_UI.noteLinkTarget(href);
       let t = String(href ?? "").trim();
       if (!t || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(t) || /^[\\/]/.test(t)) return null;
       t = t.replace(/^\.\//, "");
@@ -2342,15 +2366,23 @@
       }
       return NOTE_ID_RE.test(id) && !id.includes("..") ? id : null;
     }
-    const cleanLinkLabel = (label) => String(label ?? "").replace(/[\[\]\n]+/g, " ").replace(/\s+/g, " ").trim() || "note";
-    const buildNoteLink = (id, label, heading = "") => "[" + cleanLinkLabel(label) + "](" + encodeURIComponent(id) + ".md" + (cleanAnchor(heading) ? "#" + cleanAnchor(heading) : "") + ")";
+    const cleanLinkLabel = (label) => {
+      if (PARSER_PART) return PARSER_UI.cleanLinkLabel(label);
+      return String(label ?? "").replace(/[\[\]\n]+/g, " ").replace(/\s+/g, " ").trim() || "note";
+    };
+    const buildNoteLink = (id, label, heading = "") => {
+      if (PARSER_PART) return PARSER_UI.buildNoteLink(id, label, heading);
+      return "[" + cleanLinkLabel(label) + "](" + encodeURIComponent(id) + ".md" + (cleanAnchor(heading) ? "#" + cleanAnchor(heading) : "") + ")";
+    };
     function insertNoteLink(value, s, e, id, label, heading = "") {
+      if (PARSER_PART) return PARSER_UI.insertNoteLink(value, s, e, id, label, heading);
       const md = buildNoteLink(id, label, heading);
       return { start: s, end: e, text: md, selStart: s + md.length, selEnd: s + md.length };
     }
     // Shared CommonMark fence state: remember both the delimiter and its opening length.
     // A shorter fence or a different delimiter cannot close the active block.
     function nextMarkdownFence(line, fence) {
+      if (PARSER_PART) return PARSER_UI.nextMarkdownFence(line, fence);
       const value = String(line ?? "");
       if (fence) {
         const close = new RegExp("^ {0,3}" + (fence.char === "`" ? "`" : "~") + "{" + fence.length + ",}[\\t ]*$");
@@ -2362,6 +2394,7 @@
     }
     // Runs fn over the text OUTSIDE fenced code blocks and `inline code`; line count never changes.
     function mapOutsideCode(text, fn) {
+      if (PARSER_PART) return PARSER_UI.mapOutsideCode(text, fn);
       let fence = null;
       return String(text)
         .split("\n")
@@ -2376,6 +2409,7 @@
     // Title -> id among notes that are not in the trash. Equal titles: the most recently changed note
     // wins (then the smaller id), so the choice is the same every time.
     function resolveNoteTitle(notes, title) {
+      if (PARSER_PART) return PARSER_UI.resolveNoteTitle(notes, title);
       const want = String(title ?? "").trim().toLowerCase();
       if (!want) return null;
       const hits = notes.filter((n) => !n.trashed && titleOf(n.body).toLowerCase() === want);
@@ -2387,6 +2421,7 @@
     // [[Folder/Title]]. The first `#` starts the heading (a nested [[Note#H1#H2]] uses the last part); the text before
     // it is tried whole first (a title may contain "/" like TCP/IP), then as folder labels + title.
     function parseWikiTarget(raw) {
+      if (PARSER_PART) return PARSER_UI.parseWikiTarget(raw);
       let rest = String(raw ?? "").trim();
       let heading = "";
       const hash = rest.indexOf("#");
@@ -2454,6 +2489,7 @@
     }
     // Labels of the folders a note sits in, outermost first: the label from meta.json when the folder is listed, else its path segment.
     function folderLabels(folders, folderId) {
+      if (PARSER_PART) return PARSER_UI.folderLabels(folders, folderId);
       const id = cleanFolder(folderId);
       if (!id) return [];
       const byId = new Map((folders || []).filter((f) => f && f.id).map((f) => [f.id, f]));
@@ -2463,10 +2499,14 @@
         return String((f && f.label) || seg);
       });
     }
-    const labelsEndWith = (labels, path) => path.length <= labels.length && path.every((p, i) => labels[labels.length - path.length + i].toLowerCase() === p.toLowerCase());
+    const labelsEndWith = (labels, path) => {
+      if (PARSER_PART) return PARSER_UI.labelsEndWith(labels, path);
+      return path.length <= labels.length && path.every((p, i) => labels[labels.length - path.length + i].toLowerCase() === p.toLowerCase());
+    };
     // The generated Date Notes folder kept the stable "daily" id when its visible label changed from Daily to Agenda.
     // Resolve old [[Daily/...]] links against that same id without aliasing an unrelated user folder.
     function folderPathMatchesNote(note, folders, path) {
+      if (PARSER_PART) return PARSER_UI.folderPathMatchesNote(note, folders, path);
       const labels = folderLabels(folders, note?.folder);
       if (labelsEndWith(labels, path)) return true;
       const id = cleanFolder(note?.folder);
@@ -2526,6 +2566,7 @@
     }
     // Every note id a body links to (canonical links; wiki shorthand through `resolve`).
     function noteLinksIn(body, resolve) {
+      if (PARSER_PART) return PARSER_UI.noteLinksIn(body, resolve);
       const ids = new Set();
       mapOutsideCode(expandWikiLinks(body, resolve || (() => null)), (seg) => {
         for (const m of seg.matchAll(/\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g)) {
@@ -2539,6 +2580,7 @@
     // Export: links to notes in `names` (id -> exported file name) point at the exported file; links to
     // notes that are not part of the export stay as they are.
     function rewriteNoteLinks(body, names) {
+      if (PARSER_PART) return PARSER_UI.rewriteNoteLinks(body, names);
       return mapOutsideCode(body, (seg) =>
         seg.replace(/\]\(([^\s)]+)((?:\s+"[^"]*")?)\)/g, (all, href, title) => {
           const id = noteLinkTarget(href);
@@ -3089,6 +3131,7 @@
         : rewriteNoteLinks(expandWikiLinks(n.body, wikiResolver(all, folders), { unresolved: "text", self: n }), names);
     // Notes that link here (linked) and notes that mention the title without linking (mentions).
     function findBacklinks(notes, target, folders = []) {
+      if (PARSER_PART) return PARSER_UI.findBacklinks(notes, target, folders);
       const title = titleOf(target.body);
       const resolve = wikiResolver(notes, folders);
       const mention = mentionRe(title);
@@ -4899,9 +4942,13 @@
       }
       return parts.join("\n\n");
     }
-    const exportText = (body, opts = {}) => blocksText(parseBlocks(hideFrontMatter(body), false, opts)) + "\n";
+    const exportText = (body, opts = {}) => {
+      if (PARSER_PART) return PARSER_UI.exportText(body, opts);
+      return blocksText(parseBlocks(hideFrontMatter(body), false, opts)) + "\n";
+    };
     // One file name per note, never two the same (case-insensitive), for folder and zip export.
     function uniqueFileNames(notes, ext = "md") {
+      if (PARSER_PART) return PARSER_UI.uniqueFileNames(notes, ext);
       const used = new Set();
       return notes.map((n) => {
         const base = safeFileName(titleOf(n.body), "note");
@@ -11880,6 +11927,7 @@
     }
     // The broken link written as plain text again (the words stay): [label](x.md) -> label, [[a|b]] -> b.
     function unlinkBroken(body, item) {
+      if (PARSER_PART) return PARSER_UI.unlinkBroken(body, item);
       return mapOutsideCode(body, (seg) => seg.split(item.raw).join(item.label));
     }
     const headingOffset = (body, slug) => {
@@ -12753,6 +12801,7 @@
     // Freeze the scalar content used by the warning and file writers at the
     // same moment. Store records themselves are mutable across windows.
     function markdownExportSnapshot(notes) {
+      if (PARSER_PART) return PARSER_UI.markdownExportSnapshot(notes);
       return (Array.isArray(notes) ? notes : []).filter(Boolean).map((note) => ({ ...note }));
     }
     function markdownExportBody(note, notes = [], names = new Map(), folders = [], mode = "", readOptions = {}) {
@@ -12774,6 +12823,7 @@
     const BACKUP_MAX_TOTAL_BYTES = 250 * 1024 * 1024;
     const BACKUP_MAX_JSON_BYTES = 20 * 1024 * 1024;
     function cleanBackupZipPath(raw) {
+      if (PARSER_PART) return PARSER_UI.cleanBackupZipPath(raw);
       const s = String(raw ?? "").replace(/\\/g, "/");
       if (!s || s.length > 240 || /[\u0000-\u001f\u007f]/.test(s)) return "";
       if (s.startsWith("/") || s.endsWith("/") || /^[A-Za-z]:/.test(s)) return "";
@@ -12818,6 +12868,7 @@
       return { ok: true };
     }
     function buildBackupManifest({ notes = [], assets = [], hasMeta = false, hasCalendar = false, hasHistory = false, spaceMode = "shared", createdAt = Date.now() } = {}) {
+      if (PARSER_PART) return PARSER_UI.buildBackupManifest({ notes, assets, hasMeta, hasCalendar, hasHistory, spaceMode, createdAt });
       let live = 0, trashed = 0;
       for (const n of notes) { if (n?.trashed) trashed++; else live++; }
       return {
@@ -16211,7 +16262,7 @@
 
     if (window.__zentralNotesTestSeam) {
       window.__zentralNotesTestSeam.core = {
-        flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART, CALENDAR_UI_PART, CALENDAR_UI, notesLang, notesLocale, t, tCount,
+        flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART, CALENDAR_UI_PART, CALENDAR_UI, PARSER_PART, PARSER_UI, notesLang, notesLocale, t, tCount,
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS, SHARED_TURN_WAIT_MS, STARTUP_TURN_WAIT_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, DEMO_WHERE_NOTE_ID, DEMO_CALENDAR_NOTE_ID, buildCalendarDemoBody, buildWhereDemoBody, SHOWCASE_NOTE_ID, buildShowcaseNote, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, SPELL_MAX_SUGGESTIONS, wordRangeAtOffset, replaceWordRange, cleanSpellLanguages, toggleSpellLanguage, formatSpellLanguageLabel, collectSpellSuggestions, buildEditorSpellMenuModel, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
