@@ -1076,6 +1076,18 @@
       ]
     },
     {
+      "property": "zen.workspace.zentral.notes.calendar_weather_week",
+      "label": "Calendar week view: weather symbol and temperature above the day name",
+      "type": "bool",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.notes.calendar_weather_month",
+      "label": "Calendar month view: weather symbol in the day cell (off by default: a month cell has little room)",
+      "type": "bool",
+      "defaultValue": false
+    },
+    {
       "property": "zen.workspace.zentral.notes.date_display_format",
       "label": "Date display format (calendar, agenda, date chips and Notes by date)",
       "type": "dropdown",
@@ -1867,6 +1879,16 @@
       "owner": "notes"
     },
     "zen.workspace.zentral.notes.date_display_format": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.calendar_weather_week": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.calendar_weather_month": {
       "category": "notes",
       "section": "Quick notes",
       "owner": "notes"

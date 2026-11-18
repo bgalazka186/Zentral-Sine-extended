@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.325
+// @version 3.3.326
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.325, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.326, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.325";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.326";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -5167,7 +5167,10 @@ const __zentralEmbeddedLoader = (function () {
     const first = addDays(start, -offset);
     return Array.from({ length: 7 }, (_, i) => addDays(first, i));
   }
-  const WEEK_DAYS_LIMITS = Object.freeze({ min: 1, max: 14, default: 7, minColPx: 84, gutterPx: 42 });
+  // A week view is not a calendar week: it is "the next N days", and the owner asked for enough of them to be useful on
+  // a Big Picture surface. 48 is two rows of 24 — the widest span that still reads as a grid rather than a strip — and
+  // `WEEK_ROWS_MAX` is what the renderer uses to stack them when the height allows.
+  const WEEK_DAYS_LIMITS = Object.freeze({ min: 1, max: 48, default: 7, minColPx: 84, gutterPx: 42, maxRows: 2 });
   const WEEK_RANGE_STARTS = Object.freeze(["weekStart", "today", "selected"]);
   const DEFAULT_WEEK_SPAN = Object.freeze({ days: 7, anchor: "weekStart" });
   function cleanWeekDaysCount(value, fallback = 7) {
@@ -5202,13 +5205,108 @@ const __zentralEmbeddedLoader = (function () {
     const col = Math.max(1, Number(minColPx) || WEEK_DAYS_LIMITS.minColPx);
     return Math.max(min, Math.min(max, Math.floor(usable / col) || 1));
   }
-  // OW-25: `count` consecutive local midnights starting at `start` (clamped 1..14, DST-safe).
+  // OW-25: `count` consecutive local midnights starting at `start` (clamped 1..48, DST-safe).
   function visibleDays(start, count = 7) {
     const base = dayStart(start);
     const n = cleanWeekDaysCount(count, 7);
     const len = n === "auto" ? 7 : n;
     return Array.from({ length: len }, (_, i) => addDays(base, i));
   }
+  // OW-96: how many columns and how many rows a span needs. One row is the old behaviour and stays the default; past
+  // what the width can hold, the days stack into a second row instead of shrinking a column to nothing — 48 days at
+  // 84px is 4032px, which no sidebar has, and 24 columns twice is readable where 48 once is not.
+  //
+  // Pure, and it only decides; the renderer draws. `rows` is 1 unless two conditions both hold: the days do not fit on
+  // one row at this width, and the surface is tall enough for a second. A short window keeps one row and scrolls rather
+  // than squeezing two rows into a strip where neither is readable.
+  const WEEK_ROW_MIN_PX = 180;
+  function weekGridPlan({ days = 7, widthPx = 0, heightPx = 0, minColPx = WEEK_DAYS_LIMITS.minColPx, gutterPx = WEEK_DAYS_LIMITS.gutterPx, maxRows = WEEK_DAYS_LIMITS.maxRows } = {}) {
+    // `days: 0` is clamped to 1 exactly as `cleanWeekDaysCount` would: the plan must never disagree with the model
+    // about how many days there are, or the header and the timeline would wrap differently. `undefined` is 7.
+    const asked = Number(days);
+    const count = Math.max(1, Math.min(WEEK_DAYS_LIMITS.max, Number.isFinite(asked) && days != null ? Math.round(asked) : 7));
+    const col = Math.max(1, Number(minColPx) || WEEK_DAYS_LIMITS.minColPx);
+    const usable = Math.max(0, (Number(widthPx) || 0) - (Number(gutterPx) || 0));
+    const fitsOneRow = usable <= 0 ? count <= 7 : Math.floor(usable / col) >= count;
+    const rows = Math.max(1, Math.min(Math.max(1, Math.round(maxRows) || 1), 2));
+    if (fitsOneRow || rows < 2 || !(Number(heightPx) >= WEEK_ROW_MIN_PX * 2)) return { count, rows: 1, perRow: count };
+    const perRow = Math.ceil(count / 2);
+    // A stack is only a stack if each of its rows fits at the minimum column width. Otherwise two rows of 35px columns
+    // are worse than one row that scrolls: the whole point of the second row is that a column stays readable.
+    const perRowFits = usable <= 0 ? perRow <= 7 : Math.floor(usable / col) >= perRow;
+    if (!perRowFits) return { count, rows: 1, perRow: count };
+    return { count, rows: 2, perRow };
+  }
+
+  // The one unit rule the calendar needs. The widget does the converting (Open-Meteo converts server-side), so this
+  // only ever decides which suffix to print — and it prefers the reading's own units, exactly as the card does.
+  function weatherUnitLabelsFor(units) {
+    const clean = String(units || "").trim().toLowerCase() === "imperial" ? "imperial" : "metric";
+    return clean === "imperial" ? { temperature: "\u00b0F", wind: "mph" } : { temperature: "\u00b0C", wind: "km/h" };
+  }
+
+  // OW-96: how much a forecast for a given day can be trusted, and therefore how often it is worth refreshing.
+  // The owner's rule: the further the day from today, the lower the rate. It is a coarse ladder on purpose — one step
+  // per week of distance, four steps down — because a per-degree curve would imply a precision a 48-day streak of
+  // weather does not have. Returns { step, factor, trust } with factor 1 (today) down to 1/4 (a month out).
+  const FORECAST_TRUST_STEPS = Object.freeze([1, 0.75, 0.5, 0.25]);
+  function forecastTrust(distanceDays) {
+    const n = Math.round(Number(distanceDays));
+    if (!Number.isFinite(n) || n <= 0) return { step: 0, factor: FORECAST_TRUST_STEPS[0], trust: 1 };
+    const step = Math.min(FORECAST_TRUST_STEPS.length - 1, Math.floor(n / 7));
+    const factor = FORECAST_TRUST_STEPS[step];
+    return { step, factor, trust: factor };
+  }
+
+  // The refresh interval a day earns: today every `baseMinutes`, a day far out many times rarer. Never zero, never
+  // shorter than the base — the ladder only ever relaxes the rate, it can never make the widget poll harder.
+  function forecastRefreshMinutes(baseMinutes, distanceDays) {
+    const base = Math.max(1, Math.round(Number(baseMinutes) || 30));
+    const { factor } = forecastTrust(distanceDays);
+    return Math.max(base, Math.round(base / Math.max(0.05, factor)));
+  }
+
+  // OW-96: turn the widget's flat day list into the one small thing a calendar column needs: a symbol, a temperature
+  // and a sentence for the tooltip. `todayKey` is the local date of the render, so a forecast day that has already
+  // passed (an old cache) never appears on a future column, and `trust` comes from the distance ladder.
+  //
+  // Pure and tolerant: a missing high is an empty temperature, never "undefined"; a day with no icon is skipped rather
+  // than drawn as a blank box. Returns a Map keyed by the date string.
+  function calendarWeatherIndex(days, { todayKey = "", units = "metric" } = {}) {
+    const out = new Map();
+    const list = Array.isArray(days) ? days : [];
+    const labels = weatherUnitLabelsFor(units);
+    let base = null;
+    if (todayKey) {
+      const t = Date.parse(todayKey + "T00:00:00Z");
+      if (Number.isFinite(t)) base = t;
+    }
+    for (const entry of list) {
+      const key = entry && typeof entry.key === "string" ? entry.key.slice(0, 10) : "";
+      if (!key || !entry.icon || entry.icon === "unknown") continue;
+      const stamp = Date.parse(key + "T00:00:00Z");
+      const distance = base != null && Number.isFinite(stamp) ? Math.round((stamp - base) / 86400000) : 0;
+      const dayUnits = entry.units || units;
+      const suffix = weatherUnitLabelsFor(dayUnits).temperature;
+      const high = Number.isFinite(Number(entry.high)) && entry.high !== null ? Math.round(Number(entry.high)) + suffix : "";
+      const low = Number.isFinite(Number(entry.low)) && entry.low !== null ? Math.round(Number(entry.low)) + suffix : "";
+      const range = high && low ? high + " / " + low : high || low || "";
+      out.set(key, {
+        key,
+        icon: entry.icon,
+        label: entry.label || "",
+        temp: high,
+        high,
+        low,
+        range,
+        distance,
+        trust: forecastTrust(distance).trust,
+        text: [entry.label || "Weather", range].filter(Boolean).join(", "),
+      });
+    }
+    return out;
+  }
+
   function resolveWeekVisibleDays({ cursor, today, weekStart = 1, span, widthPx = 0, panDay = "" } = {}) {
     const cfg = cleanWeekSpan(span);
     const count = cfg.days === "auto" ? fitWeekDayCount(widthPx) : cfg.days;
@@ -12385,7 +12483,9 @@ const __zentralEmbeddedLoader = (function () {
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, itemIdTokens, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, cleanHistoryFilter, filterHistoryRecords, historyPruneSurvey, exportHistoryLines, historySummaryLine, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanNoteDropKind, NOTE_DROP_KINDS, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_TABLE, HOLIDAY_TABLE_KINDS, holidayTableEntries, holidayTableYears, holidaySetCoverage, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, holidaySetsOf, HOLIDAY_FEED_RE, holidayFeedName, holidayFeedOf, isImportedHoliday, markImportedHoliday, IMPORTED_HOLIDAY_CLASS, importedHolidayAttrs, NO_WORK_FREE, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     DEFAULT_DAY_LOOK, DAY_LOOK_KINDS, DAY_LOOK_MAX_STRENGTH, cleanDayLookColor, cleanDayLookStrength, cleanDayLook, dayLookTint, CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaLeftCount, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, AGENDA_FOLD_DEFAULTS, cleanAgendaFold, inQuietHours, agendaFoldPlan, UI_STATE_KEYS, isUiStateKey, splitUiState, migrateUiState, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, itemOwnsNoteText, itemIsFreeStanding, noteLinkedItems, unlinkPlan, unlinkLineText, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle, icsUnfold, icsText, icsProperty, icsDateValue, icsZonedMs, icsStamp, icsRecurrence, parseIcs, icsToItem, planIcsImport, icsEscape, icsFold, icsEventLines, icsFromItems, icsUtcStamp, defaultIcsUid, SYNC_STATES, syncStateOf, markSynced, markSyncedDeleted, syncPlan,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, weekGridPlan, WEEK_ROW_MIN_PX, FORECAST_TRUST_STEPS, forecastTrust,
+    weatherUnitLabelsFor, calendarWeatherIndex,
+    forecastRefreshMinutes, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaLeftCount, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, AGENDA_FOLD_DEFAULTS, cleanAgendaFold, inQuietHours, agendaFoldPlan, UI_STATE_KEYS, isUiStateKey, splitUiState, migrateUiState, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, itemOwnsNoteText, itemIsFreeStanding, noteLinkedItems, unlinkPlan, unlinkLineText, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle, icsUnfold, icsText, icsProperty, icsDateValue, icsZonedMs, icsStamp, icsRecurrence, parseIcs, icsToItem, planIcsImport, icsEscape, icsFold, icsEventLines, icsFromItems, icsUtcStamp, defaultIcsUid, SYNC_STATES, syncStateOf, markSynced, markSyncedDeleted, syncPlan,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -13143,6 +13243,10 @@ __zentralShim.register = function (def) {
       HIDDEN_MENU: "zen.workspace.zentral.notes.hidden_tools_menu",
       DATE_MODE: "zen.workspace.zentral.notes.date_notes_mode",
       DATE_DISPLAY: "zen.workspace.zentral.notes.date_display_format",
+      // OW-96: weather symbols in the calendar. Week view on (the owner's default), month view off — a month cell has
+      // no room for a symbol that must stay readable, so it is an option and never the default.
+      CAL_WEATHER_WEEK: "zen.workspace.zentral.notes.calendar_weather_week",
+      CAL_WEATHER_MONTH: "zen.workspace.zentral.notes.calendar_weather_month",
       DATE_ARCHIVE: "zen.workspace.zentral.notes.archive_daily_notes",
       NOTES_LANGUAGE: "zen.workspace.zentral.notes.language",
       NOTES_LANGUAGE_ACCEPT_ALL: "zen.workspace.zentral.notes.language_accept_all",
@@ -32722,6 +32826,26 @@ __zentralShim.register = function (def) {
       // The holiday names follow the Notes interface language (OW-43); the sets themselves are the user's choice.
       const calendarHolidayPrefs = () => CALENDAR_PART?.cleanCalendarHolidays?.(store.meta.calendarHolidays) || { enabled: true, region: "none", locales: [], weekend: "auto", personalDays: [] };
       const calendarWorkFreeInfo = (day) => CALENDAR_PART?.isWorkFree?.(day, calendarHolidayPrefs(), notesLang()) || { workFree: false, weekend: false, holiday: null, holidays: [], personal: null, reasons: [], tooltip: "" };
+
+      // OW-96: the forecast the calendar shows. It reads what the widget already holds and never asks the weather
+      // service for anything — a calendar repaint must not become a network event. `null` means "do not draw" (the
+      // option is off, or there is no widget, or its cache has no forecast), which is different from "no weather today".
+      const calendarWeatherByDay = (renderNowMs) => {
+        try {
+          // `getPref` is the module-wide reader (it delegates to the controller's typed getter), and a bool default is
+          // what selects the boolean path there — not `prefBool`, which only exists inside the controller scope.
+          // The established bool form in this module (`=== true`), so a stored "true" and a real true agree.
+          if (getPref(PREF.CAL_WEATHER_WEEK, true) === false) return null;
+          const api = window.ZentralWidgets;
+          if (!api || typeof api.weatherDays !== "function") return null;
+          const days = api.weatherDays();
+          if (!Array.isArray(days) || !days.length) return null;
+          const todayKey = C.zonedDateKey(renderNowMs, calendarDisplayZone());
+          return CALENDAR_PART.calendarWeatherIndex(days, { todayKey });
+        } catch (_) {
+          return null;
+        }
+      };
       function applyWorkFreeAttrs(el, wf, { appendTitle = false } = {}) {
         // OW-46: with the master switch off nothing is drawn — not even a personal day off, never a holiday marker.
         if (!el || !wf || !wf.workFree || calendarHolidayPrefs().enabled === false) return;
@@ -33900,37 +34024,70 @@ __zentralShim.register = function (def) {
         const setEndGridMin = C.timelineCivilToGridMin(timeline, hoursSet.endMin);
         const fmt = (day) => calendarDayLabel(day, { weekday: mode === "week" ? "short" : "long", year: true });
         calendarPeriod.textContent = mode === "week" && days.length > 1 ? `${fmt(days[0])} – ${fmt(days[days.length - 1])}` : fmt(days[0]);
-        const cols = `42px repeat(${days.length}, minmax(0, 1fr))`;
+        // OW-96: 48 days do not fit 48 columns. `weekGridPlan` decides whether the days stack into two rows of 24 at
+        // this width and height; it is asked once here, before anything is built, because the header, the all-day row
+        // and the timeline all have to wrap the same way or their cells sit under the wrong days. With one row — the
+        // normal case — every branch below is the code that was always there.
         const todayKey = C.zonedDateKey(nowMs(), zone);
+        const weekRowPlan = mode === "week" && days.length > 1
+          ? C.weekGridPlan({ days: days.length, widthPx: calendarPaneWidth(), heightPx: calendarPaneHeight() })
+          : { count: days.length, rows: 1, perRow: days.length };
+        // The header wraps exactly as the timeline does (see the columns below). With one row this is the original
+        // `repeat(days.length, ...)`; with two it is `repeat(perRow, ...)` and the day heads wrap.
+        const headPerRow = Math.max(1, weekRowPlan.perRow);
+        const cols = weekRowPlan.rows === 2
+          ? `repeat(${headPerRow}, minmax(0, 1fr))`
+          : `42px repeat(${days.length}, minmax(0, 1fr))`;
         const root = h("div", { class: "zn-cal-time-view is-" + mode, "aria-label": t(mode === "week" ? "cal.weekCalendar.aria" : "cal.dayCalendar.aria") });
         root.dataset.hours = hoursSet.on ? "limited" : "all";
         root.style.setProperty("--zn-cal-hours", String(gridHours));
         const header = h("div", { class: "zn-cal-time-head" });
         header.style.gridTemplateColumns = cols;
         const cornerWeek = showWeeks ? C.weekNumber(days[0], weekStart) : 0;
-        header.append(
-          showWeeks
-            ? h("span", { class: "zn-cal-time-corner zn-cal-week-num", "aria-label": t("cal.week.aria", { num: cornerWeek }), title: t("cal.week.aria", { num: cornerWeek }) }, t("cal.week.short", { num: cornerWeek }))
-            : h("span", { class: "zn-cal-time-corner", "aria-hidden": "true" }),
-        );
+        // With two rows the week number would eat the first cell of the first row; the period line above the grid
+        // already names the span, so the corner is left out and the days start in column one.
+        if (weekRowPlan.rows !== 2) {
+          header.append(
+            showWeeks
+              ? h("span", { class: "zn-cal-time-corner zn-cal-week-num", "aria-label": t("cal.week.aria", { num: cornerWeek }), title: t("cal.week.aria", { num: cornerWeek }) }, t("cal.week.short", { num: cornerWeek }))
+              : h("span", { class: "zn-cal-time-corner", "aria-hidden": "true" }),
+          );
+        }
+        // OW-96: one read of the widget's forecast for the whole render, then a map lookup per day. The card owns the
+        // fetching; the calendar only asks what it already has, so a calendar render never starts a network request.
+        const calWeather = mode === "week" ? calendarWeatherByDay(nowMs()) : null;
         for (const day of days) {
           const isToday = C.localDateKey(day) === todayKey;
           const wf = calendarWorkFreeInfo(day);
-          const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", " + calendarTodayLabel() : "") + (wf.tooltip ? ", " + wf.tooltip : "") }, h("strong", {}, new Date(day).toLocaleDateString(notesLocale(), { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), ...(wf.tooltip ? [h("span", { class: "zn-cal-holiday-pill", title: wf.tooltip }, wf.tooltip)] : []));
+          const wx = calWeather ? calWeather.get(CALENDAR_PART.localDateKey(day)) : null;
+          const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", " + calendarTodayLabel() : "") + (wf.tooltip ? ", " + wf.tooltip : "") + (wx ? ", " + wx.text : "") },
+            // The symbol sits above the weekday name: it answers "what is this day going to be like" before the eye
+            // reaches the name that identifies the column, which is the order the owner asked for.
+            ...(wx ? [h("span", { class: "zn-cal-weather", "aria-hidden": "true", title: wx.text }, h("span", { class: "zn-cal-weather-icon" }, wx.icon), h("span", { class: "zn-cal-weather-temp" }, wx.temp))] : []),
+            h("strong", {}, new Date(day).toLocaleDateString(notesLocale(), { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), ...(wf.tooltip ? [h("span", { class: "zn-cal-holiday-pill", title: wf.tooltip }, wf.tooltip)] : []));
           applyWorkFreeAttrs(dayHead, wf);
           dayHead.addEventListener("click", () => { store.setMeta({ calendarCursor: C.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); });
           bindCalendarDayContext(dayHead, day);
+          // Each wrapped row starts on its own line under column one, never half a column off.
+          if (weekRowPlan.rows === 2 && days.indexOf(day) % headPerRow === 0) dayHead.style.gridColumnStart = "1";
           header.append(dayHead);
         }
         const allDayRow = h("div", { class: "zn-cal-time-allday-row", "aria-label": t("cal.allDayRow.aria") });
         allDayRow.style.gridTemplateColumns = cols;
         const dragAllDayRow = patch?.allDayRow || allDayRow;
+        // OW-96: two rows wrap here as well, or the all-day cells would sit under the wrong days. The label cell stays
+        // in the first column of the first row; the second row begins at column one.
+        if (weekRowPlan.rows === 2) {
+          allDayRow.style.gridTemplateColumns = `42px repeat(${headPerRow}, minmax(0, 1fr))`;
+          allDayRow.dataset.rows = "2";
+        }
         allDayRow.append(h("span", { class: "zn-cal-time-all-label" }, t("cal.allDay")));
         for (const day of workDays) {
           const isToday = C.localDateKey(day) === todayKey;
           const cell = h("div", { class: "zn-cal-time-allday-cell" + (isToday ? " is-today" : ""), tabindex: "0", "aria-label": t("cal.allDayFor.aria", { day: fmt(day) }), "data-day": C.ymd(new Date(day)) });
           applyWorkFreeAttrs(cell, calendarWorkFreeInfo(day));
           bindCalendarDayContext(cell, day);
+          if (weekRowPlan.rows === 2 && days.indexOf(day) % headPerRow === 0) cell.style.gridColumnStart = "2";
           for (const item of C.allDayOf(expanded, day)) {
             const button = calendarItemButton(item, true);
             // A drag in the all-day row moves a reminder by days and never reads the height of an hour (which is not
@@ -34023,9 +34180,21 @@ __zentralShim.register = function (def) {
           hours.append(labelEl);
         }
         gridRow.append(hours);
+        // OW-96: 48 days do not fit 48 columns. When the plan asks for two rows the days are split across two column
+        // grids of the same width, stacked — hour gutter and timeline on the left of both, so the two rows line up and
+        // read as one grid rather than two calendars. Each row keeps the second row's own hour rules; only the days
+        // move. `weekRowPlan.perRow` is 24 for a full 48-day span.
+        // OW-96: with two rows the grid is laid out as `perRow` columns and the days simply wrap into the next row —
+        // CSS grid does the stacking, and every row keeps its own full-height tracks. The first day of a row is pinned
+        // to the second column so it never lands under the hour gutter, which exists only once. With one row (the
+        // normal case, and every patch) `perRow` is the day count and nothing about the view changes at all.
+        const perRow = weekRowPlan.rows === 2 ? Math.max(1, weekRowPlan.perRow) : days.length;
         const columns = h("div", { class: "zn-cal-time-columns" });
         const dragColumns = patch?.columns || columns, dragScroll = patch?.scroll || scroll;
-        columns.style.gridTemplateColumns = `repeat(${days.length}, minmax(0, 1fr))`;
+        columns.style.gridTemplateColumns = `repeat(${perRow}, minmax(0, 1fr))`;
+        if (weekRowPlan.rows === 2) columns.dataset.rows = "2";
+        // A patch cannot re-flow a grid whose shape changed: the caller draws the whole view instead.
+        if (patch && weekRowPlan.rows !== 1) return "refit";
         const work = C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK);
         for (const day of workDays) {
           const dayKey = C.localDateKey(day);
@@ -34139,8 +34308,12 @@ __zentralShim.register = function (def) {
           }
           const col = h("div", { class: "zn-cal-time-column" + (isToday ? " is-today" : "") }, track);
           applyWorkFreeAttrs(col, calendarWorkFreeInfo(day));
+          // The row comes from the day's place in `days`, not in `workDays`: a patch draws a subset, and the row a
+          // column belongs to must not move because its neighbours were skipped.
+          if (weekRowPlan.rows === 2 && days.indexOf(day) % perRow === 0) { col.style.gridColumnStart = "1"; col.classList.add("is-row-start"); }
           columns.append(col);
         }
+        gridRow.dataset.rows = String(weekRowPlan.rows);
         gridRow.append(columns);
         scroll.append(gridRow);
         if (patch) {
@@ -35319,8 +35492,10 @@ __zentralShim.register = function (def) {
             { icon: anchorNow === "selected" ? "check" : undefined, label: t("cal.days.selectedDay"), action: () => setWeekSpan({ anchor: "selected" }, true) },
           ]);
         }
+        // OW-96: the span goes up to the model's ceiling (48) now that the grid can stack two rows of 24. The short
+        // spans stay first, because they are what a person picks nine times out of ten.
         calendarChoiceMenu(calendarDaysSelect,
-          [3, 7, 14, 30].map((days) => ({ value: String(days), label: tCount("cal.days", days) })),
+          [3, 7, 14, 21, 30, 48].map((days) => ({ value: String(days), label: tCount("cal.days", days) })),
           String(store.meta.calendarDaysForward || 7), (value) => { store.setMeta({ calendarDaysForward: Number(value) }); renderCalendar(); });
       });
       listen(calendarKindSelect, "click", () => calendarChoiceMenu(calendarKindSelect,

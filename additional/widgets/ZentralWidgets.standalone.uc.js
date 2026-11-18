@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Widgets
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.325
+// @version 3.3.326
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.325, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.326, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.325";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.326";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -3330,10 +3330,14 @@ function nativeSidebarSide() {
     return { latitude: Math.round(lat * 10000) / 10000, longitude: Math.round(lon * 10000) / 10000 };
   }
 
-  // OW-57: up to three places, cycled by a click. One JSON pref holds the list; the old single place (name +
+  // OW-57/OW-95: any number of places, cycled by hand. One JSON pref holds the list; the old single place (name +
   // latitude + longitude) is migrated as the first entry, so a saved place is never lost. Each entry carries its own
   // id, which is what makes the cache key differ per place: the old place's numbers can never show for the new one.
-  const WEATHER_PLACES_MAX = 3;
+  //
+  // "Unlimited" still has a ceiling, and 48 is the honest one: the list is cycled a click at a time, and a pref that
+  // somehow grew to thousands would be a menu nobody can use and a JSON blob read on every render. The value is far
+  // above any real list and it keeps `cleanWeatherPlaces` linear.
+  const WEATHER_PLACES_MAX = 48;
   const WEATHER_PLACE_NAME_MAX = 60;
   function cleanWeatherPlaceName(raw) {
     return String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, WEATHER_PLACE_NAME_MAX);
@@ -3342,7 +3346,7 @@ function nativeSidebarSide() {
     const id = String(raw ?? "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
     return id ? id.slice(0, 40) : fallback;
   }
-  // `raw` is the stored JSON (string) or an already-parsed value. Returns [] for junk, at most three entries, each
+  // `raw` is the stored JSON (string) or an already-parsed value. Returns [] for junk, at most WEATHER_PLACES_MAX entries, each
   // { id, name, latitude, longitude } with a unique id. A entry without real numbers is dropped: no place, no request.
   function cleanWeatherPlaces(raw) {
     let value = raw;
@@ -3465,6 +3469,68 @@ function nativeSidebarSide() {
     return null;
   }
 
+  // OW-95: the weather card has three VIEWS, in a fixed order, and a click walks them. "Today", "Tomorrow" and "Week"
+  // are not three different readings — one request already carries the whole week — so a view is a lens on the same
+  // cached value: switching never fetches, and the numbers a person compares are always from the same instant.
+  const WEATHER_VIEWS = Object.freeze(["today", "tomorrow", "week"]);
+  const cleanWeatherView = (raw) => (WEATHER_VIEWS.includes(raw) ? raw : "today");
+  // A click moves to the next view and wraps. `hold` (a long press, or Escape) goes back to the first view, which is
+  // "today" — the card's main face, the one a glance should always be able to reach.
+  function nextWeatherView(current) {
+    const at = WEATHER_VIEWS.indexOf(cleanWeatherView(current));
+    return WEATHER_VIEWS[(at + 1) % WEATHER_VIEWS.length];
+  }
+  // What each view shows, from the reduced week the cache already holds. Pure: the card is a painter, and every branch
+  // here is testable without a sidebar, a place or a network.
+  function weatherViewParts(value, view, opts = {}) {
+    const days = Array.isArray(value?.week) ? value.week : [];
+    // The reading's own units always win over the caller's: a cached metric value labelled °F is a lie, and the caller
+    // (the card, a test) cannot know better than the value itself. `opts.units` is only the fallback for a hand-made
+    // value that carries none.
+    const units = cleanWeatherUnits(value?.units) || cleanWeatherUnits(opts.units);
+    const labels = weatherUnitLabels(units, value?.countryCode || opts.countryCode);
+    const temp = (n) => (n == null || !Number.isFinite(Number(n)) ? "" : Math.round(Number(n)) + labels.temperature);
+    const range = (day) => (day && (day.high != null || day.low != null) ? temp(day.high) + " / " + temp(day.low) : "");
+    const icon = cleanWeatherView(view);
+    if (icon === "tomorrow") {
+      const day = days[1] || null;
+      if (!day) return { view: icon, empty: true, text: "Tomorrow's forecast is not in this reading" };
+      return {
+        view: icon,
+        icon: day.icon,
+        label: day.label,
+        range: range(day),
+        temperature: temp(day.high),
+        text: "Tomorrow " + (day.label || "") + " " + range(day),
+      };
+    }
+    if (icon === "week") {
+      // The week view is a list, not a sentence: one line per day, which is what a narrow card can actually read.
+      const lines = days.map((day, index) => ({
+        index,
+        icon: day.icon,
+        // `day` is what the row is called: today and tomorrow are named for when they are, everything after that for
+        // what the sky does — a week list where every row says "Rain" cannot be told apart.
+        day: index === 0 ? "Today" : index === 1 ? "Tomorrow" : day.label || "",
+        // The weather word is kept for the tooltip; a row has no space for both, and the glyph already says the word.
+        label: day.label || "",
+        high: temp(day.high),
+        low: temp(day.low),
+        text: (index === 0 ? "Today" : index === 1 ? "Tomorrow" : day.label || "") + " " + range(day),
+      }));
+      return { view: icon, lines, empty: !lines.length, text: lines.map((l) => l.text).join(" \u00b7 ") };
+    }
+    // Today: the reading the card is named for.
+    return {
+      view: "today",
+      icon: value?.icon,
+      label: value?.label,
+      range: value?.high != null || value?.low != null ? temp(value.high) + " / " + temp(value.low) : "",
+      temperature: temp(value?.temperature),
+      text: [value?.label, temp(value?.temperature)].filter(Boolean).join(" "),
+    };
+  }
+
   // What the card's second line says. Wide: tomorrow plus the next wet day. Narrow: one of them, and a click swaps.
   // Pure, so the swap is testable without a sidebar.
   function weatherOutlookParts(week, opts = {}) {
@@ -3557,6 +3623,8 @@ function nativeSidebarSide() {
     if (!value) return null;
     const labels = weatherUnitLabels(value.units, value.countryCode);
     const temp = value.temperature == null ? "\u2014" : Math.round(value.temperature) + labels.temperature;
+    // The compact form on purpose: this range sits on the meta line beside wind and humidity, where two unit suffixes
+    // would double its width. The views (OW-95) label their own numbers, so nothing is lost.
     const range = value.high == null || value.low == null ? "" : Math.round(value.high) + "\u00b0 / " + Math.round(value.low) + "\u00b0";
     const details = [];
     if (value.wind != null) details.push(Math.round(value.wind) + " " + labels.wind);
@@ -3668,6 +3736,11 @@ function nativeSidebarSide() {
     isWetDay,
     nextWetDay,
     weatherOutlookParts,
+    // OW-95: the three views and the two gestures, exported so the rules are testable without a card.
+    WEATHER_VIEWS,
+    cleanWeatherView,
+    nextWeatherView,
+    weatherViewParts,
     weatherUnitLabels,
     formatWeatherParts,
     isWeatherCacheFresh,
@@ -4544,9 +4617,9 @@ function nativeSidebarSide() {
         };
       }
 
-      // OW-57: which place is showing. Per-window state like the timer's: the place a person glanced at is not a
-      // setting, and two windows may look at two places. -1 / a missing card means "the list decides" (first entry).
-      const weatherView = { placeId: "", mounted: false };
+      // OW-57/OW-95: which place and which view are showing. Per-window state like the timer's: what a person glanced
+      // at is not a setting, and two windows may look at two places. A missing id means "the list decides" (first).
+      const weatherView = { placeId: "", view: "today", mounted: false };
 
       // The saved places. The JSON pref is the truth once it exists; a build that only ever had the three single
       // prefs reads them as one place, and the first read writes that place into the JSON pref so nothing is lost.
@@ -5291,12 +5364,18 @@ function nativeSidebarSide() {
           const placeEl = doc.createElement("div");
           placeEl.className = "zw-card-meta zw-weather-place";
 
-          // OW-50: the second line is tomorrow, and the next day that looks wet. On a narrow card only one fits, so a
-          // click swaps between them. The swap is per-window state, not a pref: it is a glance, not a setting.
+          // OW-95: the outlook is no longer a click-swapped pair. The card has three views (today / tomorrow / week)
+          // and a click walks those; the outlook shows the extra days the current view needs, all of them at once.
           const outlookEl = doc.createElement("div");
           outlookEl.className = "zw-card-meta zw-weather-outlook";
           outlookEl.hidden = true;
-          let outlookFaces = [];
+          // The last value `paint` drew. A view change re-renders from this, which is why switching views never
+          // fetches and never blanks the card.
+          let lastPainted = null;
+          let lastPaintInfo = {};
+          // Assigned by `paint` below; declared here because `paint` writes it and a `let` after its first use is a
+          // temporal-dead-zone throw, not a hoisted `undefined`.
+          let repaintWeather = null;
 
           wrap.appendChild(main);
           wrap.appendChild(metaEl);
@@ -5314,46 +5393,67 @@ function nativeSidebarSide() {
           // OW-54: every half of the outlook is drawn, each on its own line. A narrow card wraps; it never hides one half
           // behind a click. This used to swap the two on a click when the card was under 200px, which was a workaround
           // for the line being cut (white-space: nowrap + ellipsis) — the cut is gone, so the workaround is too.
-          const paintOutlook = (parts, opts) => {
-            const lines = (parts && (parts.lines || parts.faces)) || [];
-            if (!parts || !lines.length) {
+          const paintOutlook = (lines, opts) => {
+            if (!Array.isArray(lines) || !lines.length) {
               outlookEl.hidden = true;
               outlookEl.replaceChildren();
-              outlookEl.removeAttribute("data-zw-outlook-face");
-              outlookFaces = [];
               return;
             }
             outlookEl.replaceChildren();
             for (const line of lines) {
               const row = doc.createElement("span");
               row.className = "zw-weather-outlook-line";
-              row.textContent = line;
+              if (line && typeof line === "object") {
+                // A week row: glyph, day name, high/low. Each part its own span so the glyph can be sized on its own
+                // and a narrow card can drop the low without dropping the row.
+                if (line.icon) {
+                  const glyph = doc.createElement("span");
+                  glyph.className = "zw-weather-outlook-icon";
+                  glyph.textContent = WEATHER_ICON_GLYPHS[line.icon] || WEATHER_ICON_GLYPHS.unknown;
+                  row.appendChild(glyph);
+                }
+                const name = doc.createElement("span");
+                name.className = "zw-weather-outlook-day";
+                name.textContent = line.day || line.label || "";
+                row.appendChild(name);
+                const temps = doc.createElement("span");
+                temps.className = "zw-weather-outlook-temps";
+                temps.textContent = [line.high, line.low].filter(Boolean).join(" / ");
+                row.appendChild(temps);
+                row.title = line.text || "";
+              } else {
+                row.textContent = String(line);
+              }
               outlookEl.appendChild(row);
             }
-            outlookEl.title = lines.join(" \u00b7 ");
-            outlookEl.removeAttribute("data-zw-outlook-face");
-            outlookFaces = lines.slice();
+            const flat = lines.map((line) => (line && typeof line === "object" ? line.text : String(line))).filter(Boolean);
+            outlookEl.title = flat.join(" \u00b7 ");
             outlookEl.hidden = false;
-            outlookEl.setAttribute("aria-label", (opts?.place ? opts.place + ": " : "") + lines.join(", "));
+            outlookEl.setAttribute("aria-label", (opts?.place ? opts.place + ": " : "") + flat.join(", "));
           };
+          // The outlook is part of the card: a press on it must not be a second control, but it must still arm the
+          // hold, so only the click and the pointer handlers below decide what happens.
           // The card's own click is not the outlook's business any more; OW-57 owns a click on the card (place cycling).
           outlookEl.addEventListener("click", (e) => e.stopPropagation());
 
           const paint = (value, info = {}) => {
+            lastPainted = value;
+            lastPaintInfo = info || {};
             const opts = readWeatherOpts();
             placeEl.textContent = opts.place || "Set a place in Settings";
             // A control only when a click can do something: one place is a label, not a button.
             const readyPlaces = opts.places.filter(weatherPlaceReady);
-            const cyclable = readyPlaces.length > 1;
+            // OW-95: the card is a control whenever a click can do something, and a click now always can (three views,
+            // even with one place and no network). The place count still matters, so it stays on the card.
             wrap.setAttribute("data-zw-places", String(readyPlaces.length));
-            if (cyclable) {
-              wrap.setAttribute("role", "button");
-              wrap.setAttribute("tabindex", "0");
-              wrap.setAttribute("aria-label", `${opts.place || ""}: click for the next place (${readyPlaces.length} saved)`);
-            } else {
-              wrap.removeAttribute("role");
-              wrap.removeAttribute("tabindex");
-            }
+            wrap.setAttribute("role", "button");
+            wrap.setAttribute("tabindex", "0");
+            wrap.setAttribute("aria-roledescription", "weather card");
+            const viewName = { today: "today", tomorrow: "tomorrow", week: "this week" }[cleanWeatherView(weatherView.view)];
+            wrap.setAttribute("aria-label",
+              `${opts.place || ""}: showing ${viewName}. Click for the next view` +
+              (readyPlaces.length > 1 ? `, Ctrl+click or middle click for the next place (${readyPlaces.length} saved)` : "") +
+              ", hold to go back to today");
             wrap.setAttribute("data-zw-weather", value ? (info.cached ? "cached" : "live") : info.error ? "error" : "empty");
             if (!value) {
               iconEl.textContent = "\u2601";
@@ -5362,27 +5462,92 @@ function nativeSidebarSide() {
               rangeEl.textContent = "";
               detailsEl.textContent = "";
               outlookEl.hidden = true;
-              outlookFaces = [];
               wrap.setAttribute("aria-label", info.error ? "Weather unavailable" : "Weather: no place set");
               return;
             }
             const parts = formatWeatherParts(value, opts.units);
-            iconEl.textContent = WEATHER_ICON_GLYPHS[parts.icon] || WEATHER_ICON_GLYPHS.unknown;
-            tempEl.textContent = parts.temperature;
-            labelEl.textContent = parts.label;
-            rangeEl.textContent = parts.range;
-            detailsEl.textContent = parts.details;
+            // OW-95: the view decides the first three lines; the outlook carries whatever the view does not fit.
+            const view = cleanWeatherView(weatherView.view);
+            wrap.setAttribute("data-zw-weather-view", view);
+            let viewParts = null;
             try {
-              paintOutlook(weatherOutlookParts(value.week, opts), opts);
+              // The reading's own units, never the current pref: a cached metric value shown as °F would be a lie,
+              // and Open-Meteo converts server-side, so only the reading knows what its numbers are.
+              viewParts = weatherViewParts(value, view, { units: cleanWeatherUnits(value.units), countryCode: value.countryCode });
+            } catch (err) {
+              console.warn("[ZentralWidgets] weather view failed:", err);
+            }
+            const shown = viewParts && !viewParts.empty ? viewParts : null;
+            iconEl.textContent = WEATHER_ICON_GLYPHS[(shown || parts).icon] || WEATHER_ICON_GLYPHS.unknown;
+            tempEl.textContent = view === "week" ? "" : (shown || parts).temperature ?? parts.temperature;
+            labelEl.textContent = view === "week" ? "This week" : (shown || parts).label;
+            rangeEl.textContent = view === "week" ? "" : (shown || parts).range ?? "";
+            detailsEl.textContent = view === "today" ? parts.details : "";
+            try {
+              // Today keeps the OW-50 second line (tomorrow + the next wet day) because a glance at today wants what
+              // comes next; tomorrow and week own their own rows, so the outlook is theirs alone.
+              if (view === "week") paintOutlook(shown?.lines || [], opts);
+              else if (view === "tomorrow") paintOutlook([], opts);
+              else {
+                const outlook = weatherOutlookParts(value.week, opts);
+                paintOutlook((outlook.lines || []).map((line) => String(line)), opts);
+              }
             } catch (err) {
               outlookEl.hidden = true;
               console.warn("[ZentralWidgets] weather outlook failed:", err);
             }
-            wrap.setAttribute("aria-label", (opts.place ? opts.place + ": " : "") + parts.text);
+            wrap.setAttribute("aria-label", (opts.place ? opts.place + ": " : "") + (view === "week" ? "This week" : (shown || parts).text));
+          };
+          repaintWeather = () => {
+            if (!lastPainted) return false;
+            try {
+              paint(lastPainted, lastPaintInfo);
+              return true;
+            } catch (err) {
+              console.warn("[ZentralWidgets] weather repaint failed:", err);
+              return false;
+            }
           };
 
-          // OW-57: the whole card is the control. A click shows the next place; one place (or none) leaves it alone.
-          // The outlook no longer owns a click (OW-54), so there is nothing left to collide with.
+          // OW-95: the whole card is the control, and the two gestures are the two axes.
+          //   click  -> the next view: today, tomorrow, week, back to today. The data does not change, so this never
+          //             fetches: three views are one reading.
+          //   hold   -> back to the main face: TODAY, and the first saved place. A long press is the "reset" a person
+          //             reaches for after wandering, and it must work even with one place and an empty cache.
+          // The place is cycled by the hold's sibling, the middle click / the keyboard: `Ctrl`+Enter or a middle click
+          // steps the place, because a card with unlimited places still needs a way to reach the second one.
+          const setView = (next) => {
+            const clean = cleanWeatherView(next);
+            if (clean === weatherView.view) return false;
+            weatherView.view = clean;
+            repaintWeather?.();
+            return true;
+          };
+          const cycleView = () => setView(nextWeatherView(weatherView.view));
+          // Back to the main face: today, and the first saved place. Both halves are reset because "the main one" is a
+          // place AND a view to the person who asked for it; a hold that left them on another city would be a puzzle.
+          const revertToMain = () => {
+            let changed = false;
+            if (weatherView.view !== "today") {
+              weatherView.view = "today";
+              changed = true;
+            }
+            const places = readWeatherPlaces().filter(weatherPlaceReady);
+            const main = places[0] || null;
+            if (main && main.id !== weatherView.placeId) {
+              weatherView.placeId = main.id;
+              changed = true;
+            }
+            // Repaint from the last painted value at once. A view is a lens on data the card already has, so waiting
+            // for a fetch (or for a scheduler tick) would show a stale face for no reason.
+            if (changed) {
+              repaintWeather?.();
+              try {
+                requestRefresh({ force: false });
+              } catch (_) {}
+            }
+            return changed;
+          };
           const cyclePlace = () => {
             const places = readWeatherPlaces().filter(weatherPlaceReady);
             if (places.length < 2) return false;
@@ -5393,18 +5558,71 @@ function nativeSidebarSide() {
             requestRefresh({ force: true });
             return true;
           };
-          wrap.addEventListener("click", () => {
+          // A hold is a real gesture, not a click variant: 550 ms is long enough not to fire while someone is reading
+          // and short enough that it does not feel stuck. Moving the pointer or releasing early cancels it.
+          const HOLD_MS = 550;
+          let holdTimer = null;
+          let held = false;
+          const cancelHold = () => {
+            if (holdTimer !== null) clearTimeout(holdTimer);
+            holdTimer = null;
+          };
+          const onPointerDown = (event) => {
+            if (event?.button !== 0) return;
+            held = false;
+            cancelHold();
+            holdTimer = setTimeout(() => {
+              holdTimer = null;
+              held = true;
+              try {
+                revertToMain();
+              } catch (err) {
+                console.warn("[ZentralWidgets] weather revert failed:", err);
+              }
+              repaintWeather?.();
+            }, HOLD_MS);
+          };
+          wrap.addEventListener("pointerdown", onPointerDown);
+          wrap.addEventListener("pointerup", cancelHold);
+          wrap.addEventListener("pointercancel", cancelHold);
+          wrap.addEventListener("pointerleave", cancelHold);
+          wrap.addEventListener("click", (event) => {
+            if (held) {
+              held = false;
+              return;
+            }
+            try {
+              // Ctrl/Cmd means "the other axis": step the place instead of the view.
+              if (event?.ctrlKey || event?.metaKey) cyclePlace();
+              else cycleView();
+            } catch (err) {
+              console.warn("[ZentralWidgets] weather control failed:", err);
+            }
+          });
+          // A middle click steps the place, the same way a middle click opens a Zen tab: one gesture, one axis.
+          wrap.addEventListener("auxclick", (event) => {
+            if (event?.button !== 1) return;
+            event.preventDefault?.();
             try {
               cyclePlace();
-            } catch (err) {
-              console.warn("[ZentralWidgets] weather place cycle failed:", err);
-            }
+            } catch (_) {}
           });
           wrap.addEventListener("keydown", (e) => {
             if (e.key !== "Enter" && e.key !== " ") return;
             e.preventDefault();
-            cyclePlace();
+            try {
+              if (e.ctrlKey || e.metaKey) cyclePlace();
+              else cycleView();
+            } catch (_) {}
           });
+          // Escape is the keyboard's hold: back to the main face without a pointer.
+          wrap.addEventListener("keydown", (e) => {
+            if (e.key !== "Escape") return;
+            e.preventDefault();
+            revertToMain();
+            repaintWeather?.();
+          });
+
 
           return {
             element: wrap,
@@ -6042,6 +6260,29 @@ function nativeSidebarSide() {
           }
         },
         getCachedValue: (id) => scheduler.getCached(normalizeWidgetId(id) || id),
+        // OW-96: the calendar draws one small symbol per day from this, and it must not have to know how the widget
+        // stores its cache. Read-only on purpose: the calendar asks, the widget owns the request and the refresh.
+        // Returns [{ key, icon, label, high, low, units }] where `key` is the local date (YYYY-MM-DD), or an empty list.
+        weatherDays: () => {
+          try {
+            const cached = scheduler.getCached("weather");
+            if (!cached) return [];
+            const days = Array.isArray(cached.week) ? cached.week : [];
+            const units = cleanWeatherUnits(cached.units);
+            return days
+              .filter((day) => day && typeof day.date === "string" && day.date)
+              .map((day) => ({
+                key: String(day.date).slice(0, 10),
+                icon: day.icon || "unknown",
+                label: day.label || "",
+                high: day.high,
+                low: day.low,
+                units,
+              }));
+          } catch (_) {
+            return [];
+          }
+        },
         setCachedValue: (id, value, updatedAt) =>
           scheduler.setCached(normalizeWidgetId(id) || id, value, updatedAt),
         clearCache: (id) => scheduler.clearCache(id),

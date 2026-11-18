@@ -526,6 +526,38 @@
   margin-top: 1px !important;
 }
 
+/* OW-95: a week row is glyph + day + temperatures. A grid keeps the three columns aligned down the list, which is what
+   makes seven rows readable at 220px; the glyph is small but not a speck, and the day name is what gives way when the
+   card is narrow (the temperatures are the numbers people compare). */
+#zentral-sidebar-widgets .zw-weather-outlook .zw-weather-outlook-line {
+  display: grid !important;
+  grid-template-columns: 18px minmax(0, 1fr) auto !important;
+  align-items: baseline !important;
+  column-gap: 6px !important;
+}
+#zentral-sidebar-widgets .zw-weather-outlook .zw-weather-outlook-line .zw-weather-outlook-icon {
+  font-size: 13px !important;
+  line-height: 1 !important;
+  opacity: 0.85 !important;
+  text-align: center !important;
+}
+#zentral-sidebar-widgets .zw-weather-outlook .zw-weather-outlook-line .zw-weather-outlook-day {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+#zentral-sidebar-widgets .zw-weather-outlook .zw-weather-outlook-line .zw-weather-outlook-temps {
+  white-space: nowrap !important;
+  font-variant-numeric: tabular-nums !important;
+  opacity: 0.85 !important;
+}
+/* The card names the view it is on, so a person never wonders why the numbers moved. */
+#zentral-sidebar-widgets .zw-weather[data-zw-weather-view="tomorrow"] .zw-weather-label::after,
+#zentral-sidebar-widgets .zw-weather[data-zw-weather-view="week"] .zw-weather-label::after {
+  content: "" !important;
+}
+
 /* The default face is one line, and a narrow card must not wrap it into three. */
 #zentral-sidebar-widgets .zw-weather .zw-card-meta {
   min-width: 0 !important;

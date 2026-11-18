@@ -2512,6 +2512,16 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-time-day-head.is-today { border-bottom: 2px solid var(--zn-accent); background: color-mix(in srgb, var(--zn-accent) 12%, transparent); }
 .zentral-notes-sheet .zn-cal-time-day-head.is-today strong { color: var(--zn-accent); }
 .zentral-notes-sheet .zn-cal-time-day-head strong { font-size: .78em; }
+/* OW-96: the weather line above the weekday. Small but readable: the glyph is text-sized rather than a 10px speck, and
+   the temperature beside it is tabular so the columns line up when a row of seven days is compared at a glance. */
+.zentral-notes-sheet .zn-cal-weather { display: inline-flex; min-width: 0; align-items: baseline; gap: 3px; line-height: 1; color: var(--zn-muted); font-size: .68em; }
+.zentral-notes-sheet .zn-cal-weather-icon { font-size: 1.15em; line-height: 1; opacity: .9; }
+.zentral-notes-sheet .zn-cal-weather-temp { font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* In a narrow column (48 days stacked, a small pane) the temperature is what goes: the glyph still says the weather,
+   and a clipped "-3°C" would read as a wrong number rather than a missing one. */
+.zentral-notes-sheet .zn-cal-time-day-head.is-narrow .zn-cal-weather-temp { display: none; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-weather { font-size: .62em; gap: 2px; }
+
 .zentral-notes-sheet .zn-cal-time-day-head > span { color: var(--zn-muted); font-size: .7em; }
 .zentral-notes-sheet .zn-cal-time-allday-row { flex: 0 0 auto; align-items: stretch; max-height: 112px; overflow: auto; scrollbar-gutter: stable; scrollbar-width: thin; border-bottom: 1px solid var(--zn-line); }
 .zentral-notes-sheet .zn-cal-time-all-label { align-self: start; padding: 5px 2px 2px 0; color: var(--zn-muted); font-size: .63em; }
@@ -2532,6 +2542,17 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-hour-label:first-child { transform: none; }
 .zentral-notes-sheet .zn-cal-time-columns { grid-column: 2 / -1; display: grid; min-width: 0; width: 100%; }
 .zentral-notes-sheet .zn-cal-time-column { min-width: 0; border-left: 1px solid var(--zn-line); }
+/* OW-96: a span too long for one row of columns wraps into a second. The grid gets one more row, the hour gutter
+   spans both (it is a single column of hours, and repeating it would draw the day twice), and a wrapped row starts on
+   a fresh line with a rule above it so the two halves read as two rows of one calendar, not as one broken grid.
+   With one row nothing here applies. */
+.zentral-notes-sheet .zn-cal-time-columns[data-rows="2"] { grid-auto-rows: min-content; row-gap: 6px; }
+.zentral-notes-sheet .zn-cal-time-grid-row[data-rows="2"] { grid-template-rows: 1fr; }
+.zentral-notes-sheet .zn-cal-time-grid-row[data-rows="2"] > .zn-cal-hour-gutter { grid-row: 1 / -1; grid-column: 1; }
+/* The first column of a wrapped line has nothing to its left to separate it from: the hour gutter already did. */
+.zentral-notes-sheet .zn-cal-time-column.is-row-start { border-left: 0; }
+.zentral-notes-sheet .zn-cal-time-head[data-rows="2"], .zentral-notes-sheet .zn-cal-time-allday-row[data-rows="2"] { grid-auto-flow: row; }
+
 .zentral-notes-sheet .zn-cal-time-column.is-today { background: color-mix(in srgb, var(--zn-accent) 5%, transparent); }
 .zentral-notes-sheet .zn-cal-time-track { position: relative; min-width: 0; background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--zn-cal-hour-height, 54px) - 1px), var(--zn-line) calc(var(--zn-cal-hour-height, 54px) - 1px), var(--zn-line) var(--zn-cal-hour-height, 54px)); }
 .zentral-notes-sheet .zn-cal-time-hour-line { position: absolute; right: 0; left: 0; height: 1px; border-top: 1px solid color-mix(in srgb, var(--zn-line) 55%, transparent); pointer-events: none; }

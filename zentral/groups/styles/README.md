@@ -1,6 +1,6 @@
 # zentral/groups/styles
 
-Owner and local file guide for Extended 3.3.325. Original Zentral reference: 1.1.0.
+Owner and local file guide for Extended 3.3.326. Original Zentral reference: 1.1.0.
 
 | File                           | Responsibility                                                                    |
 | ------------------------------ | --------------------------------------------------------------------------------- |

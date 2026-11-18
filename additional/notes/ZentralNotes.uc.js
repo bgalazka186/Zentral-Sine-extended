@@ -201,6 +201,10 @@
       HIDDEN_MENU: "zen.workspace.zentral.notes.hidden_tools_menu",
       DATE_MODE: "zen.workspace.zentral.notes.date_notes_mode",
       DATE_DISPLAY: "zen.workspace.zentral.notes.date_display_format",
+      // OW-96: weather symbols in the calendar. Week view on (the owner's default), month view off — a month cell has
+      // no room for a symbol that must stay readable, so it is an option and never the default.
+      CAL_WEATHER_WEEK: "zen.workspace.zentral.notes.calendar_weather_week",
+      CAL_WEATHER_MONTH: "zen.workspace.zentral.notes.calendar_weather_month",
       DATE_ARCHIVE: "zen.workspace.zentral.notes.archive_daily_notes",
       NOTES_LANGUAGE: "zen.workspace.zentral.notes.language",
       NOTES_LANGUAGE_ACCEPT_ALL: "zen.workspace.zentral.notes.language_accept_all",
@@ -19780,6 +19784,26 @@
       // The holiday names follow the Notes interface language (OW-43); the sets themselves are the user's choice.
       const calendarHolidayPrefs = () => CALENDAR_PART?.cleanCalendarHolidays?.(store.meta.calendarHolidays) || { enabled: true, region: "none", locales: [], weekend: "auto", personalDays: [] };
       const calendarWorkFreeInfo = (day) => CALENDAR_PART?.isWorkFree?.(day, calendarHolidayPrefs(), notesLang()) || { workFree: false, weekend: false, holiday: null, holidays: [], personal: null, reasons: [], tooltip: "" };
+
+      // OW-96: the forecast the calendar shows. It reads what the widget already holds and never asks the weather
+      // service for anything — a calendar repaint must not become a network event. `null` means "do not draw" (the
+      // option is off, or there is no widget, or its cache has no forecast), which is different from "no weather today".
+      const calendarWeatherByDay = (renderNowMs) => {
+        try {
+          // `getPref` is the module-wide reader (it delegates to the controller's typed getter), and a bool default is
+          // what selects the boolean path there — not `prefBool`, which only exists inside the controller scope.
+          // The established bool form in this module (`=== true`), so a stored "true" and a real true agree.
+          if (getPref(PREF.CAL_WEATHER_WEEK, true) === false) return null;
+          const api = window.ZentralWidgets;
+          if (!api || typeof api.weatherDays !== "function") return null;
+          const days = api.weatherDays();
+          if (!Array.isArray(days) || !days.length) return null;
+          const todayKey = C.zonedDateKey(renderNowMs, calendarDisplayZone());
+          return CALENDAR_PART.calendarWeatherIndex(days, { todayKey });
+        } catch (_) {
+          return null;
+        }
+      };
       function applyWorkFreeAttrs(el, wf, { appendTitle = false } = {}) {
         // OW-46: with the master switch off nothing is drawn — not even a personal day off, never a holiday marker.
         if (!el || !wf || !wf.workFree || calendarHolidayPrefs().enabled === false) return;
@@ -20958,37 +20982,70 @@
         const setEndGridMin = C.timelineCivilToGridMin(timeline, hoursSet.endMin);
         const fmt = (day) => calendarDayLabel(day, { weekday: mode === "week" ? "short" : "long", year: true });
         calendarPeriod.textContent = mode === "week" && days.length > 1 ? `${fmt(days[0])} – ${fmt(days[days.length - 1])}` : fmt(days[0]);
-        const cols = `42px repeat(${days.length}, minmax(0, 1fr))`;
+        // OW-96: 48 days do not fit 48 columns. `weekGridPlan` decides whether the days stack into two rows of 24 at
+        // this width and height; it is asked once here, before anything is built, because the header, the all-day row
+        // and the timeline all have to wrap the same way or their cells sit under the wrong days. With one row — the
+        // normal case — every branch below is the code that was always there.
         const todayKey = C.zonedDateKey(nowMs(), zone);
+        const weekRowPlan = mode === "week" && days.length > 1
+          ? C.weekGridPlan({ days: days.length, widthPx: calendarPaneWidth(), heightPx: calendarPaneHeight() })
+          : { count: days.length, rows: 1, perRow: days.length };
+        // The header wraps exactly as the timeline does (see the columns below). With one row this is the original
+        // `repeat(days.length, ...)`; with two it is `repeat(perRow, ...)` and the day heads wrap.
+        const headPerRow = Math.max(1, weekRowPlan.perRow);
+        const cols = weekRowPlan.rows === 2
+          ? `repeat(${headPerRow}, minmax(0, 1fr))`
+          : `42px repeat(${days.length}, minmax(0, 1fr))`;
         const root = h("div", { class: "zn-cal-time-view is-" + mode, "aria-label": t(mode === "week" ? "cal.weekCalendar.aria" : "cal.dayCalendar.aria") });
         root.dataset.hours = hoursSet.on ? "limited" : "all";
         root.style.setProperty("--zn-cal-hours", String(gridHours));
         const header = h("div", { class: "zn-cal-time-head" });
         header.style.gridTemplateColumns = cols;
         const cornerWeek = showWeeks ? C.weekNumber(days[0], weekStart) : 0;
-        header.append(
-          showWeeks
-            ? h("span", { class: "zn-cal-time-corner zn-cal-week-num", "aria-label": t("cal.week.aria", { num: cornerWeek }), title: t("cal.week.aria", { num: cornerWeek }) }, t("cal.week.short", { num: cornerWeek }))
-            : h("span", { class: "zn-cal-time-corner", "aria-hidden": "true" }),
-        );
+        // With two rows the week number would eat the first cell of the first row; the period line above the grid
+        // already names the span, so the corner is left out and the days start in column one.
+        if (weekRowPlan.rows !== 2) {
+          header.append(
+            showWeeks
+              ? h("span", { class: "zn-cal-time-corner zn-cal-week-num", "aria-label": t("cal.week.aria", { num: cornerWeek }), title: t("cal.week.aria", { num: cornerWeek }) }, t("cal.week.short", { num: cornerWeek }))
+              : h("span", { class: "zn-cal-time-corner", "aria-hidden": "true" }),
+          );
+        }
+        // OW-96: one read of the widget's forecast for the whole render, then a map lookup per day. The card owns the
+        // fetching; the calendar only asks what it already has, so a calendar render never starts a network request.
+        const calWeather = mode === "week" ? calendarWeatherByDay(nowMs()) : null;
         for (const day of days) {
           const isToday = C.localDateKey(day) === todayKey;
           const wf = calendarWorkFreeInfo(day);
-          const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", " + calendarTodayLabel() : "") + (wf.tooltip ? ", " + wf.tooltip : "") }, h("strong", {}, new Date(day).toLocaleDateString(notesLocale(), { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), ...(wf.tooltip ? [h("span", { class: "zn-cal-holiday-pill", title: wf.tooltip }, wf.tooltip)] : []));
+          const wx = calWeather ? calWeather.get(CALENDAR_PART.localDateKey(day)) : null;
+          const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", " + calendarTodayLabel() : "") + (wf.tooltip ? ", " + wf.tooltip : "") + (wx ? ", " + wx.text : "") },
+            // The symbol sits above the weekday name: it answers "what is this day going to be like" before the eye
+            // reaches the name that identifies the column, which is the order the owner asked for.
+            ...(wx ? [h("span", { class: "zn-cal-weather", "aria-hidden": "true", title: wx.text }, h("span", { class: "zn-cal-weather-icon" }, wx.icon), h("span", { class: "zn-cal-weather-temp" }, wx.temp))] : []),
+            h("strong", {}, new Date(day).toLocaleDateString(notesLocale(), { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), ...(wf.tooltip ? [h("span", { class: "zn-cal-holiday-pill", title: wf.tooltip }, wf.tooltip)] : []));
           applyWorkFreeAttrs(dayHead, wf);
           dayHead.addEventListener("click", () => { store.setMeta({ calendarCursor: C.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); });
           bindCalendarDayContext(dayHead, day);
+          // Each wrapped row starts on its own line under column one, never half a column off.
+          if (weekRowPlan.rows === 2 && days.indexOf(day) % headPerRow === 0) dayHead.style.gridColumnStart = "1";
           header.append(dayHead);
         }
         const allDayRow = h("div", { class: "zn-cal-time-allday-row", "aria-label": t("cal.allDayRow.aria") });
         allDayRow.style.gridTemplateColumns = cols;
         const dragAllDayRow = patch?.allDayRow || allDayRow;
+        // OW-96: two rows wrap here as well, or the all-day cells would sit under the wrong days. The label cell stays
+        // in the first column of the first row; the second row begins at column one.
+        if (weekRowPlan.rows === 2) {
+          allDayRow.style.gridTemplateColumns = `42px repeat(${headPerRow}, minmax(0, 1fr))`;
+          allDayRow.dataset.rows = "2";
+        }
         allDayRow.append(h("span", { class: "zn-cal-time-all-label" }, t("cal.allDay")));
         for (const day of workDays) {
           const isToday = C.localDateKey(day) === todayKey;
           const cell = h("div", { class: "zn-cal-time-allday-cell" + (isToday ? " is-today" : ""), tabindex: "0", "aria-label": t("cal.allDayFor.aria", { day: fmt(day) }), "data-day": C.ymd(new Date(day)) });
           applyWorkFreeAttrs(cell, calendarWorkFreeInfo(day));
           bindCalendarDayContext(cell, day);
+          if (weekRowPlan.rows === 2 && days.indexOf(day) % headPerRow === 0) cell.style.gridColumnStart = "2";
           for (const item of C.allDayOf(expanded, day)) {
             const button = calendarItemButton(item, true);
             // A drag in the all-day row moves a reminder by days and never reads the height of an hour (which is not
@@ -21081,9 +21138,21 @@
           hours.append(labelEl);
         }
         gridRow.append(hours);
+        // OW-96: 48 days do not fit 48 columns. When the plan asks for two rows the days are split across two column
+        // grids of the same width, stacked — hour gutter and timeline on the left of both, so the two rows line up and
+        // read as one grid rather than two calendars. Each row keeps the second row's own hour rules; only the days
+        // move. `weekRowPlan.perRow` is 24 for a full 48-day span.
+        // OW-96: with two rows the grid is laid out as `perRow` columns and the days simply wrap into the next row —
+        // CSS grid does the stacking, and every row keeps its own full-height tracks. The first day of a row is pinned
+        // to the second column so it never lands under the hour gutter, which exists only once. With one row (the
+        // normal case, and every patch) `perRow` is the day count and nothing about the view changes at all.
+        const perRow = weekRowPlan.rows === 2 ? Math.max(1, weekRowPlan.perRow) : days.length;
         const columns = h("div", { class: "zn-cal-time-columns" });
         const dragColumns = patch?.columns || columns, dragScroll = patch?.scroll || scroll;
-        columns.style.gridTemplateColumns = `repeat(${days.length}, minmax(0, 1fr))`;
+        columns.style.gridTemplateColumns = `repeat(${perRow}, minmax(0, 1fr))`;
+        if (weekRowPlan.rows === 2) columns.dataset.rows = "2";
+        // A patch cannot re-flow a grid whose shape changed: the caller draws the whole view instead.
+        if (patch && weekRowPlan.rows !== 1) return "refit";
         const work = C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK);
         for (const day of workDays) {
           const dayKey = C.localDateKey(day);
@@ -21197,8 +21266,12 @@
           }
           const col = h("div", { class: "zn-cal-time-column" + (isToday ? " is-today" : "") }, track);
           applyWorkFreeAttrs(col, calendarWorkFreeInfo(day));
+          // The row comes from the day's place in `days`, not in `workDays`: a patch draws a subset, and the row a
+          // column belongs to must not move because its neighbours were skipped.
+          if (weekRowPlan.rows === 2 && days.indexOf(day) % perRow === 0) { col.style.gridColumnStart = "1"; col.classList.add("is-row-start"); }
           columns.append(col);
         }
+        gridRow.dataset.rows = String(weekRowPlan.rows);
         gridRow.append(columns);
         scroll.append(gridRow);
         if (patch) {
@@ -22377,8 +22450,10 @@
             { icon: anchorNow === "selected" ? "check" : undefined, label: t("cal.days.selectedDay"), action: () => setWeekSpan({ anchor: "selected" }, true) },
           ]);
         }
+        // OW-96: the span goes up to the model's ceiling (48) now that the grid can stack two rows of 24. The short
+        // spans stay first, because they are what a person picks nine times out of ten.
         calendarChoiceMenu(calendarDaysSelect,
-          [3, 7, 14, 30].map((days) => ({ value: String(days), label: tCount("cal.days", days) })),
+          [3, 7, 14, 21, 30, 48].map((days) => ({ value: String(days), label: tCount("cal.days", days) })),
           String(store.meta.calendarDaysForward || 7), (value) => { store.setMeta({ calendarDaysForward: Number(value) }); renderCalendar(); });
       });
       listen(calendarKindSelect, "click", () => calendarChoiceMenu(calendarKindSelect,

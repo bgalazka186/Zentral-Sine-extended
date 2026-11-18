@@ -94,12 +94,12 @@ const openCalendarRow = (root, trigger, label) => {
 (async () => {
   await test("pure visibleDays(start, count), cleanWeekSpan, fitWeekDayCount and resolveWeekVisibleDays across DST and month/year borders", () => {
     assert.equal(cal.WEEK_DAYS_LIMITS.min, 1);
-    assert.equal(cal.WEEK_DAYS_LIMITS.max, 14);
+    assert.equal(cal.WEEK_DAYS_LIMITS.max, 48, "OW-96: a span goes up to 48 days, two rows of 24");
     assert.deepEqual([...cal.WEEK_RANGE_STARTS], ["weekStart", "today", "selected"]);
     assert.deepEqual(cal.cleanWeekSpan(), { days: 7, anchor: "weekStart" });
     assert.deepEqual(cal.cleanWeekSpan({ days: "auto", anchor: "today" }), { days: "auto", anchor: "today" });
     assert.deepEqual(cal.cleanWeekSpan({ days: 0, anchor: "selected" }), { days: 1, anchor: "selected" });
-    assert.deepEqual(cal.cleanWeekSpan({ days: 99, anchor: "invalid" }), { days: 14, anchor: "weekStart" });
+    assert.deepEqual(cal.cleanWeekSpan({ days: 99, anchor: "invalid" }), { days: 48, anchor: "weekStart" });
     assert.deepEqual(cal.cleanWeekSpan(5), { days: 5, anchor: "weekStart" });
     assert.deepEqual(cal.cleanWeekSpan("auto"), { days: "auto", anchor: "weekStart" });
 
@@ -114,7 +114,8 @@ const openCalendarRow = (root, trigger, label) => {
       "2026-12-28", "2026-12-29", "2026-12-30", "2026-12-31", "2027-01-01", "2027-01-02", "2027-01-03",
     ]);
     assert.equal(cal.visibleDays(day(2026, 11, 16), 0).length, 1);
-    assert.equal(cal.visibleDays(day(2026, 11, 16), 25).length, 14);
+    assert.equal(cal.visibleDays(day(2026, 11, 16), 25).length, 25, "25 days is now inside the ceiling");
+    assert.equal(cal.visibleDays(day(2026, 11, 16), 99).length, 48, "and the ceiling is what stops it");
 
     // DST weeks (EU March/October, US March/November, NZ April/September): consecutive civil days without gaps or duplicates.
     for (const [y, m, d] of [[2026, 3, 6], [2026, 3, 27], [2026, 4, 3], [2026, 9, 25], [2026, 10, 23], [2026, 10, 30]]) {
@@ -136,7 +137,8 @@ const openCalendarRow = (root, trigger, label) => {
     assert.equal(narrowAuto, 3);
     assert.equal(mediumAuto, 7);
     assert.equal(wideAuto, 12);
-    assert.equal(cal.fitWeekDayCount(2400), 14);
+    assert.equal(cal.fitWeekDayCount(2400), 28, "auto keeps fitting: 2400px less the 42px gutter, in 84px columns");
+    assert.equal(cal.fitWeekDayCount(99999), 48, "and never asks for more than the model allows");
 
     // Range anchors: weekStart (Mon vs Sun), today, selected.
     const wed18 = day(2026, 11, 18);

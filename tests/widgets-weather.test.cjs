@@ -233,16 +233,18 @@ test("a week of days survives the payload reduction, and the raw payload never d
 });
 
 test("OW-54: every half of the outlook is drawn, and a narrow card wraps instead of hiding one", () => {
-  const card = SRC.slice(SRC.indexOf('id: "weather"'), SRC.indexOf('id: "weather"') + 9000);
+  // The window is generous on purpose: the card grew (OW-95 gave it three views and two gestures) and a slice that
+  // just barely fitted before is how this test failed on a change that did not touch its subject.
+  const card = SRC.slice(SRC.indexOf('id: "weather"'), SRC.indexOf('id: "weather"') + 16000);
   assert.match(card, /zw-weather-outlook/, "the second line has its own element");
   assert.match(card, /weatherOutlookParts\(/, "and is filled from the pure rule");
   // One row per half, always both.
   assert.match(card, /zw-weather-outlook-line/, "each half gets its own row");
-  assert.ok(!/outlookFace\b/.test(card), "there is no swapped face any more: nothing is hidden behind a click");
+  assert.ok(!/outlookFaces\b/.test(card), "there is no swapped face list any more: nothing is hidden behind a click");
   assert.ok(!/Click to see the other day/.test(card), "and no click is offered for it");
   // The attribute is only ever *removed* now: an older render may have set it, and clearing it is the whole point.
-  assert.ok(!/setAttribute\("data-zw-outlook-face"/.test(card), "the swap attribute is never set any more");
-  assert.match(card, /removeAttribute\("data-zw-outlook-face"\)/, "and is cleared if an older render left it");
+  // OW-95 removed the swap outright, so even the clearing line is gone: there is no face attribute at all now.
+  assert.ok(!/data-zw-outlook-face/.test(card), "the swap attribute is gone from the card entirely");
   // The pure rule hands the renderer its lines, and keeps the old pair for anyone still asking for it.
   const parts = c.weatherOutlookParts([day({ high: 8, low: 1 }), day({ high: 11, low: 3 }), rain()], { units: "metric" });
   assert.deepEqual(JSON.parse(JSON.stringify(parts.lines)), [parts.tomorrow, parts.wet]);

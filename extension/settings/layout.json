@@ -1262,6 +1262,8 @@
     "zen.workspace.zentral.notes.hidden_tools_menu",
     "zen.workspace.zentral.notes.date_notes_mode",
     "zen.workspace.zentral.notes.date_display_format",
+    "zen.workspace.zentral.notes.calendar_weather_week",
+    "zen.workspace.zentral.notes.calendar_weather_month",
     "zen.workspace.zentral.notes.language",
     "zen.workspace.zentral.notes.language_accept_all",
     "zen.workspace.zentral.notes.default_view",
