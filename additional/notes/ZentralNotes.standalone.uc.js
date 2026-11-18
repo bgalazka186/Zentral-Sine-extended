@@ -5270,6 +5270,19 @@ const __zentralEmbeddedLoader = (function () {
     return Math.max(base, Math.round(base / Math.max(0.05, factor)));
   }
 
+  const CALENDAR_WEATHER_GLYPHS = Object.freeze({
+    sun: "\u2600",
+    "cloud-sun": "\u26c5",
+    cloud: "\u2601",
+    fog: "\u2592",
+    drizzle: "\u2614",
+    rain: "\u2614",
+    sleet: "\u2745",
+    snow: "\u2744",
+    storm: "\u26a1",
+    unknown: "\u2601",
+  });
+
   // OW-96: turn the widget's flat day list into the one small thing a calendar column needs: a symbol, a temperature
   // and a sentence for the tooltip. `todayKey` is the local date of the render, so a forecast day that has already
   // passed (an old cache) never appears on a future column, and `trust` comes from the distance ladder.
@@ -5298,6 +5311,7 @@ const __zentralEmbeddedLoader = (function () {
       out.set(key, {
         key,
         icon: entry.icon,
+        glyph: entry.glyph || CALENDAR_WEATHER_GLYPHS[entry.icon] || entry.icon,
         label: entry.label || "",
         temp: high,
         high,
@@ -12527,7 +12541,7 @@ const __zentralEmbeddedLoader = (function () {
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, itemIdTokens, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, cleanHistoryFilter, filterHistoryRecords, historyPruneSurvey, exportHistoryLines, historySummaryLine, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanNoteDropKind, NOTE_DROP_KINDS, cleanCalendarShare, TREE_WIDTH_LIMITS, cleanTreePaneWidth, clampTreePaneWidth, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_TABLE, HOLIDAY_TABLE_KINDS, holidayTableEntries, holidayTableYears, holidaySetCoverage, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, holidaySetsOf, HOLIDAY_FEED_RE, holidayFeedName, holidayFeedOf, isImportedHoliday, markImportedHoliday, IMPORTED_HOLIDAY_CLASS, importedHolidayAttrs, NO_WORK_FREE, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     DEFAULT_DAY_LOOK, DAY_LOOK_KINDS, DAY_LOOK_MAX_STRENGTH, cleanDayLookColor, cleanDayLookStrength, cleanDayLook, dayLookTint, CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
     cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, weekGridPlan, WEEK_ROW_MIN_PX, FORECAST_TRUST_STEPS, forecastTrust,
-    weatherUnitLabelsFor, calendarWeatherIndex,
+    weatherUnitLabelsFor, CALENDAR_WEATHER_GLYPHS, calendarWeatherIndex,
     forecastRefreshMinutes, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaLeftCount, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, AGENDA_FOLD_DEFAULTS, cleanAgendaFold, inQuietHours, agendaFoldPlan, UI_STATE_KEYS, isUiStateKey, splitUiState, migrateUiState, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, itemOwnsNoteText, itemIsFreeStanding, noteLinkedItems, unlinkPlan, unlinkLineText, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle, icsUnfold, icsText, icsProperty, icsDateValue, icsZonedMs, icsStamp, icsRecurrence, parseIcs, icsToItem, planIcsImport, icsEscape, icsFold, icsEventLines, icsFromItems, icsUtcStamp, defaultIcsUid, SYNC_STATES, syncStateOf, markSynced, markSyncedDeleted, syncPlan,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
@@ -32955,17 +32969,21 @@ __zentralShim.register = function (def) {
       // OW-96: the forecast the calendar shows. It reads what the widget already holds and never asks the weather
       // service for anything — a calendar repaint must not become a network event. `null` means "do not draw" (the
       // option is off, or there is no widget, or its cache has no forecast), which is different from "no weather today".
-      const calendarWeatherByDay = (renderNowMs) => {
+      // `getPref` is the module-wide reader (it delegates to the controller's typed getter), and a bool default is
+      // what selects the boolean path there — not `prefBool`, which only exists inside the controller scope.
+      // The established bool form in this module (`=== true`), so a stored "true" and a real true agree.
+      const calendarWeatherByDay = (renderNowMs, surface = "week") => {
         try {
-          // `getPref` is the module-wide reader (it delegates to the controller's typed getter), and a bool default is
-          // what selects the boolean path there — not `prefBool`, which only exists inside the controller scope.
-          // The established bool form in this module (`=== true`), so a stored "true" and a real true agree.
-          if (getPref(PREF.CAL_WEATHER_WEEK, true) === false) return null;
+          if (surface === "month") {
+            if (getPref(PREF.CAL_WEATHER_MONTH, false) !== true) return null;
+          } else if (getPref(PREF.CAL_WEATHER_WEEK, true) === false) {
+            return null;
+          }
           const api = window.ZentralWidgets;
           if (!api || typeof api.weatherDays !== "function") return null;
           const days = api.weatherDays();
           if (!Array.isArray(days) || !days.length) return null;
-          const todayKey = C.zonedDateKey(renderNowMs, calendarDisplayZone());
+          const todayKey = CALENDAR_PART.zonedDateKey(renderNowMs, calendarDisplayZone());
           return CALENDAR_PART.calendarWeatherIndex(days, { todayKey });
         } catch (_) {
           return null;
@@ -33420,6 +33438,7 @@ __zentralShim.register = function (def) {
         const selected = CALENDAR_PART.parseYmd(store.meta.calendarCursor) ? CALENDAR_PART.parseYmd(store.meta.calendarCursor).getTime() : calendarTodayDay();
         const today = calendarTodayDay();
         const selection = h("div", { class: "zn-cal-month-selection" });
+        const calWeather = calendarWeatherByDay(nowMs(), "month");
         const drawCells = [];
         const selectDay = (day) => {
           const key = CALENDAR_PART.localDateKey(day);
@@ -33444,7 +33463,8 @@ __zentralShim.register = function (def) {
           const dayItems = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.nextDayStart(day));
           const dayText = calendarDayLabel(day, { year: true });
           const wf = calendarWorkFreeInfo(day);
-          const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", tabindex: "0", "aria-selected": day === selected ? "true" : "false", "aria-label": t("cal.month.dayAria", { day: dayText }) + (wf.tooltip ? ", " + wf.tooltip : ""), "data-day": CALENDAR_PART.ymd(new Date(day)) });
+          const monthWx = calWeather ? calWeather.get(CALENDAR_PART.localDateKey(day)) : null;
+          const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", tabindex: "0", "aria-selected": day === selected ? "true" : "false", "aria-label": t("cal.month.dayAria", { day: dayText }) + (wf.tooltip ? ", " + wf.tooltip : "") + (monthWx ? ", " + monthWx.text : ""), "data-day": CALENDAR_PART.ymd(new Date(day)) });
           applyWorkFreeAttrs(cell, wf);
           // T2.13a: read from the day's own items — the imported holiday marks the day it falls on, nothing else.
           applyImportedHolidayAttrs(cell, dayItems);
@@ -33452,6 +33472,7 @@ __zentralShim.register = function (def) {
           const dayButton = h("button", { type: "button", class: "zn-cal-month-date", "aria-label": t("cal.month.openDayAria", { day: dayText }), "aria-pressed": day === selected ? "true" : "false", title: wf.tooltip || null }, String(new Date(day).getDate()));
           dayButton.addEventListener("click", (event) => { event.stopPropagation(); openDayView(); });
           cell.append(dayButton);
+          if (monthWx) cell.append(h("span", { class: "zn-cal-month-weather", "aria-hidden": "true", title: monthWx.text }, monthWx.glyph || monthWx.icon));
           if (wf.tooltip) cell.append(h("span", { class: "zn-cal-month-holiday", title: wf.tooltip }, wf.tooltip));
           const allDay = dayItems.filter((item) => CALENDAR_PART.isAllDay(item));
           const timed = dayItems.filter((item) => !CALENDAR_PART.isAllDay(item));
@@ -34192,7 +34213,7 @@ __zentralShim.register = function (def) {
           const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", " + calendarTodayLabel() : "") + (wf.tooltip ? ", " + wf.tooltip : "") + (wx ? ", " + wx.text : "") },
             // The symbol sits above the weekday name: it answers "what is this day going to be like" before the eye
             // reaches the name that identifies the column, which is the order the owner asked for.
-            ...(wx ? [h("span", { class: "zn-cal-weather", "aria-hidden": "true", title: wx.text }, h("span", { class: "zn-cal-weather-icon" }, wx.icon), h("span", { class: "zn-cal-weather-temp" }, wx.temp))] : []),
+            ...(wx ? [h("span", { class: "zn-cal-weather", "aria-hidden": "true", title: wx.text }, h("span", { class: "zn-cal-weather-icon" }, wx.glyph || wx.icon), h("span", { class: "zn-cal-weather-temp" }, wx.temp))] : []),
             h("strong", {}, new Date(day).toLocaleDateString(notesLocale(), { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), ...(wf.tooltip ? [h("span", { class: "zn-cal-holiday-pill", title: wf.tooltip }, wf.tooltip)] : []));
           applyWorkFreeAttrs(dayHead, wf);
           dayHead.addEventListener("click", () => { store.setMeta({ calendarCursor: C.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); });
@@ -35494,6 +35515,14 @@ __zentralShim.register = function (def) {
         if (rafCalendarFit) return;
         rafCalendarFit = window.requestAnimationFrame(() => { rafCalendarFit = 0; refitCalendar(); });
       }
+      // The widget owns refresh and cache; this only asks the visible Week calendar to repaint after a cache update.
+      // requestCalendarBackground defers the paint during a drag/dialog rather than replacing the grid under the pointer.
+      listen(window, "zentral-weather-updated", () => {
+        if (!CALENDAR_PART || !isOpen || destroyed || view !== "list" || filter !== "all" || calendarPane.hidden) return;
+        const calView = store.meta.calendarView || "month";
+        if (calView !== "week" && !(calView === "month" && getPref(PREF.CAL_WEATHER_MONTH, false) === true)) return;
+        requestCalendarBackground();
+      });
       function changeCalendarCursor(delta, shiftKey = false) {
         const C = CALENDAR_PART, stored = C.parseYmd(store.meta.calendarCursor), base = stored ? stored.getTime() : C.dayStart(nowMs());
         const view = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
@@ -49690,6 +49719,12 @@ __zentralShim.register = function (def) {
             }
             if (zenMode() !== "off") zenSoon();
             if (agendaEnabled()) agendaSoon();
+          }
+          else if (name === PREF.CAL_WEATHER_WEEK || name === PREF.CAL_WEATHER_MONTH) {
+            for (const b of [...bindings.values(), floating]) {
+              const sh = typeof b?.sheet === "function" ? b.sheet() : b?.sheet;
+              sh?.refreshCalendar?.();
+            }
           }
           else if (name === PREF.ZEN_TOP) {
             repositionManagedRoots();

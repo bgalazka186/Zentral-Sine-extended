@@ -129,7 +129,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 |   131 | `OW-105`    | `DONE`    | High                | S      | —                 | Widgets: explicit colour values forced in settings must be applied to every widget card and its controls |
 |   132 | `OW-106`    | `DONE`    | High                | S      | —                 | Notes / Calendar: opening the feature defaults to the All notes screen, not the last note opened |
 |   133 | `OW-107`    | `DONE`    | High                | S-M    | —                 | Weather: audit what location data leaves the browser, where it is sent, and what permissions/consent are involved; document the actual behaviour and close any unnecessary exposure |
-|   134 | `OW-108`    | `OPEN`    | High                | M      | —                 | Calendar: the weather strip/card data is missing; find and fix the broken data path and keep it correct as the view changes |
 |   135 | `OW-109`    | `OPEN`    | High                | M      | —                 | Weather widget: add a saved default view and a user-controlled view switch; in Week view preserve the weather description and show compact day-of-month labels (18., 19., 20., …) |
 |   136 | `OW-110`    | `OPEN`    | High                | L      | —                 | Boost: audit and fix all feature bugs, especially Game Mode unexpectedly loading every Zentral app instead of reducing memory use |
 
@@ -795,18 +794,6 @@ asserting no rendered text matches `/^[a-z][A-Za-z0-9]*(\.[A-Za-z0-9_]+)+$/`. Ve
 
 **Tests / done when:** A code-backed security report states exactly what data is sent, to whom and when; tests prevent silent geolocation or unintended extra disclosure.
 
-#### `OW-108` — Restore weather data in Calendar
-
-**Problem:** Weather data does not appear in Calendar even though the weather feature is configured.
-
-**Plan (in this order):**
-
-1. Trace the shared weather data source, cache and scheduler into Calendar's view model; identify whether the fault is request, projection, preference gating or rendering.
-2. Fix the broken integration without adding duplicate requests or a second refresh timer.
-3. Cover Week and any currently supported Calendar weather surface, including no place configured, stale cache, request failure and changing the visible date range.
-
-**Tests / done when:** Calendar renders the available weather data for the dates it displays, refreshes through the existing shared scheduler and degrades cleanly when data is unavailable.
-
 #### `OW-109` — Weather widget views and Week labels
 
 **Problem:** The Weather widget needs a saved default view and a clear way for the user to change what is displayed. In Week view, Today/Tomorrow labels currently replace the weather description (for example, “słabe opady deszczu”), and compact dates are missing.
@@ -901,8 +888,8 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 State: **3.4.0 on beta**. The existing roadmap through `OW-104` remains complete as recorded above. The new owner requests `OW-105`–`OW-110` are OPEN and ordered from the smallest changes to the larger Boost audit.
 
-Completed this session: OW-105 widget colour overrides are fixed and regression-tested; OW-106 makes real Notes/Calendar pseudo-tabs open on All notes while preserving explicit note navigation; OW-107 documents the Weather data flow, removes lookup while Weather is off, and guards late geocoding responses. OW-108–OW-110 remain open.
+Completed this session: OW-105 widget colour overrides are fixed and regression-tested; OW-106 makes real Notes/Calendar pseudo-tabs open on All notes while preserving explicit note navigation; OW-107 documents the Weather data flow, removes lookup while Weather is off, and guards late geocoding responses; OW-108 restores Calendar weather (reads `entry.value` from `scheduler.getCached`, normalizes `timeformat=unixtime` dates via `weatherDateKey`, fixes `C.zonedDateKey` -> `CALENDAR_PART.zonedDateKey` ReferenceError, maps icon glyphs, fixes stale-cache `updatedAt` and failed-fetch retention, and wires `calendar_weather_month` into Month view). OW-109–OW-110 remain open.
 
 Known debts: no live Zen/Sine runtime is available in this session; repository tests and CI must be used where possible, and live-only claims must not be presented as verified.
 
-Next action: complete OW-108 (Calendar weather refresh/render), then OW-109 (Weather default/current views and Week labels), then OW-110 (full Boost audit and Game Mode RAM behaviour). Commit and push each completed change separately. Do not bump any version above 3.4.0.
+Next action: complete OW-109 (Weather default/current views and Week labels), then OW-110 (full Boost audit and Game Mode RAM behaviour). Commit and push each completed change separately. Do not bump any version above 3.4.0.

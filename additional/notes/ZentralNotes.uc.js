@@ -19870,17 +19870,21 @@
       // OW-96: the forecast the calendar shows. It reads what the widget already holds and never asks the weather
       // service for anything — a calendar repaint must not become a network event. `null` means "do not draw" (the
       // option is off, or there is no widget, or its cache has no forecast), which is different from "no weather today".
-      const calendarWeatherByDay = (renderNowMs) => {
+      // `getPref` is the module-wide reader (it delegates to the controller's typed getter), and a bool default is
+      // what selects the boolean path there — not `prefBool`, which only exists inside the controller scope.
+      // The established bool form in this module (`=== true`), so a stored "true" and a real true agree.
+      const calendarWeatherByDay = (renderNowMs, surface = "week") => {
         try {
-          // `getPref` is the module-wide reader (it delegates to the controller's typed getter), and a bool default is
-          // what selects the boolean path there — not `prefBool`, which only exists inside the controller scope.
-          // The established bool form in this module (`=== true`), so a stored "true" and a real true agree.
-          if (getPref(PREF.CAL_WEATHER_WEEK, true) === false) return null;
+          if (surface === "month") {
+            if (getPref(PREF.CAL_WEATHER_MONTH, false) !== true) return null;
+          } else if (getPref(PREF.CAL_WEATHER_WEEK, true) === false) {
+            return null;
+          }
           const api = window.ZentralWidgets;
           if (!api || typeof api.weatherDays !== "function") return null;
           const days = api.weatherDays();
           if (!Array.isArray(days) || !days.length) return null;
-          const todayKey = C.zonedDateKey(renderNowMs, calendarDisplayZone());
+          const todayKey = CALENDAR_PART.zonedDateKey(renderNowMs, calendarDisplayZone());
           return CALENDAR_PART.calendarWeatherIndex(days, { todayKey });
         } catch (_) {
           return null;
@@ -20335,6 +20339,7 @@
         const selected = CALENDAR_PART.parseYmd(store.meta.calendarCursor) ? CALENDAR_PART.parseYmd(store.meta.calendarCursor).getTime() : calendarTodayDay();
         const today = calendarTodayDay();
         const selection = h("div", { class: "zn-cal-month-selection" });
+        const calWeather = calendarWeatherByDay(nowMs(), "month");
         const drawCells = [];
         const selectDay = (day) => {
           const key = CALENDAR_PART.localDateKey(day);
@@ -20359,7 +20364,8 @@
           const dayItems = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.nextDayStart(day));
           const dayText = calendarDayLabel(day, { year: true });
           const wf = calendarWorkFreeInfo(day);
-          const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", tabindex: "0", "aria-selected": day === selected ? "true" : "false", "aria-label": t("cal.month.dayAria", { day: dayText }) + (wf.tooltip ? ", " + wf.tooltip : ""), "data-day": CALENDAR_PART.ymd(new Date(day)) });
+          const monthWx = calWeather ? calWeather.get(CALENDAR_PART.localDateKey(day)) : null;
+          const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", tabindex: "0", "aria-selected": day === selected ? "true" : "false", "aria-label": t("cal.month.dayAria", { day: dayText }) + (wf.tooltip ? ", " + wf.tooltip : "") + (monthWx ? ", " + monthWx.text : ""), "data-day": CALENDAR_PART.ymd(new Date(day)) });
           applyWorkFreeAttrs(cell, wf);
           // T2.13a: read from the day's own items — the imported holiday marks the day it falls on, nothing else.
           applyImportedHolidayAttrs(cell, dayItems);
@@ -20367,6 +20373,7 @@
           const dayButton = h("button", { type: "button", class: "zn-cal-month-date", "aria-label": t("cal.month.openDayAria", { day: dayText }), "aria-pressed": day === selected ? "true" : "false", title: wf.tooltip || null }, String(new Date(day).getDate()));
           dayButton.addEventListener("click", (event) => { event.stopPropagation(); openDayView(); });
           cell.append(dayButton);
+          if (monthWx) cell.append(h("span", { class: "zn-cal-month-weather", "aria-hidden": "true", title: monthWx.text }, monthWx.glyph || monthWx.icon));
           if (wf.tooltip) cell.append(h("span", { class: "zn-cal-month-holiday", title: wf.tooltip }, wf.tooltip));
           const allDay = dayItems.filter((item) => CALENDAR_PART.isAllDay(item));
           const timed = dayItems.filter((item) => !CALENDAR_PART.isAllDay(item));
@@ -21107,7 +21114,7 @@
           const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", " + calendarTodayLabel() : "") + (wf.tooltip ? ", " + wf.tooltip : "") + (wx ? ", " + wx.text : "") },
             // The symbol sits above the weekday name: it answers "what is this day going to be like" before the eye
             // reaches the name that identifies the column, which is the order the owner asked for.
-            ...(wx ? [h("span", { class: "zn-cal-weather", "aria-hidden": "true", title: wx.text }, h("span", { class: "zn-cal-weather-icon" }, wx.icon), h("span", { class: "zn-cal-weather-temp" }, wx.temp))] : []),
+            ...(wx ? [h("span", { class: "zn-cal-weather", "aria-hidden": "true", title: wx.text }, h("span", { class: "zn-cal-weather-icon" }, wx.glyph || wx.icon), h("span", { class: "zn-cal-weather-temp" }, wx.temp))] : []),
             h("strong", {}, new Date(day).toLocaleDateString(notesLocale(), { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), ...(wf.tooltip ? [h("span", { class: "zn-cal-holiday-pill", title: wf.tooltip }, wf.tooltip)] : []));
           applyWorkFreeAttrs(dayHead, wf);
           dayHead.addEventListener("click", () => { store.setMeta({ calendarCursor: C.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); });
@@ -22413,7 +22420,8 @@
       // requestCalendarBackground defers the paint during a drag/dialog rather than replacing the grid under the pointer.
       listen(window, "zentral-weather-updated", () => {
         if (!CALENDAR_PART || !isOpen || destroyed || view !== "list" || filter !== "all" || calendarPane.hidden) return;
-        if ((store.meta.calendarView || "month") !== "week") return;
+        const calView = store.meta.calendarView || "month";
+        if (calView !== "week" && !(calView === "month" && getPref(PREF.CAL_WEATHER_MONTH, false) === true)) return;
         requestCalendarBackground();
       });
       function changeCalendarCursor(delta, shiftKey = false) {
@@ -36612,6 +36620,12 @@
             }
             if (zenMode() !== "off") zenSoon();
             if (agendaEnabled()) agendaSoon();
+          }
+          else if (name === PREF.CAL_WEATHER_WEEK || name === PREF.CAL_WEATHER_MONTH) {
+            for (const b of [...bindings.values(), floating]) {
+              const sh = typeof b?.sheet === "function" ? b.sheet() : b?.sheet;
+              sh?.refreshCalendar?.();
+            }
           }
           else if (name === PREF.ZEN_TOP) {
             repositionManagedRoots();

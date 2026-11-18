@@ -1624,10 +1624,8 @@
         // calendar after the cache has changed so its next render sees the new forecast (or cleared error).
         if (id === "weather" && value !== undefined) {
           try {
-            const event = typeof window.CustomEvent === "function"
-              ? new window.CustomEvent("zentral-weather-updated")
-              : new Event("zentral-weather-updated");
-            window.dispatchEvent?.(event);
+            const Evt = typeof window.CustomEvent === "function" ? window.CustomEvent : window.Event;
+            window.dispatchEvent?.(new Evt("zentral-weather-updated"));
           } catch (_) {}
         }
         if (!idle()) scheduleNext(current, { lastValue: stored?.value });
@@ -2285,6 +2283,42 @@
     return p ? `${baseId}:${p.latitude},${p.longitude}` : baseId;
   }
 
+  // OW-108: weatherRequestUrl asks Open-Meteo for `timeformat=unixtime`, so `daily.time` arrives as Unix seconds
+  // while hand-crafted fixtures/caches may carry ISO `YYYY-MM-DD`. Normalize both to `YYYY-MM-DD` in the forecast's
+  // timezone (falling back to local time) so Calendar date lookups always match.
+  function weatherDateKey(rawDate, timeZone) {
+    if (rawDate == null) return "";
+    const str = String(rawDate).trim();
+    if (!str) return "";
+    const iso = /^(\d{4}-\d{2}-\d{2})/.exec(str);
+    if (iso) return iso[1];
+    if (!/^-?\d+(?:\.\d+)?$/.test(str)) return "";
+    const num = Number(str);
+    if (!Number.isFinite(num)) return "";
+    const ms = Math.abs(num) >= 1e12 ? num : num * 1000;
+    const date = new Date(ms);
+    if (!Number.isFinite(date.getTime())) return "";
+    const tz = typeof timeZone === "string" ? timeZone.trim() : "";
+    if (tz) {
+      try {
+        const parts = new Intl.DateTimeFormat("en-US", {
+          timeZone: tz,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).formatToParts(date);
+        const y = parts.find((p) => p.type === "year")?.value;
+        const m = parts.find((p) => p.type === "month")?.value;
+        const d = parts.find((p) => p.type === "day")?.value;
+        if (y && m && d) return `${y}-${m}-${d}`;
+      } catch (_) {}
+    }
+    const y = String(date.getFullYear()).padStart(4, "0");
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
   function weatherRequestUrl(place, units) {
     const p = cleanWeatherPlace(place?.latitude, place?.longitude);
     if (!p) return "";
@@ -2603,6 +2637,7 @@
     weatherPlaceReady,
     weatherPlacesFromLegacy,
     weatherCacheKeyFor,
+    weatherDateKey,
     WEATHER_PLACES_MAX,
     weatherRequestUrl,
     readWeatherPayload,
@@ -4476,16 +4511,25 @@
             }
             const places = readWeatherPlaces().filter(weatherPlaceReady);
             const main = places[0] || null;
+            const notifyCalendar = () => {
+              try {
+                const Evt = typeof window.CustomEvent === "function" ? window.CustomEvent : window.Event;
+                window.dispatchEvent?.(new Evt("zentral-weather-updated"));
+              } catch (_) {}
+            };
+            let placeChanged = false;
             if (main && main.id !== weatherView.placeId) {
               weatherView.placeId = main.id;
               changed = true;
+              placeChanged = true;
             }
             // Repaint from the last painted value at once. A view is a lens on data the card already has, so waiting
             // for a fetch (or for a scheduler tick) would show a stale face for no reason.
             if (changed) {
               repaintWeather?.();
+              if (placeChanged) notifyCalendar();
               try {
-                requestRefresh({ force: false });
+                requestRefresh({ force: placeChanged });
               } catch (_) {}
             }
             return changed;
@@ -4498,6 +4542,10 @@
             if (!next || next.id === active?.id) return false;
             weatherView.placeId = next.id;
             requestRefresh({ force: true });
+            try {
+              const Evt = typeof window.CustomEvent === "function" ? window.CustomEvent : window.Event;
+              window.dispatchEvent?.(new Evt("zentral-weather-updated"));
+            } catch (_) {}
             return true;
           };
           // A hold is a real gesture, not a click variant: 550 ms is long enough not to fire while someone is reading
@@ -4572,16 +4620,23 @@
               const opts = readWeatherOpts();
               return weatherCacheKeyFor("weather", opts.place_);
             },
-            fetch({ now, cachedValue }) {
+            fetch({ now, cachedValue, updatedAt }) {
               const opts = readWeatherOpts();
               if (!opts.place_) return null; // no place, no request, no network
-              if (cachedValue && isWeatherCacheFresh(now, { value: cachedValue, updatedAt: now }, opts.refreshMinutes)) return undefined;
+              const sameUnits = cachedValue && cleanWeatherUnits(cachedValue.units) === opts.units;
+              if (cachedValue && sameUnits && isWeatherCacheFresh(now, { value: cachedValue, updatedAt }, opts.refreshMinutes)) return undefined;
               const url = weatherRequestUrl(opts.place_, opts.units);
               if (!url) return null;
               return fetch(url, { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" })
-                .then((res) => (res && res.ok ? res.json() : null))
-                .then((payload) => (payload ? readWeatherPayload(payload, opts.units, widgetLang()) : null))
-                .catch(() => null);
+                .then((res) => {
+                  if (!res || !res.ok) throw new Error("Weather request failed");
+                  return res.json();
+                })
+                .then((payload) => {
+                  const parsed = payload ? readWeatherPayload(payload, opts.units, widgetLang()) : null;
+                  if (!parsed) throw new Error("Weather payload invalid");
+                  return parsed;
+                });
             },
             isStale(now, cached) {
               return !cached?.value || !isWeatherCacheFresh(now, cached, readWeatherOpts().refreshMinutes);
@@ -5216,33 +5271,55 @@
         // Returns [{ key, icon, label, high, low, units }] where `key` is the local date (YYYY-MM-DD), or an empty list.
         weatherDays: () => {
           try {
-            const cached = scheduler.getCached("weather");
+            const place = readWeatherOpts().place_;
+            const entry = scheduler.getCached("weather") || (place ? scheduler.getCached(weatherCacheKeyFor("weather", place)) : null);
+            const cached = entry?.value || null;
             if (!cached) return [];
             // OW-99: the calendar asks once per week render, and at 48 days that is a render per scroll. The reading is
-            // the same object between refreshes, so the mapped list is built once per reading and handed back as-is —
-            // the caller must not mutate it, which the comment above says.
+            // the same object between refreshes, so the mapped list is built once per reading and handed back as-is.
             if (weatherDaysCache.source === cached) return weatherDaysCache.list;
             const days = Array.isArray(cached.week) ? cached.week : [];
             const units = cleanWeatherUnits(cached.units);
-            const result = days
-              .filter((day) => day && typeof day.date === "string" && day.date)
-              .map((day) => ({
-                key: String(day.date).slice(0, 10),
+            const result = [];
+            for (const day of days) {
+              if (!day) continue;
+              const key = weatherDateKey(day.date, cached.timezone);
+              if (!key) continue;
+              result.push({
+                key,
                 icon: day.icon || "unknown",
+                glyph: WEATHER_ICON_GLYPHS[day.icon] || "",
                 label: day.label || "",
                 high: day.high,
                 low: day.low,
                 units,
-              }));
+              });
+            }
             weatherDaysCache = { source: cached, list: result };
             return result;
           } catch (_) {
             return [];
           }
         },
-        setCachedValue: (id, value, updatedAt) =>
-          scheduler.setCached(normalizeWidgetId(id) || id, value, updatedAt),
-        clearCache: (id) => scheduler.clearCache(id),
+        setCachedValue: (id, value, updatedAt) => {
+          const norm = normalizeWidgetId(id) || id;
+          scheduler.setCached(norm, value, updatedAt);
+          if (norm === "weather" || String(norm).startsWith("weather:")) {
+            try {
+              const Evt = typeof window.CustomEvent === "function" ? window.CustomEvent : window.Event;
+              window.dispatchEvent?.(new Evt("zentral-weather-updated"));
+            } catch (_) {}
+          }
+        },
+        clearCache: (id) => {
+          scheduler.clearCache(id);
+          if (id == null || id === "weather" || String(id).startsWith("weather:")) {
+            try {
+              const Evt = typeof window.CustomEvent === "function" ? window.CustomEvent : window.Event;
+              window.dispatchEvent?.(new Evt("zentral-weather-updated"));
+            } catch (_) {}
+          }
+        },
         getArea: () => ({ ...lastArea }),
         getTray: () => tray,
         isPaused: () => scheduler.isPaused(),

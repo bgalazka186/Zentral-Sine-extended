@@ -2526,6 +2526,8 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-month-mark:focus-visible { background: var(--zn-cal-item-hover, var(--zn-hover)); outline: 1px solid var(--zn-cal-item-outline, var(--zn-accent)); outline-offset: -1px; }
 .zentral-notes-sheet .zn-cal-month-mark.is-reminder::before { content: "● "; color: var(--zn-cal-item-outline, var(--zn-cal-item-color, var(--zn-accent))); }
 .zentral-notes-sheet .zn-cal-month-more { color: var(--zn-muted); font-size: .62em; }
+.zentral-notes-sheet .zn-cal-month-weather { position: absolute; top: 3px; right: 5px; color: var(--zn-muted); font-size: .78em; line-height: 1; pointer-events: none; }
+.zentral-notes-sheet .zn-cal-month-cell:has(.zn-cal-month-reminder-dot) .zn-cal-month-weather { right: 15px; }
 .zentral-notes-sheet .zn-cal-month-reminder-dot { position: absolute; top: 4px; right: 5px; color: var(--zn-accent); font-size: .55em; }
 .zentral-notes-sheet .zn-cal-day-group { min-width: 0; margin: 4px 0 9px; padding: 7px; border: 1px solid var(--zn-line); border-radius: 8px; }
 .zentral-notes-sheet .zn-cal-day-group.is-selected { border-color: color-mix(in srgb, var(--zn-accent) 70%, var(--zn-line)); }
