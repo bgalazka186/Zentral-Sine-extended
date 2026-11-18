@@ -49,7 +49,7 @@ test("hover reveal edge geometry on window resize is coalesced to one run per fr
 });
 test("new resize observers in the notes module are frame-throttled", () => {
   const src = read("additional/notes/ZentralNotes.uc.js");
-  assert.match(src, /const scheduleLayout = \(\) => \{\s*if \(!rafLayout\)/);
+  assert.match(src, /const scheduleLayout = \(force = false\) => \{\s*if \(force === true\) layoutForced = true;\s*if \(!rafLayout\)/);
 });
 test("notes drag / resize: geometry is read once at the start, pointer events only remember a position, one frame paints", () => {
   const src = read("additional/notes/ZentralNotes.uc.js");

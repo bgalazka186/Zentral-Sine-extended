@@ -1,4 +1,5 @@
 "use strict";
+const MB = 1_000_000; // Firefox ProcInfo.memory is bytes; readings are written in MB.
 /* OW-113 (owner audit F3): Boost's "never unload the Big Picture source tab" rule was dead code.
  *
  * `videoSourceTab()` reads `window.Zentral?.Video?.sourceTab || window.__zentralVideoSourceTab`, but no file
@@ -197,7 +198,7 @@ function bootBoost({ tabs = [], sourceTab = null, zentralVideo = null, readings 
   const context = vm.createContext({
     ...win,
     ChromeUtils: {
-      requestProcInfo: () => ({ memory: readings[Math.min(readingIndex++, readings.length - 1)] }),
+      requestProcInfo: () => ({ memory: readings[Math.min(readingIndex++, readings.length - 1)] * MB }),
       forceGC() {}, forceCC() {},
     },
     Cc: win.Cc, Ci: win.Ci, console: win.console,

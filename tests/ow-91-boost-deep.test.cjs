@@ -1,4 +1,5 @@
 "use strict";
+const MB = 1_000_000; // Firefox ProcInfo.memory is bytes; fixtures are written in MB.
 /* OW-91 (plan B4): the deep pass, its policy table, Restore, the panel background modes and the one shortcut.
  *
  * The policy table is the part that matters most, because every "never" in it is a way to lose somebody's page or
@@ -213,7 +214,7 @@ function bootBoost({ prefs = {}, tabs = [], panels = [], sessionUrls = {} } = {}
 
   const context = vm.createContext({
     ...win,
-    ChromeUtils: { requestProcInfo: () => ({ memory: 900 }), forceGC() {}, forceCC() {} },
+    ChromeUtils: { requestProcInfo: () => ({ memory: 900 * MB }), forceGC() {}, forceCC() {} },
     Cc: win.Cc, Ci: win.Ci, console: win.console, Promise, Set, Map, WeakMap, Array, Object, Number, Math, String,
     Symbol, Error, TypeError, Date, JSON, globalThis: win,
   });

@@ -1,4 +1,5 @@
 "use strict";
+const MB = 1_000_000; // Firefox ProcInfo.memory is bytes; fixtures are written in MB.
 /* OW-112 (owner audit F2): `zen.workspace.zentral.boost.keep_pinned = true` actually means
  * "a deep pass MAY UNLOAD pinned/Essential tabs", the exact opposite of its name. This suite checks
  * the CURRENT behaviour first: the new, honestly named pref, the one-time migration of an old
@@ -129,7 +130,7 @@ function boot({ prefs = {}, userSet = [], noPrefHasUserValue = false, failWrites
   win.Zentral = { Panels: { essentialPanels: new Map() } };
   const context = vm.createContext({
     ...win,
-    ChromeUtils: { requestProcInfo: () => ({ memory: 900 }), forceGC() {}, forceCC() {} },
+    ChromeUtils: { requestProcInfo: () => ({ memory: 900 * MB }), forceGC() {}, forceCC() {} },
     Cc: win.Cc, Ci: win.Ci, console: win.console,
     Promise, Set, Map, WeakMap, WeakSet, Array, Object, Number, Math, String, Symbol, Error, TypeError, Date, JSON,
     globalThis: win,

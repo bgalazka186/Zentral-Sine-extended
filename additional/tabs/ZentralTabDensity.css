@@ -981,3 +981,42 @@
   align-items: center !important;
   box-sizing: border-box !important;
 }
+
+/* OW-116: a pending placeholder still owns its two visual children. Zen/Arc's unloaded-tab
+ * appearance rules can gray the favicon and hide/transparentize the native label node while the
+ * row above stays visible; keep BOTH intact for Notes and Agenda rows. These selectors never use
+ * display:none or zero width/height/font-size, so they cannot reproduce the missing-title bug.
+ * The favicon rule is narrowly scoped to our placeholder markers (never a blanket [pending] tab). */
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  zen-folder[bgalazka-notes-folder]
+  tab:is([bgalazka-notes-item], [bgalazka-notes-agenda-item])[pending]
+  > .tab-stack
+  > .tab-content
+  > .tab-icon-stack
+  > .tab-icon-image,
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  zen-folder[bgalazka-notes-folder]
+  tab:is([bgalazka-notes-item], [bgalazka-notes-agenda-item])[pending]
+  > .tab-stack
+  > .tab-content
+  > .tab-label-container
+  > .tab-label {
+  opacity: 1 !important;
+  filter: none !important;
+  visibility: visible !important;
+}
+
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  zen-folder[bgalazka-notes-folder]
+  tab:is([bgalazka-notes-item], [bgalazka-notes-agenda-item])[pending]
+  > .tab-stack
+  > .tab-content
+  > .tab-label-container {
+  opacity: 1 !important;
+  filter: none !important;
+  visibility: visible !important;
+  overflow: visible !important;
+}

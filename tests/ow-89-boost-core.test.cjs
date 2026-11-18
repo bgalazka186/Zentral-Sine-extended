@@ -1,4 +1,5 @@
 "use strict";
+const MB = 1_000_000; // Firefox ProcInfo.memory is bytes; fixtures are written in MB.
 /* OW-89 (plan B2): the Boost core. Three claims, each measurable in Node against the real module source:
  *   1. the RAM reading is the sum of the parent and every child a browser reports, and a build that cannot answer
  *      disables the reading with one warning instead of throwing;
@@ -23,7 +24,7 @@ function test(name, fn) {
 
 /* ---------------- a fake chrome window ---------------- */
 
-function boot({ prefs = {}, procs = [{ memory: 100, children: [{ memory: 50 }, { memory: 25 }] }], readings = null, manager = "ok", media = [] } = {}) {
+function boot({ prefs = {}, procs = [{ memory: 100 * MB, children: [{ memory: 50 * MB }, { memory: 25 * MB }] }], readings = null, manager = "ok", media = [] } = {}) {
   const store = new Map(Object.entries(prefs));
   const timers = new Map();
   let timerId = 0;
@@ -199,7 +200,7 @@ test("a malformed report is refused rather than counted as zero", () => {
 /* ---------------- 2. Level 1 ---------------- */
 
 test("Level 1 asks the reporter manager once, runs GC and CC, and measures after the settle delay", async () => {
-  const h = boot({ procs: [{ memory: 500 }], readings: [{ memory: 500 }, { memory: 300 }] });
+  const h = boot({ procs: [{ memory: 500 * MB }], readings: [{ memory: 500 * MB }, { memory: 300 * MB }] });
   const pending = h.api.runLevel1();
   await Promise.resolve();
   assert.equal(h.calls.minimize, 1, "one minimize call");
@@ -270,7 +271,7 @@ test("sampling runs every 2 s while someone is looking, and stops when they are 
 /* ---------------- 4. the startup trim ---------------- */
 
 test("the trim runs once after 90 quiet seconds, and never twice", () => {
-  const h = boot({ procs: [{ memory: 900 }, { memory: 400 }] });
+  const h = boot({ procs: [{ memory: 900 * MB }, { memory: 400 * MB }] });
   assert.ok(h.pendingDelays().includes(90000), "it waits for a quiet period");
   h.fire(90000);
   assert.equal(h.calls.minimize, 0, "it does not run before the browser is idle");

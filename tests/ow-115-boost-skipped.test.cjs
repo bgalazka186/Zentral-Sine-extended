@@ -1,4 +1,5 @@
 "use strict";
+const MB = 1_000_000; // Firefox ProcInfo.memory is bytes; fixtures are written in MB.
 /* OW-115 (owner audit F5, optional): explain a deep pass that did nothing.
  *
  * `runLevel2` already collects named `skipped` reasons but nothing shows them, and there is no way to
@@ -133,7 +134,7 @@ function bootBoost(tabs) {
   win.Zentral = { Panels: { essentialPanels: new Map() } };
   const context = vm.createContext({
     ...win,
-    ChromeUtils: { requestProcInfo: () => ({ memory: 900 }), forceGC() {}, forceCC() {} },
+    ChromeUtils: { requestProcInfo: () => ({ memory: 900 * MB }), forceGC() {}, forceCC() {} },
     Cc: win.Cc, Ci: win.Ci, console: win.console,
     Promise, Set, Map, WeakMap, WeakSet, Array, Object, Number, Math, String, Symbol, Error, TypeError, Date, JSON,
     globalThis: win,

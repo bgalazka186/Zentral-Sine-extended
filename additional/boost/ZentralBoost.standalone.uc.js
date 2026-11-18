@@ -1539,6 +1539,10 @@ function nativeSidebarSide() {
       };
 
       /* ---------------- B2.1 memory meter ---------------- */
+      // Firefox reports ProcInfo.memory in bytes. The widget's MB/GB switch is decimal
+      // (1000 MB = 1 GB), so one conversion here keeps every reading and `freedMB`
+      // in the unit the rest of Zentral already uses.
+      const PROC_MEMORY_BYTES_PER_MB = 1_000_000;
 
       let probeInfo = null;
       const readProcInfo = () => {
@@ -1550,8 +1554,8 @@ function nativeSidebarSide() {
         }
       };
 
-      // Sum of the parent and every child's `memory`, in MB. Pure enough to test directly: the caller hands in the
-      // object a browser returned, so nothing here talks to Gecko.
+      // Sum of the parent and every child's `memory` (BYTES), converted once to MB. Pure enough to
+      // test directly: the caller hands in the object a browser returned, so nothing here talks to Gecko.
       function memoryMBFrom(info) {
         if (!info || typeof info !== "object") return null;
         let total = 0;
@@ -1565,7 +1569,7 @@ function nativeSidebarSide() {
         add(info);
         const children = Array.isArray(info.children) ? info.children : [];
         for (const child of children) add(child);
-        return seen ? Math.round(total) : null;
+        return seen ? Math.round(total / PROC_MEMORY_BYTES_PER_MB) : null;
       }
 
       let memorySupport = null; // null = not probed yet, false = the build cannot answer

@@ -1,4 +1,5 @@
 "use strict";
+const MB = 1_000_000; // Firefox ProcInfo.memory is bytes; readings are written in MB.
 /* OW-111 (owner audit F1): a tab that backs an Essential-panel record must obey its
  * `backgroundMode` in EVERY pass — Level 2, the RAM limiter and Game Mode.
  *
@@ -146,7 +147,7 @@ function boot({ prefs = {}, tabs = [], panels = [], readings = [900] } = {}) {
   const context = vm.createContext({
     ...win,
     ChromeUtils: {
-      requestProcInfo: () => ({ memory: readings[Math.min(readingIndex++, readings.length - 1)] }),
+      requestProcInfo: () => ({ memory: readings[Math.min(readingIndex++, readings.length - 1)] * MB }),
       forceGC() {}, forceCC() {},
     },
     Cc: win.Cc, Ci: win.Ci, console: win.console,

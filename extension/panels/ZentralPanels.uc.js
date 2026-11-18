@@ -1778,6 +1778,14 @@
       function syncPanelPushState() {
         ensurePillDualViewButton();
         ensurePillHoverRevealButton();
+        // OW-117: resize and mutation bursts call this repeatedly. Write an attribute only when
+        // its value actually changed, so a resize with unchanged push state is a read-only pass.
+        const setAttrIfChanged = (el, name, value) => {
+          if (!el) return;
+          const next = String(value);
+          if (el.getAttribute(name) !== next) el.setAttribute(name, next);
+        };
+        const docRoot = document.documentElement;
         const root = document.getElementById("zen-app-panel-root");
         const pill = document.getElementById("zen-app-panel-pill");
         const pinBtn = pill?.querySelector(".zen-app-btn[data-pinned]");
@@ -1793,24 +1801,21 @@
           : getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, true);
         const dualViewActive = requestedPush && !ctx.floating?.isDetached?.();
         const pushChanged =
-          document.documentElement.getAttribute("bgalazka-push-page") !==
-          String(dualViewActive);
+          docRoot.getAttribute("bgalazka-push-page") !== String(dualViewActive);
         const tripleChanged = lastSyncedTripleMode !== triple;
         lastSyncedTripleMode = triple;
-        document.documentElement.setAttribute(
-          "bgalazka-push-page",
-          String(dualViewActive),
-        );
+        if (pushChanged) docRoot.setAttribute("bgalazka-push-page", String(dualViewActive));
         const pushBtn = document.getElementById("zen-app-dual-view-btn");
         if (pushBtn) {
-          pushBtn.setAttribute("data-active", String(dualViewActive));
-          pushBtn.title = ctx.floating?.isDetached?.()
+          setAttrIfChanged(pushBtn, "data-active", String(dualViewActive));
+          const title = ctx.floating?.isDetached?.()
             ? "Page push is unavailable while detached. Push the panel 15 px into an edge to dock it. Hold: toggle Triple View."
             : triple
               ? "Click: toggle webpage push in Triple View. Hold: exit Triple View."
               : "Click: toggle webpage push. Hold: toggle Triple View.";
-          pushBtn.setAttribute("aria-label", pushBtn.title);
-          pushBtn.setAttribute("aria-pressed", String(dualViewActive));
+          if (pushBtn.title !== title) pushBtn.title = title;
+          setAttrIfChanged(pushBtn, "aria-label", title);
+          setAttrIfChanged(pushBtn, "aria-pressed", String(dualViewActive));
         }
         syncHoverPanelAvailability();
         // Dual and Triple View act as an effective pin without changing the

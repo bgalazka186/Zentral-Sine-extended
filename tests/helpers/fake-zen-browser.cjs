@@ -24,7 +24,7 @@ function loadRuntimeHoverCard(ctx) {
   return vm.runInNewContext("(" + runtimeSource.slice(start, i + 1) + ")", ctx);
 }
 
-function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyFolders = false, calendar = Calendar, hiddenDOMWindow = null, sharedObs = null, workspaceName = "Default", esModules = {}, gZenPinnedTabManager = null, SessionStore = null } = {}) {
+function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyFolders = false, calendar = Calendar, parts = null, discardRewritesVisuals = false, hiddenDOMWindow = null, sharedObs = null, workspaceName = "Default", esModules = {}, gZenPinnedTabManager = null, SessionStore = null } = {}) {
   const dom = require("./fake-dom.cjs")(), { El, Ev, document } = dom;
   document.querySelector = (selector) => document.querySelectorAll(selector)[0] || null;
   document.createXULElement = (tag) => document.createElement(tag);
@@ -88,7 +88,7 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     return event;
   };
   const win = {
-    document, __zentralNotesParts: { "notes-calendar": calendar }, __zentralNotesTestSeam: {},
+    document, __zentralNotesParts: { "notes-calendar": calendar, ...(parts || {}) }, __zentralNotesTestSeam: {},
     ZentralRuntime: { register(value) { definition = value; } },
     ...(gZenPinnedTabManager ? { gZenPinnedTabManager } : {}),
     ...(SessionStore ? { SessionStore } : {}),
@@ -131,7 +131,22 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     // OW-88: an unloaded placeholder keeps its element, label, icon and private URL; Gecko only drops the page. The
     // fake does the same, and records every call so a test can prove placeholders are parked and real tabs are not.
     discarded: [],
-    discardBrowser(tab, animate) { this.discarded.push(tab); tab.setAttribute("pending", "true"); tab.setAttribute("discarded", "true"); emit("TabBrowserDiscarded", tab); return true; },
+    discardBrowser(tab, animate) {
+      this.discarded.push(tab);
+      tab.setAttribute("pending", "true"); tab.setAttribute("discarded", "true");
+      // OW-116: real Zen can rewrite BOTH label roads and drop the favicon when it parks a
+      // placeholder. Opt in from a test; OW-88's inert-placeholder model stays the default.
+      if (discardRewritesVisuals) {
+        tab.setAttribute("label", "[pending]");
+        const labelNode = tab.querySelector?.(".tab-label");
+        if (labelNode) { labelNode.setAttribute("value", "[pending]"); labelNode.textContent = "[pending]"; }
+        tab.removeAttribute("image");
+        const image = tab.querySelector?.(".tab-icon-image");
+        if (image) image.removeAttribute("src");
+      }
+      emit("TabBrowserDiscarded", tab);
+      return true;
+    },
     moveTabToExistingGroup(tab, folder) { folder.addTabs([tab]); emit("TabMove", tab); },
     moveTabBefore(tab, before) { before.parentElement?.insertBefore(tab, before); emit("TabMove", tab); },
   };

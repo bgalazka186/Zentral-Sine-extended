@@ -29873,6 +29873,45 @@ __zentralShim.register = function (def) {
     // ---- Sidebar helpers that touch the browser's DOM (kept outside start() so the fake DOM can test them) ------------------
     // Facts from the real Zen DOM: a zen-folder carries its colour as seven inline --tab-group-* properties, its icon is
     // `.tab-group-folder-icon svg g.icon > image`, a tab's icon is `img.tab-icon-image`, fed by the tab's `image` attribute.
+    // Zen/Firefox can own both roads to a sidebar title: the tab's `label` attribute and the
+    // native `.tab-label` node. A discard/session restore may rewrite either one to `[pending]`,
+    // so Notes always writes/restores both and never relies on a XUL binding seeing our attribute.
+    function setSidebarTabLabel(tab, label) {
+      const next = String(label ?? "");
+      if (!tab) return false;
+      let changed = false;
+      if ((tab.getAttribute?.("label") || "") !== next) {
+        tab.setAttribute?.("label", next);
+        changed = true;
+      }
+      const native = tab.querySelector?.(".tab-label");
+      if (native) {
+        if ((native.getAttribute?.("value") || "") !== next) {
+          native.setAttribute?.("value", next);
+          changed = true;
+        }
+        if ((native.textContent || "") !== next) {
+          try { native.textContent = next; changed = true; } catch (_) {}
+        }
+      }
+      return changed;
+    }
+    // Only browser-side placeholder rewrites are healed from a TabAttrModified event. An ordinary
+    // user rename is intentionally left alone so the next projection can adopt the new title.
+    function isBrowserPendingLabel(value) {
+      const v = String(value ?? "").trim();
+      return !v || v === "[pending]" || /^about:blank(?:[#?]|$)/.test(v) || /^(?:data|moz-extension):/i.test(v);
+    }
+    function needsLabelRepair(tab) {
+      const native = tab?.querySelector?.(".tab-label");
+      return isBrowserPendingLabel(tab?.getAttribute?.("label")) ||
+        (!!native && (isBrowserPendingLabel(native.getAttribute("value")) || isBrowserPendingLabel(native.textContent)));
+    }
+    function restoreSidebarTabLabel(tab, onlyPlaceholder = false) {
+      const wanted = tab?.getAttribute?.("bgalazka-notes-label") || "";
+      if (!wanted || (onlyPlaceholder && !needsLabelRepair(tab))) return false;
+      return setSidebarTabLabel(tab, wanted);
+    }
     function setNotesTabIcon(tab, color, { gBrowser, on = true, warn = () => {} } = {}) {
       const uri = on ? noteFaviconUri(color) : "";
       try {
@@ -30185,7 +30224,7 @@ __zentralShim.register = function (def) {
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS, SHARED_TURN_WAIT_MS, STARTUP_TURN_WAIT_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, DEMO_WHERE_NOTE_ID, DEMO_CALENDAR_NOTE_ID, buildCalendarDemoBody, buildWhereDemoBody, SHOWCASE_NOTE_ID, buildShowcaseNote, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, SPELL_MAX_SUGGESTIONS, wordRangeAtOffset, replaceWordRange, cleanSpellLanguages, toggleSpellLanguage, formatSpellLanguageLabel, collectSpellSuggestions, buildEditorSpellMenuModel, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
-        makeFolderUid, ensureFolderUids, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_STYLE, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, SPACE_MODES, cleanSpaceMode, SPACES_DIR, SPACE_REGISTRY_FILE, SPACE_SHARES_FILE, cleanWorkspaceId, workspaceDirKey, readZenWorkspaces, resolveActiveWorkspaceIdentity, cleanSpaceRegistry, reconcileSpaceRegistry, cleanShareTargets, cleanShareRecord, cleanSpaceShares, mergeSpaceShares, isSharedWithSpace, planSpaceSharesForSpace, resolveSpaceStorageTarget, canShareCalendarItemWithoutNote, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
+        makeFolderUid, ensureFolderUids, setSidebarTabLabel, isBrowserPendingLabel, needsLabelRepair, restoreSidebarTabLabel, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_STYLE, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, SPACE_MODES, cleanSpaceMode, SPACES_DIR, SPACE_REGISTRY_FILE, SPACE_SHARES_FILE, cleanWorkspaceId, workspaceDirKey, readZenWorkspaces, resolveActiveWorkspaceIdentity, cleanSpaceRegistry, reconcileSpaceRegistry, cleanShareTargets, cleanShareRecord, cleanSpaceShares, mergeSpaceShares, isSharedWithSpace, planSpaceSharesForSpace, resolveSpaceStorageTarget, canShareCalendarItemWithoutNote, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, folderPathMatchesNote, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         FOLDER_ZEN_SIDEBAR_VALUES, cleanFolderZenSidebar, resolveFolderZenSidebar, folderZenSidebarMenuAction,
@@ -43598,16 +43637,73 @@ __zentralShim.register = function (def) {
       if (offCalendarHistory) cleanups.push(offCalendarHistory);
 
       // ---- layout ------------------------------------------------------------------
-      function layout() {
+      // OW-117: a window resize, panel push and Triple View gap all dispatch a burst of layout
+      // notifications with the SAME geometry. A pass whose geometry/state fingerprint has not
+      // changed does not rewrite the sheet, the root CSS variables or the dataset. Direct caller
+      // layout() is authoritative; observer-driven rAF passes pass force=false and are dedupable.
+      let lastLayoutKey = "";
+      let layoutForced = false;
+      const layoutProbe = window.__zentralNotesTestSeam?.layout || {
+        passes: 0, writes: 0, styleWrites: 0, datasetWrites: 0, skipped: 0,
+        reset() { this.passes = 0; this.writes = 0; this.styleWrites = 0; this.datasetWrites = 0; this.skipped = 0; },
+      };
+      if (window.__zentralNotesTestSeam) window.__zentralNotesTestSeam.layout = layoutProbe;
+      const layoutStateKey = ({ a, off, left, top, w, hgt, size, key }) => [
+        key, size, mode, view, isOpen, collapsed, foldedByParentPanel, !!gesture?.active,
+        JSON.stringify(gesture && {
+          slot: gesture.slot, kind: gesture.kind, edge: gesture.edge, share: gesture.share,
+          px: gesture.px, up: gesture.up, next: gesture.next, sy: gesture.sy,
+          startPx: gesture.startPx, startUp: gesture.startUp, startDown: gesture.startDown,
+          roomUp: gesture.roomUp, roomDown: gesture.roomDown, base: gesture.base,
+        }),
+        adapter.geoKey || "", adapter.position, !!adapter.cardMode,
+        adapter.slotKind?.(), adapter.placement?.(), store.meta.size, store.meta.cardDock,
+        store.meta.cardW, store.meta.cardH, store.meta.cardHShare, store.meta.shareDock,
+        store.meta.shareGap, store.meta.dockPx, store.meta.gapPx, store.meta.dock,
+        store.meta.hideOverlay, dockMode(), hoverMode(), hidesOverlay(),
+        getPref(PREF.PUSH_PAGE, false), getPref(PREF.PUSH_PANEL_PERCENT, 45),
+        getPref(PREF.WIDE_PERCENT, 200), getPref(PREF.REVEAL_HEIGHT, 10),
+        getPref(PREF.HOVER_REVEAL, false), window.innerWidth, window.innerHeight,
+        document.documentElement.hasAttribute("bgalazka-triple-view") ? 1 : 0,
+        document.documentElement.hasAttribute("bgalazka-quad-view") ? 1 : 0,
+        JSON.stringify(a), JSON.stringify(root.getBoundingClientRect?.() || {}),
+        off.ox, off.oy, left, top, w, hgt,
+      ].join("|");
+      const invalidateLayoutKey = () => { lastLayoutKey = ""; };
+      const setStyleValue = (node, prop, value) => {
+        const next = String(value ?? "");
+        if (node.style[prop] === next) return false;
+        node.style[prop] = next;
+        if (/^[a-z]+(?:-[a-z]+)*$/.test(prop) && typeof node.style.setProperty === "function" && node.style.getPropertyValue?.(prop) !== next)
+          node.style.setProperty(prop, next);
+        layoutProbe.styleWrites += 1;
+        return true;
+      };
+      const setDatasetValue = (node, prop, value) => {
+        if (value == null || value === false) {
+          if (!(prop in node.dataset)) return false;
+          delete node.dataset[prop];
+          layoutProbe.datasetWrites += 1;
+          return true;
+        }
+        const next = String(value);
+        if (node.dataset[prop] === next) return false;
+        node.dataset[prop] = next;
+        layoutProbe.datasetWrites += 1;
+        return true;
+      };
+      function layout(force = true) {
         rafLayout = 0;
-        if (!isOpen || destroyed || root.hidden) return;
+        layoutProbe.passes += 1;
+        if (!isOpen || destroyed || root.hidden) { invalidateLayoutKey(); return; }
         // MutationObserver delivery can lag a layout frame; read the authoritative parent state here too.
         syncParentPanelHidden();
-        if (foldedByParentPanel) return;
+        if (foldedByParentPanel) { invalidateLayoutKey(); return; }
         // Autohide switched off (or the card undocked / enlarged) while folded away: bring it back.
         if (collapsed && !hoverMode()) expand(false);
         if (collapsed) {
           placeReveal();
+          invalidateLayoutKey();
           return;
         }
         // A panel-hosted sheet settles its slot BEFORE the area is measured (the reserve is applied synchronously),
@@ -43617,26 +43713,27 @@ __zentralShim.register = function (def) {
         // (no invisible hit area) until the panel is shortened again.
         if (adapter.suspended?.()) {
           if (gesture) cancelGesture();
-          root.dataset.suspended = "true";
+          setDatasetValue(root, "suspended", "true");
           if (bigPicture) closeCalendarBigPicture({ restoreFocus: false });
           if (dialog?.dataset.calendarLayer === "true") closeDialog();
-          root.style.visibility = "hidden";
-          root.style.pointerEvents = "none";
-          root.dataset.slot = "";
+          setStyleValue(root, "visibility", "hidden");
+          setStyleValue(root, "pointerEvents", "none");
+          setDatasetValue(root, "slot", "");
+          invalidateLayoutKey();
           return;
         }
         if (root.dataset.suspended) {
-          delete root.dataset.suspended;
-          root.style.visibility = "";
-          root.style.pointerEvents = "";
+          setDatasetValue(root, "suspended", null);
+          setStyleValue(root, "visibility", "");
+          setStyleValue(root, "pointerEvents", "");
         }
         // A card being moved or resized is placed by the gesture; a layout pass now would snap it back to the old place.
-        if (gesture && gesture.active && !gesture.slot) return;
+        if (gesture && gesture.active && !gesture.slot) { invalidateLayoutKey(); return; }
         const a = adapter.getArea({ wide: mode === "split", span: store.meta.size === "span", dock: store.meta.cardDock, dockW: store.meta.cardW });
-        if (!a || a.width < 40 || a.height < 40) return;
+        if (!a || a.width < 40 || a.height < 40) { invalidateLayoutKey(); return; }
         const size = a.fill ? "full" : store.meta.size;
         const off = hostOffset();
-        if (!off) return;
+        if (!off) { invalidateLayoutKey(); return; }
         const key = adapter.geoKey || "";
         const b = a.bounds || a;
         const geo = key ? store.meta.geo?.[key] : null;
@@ -43675,19 +43772,26 @@ __zentralShim.register = function (def) {
             hgt = r.h;
           }
         }
-        root.style.left = Math.round(left - off.ox) + "px";
-        root.style.top = Math.round(top - off.oy) + "px";
-        root.style.width = Math.round(w) + "px";
-        root.style.height = Math.round(hgt) + "px";
-        root.dataset.split = w >= 560 ? "side" : "stack";
-        if (adapter.cardMode) {
-          if (a.docked) root.dataset.docked = a.docked;
-          else delete root.dataset.docked;
+        // OW-117: a resize burst whose measured box and relevant state are unchanged skips every
+        // style/dataset write (and the downstream push/pill/fit work) instead of restyling repeatedly.
+        const stateKey = layoutStateKey({ a, off, left, top, w, hgt, size, key });
+        if (!force && !layoutForced && stateKey === lastLayoutKey) {
+          layoutProbe.skipped += 1;
+          return;
         }
+        lastLayoutKey = stateKey;
+        layoutForced = false;
+        layoutProbe.writes += 1;
+        setStyleValue(root, "left", Math.round(left - off.ox) + "px");
+        setStyleValue(root, "top", Math.round(top - off.oy) + "px");
+        setStyleValue(root, "width", Math.round(w) + "px");
+        setStyleValue(root, "height", Math.round(hgt) + "px");
+        setDatasetValue(root, "split", w >= 560 ? "side" : "stack");
+        if (adapter.cardMode) setDatasetValue(root, "docked", a.docked || null);
         taAnchY = null;
         readAnchY = null;
         adapter.setSpill?.(!!a.wideFill || !!a.outside);
-        root.dataset.slot = adapter.slotKind?.() || "";
+        setDatasetValue(root, "slot", adapter.slotKind?.() || "");
         placeReveal();
         applyPush(left, w);
         placePill(left, top, w, hgt);
@@ -43746,9 +43850,8 @@ __zentralShim.register = function (def) {
               ? { strip, px: gdrag.px, up: gdrag.up }
               : { strip, upFrac, savedPx, savedShare, size: store.meta.size, pref: prefPct },
           );
-          root.dataset.slot = adapter.slotKind?.() || "";
-          if (quad) root.dataset.bgalazkaTripleSlot = "notes";
-          else delete root.dataset.bgalazkaTripleSlot;
+          setDatasetValue(root, "slot", adapter.slotKind?.() || "");
+          setDatasetValue(root, "bgalazkaTripleSlot", quad ? "notes" : null);
         }
       }
       // ---- the card's pill: the same controls as a Zentral panel's pill ---------------------------------
@@ -44224,8 +44327,10 @@ __zentralShim.register = function (def) {
           armGrace();
         }
       }
-      const scheduleLayout = () => {
-        if (!rafLayout) rafLayout = window.requestAnimationFrame(layout);
+      // Only an explicit `true` forces a pass; adapter.watch may hand us an event object.
+      const scheduleLayout = (force = false) => {
+        if (force === true) layoutForced = true;
+        if (!rafLayout) rafLayout = window.requestAnimationFrame(() => layout(false));
       };
 
       // ---- top layer (standalone card only) -------------------------------------------------------
@@ -45344,15 +45449,18 @@ __zentralShim.register = function (def) {
         // chrome and its ancestors, and, after any change, a short settle loop that keeps laying out while
         // Zen's own slide animation runs (an animation has no event per frame).
         watch(cb) {
+          // OW-117: the old 450 ms per-frame settle loop ran a whole layout every animation frame
+          // even when the chrome had stopped moving. One coalesced frame answers the burst and ONE
+          // trailing timer answers the end of a native slide animation; no Date.now() loop.
           let frame = 0;
-          let until = 0;
+          let settleTimer = 0;
           const tick = () => {
             frame = 0;
             cb();
-            if (Date.now() < until) frame = window.requestAnimationFrame(tick);
           };
           const kick = () => {
-            until = Date.now() + 450;
+            if (settleTimer) window.clearTimeout(settleTimer);
+            settleTimer = window.setTimeout(() => { settleTimer = 0; cb(); }, 450);
             if (!frame) frame = window.requestAnimationFrame(tick);
           };
           const ro = new ResizeObserver(kick);
@@ -45389,8 +45497,9 @@ __zentralShim.register = function (def) {
             window.removeEventListener("transitionrun", onTrans, true);
             window.removeEventListener("transitionend", onTrans, true);
             if (frame) window.cancelAnimationFrame(frame);
+            if (settleTimer) window.clearTimeout(settleTimer);
             frame = 0;
-            until = 0;
+            settleTimer = 0;
           };
         },
         rewatch() {},
@@ -46546,6 +46655,15 @@ __zentralShim.register = function (def) {
           return "failed";
         } finally {
           // The discard fires TabBrowserDiscarded, a tab event like any other: it must not start a projection repair run.
+          // It CAN rewrite the native label or blank the favicon, though; heal those two visuals in place, even during
+          // the quiet window, without waking the whole projection.
+          try {
+            if (tab.localName === "tab") {
+              restoreSidebarTabLabel(tab);
+              if (tab.hasAttribute?.(AGENDA_ATTR)) agendaEnsureVisuals(tab);
+              else zenSetTabIcon(tab, tab.getAttribute?.("bgalazka-notes-color") || "");
+            }
+          } catch (_) {}
           if (!wasQuiet) zenQuiet(500);
         }
         try { window.__zentralNotesTestSeam?.onPseudoTabParked?.(tab); } catch (_) {}
@@ -46857,6 +46975,11 @@ __zentralShim.register = function (def) {
         const tab = ev.target;
         if (disposed || zenIconBusy || tab?.localName !== "tab" || !notesTabKey(tab)) return;
         const changed = ev.detail?.changed;
+        const labelChanged = !Array.isArray(changed) || changed.includes("label");
+        // OW-116: a discard can rewrite the title during the 500 ms "quiet" window, when a full
+        // projection event is intentionally ignored. Repair ONLY a browser-looking placeholder,
+        // on both label roads, without starting a reconciliation pass.
+        if (labelChanged && restoreSidebarTabLabel(tab, true)) return;
         if (Array.isArray(changed) && !changed.includes("image")) return;
         const id = window.setTimeout(() => { zenIconTimers.delete(id); zenEnsureIcon(tab); }, 0);
         zenIconTimers.add(id);
@@ -46933,7 +47056,7 @@ __zentralShim.register = function (def) {
             if (!zenPlace(tab, parentEl)) { zenRemoveTab(tab); zenMoveBroken = true; warn("Zen folder: could not put a tab into the NOTES folder; experiment stopped"); return false; }
             tab.setAttribute("bgalazka-notes-label", e.label);
             tab.setAttribute("bgalazka-notes-parent", e.parent);
-            tab.setAttribute("label", e.label);
+            setSidebarTabLabel(tab, e.label);
             zenSetTabIcon(tab, e.color || "");
             zenIconRetry(tab);
             return true;
@@ -46966,7 +47089,7 @@ __zentralShim.register = function (def) {
         },
         relabel(key, label) {
           const root = zenRootEl();
-          for (const t of zenByKey(root, key)) { t.setAttribute("bgalazka-notes-label", label); t.setAttribute("label", label); notesHoverCard.updated(t); }
+          for (const t of zenByKey(root, key)) { t.setAttribute("bgalazka-notes-label", label); setSidebarTabLabel(t, label); notesHoverCard.updated(t); }
           const f = zenFolderByKey(root, key);
           if (f) { f.setAttribute("bgalazka-notes-label", label); try { f.label = label; } catch (_) {} }
         },
@@ -47782,6 +47905,9 @@ __zentralShim.register = function (def) {
         if (!el) return;
         const next = String(value ?? "");
         if (el.getAttribute?.(name) !== next) el.setAttribute?.(name, next);
+        // A discarded tab's native XUL label may have been rewritten independently of the
+        // attribute; keep both roads in sync on every Agenda projection/heal pass.
+        if (name === "label") setSidebarTabLabel(el, next);
       };
       const agendaDelAttr = (el, name) => {
         if (el?.hasAttribute?.(name)) el.removeAttribute?.(name);
@@ -47859,7 +47985,9 @@ __zentralShim.register = function (def) {
         const on = zenFaviconsOn();
         const wantUri = agendaFaviconUri(on ? wantColor : "", kind);
         const img = tab.querySelector?.(".tab-icon-image");
-        const needsLabel = (tab.getAttribute("label") || "") !== wantLabel;
+        const nativeLabel = tab.querySelector?.(".tab-label");
+        const needsLabel = (tab.getAttribute("label") || "") !== wantLabel ||
+          (!!nativeLabel && ((nativeLabel.getAttribute?.("value") || "") !== wantLabel || (nativeLabel.textContent || "") !== wantLabel));
         const needsTip = (tab.getAttribute("tooltiptext") || "") !== wantTip || (tab.getAttribute("title") || "") !== wantTip;
         const needsIcon = (tab.getAttribute("image") || "") !== wantUri || (!!img && (img.getAttribute("src") || "") !== wantUri);
         if (!needsLabel && !needsTip && !needsIcon) return false;
@@ -47883,6 +48011,8 @@ __zentralShim.register = function (def) {
         if (disposed || agendaAttrBusy || !agendaEnabled() || tab?.localName !== "tab" || !agendaOwnTab(tab)) return;
         const changed = ev.detail?.changed;
         if (Array.isArray(changed) && !changed.some((k) => k === "label" || k === "image" || k === "tooltiptext" || k === "title" || k === "bgalazka-notes-label" || k === "bgalazka-notes-agenda-kind" || k === "bgalazka-notes-color")) return;
+        // An external `[pending]` rewrite can leave the attribute correct but the native label
+        // node wrong; `agendaEnsureVisuals` now checks both roads and heals either one.
         agendaEnsureVisuals(tab);
       };
       const agendaApi = {
@@ -48508,7 +48638,7 @@ __zentralShim.register = function (def) {
           document.documentElement.removeAttribute("zentral-agenda-ctx");
           document.querySelectorAll?.("[zentral-agenda-folder-own],[zentral-agenda-own]").forEach((item) => item.remove());
         }
-        for (const ty of ["TabOpen", "TabClose", "TabUnpinned", "TabPinned", "TabMove", "SSTabRestored", "FolderGrouped", "FolderUngrouped"]) window[act](ty, onAgendaTabEvent, true);
+        for (const ty of ["TabOpen", "TabClose", "TabUnpinned", "TabPinned", "TabMove", "TabBrowserDiscarded", "SSTabRestored", "FolderGrouped", "FolderUngrouped"]) window[act](ty, onAgendaTabEvent, true);
       }
       onCleanup(() => bindAgenda(false));
       function pseudoEventPath(event) {
@@ -48994,7 +49124,7 @@ __zentralShim.register = function (def) {
         // agendaTabKey validates the live/current SessionStore URL and ignores
         // stale expandos when a reused tab now points to ordinary content.
         const isAgendaTab = !!agendaTabKey(tab);
-        if ((ev.type === "SSTabRestored" || ev.type === "TabOpen") && isAgendaTab && !agendaTabKey(tab).startsWith("seed:")) {
+        if ((ev.type === "SSTabRestored" || ev.type === "TabOpen" || ev.type === "TabBrowserDiscarded") && isAgendaTab && !agendaTabKey(tab).startsWith("seed:")) {
           agendaEnsureVisuals(tab);
           agendaIconRetry(tab);
         }
@@ -49355,9 +49485,11 @@ __zentralShim.register = function (def) {
         try {
           const noteKey = notesTabKey(tab);
           if (!noteKey) return;
-          const label = tab.getAttribute("bgalazka-notes-label");
-          if (label && tab.getAttribute("label") !== label) tab.setAttribute("label", label);
+          // Both the native label road and the XUL node may have been rewritten by the discard.
+          restoreSidebarTabLabel(tab);
+          const isAgenda = tab.hasAttribute?.("bgalazka-notes-agenda-item");
           if (/^n:/.test(noteKey)) { zenSetTabIcon(tab, tab.getAttribute("bgalazka-notes-color") || ""); zenIconRetry(tab); }
+          else if (isAgenda) agendaEnsureVisuals(tab);
           if (!tab._zentralNotesUrl) tab._zentralNotesUrl = noteKey.startsWith("n:")
             ? ZEN_URL_PREFIX + "note:" + encodeURIComponent(noteKey.slice(2))
             : ZEN_URL_PREFIX + "new:" + encodeURIComponent(noteKey === "root" ? "" : noteKey.slice(4));
@@ -49366,6 +49498,8 @@ __zentralShim.register = function (def) {
       const onZenTabEvent = (ev) => {
         if (ev.type === "TabClose") notesHoverCard.removed(ev.target);
         if (disposed || zen.dead || zenMode() === "off" || zenEventsIgnored()) return;
+        // TabAttrModified is handled by onZenAttr: a browser-side `[pending]` rewrite only heals the
+        // two label roads in place and never starts an expensive projection reconciliation.
         const tab = ev.target;
         if (!tab || tab.localName !== "tab") return;
         const marked = !!notesTabKey(tab);

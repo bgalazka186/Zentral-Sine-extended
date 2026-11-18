@@ -1,4 +1,5 @@
 "use strict";
+const MB = 1_000_000; // Firefox ProcInfo.memory is bytes; fixtures are written in MB.
 /* OW-94 (plan B7.2/B7.3): Game Mode, run for real against a fake browser.
  *
  * The source checks in `ow-94-game-mode.test.cjs` prove the rules exist; this one proves they act. It boots the module
@@ -123,7 +124,7 @@ function boot({ prefs = {} } = {}) {
 
   const context = vm.createContext({
     ...win,
-    ChromeUtils: { requestProcInfo: () => ({ memory: 900 }), forceGC() {}, forceCC() {} },
+    ChromeUtils: { requestProcInfo: () => ({ memory: 900 * MB }), forceGC() {}, forceCC() {} },
     Cc: win.Cc, Ci: win.Ci, console: win.console,
     Promise, Set, Map, WeakMap, WeakSet, Array, Object, Number, Math, String, Symbol, Error, TypeError, Date, JSON,
     globalThis: win,

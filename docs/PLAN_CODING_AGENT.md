@@ -57,7 +57,7 @@ OWNER GATE: after merging, the owner checks (1) opening a note and an agenda ite
 
 Create a new small feature module `additional/boost/` (id `boost`). Copy the structure of `additional/tabs/unloading/` (files: `ZentralBoost.uc.js`, `settings.json`, `preferences.json`, `theme.json`, `standalone.json`, `README.md`; and its entry in `loader/ZentralCatalog.js`, next to `tab-unload`). Follow the lifecycle contract: everything torn down on destroy.
 
-B2.1 Memory meter (`boost.memory`): total browser RAM in MB = sum of `memory` over the parent and all `children` returned by `ChromeUtils.requestProcInfo()`. Sample ONLY on demand (the button popup is open: every 2 s; the RAM limiter is on: see B5). No other sampling. If `requestProcInfo` throws or is missing, the feature disables itself with one console warning.
+B2.1 Memory meter (`boost.memory`): total browser RAM in MB = sum of `memory` over the parent and all `children` returned by `ChromeUtils.requestProcInfo()`, divided by `1,000,000` because Firefox reports those `memory` values in **bytes** (the widget's GB switch is decimal). Sample ONLY on demand (the button popup is open: every 2 s; the RAM limiter is on: see B5). No other sampling. If `requestProcInfo` throws or is missing, the feature disables itself with one console warning.
 
 B2.2 Level 1 "Light": call `Cc["@mozilla.org/memory-reporter-manager;1"].getService(Ci.nsIMemoryReporterManager).minimizeMemoryUsage(callback)` (wrap the function in an object with `run()` if the call rejects a bare function), then `Cu.forceGC()` and `Cu.forceCC()` each in `try/catch`. Do not close, unload or reload anything. Return `{beforeMB, afterMB, freedMB}` measured with B2.1 about 3 s after the callback.
 

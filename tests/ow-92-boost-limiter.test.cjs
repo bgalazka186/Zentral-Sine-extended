@@ -1,4 +1,5 @@
 "use strict";
+const MB = 1_000_000; // Firefox ProcInfo.memory is bytes; readings are written in MB.
 /* OW-92 (plan B5): the RAM limiter.
  *
  * The limiter is the one part of Boost that acts on its own, so its state machine is proven on its own first: the pure
@@ -82,7 +83,7 @@ function boot({ prefs = {}, readings = [900], tabs = [] } = {}) {
   const context = vm.createContext({
     ...win,
     ChromeUtils: {
-      requestProcInfo: () => ({ memory: readings[Math.min(readingIndex++, readings.length - 1)] }),
+      requestProcInfo: () => ({ memory: readings[Math.min(readingIndex++, readings.length - 1)] * MB }),
       forceGC() {},
       forceCC() {},
     },

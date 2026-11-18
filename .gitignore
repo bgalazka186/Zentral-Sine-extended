@@ -26,6 +26,7 @@ docs/*
 !docs/perf-results.md
 !docs/ow-114-pending-css-audit.md
 !docs/st7-4-agenda-rows-research.md
+!docs/bugfix-2026-11-18.md
 patches/
 zentral/upstream/
 

@@ -6,8 +6,10 @@ reloading anything. Part of the owner's RAM plan (`docs/PLAN_CODING_AGENT.md`, t
 ## What it does (B2, `OW-89`)
 
 - **The reading** (`memoryMB()`): the sum of `memory` over the parent process and every child returned by
-  `ChromeUtils.requestProcInfo()`, rounded to MB. Sampled **only on demand** — while the Boost popup is open (every
-  2 s) or while the RAM limiter wants readings. No other sampling, and no `setInterval` anywhere in this file.
+  `ChromeUtils.requestProcInfo()`. Firefox reports those values in **bytes**; Boost divides the sum once by
+  `1,000,000` and rounds it to decimal MB before the widget formats GB. Sampled **only on demand** — while the Boost
+  popup is open (every 2 s) or while the RAM limiter wants readings. No other sampling, and no `setInterval`
+  anywhere in this file.
 - **Free memory, light** (`runLevel1()`): `minimizeMemoryUsage()` on the memory reporter manager, then `forceGC()` and
   `forceCC()`, each in its own `try/catch` so a build that refuses one step still frees the rest. Returns
   `{ beforeMB, afterMB, freedMB, by }`, with the "after" reading taken ~3 s later because Gecko frees on its own

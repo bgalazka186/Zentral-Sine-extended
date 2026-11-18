@@ -1,4 +1,5 @@
 "use strict";
+const MB = 1_000_000; // Firefox ProcInfo.memory is bytes; fixtures are written in MB.
 /* OW-110: Boost bug pass & Game Mode RAM regression tests.
  *
  * Covers the owner-reported regression (turning Game Mode on caused every Zentral app in `essentialPanels` to be
@@ -189,7 +190,7 @@ function bootBoost({ prefs = {}, tabs = [], essentialRecords = [], loadedPanelBr
   const context = vm.createContext({
     ...win,
     ChromeUtils: {
-      requestProcInfo: procInfo || (() => ({ memory: 900 })),
+      requestProcInfo: procInfo || (() => ({ memory: 900 * MB })),
       forceGC() {},
       forceCC() {},
     },
@@ -337,7 +338,7 @@ test("destroy() resolves pending runLevel1() and runLevel2() settle promises ins
 
 test("async ChromeUtils.requestProcInfo() Promise populates readings instead of disabling the meter", async () => {
   const h = bootBoost({
-    procInfo: () => Promise.resolve({ memory: 640, children: [{ memory: 160 }] }),
+    procInfo: () => Promise.resolve({ memory: 640 * MB, children: [{ memory: 160 * MB }] }),
   });
   await new Promise((r) => setTimeout(r, 0));
   assert.equal(h.api.state().memorySupport, true, "Promise-based requestProcInfo is supported");
@@ -421,7 +422,7 @@ test("runLevel2 preserves lastSampleMB when afterMB is null and startup trim det
     procInfo: () => {
       calls += 1;
       // 1=probe (reused by trim runLevel1 before), 2=trim runLevel1 after, 3=runLevel2 before, 4=runLevel2 after -> null
-      return calls <= 3 ? { memory: 600 } : null;
+      return calls <= 3 ? { memory: 600 * MB } : null;
     },
   });
   assert.equal(h.listeners.get("keydown")?.size || 0, 2, "startup trim + shortcut keydown listeners attached initially");
@@ -453,7 +454,7 @@ test("limiterRunHard stops immediately if limiter is disabled mid-run", async ()
       "zen.workspace.zentral.boost.limit_target_pct": 80,
     },
     tabs,
-    procInfo: () => ({ memory: 900 }),
+    procInfo: () => ({ memory: 900 * MB }),
   });
   h.win.gBrowser.selectedTab = null;
   const events = [];
