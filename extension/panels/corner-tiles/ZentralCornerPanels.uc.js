@@ -560,9 +560,15 @@
         if (ctx.getActiveAppBrowser() !== browser) browser.style.display = "none";
         // This opt-in preload is meant to receive site notifications even
         // before the Essential tab itself is selected or restored.
+        //
+        // OW-93 (plan B6): not for a `throttled` record. A panel the person marked throttled gets its activity from
+        // `syncAppPanelBrowserActivity`, which keeps it inactive while it is hidden — activating it here would undo
+        // that on every preload and put the page back to burning a third of a core in the background.
         try {
-          browser.docShellIsActive = true;
-          if (browser.isRemoteBrowser) browser.renderLayers = false;
+          if (record.backgroundMode !== "throttled") {
+            browser.docShellIsActive = true;
+            if (browser.isRemoteBrowser) browser.renderLayers = false;
+          }
         } catch (_) {}
         const uri = Services.io.newURI(record.app.url);
         browser.fixupAndLoadURIString(record.app.url, {

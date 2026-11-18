@@ -1754,7 +1754,13 @@
             // a reparented browser. This protection does not require painting.
             browser.zenModeActive = visible || notifications;
           }
-          const active = visible || notifications;
+          // OW-93 (plan B6): a record whose background mode is `throttled` keeps its document ACTIVE only while it is
+          // visible. Hidden, it goes inactive and stops painting, so Gecko throttles its timers and animations (that is
+          // the 35 % of a core a non-notification page can burn while invisible) while the browser stays loaded — its
+          // sockets, title events and badge callbacks keep working. `live` records are exactly as they were, and
+          // `asleep-allowed` is about unloading, not about activity, so it takes the same path as `live` here.
+          const throttled = essential?.backgroundMode === "throttled";
+          const active = throttled ? visible : visible || notifications;
           if (browser.docShellIsActive !== active)
             browser.docShellIsActive = active;
           // docShellIsActive=true also enables layers. Turn them back off for
@@ -2740,6 +2746,9 @@
           if (!record) return;
           record.backgroundMode = mode;
           ctx.saveEssentialSettings(record);
+          // OW-93: the switch applies now, not on the next panel open. A record that just became `throttled` goes
+          // inactive on the spot if it is hidden; one that went back to `live` is reactivated by the same pass.
+          ctx.syncAppPanelBrowserActivity?.();
           for (const [value, el] of items) {
             if (value === mode) el.setAttribute("checked", "true");
             else el.removeAttribute("checked");
