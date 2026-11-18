@@ -129,7 +129,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 |   131 | `OW-105`    | `DONE`    | High                | S      | —                 | Widgets: explicit colour values forced in settings must be applied to every widget card and its controls |
 |   132 | `OW-106`    | `DONE`    | High                | S      | —                 | Notes / Calendar: opening the feature defaults to the All notes screen, not the last note opened |
 |   133 | `OW-107`    | `DONE`    | High                | S-M    | —                 | Weather: audit what location data leaves the browser, where it is sent, and what permissions/consent are involved; document the actual behaviour and close any unnecessary exposure |
-|   135 | `OW-109`    | `OPEN`    | High                | M      | —                 | Weather widget: add a saved default view and a user-controlled view switch; in Week view preserve the weather description and show compact day-of-month labels (18., 19., 20., …) |
 |   136 | `OW-110`    | `OPEN`    | High                | L      | —                 | Boost: audit and fix all feature bugs, especially Game Mode unexpectedly loading every Zentral app instead of reducing memory use |
 
 ---
@@ -794,20 +793,6 @@ asserting no rendered text matches `/^[a-z][A-Za-z0-9]*(\.[A-Za-z0-9_]+)+$/`. Ve
 
 **Tests / done when:** A code-backed security report states exactly what data is sent, to whom and when; tests prevent silent geolocation or unintended extra disclosure.
 
-#### `OW-109` — Weather widget views and Week labels
-
-**Problem:** The Weather widget needs a saved default view and a clear way for the user to change what is displayed. In Week view, Today/Tomorrow labels currently replace the weather description (for example, “słabe opady deszczu”), and compact dates are missing.
-
-**Plan (in this order):**
-
-1. Inspect the existing Today / Tomorrow / Week view model and preference schema; make the default view a validated saved preference.
-2. Keep the actual weather description visible in Week view for every day, including today and tomorrow.
-3. Add a small day-of-month label for each day (18., 19., 20., …), using the widget's locale-aware formatting conventions.
-4. Let users switch views directly in the widget and persist the selection independently from the configured default.
-5. Add tests for the default, manual view changes, persistence, Polish/English labels, Today/Tomorrow descriptions and month boundaries.
-
-**Tests / done when:** The widget opens on the selected default, the user can switch views, each Week day shows both its date and actual description, and the current weather data is unchanged.
-
 #### `OW-110` — Audit and repair Boost, including Game Mode
 
 **Problem:** Activating Game Mode unexpectedly loads every Zentral app, which defeats its purpose as a RAM-saving feature. The owner also requests a full bug pass over Boost, not just this single symptom.
@@ -888,8 +873,8 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 State: **3.4.0 on beta**. The existing roadmap through `OW-104` remains complete as recorded above. The new owner requests `OW-105`–`OW-110` are OPEN and ordered from the smallest changes to the larger Boost audit.
 
-Completed this session: OW-105 widget colour overrides are fixed and regression-tested; OW-106 makes real Notes/Calendar pseudo-tabs open on All notes while preserving explicit note navigation; OW-107 documents the Weather data flow, removes lookup while Weather is off, and guards late geocoding responses; OW-108 restores Calendar weather (reads `entry.value` from `scheduler.getCached`, normalizes `timeformat=unixtime` dates via `weatherDateKey`, fixes `C.zonedDateKey` -> `CALENDAR_PART.zonedDateKey` ReferenceError, maps icon glyphs, fixes stale-cache `updatedAt` and failed-fetch retention, and wires `calendar_weather_month` into Month view). OW-109–OW-110 remain open.
+Completed this session: OW-105 widget colour overrides are fixed and regression-tested; OW-106 makes real Notes/Calendar pseudo-tabs open on All notes while preserving explicit note navigation; OW-107 documents the Weather data flow, removes lookup while Weather is off, and guards late geocoding responses; OW-108 restores Calendar weather; OW-109 adds `weather.default_view`, direct Today/Tomorrow/Week buttons persisted via `weather.view` independently from the default, compact day-of-month labels (`18.`, `19.`, ...), actual weather descriptions for all Week rows including Today/Tomorrow, and live EN/PL localization. OW-110 remains open.
 
 Known debts: no live Zen/Sine runtime is available in this session; repository tests and CI must be used where possible, and live-only claims must not be presented as verified.
 
-Next action: complete OW-109 (Weather default/current views and Week labels), then OW-110 (full Boost audit and Game Mode RAM behaviour). Commit and push each completed change separately. Do not bump any version above 3.4.0.
+Next action: complete OW-110 (full Boost audit and Game Mode RAM behaviour), then continue eligible smaller open items (`T4.3a`..`T4.3c`, `ST7.4`). Commit and push each completed change separately. Do not bump any version above 3.4.0.

@@ -1186,6 +1186,8 @@ function nativeSidebarSide() {
     WEATHER_UNITS: "zen.workspace.zentral.widgets.weather.units",
     WEATHER_REFRESH_MINUTES: "zen.workspace.zentral.widgets.weather.refresh_minutes",
     WEATHER_PLACES: "zen.workspace.zentral.widgets.weather.places",
+    WEATHER_DEFAULT_VIEW: "zen.workspace.zentral.widgets.weather.default_view",
+    WEATHER_VIEW: "zen.workspace.zentral.widgets.weather.view",
     TIMER_ENABLED: "zen.workspace.zentral.widgets.timer.enabled",
     // Retired by OW-90 with the card it belonged to; read once so an owner's choice survives the swap.
     LEGACY_STATUS_ENABLED: "zen.workspace.zentral.widgets.status.enabled",
@@ -1229,6 +1231,8 @@ function nativeSidebarSide() {
     WEATHER_LONGITUDE: "",
     WEATHER_UNITS: "auto",
     WEATHER_REFRESH_MINUTES: 30,
+    WEATHER_DEFAULT_VIEW: "today",
+    WEATHER_VIEW: "",
     TIMER_ENABLED: true,
     TIMER_CLICK_STOPWATCH: true,
     CLOCK_QUICK_NOTE: true,
@@ -1312,6 +1316,13 @@ function nativeSidebarSide() {
       "timer.stopTitle": "Stop the countdown",
       "timer.stopStopwatchTitle": "Stop the stopwatch",
       "timer.startStopwatchTitle": "Start the stopwatch",
+      "weather.view.today": "Today",
+      "weather.view.tomorrow": "Tomorrow",
+      "weather.view.week": "Week",
+      "weather.viewsLabel": "Weather views",
+      "weather.weekTitle": "This week",
+      "weather.tomorrowUnavailable": "Tomorrow's forecast is not in this reading",
+      "weather.cardAria": "{place}showing {view}. Click for the next view{placesHint}, hold to go back to default",
     }),
     pl: Object.freeze({
       "clock.title": "Zegar",
@@ -1370,6 +1381,13 @@ function nativeSidebarSide() {
       "timer.stopTitle": "Zatrzymaj odliczanie",
       "timer.stopStopwatchTitle": "Zatrzymaj stoper",
       "timer.startStopwatchTitle": "Uruchom stoper",
+      "weather.view.today": "Dzi\u015b",
+      "weather.view.tomorrow": "Jutro",
+      "weather.view.week": "Tydzie\u0144",
+      "weather.viewsLabel": "Widoki pogody",
+      "weather.weekTitle": "Ten tydzie\u0144",
+      "weather.tomorrowUnavailable": "Prognoza na jutro nie jest dost\u0119pna w tym odczycie",
+      "weather.cardAria": "{place}widok: {view}. Kliknij, aby prze\u0142\u0105czy\u0107 widok{placesHint}, przytrzymaj, aby wr\u00f3ci\u0107 do domy\u015blnego",
     }),
   });
   // What the widgets are really set to right now. `notesRaw` is the Notes language as read from its pref; the caller
@@ -3513,13 +3531,37 @@ function nativeSidebarSide() {
     return null;
   }
 
-  // OW-95: the weather card has three VIEWS, in a fixed order, and a click walks them. "Today", "Tomorrow" and "Week"
-  // are not three different readings — one request already carries the whole week — so a view is a lens on the same
-  // cached value: switching never fetches, and the numbers a person compares are always from the same instant.
+  // OW-95 / OW-109: the weather card has three VIEWS, in a fixed order, and a user-controlled view switch + saved default.
+  // "Today", "Tomorrow" and "Week" are not three different readings — one request already carries the whole week —
+  // so a view is a lens on the same cached value: switching never fetches, and the numbers compared are from the same instant.
   const WEATHER_VIEWS = Object.freeze(["today", "tomorrow", "week"]);
-  const cleanWeatherView = (raw) => (WEATHER_VIEWS.includes(raw) ? raw : "today");
-  // A click moves to the next view and wraps. `hold` (a long press, or Escape) goes back to the first view, which is
-  // "today" — the card's main face, the one a glance should always be able to reach.
+  const cleanWeatherView = (raw) => {
+    const value = String(raw ?? "").trim().toLowerCase();
+    return WEATHER_VIEWS.includes(value) ? value : "today";
+  };
+  function resolveWeatherView(savedView, defaultView) {
+    const saved = String(savedView ?? "").trim().toLowerCase();
+    if (WEATHER_VIEWS.includes(saved)) return saved;
+    const fallback = String(defaultView ?? "").trim().toLowerCase();
+    return WEATHER_VIEWS.includes(fallback) ? fallback : "today";
+  }
+  function weatherDayNumberLabel(rawDate, opts = {}) {
+    const key = weatherDateKey(rawDate, opts.timeZone);
+    if (!key) return "";
+    const y = Number(key.slice(0, 4));
+    const m = Number(key.slice(5, 7));
+    const d = Number(key.slice(8, 10));
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d) || d < 1 || d > 31) return "";
+    const locale = opts.locale || (String(opts.lang || "").toLowerCase().startsWith("pl") ? "pl" : "en");
+    let dayNum = "";
+    try {
+      dayNum = getClockDateTimeFormat(locale, { timeZone: "UTC", day: "numeric" }).format(new Date(Date.UTC(y, m - 1, d)));
+    } catch (_) {
+      dayNum = String(d);
+    }
+    return dayNum ? dayNum + "." : "";
+  }
+  // A click moves to the next view and wraps. `hold` (a long press, or Escape) goes back to the configured default view.
   function nextWeatherView(current) {
     const at = WEATHER_VIEWS.indexOf(cleanWeatherView(current));
     return WEATHER_VIEWS[(at + 1) % WEATHER_VIEWS.length];
@@ -3528,6 +3570,9 @@ function nativeSidebarSide() {
   // here is testable without a sidebar, a place or a network.
   function weatherViewParts(value, view, opts = {}) {
     const days = Array.isArray(value?.week) ? value.week : [];
+    const lang = opts.lang ? (String(opts.lang).toLowerCase().startsWith("pl") ? "pl" : "en") : null;
+    const uiLang = lang || "en";
+    const timeZone = opts.timeZone || value?.timezone || "";
     // The reading's own units always win over the caller's: a cached metric value labelled °F is a lie, and the caller
     // (the card, a test) cannot know better than the value itself. `opts.units` is only the fallback for a hand-made
     // value that carries none.
@@ -3535,43 +3580,59 @@ function nativeSidebarSide() {
     const labels = weatherUnitLabels(units, value?.countryCode || opts.countryCode);
     const temp = (n) => (n == null || !Number.isFinite(Number(n)) ? "" : Math.round(Number(n)) + labels.temperature);
     const range = (day) => (day && (day.high != null || day.low != null) ? temp(day.high) + " / " + temp(day.low) : "");
+    const resolveLabel = (entry) => {
+      if (lang && entry?.code != null) return weatherCodeInfo(entry.code, lang).label;
+      if (entry?.label) return String(entry.label);
+      if (entry?.code != null) return weatherCodeInfo(entry.code, uiLang).label;
+      return "";
+    };
     const icon = cleanWeatherView(view);
     if (icon === "tomorrow") {
       const day = days[1] || null;
-      if (!day) return { view: icon, empty: true, text: "Tomorrow's forecast is not in this reading" };
+      if (!day) return { view: icon, empty: true, text: widgetText(uiLang, "weather.tomorrowUnavailable") };
+      const label = resolveLabel(day);
+      const tomorrowWord = widgetText(uiLang, "weather.view.tomorrow");
       return {
         view: icon,
         icon: day.icon,
-        label: day.label,
+        label,
         range: range(day),
         temperature: temp(day.high),
-        text: "Tomorrow " + (day.label || "") + " " + range(day),
+        text: [tomorrowWord, label, range(day)].filter(Boolean).join(" "),
       };
     }
     if (icon === "week") {
-      // The week view is a list, not a sentence: one line per day, which is what a narrow card can actually read.
-      const lines = days.map((day, index) => ({
-        index,
-        icon: day.icon,
-        // `day` is what the row is called: today and tomorrow are named for when they are, everything after that for
-        // what the sky does — a week list where every row says "Rain" cannot be told apart.
-        day: index === 0 ? "Today" : index === 1 ? "Tomorrow" : day.label || "",
-        // The weather word is kept for the tooltip; a row has no space for both, and the glyph already says the word.
-        label: day.label || "",
-        high: temp(day.high),
-        low: temp(day.low),
-        text: (index === 0 ? "Today" : index === 1 ? "Tomorrow" : day.label || "") + " " + range(day),
-      }));
+      const todayWord = widgetText(uiLang, "weather.view.today");
+      const tomorrowWord = widgetText(uiLang, "weather.view.tomorrow");
+      // OW-109: Week view keeps the actual weather description visible for every day (including today and tomorrow)
+      // alongside a compact day-of-month label (18., 19., 20., ...).
+      const lines = days.map((day, index) => {
+        const label = resolveLabel(day);
+        const dateLabel = weatherDayNumberLabel(day?.date, { timeZone, lang: uiLang, locale: opts.locale });
+        const when = index === 0 ? todayWord : index === 1 ? tomorrowWord : "";
+        return {
+          index,
+          icon: day.icon,
+          dateLabel,
+          when,
+          day: label,
+          label,
+          high: temp(day.high),
+          low: temp(day.low),
+          text: [dateLabel, label, range(day)].filter(Boolean).join(" "),
+        };
+      });
       return { view: icon, lines, empty: !lines.length, text: lines.map((l) => l.text).join(" \u00b7 ") };
     }
     // Today: the reading the card is named for.
+    const todayLabel = resolveLabel(value);
     return {
       view: "today",
       icon: value?.icon,
-      label: value?.label,
+      label: todayLabel,
       range: value?.high != null || value?.low != null ? temp(value.high) + " / " + temp(value.low) : "",
       temperature: temp(value?.temperature),
-      text: [value?.label, temp(value?.temperature)].filter(Boolean).join(" "),
+      text: [todayLabel, temp(value?.temperature)].filter(Boolean).join(" "),
     };
   }
 
@@ -3781,9 +3842,11 @@ function nativeSidebarSide() {
     isWetDay,
     nextWetDay,
     weatherOutlookParts,
-    // OW-95: the three views and the two gestures, exported so the rules are testable without a card.
+    // OW-95 / OW-109: the three views and the two gestures, exported so the rules are testable without a card.
     WEATHER_VIEWS,
     cleanWeatherView,
+    resolveWeatherView,
+    weatherDayNumberLabel,
     nextWeatherView,
     weatherViewParts,
     weatherUnitLabels,
@@ -4729,9 +4792,26 @@ function nativeSidebarSide() {
         };
       }
 
-      // OW-57/OW-95: which place and which view are showing. Per-window state like the timer's: what a person glanced
-      // at is not a setting, and two windows may look at two places. A missing id means "the list decides" (first).
-      const weatherView = { placeId: "", view: "today", mounted: false };
+      // OW-57/OW-95/OW-109: active place + view state. The view initializes from the persisted user selection
+      // (`weather.view`) when valid, falling back to the configured `weather.default_view` (validated, default "today").
+      const readDefaultWeatherView = () =>
+        cleanWeatherView(getString(WIDGET_PREFS.WEATHER_DEFAULT_VIEW, DEFAULTS.WEATHER_DEFAULT_VIEW));
+      const readInitialWeatherView = () =>
+        resolveWeatherView(getString(WIDGET_PREFS.WEATHER_VIEW, DEFAULTS.WEATHER_VIEW), readDefaultWeatherView());
+      const weatherView = { placeId: "", view: readInitialWeatherView(), mounted: false };
+      let weatherRepaintHook = null;
+
+      for (const pref of [
+        WIDGET_PREFS.WEATHER_DEFAULT_VIEW,
+        WIDGET_PREFS.WEATHER_VIEW,
+        WIDGET_PREFS.LANGUAGE,
+        NOTES_LANGUAGE_PREF,
+      ]) {
+        watchPref(pref, () => {
+          weatherView.view = readInitialWeatherView();
+          try { weatherRepaintHook?.(); } catch (_) {}
+        });
+      }
 
       // The saved places. The JSON pref is the truth once it exists; a build that only ever had the three single
       // prefs reads them as one place, and the first read writes that place into the JSON pref so nothing is lost.
@@ -5448,6 +5528,7 @@ function nativeSidebarSide() {
           return weatherCacheKeyFor("weather", opts.place_);
         },
         create({ document: doc, requestRefresh }) {
+          weatherView.view = readInitialWeatherView();
           const wrap = doc.createElement("div");
           wrap.className = "zw-weather";
 
@@ -5473,6 +5554,14 @@ function nativeSidebarSide() {
           metaEl.appendChild(rangeEl);
           metaEl.appendChild(detailsEl);
 
+          // OW-109: direct user-controlled view switch (Today / Tomorrow / Week) independent from the default setting.
+          const viewsEl = doc.createElement("div");
+          viewsEl.className = "zw-weather-views";
+          viewsEl.setAttribute("role", "group");
+          viewsEl.setAttribute("aria-label", tw("weather.viewsLabel"));
+          viewsEl.hidden = true;
+          const viewButtons = new Map();
+
           const placeEl = doc.createElement("div");
           placeEl.className = "zw-card-meta zw-weather-place";
 
@@ -5492,6 +5581,7 @@ function nativeSidebarSide() {
           wrap.appendChild(main);
           wrap.appendChild(metaEl);
           wrap.appendChild(outlookEl);
+          wrap.appendChild(viewsEl);
           wrap.appendChild(placeEl);
 
           const areaWidth = () => {
@@ -5517,8 +5607,7 @@ function nativeSidebarSide() {
               row.className = "zw-weather-outlook-line";
               if (line && typeof line === "object") {
                 row.classList.add("zw-weather-outlook-week-line");
-                // A week row: glyph, day name, high/low. Each part its own span so the glyph can be sized on its own
-                // and a narrow card can drop the low without dropping the row.
+                // A week row: glyph, compact date + actual weather description, high/low.
                 if (line.icon) {
                   const glyph = doc.createElement("span");
                   glyph.className = "zw-weather-outlook-icon";
@@ -5527,13 +5616,22 @@ function nativeSidebarSide() {
                 }
                 const name = doc.createElement("span");
                 name.className = "zw-weather-outlook-day";
-                name.textContent = line.day || line.label || "";
+                if (line.dateLabel) {
+                  const dateSpan = doc.createElement("span");
+                  dateSpan.className = "zw-weather-outlook-date";
+                  dateSpan.textContent = line.dateLabel;
+                  name.appendChild(dateSpan);
+                }
+                const descSpan = doc.createElement("span");
+                descSpan.className = "zw-weather-outlook-desc";
+                descSpan.textContent = line.label || line.day || "";
+                name.appendChild(descSpan);
                 row.appendChild(name);
                 const temps = doc.createElement("span");
                 temps.className = "zw-weather-outlook-temps";
                 temps.textContent = [line.high, line.low].filter(Boolean).join(" / ");
                 row.appendChild(temps);
-                row.title = line.text || "";
+                row.title = [line.when, line.text].filter(Boolean).join(" \u2014 ");
               } else {
                 row.textContent = String(line);
               }
@@ -5549,10 +5647,22 @@ function nativeSidebarSide() {
           // The card's own click is not the outlook's business any more; OW-57 owns a click on the card (place cycling).
           outlookEl.addEventListener("click", (e) => e.stopPropagation());
 
+          const syncViewButtons = (activeView, hasValue) => {
+            viewsEl.hidden = !hasValue;
+            viewsEl.setAttribute("aria-label", tw("weather.viewsLabel"));
+            for (const [viewId, btn] of viewButtons.entries()) {
+              const active = viewId === activeView;
+              btn.textContent = tw("weather.view." + viewId);
+              btn.setAttribute("aria-pressed", active ? "true" : "false");
+              btn.classList.toggle("is-active", active);
+            }
+          };
+
           const paint = (value, info = {}) => {
             lastPainted = value;
             lastPaintInfo = info || {};
             const opts = readWeatherOpts();
+            const lang = widgetLang();
             placeEl.textContent = opts.place || "Set a place in Settings";
             // A control only when a click can do something: one place is a label, not a button.
             const readyPlaces = opts.places.filter(weatherPlaceReady);
@@ -5562,12 +5672,16 @@ function nativeSidebarSide() {
             wrap.setAttribute("role", "button");
             wrap.setAttribute("tabindex", "0");
             wrap.setAttribute("aria-roledescription", "weather card");
-            const viewName = { today: "today", tomorrow: "tomorrow", week: "this week" }[cleanWeatherView(weatherView.view)];
-            wrap.setAttribute("aria-label",
-              `${opts.place || ""}: showing ${viewName}. Click for the next view` +
-              (readyPlaces.length > 1 ? `, Ctrl+click or middle click for the next place (${readyPlaces.length} saved)` : "") +
-              ", hold to go back to today");
+            const view = cleanWeatherView(weatherView.view);
+            const viewName = tw("weather.view." + view);
+            const placesHint = readyPlaces.length > 1 ? `, ${readyPlaces.length} saved places` : "";
+            wrap.setAttribute("aria-label", tw("weather.cardAria", {
+              place: opts.place ? opts.place + ": " : "",
+              view: viewName,
+              placesHint,
+            }));
             wrap.setAttribute("data-zw-weather", value ? (info.cached ? "cached" : "live") : info.error ? "error" : "empty");
+            syncViewButtons(view, Boolean(value));
             if (!value) {
               iconEl.textContent = "\u2601";
               tempEl.textContent = info.error ? "\u2014" : "";
@@ -5580,20 +5694,24 @@ function nativeSidebarSide() {
             }
             const parts = formatWeatherParts(value, opts.units);
             // OW-95: the view decides the first three lines; the outlook carries whatever the view does not fit.
-            const view = cleanWeatherView(weatherView.view);
             wrap.setAttribute("data-zw-weather-view", view);
             let viewParts = null;
             try {
               // The reading's own units, never the current pref: a cached metric value shown as °F would be a lie,
               // and Open-Meteo converts server-side, so only the reading knows what its numbers are.
-              viewParts = weatherViewParts(value, view, { units: cleanWeatherUnits(value.units), countryCode: value.countryCode });
+              viewParts = weatherViewParts(value, view, {
+                units: cleanWeatherUnits(value.units),
+                countryCode: value.countryCode,
+                lang,
+                timeZone: value.timezone,
+              });
             } catch (err) {
               console.warn("[ZentralWidgets] weather view failed:", err);
             }
             const shown = viewParts && !viewParts.empty ? viewParts : null;
             iconEl.textContent = WEATHER_ICON_GLYPHS[(shown || parts).icon] || WEATHER_ICON_GLYPHS.unknown;
             tempEl.textContent = view === "week" ? "" : (shown || parts).temperature ?? parts.temperature;
-            labelEl.textContent = view === "week" ? "This week" : (shown || parts).label;
+            labelEl.textContent = view === "week" ? tw("weather.weekTitle") : (shown || parts).label;
             rangeEl.textContent = view === "week" ? "" : (shown || parts).range ?? "";
             detailsEl.textContent = view === "today" ? parts.details : "";
             try {
@@ -5609,7 +5727,7 @@ function nativeSidebarSide() {
               outlookEl.hidden = true;
               console.warn("[ZentralWidgets] weather outlook failed:", err);
             }
-            wrap.setAttribute("aria-label", (opts.place ? opts.place + ": " : "") + (view === "week" ? "This week" : (shown || parts).text));
+            wrap.setAttribute("aria-label", (opts.place ? opts.place + ": " : "") + (view === "week" ? tw("weather.weekTitle") : (shown || parts).text));
           };
           repaintWeather = () => {
             if (!lastPainted) return false;
@@ -5621,29 +5739,46 @@ function nativeSidebarSide() {
               return false;
             }
           };
+          weatherRepaintHook = repaintWeather;
 
-          // OW-95: the whole card is the control, and the two gestures are the two axes.
-          //   click  -> the next view: today, tomorrow, week, back to today. The data does not change, so this never
-          //             fetches: three views are one reading.
-          //   hold   -> back to the main face: TODAY, and the first saved place. A long press is the "reset" a person
-          //             reaches for after wandering, and it must work even with one place and an empty cache.
-          // The place is cycled by the hold's sibling, the middle click / the keyboard: `Ctrl`+Enter or a middle click
-          // steps the place, because a card with unlimited places still needs a way to reach the second one.
+          // OW-95 / OW-109: direct view buttons + card click cycling.
+          //   click  -> the next view: today, tomorrow, week, back to today. Saved independently from default_view.
+          //   hold   -> back to the configured default view and the first saved place.
           const setView = (next) => {
             const clean = cleanWeatherView(next);
-            if (clean === weatherView.view) return false;
+            const changed = clean !== weatherView.view;
             weatherView.view = clean;
-            repaintWeather?.();
-            return true;
+            writeStringPref(WIDGET_PREFS.WEATHER_VIEW, clean);
+            if (changed) repaintWeather?.();
+            return changed;
           };
+          for (const viewId of WEATHER_VIEWS) {
+            const btn = doc.createElement("button");
+            btn.type = "button";
+            btn.className = "zw-weather-view-btn";
+            btn.setAttribute("data-zw-view", viewId);
+            btn.textContent = tw("weather.view." + viewId);
+            btn.setAttribute("aria-pressed", viewId === weatherView.view ? "true" : "false");
+            btn.classList.toggle("is-active", viewId === weatherView.view);
+            btn.addEventListener("pointerdown", (e) => e.stopPropagation());
+            btn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              setView(viewId);
+            });
+            viewButtons.set(viewId, btn);
+            viewsEl.appendChild(btn);
+          }
           const cycleView = () => setView(nextWeatherView(weatherView.view));
-          // Back to the main face: today, and the first saved place. Both halves are reset because "the main one" is a
-          // place AND a view to the person who asked for it; a hold that left them on another city would be a puzzle.
+          // Back to the main face: configured default view, and the first saved place.
           const revertToMain = () => {
             let changed = false;
-            if (weatherView.view !== "today") {
-              weatherView.view = "today";
+            const defaultView = readDefaultWeatherView();
+            if (weatherView.view !== defaultView) {
+              weatherView.view = defaultView;
               changed = true;
+            }
+            if (getString(WIDGET_PREFS.WEATHER_VIEW, "").trim()) {
+              writeStringPref(WIDGET_PREFS.WEATHER_VIEW, "");
             }
             const places = readWeatherPlaces().filter(weatherPlaceReady);
             const main = places[0] || null;
@@ -5786,6 +5921,10 @@ function nativeSidebarSide() {
               } catch (err) {
                 console.warn("[ZentralWidgets] weather render failed:", err);
               }
+            },
+            dispose() {
+              cancelHold();
+              if (weatherRepaintHook === repaintWeather) weatherRepaintHook = null;
             },
           };
         },

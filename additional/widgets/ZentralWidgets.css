@@ -565,6 +565,20 @@
 }
 #zentral-sidebar-widgets .zw-weather-outlook .zw-weather-outlook-line .zw-weather-outlook-day {
   grid-column: 2 !important;
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+#zentral-sidebar-widgets .zw-weather-outlook .zw-weather-outlook-line .zw-weather-outlook-date {
+  flex: 0 0 auto !important;
+  font-size: 10px !important;
+  font-variant-numeric: tabular-nums !important;
+  opacity: 0.68 !important;
+  white-space: nowrap !important;
+}
+#zentral-sidebar-widgets .zw-weather-outlook .zw-weather-outlook-line .zw-weather-outlook-desc {
   min-width: 0 !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
@@ -574,6 +588,43 @@
   white-space: nowrap !important;
   font-variant-numeric: tabular-nums !important;
   opacity: 0.85 !important;
+}
+/* OW-109: direct view switcher inside the Weather card. */
+#zentral-sidebar-widgets .zw-weather-views {
+  display: flex !important;
+  align-items: center !important;
+  gap: 3px !important;
+  margin-top: 2px !important;
+  min-width: 0 !important;
+}
+#zentral-sidebar-widgets .zw-weather-views[hidden] {
+  display: none !important;
+}
+#zentral-sidebar-widgets .zw-weather-view-btn {
+  appearance: none !important;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent) !important;
+  background: transparent !important;
+  color: inherit !important;
+  border-radius: 5px !important;
+  padding: 1px 6px !important;
+  font: inherit !important;
+  font-size: 10px !important;
+  line-height: 1.4 !important;
+  opacity: 0.72 !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+}
+#zentral-sidebar-widgets .zw-weather-view-btn:hover {
+  opacity: 0.95 !important;
+}
+#zentral-sidebar-widgets .zw-weather-view-btn.is-active {
+  opacity: 1 !important;
+  background: color-mix(in srgb, currentColor 14%, transparent) !important;
+  border-color: color-mix(in srgb, currentColor 32%, transparent) !important;
+}
+#zentral-sidebar-widgets .zw-weather-view-btn:focus-visible {
+  outline: 2px solid var(--zw-accent, #6ca8ff) !important;
+  outline-offset: 1px !important;
 }
 /* The card names the view it is on, so a person never wonders why the numbers moved. */
 #zentral-sidebar-widgets .zw-weather[data-zw-weather-view="tomorrow"] .zw-weather-label::after,
