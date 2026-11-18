@@ -925,3 +925,59 @@
     calc(var(--bgalazka-essential-launcher-size) - 2px)
   ) !important;
 }
+
+/* OW-114 (owner audit F4): OW-88 parks inert Notes/Agenda sidebar rows with
+ * `[pending]`. The collapsed-folder / empty-folder compact rules above treat a
+ * pinned pending tab as "nothing loaded" and hide the row (or its whole folder).
+ * These rows are not unloaded web pages: keep their labels, icons, colour,
+ * opacity and spacing exactly as a loaded placeholder. The scope is only the
+ * Notes folder and only its two placeholder markers; third-party Arc/Zen
+ * unloaded-tab styles cannot be fixed here (see the OW-114 audit/handoff and
+ * the OWNER GATE: compare labels, icons, opacity, grayscale and spacing). */
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  zen-folder[bgalazka-notes-folder]
+  tab[bgalazka-notes-item][pending],
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  zen-folder[bgalazka-notes-folder]
+  tab[bgalazka-notes-agenda-item][pending],
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  zen-folder[bgalazka-notes-folder]
+  tab[bgalazka-notes-item][pending]
+  > .tab-stack
+  > .tab-content,
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  zen-folder[bgalazka-notes-folder]
+  tab[bgalazka-notes-agenda-item][pending]
+  > .tab-stack
+  > .tab-content,
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]),
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]),
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending])
+  > .tab-group-label-container,
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending])
+  > .tab-group-label-container {
+  opacity: 1 !important;
+  filter: none !important;
+  pointer-events: auto !important;
+  overflow: visible !important;
+  min-height: var(--bgalazka-look-tabbar-row-height, 20px) !important;
+  height: auto !important;
+  max-height: none !important;
+  flex: 0 0 auto !important;
+  margin-block: var(--bgalazka-look-tabbar-row-gap, 0px) !important;
+  padding-block: 0 !important;
+  align-items: center !important;
+  box-sizing: border-box !important;
+}

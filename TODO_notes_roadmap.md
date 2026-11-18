@@ -77,7 +77,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
-|    34 | `OW-114`    | `OPEN`    | Low                 | S      | none              | Boost F4: CSS audit of `[pending]` rules that change a parked Notes/Agenda placeholder's look + narrow override |
 |    35 | `OW-115`    | `OPEN`    | Low                 | S      | OW-111..OW-114    | Boost F5 (optional): show the deep pass's skipped reasons in the popup and pinned/unpinned counts in `state()` |
 |    36 | `T2.13`     | `DONE`    | Med                 | M      | all other Track 2 | ICS export/import and Google-sync groundwork (always last in Track 2)                                    |
 |    41 | `T4.3a`     | `OPEN`    | Med                 | M      | none              | Extract calendar UI from `ZentralNotes.uc.js`                                                            |
@@ -804,25 +803,6 @@ own wording; the tests are written first, run against the current code, and the 
 still has the defect. Version stays `3.4.0`, build chain uses `--keep-version`, `docs/perf-results.md` gets one
 line per shipped row. All five are `OW-*` code tasks, so rule 1 puts them ahead of `T4.3a`.
 
-#### `OW-114` (F4) — Parked placeholders look "unloaded" (visual regression check)
-
-**Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Depends on:** none · **Source:** owner audit F4
-
-**Problem (verified):** OW-88 discards Notes/Agenda placeholder tabs, giving them `pending`. The owner runs Arc 2.0
-with `arc-grayscale-unloaded-tabs = true` and `browser.tabs.fadeOutUnloadedTabs = true`; `additional/tabs/ZentralTabDensity.css`
-has four rules keyed on `[pinned]:not([pending])` / `[pending]` that can hide or collapse a parked row.
-
-**Plan (in this order):** do NOT guess. First add a CSS audit (`tools/audit-pending-placeholder-css.cjs` + a test)
-that lists every rule in `additional/**/*.css` and `extension/**/*.css` matching `[pending]` on a pinned tab inside
-`zen-folder[bgalazka-notes-folder]` / `[bgalazka-notes-item]` / `[bgalazka-notes-agenda-item]`, and report them in
-the handoff. If any of OUR rules changes the look of a parked placeholder, add a narrow override scoped to
-`tab[bgalazka-notes-item][pending], tab[bgalazka-notes-agenda-item][pending]` restoring the loaded look
-(opacity/filter/layout). Third-party styles (Arc, Zen) cannot be fixed here: write that in the handoff.
-**OWNER GATE:** compare the sidebar rows before/after (labels, icons, opacity, spacing).
-
-**Tests / done when:** the audit runs from the suite, names every matching rule, the narrow override exists and is
-pinned by a CSS test, and the owner gate is written in the handoff.
-
 #### `OW-115` (F5) — Explain a deep pass that did nothing (optional)
 
 **Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Depends on:** OW-111..OW-114 · **Source:** owner audit F5
@@ -901,10 +881,14 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and version here in place. Keep the project version at 3.4.0 until the owner explicitly says otherwise.**
 
-State: **3.4.0 on beta**. Prerequisites `OW-108`–`OW-110` (through `0090091`, merged here as `c86d4b6`) are included. The owner's Boost-audit findings F1–F5 were added as `OW-111`–`OW-115`; F1 (`OW-111`), F2 (`OW-112`) and F3 (`OW-113`) are DONE (see `docs/LEGACY_done_rows.md`). `OW-114` (F4) is next. The remaining `OW-*` code tasks take priority over `T4.3a`..`T4.3c` and `ST7.4`; `OW-66` is the owner's live-Zen check with no code work (skip).
+State: **3.4.0 on beta**. Prerequisites `OW-108`–`OW-110` (through `0090091`, merged here as `c86d4b6`) are included. The owner's Boost-audit findings F1–F5 were added as `OW-111`–`OW-115`; F1 (`OW-111`), F2 (`OW-112`), F3 (`OW-113`) and F4 (`OW-114`) are DONE (see `docs/LEGACY_done_rows.md`). F5 (`OW-115`) is the only Boost-audit task left and is optional/ungated now that F1–F4 shipped. After it: `T4.3a`..`T4.3c`, `ST7.4`; `OW-66` is the owner's live-Zen check with no code work (skip).
 
-Completed this session: added F1–F5 to the roadmap as rows + task blocks, then shipped `OW-111`, `OW-112` and `OW-113`. F1 was verified against the CURRENT code: `runLevel2` swept `essentialPanels` record tabs with `keep_pinned`, so `asleep-allowed` was a no-op by default while `keep_pinned: true` unloaded `live` records; `ow-111` (11 cases) and the realistic `ow-91` fixtures were RED on HEAD and GREEN after the fix. F2 was verified as still present: `keep_pinned = true` meant "may unload"; `ow-112` (7 cases) was RED on the `OW-111` HEAD and GREEN after the rename to `unload_pinned` (same label, same `false` default, old pref only an external fallback). F3 was verified as still present: nothing wrote `window.Zentral.Video.sourceTab` or `window.__zentralVideoSourceTab`; `ow-113` (5 cases) was RED on the `OW-112` HEAD and GREEN after the video module published a live getter over `deps.current` (`sourceTab()` / `__zentralVideoSourceTab`), torn down on destroy. Every task ran the `--keep-version` chain, full suite (`270/270` after the third new suite) and `git diff --check` green; `docs/perf-results.md` has one line per task.
+Completed this session: added F1–F5 to the roadmap, then shipped `OW-111`..`OW-114`, each with tests RED on the previous HEAD and GREEN after the fix, the `--keep-version` chain, full suite (`271/271` after the fourth new suite) and `git diff --check`. F1: record tabs now obey `backgroundMode` in Level 2/limiter/Game Mode. F2: `keep_pinned` → `unload_pinned` with one-time migration and a one-release fallback, no default change. F3: the video preview publishes a live `__zentralVideoSourceTab` getter over `deps.current`, removed on destroy. F4: `tools/audit-pending-placeholder-css.cjs` + `tests/ow-114-pending-placeholder-css.test.cjs` + `docs/ow-114-pending-css-audit.md` are the screenshot-free audit; eight narrow Notes/Agenda overrides at `additional/tabs/ZentralTabDensity.css:937` restore opacity/filter/layout. `docs/perf-results.md` has one line per task.
 
-Known debts: no live Zen/Sine runtime is available in this session; repository tests and CI must be used where possible, and live-only claims must not be presented as verified. F4 (four `[pending]` rules in `additional/tabs/ZentralTabDensity.css`) was verified as still present but is NOT yet fixed. F4's OWNER GATE (compare sidebar rows before/after: labels, icons, opacity, spacing) and third-party Arc/Zen `[pending]` styles cannot be checked here; the handoff must say so.
+**OW-114 CSS audit report (screenshot-free; full table in `docs/ow-114-pending-css-audit.md`):** 17 candidate rules in `additional` + `extension` CSS mention `[pending]` / `[pending="true"]`. Four OUR compact-density rules MATCH a pinned parked placeholder and hide/collapse it or its folder: `additional/tabs/ZentralTabDensity.css:357` (collapsed child tab: height/opacity/pointer-events/overflow), `additional/tabs/ZentralTabDensity.css:371` (its `.tab-content`), `additional/tabs/ZentralTabDensity.css:388` (nested folder with no "loaded" pinned tab), `additional/tabs/ZentralTabDensity.css:488` (folder whose header Zen zeroed and no "loaded" pinned tab). Five `extension/appearance/ZentralAppearance.css` candidates at `:300`, `:307`, `:316`, `:323`, `:323` do NOT match: they require a LOADED Essential-panel tile/launcher inside the pending tab, which a Notes/Agenda placeholder never has. Eight narrow override selectors at `additional/tabs/ZentralTabDensity.css:937` (scoped to `zen-folder[bgalazka-notes-folder]` and `tab[bgalazka-notes-item][pending]` / `tab[bgalazka-notes-agenda-item][pending]`, plus their `.tab-content`, folder and label container) restore `opacity: 1`, `filter: none`, `pointer-events: auto`, row height/gap/padding and `overflow: visible` with `!important`. `zentral/groups/styles/ZentralGroupsInjected.css` already resets `filter: none` for a pending folder tab, but it is outside the audited trees and covers only the filter.
 
-Next action: `OW-114` (F4) — tests/CSS audit first, list every `[pending]` rule touching a pinned Notes/Agenda placeholder in the handoff, add a narrow override only if OUR CSS changes its look, then `OW-115` (F5 only after F1–F4 are shipped) → `T4.3a` → `T4.3b` → `T4.3c` → `ST7.4`. Keep the version at 3.4.0; never `--bump`.
+**Third-party / OWNER GATE:** `arc-grayscale-unloaded-tabs = true` and `browser.tabs.fadeOutUnloadedTabs = true` are Arc 2.0 / Zen mod styles, not rules in this repository; third-party Arc/Zen `[pending]` styles cannot be fixed here and may still gray or fade a parked row. No live Zen/Sine runtime is available, so this audit is static, not a screenshot. OWNER GATE: compare Notes/Agenda sidebar rows before/after with compact mode, a collapsed folder and the space indicator — labels, icons, opacity, grayscale and spacing. `docs/ow-114-pending-css-audit.md` carries the same caveat; do not present the visual result as verified until the owner checks it.
+
+Known debts: no live Zen/Sine runtime is available in this session; repository tests and CI must be used where possible, and live-only claims must not be presented as verified. `OW-115` (F5) is optional; F1–F4 are now shipped so its gate is open.
+
+Next action: `OW-115` (F5, optional) — surface `runLevel2`'s grouped `skipped` reasons in the Boost popup and add pinned/unpinned loaded-tab counts to `boost.state()`, with tests in both widget languages and no new pref; then `T4.3a` → `T4.3b` → `T4.3c` → `ST7.4`. Keep the version at 3.4.0; never `--bump`.
