@@ -77,6 +77,11 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
+|    31 | `OW-111`    | `OPEN`    | High (correctness)  | M      | none              | Boost F1: panel-record tabs must obey their `backgroundMode` in EVERY pass (Level 2, limiter, Game Mode) |
+|    32 | `OW-112`    | `OPEN`    | Low                 | S      | OW-111            | Boost F2: rename the misleading pref `keep_pinned` to `unload_pinned`, migrate once, keep old as fallback |
+|    33 | `OW-113`    | `OPEN`    | Med                 | M      | none              | Boost F3: expose the Big Picture/video source tab so its "never unload" rule is live code, not dead code  |
+|    34 | `OW-114`    | `OPEN`    | Low                 | S      | none              | Boost F4: CSS audit of `[pending]` rules that change a parked Notes/Agenda placeholder's look + narrow override |
+|    35 | `OW-115`    | `OPEN`    | Low                 | S      | OW-111..OW-114    | Boost F5 (optional): show the deep pass's skipped reasons in the popup and pinned/unpinned counts in `state()` |
 |    36 | `T2.13`     | `DONE`    | Med                 | M      | all other Track 2 | ICS export/import and Google-sync groundwork (always last in Track 2)                                    |
 |    41 | `T4.3a`     | `OPEN`    | Med                 | M      | none              | Extract calendar UI from `ZentralNotes.uc.js`                                                            |
 |    42 | `T4.3b`     | `OPEN`    | Med                 | M      | T4.3a             | Extract parser/wiki graph and import/export                                                              |
@@ -794,6 +799,116 @@ asserting no rendered text matches `/^[a-z][A-Za-z0-9]*(\.[A-Za-z0-9_]+)+$/`. Ve
 
 ---
 
+## Boost audit findings added 2026-11-18 (owner's F1–F5)
+
+The owner ran a second agent over an **older** Boost patch and asked that none of these be trusted (or dismissed as
+"already tweaked") without a test against the code that is in this repository now. Each row below keeps the finding's
+own wording; the tests are written first, run against the current code, and the fix lands only where the current code
+still has the defect. Version stays `3.4.0`, build chain uses `--keep-version`, `docs/perf-results.md` gets one
+line per shipped row. All five are `OW-*` code tasks, so rule 1 puts them ahead of `T4.3a`.
+
+#### `OW-111` (F1) — Panel-record tabs must obey their `backgroundMode` in EVERY pass
+
+**Status:** `OPEN` · **Impact:** High (correctness) · **Effort:** M · **Depends on:** none · **Source:** owner audit F1
+
+**Problem (verified against the current code, not just the report):** `runLevel2` loops over `gBrowser.tabs` and
+asks `ZentralTabPolicy.isUnloadable` without skipping the tabs that back `essentialPanels` records; those records'
+tabs are pinned / `zen-essential` in a real Zen. `canUnload` passes `keepPinned: prefBool(boost.keep_pinned, false)`
+for **both** loops, so with the default `false` the policy refuses a pinned record tab and `asleep-allowed` is a
+no-op; with `keep_pinned` on, the TAB loop unloads `live` records (WhatsApp, Messenger) too. The existing
+`panelRecord(...)` fixture in `tests/ow-91-boost-deep.test.cjs` builds both branches of its `attrs` ternary as `[]`,
+so no test has ever given a record a pinned or Essential tab.
+
+**Plan (in this order):**
+1. Build a `Set` of `record.tab` once per deep run; the TAB loop skips those tabs — a record tab is owned ONLY by the
+   panel loop.
+2. The panel loop decides with the record's mode: `asleep-allowed` may sleep even when the tab is pinned/Essential
+   (the mode is the person's explicit consent), `live` and `throttled` are never slept by Level 2 or the limiter,
+   Stronger saver (`allowModes` = all modes) may sleep every record. Every other never-rule (selected, audible,
+   sharing, PiP, video source, already pending, host, placeholder, private) still applies to record tabs.
+3. Implement with a `ctx.panelConsent` / `ctx.isPanelRecord` input to `ZentralTabPolicy.isUnloadable` (with its own
+   named reason) so `keepPinned` is waived ONLY for a consenting record tab. `ZentralTabUnload` passes neither input
+   and keeps exactly today's answers.
+
+**Tests / done when:** `tests/ow-111-panel-record-modes.test.cjs` drives `runLevel2`, the limiter and Game Mode with
+records whose tabs are `pinned: true` and, separately, `attrs: ["zen-essential"]`: (a) `live` + keep_pinned false →
+not unloaded, (b) `live` + keep_pinned TRUE → still not unloaded by Level 2 or the limiter, (c) `asleep-allowed` +
+keep_pinned false → unloaded, (d) `throttled` → not unloaded, (e) Stronger saver → all three unloaded, (f) an
+audible/selected record is never unloaded in any mode. `tests/ow-91-boost-deep.test.cjs` fixtures become realistic.
+Red on the current code, green after.
+
+#### `OW-112` (F2) — Rename the misleading pref `keep_pinned`
+
+**Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Depends on:** OW-111 · **Source:** owner audit F2
+
+**Problem (verified):** `zen.workspace.zentral.boost.keep_pinned = true` currently means "pinned tabs MAY be
+unloaded" — the opposite of its name; the settings label ("Unloading may include pinned and Essential tabs") says
+what it does. This naming confusion is what let F1 survive.
+
+**Plan (in this order):** add `zen.workspace.zentral.boost.unload_pinned` (same meaning as the current checkbox,
+default `false`); migrate once — if the old pref is `true`, set the new one to `true`; read the old pref as a fallback
+for one release; fix the settings label/description, `additional/boost/README.md`, `docs/PLAN_CODING_AGENT.md`'s
+stale sentence, the standalone preference order and the tests. **Do not change defaults.** Rebuild preferences and
+run the settings-consistency + default-drift checks.
+
+**Tests / done when:** a test pins the schema/standalone/layout/preferences presence of the new pref, the default
+`false`, the one-time migration, the old-pref fallback, and that no source still reads `keep_pinned` as its primary
+name. Red on the current code, green after.
+
+#### `OW-113` (F3) — The Big Picture source tab is never exposed
+
+**Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Depends on:** none · **Source:** owner audit F3
+
+**Problem (verified):** `videoSourceTab()` in `ZentralBoost.uc.js` reads
+`window.Zentral?.Video?.sourceTab || window.__zentralVideoSourceTab`. There is no writer of either anywhere in the
+repository (`grep -rn "__zentralVideoSourceTab\|Video.sourceTab" additional/video/**` finds none), and
+`window.Zentral.Video` is not published. So only an AUDIBLE source tab survives the deep pass; a paused/muted source
+can be unloaded and the preview blanked.
+
+**Plan (in this order):** read how `additional/video/controllers/ZentralVideoDiscovery.js` and
+`ZentralVideoSidebar.js` keep `deps.current` (the selected source carries `.tab`), then expose a getter that returns
+that tab element or `null` through `window.__zentralVideoSourceTab` (the name Boost already reads), defined in the
+video module's own init and torn down on destroy. No new pref, no polling.
+
+**Tests / done when:** with a fake video module state, Level 2, the limiter and Game Mode leave that tab loaded even
+when it is not audible; with no source the getter returns `null`; destroy removes the getter. Red on the current
+code, green after.
+
+#### `OW-114` (F4) — Parked placeholders look "unloaded" (visual regression check)
+
+**Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Depends on:** none · **Source:** owner audit F4
+
+**Problem (verified):** OW-88 discards Notes/Agenda placeholder tabs, giving them `pending`. The owner runs Arc 2.0
+with `arc-grayscale-unloaded-tabs = true` and `browser.tabs.fadeOutUnloadedTabs = true`; `additional/tabs/ZentralTabDensity.css`
+has four rules keyed on `[pinned]:not([pending])` / `[pending]` that can hide or collapse a parked row.
+
+**Plan (in this order):** do NOT guess. First add a CSS audit (`tools/audit-pending-placeholder-css.cjs` + a test)
+that lists every rule in `additional/**/*.css` and `extension/**/*.css` matching `[pending]` on a pinned tab inside
+`zen-folder[bgalazka-notes-folder]` / `[bgalazka-notes-item]` / `[bgalazka-notes-agenda-item]`, and report them in
+the handoff. If any of OUR rules changes the look of a parked placeholder, add a narrow override scoped to
+`tab[bgalazka-notes-item][pending], tab[bgalazka-notes-agenda-item][pending]` restoring the loaded look
+(opacity/filter/layout). Third-party styles (Arc, Zen) cannot be fixed here: write that in the handoff.
+**OWNER GATE:** compare the sidebar rows before/after (labels, icons, opacity, spacing).
+
+**Tests / done when:** the audit runs from the suite, names every matching rule, the narrow override exists and is
+pinned by a CSS test, and the owner gate is written in the handoff.
+
+#### `OW-115` (F5) — Explain a deep pass that did nothing (optional)
+
+**Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Depends on:** OW-111..OW-114 · **Source:** owner audit F5
+
+**Problem:** "nothing happened" after a deep pass is not explainable; `runLevel2` already collects `skipped` reasons
+but nothing shows them.
+
+**Plan (in this order):** surface the collected `skipped` reasons in the Boost popup (e.g. `pinned-kept: 12`), and
+add `boost.state()` counts of pinned vs unpinned loaded tabs so the owner sees how many Level 2 can touch. Optional:
+the owner may skip it; it is gated after F1–F4.
+
+**Tests / done when:** a test asserts the grouped reason line and the two counts, in both widget languages, with no
+new pref. Red on the current code, green after.
+
+---
+
 ## Track 2 design rules (owner decisions, still binding)
 
 _Re-planned 2026-11-11 from the owner's wishes. The All notes view becomes an adjustable split: folder tree and calendar side-by-side in a wide window, stacked in a tall/narrow window. Dependency flow: calendar core and persistent item store (`T2.1`, `T2.3a`)_ $\rightarrow$ _date parser and shared date controls (`T2.12a–c`, `T2.2a`)_ $\rightarrow$ _date chips and Notes by date (`T2.2b–c`)_ $\rightarrow$ _item editors and safety prompts (`T2.3b–h`), duplicate-line identity follow-up (`T2.3a1`)_ $\rightarrow$ _calendar layout and views (`T2.4a–b`)_ $\rightarrow$ _calendar correctness audit (`T2.4b-audit`)_ $\rightarrow$ _week/day views (`T2.4c`)_ $\rightarrow$ _drag/resize/create (`T2.5`)_ $\rightarrow$ _Big Picture (`T2.6`)_ $\rightarrow$ _alerts (`T2.7a–c`)_ $\rightarrow$ _Agenda/Daily unification (`T2.8–9`)_ $\rightarrow$ _holidays and folder exclusion (`T2.10–11`)_ $\rightarrow$ _ICS groundwork (`T2.13`, always last)._
@@ -856,10 +971,10 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and version here in place. Keep the project version at 3.4.0 until the owner explicitly says otherwise.**
 
-State: **3.4.0 on beta**. The existing roadmap through `OW-110` is complete (see `docs/LEGACY_done_rows.md`). Remaining open items are `T4.3a`..`T4.3c`, `ST7.4`, and the owner live-check item `OW-66`.
+State: **3.4.0 on beta**. Prerequisites `OW-108`–`OW-110` (through `0090091`, merged here as `c86d4b6`) are included; the roadmap through `OW-110` is complete (see `docs/LEGACY_done_rows.md`). The owner's Boost-audit findings F1–F5 were added as `OW-111`–`OW-115` at the TOP of the Master Order: they are eligible `OW-*` code tasks, so rule 1 puts them ahead of `T4.3a`. Still open after them: `T4.3a`..`T4.3c`, `ST7.4`, and the owner live-check item `OW-66` (no code work, skip).
 
-Completed this session: OW-108 restores Calendar weather; OW-109 adds `weather.default_view`, direct Today/Tomorrow/Week buttons persisted via `weather.view` independently from the default, compact day-of-month labels (`18.`, `19.`, ...), actual weather descriptions for all Week rows including Today/Tomorrow, and live EN/PL localization; OW-110 audits Boost and fixes Game Mode (`gameModeTargets()` no longer calls `getOrCreateAppBrowser`, `applyGameMode(true)` no longer calls `syncPanelActivity()` to re-wake preload panels, `syncAppPanelBrowserActivity` respects active Game Mode, `strongerSaverSleep()` chains after `runLevel2` instead of hitting `level2Busy`, teardown clears `game_mode` pref, pending settle timers resolve cleanly on `destroy()`, async `requestProcInfo()` Promises work, trim/unload/limiter cleanup guards, and Boost widget card popup sampling/disposal/late-attach).
+Completed this session: added the five Boost-audit findings to the roadmap (rows + task blocks); no code shipped yet. Verified against the CURRENT code (not the old patch) that F1 is real (the tab loop never skips `essentialPanels` record tabs; `canUnload` feeds `keep_pinned` to both loops, so `asleep-allowed` is a no-op by default and `keep_pinned: true` unloads `live` records), F2 is real (`keep_pinned = true` means "may unload"), F3 is real (no writer of `window.Zentral.Video.sourceTab` or `window.__zentralVideoSourceTab` anywhere), and F4 has four `[pending]` rules in `additional/tabs/ZentralTabDensity.css` to audit. `OW-111` is the current task.
 
-Known debts: no live Zen/Sine runtime is available in this session; repository tests and CI must be used where possible, and live-only claims must not be presented as verified.
+Known debts: no live Zen/Sine runtime is available in this session; repository tests and CI must be used where possible, and live-only claims must not be presented as verified. The F4 owner gate (compare sidebar rows before/after) and third-party Arc/Zen `[pending]` styles cannot be checked here.
 
-Next action: continue eligible smaller open items (`T4.3a` → `T4.3b` → `T4.3c`, `ST7.4`). Do not bump any version above 3.4.0.
+Next action: `OW-111` (F1) first — tests red, then fix, release chain with `--keep-version`, full suite, `git diff --check`, docs, one commit/push — then `OW-112` → `OW-113` → `OW-114` → `OW-115`, then `T4.3a` → `T4.3b` → `T4.3c` → `ST7.4`. Keep the version at 3.4.0; never `--bump`.
