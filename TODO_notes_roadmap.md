@@ -77,7 +77,7 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
-|    36 | `T2.13`     | `OPEN`    | Med                 | M      | all other Track 2 | ICS export/import and Google-sync groundwork (always last in Track 2)                                    |
+|    36 | `T2.13`     | `DONE`    | Med                 | M      | all other Track 2 | ICS export/import and Google-sync groundwork (always last in Track 2)                                    |
 |    41 | `T4.3a`     | `OPEN`    | Med                 | M      | none              | Extract calendar UI from `ZentralNotes.uc.js`                                                            |
 |    42 | `T4.3b`     | `OPEN`    | Med                 | M      | T4.3a             | Extract parser/wiki graph and import/export                                                              |
 |    43 | `T4.3c`     | `OPEN`    | Med                 | M      | T4.3b             | Extract Zen sidebar UI; single build entry                                                               |
@@ -129,14 +129,51 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 #### `T2.13` — ICS export/import and Google-sync groundwork (always last in Track 2)
 
-**Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
+**Status:** `DONE` (3.3.309) · **Impact:** Med · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
 
 **Current state and what is LEFT:** **DO NOT BEGIN UNTIL EVERY OTHER TRACK 2 ROW IS `DONE`.** Local `.ics` export/import with stable `uid` / `etag` / `updated`, `syncState`, and RRULE serialization.
 
 **Progress:** the **import** half shipped ahead of this row as the owner's `OW-53` (3.3.280): `parseIcs` / `icsToItem` /
 `planIcsImport` in the calendar module, with stable `x.icsUid`, `EXDATE` and the `RRULE` subset, and a card in Calendar →
-Tools. What is **LEFT** here is the other direction (`icsFromItems` / a `VCALENDAR` writer with the same UID, `etag` and
-`updated`), `syncState` per item, and a round-trip fixture (`import → export → import` is the same calendar).
+Tools. **Finished at 3.3.309** — the three things that were LEFT, each verified rather than assumed:
+
+1. **The writer.** `icsFromItems(items, {now, name, uidFor, prodId})` in the calendar module emits a full `VCALENDAR`
+   (`VERSION`, `PRODID`, `CALSCALE`, `METHOD`, `X-WR-CALNAME`), one `VEVENT` per item with `UID`, `DTSTAMP`, `CREATED`,
+   `DTSTART`/`DTEND`, `SUMMARY`, `DESCRIPTION`, `LOCATION`, `STATUS`, `RRULE`/`EXDATE` verbatim from the reader's own
+   subset, and a `VALARM` for a reminder. Lines are CRLF and folded at **75 UTF-8 octets** — folding counts octets, not
+   characters, so a 4-octet emoji is never cut in half (pinned). `DTSTART;TZID=` is written in the item's own zone and
+   the wall clock is derived through `Intl`, so the instant round-trips: 09:00Z in `Europe/Warsaw` goes out as
+   `20261118T100000` and comes back as 09:00Z. All-day uses `DTEND;VALUE=DATE` one day **after** the last day, which is
+   what the reader expects. A timed event with no end gets the default duration. **Identity is the point:** an item's
+   own `x.icsUid` is reused, and an item that never came from a file gets `<id>@zentral-notes` — never the clock, so the
+   same item exported twice has the same UID and a re-import updates instead of duplicating. A cancelled import
+   (`x.icsCancelled`) is filtered out **in the writer**, not in the card, so no caller can resurrect a cancelled event.
+2. **`syncState` per item.** `x.syncedEtag` (the etag the other side holds) plus `x.syncedDeleted` give
+   `syncStateOf(item)` → `new` / `changed` / `clean` / `deleted`; `markSynced(item, remoteEtag)` and
+   `markSyncedDeleted(item)` write that bookkeeping; `syncPlan(items)` groups a whole calendar and counts what a pass has
+   to push. Both fields are kept by `cleanItem` **only when present**, by the same rule as item colour, so an item that
+   never synced serialises and hashes exactly as before — no etag churn (pinned). Nothing in this layer touches a
+   network: it is what a sync reads, not the sync.
+3. **The round-trip fixture.** `tests/notes-ics-export.test.cjs` (12 assertions) takes the **OW-53 import fixture** —
+   Google-shaped, folded, escaped, with a `TZID` event, an all-day event, a weekly `RRULE` + `EXDATE`, a `VALARM` and a
+   cancelled event — imports it, exports it, imports that back, and asserts the two calendars agree on every field that
+   carries meaning (start instant, end, summary, description, location, recurrence, reminder, calendar name). It also
+   asserts the strong form of "a second import updates": feeding the exported file back against the items it came from
+   yields **3 updates, 0 adds**. `tests/notes-ics-export-card.test.cjs` drives the card itself with the real sheet code
+   and the real calendar module (fake DOM, not a re-implementation): the row opens from Calendar → Tools, the card names
+   `Everything (3)` with a cancelled import left out of the count, opening it writes nothing, and pressing Export saves
+   one file through the host whose text imports back to those same three events. Well-formedness is checked over the whole file: no bare `LF`, no line over 76 octets,
+   `BEGIN:VEVENT`/`END:VEVENT` balanced.
+
+**The card and the seam:** Calendar → Tools → *Export calendar (.ics)…* opens the `zn-dialog-card` pattern with an
+"Everything (n) / This year (n)" chip pair, and only the Export button writes; the file goes through `env.saveIcs`, the
+same save picker as every other export, so a host (and a test) answers without a dialog. `cal.ics.export*` strings exist
+in **en and pl**, and the test fails if either key is missing — no raw key can reach a person.
+
+**Honest limits:** there is no network sync and no OAuth — the "Google-sync groundwork" is exactly the shape and the
+bookkeeping (`toGoogle`/`fromGoogle` already existed; `syncState` is new). `TZID` is resolved through `Intl`, so a zone
+whose rules differ between the platform's tzdata and Google's may disagree on a historical instant. `VALARM` is written
+for the first reminder only. `T2.13a` (holiday feeds, `OW-44`) follows this row and is still open.
 
 **Full specification (original row):** **OPEN — DO NOT BEGIN UNTIL EVERY OTHER T2 TASK IS COMPLETE.** Depends on all Track 2 item model, recurrence, reminder and calendar UI work. Export/import `.ics` locally (no network); stable `uid` / `etag` / `updated`, `syncState` per item, RRULE serialization and fixture coverage.
 
@@ -636,4 +673,5 @@ Known debts / owner requirements: LIMITS of `OW-04`: the pointer is held to the 
 
 Planning only, no code (2026-11-17, version 3.3.244): the owner's holiday list added as `OW-43` (holiday sets split from the interface language, any language picks any set, first sets `PL` + `US`), `OW-44` (any number of sets at once), `OW-45` (one-place year table for movable/one-off dates such as the Polish election day and `niedziela handlowa`), `OW-46` (one master off switch) and `T2.13a` (how holidays behave when the `T2.13` ICS/Google groundwork is built: local sets are never imported or synced). They sit at the top of the Master Order; `T3.3` follows them.
 
-Next action: `T2.13` — ICS export/import and the Google-sync groundwork, the last Track 2 item. Then `OW-78` (one palette: the CSS `--zn-*` variables and the JS resolver must agree) and `OW-77` (a real-Chromium audit of every Notes and calendar menu, so "unreadable" stays measured), then `OW-79` (more languages, and never a raw key on screen — the owner asked to be prepared for more languages), then `ST7.4` and the `T4.3a`→`b`→`c` extraction chain. `OW-66` is the owner's live check of `OW-58`–`OW-65` and `OW-73`–`OW-76` in the real sidebar and needs no code from a session. Finished lately: `OW-21` (find and replace, 3.3.300), `OW-65` (the Clock card's shape, 3.3.301), `OW-22` (next match not on screen, 3.3.302), `OW-67`–`OW-72` (the six widget reports, 3.3.303) and `OW-73`–`OW-76` (the four calendar reports, 3.3.304: the one-line toolbar, the header controls that outlive the strip, the regrouped menus and the Zentral appearance theme). Then 3.3.307: `OW-80`/`OW-86` (the tree in Big Picture — moved, not copied; a click selects there, a double click opens, and a multi-note drop asks), `OW-81` (the quick-settings default for a dropped note, measured to still fit the card), `OW-82` (drop on empty space asks, with a five-minute silent window), and the owner's three corrections `OW-83` (small bare chevrons), `OW-84` (no creation offered twice in the `+` menu) and `OW-85` (**`OW-73` reverted** — it targeted the Notes rows; the layout buttons now sit in the bar under the title, where nothing is cut at 420, 340 or 300px). `ST7.3` stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.
+Next action: `T2.13a` — holiday feeds and the imported-holiday look (needs `OW-44`, which is still open, so the next
+row that is actually unblocked is `OW-78`). Then `OW-78` (one palette: the CSS `--zn-*` variables and the JS resolver must agree) and `OW-77` (a real-Chromium audit of every Notes and calendar menu, so "unreadable" stays measured), then `OW-79` (more languages, and never a raw key on screen — the owner asked to be prepared for more languages), then `ST7.4` and the `T4.3a`→`b`→`c` extraction chain. `OW-66` is the owner's live check of `OW-58`–`OW-65` and `OW-73`–`OW-76` in the real sidebar and needs no code from a session. Finished lately: `OW-21` (find and replace, 3.3.300), `OW-65` (the Clock card's shape, 3.3.301), `OW-22` (next match not on screen, 3.3.302), `OW-67`–`OW-72` (the six widget reports, 3.3.303) and `OW-73`–`OW-76` (the four calendar reports, 3.3.304: the one-line toolbar, the header controls that outlive the strip, the regrouped menus and the Zentral appearance theme). Then 3.3.307: `OW-80`/`OW-86` (the tree in Big Picture — moved, not copied; a click selects there, a double click opens, and a multi-note drop asks), `OW-81` (the quick-settings default for a dropped note, measured to still fit the card), `OW-82` (drop on empty space asks, with a five-minute silent window), and the owner's three corrections `OW-83` (small bare chevrons), `OW-84` (no creation offered twice in the `+` menu) and `OW-85` (**`OW-73` reverted** — it targeted the Notes rows; the layout buttons now sit in the bar under the title, where nothing is cut at 420, 340 or 300px). `ST7.3` stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.

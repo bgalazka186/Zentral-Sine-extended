@@ -253,7 +253,7 @@ test("the source file itself has no other job: no writes, no network, no clock o
   assert.match(src, /id: "calendar-import-ics"[^\n]*askCalendarIcsImport/);
   // It reads the file through the env (like every other picker), and asks the pure layer for the plan.
   assert.match(src, /function pickIcsFile\(\)[\s\S]{0,400}env\.pickIcs/);
-  assert.ok(src.includes("exportCalendarWeek, printCalendarWeek, exportReminderHistory, pickIcs"), "the picker is in the env");
+  assert.ok(src.includes("exportCalendarWeek, printCalendarWeek, exportReminderHistory, pickIcs, saveIcs"), "the picker and the saver are in the env");
   assert.match(src, /function askCalendarIcsImport\(\)[\s\S]{0,3000}planIcsImport/);
   // Every write sits behind the Import button: the card draws first, and only `go` calls the writer.
   const card = src.slice(src.indexOf("function askCalendarIcsImport()"), src.indexOf("async function importIcsPlan("));

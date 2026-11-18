@@ -22685,6 +22685,7 @@
         { id: "cal-tools-more", icon: "more", label: t("cal.toolsMenu.moreGroup"), group: moreRows },
         { sep: true },
         { id: "calendar-import-ics", label: t("cal.toolsMenu.importIcs"), icon: "outside", run: () => queueMicrotask(askCalendarIcsImport) },
+        { id: "calendar-export-ics", label: t("cal.toolsMenu.exportIcs"), icon: "save", run: () => queueMicrotask(askCalendarIcsExport) },
         { id: "cal-tools-week-text", icon: "note", label: t("cal.toolsMenu.weekTextGroup"), group: [
           { icon: "copy", label: t("cal.toolsMenu.copyWeekMd"), action: () => { const out = calendarWeekMarkdown(); env.copyText?.(out.text); flash(t("cal.toolsMenu.weekCopied")); } },
           { icon: "save", label: t("cal.toolsMenu.saveWeekMd"), action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.exportCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((saved) => { if (saved) flash(t("cal.toolsMenu.weekExported")); }).catch((error) => flash(t("cal.toolsMenu.weekExportFailed", { error: String(error?.message || error) }))); } },
@@ -27419,6 +27420,54 @@
         flash(t("cal.ics.done", { added, updated }));
       }
 
+      // T2.13: the other direction. One card, the same shape as the import card, that says how much is going out and
+      // only writes when Export is pressed. The file is written by `env.saveIcs` beside every other save, so a host
+      // (and a test) can answer without a real save dialog.
+      function askCalendarIcsExport() {
+        const C = CALENDAR_PART;
+        const items = store.items;
+        if (!C?.icsFromItems) { flash(t("cal.ics.exportUnavailable")); return; }
+        if (!items?.list) { flash(t("cal.ics.exportUnavailable")); return; }
+        // A cancelled import is an exception, not an event: it is the one thing that never goes back out.
+        const all = (items.list() || []).filter((it) => it && !it.x?.icsCancelled);
+        if (!all.length) { flash(t("cal.ics.exportEmpty")); return; }
+        const year = new Date().getFullYear();
+        const inYear = all.filter((it) => {
+          const start = C.parseYmd(it.start?.date) || new Date(it.start?.dateTime || "");
+          return Number.isFinite(start?.getTime?.()) && start.getFullYear() === year;
+        });
+        let scope = "all";
+        const scopes = [["all", all.length], ["year", inYear.length]];
+        const scopeChips = scopes.map(([value, n]) => {
+          const b = chip(t(value === "all" ? "cal.ics.exportAll" : "cal.ics.exportThisYear", { n }), value === scope);
+          b.dataset.scope = value;
+          b.addEventListener("click", () => {
+            scope = value;
+            for (const other of scopeChips) other.classList.toggle("is-on", other.dataset.scope === scope);
+          });
+          return b;
+        });
+        const cancel = chip(t("common.cancel"));
+        const go = chip(t("cal.ics.exportBtn"), true);
+        openCard(t("cal.ics.exportTitle"), h("p", {}, t("cal.ics.exportHint")),
+          h("p", { class: "zn-hint" }, t("cal.ics.exportScope")),
+          h("div", { class: "zn-set-chips" }, ...scopeChips),
+          h("div", { class: "zn-dialog-actions" }, cancel, go));
+        cancel.addEventListener("click", () => { closeDialog(); });
+        go.addEventListener("click", () => {
+          if (typeof env.saveIcs !== "function") { closeDialog(); flash(t("cal.ics.exportUnavailable")); return; }
+          const chosen = scope === "year" ? inYear : all;
+          // The same writer, the same UIDs: a file that comes back in is an update, not a second copy.
+          const out = C.icsFromItems(chosen, { now: Date.now(), name: "Zentral Notes" });
+          if (!out.count) { closeDialog(); flash(t("cal.ics.exportEmpty")); return; }
+          closeDialog();
+          Promise.resolve(env.saveIcs(out.text, "zentral-notes-" + CALENDAR_PART.ymd(new Date()))).then((saved) => {
+            if (saved) flash(t("cal.ics.exportDone", { n: out.count }));
+            focusEditor();
+          }).catch((error) => { warn(error); flash(t("cal.ics.exportFailed")); });
+        });
+      }
+
       // Table creator: pick a size on the grid (or type it), choose left / centre / right per column,
       // then insert a ready table.
       function askTable() {
@@ -31483,6 +31532,15 @@
           return { text: await IOUtils.readUTF8(file.path), name: String(file.path).split(/[\\/]/).pop() || "calendar.ics", size: info.size };
         } catch (error) { warn(error); return { error: t("cal.ics.readFailed") }; }
       }
+      // T2.13: the calendar written out as one .ics, through the same save picker as every other export.
+      async function saveIcs(text, baseName) {
+        const file = await pick(Ci.nsIFilePicker.modeSave, t("cal.ics.exportSaveTitle"), (baseName || "zentral-notes") + ".ics", "ics");
+        if (!file) return false;
+        try {
+          await IOUtils.writeUTF8(file.path, String(text || ""));
+          return true;
+        } catch (error) { warn(error); return false; }
+      }
       // ST7.5: the reminder history as a plain .txt, through the same save picker as every other export.
       async function exportReminderHistory(text) {
         const file = await pick(Ci.nsIFilePicker.modeSave, t("history.export"), "reminder-history.txt", "");
@@ -31779,7 +31837,7 @@
       }
       const tick = createTimeTickService({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), warn });
       onCleanup(() => tick.destroy());
-      const env = { openLink, copyText, exportNote, exportAll, exportZip, exportBackupZip, exportObsidianVault, pickObsidianVault, importObsidianVault, pickBackupZip, restoreBackupZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, exportReminderHistory, pickIcs, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now(),
+      const env = { openLink, copyText, exportNote, exportAll, exportZip, exportBackupZip, exportObsidianVault, pickObsidianVault, importObsidianVault, pickBackupZip, restoreBackupZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, exportReminderHistory, pickIcs, saveIcs, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now(),
         // Visibility rules live in meta.json, which raises no store event: the sheet asks for the Zen Agenda refresh.
         refreshAgenda: () => { if (!disposed && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); } },
         // SB6.5: Agenda Doctor diagnostics & safe one-click repair (wired to live host DOM + reminder history).
