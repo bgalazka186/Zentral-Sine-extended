@@ -1838,7 +1838,6 @@
           parseInt(root?.style?.width, 10) ||
           350;
 
-        const docRoot = document.documentElement;
         const widthValue = `${Math.round(width)}px`;
         if (
           docRoot.style.getPropertyValue("--bgalazka-panel-width") !==

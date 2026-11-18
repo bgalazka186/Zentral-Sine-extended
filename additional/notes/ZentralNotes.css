@@ -3652,6 +3652,32 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
   font-size: 0.82em;
 }
 
+/* OW-116: clear only colour and opacity for parked Notes/Agenda rows. Compact tabs keep their own
+ * sizing and clipping; these selectors touch no layout properties and use no grouped pseudo-class.
+ * The tab row, its content box, favicon, label container and native title each get the same
+ * narrow treatment, so a browser-side pending rewrite cannot gray or fade either visual road. */
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-item][pending],
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content,
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-agenda-item][pending],
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content {
+  filter: none !important;
+  opacity: 1 !important;
+}
 
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-image,
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-image {
+  filter: none !important;
+  opacity: 1 !important;
+}
 
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-label-container,
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-label-container {
+  filter: none !important;
+  opacity: 1 !important;
+}
 
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-label-container > .tab-label,
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-label-container > .tab-label {
+  filter: none !important;
+  opacity: 1 !important;
+}

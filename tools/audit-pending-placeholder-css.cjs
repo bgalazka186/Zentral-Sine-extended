@@ -6,6 +6,8 @@
  * `additional` and `extension` CSS whose selector mentions the pending attribute,
  * and say whether it can change the look of one of those pinned placeholder rows. No browser,
  * no screenshot, no live Zen needed: this is a static reading of the shipped stylesheets.
+ * OW-119: Notes-owned OW-116 visual rules are reported as `visual`, never as compact-density
+ * overrides, so `additional/tabs/ZentralTabDensity.css` stays the compact-tabs feature's own file.
  *
  * Usage:
  *   node tools/audit-pending-placeholder-css.cjs            human-readable report
@@ -149,9 +151,21 @@ function classify(rule) {
   const look = rule.declarations
     .filter((d) => LOOK_PROPERTIES.has(d.property))
     .map((d) => `${d.property}: ${d.value}`);
-  const isOverride = NOTES_MARK.test(selector) &&
-    rule.declarations.some((d) => d.property === "opacity" && /^1\s*!important/.test(d.value)) &&
-    rule.declarations.some((d) => d.property === "filter" && /^none\s*!important/.test(d.value));
+  // OW-116: Notes-owned visual rules reset only colour/opacity for our pending
+  // placeholder markers. They are deliberately NOT compact-density overrides:
+  // the compact-tabs stylesheet must keep its own clipping and sizing rules.
+  const visualOpacity = rule.declarations.some((d) => d.property === "opacity" && /^1\s*!important/.test(d.value));
+  const visualFilter = rule.declarations.some((d) => d.property === "filter" && /^none\s*!important/.test(d.value));
+  const isVisual = rule.file === "additional/notes/ZentralNotes.css" && NOTES_MARK.test(selector) && visualOpacity && visualFilter;
+  if (isVisual) {
+    return {
+      matches: false,
+      kind: "visual",
+      reason: "OW-116 visual rule: Notes/Agenda pending rows only; compact tabs' layout is untouched",
+      look,
+    };
+  }
+  const isOverride = rule.file === "additional/tabs/ZentralTabDensity.css" && NOTES_MARK.test(selector) && visualOpacity && visualFilter;
   if (isOverride) {
     return {
       matches: true,
@@ -206,6 +220,7 @@ function audit() {
     rules,
     matching: rules.filter((r) => r.matches && r.kind !== "override"),
     overrides: rules.filter((r) => r.kind === "override"),
+    visual: rules.filter((r) => r.kind === "visual"),
   };
 }
 
@@ -219,7 +234,7 @@ function format(report) {
     "Notes/Agenda placeholder row after OW-88 parks it, either inside `zen-folder[bgalazka-notes-folder]` or",
     "marked `tab[bgalazka-notes-item]` / `tab[bgalazka-notes-agenda-item]`.",
     "",
-    `Candidate rules: ${report.rules.length}; matching OUR rules: ${report.matching.length}; narrow overrides: ${report.overrides.length}.`,
+    `Candidate rules: ${report.rules.length}; matching OUR rules: ${report.matching.length}; narrow overrides: ${report.overrides.length}; Notes-owned visual rules: ${report.visual.length}.`,
     "",
     "| # | File:line | Match | Kind | Selector (compact) | Look properties changed | Reason |",
     "| --: | :--- | :--- | :--- | :--- | :--- | :--- |",
@@ -239,6 +254,9 @@ function format(report) {
     "- `zentral/groups/styles/ZentralGroupsInjected.css` already resets `filter: none` for",
     "  `:root zen-folder tab[pending=\"true\"]`, but it is outside the audited directories and covers only the",
     "  filter, not opacity or layout.",
+    "- OW-116 visual rules live in `additional/notes/ZentralNotes.css` and reset only `opacity` / `filter`",
+    "  for the two Notes/Agenda pending markers. They are intentionally absent from",
+    "  `additional/tabs/ZentralTabDensity.css` and do not change compact tabs' clipping, sizing or layout.",
     "",
     "## OWNER GATE",
     "",

@@ -25,6 +25,9 @@ test("the screenshot-free audit lists every pending rule in the two owned CSS tr
   assert.equal(report.matching.length, 4, "exactly four OUR rules can hide a parked placeholder");
   assert.ok(report.overrides.length >= 4, "each of those has a narrow Notes/Agenda override");
   assert.ok(report.rules.length >= 13, "every candidate is listed, including the non-matching ones");
+  assert.equal(report.visual.length, 10, "OW-116's Notes-owned visual rules are listed separately");
+  assert.ok(report.visual.every((r) => r.file === "additional/notes/ZentralNotes.css" && !r.matches),
+    "visual rules do not masquerade as compact-density matches");
 
   const density = report.matching;
   assert.ok(density.every((r) => r.file === "additional/tabs/ZentralTabDensity.css"));

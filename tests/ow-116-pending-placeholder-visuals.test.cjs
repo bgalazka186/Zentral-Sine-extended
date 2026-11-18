@@ -2,9 +2,10 @@
 /* Owner bugs 1 and 2 (2026-11-18): Zen sidebar Notes rows lost their titles while favicons/folders
  * stayed, and Agenda favicons stayed grayscale. Both are parked `[pending]` pseudo-tabs, so the fix
  * has two halves: restore the native `.tab-label` text whenever the browser rewrites a row, and
- * ship a narrow CSS override that clears grayscale/opacity on the row, its favicon and its label
- * WITHOUT hiding or zeroing either. This suite runs the real Notes source in the fake Zen browser
- * and audits the shipped CSS; no live Zen screenshot is claimed. */
+ * ship Notes-owned CSS that clears grayscale/opacity on the row, its favicon and its label
+ * WITHOUT hiding or zeroing either and WITHOUT touching compact tabs' layout/clipping. This suite
+ * runs the real Notes source in the fake Zen browser and audits the shipped CSS; no live Zen
+ * screenshot is claimed. */
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -124,24 +125,30 @@ test("the Agenda row keeps its title/favicon when the browser rewrites a pending
   await h.destroy();
 });
 
-test("the narrow pending override clears grayscale on Agenda favicons while keeping labels visible", () => {
+test("Notes-owned pending visual rules clear grayscale without touching compact-tabs layout", () => {
   const report = audit();
-  const css = read("additional/tabs/ZentralTabDensity.css");
-  const visual = report.overrides.filter((r) => r.file === "additional/tabs/ZentralTabDensity.css" && r.line > 975);
-  assert.ok(visual.length >= 2, "new pending-visual overrides are listed by the screenshot-free audit");
+  const css = read("additional/notes/ZentralNotes.css");
+  const density = read("additional/tabs/ZentralTabDensity.css");
+  const visual = report.visual;
+  assert.ok(visual.length >= 4, "Notes-owned visual rules are listed separately by the screenshot-free audit");
+  assert.ok(visual.every((r) => r.file === "additional/notes/ZentralNotes.css"), "visual rules live in Notes' CSS");
+  assert.equal(report.overrides.length, 8, "the eight compact OW-114 overrides are unchanged");
+  assert.ok(report.overrides.every((r) => r.file === "additional/tabs/ZentralTabDensity.css"), "compact overrides stay in their own sheet");
   const selectors = visual.map((r) => r.selector).join("\n");
   assert.match(selectors, /bgalazka-notes-item/, "Notes rows are covered");
   assert.match(selectors, /bgalazka-notes-agenda-item/, "Agenda rows are covered");
   assert.match(selectors, /\.tab-icon-image/, "the favicon itself is covered, not just the row");
   assert.match(selectors, /\.tab-label/, "the title node is covered too");
   const declarations = visual.flatMap((r) => r.declarations.map((d) => `${d.property}: ${d.value}`));
-  for (const wanted of ["filter: none !important", "opacity: 1 !important", "visibility: visible !important"]) {
+  for (const wanted of ["filter: none !important", "opacity: 1 !important"]) {
     assert.ok(declarations.includes(wanted), wanted + " is restored");
   }
-  for (const forbidden of ["display: none", "width: 0", "height: 0", "font-size: 0"]) {
-    assert.ok(!declarations.some((d) => d.includes(forbidden)), "the override never hides/zeroes a row: " + forbidden);
+  for (const forbidden of ["visibility:", "overflow:", "display:", "width:", "height:", "font-size:", "display: none", "width: 0", "height: 0", "font-size: 0"]) {
+    assert.ok(!declarations.some((d) => d.includes(forbidden)), "the visual rules never change compact-tabs layout: " + forbidden);
   }
-  assert.match(css, /\[pending\]/, "the override is scoped to parked placeholders");
+  assert.doesNotMatch(density, /OW-116/, "the compact-tabs stylesheet is untouched");
+  assert.match(css, /\[pending\]/, "the visual rules are scoped to parked placeholders");
+  assert.doesNotMatch(css, /OW-116[\s\S]*bgalazka-tabbar-compact/, "not tied to the compact-tabs switch");
   assert.doesNotMatch(css, /:root\s+tab\[pending\][^{]*\{[^}]*filter:\s*none/, "no blanket pending-tab override");
   assert.equal(read("docs/ow-114-pending-css-audit.md"), format(report), "the generated CSS audit report is current");
 });
