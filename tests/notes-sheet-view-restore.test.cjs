@@ -84,15 +84,31 @@ async function makeSheet() {
 const viewOf = (root) => root.dataset.view;
 
 (async () => {
+  await test("OW-106: a fresh sheet defaults to All notes even when the saved view was the editor", async () => {
+    const h = await makeSheet();
+    const note = h.store.create("# Saved note\\nBody");
+    h.store.setMeta({ sheetView: "editor" });
+    await h.store.flush();
+    const sheet = h.make();
+    try {
+      const root = await h.prepare(sheet);
+      assert.equal(viewOf(root), "list", "the default landing page is All notes, not the last note's editor");
+      assert.equal(root.dataset.allNotesActive, "true", "the calendar/list surface is active");
+      assert.equal(sheet.openNote(note.id), true, "intentional navigation to a particular note remains available");
+      await h.flush();
+      assert.equal(viewOf(root), "editor", "an explicit request still opens the selected note");
+    } finally { try { sheet.destroy(); } catch (_) {} }
+  });
+
   await test("the view the person leaves is written to the view state, and it is a view key", async () => {
     const h = await makeSheet();
     const sheet = h.make();
     try {
       const root = await h.prepare(sheet);
-      assert.equal(viewOf(root), "editor", "a sheet opens in the editor");
+      assert.equal(viewOf(root), "list", "a fresh sheet opens in All notes");
       root.all().find((el) => el.title === "All notes").click();
       await h.flush();
-      assert.equal(viewOf(root), "list", "precondition: All notes is on screen");
+      assert.equal(viewOf(root), "list", "All notes is on screen");
       assert.equal(h.store.meta.sheetView, "list", "and the view state recorded it");
       assert.ok(C.UI_STATE_KEYS.includes("sheetView") && C.UI_STATE_KEYS.includes("sheetFilter"),
         "the calendar part owns the key, so it round-trips through the view file rather than meta.json");

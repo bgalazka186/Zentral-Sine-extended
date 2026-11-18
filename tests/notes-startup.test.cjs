@@ -66,6 +66,7 @@ const REAL_FOLDERS = ["Home/fhome00001/", "Work projects/fwork00001/blue"];
     const w = world(), win = w.openWindow();
     await startupPanel(w, win, {});
     reference = seen(win);
+    assert.equal(win.openSheets()[0].dataset.view, "list", "start-up restore also lands on All notes, not the last note's editor");
     assert.deepEqual(reference, [{ slot: "", folded: true, busy: "", text: "# Two\ntext of Two" }], "open, folded with its panel (a folded sheet holds no room), the note used last");
     assert.equal(focusInside(win, win.openSheets()[0]), false, "the keyboard focus was never moved into Notes");
     assert.equal(w.meta().openIn, "primary");
