@@ -57,7 +57,10 @@ test("the month/week toggle is a chevron that points the way the view goes", () 
 });
 
 test("the chevron actually turns: down to the week, up back to the month", () => {
-  assert.match(CSS, /zn-calendar-view-toggle\[data-next="month"\] svg \{ transform: rotate\(180deg\)/, "month is the up one");
+  // The icon set's chevron points right, so "down" is 90° and "up" is 270°. A test that asserted 0/180 would pass on a
+  // chevron pointing sideways, which is exactly what it looked like before this check existed.
+  assert.match(CSS, /zn-calendar-view-toggle\[data-next="week"\] svg \{ transform: rotate\(90deg\)/, "week is the down one");
+  assert.match(CSS, /zn-calendar-view-toggle\[data-next="month"\] svg \{ transform: rotate\(270deg\)/, "month is the up one");
   assert.match(CSS, /prefers-reduced-motion[\s\S]{0,120}zn-calendar-view-toggle svg \{ transition: none/, "and turning is optional for a person who asked for less motion");
 });
 
