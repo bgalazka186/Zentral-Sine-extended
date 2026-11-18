@@ -30434,7 +30434,7 @@
         // OW-106: All notes is the default landing page whenever Notes/Calendar opens, even if the last
         // sheet view was the editor. Keep the most recent note selected behind the list (the editor and tab
         // context need it); an intentional openNoteById/openNote action after opening still opens its target.
-        const showAllNotes = !!CALENDAR_PART && (!!adapter.kind || adapter.defaultLanding === true);
+        const showAllNotes = !!CALENDAR_PART && !!adapter.kind;
         sheetViewRestored = true;
         rememberedView = "";
         const id = store.latestId();
@@ -31252,8 +31252,6 @@
       return {
         position: "fixed",
         host: document.documentElement,
-        // The standalone Notes card is also a feature entry point, so it starts in All notes like a hosted pseudo-tab.
-        defaultLanding: true,
         // Docked or floating, the card's place is remembered (docked has its own slot, so switching the dock
         // option never moves the floating card).
         get geoKey() {
