@@ -108,10 +108,144 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 |   110 | `OW-84`     | `DONE`    | Low                 | S      | —                 | The Notes `+` menu must not offer the same creation twice ("New reminder" and "Create timed reminder…" opened the same composer) |
 |   111 | `OW-85`     | `DONE`    | High                | M      | —                 | Correction to OW-73: revert it (it targeted the Notes rows) and put the split-view / folder-tree / hide-calendar buttons in the bar under the title, above the search, where they cannot be cut by the window edge |
 |   112 | `OW-86`     | `DONE`    | Med                 | M      | —                 | In the Big Picture tree a click selects (Shift/Ctrl as in the docked tree), a double click opens, and dropping several selected notes on one day asks what the drop should make |
+|   113 | `OW-87`     | `DONE`    | Low                 | S      | —                 | The logger's core category must default to off in the repository, so a fresh install does not turn on a debug stream the owner already switched off locally |
+|   114 | `OW-88`     | `OPEN`    | High                | M      | —                 | Notes and Agenda sidebar placeholders each hold a whole content process (about 11 extra processes, half a gigabyte): keep them unloaded and every visible behaviour identical |
+|   115 | `OW-89`     | `OPEN`    | High                | M      | OW-88             | Boost, part one: read total browser RAM on demand, free memory losslessly, trim once after startup |
+|   116 | `OW-90`     | `OPEN`    | Med                 | M      | OW-89             | Boost, part two: the sidebar card and its menu (replaces the Status card) |
+|   117 | `OW-91`     | `OPEN`    | Med                 | L      | OW-89             | Boost, part three: unload what is not in use (normal tabs and opt-in panels), with one Restore |
+|   118 | `OW-92`     | `OPEN`    | Med                 | M      | OW-89             | Boost, part four: a RAM limiter with a soft and a hard mode, one-shot timers only |
+|   119 | `OW-93`     | `OPEN`    | Med                 | M      | OW-91             | Background mode per essential panel (live / throttled / allow sleep), so a hidden arena.ai is throttled instead of burning a core |
+|   120 | `OW-94`     | `OPEN`    | Med                 | L      | OW-91             | Game Mode: pause every feature's timers and keep only audible tabs and the video source active, with a stronger saver behind a second switch |
 
 ---
 
 ## Task blocks (same order as the Master Order)
+
+### RAM plan (`OW-87`–`OW-94`) — source: `docs/PLAN_CODING_AGENT.md`
+
+The owner measured his own browser (2026-11-18) and wrote the plan himself with an AI: the whole window including
+every Zentral script and DOM is about 49 MB, so **the code is not the problem and nothing here refactors for size**.
+What costs RAM is (a) about eleven Notes/Agenda placeholder tabs, each holding a content process of 43–51 MB, and
+(b) real heavy pages (Messenger ≈0.9 GB, arena.ai ≈0.9 GB, WhatsApp ≈0.75 GB, an idle YouTube ≈1.1 GB) which the mod
+can only unload or throttle on demand. The full task text, owner gates and the do-not list live in that file; these
+blocks are the roadmap-sized version of it. Order is fixed: `OW-87` → `OW-88` → `OW-89` → `OW-90` → `OW-91` → `OW-92`
+→ `OW-93` → `OW-94`. Every row keeps the plan's kill-switch rule (default ON = new behaviour, off = exactly today),
+adds `tests/<id>.test.cjs`, and writes one line into `docs/perf-results.md` with effect "not measured".
+
+#### `OW-87` — The core logger category is off in the repository too
+
+**Status:** `DONE` (3.3.315) · **Impact:** Low · **Effort:** S · **Source:** `docs/PLAN_CODING_AGENT.md` task B0
+
+**Problem:** the owner already switched `zen.workspace.zentral.debug.core` off on his machine, but the repository shipped
+it as `true` in `additional/diagnostics/settings.json`, in the settings preset `extension/settings/recommended.json`
+and in `ZentralShared`'s fallback table, so every fresh install turned a debug stream back on — and the settings dialog
+hard-set it to `true` on save.
+
+**Done at 3.3.315** — the default is `false` in the schema, the preset and Core's fallback table (so `preferences.json`
+rebuilt to `false` as well); the logger's `isModuleEnabled` no longer short-circuits `core` to `true`, so the category
+follows its own pref like every other one — without that, the owner's local `false` and the new switch would both have
+been decorative; and the settings row is a real switch that loads from and saves to the pref instead of a checked,
+`disabled` control that re-forced `true` on every save. `zen.workspace.zentral.modules.logger.enabled` is untouched, by
+the plan's own instruction. `tests/ow-87-debug-core-default.test.cjs` (6 tests) pins all four places, and
+`tests/diagnostics-logger.test.cjs` grew the two cases that prove core is now switch-governed.
+
+#### `OW-88` — Notes/Agenda placeholders must not hold a content process
+
+**Problem:** `about:blank#zn-note:<id>` and `about:blank#zn-agenda-<key>` are created as live tabs, so each one loads a
+content process (~50 MB) for a page that only exists to be a sidebar row.
+
+**Plan (symbols in `additional/notes/ZentralNotes.uc.js`):** `parkPseudoTab(tab)` = `discardBrowser(tab, true)` in
+`try/catch`, skipped when the tab is disconnected, selected, `zenBusy`, already `pending`, or not a placeholder; called
+from a scope `setTimeout(…, 0)` after `addManagedPseudoTab`'s callers finish marking/pinning, after
+`onPseudoTabRestored`, and right after the deferred hand-back in `onZenSelect`/`activateZenTab`; wrapped in the
+existing `zenEventsIgnored()` quiet window. Pref `zen.workspace.zentral.notes.park_pseudo_tabs` (default `true`) in the
+Notes settings Advanced section: "Keep sidebar note/agenda placeholders unloaded (saves memory)".
+Never touch a real note tab or a non-placeholder tab; never re-select inside Zen's own `TabSelect` dispatch.
+
+**Tests:** 20 placeholders → 20 discards after the creator returns; selected/busy/pending/disconnected skipped;
+kill-switch off → zero calls; a click still opens the note, hands selection back, then parks again; the existing
+Notes tests pass unchanged. **Owner gate:** a note and an agenda item still open from the sidebar, labels/icons stay,
+`about:memory` / D1 shows `web` processes down from ~11 to 1–2.
+
+#### `OW-89` — Boost core: memory meter, Level 1, post-startup trim
+
+**Plan:** new module `additional/boost/` (id `boost`), same file set as `additional/tabs/unloading/`, catalog entry
+beside `tab-unload`. `memoryMB()` sums `memory` over the parent and all `children` of
+`ChromeUtils.requestProcInfo()`, sampled only on demand (popup open: 2 s; limiter: per `OW-92`). Level 1 =
+`minimizeMemoryUsage()` on the reporter manager, then `forceGC()`, `forceCC()` in `try/catch`, returning
+`{beforeMB, afterMB, freedMB}` measured ~3 s later — nothing is closed, unloaded or reloaded. Post-startup trim runs
+Level 1 once per browser start, after session restore and the Startup module, 90 s without user input and no audible
+media, through one `setTimeout` chain plus `requestIdleCallback` — never polling. Pref
+`zen.workspace.zentral.boost.startup_trim` (default `true`). Public API `window.ZentralBoost` with `runLevel1()`,
+`memoryMB()`, `onChange(cb)`.
+
+**Tests:** Level 1 calls the manager once and returns the measured numbers; the trim runs once, never while media
+plays or input is recent; the kill-switch is respected; destroy cancels pending timers.
+
+#### `OW-90` — The Boost widget replaces the Status widget
+
+**Plan:** register widget `boost` in `additional/widgets/ZentralWidgets.uc.js` and **remove the `status` widget**
+(the owner's words: it replaces it) — the memory reading moves into Boost, the battery reading is dropped with the
+card, since a desktop has none (`OW-70`). Compact tile "Boost" with the last RAM number (updates only while the
+popup is open), left click runs Level 1 and toasts "Freed X MB", right click/arrow opens "Free memory (light)" plus
+greyed entries for `OW-91`/`OW-92`. A self-contained toast (4 s, accessible, theme-aware, no cross-module
+dependency). Pref `zen.workspace.zentral.widgets.boost.enabled` (default `true`); honours the tray's
+`pause_when_hidden`; works with the tray absent (API + shortcut only, documented in the module README).
+
+**Tests:** `registerWidget` called once and never for `status`; a click calls `runLevel1`; popup open/close
+starts/stops the 2 s sampler; destruction stops it.
+
+#### `OW-91` — Unload what is not in use, with Restore
+
+**Plan:** extract `isNormalTabAlreadyUnloaded` / `isSuccessorCandidate` / host-tab exclusion from
+`additional/tabs/unloading/ZentralTabUnload.uc.js` into a shared `ZentralTabPolicy.isUnloadable(tab, ctx)` used by
+both modules (TabUnload's behaviour unchanged). Never unload: the selected tab, a Zentral host tab, a playing tab
+(`soundPlaying`), a sharing tab (`_sharingState`), a picture-in-picture tab, the video preview's source tab, an
+already `pending` tab; pinned/essential only when `zen.workspace.zentral.boost.keep_pinned` (default `false`).
+Essential-panel records get `backgroundMode` (`live` default | `throttled` | `asleep-allowed`) saved with the app
+settings; Level 2 = Level 1 + eligible tabs oldest-`lastAccessed` first + sleeping only `asleep-allowed` records via
+`explicitUnloadTabs`, waking through `loadEssentialInBackground(record, true)`. `undoState` (cap 50) feeds a
+"Restore" entry and the toast after a deep run. Menu entries "Free memory (deep)" / "Restore"; shortcut pref
+`zen.workspace.zentral.boost.shortcut` (default empty) following `extension/panels/interaction/ZentralAppShortcuts.js`.
+
+**Tests:** the policy table for every never rule; Level 2 never touches selected/audible/PiP/video-source; the three
+background modes; Restore wakes exactly what was slept; TabUnload tests unchanged.
+
+#### `OW-92` — The RAM limiter
+
+**Plan:** prefs `zen.workspace.zentral.boost.limit_enabled` (`false`), `limit_mb` (4096), `limit_mode` (`soft` |
+`hard`), `limit_cooldown_s` (60), `limit_target_pct` (85). One-shot timers only: sample every 60 s, every 10 s above
+70 % of the limit; above the limit `soft` toasts with "Free now", `hard` runs Level 2 in batches of three tabs,
+re-samples, stops at `limit_mb * target_pct / 100` or when nothing is eligible, then one result toast; never inside
+the cooldown; still above with nothing eligible = one toast per 10 minutes. The README says plainly that a real
+per-process cap is impossible from JS.
+
+**Tests:** the state machine — hysteresis, cooldown, no repeat, soft vs hard, nothing eligible.
+
+#### `OW-93` — Background mode `throttled` for essential panels
+
+**Plan:** preloaded panel browsers are kept `docShellIsActive = true` in `syncAppPanelBrowserActivity`
+(`extension/panels/browsers/ZentralBrowserIntegrations.uc.js`) and the corner-tile equivalent, which is why a hidden
+arena.ai burns about 35 % of a core. For records with `backgroundMode === "throttled"`: while the panel is hidden,
+`docShellIsActive = false` and `renderLayers = false`; restored when shown. The browser stays loaded, so sockets and
+title/badge events keep working. `live` records keep exactly today's behaviour.
+
+**Tests:** `live` unchanged; `throttled` inactive while hidden and active while shown; a runtime mode switch applies
+immediately. **Owner gate:** the owner sets arena.ai to `throttled` first; Messenger and WhatsApp stay `live` until he
+tests and agrees.
+
+#### `OW-94` — Game Mode and the pause state
+
+**Plan:** `ZentralRuntime.performance = { paused, setPaused(bool), onChange(cb) }`; paused features skip work and
+re-arm on resume (video preview timers, widget refresh, RSS scan, Notes minute wake, panel fallback poll) through the
+scope helpers. Level 3 "Game Mode" = Level 2 + pause + `docShellIsActive = false` / `renderLayers = false` on every
+kept browser except audible tabs and the Big Picture video source. A separate "Stronger saver" toggle also sleeps
+`live`/`throttled` records (WhatsApp, Messenger) and is **off** by default; when on it fills `undoState` so Restore
+brings them back. Turning Game Mode off resumes and restores activity for the selected tab only; everything else
+reloads lazily. Kill-switch pref `zen.workspace.zentral.boost.game_mode` is the toggle itself.
+
+**Tests:** pause propagates to each subscribed feature; exempt tabs stay active; toggle off restores; Restore after
+Stronger saver wakes records. **Owner gate:** a video played in the sidebar preview still plays with Game Mode on.
 
 #### `T2.13a` — Holidays and the future Google Calendar sync/import
 
@@ -529,7 +663,7 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.307.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9`, `SB6.6`, `UI4.11`, `DOC-1`, `TM3.7`, `ST7.8`, `SB6.11`, `ST7.5`, `UI4.10`, `OW-53`, `F0.15`, `F0.16`, `OW-54`, `OW-55`, `OW-56`, `OW-57`, `OW-58`, `OW-59`, `OW-60`, `OW-61`, `T3.5`, `SB6.9`, `ST7.3`, `OW-63`, `OW-62`, `OW-64`, `OW-21`, `OW-65`, `OW-22` and `OW-67`–`OW-72`, `OW-73`–`OW-76` and `OW-80`–`OW-86` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`240/240` test files) passes in Node/fake-Zen at 3.3.307; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.315.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9`, `SB6.6`, `UI4.11`, `DOC-1`, `TM3.7`, `ST7.8`, `SB6.11`, `ST7.5`, `UI4.10`, `OW-53`, `F0.15`, `F0.16`, `OW-54`, `OW-55`, `OW-56`, `OW-57`, `OW-58`, `OW-59`, `OW-60`, `OW-61`, `T3.5`, `SB6.9`, `ST7.3`, `OW-63`, `OW-62`, `OW-64`, `OW-21`, `OW-65`, `OW-22` and `OW-67`–`OW-72`, `OW-73`–`OW-76` and `OW-80`–`OW-86` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`240/240` test files) passes in Node/fake-Zen at 3.3.307; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
 
 `OW-67`–`OW-72` DONE (3.3.303) — the owner's six widget reports of 2026-11-17, each fixed and each pinned by a test.
 
@@ -799,4 +933,4 @@ Known debts / owner requirements: LIMITS of `OW-04`: the pointer is held to the 
 
 Planning only, no code (2026-11-17, version 3.3.244): the owner's holiday list added as `OW-43` (holiday sets split from the interface language, any language picks any set, first sets `PL` + `US`), `OW-44` (any number of sets at once), `OW-45` (one-place year table for movable/one-off dates such as the Polish election day and `niedziela handlowa`), `OW-46` (one master off switch) and `T2.13a` (how holidays behave when the `T2.13` ICS/Google groundwork is built: local sets are never imported or synced). They sit at the top of the Master Order; `T3.3` follows them.
 
-Next action: `ST7.4` (render Agenda rows without real tabs — research) and the `T4.3a`→`b`→`c` extraction chain, both large. `OW-66` is the owner's live check of `OW-58`–`OW-65`, `OW-73`–`OW-76` and `OW-80`–`OW-86` in the real sidebar and needs no code from a session. Finished lately: `OW-21` (find and replace, 3.3.300), `OW-65` (the Clock card's shape, 3.3.301), `OW-22` (next match not on screen, 3.3.302), `OW-67`–`OW-72` (the six widget reports, 3.3.303) and `OW-73`–`OW-76` (the four calendar reports, 3.3.304). Then 3.3.307: `OW-80`/`OW-86` (the tree in Big Picture — moved, not copied; a click selects there, a double click opens, and a multi-note drop asks), `OW-81` (the quick-settings default for a dropped note), `OW-82` (drop on empty space asks, with a five-minute silent window), and the owner's three corrections `OW-83` (small bare chevrons), `OW-84` (no creation offered twice in the `+` menu) and `OW-85` (`OW-73` reverted — the layout buttons now sit in the bar under the title, where nothing is cut at 420, 340 or 300px). 3.3.309: `T2.13` (the `.ics` writer, `syncState`, and the round trip that proves `import → export → import` is the same calendar). 3.3.310: `T2.13a` (an imported holiday calendar is never a local holiday — `isWorkFree` cannot see the item store, the mark is a neutral imported look, and both the import card and the holidays settings say so). 3.3.311: `OW-78` (one palette — the CSS chain reads the resolved token first and the resolver was found hardcoding two themes' text colours). 3.3.313: `OW-79` (a language is a data file, and a key no table has draws readable words, never a dotted key). 3.3.314: `OW-77` (`tools/audit-notes-menus.cjs` — 11 menus, 264 measurements, 0 findings, baseline in `docs/MENU_BASELINE.md`). `ST7.3` stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.
+Next action: the RAM plan (`OW-87`→`OW-94`, from `docs/PLAN_CODING_AGENT.md`) runs first, in that exact order: the logger default, then the Notes/Agenda placeholder parking (the one measured half-gigabyte), then Boost in four slices, the panel background modes and Game Mode. `ST7.4` (render Agenda rows without real tabs — research) and the `T4.3a`→`b`→`c` extraction chain stay next after it, both large. `OW-66` is the owner's live check of `OW-58`–`OW-65`, `OW-73`–`OW-76` and `OW-80`–`OW-86` in the real sidebar and needs no code from a session. Finished lately: `OW-21` (find and replace, 3.3.300), `OW-65` (the Clock card's shape, 3.3.301), `OW-22` (next match not on screen, 3.3.302), `OW-67`–`OW-72` (the six widget reports, 3.3.303) and `OW-73`–`OW-76` (the four calendar reports, 3.3.304). Then 3.3.307: `OW-80`/`OW-86` (the tree in Big Picture — moved, not copied; a click selects there, a double click opens, and a multi-note drop asks), `OW-81` (the quick-settings default for a dropped note), `OW-82` (drop on empty space asks, with a five-minute silent window), and the owner's three corrections `OW-83` (small bare chevrons), `OW-84` (no creation offered twice in the `+` menu) and `OW-85` (`OW-73` reverted — the layout buttons now sit in the bar under the title, where nothing is cut at 420, 340 or 300px). 3.3.309: `T2.13` (the `.ics` writer, `syncState`, and the round trip that proves `import → export → import` is the same calendar). 3.3.310: `T2.13a` (an imported holiday calendar is never a local holiday — `isWorkFree` cannot see the item store, the mark is a neutral imported look, and both the import card and the holidays settings say so). 3.3.311: `OW-78` (one palette — the CSS chain reads the resolved token first and the resolver was found hardcoding two themes' text colours). 3.3.313: `OW-79` (a language is a data file, and a key no table has draws readable words, never a dotted key). 3.3.314: `OW-77` (`tools/audit-notes-menus.cjs` — 11 menus, 264 measurements, 0 findings, baseline in `docs/MENU_BASELINE.md`). 3.3.315: `OW-87` (the core logger category is off by default everywhere and is a real switch). Also repaired in that commit: `docs/ADDING_A_LANGUAGE.md` and `docs/MENU_BASELINE.md` were never committed (`.gitignore` hides `docs/*`), so `tests/notes-more-languages.test.cjs` failed on a fresh clone — both are whitelisted now and `docs/perf-results.md` starts with `OW-87`. `ST7.3` stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.
