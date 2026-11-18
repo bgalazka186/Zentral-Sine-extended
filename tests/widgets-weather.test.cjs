@@ -259,6 +259,10 @@ test("OW-54: the outlook is styled to wrap, never to be cut", () => {
   assert.ok(!/white-space:\s*nowrap/.test(rule), "nowrap is what cut the answer");
   assert.ok(!/ellipsis/.test(rule), "so is the ellipsis");
   assert.match(css, /\.zw-weather-outlook \.zw-weather-outlook-line \{[^}]*display:\s*block/, "each half is a block of its own");
+  assert.match(SRC, /row\.classList\.add\("zw-weather-outlook-week-line"\)/, "only structured week rows receive the grid class");
+  assert.match(css, /\.zw-weather-outlook-week-line \{[^}]*display:\s*grid/, "week rows use the aligned grid");
+  assert.doesNotMatch(css, /\.zw-weather-outlook-line \{[^}]*display:\s*grid/, "plain outlook text must not be confined to the icon column");
+  assert.match(css, /\.zw-weather-outlook-day \{[^}]*grid-column:\s*2/, "the day stays in its column even without an icon");
   // The click-to-swap styling went with the swap.
   assert.ok(!/zw-weather-outlook\[data-zw-outlook-face\]/.test(css), "no dotted underline for a click that no longer exists");
 });

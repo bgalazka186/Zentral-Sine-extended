@@ -556,7 +556,7 @@
 /* OW-95: a week row is glyph + day + temperatures. A grid keeps the three columns aligned down the list, which is what
    makes seven rows readable at 220px; the glyph is small but not a speck, and the day name is what gives way when the
    card is narrow (the temperatures are the numbers people compare). */
-#zentral-sidebar-widgets .zw-weather-outlook .zw-weather-outlook-line {
+#zentral-sidebar-widgets .zw-weather-outlook .zw-weather-outlook-week-line {
   display: grid !important;
   grid-template-columns: 18px minmax(0, 1fr) auto !important;
   align-items: baseline !important;
@@ -569,6 +569,7 @@
   text-align: center !important;
 }
 #zentral-sidebar-widgets .zw-weather-outlook .zw-weather-outlook-line .zw-weather-outlook-day {
+  grid-column: 2 !important;
   min-width: 0 !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
