@@ -2355,6 +2355,22 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-agenda-row.is-personal-off {
   background: color-mix(in srgb, #b48bea 12%, transparent);
 }
+/* T2.13a: a holiday that came from a subscribed calendar file. It is NOT a local holiday: a neutral, cool grey edge and
+   no tint, so a synced holiday week can never look like a day off this calendar decided on. Deliberately quiet — an
+   imported holiday is information, not a rule. */
+.zentral-notes-sheet .zn-cal-month-cell.is-imported-holiday,
+.zentral-notes-sheet .zn-cal-time-day-head.is-imported-holiday,
+.zentral-notes-sheet .zn-cal-time-allday-cell.is-imported-holiday,
+.zentral-notes-sheet .zn-cal-time-column.is-imported-holiday,
+.zentral-notes-sheet .zn-cal-day-group.is-imported-holiday,
+.zentral-notes-sheet .zn-cal-agenda-row.is-imported-holiday {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 18%, transparent);
+}
+.zentral-notes-sheet .zn-cal-month-mark.is-imported-holiday,
+.zentral-notes-sheet .zn-cal-item.is-imported-holiday {
+  opacity: 0.82;
+  border-left-style: dashed;
+}
 .zentral-notes-sheet .zn-cal-picker-day.is-workfree {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, #78a9c8 36%, transparent);
   background: color-mix(in srgb, #78a9c8 7%, transparent);

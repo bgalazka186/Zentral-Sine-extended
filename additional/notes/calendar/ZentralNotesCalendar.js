@@ -971,6 +971,12 @@
       if (x.icsCalendar) item.x.icsCalendar = String(x.icsCalendar).slice(0, 200);
       if (x.icsLocation) item.x.icsLocation = String(x.icsLocation).slice(0, 500);
       if (x.icsCancelled === true) item.x.icsCancelled = true;
+      // T2.13a: a holiday that came from a feed is marked as imported, never as a local holiday. Kept only when set,
+      // so a file that is not a holiday feed leaves every item exactly as it was (no etag churn).
+      if (x.icsHolidayFeed === true) {
+        item.x.icsHolidayFeed = true;
+        item.x.icsHolidayName = String(x.icsHolidayName ?? "").slice(0, 120);
+      }
     }
     // T2.13: the sync bookkeeping, kept only on items that have actually been synced — an item that never has serialises
     // exactly as before, so no etag churn and no needless write on export (the same rule as the colour above).
@@ -1927,12 +1933,17 @@
     const byUid = new Map();
     for (const item of list) if (item?.x?.icsUid && !byUid.has(item.x.icsUid)) byUid.set(item.x.icsUid, item);
     const add = [], update = [], skipped = [];
-    let reminders = 0, events = 0;
+    let reminders = 0, events = 0, importedHolidays = 0;
+    // T2.13a: the whole file is read once for the feed it names, so every event of a holiday calendar is marked the
+    // same way. The mark is what keeps it out of the local sets and out of the work-free tint.
+    const feed = holidayFeedOf(parsed?.events);
     for (const event of parsed?.events || []) {
       if (event.cancelled) { skipped.push({ reason: "cancelled", summary: event.summary, uid: event.uid }); continue; }
       if (event.unreadable) { skipped.push({ reason: "unreadable", summary: event.summary, uid: event.uid }); continue; }
-      const item = icsToItem(event, { kind, now, zone });
-      if (!item) { skipped.push({ reason: "unreadable", summary: event.summary, uid: event.uid }); continue; }
+      const made = icsToItem(event, { kind, now, zone });
+      if (!made) { skipped.push({ reason: "unreadable", summary: event.summary, uid: event.uid }); continue; }
+      const item = feed ? markImportedHoliday(made, { feed }) : made;
+      if (isImportedHoliday(item)) importedHolidays++;
       if (item.x.kind === "reminder") reminders++; else events++;
       const already = event.uid ? byUid.get(event.uid) : null;
       if (already) update.push({ item, existing: already });
@@ -1941,7 +1952,9 @@
     const stamps = [...add, ...update.map((u) => u.item)].map((item) => Date.parse(item.start.dateTime || item.start.date + "T00:00:00"));
     const valid = stamps.filter((n) => Number.isFinite(n));
     return {
-      add, update, skipped, reminders, events,
+      add, update, skipped, reminders, events, importedHolidays,
+      // The feed this file is, or "" — a holiday calendar is imported as events and is never a local holiday set.
+      holidayFeed: feed,
       from: valid.length ? Math.min(...valid) : null,
       to: valid.length ? Math.max(...valid) : null,
       warnings: parsed?.warnings || [],
@@ -8354,6 +8367,60 @@
     return merged;
   }
   // The sets that give a day its holidays, in the order they are chosen (OW-44): one day may belong to several.
+  // ---------- T2.13a: a holiday calendar that came from a FILE is not a local holiday ----------
+  // A Google holiday calendar arrives through the OW-53 import as ordinary all-day events. Two things must never
+  // happen: (1) an imported event must not become a day in a local holiday set — a set is rule-computed (plus
+  // HOLIDAY_TABLE) and is never written by an import; (2) a day must not silently start looking work-free because
+  // somebody subscribed to a holiday feed. So an imported holiday is shown as itself, with a neutral "imported" look,
+  // and `isWorkFree` never reads the item store (it takes prefs only — that is the guarantee, kept here in writing).
+  //
+  // The feed is recognised by what the file says about itself, not by the event names: Google's holiday calendars all
+  // carry "Holidays" in `X-WR-CALNAME` (e.g. "Holidays in Poland"), and the URL form ends with `/holiday@group...`.
+  const HOLIDAY_FEED_RE = /\bholidays?\b|#holiday@|holiday@group/i;
+  function holidayFeedName(name) {
+    const text = String(name == null ? "" : name).replace(/\s+/g, " ").trim();
+    if (!text) return "";
+    if (!HOLIDAY_FEED_RE.test(text)) return "";
+    // A whole-calendar name is all we keep: the event text beside it is the holiday, not the feed.
+    return text.slice(0, 120);
+  }
+  // The feed a batch of imported events came from, or "" — one answer for the whole file.
+  function holidayFeedOf(events) {
+    const list = Array.isArray(events) ? events : [];
+    for (const event of list) {
+      const name = holidayFeedName(event?.calendar);
+      if (name) return name;
+    }
+    return "";
+  }
+  // Does this ITEM carry the imported-holiday mark? Only an imported item can: an event made here is never one, even
+  // if it happens to fall on a holiday and is all-day.
+  function isImportedHoliday(item) {
+    if (!item || typeof item !== "object") return false;
+    return item.x?.src === "ics" && item.x?.icsHolidayFeed === true;
+  }
+  // The mark written by the import: only on an all-day item from an .ics that came from a recognised feed. A timed
+  // event from the same file is an ordinary event (Google's holiday feeds are all-day, but a file is a file), and a
+  // reminder is never a holiday. Returns the item unchanged when the mark does not apply, so a caller can always pass
+  // the result straight to the store.
+  function markImportedHoliday(item, { feed = "" } = {}) {
+    if (!item || typeof item !== "object") return item;
+    const name = holidayFeedName(feed) || String(feed || "").trim();
+    if (!name) return item;
+    if (item.x?.src !== "ics") return item;
+    if (!item.start?.date) return item; // all-day only: a holiday feed's entries are days, not appointments
+    if (item.x?.kind === "reminder") return item;
+    return { ...item, x: { ...item.x, icsHolidayFeed: true, icsHolidayName: name.slice(0, 120) } };
+  }
+  // The look: a neutral mark, deliberately NOT the work-free tint. Kept pure so both the calendar and a test read the
+  // same decision, and so the classes are named once.
+  const IMPORTED_HOLIDAY_CLASS = "is-imported-holiday";
+  function importedHolidayAttrs(item) {
+    if (!isImportedHoliday(item)) return null;
+    const feed = String(item.x?.icsHolidayName || "").slice(0, 120);
+    return { class: IMPORTED_HOLIDAY_CLASS, "data-imported-holiday": feed || "true", title: feed };
+  }
+
   function holidaySetsOf(wf) {
     const list = Array.isArray(wf?.holidays) ? wf.holidays : (wf?.holiday ? [wf.holiday] : []);
     const out = [];
@@ -8401,7 +8468,7 @@
   const api = {
     KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, translate, t, pluralCategory, tCount, translationKeys, missingTranslationKeys, ymd, parseYmd, dayStart, addDays, nextDayStart, dayRange, civilDayStart, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, lineScheduleSignature, cleanTextSchedule, scheduleSignatureFromItem, scheduleFromParsedLine, reconcileListItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, itemIdTokens, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, cleanHistoryFilter, filterHistoryRecords, historyPruneSurvey, exportHistoryLines, historySummaryLine, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanNoteDropKind, NOTE_DROP_KINDS, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_TABLE, HOLIDAY_TABLE_KINDS, holidayTableEntries, holidayTableYears, holidaySetCoverage, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, holidaySetsOf, NO_WORK_FREE, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, itemIdTokens, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, cleanHistoryFilter, filterHistoryRecords, historyPruneSurvey, exportHistoryLines, historySummaryLine, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanNoteDropKind, NOTE_DROP_KINDS, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_TABLE, HOLIDAY_TABLE_KINDS, holidayTableEntries, holidayTableYears, holidaySetCoverage, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, holidaySetsOf, HOLIDAY_FEED_RE, holidayFeedName, holidayFeedOf, isImportedHoliday, markImportedHoliday, IMPORTED_HOLIDAY_CLASS, importedHolidayAttrs, NO_WORK_FREE, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     DEFAULT_DAY_LOOK, DAY_LOOK_KINDS, DAY_LOOK_MAX_STRENGTH, cleanDayLookColor, cleanDayLookStrength, cleanDayLook, dayLookTint, CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
     cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaLeftCount, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, AGENDA_FOLD_DEFAULTS, cleanAgendaFold, inQuietHours, agendaFoldPlan, UI_STATE_KEYS, isUiStateKey, splitUiState, migrateUiState, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, itemOwnsNoteText, itemIsFreeStanding, noteLinkedItems, unlinkPlan, unlinkLineText, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle, icsUnfold, icsText, icsProperty, icsDateValue, icsZonedMs, icsStamp, icsRecurrence, parseIcs, icsToItem, planIcsImport, icsEscape, icsFold, icsEventLines, icsFromItems, icsUtcStamp, defaultIcsUid, SYNC_STATES, syncStateOf, markSynced, markSyncedDeleted, syncPlan,
   };

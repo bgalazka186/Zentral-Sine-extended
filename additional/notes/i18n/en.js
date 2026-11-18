@@ -275,6 +275,8 @@
       "cal.ics.readFailed": "The calendar file could not be read",
       "cal.ics.tooBig": "A calendar file larger than {mb} MB is not read",
       "cal.ics.unavailable": "Importing a calendar file is unavailable",
+      // T2.13a: a holiday calendar is a set of ordinary events, and the card says so before anything is written.
+      "cal.ics.holidayFeed": "\"{calendar}\" is a holiday calendar. Its days arrive as ordinary all-day events: they are marked as imported, and they never become a day off in your own holiday sets.",
       // T2.13: the other direction — the calendar written out as a file other calendars read.
       "cal.ics.exportTitle": "Export this calendar",
       "cal.ics.exportHint": "One calendar file with everything on this calendar. It opens in Google Calendar, Apple Calendar and anything else that reads .ics.",
@@ -988,6 +990,7 @@
       "cal.holidays.noneSelected": "No holiday set chosen: only weekends and personal days off are shown.",
       "cal.holidays.setsActive": "Showing public holidays: {sets}.",
       "cal.holidays.enableAllHint": "Off hides every holiday feature: no tint, no holiday names, no trading Sundays. Personal days off are kept.",
+      "cal.holidays.importedNote": "These holidays are local to Notes and are never synced or imported into. A holiday calendar you bring in is a set of ordinary events: it is marked as imported and never becomes a day off here.",
       "cal.holidays.localOnly": "Holiday sets are local: they are never imported from or written to a synced calendar.",
       "cal.holidays.coverage": "Set {region}: its own dates run to {newest}; years with a written table: {years}.",
       "cal.holidays.coverageRulesOnly": "none yet",

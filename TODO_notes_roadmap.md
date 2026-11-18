@@ -115,7 +115,7 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 #### `T2.13a` — Holidays and the future Google Calendar sync/import
 
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S-M · **Depends on:** OW-44, T2.13 · **Source:** owner 2026-11-17
+**Status:** `DONE` (3.3.310) · **Impact:** Med · **Effort:** S-M · **Depends on:** OW-44, T2.13 · **Source:** owner 2026-11-17
 
 **Problem:** the owner's question — Google Calendar shows its own holiday calendars and today we do not know what would happen if a review of `T2.13` (ICS/Google groundwork) starts importing them.
 
@@ -126,6 +126,37 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 4. The settings dialog gets one line saying holidays are local and never synced.
 
 **Tests / done when:** an imported holiday-like all-day event does not become a local holiday, `isWorkFree` is unchanged by it, and the local holiday sets still work with the import off.
+
+**Done at 3.3.310** — the owner unblocked this row himself ("`T2.13a` is not blocked, go on work in loop"). All four
+plan steps, in the order the plan asked for:
+
+1. **Holiday sets stay local, and it is structural, not a promise.** `isWorkFree(day, prefs, lang)` takes prefs only —
+   it has no parameter through which an item could arrive, so an imported event cannot reach the work-free answer even
+   by accident. The test states this as the signature (`isWorkFree.length === 2`) so a future "just one more argument"
+   fails loudly instead of quietly.
+2. **A feed is recognised by the file, not by the event text.** `holidayFeedName` / `holidayFeedOf` read the file's
+   `X-WR-CALNAME` (Google names its feeds "Holidays in Poland"; the URL form `…#holiday@group…` is matched too). The
+   over-marking direction is deliberate: a calendar called "Holiday planning" is marked imported, which is quiet, while
+   under-marking would be a silent day off.
+3. **The look is imported, never work-free.** `markImportedHoliday` writes `x.icsHolidayFeed` + `x.icsHolidayName` on
+   **all-day, non-reminder `.ics` items only**; `importedHolidayAttrs` turns that into the `is-imported-holiday` class
+   and a `data-imported-holiday` naming the feed. The CSS paints it with a neutral `currentColor` edge and a dashed
+   item border — it is asserted **not** to appear in the work-free or holiday tint rules, so a subscribed holiday week
+   can never look like a day off this calendar decided on. Both the item button (Week/Day/Agenda) and the Month cell
+   carry it.
+4. **Two places say so in words.** The import card gains a line naming the feed and explaining that its days arrive as
+   ordinary events; the holidays settings dialog gains `cal.holidays.importedNote` — "these holidays are local to Notes
+   and are never synced". Both strings exist in en and pl, and the test fails if either key goes missing.
+
+**No etag churn:** the two marks are kept by `cleanItem` only when present and only on `src: "ics"` items, so a file
+that is not a holiday feed imports byte-identically to before, and a store that never saw one serialises and hashes
+exactly as it did.
+
+**Tests:** `tests/notes-calendar-imported-holidays.test.cjs` (14). The live one drives a real sheet (fake DOM, real
+store, real module) through the actual `planIcsImport` → `store.items.upsert` → render path and asserts the mark lands
+on `2026-11-01` and `2026-11-11` and on no other cell — verified by deliberately disabling the render call and watching
+the test fail (1 negative check, not a claim). The harness the holiday tests share was extracted to
+`tests/helpers/holiday-harness.cjs` so `notes-calendar-holidays.test.cjs` and this file cannot drift apart.
 
 #### `T2.13` — ICS export/import and Google-sync groundwork (always last in Track 2)
 
@@ -173,7 +204,7 @@ in **en and pl**, and the test fails if either key is missing — no raw key can
 **Honest limits:** there is no network sync and no OAuth — the "Google-sync groundwork" is exactly the shape and the
 bookkeeping (`toGoogle`/`fromGoogle` already existed; `syncState` is new). `TZID` is resolved through `Intl`, so a zone
 whose rules differ between the platform's tzdata and Google's may disagree on a historical instant. `VALARM` is written
-for the first reminder only. `T2.13a` (holiday feeds, `OW-44`) follows this row and is still open.
+for the first reminder only. `T2.13a` (holiday feeds, `OW-44`) follows this row and is DONE at 3.3.310.
 
 **Full specification (original row):** **OPEN — DO NOT BEGIN UNTIL EVERY OTHER T2 TASK IS COMPLETE.** Depends on all Track 2 item model, recurrence, reminder and calendar UI work. Export/import `.ics` locally (no network); stable `uid` / `etag` / `updated`, `syncState` per item, RRULE serialization and fixture coverage.
 
@@ -673,5 +704,4 @@ Known debts / owner requirements: LIMITS of `OW-04`: the pointer is held to the 
 
 Planning only, no code (2026-11-17, version 3.3.244): the owner's holiday list added as `OW-43` (holiday sets split from the interface language, any language picks any set, first sets `PL` + `US`), `OW-44` (any number of sets at once), `OW-45` (one-place year table for movable/one-off dates such as the Polish election day and `niedziela handlowa`), `OW-46` (one master off switch) and `T2.13a` (how holidays behave when the `T2.13` ICS/Google groundwork is built: local sets are never imported or synced). They sit at the top of the Master Order; `T3.3` follows them.
 
-Next action: `T2.13a` — holiday feeds and the imported-holiday look (needs `OW-44`, which is still open, so the next
-row that is actually unblocked is `OW-78`). Then `OW-78` (one palette: the CSS `--zn-*` variables and the JS resolver must agree) and `OW-77` (a real-Chromium audit of every Notes and calendar menu, so "unreadable" stays measured), then `OW-79` (more languages, and never a raw key on screen — the owner asked to be prepared for more languages), then `ST7.4` and the `T4.3a`→`b`→`c` extraction chain. `OW-66` is the owner's live check of `OW-58`–`OW-65` and `OW-73`–`OW-76` in the real sidebar and needs no code from a session. Finished lately: `OW-21` (find and replace, 3.3.300), `OW-65` (the Clock card's shape, 3.3.301), `OW-22` (next match not on screen, 3.3.302), `OW-67`–`OW-72` (the six widget reports, 3.3.303) and `OW-73`–`OW-76` (the four calendar reports, 3.3.304: the one-line toolbar, the header controls that outlive the strip, the regrouped menus and the Zentral appearance theme). Then 3.3.307: `OW-80`/`OW-86` (the tree in Big Picture — moved, not copied; a click selects there, a double click opens, and a multi-note drop asks), `OW-81` (the quick-settings default for a dropped note, measured to still fit the card), `OW-82` (drop on empty space asks, with a five-minute silent window), and the owner's three corrections `OW-83` (small bare chevrons), `OW-84` (no creation offered twice in the `+` menu) and `OW-85` (**`OW-73` reverted** — it targeted the Notes rows; the layout buttons now sit in the bar under the title, where nothing is cut at 420, 340 or 300px). `ST7.3` stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.
+Next action: `OW-78` — one palette: the CSS `--zn-*` variables and the JS resolver must agree. Then `OW-78` (one palette: the CSS `--zn-*` variables and the JS resolver must agree) and `OW-77` (a real-Chromium audit of every Notes and calendar menu, so "unreadable" stays measured), then `OW-79` (more languages, and never a raw key on screen — the owner asked to be prepared for more languages), then `ST7.4` and the `T4.3a`→`b`→`c` extraction chain. `OW-66` is the owner's live check of `OW-58`–`OW-65` and `OW-73`–`OW-76` in the real sidebar and needs no code from a session. Finished lately: `OW-21` (find and replace, 3.3.300), `OW-65` (the Clock card's shape, 3.3.301), `OW-22` (next match not on screen, 3.3.302), `OW-67`–`OW-72` (the six widget reports, 3.3.303) and `OW-73`–`OW-76` (the four calendar reports, 3.3.304: the one-line toolbar, the header controls that outlive the strip, the regrouped menus and the Zentral appearance theme). Then 3.3.307: `OW-80`/`OW-86` (the tree in Big Picture — moved, not copied; a click selects there, a double click opens, and a multi-note drop asks), `OW-81` (the quick-settings default for a dropped note, measured to still fit the card), `OW-82` (drop on empty space asks, with a five-minute silent window), and the owner's three corrections `OW-83` (small bare chevrons), `OW-84` (no creation offered twice in the `+` menu) and `OW-85` (**`OW-73` reverted** — it targeted the Notes rows; the layout buttons now sit in the bar under the title, where nothing is cut at 420, 340 or 300px). `ST7.3` stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.

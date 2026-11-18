@@ -19787,6 +19787,17 @@
           el.title = appendTitle && el.title ? `${el.title}\n${wf.tooltip}` : wf.tooltip;
         }
       }
+      // T2.13a: an imported holiday is shown as itself. It never becomes a local holiday and never makes a day
+      // work-free (`isWorkFree` reads prefs only — it has no access to the item store at all), so the only thing that
+      // happens here is a neutral mark on the day and on the item, saying where it came from.
+      function applyImportedHolidayAttrs(el, items) {
+        if (!el) return;
+        const marked = (Array.isArray(items) ? items : []).map((item) => CALENDAR_PART?.importedHolidayAttrs?.(item)).find(Boolean);
+        if (!marked) return;
+        el.classList.add(marked.class);
+        el.setAttribute("data-imported-holiday", marked["data-imported-holiday"]);
+        if (marked.title) el.title = el.title ? `${el.title}\n${marked.title}` : marked.title;
+      }
       function toggleCalendarPersonalDayOff(dayKey) {
         const cur = calendarHolidayPrefs();
         const exists = cur.personalDays.some((p) => p.date === dayKey);
@@ -19936,6 +19947,12 @@
           "aria-label": `${reminder ? "Reminder" : "Event"}: ${item.summary}${reminder ? ". State: " + lifecycle : ""}${item.x?.calNote ? ". Calendar note: " + item.x.calNote : ""}`,
         });
         button._znCalendarItem = item;
+        // T2.13a: an imported holiday looks like an imported holiday wherever the item is drawn.
+        const holidayAttrs = CALENDAR_PART?.importedHolidayAttrs?.(item);
+        if (holidayAttrs) {
+          button.classList.add(holidayAttrs.class);
+          button.setAttribute("data-imported-holiday", holidayAttrs["data-imported-holiday"]);
+        }
         if (!reminder) button.setAttribute("data-item-key", JSON.stringify(["event", String(item.id), String(item.x?.recurrenceId || "")]));
         if (reminder) {
           const identity = reminderLifecycleIdentity(item);
@@ -20207,6 +20224,8 @@
           const wf = calendarWorkFreeInfo(day);
           const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", tabindex: "0", "aria-selected": day === selected ? "true" : "false", "aria-label": t("cal.month.dayAria", { day: dayText }) + (wf.tooltip ? ", " + wf.tooltip : ""), "data-day": CALENDAR_PART.ymd(new Date(day)) });
           applyWorkFreeAttrs(cell, wf);
+          // T2.13a: read from the day's own items — the imported holiday marks the day it falls on, nothing else.
+          applyImportedHolidayAttrs(cell, dayItems);
           const openDayView = () => { store.setMeta({ calendarCursor: CALENDAR_PART.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); };
           const dayButton = h("button", { type: "button", class: "zn-cal-month-date", "aria-label": t("cal.month.openDayAria", { day: dayText }), "aria-pressed": day === selected ? "true" : "false", title: wf.tooltip || null }, String(new Date(day).getDate()));
           dayButton.addEventListener("click", (event) => { event.stopPropagation(); openDayView(); });
@@ -22554,6 +22573,8 @@
           enableCheck,
           h("span", {}, t("cal.holidays.enableTint")),
           h("small", { class: "zn-hint zn-cal-holidays-enable-note" }, t("cal.holidays.enableAllHint")));
+        // T2.13a: the owner's plan step 4 — one line saying holidays here are local and never synced.
+        const importedNote = h("p", { class: "zn-hint zn-cal-holidays-imported-note" }, t("cal.holidays.importedNote"));
 
         // OW-43: the holiday SET is chosen apart from the interface language, and any number of sets at once (OW-44).
         const setsList = h("div", { class: "zn-cal-holidays-sets" });
@@ -22640,6 +22661,7 @@
         openCalendarCard(
           t("cal.holidays.title"),
           enableRow,
+          importedNote,
           regionStatus,
           h("div", { class: "zn-dialog-label" }, h("strong", {}, t("cal.holidays.setsHeading")), setsList, h("p", { class: "zn-hint" }, t("cal.holidays.setsHint")), coverageLine),
           h("label", { class: "zn-dialog-label" }, t("cal.holidays.weekendLabel"), weekendSelect),
@@ -27375,6 +27397,8 @@
               body.append(h("p", {}, t("cal.ics.skippedHeading")), list);
             }
             if (plan.warnings.length) body.append(h("p", { class: "zn-hint" }, t("cal.ics.warnings", { n: plan.warnings.length })));
+            // T2.13a: say plainly what a holiday calendar is, before anyone presses Import.
+            if (plan.holidayFeed) body.append(h("p", { class: "zn-hint zn-ics-holiday-feed" }, t("cal.ics.holidayFeed", { calendar: plan.holidayFeed })));
             return plan;
           };
           const pickKind = (next) => { kind = next; for (const b of kindChips) b.classList.toggle("is-on", b.dataset.kind === kind); draw(); };
