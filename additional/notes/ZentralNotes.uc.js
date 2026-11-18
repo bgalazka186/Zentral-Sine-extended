@@ -30434,7 +30434,7 @@
         // OW-106: All notes is the default landing page whenever Notes/Calendar opens, even if the last
         // sheet view was the editor. Keep the most recent note selected behind the list (the editor and tab
         // context need it); an intentional openNoteById/openNote action after opening still opens its target.
-        const showAllNotes = !!CALENDAR_PART;
+        const showAllNotes = !!CALENDAR_PART && !!adapter.kind;
         sheetViewRestored = true;
         rememberedView = "";
         const id = store.latestId();

@@ -59,6 +59,8 @@ async function makeSheet() {
   await store.flush();
   const host = new El("div");
   const adapter = {
+    // Match the real Notes/Calendar pseudo-tab host: opening it defaults to All notes.
+    kind: "primary",
     position: "fixed", host, attach: (root) => host.append(root),
     getArea: () => ({ left: 0, top: 0, width: 1100, height: 720 }),
     watch: () => () => {}, setActive() {}, rewatch() {},
@@ -105,49 +107,49 @@ const viewOf = (root) => root.dataset.view;
     const sheet = h.make();
     try {
       const root = await h.prepare(sheet);
-      assert.equal(viewOf(root), "list", "a fresh sheet opens in All notes");
-      root.all().find((el) => el.title === "All notes").click();
-      await h.flush();
-      assert.equal(viewOf(root), "list", "All notes is on screen");
-      assert.equal(h.store.meta.sheetView, "list", "and the view state recorded it");
+      assert.equal(viewOf(root), "list", "a fresh pseudo-tab host opens in All notes");
+      assert.equal(h.store.meta.sheetView, "list", "and the default landing page is recorded");
       assert.ok(C.UI_STATE_KEYS.includes("sheetView") && C.UI_STATE_KEYS.includes("sheetFilter"),
         "the calendar part owns the key, so it round-trips through the view file rather than meta.json");
     } finally { try { sheet.destroy(); } catch (_) {} }
   });
 
-  await test("reopening the sheet — what a panel switch does — comes back to All notes, not the editor", async () => {
+  await test("reopening the sheet — what a panel switch does — comes back to All notes", async () => {
     const h = await makeSheet();
     const first = h.make();
     let second = null;
     try {
       const root = await h.prepare(first);
-      root.all().find((el) => el.title === "All notes").click();
-      await h.flush();
-      assert.equal(viewOf(root), "list");
+      assert.equal(viewOf(root), "list", "the first open is already All notes");
 
       // The panel switch: this sheet goes away and a new one is built, as the host does it.
       try { first.destroy(); } catch (_) {}
       second = h.make();
       const root2 = await h.prepare(second);
-      assert.equal(viewOf(root2), "list", "the reopened sheet shows All notes again instead of throwing the person into an editor");
-      assert.equal(root2.dataset.allNotesActive, "true", "and the calendar is live beside it, as it was");
+      assert.equal(viewOf(root2), "list", "the reopened sheet still shows All notes");
+      assert.equal(root2.dataset.allNotesActive, "true", "and the calendar is live beside it");
     } finally {
       try { second && second.destroy(); } catch (_) {}
     }
   });
 
-  await test("a sheet left in the editor still opens in the editor", async () => {
+  await test("a sheet left in the editor still defaults to All notes after it is reopened", async () => {
     const h = await makeSheet();
     const first = h.make();
     let second = null;
     try {
       const root = await h.prepare(first);
+      assert.equal(viewOf(root), "list");
+      const noteId = h.store.latestId();
+      assert.ok(noteId);
+      assert.equal(first.openNote(noteId), true, "the person can explicitly enter the note editor");
+      await h.flush();
       assert.equal(viewOf(root), "editor");
       try { first.destroy(); } catch (_) {}
       second = h.make();
       const root2 = await h.prepare(second);
-      assert.equal(viewOf(root2), "editor", "an editor note is where the person was, so that is where they come back");
-      assert.equal(root2.dataset.allNotesActive, "false", "no calendar is forced on a sheet that was in the editor");
+      assert.equal(viewOf(root2), "list", "the last-opened note is not restored as the default landing page");
+      assert.equal(root2.dataset.allNotesActive, "true");
     } finally { try { second && second.destroy(); } catch (_) {} }
   });
 
@@ -157,8 +159,7 @@ const viewOf = (root) => root.dataset.view;
     let second = null;
     try {
       const root = await h.prepare(first);
-      root.all().find((el) => el.title === "All notes").click();
-      await h.flush();
+      assert.equal(viewOf(root), "list");
       // Trash is a filter of the same list; switching to it must not be forgotten either.
       h.store.setMeta({ sheetFilter: "trash", sheetView: "list" });
       try { first.destroy(); } catch (_) {}
