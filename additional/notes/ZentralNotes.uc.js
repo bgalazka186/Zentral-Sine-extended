@@ -51,9 +51,17 @@
   };
   const FLAVORS_PART = loadPart("additional/notes/flavors/ZentralNotesFlavors.js", "notes-flavors");
   const SHORTCUTS_PART = loadPart("additional/notes/flavors/ZentralNotesShortcuts.js", "notes-shortcuts");
-  // AU-B4: language tables must load before the calendar core compiles built-in languages.
-  loadOptional("additional/notes/i18n/en.js");
-  loadOptional("additional/notes/i18n/pl.js");
+  // AU-B4 / OW-79: language tables must load before the calendar core compiles built-in languages, and WHICH tables
+  // there are is data, not code. `i18n/registry.js` is generated from the directory (tools/build-languages.cjs), so a
+  // new `i18n/xx.js` is picked up by existing: no line is added here, and no list in the calendar core is edited.
+  loadOptional("additional/notes/i18n/registry.js");
+  const NOTES_LANG_CODES = (() => {
+    const listed = window.__zentralNotesLangRegistry?.languages;
+    // The fallback pair is the floor: a checkout whose registry module failed to load still speaks both languages it
+    // has always shipped, rather than silently losing one.
+    return Array.isArray(listed) && listed.length ? listed.slice() : ["en", "pl"];
+  })();
+  for (const code of NOTES_LANG_CODES) loadOptional("additional/notes/i18n/" + code + ".js");
   // The calendar core (items, parsing, overlap lanes, month grid; roadmap T2.1). Pure logic; a missing file means no calendar.
   const CALENDAR_PART = loadPart("additional/notes/calendar/ZentralNotesCalendar.js", "notes-calendar");
   // Pasted web / AI-chat HTML becomes clean Markdown (roadmap T1.4). Pure logic; a missing file keeps the plain-text paste.
@@ -5484,6 +5492,14 @@
     // A plain number slider: always has a value (no "Theme" reset), def is its default.
     const S = (id, label, pref, min, max, unit, def) => ({ id, label, pref, kind: "slider", min, max, unit, seed: def, def, plain: true });
     const C = (id, label, pref, seed) => ({ id, label, pref, kind: "color", seed, theme: true });
+    // OW-79: what the language menu offers, read from what actually registered. English first, then by code; a file
+    // that is not finished yet says so in its own row instead of pretending, and a new `i18n/xx.js` needs no edit here.
+    function notesLanguageChoices() {
+      let list = [];
+      try { list = CALENDAR_PART?.notesLanguages?.() || []; } catch (_) { list = []; }
+      if (!list.length) return [["en", "English"], ["pl", "Polski (Polish)"]]; // registry unavailable: the shipped pair
+      return list.map((entry) => [entry.code, entry.complete ? entry.name : entry.name + " \u2014 " + entry.missing + " missing"]);
+    }
     const SETTINGS_TABS = Object.freeze([
       { id: "writing", label: "Writing", items: WRITING_OPTIONS },
       {
@@ -5575,7 +5591,7 @@
       },
       {
         id: "links", label: "Links & history", items: [
-          { id: "notesLanguage", label: "Notes language (interface and date parsing)", pref: PREF.NOTES_LANGUAGE, kind: "choice", def: "en", choices: [["en", "English"], ["pl", "Polski (Polish)"]] },
+          { id: "notesLanguage", label: "Notes language (interface and date parsing)", pref: PREF.NOTES_LANGUAGE, kind: "choice", def: "en", choices: notesLanguageChoices() },
           { id: "notesLanguageAcceptAll", label: "Accept dates written in any built-in language", pref: PREF.NOTES_LANGUAGE_ACCEPT_ALL, kind: "bool", def: true },
           { id: "newChooser", label: "The + button asks: blank note, today, tomorrow or a date", pref: PREF.NEW_CHOOSER, kind: "bool", def: false },
           { id: "pinStrip", label: "Pinned notes strip and Recent menu under the title", pref: PREF.PIN_STRIP, kind: "bool", def: false },
@@ -26202,19 +26218,20 @@
       // OW-81/OW-79: a tab whose translation is missing shows its own label, never "settings.tab.calendar".
       const settingsTabLabel = (tab) => {
         const key = "settings.tab." + tab.id;
-        const text = t(key);
-        return text === key ? tab.label : text;
+        // OW-79: a missing key now answers with readable words, so ask whether the table HAS it rather than comparing.
+        return CALENDAR_PART?.hasTranslation?.(key) ? t(key) : tab.label;
       };
       const settingsHeadingLabel = (o) => (o.i18nKey ? t(o.i18nKey) : o.label);
+      // OW-79: `t()` never returns a raw key any more, so "is there a translation?" is asked explicitly. Without this
+      // every option would show the readable form of its own key instead of the label the group carries.
+      const hasT = (key) => CALENDAR_PART?.hasTranslation?.(key) ?? false;
       const settingsOptLabel = (o) => {
         const key = "settings.opt." + o.id;
-        const val = t(key);
-        return val !== key ? val : o.label;
+        return hasT(key) ? t(key) : o.label;
       };
       const settingsChoiceLabel = (o, v, fallback) => {
         const key = "settings.choice." + o.id + "." + v;
-        const val = t(key);
-        return val !== key ? val : fallback;
+        return hasT(key) ? t(key) : fallback;
       };
       const choiceDropdown = (o, value, onPick) => {
         const select = h("select", { class: "zn-select", "aria-label": settingsOptLabel(o) });

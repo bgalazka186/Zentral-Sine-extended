@@ -262,8 +262,14 @@
       if (preloaded && typeof preloaded === "object") {
         for (const key of Object.keys(preloaded)) registerLanguage(preloaded[key]);
       }
+      // OW-79: whatever the generated registry names, plus the historical pair as a floor. A language file that is
+      // present but not yet in the registry is still picked up when it defined itself as `notes-lang-<code>`, so the
+      // worst case is a language that appears without a menu row (until the tool runs), never a silent loss.
+      const codes = new Set([...NOTES_LANGUAGES]);
+      const listed = window.__zentralNotesLangRegistry?.languages;
+      if (Array.isArray(listed)) for (const code of listed) if (typeof code === "string" && code) codes.add(code);
       if (window.ZentralModuleLoader && typeof window.ZentralModuleLoader.get === "function") {
-        for (const code of NOTES_LANGUAGES) {
+        for (const code of codes) {
           if (!LANG_REGISTRY.has(code)) {
             const mod = window.ZentralModuleLoader.get("notes-lang-" + code);
             if (mod) registerLanguage(mod);
@@ -305,15 +311,55 @@
     return notesLanguageTable(lang)?.locale || "en-GB";
   }
   // AU-B4b: interface string lookup with per-key English fallback and `{param}` interpolation.
+  // OW-79: a key that no table has must never reach a person. `TRANSLATION_GAPS` holds the ones that did, so a
+  // developer can see them (the audit tool and the test read this list) while the screen shows readable English.
+  const TRANSLATION_GAPS = new Map();
+  const gapListeners = new Set();
+  const DOTTED_KEY_RE = /^[a-z][A-Za-z0-9]*(\.[A-Za-z0-9_]+)+$/;
+  function reportTranslationGap(key, lang) {
+    const id = String(key || "");
+    if (!id) return;
+    if (!TRANSLATION_GAPS.has(id)) TRANSLATION_GAPS.set(id, new Set());
+    const langs = TRANSLATION_GAPS.get(id);
+    if (langs.has(lang)) return; // once per key and language, not on every draw
+    langs.add(lang);
+    if (typeof console !== "undefined" && console && typeof console.warn === "function") {
+      console.warn("[Zentral Notes] missing translation: " + id + " (" + lang + ")");
+    }
+    for (const fn of gapListeners) { try { fn(id, lang); } catch (_) {} }
+  }
+  function onTranslationGap(fn) {
+    if (typeof fn !== "function") return () => {};
+    gapListeners.add(fn);
+    return () => gapListeners.delete(fn);
+  }
+  function translationGaps() {
+    return [...TRANSLATION_GAPS].map(([key, langs]) => ({ key, languages: [...langs] }));
+  }
+  // The last resort for a key nobody has: the readable part of the key itself ("cal.todayBtn" -> "Today btn"), never
+  // the dotted form. A dotted key on screen is the defect this row exists for, so this is deliberately a poor but
+  // ENGLISH-looking answer rather than an honest one a person cannot read.
+  function readableKey(key) {
+    const parts = String(key || "").split(".");
+    const last = parts[parts.length - 1] || String(key || "");
+    const words = last.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").trim();
+    return words ? words.charAt(0).toUpperCase() + words.slice(1) : "";
+  }
   function translate(key, params = null, lang = DEFAULT_NOTES_LANGUAGE) {
     const k = String(key ?? "");
     if (!k) return "";
     const resolvedLang = cleanNotesLanguage(lang);
     const primary = notesLanguageTable(resolvedLang)?.strings;
     const fallback = notesLanguageTable(DEFAULT_NOTES_LANGUAGE)?.strings;
-    let template = primary && Object.prototype.hasOwnProperty.call(primary, k) && typeof primary[k] === "string"
-      ? primary[k]
-      : (fallback && Object.prototype.hasOwnProperty.call(fallback, k) && typeof fallback[k] === "string" ? fallback[k] : k);
+    const has = (table) => table && Object.prototype.hasOwnProperty.call(table, k) && typeof table[k] === "string" && table[k].length > 0;
+    let template;
+    if (has(primary)) template = primary[k];
+    else if (has(fallback)) template = fallback[k];
+    else {
+      // Missing everywhere. Say so once, and show words rather than the key.
+      reportTranslationGap(k, resolvedLang);
+      template = DOTTED_KEY_RE.test(k) ? readableKey(k) : k;
+    }
     if (params && typeof params === "object") {
       template = template.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, name) => (
         Object.prototype.hasOwnProperty.call(params, name) && params[name] !== undefined && params[name] !== null
@@ -322,6 +368,14 @@
       ));
     }
     return template;
+  }
+  // OW-79 made `translate` never return a raw key, so "did a table have this?" can no longer be answered by comparing
+  // the result with the key. This is the explicit question, asked the same way the lookup itself asks it.
+  function hasTranslation(key, lang = DEFAULT_NOTES_LANGUAGE) {
+    const k = String(key ?? "");
+    if (!k) return false;
+    const table = notesLanguageTable(lang)?.strings;
+    return Boolean(table && Object.prototype.hasOwnProperty.call(table, k) && typeof table[k] === "string" && table[k].length > 0);
   }
   const t = translate;
   function pluralCategory(count, lang = DEFAULT_NOTES_LANGUAGE) {
@@ -347,6 +401,28 @@
       chosen = Object.prototype.hasOwnProperty.call(fallback, baseKey + "." + enCat) ? baseKey + "." + enCat : baseKey + ".other";
     }
     return translate(chosen, { ...(params && typeof params === "object" ? params : {}), count: n }, resolvedLang);
+  }
+  // OW-79: the list a menu should drawn from — whatever has been REGISTERED, not a hardcoded pair. A new
+  // `i18n/xx.js` that is loaded and registered appears here without a JS change, and `missing` says how much of it is
+  // still English so the menu can be honest about a half-finished file.
+  function notesLanguages() {
+    const base = translationKeys(DEFAULT_NOTES_LANGUAGE);
+    const out = [];
+    for (const [code, table] of LANG_REGISTRY) {
+      if (!table) continue;
+      const missing = missingTranslationKeys(code);
+      out.push(Object.freeze({
+        code,
+        name: String(table.name || code),
+        locale: String(table.locale || ""),
+        complete: missing.length === 0,
+        missing: missing.length,
+        total: base.length,
+      }));
+    }
+    // English first (it is the fallback every other table is measured against), then alphabetical by code: a menu
+    // that reshuffles when a file is added is harder to use than one that only grows.
+    return out.sort((a, b) => (a.code === DEFAULT_NOTES_LANGUAGE ? -1 : b.code === DEFAULT_NOTES_LANGUAGE ? 1 : a.code.localeCompare(b.code)));
   }
   function translationKeys(lang = DEFAULT_NOTES_LANGUAGE) {
     const strings = notesLanguageTable(lang)?.strings;
@@ -8470,7 +8546,7 @@
   }
 
   const api = {
-    KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, translate, t, pluralCategory, tCount, translationKeys, missingTranslationKeys, ymd, parseYmd, dayStart, addDays, nextDayStart, dayRange, civilDayStart, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, lineScheduleSignature, cleanTextSchedule, scheduleSignatureFromItem, scheduleFromParsedLine, reconcileListItem, itemFromLine,
+    KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, translate, t, hasTranslation, pluralCategory, tCount, translationKeys, missingTranslationKeys, TRANSLATION_GAPS, reportTranslationGap, onTranslationGap, translationGaps, readableKey, notesLanguages, DOTTED_KEY_RE, ymd, parseYmd, dayStart, addDays, nextDayStart, dayRange, civilDayStart, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, lineScheduleSignature, cleanTextSchedule, scheduleSignatureFromItem, scheduleFromParsedLine, reconcileListItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, itemIdTokens, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, cleanHistoryFilter, filterHistoryRecords, historyPruneSurvey, exportHistoryLines, historySummaryLine, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanNoteDropKind, NOTE_DROP_KINDS, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_TABLE, HOLIDAY_TABLE_KINDS, holidayTableEntries, holidayTableYears, holidaySetCoverage, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, holidaySetsOf, HOLIDAY_FEED_RE, holidayFeedName, holidayFeedOf, isImportedHoliday, markImportedHoliday, IMPORTED_HOLIDAY_CLASS, importedHolidayAttrs, NO_WORK_FREE, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     DEFAULT_DAY_LOOK, DAY_LOOK_KINDS, DAY_LOOK_MAX_STRENGTH, cleanDayLookColor, cleanDayLookStrength, cleanDayLook, dayLookTint, CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,

@@ -868,6 +868,7 @@
       "settings.choice.capPos.top": "Na pocz\u0105tku",
       "settings.choice.notesLanguage.en": "English (Angielski)",
       "settings.choice.notesLanguage.pl": "Polski",
+      "settings.choice.notesLanguage.de": "Deutsch (Niemiecki)",
       "settings.choice.treeOrder.folders-first": "Najpierw foldery",
       "settings.choice.treeOrder.notes-first": "Najpierw notatki",
       "settings.choice.treeOrder.mixed-by-name": "Mieszane, alfabetycznie",

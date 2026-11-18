@@ -398,12 +398,24 @@ function allText(node) {
     linksTab.click();
     await h.flushRaf();
 
-    // Find the Polish language chip in Settings -> Links & history and click it
-    const plChip = [...h.adapter.host.querySelectorAll(".zn-dialog-card button")].find((b) =>
-      b.textContent === enTable.strings["settings.choice.notesLanguage.pl"],
-    );
-    assert.ok(plChip, "Polski language choice button exists in Settings -> Links & history");
-    plChip.click();
+    // Choose Polish in Settings -> Links & history. OW-79 made the language list come from what registered, and a list
+    // of more than three options is drawn as a dropdown (`choiceIsDropdown`), so this accepts either shape rather than
+    // assuming the two-language chip row of before.
+    const plLabel = enTable.strings["settings.choice.notesLanguage.pl"];
+    const langSelect = [...h.adapter.host.querySelectorAll(".zn-dialog-card select")]
+      .find((sel) => [...sel.querySelectorAll("option")].some((o) => o.textContent === plLabel));
+    if (langSelect) {
+      const option = [...langSelect.querySelectorAll("option")].find((o) => o.textContent === plLabel);
+      assert.ok(option, "Polski is an option in Settings -> Links & history");
+      // The sheet's own listener reads `select.value`, so this is the state a person's choice leaves behind. (The fake
+      // DOM does not carry an option's `value` attribute onto the element, so the code is used directly.)
+      langSelect.value = "pl";
+      langSelect.dispatchEvent(new h.Ev("change", { bubbles: true }));
+    } else {
+      const plChip = [...h.adapter.host.querySelectorAll(".zn-dialog-card button")].find((b) => b.textContent === plLabel);
+      assert.ok(plChip, "Polski language choice exists in Settings -> Links & history");
+      plChip.click();
+    }
     await h.flushRaf();
 
     // Live refresh updated BOTH the open Settings dialog AND the underlying All notes + Calendar sheet!

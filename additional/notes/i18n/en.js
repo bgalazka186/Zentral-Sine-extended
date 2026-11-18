@@ -1,5 +1,6 @@
 // Pure English language table for Zentral Notes & Calendar (AU-B4a / AU-B4b).
-// Adding a language is a data file, not parser or UI logic.
+// Adding a language is a data file, not parser or UI logic. How to do it, and which tables a language needs beyond
+// `strings` (weekdays, months, offsets, plural), is in docs/ADDING_A_LANGUAGE.md. OW-79.
 (function () {
   "use strict";
 
@@ -857,6 +858,7 @@
       "settings.choice.capPos.top": "Top",
       "settings.choice.notesLanguage.en": "English",
       "settings.choice.notesLanguage.pl": "Polski (Polish)",
+      "settings.choice.notesLanguage.de": "Deutsch (German)",
       "settings.choice.treeOrder.folders-first": "Folders first",
       "settings.choice.treeOrder.notes-first": "Notes first",
       "settings.choice.treeOrder.mixed-by-name": "Mixed, by name",

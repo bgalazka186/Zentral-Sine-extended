@@ -100,7 +100,7 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 |   102 | `OW-76`     | `DONE`    | Med                 | M      | —                 | Calendar and notes must copy the style of Zentral's appearance themes by default, with extra customisation only if the person opts in |
 |   103 | `OW-77`     | `OPEN`    | Med                 | M      | —                 | A visual audit of every calendar/notes menu in real Chromium (the fit-audit harness) so "unreadable" is measured, not argued, and stays measured |
 |   104 | `OW-78`     | `DONE`    | Med                 | S      | —                 | One theme-resolution path: the CSS `--zn-*` variables and the JS resolver must agree, so `zentral` cannot mean two different palettes |
-|   105 | `OW-79`     | `OPEN`    | Low-Med             | M      | —                 | More languages without code: a language file must be droppable in, and a missing translation must never show a raw key like `cal.todayBtn` |
+|   105 | `OW-79`     | `DONE`    | Low-Med             | M      | —                 | More languages without code: a language file must be droppable in, and a missing translation must never show a raw key like `cal.todayBtn` |
 |   106 | `OW-80`     | `DONE`    | High                | L      | —                 | Big Picture: the Notes tree must be there too, on the left edge, with all of its functions — including drag of a note into the calendar to create an item |
 |   107 | `OW-81`     | `DONE`    | Med                 | S      | —                 | Quick settings: choose whether dragging a note into the calendar creates an event or a reminder by default |
 |   108 | `OW-82`     | `DONE`    | High                | M      | —                 | Dragging a calendar item onto empty space asks before deleting it, with a "don't ask for 5 minutes" button — in All notes AND Big Picture |
@@ -373,7 +373,7 @@ says it is on resolved by the same function. Verified by negative check — rest
 
 #### `OW-79` — More languages, and never a raw key on screen
 
-**Status:** `OPEN` · **Impact:** Low-Med · **Effort:** M · **Depends on:** — · **Source:** Owner decision (2026-11-18), "you can prepare us for more languages"
+**Status:** `DONE` (3.3.313) · **Impact:** Low-Med · **Effort:** M · **Depends on:** — · **Source:** Owner decision (2026-11-18), "you can prepare us for more languages"
 
 **Problem:** Adding a language is meant to be a data file (`additional/notes/i18n/en.js`, `pl.js`), but a real browser
 run of the harness showed the sheet drawing literal keys — `cal.todayBtn` appeared as the Today button's text — when no
@@ -393,6 +393,41 @@ suite passes because it always registers both tables.
 
 **Tests / done when:** An incomplete language shows English for the missing keys and never a key name; a new file needs
 only to exist to appear in the menu; the suite covers both.
+
+**Done at 3.3.313** — and the third item on the list turned out to be the real work; the first two were half-done already.
+
+1. **Per-key fallback was already there; the raw key was the hole.** `translate` fell through to English per key, but its
+   last resort was `k` — the dotted key itself, which is exactly what a person saw. It now: falls through per key to
+   English (an **empty string** in a table counts as missing too, so a blank line in a translation file cannot blank a
+   label), and when no table has the key at all it draws **readable words** from the key's last segment
+   (`cal.todayBtn` → `Today btn`), never the dotted form. The gap is reported **once per key and language** through
+   `reportTranslationGap` — a `console.warn`, a `translationGaps()` list and an `onTranslationGap` subscription — because
+   the sheet draws constantly and a warning per draw would be noise nobody reads.
+   **Found and fixed while doing this:** two places in the sheet asked "is there a translation?" by comparing
+   `t(key) === key`. Once `t()` stopped returning keys, that test became always-true and every settings option would have
+   shown the readable form of its own key. Both now ask `hasTranslation(key)`, which is the question they meant.
+2. **A new language is now genuinely a data file.** Before, it took three edits in two JS files: one `loadOptional` line
+   per language, `NOTES_LANGUAGES = ["en","pl"]` in the core, and a hardcoded `[["en","English"],["pl","Polski"]]` in the
+   settings menu — and the menu was the one nobody remembered. `tools/build-languages.cjs` now generates
+   `i18n/registry.js` from the **directory**; the sheet loads the registry then each language it names; the menu is
+   built by `notesLanguageChoices()` from `notesLanguages()`, i.e. from what actually registered. The core's
+   `NOTES_LANGUAGES` survives as a floor, not a gate. `build-languages.cjs --check` runs in the suite (beside the z-map
+   check), so a forgotten step fails in CI rather than in a user's browser.
+   **Proven, not asserted:** `i18n/de.js` was added — a real German table (weekdays, months, relative words, counted
+   offsets, ordinals) with only a handful of interface strings translated. It appeared in the registry, in the menu
+   (`Deutsch (German) — 879 missing`), and its date words parse (`heute`, `übermorgen`, `25. dezember`, `in 3 tagen`,
+   `vor 2 wochen`). The menu is honest about an incomplete language instead of pretending.
+   **A shape change fell out of it:** three options make `choiceIsDropdown` true, so the language row is now a dropdown
+   rather than a chip pair. `notes-i18n-ui` accepts either shape.
+3. **The docs.** `docs/ADDING_A_LANGUAGE.md` — the file shape, the tables a language needs beyond `strings` (with the
+   German example for each), the plural categories, the registry tool, how to check it, and what to do about keys no
+   table has. `i18n/en.js`'s own header points at it, because that is the file a translator actually opens.
+
+**Tests:** `tests/notes-more-languages.test.cjs` (11): per-key fallback, readable words for an unknown key, a blank
+counting as missing, the gap listener, registry currency, "nothing in the JS names `de`", the menu's honesty, German
+date parsing, and two live-sheet runs — one with the incomplete table registered, one with **no** table at all —
+asserting no rendered text matches `/^[a-z][A-Za-z0-9]*(\.[A-Za-z0-9_]+)+$/`. Verified by negative check: restoring
+`template = k` fails 2 of 11.
 
 ---
 
@@ -728,4 +763,4 @@ Known debts / owner requirements: LIMITS of `OW-04`: the pointer is held to the 
 
 Planning only, no code (2026-11-17, version 3.3.244): the owner's holiday list added as `OW-43` (holiday sets split from the interface language, any language picks any set, first sets `PL` + `US`), `OW-44` (any number of sets at once), `OW-45` (one-place year table for movable/one-off dates such as the Polish election day and `niedziela handlowa`), `OW-46` (one master off switch) and `T2.13a` (how holidays behave when the `T2.13` ICS/Google groundwork is built: local sets are never imported or synced). They sit at the top of the Master Order; `T3.3` follows them.
 
-Next action: `OW-77` (a real-Chromium audit of every Notes and calendar menu, so "unreadable" stays measured), then `OW-79` (more languages, and never a raw key on screen — the owner asked to be prepared for more languages), then `ST7.4` and the `T4.3a`→`b`→`c` extraction chain. `OW-66` is the owner's live check of `OW-58`–`OW-65` and `OW-73`–`OW-76` in the real sidebar and needs no code from a session. Finished lately: `OW-21` (find and replace, 3.3.300), `OW-65` (the Clock card's shape, 3.3.301), `OW-22` (next match not on screen, 3.3.302), `OW-67`–`OW-72` (the six widget reports, 3.3.303) and `OW-73`–`OW-76` (the four calendar reports, 3.3.304: the one-line toolbar, the header controls that outlive the strip, the regrouped menus and the Zentral appearance theme). Then 3.3.307: `OW-80`/`OW-86` (the tree in Big Picture — moved, not copied; a click selects there, a double click opens, and a multi-note drop asks), `OW-81` (the quick-settings default for a dropped note, measured to still fit the card), `OW-82` (drop on empty space asks, with a five-minute silent window), and the owner's three corrections `OW-83` (small bare chevrons), `OW-84` (no creation offered twice in the `+` menu) and `OW-85` (**`OW-73` reverted** — it targeted the Notes rows; the layout buttons now sit in the bar under the title, where nothing is cut at 420, 340 or 300px). `ST7.3` stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.
+Next action: `OW-77` (a real-Chromium audit of every Notes and calendar menu, so "unreadable" stays measured), then `ST7.4` and the `T4.3a`→`b`→`c` extraction chain. `OW-66` is the owner's live check of `OW-58`–`OW-65` and `OW-73`–`OW-76` in the real sidebar and needs no code from a session. Finished lately: `OW-21` (find and replace, 3.3.300), `OW-65` (the Clock card's shape, 3.3.301), `OW-22` (next match not on screen, 3.3.302), `OW-67`–`OW-72` (the six widget reports, 3.3.303) and `OW-73`–`OW-76` (the four calendar reports, 3.3.304: the one-line toolbar, the header controls that outlive the strip, the regrouped menus and the Zentral appearance theme). Then 3.3.307: `OW-80`/`OW-86` (the tree in Big Picture — moved, not copied; a click selects there, a double click opens, and a multi-note drop asks), `OW-81` (the quick-settings default for a dropped note, measured to still fit the card), `OW-82` (drop on empty space asks, with a five-minute silent window), and the owner's three corrections `OW-83` (small bare chevrons), `OW-84` (no creation offered twice in the `+` menu) and `OW-85` (**`OW-73` reverted** — it targeted the Notes rows; the layout buttons now sit in the bar under the title, where nothing is cut at 420, 340 or 300px). `ST7.3` stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.

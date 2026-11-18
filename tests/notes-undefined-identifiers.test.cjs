@@ -61,6 +61,8 @@ const SOURCES = {
   "additional/notes/calendar/ZentralNotesCalendar.js": [...PART, "setTimeout", "clearTimeout", "require"],
   "additional/notes/i18n/en.js": PART,
   "additional/notes/i18n/pl.js": PART,
+  "additional/notes/i18n/de.js": PART,
+  "additional/notes/i18n/registry.js": [...PART, "window"],
   "additional/notes/flavors/ZentralNotesFlavors.js": PART,
   "additional/notes/flavors/ZentralNotesShortcuts.js": PART,
   "additional/notes/paste/ZentralNotesPasteHtml.js": PART,

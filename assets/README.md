@@ -1,6 +1,6 @@
 # assets
 
-Owner and local file guide for Extended 3.3.311. Original Zentral reference: 1.1.0.
+Owner and local file guide for Extended 3.3.313. Original Zentral reference: 1.1.0.
 
 | File                               | Responsibility                         |
 | ---------------------------------- | -------------------------------------- |
