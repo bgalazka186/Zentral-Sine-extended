@@ -19,6 +19,7 @@
     "calendar/ZentralNotesCalendar.js",
     "calendar/ZentralNotesCalendarUI.js",
     "parser/ZentralNotesParserGraph.js",
+    "zen/ZentralNotesZenSidebar.js",
     "paste/ZentralNotesPasteHtml.js"
   ],
   "settings": "settings.json",

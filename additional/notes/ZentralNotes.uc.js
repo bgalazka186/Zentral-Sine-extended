@@ -162,6 +162,9 @@
   // T4.3b: parser / wiki-graph / import-export decisions live in their own pure part. The sheet keeps the full
   // Markdown reader and the DOM; this part answers link, fence, title, folder, export and backup questions.
   const PARSER_PART = loadPart("additional/notes/parser/ZentralNotesParserGraph.js", "notes-parser");
+  // T4.3c: the Zen sidebar UI's pure decisions live in their own part. The monolith stays the single build/loader
+  // entry and keeps the live browser objects; a missing part degrades to the original inline bodies.
+  const ZEN_SIDEBAR_PART = loadPart("additional/notes/zen/ZentralNotesZenSidebar.js", "notes-zen-sidebar");
   // Pasted web / AI-chat HTML becomes clean Markdown (roadmap T1.4). Pure logic; a missing file keeps the plain-text paste.
   const PASTE_HTML_PART = loadPart("additional/notes/paste/ZentralNotesPasteHtml.js", "notes-paste-html");
 
@@ -228,6 +231,38 @@
       get version() { return BACKUP_VERSION; },
     };
     const PARSER_UI = PARSER_PART ? PARSER_PART.createParserGraph(PARSER_DEPS) : null;
+    // T4.3c: bind the Zen sidebar part's host helpers and constants lazily. They are declared later in THIS core
+    // closure; getters/arrows keep the temporal dead zone away. ZEN_SIDEBAR_PART was loaded in the outer closure.
+    const ZEN_DEPS = {
+      cleanFolder: (...a) => cleanFolder(...a),
+      cleanFolderZenSidebar: (...a) => cleanFolderZenSidebar(...a),
+      titleOf: (...a) => titleOf(...a),
+      projKey: (...a) => projKey(...a),
+      buildTree: (...a) => buildTree(...a),
+      serializeFolderParts: (...a) => serializeFolderParts(...a),
+      serializeFolderOpacity: (...a) => serializeFolderOpacity(...a),
+      cleanFolderParts: (...a) => cleanFolderParts(...a),
+      cleanFolderOpacity: (...a) => cleanFolderOpacity(...a),
+      colorHex: (...a) => colorHex(...a),
+      colorfulFolderDefaults: (...a) => colorfulFolderDefaults(...a),
+      safeHref: (...a) => safeHref(...a),
+      cleanLinkLabel: (...a) => cleanLinkLabel(...a),
+      buildLink: (...a) => buildLink(...a),
+      noteOrderBetween: (...a) => noteOrderBetween(...a),
+      noteDropTarget: (...a) => ZEN_UI.noteDropTarget(...a),
+      urlNoteBody: (...a) => urlNoteBody(...a),
+      filterSessionStoreState: (...a) => filterSessionStoreState(...a),
+    };
+    const ZEN_CONFIG = {
+      get NOTES_ATTR() { return NOTES_ATTR; },
+      get NOTES_ZEN_SUB_PREFIX() { return NOTES_ZEN_SUB_PREFIX; },
+      get ZEN_URL_PREFIX() { return ZEN_URL_PREFIX; },
+      get ZEN_MODES() { return ZEN_MODES; },
+      get TINT_HEX() { return TINT_HEX; },
+      get NOTE_ID_RE() { return NOTE_ID_RE; },
+      get PSEUDO_PAYLOAD_HINT_RE() { return PSEUDO_PAYLOAD_HINT_RE; },
+    };
+    const ZEN_UI = ZEN_SIDEBAR_PART ? ZEN_SIDEBAR_PART.createZenSidebar(ZEN_DEPS, ZEN_CONFIG) : null;
     // ======================================================================
     // Constants
     // ======================================================================
@@ -1548,6 +1583,7 @@
     // T3.3: the tree a drag-and-drop needs. `rows` is what the tree draws right now (type/note/node/depth); a drop
     // names the row it landed on and whether that row's folder is open. Returns null for a drop that must do nothing.
     function noteDropTarget(rows, sourceId, targetKey, position = "before", folded = false) {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.noteDropTarget(rows, sourceId, targetKey, position, folded);
       const list = Array.isArray(rows) ? rows : [];
       const src = list.find((row) => row?.type === "note" && row.note?.id === sourceId);
       if (!src) return null;
@@ -2700,6 +2736,7 @@
     const projKey = (kind, id) => (kind === "folder" ? "f:" : "n:") + id;
     // Notes tree -> flat, ordered list of entries. Keys come from note ids and folder ids, never from titles.
     function projectNotesFolder(notes, folders) {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.projectNotesFolder(notes, folders);
       const out = [];
       const walk = (node, parent, parentHidden = false) => {
         for (const f of node.children) {
@@ -2726,6 +2763,7 @@
     // What to do to make `current` (entries found in the browser, same shape) equal `wanted`. Running it again
     // on the result gives an empty plan (idempotent); duplicates of one key collapse to the first.
     function diffProjection(current, wanted) {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.diffProjection(current, wanted);
       const have = new Map();
       const remove = [];
       for (const e of current) {
@@ -2796,11 +2834,18 @@
     // (not allowed in a segment) stands for "/" and the key can be read back from the id.
     const NOTES_ZEN_ROOT_ID = "bgalazka-zentral-notes";
     const NOTES_ZEN_SUB_PREFIX = NOTES_ZEN_ROOT_ID + "-sub_";
-    const notesSubId = (key) => NOTES_ZEN_SUB_PREFIX + String(key).replace(/^f:/, "").replace(/\//g, "_");
-    const notesKeyFromId = (id) => (typeof id === "string" && id.startsWith(NOTES_ZEN_SUB_PREFIX) && id.length > NOTES_ZEN_SUB_PREFIX.length ? "f:" + id.slice(NOTES_ZEN_SUB_PREFIX.length).replace(/_/g, "/") : "");
+    const notesSubId = (key) => {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.notesSubId(key);
+      return NOTES_ZEN_SUB_PREFIX + String(key).replace(/^f:/, "").replace(/\//g, "_");
+    };
+    const notesKeyFromId = (id) => {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.notesKeyFromId(id);
+      return typeof id === "string" && id.startsWith(NOTES_ZEN_SUB_PREFIX) && id.length > NOTES_ZEN_SUB_PREFIX.length ? "f:" + id.slice(NOTES_ZEN_SUB_PREFIX.length).replace(/_/g, "/") : "";
+    };
     // A restored sub-folder (our id, none of our attributes) is taken back: the attributes are set again from its id, its label
     // and where it sits. Returns how many were adopted.
     function adoptNotesSubfolders(root) {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.adoptNotesSubfolders(root);
       let n = 0;
       if (!root?.querySelectorAll) return n;
       const parentOf = (el) => { try { return el.parentElement?.closest?.("zen-folder") || null; } catch (_) { return null; } };
@@ -2823,6 +2868,7 @@
     // the Appearance overrides, apply).
     const ZEN_FOLDER_VARS = Object.freeze(["--zen-folder-behind-bgcolor", "--zen-folder-front-bgcolor", "--zen-folder-stroke"]);
     function folderZenVars(name) {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.folderZenVars(name);
       const hex = colorHex(name) || colorfulFolderDefaults().b;
       if (!hex) return {};
       return {
@@ -2834,6 +2880,7 @@
     // The favicon of a note tab: a small page with a folded corner in the note's colour (gray when the note has none).
     // A data: URI so it needs no file and survives a restart; `fill` is always one of our palette values, never free text.
     function noteFaviconUri(color) {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.noteFaviconUri(color);
       const hex = colorHex(color) || TINT_HEX.gray;
       const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M3.5 1.5h6l3 3v9a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1z" fill="' + hex + '"/><path d="M9.5 1.5v3h3z" fill="#000" fill-opacity=".28"/><path d="M5 7.5h6M5 9.5h6M5 11.5h4" stroke="#000" stroke-opacity=".45" stroke-width="1" stroke-linecap="round"/></svg>';
       return "data:image/svg+xml," + encodeURIComponent(svg);
@@ -2841,6 +2888,7 @@
     // Distinct Agenda pseudo-tab favicons (calendar card for events, bell for reminders, overflow clock for +N more)
     // tinted with the resolved note or category palette hex (neutral gray/orange when uncolored).
     function agendaFaviconUri(color, kind = "event") {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.agendaFaviconUri(color, kind);
       const cleanKind = kind === "reminder" || kind === "more" ? kind : "event";
       const hex = colorHex(color) || (cleanKind === "more" ? TINT_HEX.orange : TINT_HEX.gray);
       let svg;
@@ -2860,6 +2908,7 @@
     // Only migrate a projection when Zen supplies an active identity and a
     // pinned container. Unknown or unavailable workspaces are never guessed.
     function sharedProjectionPlan({ active = "", targetReady = false, alreadyThere = false } = {}) {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.sharedProjectionPlan({ active, targetReady, alreadyThere });
       if (typeof active !== "string" || !active || !targetReady) return "wait";
       return alreadyThere ? "stay" : "move";
     }
@@ -3100,6 +3149,7 @@
       return { allowed: !!item && !!item.id, sourceNoteHidden: !!item?.x?.noteId };
     }
     function planRootDedupe(roots) {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.planRootDedupe(roots);
       const adopt = roots.length ? 0 : -1;
       const remove = [];
       const release = [];
@@ -3111,10 +3161,14 @@
     }
     // Cleanup may only ever remove tabs that carry our marker. Ordinary tabs are never in the plan, whatever
     // their position, folder or title.
-    const planCleanup = (tabs) => tabs.filter((t) => t && t.attrs && NOTES_ATTR in t.attrs).map((t) => t.id);
+    const planCleanup = (tabs) => {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.planCleanup(tabs);
+      return tabs.filter((t) => t && t.attrs && NOTES_ATTR in t.attrs).map((t) => t.id);
+    };
     // A drag involving the NOTES folder. Never "move": a web tab is captured as a note or refused, one of our
     // entries that leaves the folder goes back, and nothing is ever closed or converted.
     function dropDecision({ tab, intoNotes }) {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.dropDecision({ tab, intoNotes });
       const ours = !!(tab && tab.attrs && NOTES_ATTR in tab.attrs);
       if (ours) return intoNotes ? { action: "reposition" } : { action: "restore" };
       if (!intoNotes) return { action: "ignore" };
@@ -3122,7 +3176,10 @@
       return url ? { action: "capture-url", body: urlNoteBody(tab.title, url) } : { action: "reject" };
     }
     // The text of a note made from a dropped web tab: its title and address, as an ordinary Markdown link.
-    const urlNoteBody = (title, url) => cleanLinkLabel(title || url) + "\n\n" + buildLink(cleanLinkLabel(title || url), url) + "\n";
+    const urlNoteBody = (title, url) => {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.urlNoteBody(title, url);
+      return cleanLinkLabel(title || url) + "\n\n" + buildLink(cleanLinkLabel(title || url), url) + "\n";
+    };
     // The text an export writes for a note: [[shorthand]] becomes the canonical link (or plain words when
     // nothing matches), and links to exported notes point at the exported file names (`names`: id -> file).
     const exportBody = (n, all, names = new Map(), folders = [], readOptions = null) =>
@@ -14256,6 +14313,7 @@
     // T3.3: dragging a note tab in the Zen sidebar reorders the notes tree (a pure model, wired at the sidebar).
     // `rows` is the tree as drawn now; a drop names a row and whether it lands before or after it.
     function noteTabDropPlan(rows, sourceKey, targetKey, position = "before") {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.noteTabDropPlan(rows, sourceKey, targetKey, position);
       const target = noteDropTarget(rows, typeof sourceKey === "string" && sourceKey.startsWith("n:") ? sourceKey.slice(2) : sourceKey, targetKey, position);
       if (!target) return null;
       const src = Array.isArray(rows) ? rows.find((row) => row?.type === "note" && `n:${row.note?.id}` === sourceKey) : null;
@@ -14864,13 +14922,23 @@
     const TABBAR_FOLDER = "tabbar";
     const TABBAR_LABEL = "Notes (tabbar)";
     const ZEN_MODES = Object.freeze(["off", "selected", "all"]);
-    const cleanZenMode = (v) => (ZEN_MODES.includes(v) ? v : "off");
+    const cleanZenMode = (v) => {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.cleanZenMode(v);
+      return ZEN_MODES.includes(v) ? v : "off";
+    };
     const ZEN_MAX_ENTRIES = 200;
     const ZEN_URL_PREFIX = "about:blank#zn-";
-    const zenNoteUrl = (id) => ZEN_URL_PREFIX + "note:" + encodeURIComponent(id);
-    const zenNewUrl = (folderId) => ZEN_URL_PREFIX + "new:" + encodeURIComponent(cleanFolder(folderId));
+    const zenNoteUrl = (id) => {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.zenNoteUrl(id);
+      return ZEN_URL_PREFIX + "note:" + encodeURIComponent(id);
+    };
+    const zenNewUrl = (folderId) => {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.zenNewUrl(folderId);
+      return ZEN_URL_PREFIX + "new:" + encodeURIComponent(cleanFolder(folderId));
+    };
     // Our own tab URLs only (about:blank#zn-note:<id> / #zn-new:<folder>); everything else is null.
     function parseZenUrl(url) {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.parseZenUrl(url);
       const m = /^about:blank#zn-(note|new):([A-Za-z0-9%._~-]{0,300})$/.exec(String(url ?? ""));
       if (!m) return null;
       let v;
@@ -14885,6 +14953,7 @@
     // Only exact virtual-tab addresses count; never classify a normal tab by
     // its title or by a previous entry in its navigation history.
     function pseudoTabCleanupKind({ url = "", remembered = "", sessionUrl = "", notesMarked = false, agendaMarked = false } = {}, { notesEnabled = false, agendaEnabled = false } = {}) {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.pseudoTabCleanupKind({ url, remembered, sessionUrl, notesMarked, agendaMarked }, { notesEnabled, agendaEnabled });
       const classifyUrl = (candidate) => {
         const value = String(candidate || "");
         if (/^about:blank#zn-agenda-[^\s]*$/.test(value)) return "agenda";
@@ -15253,6 +15322,7 @@
     // Fast-path wrapper for Firefox's SessionFile.write(data), which may receive
     // either an object snapshot or a serialized JSON string.
     function filterSessionFilePayload(data) {
+      if (ZEN_SIDEBAR_PART) return ZEN_UI.filterSessionFilePayload(data);
       if (typeof data === "string") {
         if (!PSEUDO_PAYLOAD_HINT_RE.test(data)) return data;
         try {
@@ -16262,7 +16332,7 @@
 
     if (window.__zentralNotesTestSeam) {
       window.__zentralNotesTestSeam.core = {
-        flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART, CALENDAR_UI_PART, CALENDAR_UI, PARSER_PART, PARSER_UI, notesLang, notesLocale, t, tCount,
+        flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART, CALENDAR_UI_PART, CALENDAR_UI, PARSER_PART, PARSER_UI, ZEN_SIDEBAR_PART, ZEN_UI, notesLang, notesLocale, t, tCount,
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS, SHARED_TURN_WAIT_MS, STARTUP_TURN_WAIT_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, DEMO_WHERE_NOTE_ID, DEMO_CALENDAR_NOTE_ID, buildCalendarDemoBody, buildWhereDemoBody, SHOWCASE_NOTE_ID, buildShowcaseNote, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, SPELL_MAX_SUGGESTIONS, wordRangeAtOffset, replaceWordRange, cleanSpellLanguages, toggleSpellLanguage, formatSpellLanguageLabel, collectSpellSuggestions, buildEditorSpellMenuModel, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
