@@ -343,6 +343,19 @@
       "icon": "power"
     },
     {
+      "id": "boost",
+      "label": "Memory Boost",
+      "group": "Performance",
+      "owner": "boost",
+      "icon": "sliders",
+      "description": "Read browser RAM on demand and give memory back without closing anything.",
+      "sections": [
+        {
+          "label": "Memory"
+        }
+      ]
+    },
+    {
       "id": "shortcuts",
       "label": "Keyboard & Mouse",
       "group": "Panels",
@@ -1131,6 +1144,23 @@
       "size": "16px"
     },
     "zen.workspace.bgalazka.smart_sleep",
+    {
+      "type": "text",
+      "label": "**Performance**",
+      "size": "22px"
+    },
+    {
+      "type": "text",
+      "label": "**Memory Boost · Memory**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.boost.enabled",
+    "zen.workspace.zentral.boost.startup_trim",
+    {
+      "type": "text",
+      "label": "**Panels**",
+      "size": "22px"
+    },
     {
       "type": "text",
       "label": "**Keyboard & Mouse · Insta Peek**",

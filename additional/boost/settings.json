@@ -1,0 +1,46 @@
+{
+  "_documentation": {
+    "purpose": "Settings schema and category/section metadata owned by boost.",
+    "consumer": "extension/settings/controllers/ZentralSettingsCatalog.js reads schema/settings; Runtime filters availability, UI controllers render controls.",
+    "feature_source": "additional/boost/ZentralBoost.uc.js"
+  },
+  "owner": "boost",
+  "schema": [
+    {
+      "property": "zen.workspace.zentral.boost.enabled",
+      "label": "Memory Boost",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.boost.startup_trim",
+      "label": "Free memory once after startup, when the browser has been quiet for 90 seconds",
+      "type": "checkbox",
+      "defaultValue": true
+    }
+  ],
+  "settings": {
+    "zen.workspace.zentral.boost.enabled": {
+      "category": "boost",
+      "section": "Memory",
+      "owner": "boost"
+    },
+    "zen.workspace.zentral.boost.startup_trim": {
+      "category": "boost",
+      "section": "Memory",
+      "owner": "boost"
+    }
+  },
+  "categories": [
+    {
+      "id": "boost",
+      "label": "Memory Boost",
+      "sections": [
+        {
+          "id": "Memory",
+          "label": "Memory"
+        }
+      ]
+    }
+  ]
+}

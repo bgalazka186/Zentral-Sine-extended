@@ -1,0 +1,14 @@
+[
+  {
+    "property": "zen.workspace.zentral.boost.enabled",
+    "label": "Memory Boost",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.boost.startup_trim",
+    "label": "Free memory once after startup, when the browser has been quiet for 90 seconds",
+    "type": "checkbox",
+    "defaultValue": true
+  }
+]

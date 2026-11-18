@@ -32,7 +32,8 @@
  * additional/rss/ZentralRssDisplay.css; additional/rss/ZentralRssDisplay.uc.js;
  * extension/settings/styles/ZentralControls.css; extension/settings/styles/ZentralSettings.css;
  * extension/settings/styles/ZentralSettingsFoundation.css; additional/tabs/ZentralTabDensity.css;
- * additional/tabs/startup/ZentralStartup.uc.js; additional/tabs/unloading/ZentralTabUnload.uc.js;
+ * additional/boost/ZentralBoost.uc.js; additional/tabs/startup/ZentralStartup.uc.js;
+ * additional/tabs/unloading/ZentralTabUnload.uc.js;
  * additional/video/ZentralVideoPreview.css; additional/video/ZentralVideoPreview.uc.js
  * Returned factory API: CSS_MANIFEST; MANIFEST
  *
@@ -241,6 +242,13 @@
         file: "additional/tabs/unloading/ZentralTabUnload.uc.js",
         description:
           "Standalone. Requires only gBrowser and its about:config preference.",
+      },
+      {
+        id: "boost",
+        name: "Memory Boost",
+        file: "additional/boost/ZentralBoost.uc.js",
+        description:
+          "Standalone. Reads browser RAM on demand and frees memory without closing anything; its own preferences.",
       },
       {
         id: "panels",

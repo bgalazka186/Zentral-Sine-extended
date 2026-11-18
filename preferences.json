@@ -2474,6 +2474,33 @@
   },
   {
     "type": "text",
+    "label": "**Performance**",
+    "size": "22px"
+  },
+  {
+    "type": "text",
+    "label": "**Memory Boost · Memory**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.boost.enabled",
+    "label": "Memory Boost",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.boost.startup_trim",
+    "label": "Free memory once after startup, when the browser has been quiet for 90 seconds",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "type": "text",
+    "label": "**Panels**",
+    "size": "22px"
+  },
+  {
+    "type": "text",
     "label": "**Keyboard & Mouse · Insta Peek**",
     "size": "16px"
   },
