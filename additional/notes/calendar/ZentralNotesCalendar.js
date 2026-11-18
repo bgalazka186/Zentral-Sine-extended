@@ -1943,7 +1943,13 @@
   function icsStamp(value, fallbackZone = "") {
     if (!value) return null;
     const { date, time, utc, tzid } = value;
-    if (!time) return { ms: Date.UTC(date.year, date.month - 1, date.day) - new Date(Date.UTC(date.year, date.month - 1, date.day)).getTimezoneOffset() * 60000, allDay: true };
+    // A DATE value is a calendar day, not an instant: `20261101` means the 1st, wherever the person is. It used to be
+    // built as UTC midnight then "corrected" by the offset of *that* instant, which is a no-op in UTC and wrong
+    // everywhere else — in Los Angeles it subtracted eight hours and the day fell back to 10-31, in Auckland it added
+    // thirteen and it moved to 11-02. An imported holiday therefore marked the wrong cell (and mostly none at all).
+    // Local midnight of that day is the instant whose local date key is the day the file wrote, in every zone from
+    // UTC-11 to UTC+14 (checked against Kiritimati, Pago Pago and Lord Howe, half-hour and 45-minute offsets included).
+    if (!time) return { ms: new Date(date.year, date.month - 1, date.day).getTime(), allDay: true };
     if (utc) return { ms: Date.UTC(date.year, date.month - 1, date.day, time.hour, time.minute, time.second), allDay: false };
     const zoned = icsZonedMs(date, time, tzid || fallbackZone);
     if (zoned !== null) return { ms: zoned, allDay: false };
