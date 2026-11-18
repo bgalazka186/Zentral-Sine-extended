@@ -425,8 +425,10 @@ function createFakeSidebarHarness(initialPrefs = {}, { fetch: fetchImpl = null, 
     }
   }
 
-  function fireDoc(type) {
-    for (const [t, fn] of [...docListeners]) if (t === type) fn({ type });
+  // `extra` is the event's own fields (a real keyboard event carries `key`, a pointer event `target`); a listener that
+  // asks for them must see the same shape it would get from the engine, not just a bare `{ type }`.
+  function fireDoc(type, extra = {}) {
+    for (const [t, fn] of [...docListeners]) if (t === type) fn({ type, ...extra });
   }
   function fireWin(type) {
     for (const [t, fn] of [...winListeners]) if (t === type) fn({ type });

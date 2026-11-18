@@ -18,6 +18,15 @@ reloading anything. Part of the owner's RAM plan (`docs/PLAN_CODING_AGENT.md`, t
   is a single one-shot timer that a new input cancels and re-arms; the final run waits for `requestIdleCallback` with a
   timeout. A hard ceiling runs it once anyway if the session never goes quiet (a first-run session with lots of input).
 
+## The widget (OW-90)
+
+The sidebar Widgets tray draws this module as the card **Boost**, which replaced the old Status card: the RAM number
+and the button that lowers it, in one place. The card lives in `additional/widgets/` and knows only three things about
+this module — `runLevel1()`, `onChange(cb)` and `lastMB()` — so this file stays usable with the tray switched off.
+A click runs Level 1 and the card toasts what was freed; the arrow opens a menu whose **Free memory (light)** entry
+works and whose **deep** / **Restore** entries are greyed until OW-91. The card's own switch is
+`zen.workspace.zentral.widgets.boost.enabled` (default on).
+
 ## Preferences
 
 | Pref | Default | Meaning |

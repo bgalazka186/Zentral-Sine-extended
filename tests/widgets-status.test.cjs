@@ -1,8 +1,13 @@
 "use strict";
-/* T3.9e tests: the Status widget (battery and memory) and the settings section it owns.
- * The readings are pure: the widget never touches `navigator.getBattery` or `Services.appinfo` itself, so the card
- * can be proven without a battery. What matters here: percentages are clamped, an unknown reading is dropped rather
- * than drawn as zero, memory prints a limit only when Firefox reports one, and a low battery is never silently green. */
+/* OW-90 tests: the Boost card, which replaced the Status card (the owner's words: "it replaces it").
+ *
+ * The card is a number and one action. What matters here:
+ *   - the compact line formats a real reading and never draws a missing one as zero;
+ *   - a click runs Level 1 exactly once, a second click while it runs does nothing;
+ *   - the arrow opens a menu that shows the entries later parts add, greyed, so nobody thinks they shipped;
+ *   - the retired Status card is really gone (no registration, no prefs, no words), and an owner who had it on gets
+ *     Boost on rather than silently losing the card;
+ *   - the card owns no timer: the number arrives through the module's `onChange`. */
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -10,13 +15,22 @@ const vm = require("node:vm");
 
 const root = path.resolve(__dirname, "..");
 const SRC = fs.readFileSync(path.join(root, "additional/widgets/ZentralWidgets.uc.js"), "utf8");
+const CSS = fs.readFileSync(path.join(root, "additional/widgets/ZentralWidgets.css"), "utf8");
 const SETTINGS = JSON.parse(fs.readFileSync(path.join(root, "additional/widgets/settings.json"), "utf8"));
 const PREFS = JSON.parse(fs.readFileSync(path.join(root, "preferences.json"), "utf8"));
-const seam = {};
-const win = { __zentralWidgetsTestSeam: seam, ZentralRuntime: { register() {} } };
-win.window = win;
-vm.runInNewContext(SRC, { window: win, globalThis: { Services: {} }, URL, Date, JSON, Math, Promise, RegExp, Number, String, Array, Object, Map, Set, console });
-const c = seam.core;
+const LAYOUT = JSON.parse(fs.readFileSync(path.join(root, "extension/settings/layout.json"), "utf8"));
+const STANDALONE = JSON.parse(fs.readFileSync(path.join(root, "additional/widgets/standalone.json"), "utf8"));
+
+function loadCore() {
+  const seam = {};
+  const win = { __zentralWidgetsTestSeam: seam, ZentralRuntime: { register() {} } };
+  win.window = win;
+  vm.runInNewContext(SRC, {
+    window: win, globalThis: { Services: {} }, URL, Date, JSON, Math, Promise, RegExp, Number, String, Array,
+    Object, Map, Set, console,
+  });
+  return seam.core;
+}
 
 let passed = 0;
 function test(name, fn) {
@@ -26,150 +40,121 @@ function test(name, fn) {
 }
 const json = (v) => JSON.parse(JSON.stringify(v));
 
-test("a battery reading is a percentage with a state and a level", () => {
-  assert.deepEqual(json(c.batteryParts({ level: 0.82, charging: false })), {
-    percent: 82, charging: false, text: "82%", title: "82% — on battery", level: "ok",
-  });
-  assert.equal(c.batteryParts({ level: 0.5, charging: true }).title, "50% — charging");
-  assert.equal(c.batteryParts({ level: 0.05 }).level, "critical");
-  assert.equal(c.batteryParts({ level: 0.2 }).level, "low");
-  assert.equal(c.batteryParts({ level: 1.7 }).percent, 100, "a value over one is clamped, never shown as 170%");
-  assert.equal(c.batteryParts({ level: -3 }).percent, 0);
-  assert.equal(c.batteryParts(null), null, "no reading is not 0%");
-  assert.equal(c.batteryParts({ charging: true }), null);
+const c = loadCore();
+
+test("a reading is a short number, and a missing reading is a dash", () => {
+  assert.deepEqual(json(c.boostParts(412)), { mb: 412, text: "412 MB", level: "ok" });
+  assert.equal(c.boostParts(1410).text, "1.4 GB", "past a thousand it switches unit instead of showing 1410 MB");
+  assert.equal(c.boostParts(999).text, "999 MB", "the switch is at the point the number stops being readable");
+  assert.equal(c.boostParts(4096).level, "low", "a browser at four gigabytes is worth a colour");
+  assert.equal(c.boostParts(null), null, "no reading is no reading");
+  assert.equal(c.boostParts(undefined), null);
+  assert.equal(c.boostParts(0), null, "0 MB is never drawn as a real browser");
+  assert.equal(c.boostParts(NaN), null);
 });
 
-test("memory prints a limit only when there is one", () => {
-  const both = c.memoryParts({ used: 3.2 * 1024 ** 3, total: 8 * 1024 ** 3 });
-  assert.equal(both.text, "3.2 / 8 GB");
-  assert.equal(both.sharePercent, 40);
-  const usedOnly = c.memoryParts({ usedSize: 1.5 * 1024 ** 3 });
-  assert.equal(usedOnly.text, "1.5 GB", "no limit, no slash");
-  assert.equal(usedOnly.sharePercent, 0);
-  assert.equal(c.memoryParts({ used: 0 }), null);
-  assert.equal(c.memoryParts(null), null);
+test("a click means one light pass, and nothing while one is running", () => {
+  assert.deepEqual(json(c.resolveBoostClick({ available: true, running: false })), { action: "free", level: 1 });
+  const busy = c.resolveBoostClick({ available: true, running: true });
+  assert.equal(busy.action, "none", "a second click must not stack a second GC");
+  assert.equal(busy.reason, "busy");
+  const missing = c.resolveBoostClick({ available: false });
+  assert.equal(missing.action, "none");
+  assert.equal(missing.reason, "module-missing", "without the module the card does nothing rather than throwing");
+  assert.equal(c.resolveBoostClick({ available: true, enabled: false }).action, "none", "the kill switch is honoured");
 });
 
-test("the line holds only what was asked for, in a stable order", () => {
-  const battery = { level: 0.3, charging: false };
-  const memory = { used: 2 * 1024 ** 3, total: 4 * 1024 ** 3 };
-  const parts = c.statusLineParts({ showBattery: true, showMemory: true }, battery, memory);
-  assert.deepEqual(json(parts.map((p) => p.kind)), ["battery", "memory"]);
-  assert.equal(parts[0].text, "30%");
-  assert.equal(parts[0].level, "ok");
-  assert.deepEqual(json(c.statusLineParts({ showBattery: true, showMemory: true }, { level: 0.05 }, null).map((p) => p.kind)), ["battery"]);
-  assert.deepEqual(json(c.statusLineParts({ showBattery: false, showMemory: true }, battery, memory).map((p) => p.kind)), ["memory"]);
-  assert.deepEqual(json(c.statusLineParts({ showBattery: false, showMemory: false }, battery, memory)), []);
-  // Charging shows the plug, and a nearly full memory is flagged, never silently fine.
-  assert.equal(c.statusLineParts({ showBattery: true }, { level: 0.9, charging: true }, null)[0].text, "90% \u26a1");
-  assert.equal(c.statusLineParts({ showMemory: true }, null, { used: 95, total: 100 })[0].level, "critical");
+test("the menu shows what later parts add, greyed and explained", () => {
+  const items = c.boostMenuItems({ running: false });
+  assert.deepEqual(json(items.map((i) => i.id)), ["free-light", "free-deep", "restore"]);
+  assert.equal(items[0].available, true, "the light pass works today");
+  assert.equal(items[1].available, false, "deep is part three");
+  assert.ok(items[1].hint, "and it says so instead of vanishing");
+  assert.equal(items[2].available, false, "restore comes with it");
+  const busy = c.boostMenuItems({ running: true });
+  assert.equal(busy[0].available, false, "while a pass runs the entry is disabled");
+  assert.equal(busy[0].label, "Freeing memory\u2026", "and it says what is happening");
 });
 
-test("memory is a slow reading, battery is quick while it charges", () => {
-  assert.equal(c.nextStatusDelayMs({ charging: true }), 60000);
-  assert.equal(c.nextStatusDelayMs({ charging: false }), 5 * 60000);
-  assert.equal(c.nextStatusDelayMs(null), 5 * 60000);
+test("the toast line never invents a number", () => {
+  assert.equal(c.boostResultText({ freedMB: 220, beforeMB: 900, afterMB: 680 }), "Freed 220 MB");
+  assert.equal(c.boostResultText({ freedMB: 0 }), "Memory was already tidy", "nothing freed is a fact, not a failure");
+  assert.equal(c.boostResultText({ freedMB: null }), "Memory freed. This build cannot measure it.",
+    "an unmeasurable build still says the run happened");
+  assert.equal(c.boostResultText(null), "Memory freed. This build cannot measure it.", "a failed run is never a crash");
+  assert.equal(c.boostResultText({ freedMB: 18.7 }), "Freed 19 MB", "a fraction is rounded once, at the edge");
 });
 
-test("the widget reads nothing from the machine and owns no timer", () => {
-  const status = SRC.slice(SRC.indexOf('id: "status"'), SRC.indexOf('id: "status"') + 6000);
-  assert.ok(status.length > 800, "the status widget exists");
-  assert.ok(!/setInterval/.test(status), "no interval of its own");
-  assert.ok(/nextStatusDelayMs/.test(status), "its cadence comes from the shared rule");
-  assert.ok(/navigator\.getBattery/.test(SRC), "battery comes from the platform API");
-  assert.ok(/levelchange/.test(SRC) && /chargingchange/.test(SRC), "and follows the platform's own change events");
-  assert.ok(/Services\.appinfo\?\.getMemoryUsage/.test(SRC), "memory comes from the platform's own counters");
+test("the card registers once and the Status card is gone", () => {
+  const registrations = [...SRC.matchAll(/registerWidget\(\{\n\s+id: "([a-z-]+)",/g)].map((m) => m[1]);
+  assert.equal(registrations.filter((id) => id === "boost").length, 1, "one Boost card");
+  assert.equal(registrations.includes("status"), false, "the Status card is not registered at all");
+  assert.equal(SRC.includes("id: \"status\""), false, "not even as a definition nobody mounts");
+  assert.equal(registrations.filter((id) => id === "clock").length, 1, "the other cards are untouched");
 });
 
-/* OW-52: the card showed nothing at all. Two platform facts broke it — the chrome window has no
- * `navigator.getBattery`, and `getMemoryUsage()` is not guaranteed to answer in the browser window — and either
- * missing half removed the whole card. These tests pin the repair: one missing reading never removes the other, and
- * a reading that cannot be taken is said out loud instead of vanishing. */
-test("battery readings are normalised from either platform shape", () => {
-  assert.deepEqual(json(c.readBatteryInfo({ level: 0.42, charging: true })), { level: 0.42, charging: true });
-  const fromPowerManager = c.readBatteryInfo({ percent: 42, charging: false, dischargingTime: 3600 });
-  assert.equal(fromPowerManager.level, 0.42, "the power manager reports 0-100, the card wants 0-1");
-  assert.equal(fromPowerManager.charging, false);
-  assert.equal(c.readBatteryInfo(null), null);
-  assert.equal(c.readBatteryInfo(undefined), null);
-});
-
-test("one missing reading never removes the other", () => {
-  const memory = { used: 2 * 1024 ** 3, total: 4 * 1024 ** 3 };
-  const battery = { level: 0.5, charging: false };
-  // No battery support, but memory works: the card still shows memory.
-  const withoutBattery = c.composeStatusParts({ showBattery: true, showMemory: true }, null, memory, { battery: false, memory: true });
-  assert.deepEqual(json(withoutBattery.map((p) => p.kind)), ["memory"], "a desktop's missing battery stays quiet");
-  assert.equal(withoutBattery[0].text, "2 / 4 GB");
-  // No memory support, but the battery answers: the card still shows the battery.
-  const withoutMemory = c.composeStatusParts({ showBattery: true, showMemory: true }, battery, null, { battery: true, memory: false });
-  assert.deepEqual(json(withoutMemory.map((p) => p.kind)), ["battery", "memory"], "the battery, then the memory dash");
-  assert.equal(withoutMemory[0].text, "50%");
-  assert.equal(withoutMemory[1].unavailable, true);
-});
-
-test("a reading that cannot be taken says so instead of vanishing", () => {
-  // Neither half readable: the tray is never empty and silent.
-  const none = c.composeStatusParts({ showBattery: true, showMemory: true }, null, null, { battery: false, memory: false });
-  assert.equal(none.length, 1, "memory explains itself; a desktop's missing battery does not nag");
-  assert.equal(none[0].kind, "memory");
-  assert.equal(none[0].text, "\u2014");
-  assert.equal(none[0].unavailable, true);
-  // OW-70: a battery-only card on a desktop (no battery) is QUIET — the owner has no battery and read the old "no
-  // battery" line as a broken widget. The fact survives in the title, where it explains without nagging.
-  const batteryOnly = c.composeStatusParts({ showBattery: true, showMemory: false }, null, null, { battery: false, memory: false });
-  assert.equal(batteryOnly.length, 1);
-  assert.equal(batteryOnly[0].text, "", "a desktop is not an error message");
-  assert.match(batteryOnly[0].title, /no battery/i, "the reason is still there for whoever wants it");
-  assert.equal(batteryOnly[0].unavailable, true);
-  // A real reading is never replaced by a placeholder.
-  const mixed = c.composeStatusParts({ showBattery: true, showMemory: true }, { level: 0.7 }, null, { battery: true, memory: false });
-  assert.deepEqual(json(mixed.map((p) => p.kind)), ["battery", "memory"], "the reading, then the dash");
-  assert.equal(mixed[0].text, "70%");
-  assert.equal(mixed[1].unavailable, true);
-  // Switching a half off means it is not mentioned at all.
-  const off = c.composeStatusParts({ showBattery: false, showMemory: true }, null, null, { battery: false, memory: false });
-  assert.deepEqual(json(off.map((p) => p.kind)), ["memory"]);
-});
-
-test("the live card reads the platform it actually runs in, and paints its first value", () => {
-  // The chrome window has no navigator.getBattery: the power manager is the documented fallback.
-  assert.ok(/navigator\.getBattery/.test(SRC), "the content-side API is still tried first");
-  assert.ok(/powermanagerservice|Services\.power/.test(SRC), "and the browser window's power manager is the fallback");
-  assert.ok(/Services\.appinfo\?\.getMemoryUsage\?/.test(SRC), "memory is guarded with a call, not just a name check");
-  assert.ok(/memorySupport !== false/.test(SRC), "a memory read failure is remembered, not retried every paint");
-  assert.ok(/composeStatusParts\(/.test(SRC), "the card paints the composed line, not the raw readings");
-  // A mount must not wait a whole five-minute interval for its first paint.
-  assert.ok(/batterySupport !== false/.test(SRC), "the battery state is tracked as unknown/yes/no");
-  assert.ok(/scheduler\.refresh\("status", \{ force: true/.test(SRC), "a battery event forces an immediate repaint");
-});
-
-test("the settings section exists and every pref is declared", () => {
-  // OW-60 retired the standalone Timer card, so `timer.enabled` is no longer a setting; the Timer FACE setting took
-  // its place. Asserting the old pref here would pin the very thing the owner asked to be removed.
-  const wanted = [
-    c.WIDGET_PREFS.STATUS_ENABLED,
-    c.WIDGET_PREFS.STATUS_SHOW_BATTERY,
-    c.WIDGET_PREFS.STATUS_SHOW_MEMORY,
-    c.WIDGET_PREFS.CLOCK_MODE,
-    c.WIDGET_PREFS.WEATHER_ENABLED,
-  ];
-  assert.equal(SETTINGS.schema.some((x) => x.property === c.WIDGET_PREFS.TIMER_ENABLED), false,
-    "the retired standalone Timer card pref is gone from settings");
-  for (const property of wanted) {
-    const item = SETTINGS.schema.find((x) => x.property === property);
-    assert.ok(item, property + " is declared in settings.json");
-    assert.ok(PREFS.some((p) => p.property === property), property + " reaches preferences.json");
+test("the card reads the module, never the platform, and owns no timer", () => {
+  const card = SRC.slice(SRC.indexOf("// ---- OW-90: the Boost card, which replaces the Status card"), SRC.indexOf("const onVisibilityOrResize"));
+  assert.ok(card.length > 4000, "the card exists");
+  for (const forbidden of ["setInterval", "getMemoryUsage", "requestProcInfo", "forceGC", "navigator.getBattery"]) {
+    assert.equal(card.includes(forbidden), false, `${forbidden} belongs to additional/boost/, not to the card`);
   }
-  assert.equal(SETTINGS.schema.find((x) => x.property === c.WIDGET_PREFS.STATUS_ENABLED).defaultValue, false, "status ships off");
-  const sections = new Set(Object.values(SETTINGS.settings).map((s) => s.section));
-  for (const section of ["Weather", "Status"]) assert.ok(sections.has(section), "new section " + section);
-  // OW-65: the Timer is not a section of its own any more — it is the Clock card's other face, so its prefs sit with
-  // the clock's. A separate "Timer" group in Settings was the last place the retired second feature still showed.
-  assert.equal(sections.has("Timer"), false, "there is no separate Timer section to find");
-  const timerPrefs = Object.keys(SETTINGS.settings).filter((k) => k.includes("widgets.timer."));
-  assert.ok(timerPrefs.length >= 3, "the timer's own prefs are still declared");
-  for (const k of timerPrefs) assert.equal(SETTINGS.settings[k].section, "Clock & Date", k + " lives with the clock");
+  assert.ok(/window\.ZentralBoost/.test(card), "the card calls the module's API");
+  assert.ok(/runLevel1\(/.test(card), "a click is Level 1");
+  assert.ok(/onChange\(/.test(card), "and the number arrives through the module's own callback");
 });
 
-console.log("\nPASS widgets-status (" + passed + " tests)");
+test("a missing module disables the card instead of breaking the tray", () => {
+  const card = SRC.slice(SRC.indexOf("// ---- OW-90: the Boost card, which replaces the Status card"), SRC.indexOf("const onVisibilityOrResize"));
+  assert.ok(/return api && typeof api\.runLevel1 === "function" \? api : null/.test(SRC),
+    "the module is looked up defensively");
+  assert.ok(/if \(!boost\) return null;/.test(card), "and a run without it does nothing");
+  const parts = c.boostParts(undefined);
+  assert.equal(parts, null, "the card still draws itself, with a dash");
+});
+
+test("the card has one setting, it ships on, and it is placed like the one it replaced", () => {
+  const pref = "zen.workspace.zentral.widgets.boost.enabled";
+  const row = SETTINGS.schema.find((x) => x.property === pref);
+  assert.ok(row, "the pref is declared");
+  assert.equal(row.defaultValue, true, "Boost ships on — the plan's own default");
+  assert.equal(row.type, "checkbox");
+  assert.ok(PREFS.some((p) => p.property === pref), "it reaches preferences.json");
+  assert.ok(LAYOUT.order.includes(pref), "it has a home in the settings dialog");
+  assert.ok((STANDALONE.preferenceOrder || []).includes(pref), "and in the standalone package");
+  // Nothing of the old card is offered any more.
+  for (const dead of ["zen.workspace.zentral.widgets.status.enabled", "zen.workspace.zentral.widgets.status.show_battery", "zen.workspace.zentral.widgets.status.show_memory"]) {
+    assert.equal(SETTINGS.schema.some((x) => x.property === dead), false, dead + " is not a setting any more");
+    assert.equal(LAYOUT.order.includes(dead), false, dead + " is not on the page");
+    assert.equal((STANDALONE.preferenceOrder || []).includes(dead), false, dead + " is not in the standalone page");
+  }
+  // The retired pref is read once (so an owner's choice survives) and declared external, exactly like OW-60's timer.
+  assert.ok((STANDALONE.externalPrefs || []).includes("zen.workspace.zentral.widgets.status.enabled"),
+    "the retired pref is declared external, so the build knows why the code still reads it");
+  assert.ok(/LEGACY_STATUS_ENABLED/.test(SRC) && /adoptLegacyStatusCard/.test(SRC), "one migration step reads it");
+});
+
+test("the card's settings section is its own, not the retired one", () => {
+  const meta = SETTINGS.settings["zen.workspace.zentral.widgets.boost.enabled"];
+  assert.ok(meta, "the metadata exists");
+  assert.equal(meta.section, "Boost", "the section names what it holds now");
+  const sections = new Set(Object.values(SETTINGS.settings).map((s) => s.section));
+  assert.equal(sections.has("Status"), false, "there is no Status section left to find");
+  assert.ok(LAYOUT.categories.some((cat) => cat.id === meta.category && cat.sections.some((s) => s.label === "Boost")),
+    "the layout really declares that section");
+});
+
+test("the card is styled with the theme's variables and can be disabled", () => {
+  assert.ok(CSS.includes("#zentral-sidebar-widgets .zw-boost {"), "the card has its own block");
+  assert.ok(/\.zw-boost-popup\b[\s\S]*\[hidden\]/.test(CSS) || CSS.includes(".zw-boost-popup[hidden]"), "hidden really hides");
+  assert.ok(CSS.includes('.zw-boost-menu-item[disabled]'), "a greyed entry looks greyed");
+  assert.equal(CSS.includes(".zw-status"), false, "the retired card's CSS is gone, not left to rot");
+  // No scheme-local colours: everything is a variable with the theme as the fallback.
+  const block = CSS.slice(CSS.indexOf(".zw-boost {"), CSS.indexOf("/* ---- Built-in Timer widget"));
+  const colours = block.match(/#[0-9a-f]{3,6}/gi) || [];
+  for (const colour of colours) {
+    assert.ok(["#e5a04b"].includes(colour.toLowerCase()), colour + " has no variable to live in");
+  }
+});
+
+console.log("\nPASS widgets-status (replaced by the Boost card, " + passed + " tests)");

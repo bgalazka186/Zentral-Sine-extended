@@ -161,7 +161,9 @@ test("nothing about a finished countdown is written to prefs", () => {
 test("the toast is a line that leaves by itself", () => {
   assert.ok(/className = "zw-toast"/.test(SRC), "one element, reused");
   assert.ok(/setAttribute\("role", "status"\)/.test(SRC), "announced, not shouted");
-  assert.ok(/}, 5000\);/.test(SRC), "five seconds and it is gone");
+  // OW-90 moved this one number to the plan's four seconds for the Boost toast; the toast is shared, so the test
+  // follows the number instead of pinning the old one.
+  assert.ok(/}, 4000\);/.test(SRC), "four seconds and it is gone");
   assert.ok(CSS.includes("#zentral-sidebar-widgets .zw-toast[hidden]"), "hidden really hides");
 });
 

@@ -235,7 +235,7 @@
           "label": "Weather"
         },
         {
-          "label": "Status"
+          "label": "Boost"
         },
         {
           "label": "Appearance"
@@ -1020,12 +1020,10 @@
     "zen.workspace.zentral.widgets.weather.refresh_minutes",
     {
       "type": "text",
-      "label": "**Sidebar Widgets · Status**",
+      "label": "**Sidebar Widgets · Boost**",
       "size": "16px"
     },
-    "zen.workspace.zentral.widgets.status.enabled",
-    "zen.workspace.zentral.widgets.status.show_battery",
-    "zen.workspace.zentral.widgets.status.show_memory",
+    "zen.workspace.zentral.widgets.boost.enabled",
     {
       "type": "text",
       "label": "**Sidebar Widgets · Appearance**",

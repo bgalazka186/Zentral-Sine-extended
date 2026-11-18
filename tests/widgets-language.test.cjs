@@ -114,27 +114,27 @@ test("the widgets read the language when they draw, not when they start", () => 
     assert.ok(!new RegExp('(setBtn|clockNoteBtn|clockNoteChip)\\.textContent = "' + literal + '"').test(SRC), literal + " is not a literal any more");
     assert.ok(SRC.includes('tw("' + key + '")'), literal + " goes through tw() with " + key);
   }
-  for (const key of ["clock.title", "date.title", "weather.title", "status.title", "tray.label"]) {
+  for (const key of ["clock.title", "date.title", "weather.title", "boost.title", "tray.label"]) {
     assert.ok(SRC.includes('tw("' + key + '")'), "the card title and the tray label use " + key);
   }
 });
 
-test("the status card's own words are translated through its options, so the pure part stays pure", () => {
+test("the Boost card's own words are translated through its options, so the pure part stays pure", () => {
+  // OW-90: the Status card is gone; its words went with it and Boost's arrive in both languages.
   const pl = { language: "pl" };
-  const parts = c.composeStatusParts({ showBattery: true, showMemory: true, ...pl }, null, null, { battery: false, memory: false });
-  const memory = parts.find((p) => p.kind === "memory");
-  assert.equal(memory.title, c.WIDGET_STRINGS.pl["status.memoryUnavailable"], "the memory note is Polish");
-  const batteryOnly = c.composeStatusParts({ showBattery: true, showMemory: false, ...pl }, null, null, { battery: false, memory: false });
-  const battery = batteryOnly.find((p) => p.kind === "battery");
-  // OW-70: a desktop's missing battery is quiet in BODY text, and the explanation lives in the title — translated like
-  // every other word, in both languages.
-  assert.equal(battery.text, "", "no complaint in the body");
-  assert.equal(battery.title, c.WIDGET_STRINGS.pl["status.noBatteryTitle"], "but the reason is Polish too");
-  assert.equal(c.composeStatusParts({ showBattery: true, showMemory: false }, null, null, { battery: false, memory: false })[0].title,
-    c.WIDGET_STRINGS.en["status.noBatteryTitle"], "and English for a caller that says nothing");
+  const items = c.boostMenuItems({ running: false, ...pl });
+  assert.equal(items.find((i) => i.id === "free-light").label, c.WIDGET_STRINGS.pl["boost.free"], "the light pass is Polish");
+  assert.equal(items.find((i) => i.id === "free-deep").label, c.WIDGET_STRINGS.pl["boost.deep"], "and so is the deep entry");
+  assert.equal(c.boostResultText({ freedMB: 120 }, pl), c.WIDGET_STRINGS.pl["boost.freed"].replace("{mb}", "120"),
+    "the toast line is built from the translated template");
   // English is unchanged for a caller that says nothing (every test written before this one).
-  const plainParts = c.composeStatusParts({ showBattery: true, showMemory: true }, null, null, { battery: false, memory: false });
-  assert.equal(plainParts.find((p) => p.kind === "memory").title, "Memory usage is not available in this build");
+  assert.equal(c.boostResultText({ freedMB: 120 }), "Freed 120 MB");
+  // Every key either language needs exists in both, or a missing translation is visible as a dotted key.
+  for (const key of Object.keys(c.WIDGET_STRINGS.en)) {
+    assert.ok(key in c.WIDGET_STRINGS.pl, key + " is translated");
+    assert.ok(!/^boost\./.test(key) || c.WIDGET_STRINGS.pl[key] !== c.WIDGET_STRINGS.en[key] || key === "boost.title",
+      key + " really is a translation");
+  }
 });
 
 console.log("\nPASS widgets-language (" + passed + " tests)");

@@ -335,10 +335,14 @@ async function test(name, fn) {
   });
 
   await test("per-widget on/off (dedicated pref & disabled_ids), ordering, and zero-leak destroy", () => {
+    // Every built-in card is switched off here so the "no widgets left" state below is about this test's own cards;
+    // the built-in cards are exercised by their own files.
     const h = createFakeSidebarHarness({
       "zen.workspace.zentral.widgets.enabled": true,
       "zen.workspace.zentral.widgets.clock.enabled": false,
       "zen.workspace.zentral.widgets.date.enabled": false,
+      "zen.workspace.zentral.widgets.weather.enabled": false,
+      "zen.workspace.zentral.widgets.boost.enabled": false,
       "zen.workspace.zentral.widgets.alpha.enabled": true,
     });
     const { api } = h.start();

@@ -125,61 +125,20 @@ const BASE = {
     api.destroy();
   });
 
-  // ---- OW-70 ---------------------------------------------------------------------------------------------
-  await test("OW-70: memory is read from every shape the platform may hand over", () => {
-    const c = createFakeSidebarHarness().core;
-    const GB = 1024 ** 3;
-    const shapes = [
-      [{ usedSize: 2 * GB, totalSize: 8 * GB }, "2 / 8 GB"],
-      [{ memorySize: 2 * GB }, "2 GB"],
-      [{ usedSize: 2 * GB, memorySize: 8 * GB }, "2 GB"],
-      [{ used: 2 * GB, total: 8 * GB }, "2 / 8 GB"],
-      [{ used: 2 * GB, limit: 8 * GB }, "2 / 8 GB"],
-      [{ usage: 2 * GB, max: 8 * GB }, "2 / 8 GB"],
-      [[2 * GB, 8 * GB], "2 / 8 GB"],
-    ];
-    for (const [raw, text] of shapes) {
-      const parts = c.memoryParts(raw);
-      assert.ok(parts, "no shape may be rejected outright: " + JSON.stringify(raw));
-      assert.equal(parts.text, text, JSON.stringify(raw));
-    }
-    assert.equal(c.memoryParts(null), null, "no reading is no reading");
-    assert.equal(c.memoryParts({}), null, "an empty object is not a reading");
-    assert.equal(c.memoryParts({ usedSize: 0 }), null, "and 0 is never drawn as a real number");
-  });
-
-  await test("OW-70: a desktop with no battery is quiet, and the card says where its numbers came from", () => {
-    const c = createFakeSidebarHarness().core;
-    const only = c.composeStatusParts({ showBattery: true, showMemory: false }, null, null, { battery: false, memory: false });
-    assert.equal(only.length, 1);
-    assert.equal(only[0].text, "", "nothing to read, so nothing is written");
-    assert.match(only[0].title, /no battery/i, "the reason is kept where it explains");
-    // With memory carrying the card, the absent battery is not mentioned at all.
-    const both = c.composeStatusParts({ showBattery: true, showMemory: true }, null, { used: 1024 ** 3 }, { battery: false, memory: true });
-    assert.deepEqual(Array.from(both, (p) => p.kind), ["memory"]);
-    // The live card records its source in the DOM, where the owner can look without a console.
-    const h = createFakeSidebarHarness({ ...BASE, "zen.workspace.zentral.widgets.status.enabled": true });
-    h.Services.appinfo.getMemoryUsage = () => ({ usedSize: 3 * 1024 ** 3, totalSize: 16 * 1024 ** 3 });
-    // The reader caches its verdict, so the fixture must exist before the widget's first fetch.
-    const { api } = h.start();
-    return tick(60).then(() => {
-      const wrap = api.getTray().children.find((el) => el.getAttribute("data-zw-widget") === "status").querySelector(".zw-status");
-      assert.match(wrap.getAttribute("data-zw-source") || "", /memory:appinfo/, "the source is readable");
-      api.destroy();
-    });
-  });
-
-  // ---- OW-71 ---------------------------------------------------------------------------------------------
+  // ---- OW-70, as it stands after OW-90 ---------------------------------------------------------------
+  // The Status card and its readings are gone: Boost owns the one memory number the browser can really report, and
+  // `additional/boost/` owns the reading itself. What survives from OW-70 here is the card's own placement rule — a
+  // widget that is switched off keeps its place for when it comes back — asserted in the OW-71 block below.
   await test("OW-71: the stored order keeps what exists, drops what does not, and never loses a widget", () => {
     const c = createFakeSidebarHarness().core;
-    const defs = [{ id: "clock" }, { id: "date" }, { id: "weather" }, { id: "status" }];
-    assert.deepEqual(Array.from(c.orderedByIds(defs, ["status", "clock"]), (d) => d.id), ["status", "clock", "date", "weather"],
+    const defs = [{ id: "clock" }, { id: "date" }, { id: "weather" }, { id: "boost" }];
+    assert.deepEqual(Array.from(c.orderedByIds(defs, ["boost", "clock"]), (d) => d.id), ["boost", "clock", "date", "weather"],
       "the chosen two first, the rest in their default order — a new widget appears, it is not hidden");
-    assert.deepEqual(Array.from(c.orderedByIds(defs, ["nope", "weather"]), (d) => d.id), ["weather", "clock", "date", "status"],
+    assert.deepEqual(Array.from(c.orderedByIds(defs, ["nope", "weather"]), (d) => d.id), ["weather", "clock", "date", "boost"],
       "an id nobody recognises is ignored");
-    assert.deepEqual(Array.from(c.orderedByIds(defs, []), (d) => d.id), ["clock", "date", "weather", "status"],
+    assert.deepEqual(Array.from(c.orderedByIds(defs, []), (d) => d.id), ["clock", "date", "weather", "boost"],
       "no stored order means the default one");
-    assert.deepEqual(Array.from(c.cleanWidgetOrder("clock, ,date;status clock")), ["clock", "date", "status"],
+    assert.deepEqual(Array.from(c.cleanWidgetOrder("clock, ,date;boost clock")), ["clock", "date", "boost"],
       "junk, repeats and separators are all handled");
     assert.deepEqual(Array.from(c.cleanWidgetOrder(null)), []);
   });
@@ -199,7 +158,7 @@ const BASE = {
       ...BASE,
       "zen.workspace.zentral.widgets.date.enabled": true,
       "zen.workspace.zentral.widgets.weather.enabled": false,
-      "zen.workspace.zentral.widgets.status.enabled": false,
+      "zen.workspace.zentral.widgets.boost.enabled": false,
     });
     const { api } = h.start();
     await tick(50);

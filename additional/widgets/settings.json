@@ -298,20 +298,9 @@
       ]
     },
     {
-      "property": "zen.workspace.zentral.widgets.status.enabled",
-      "label": "Show Status widget (battery and memory)",
-      "type": "checkbox",
-      "defaultValue": false
-    },
-    {
-      "property": "zen.workspace.zentral.widgets.status.show_battery",
-      "label": "Show the battery in the Status widget",
-      "type": "checkbox",
-      "defaultValue": true
-    },
-    {
-      "property": "zen.workspace.zentral.widgets.status.show_memory",
-      "label": "Show the memory in the Status widget",
+      "property": "zen.workspace.zentral.widgets.boost.enabled",
+      "label": "Show the Boost widget (memory and Free memory)",
+      "description": "Boost replaces the old Status card: it shows browser RAM and frees memory without closing anything.",
       "type": "checkbox",
       "defaultValue": true
     },
@@ -468,21 +457,6 @@
       "section": "Clock & Date",
       "owner": "widgets"
     },
-    "zen.workspace.zentral.widgets.status.enabled": {
-      "category": "widgets",
-      "section": "Status",
-      "owner": "widgets"
-    },
-    "zen.workspace.zentral.widgets.status.show_battery": {
-      "category": "widgets",
-      "section": "Status",
-      "owner": "widgets"
-    },
-    "zen.workspace.zentral.widgets.status.show_memory": {
-      "category": "widgets",
-      "section": "Status",
-      "owner": "widgets"
-    },
     "zen.workspace.zentral.widgets.language": {
       "category": "widgets",
       "section": "Sidebar widgets",
@@ -506,6 +480,11 @@
     "zen.workspace.zentral.widgets.appearance.text": {
       "category": "widgets",
       "section": "Appearance",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.boost.enabled": {
+      "category": "widgets",
+      "section": "Boost",
       "owner": "widgets"
     }
   }

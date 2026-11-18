@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Widgets
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.318
+// @version 3.3.320
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.318, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.320, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.318";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.320";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1147,6 +1147,8 @@ function nativeSidebarSide() {
     WEATHER_REFRESH_MINUTES: "zen.workspace.zentral.widgets.weather.refresh_minutes",
     WEATHER_PLACES: "zen.workspace.zentral.widgets.weather.places",
     TIMER_ENABLED: "zen.workspace.zentral.widgets.timer.enabled",
+    // Retired by OW-90 with the card it belonged to; read once so an owner's choice survives the swap.
+    LEGACY_STATUS_ENABLED: "zen.workspace.zentral.widgets.status.enabled",
     TIMER_CLICK_STOPWATCH: "zen.workspace.zentral.widgets.timer.click_stopwatch",
     CLOCK_QUICK_NOTE: "zen.workspace.zentral.widgets.clock.quick_note",
     ORDER: "zen.workspace.zentral.widgets.order",
@@ -1156,9 +1158,9 @@ function nativeSidebarSide() {
     CLOCK_MODE: "zen.workspace.zentral.widgets.clock.mode",
     TIMER_END_SOUND: "zen.workspace.zentral.widgets.timer.end_sound",
     TIMER_END_NOTICE: "zen.workspace.zentral.widgets.timer.end_notice",
-    STATUS_ENABLED: "zen.workspace.zentral.widgets.status.enabled",
-    STATUS_SHOW_BATTERY: "zen.workspace.zentral.widgets.status.show_battery",
-    STATUS_SHOW_MEMORY: "zen.workspace.zentral.widgets.status.show_memory",
+    // OW-90: the Status card is gone — Boost replaces it. The memory reading moved into `additional/boost/`, where the
+    // number and the action that lowers it live together; the battery reading left with the card (a desktop has none).
+    BOOST_ENABLED: "zen.workspace.zentral.widgets.boost.enabled",
     // OW-64: one language for every widget. "auto" follows the Notes interface language, so the two never disagree
     // until the person says otherwise; anything else is their own choice and stays their own choice.
     LANGUAGE: "zen.workspace.zentral.widgets.language",
@@ -1196,9 +1198,7 @@ function nativeSidebarSide() {
     CLOCK_MODE: "clock",
     TIMER_END_SOUND: "beep",
     TIMER_END_NOTICE: "none",
-    STATUS_ENABLED: false,
-    STATUS_SHOW_BATTERY: true,
-    STATUS_SHOW_MEMORY: true,
+    BOOST_ENABLED: true,
     LANGUAGE: "auto",
   });
 
@@ -1220,6 +1220,19 @@ function nativeSidebarSide() {
       "date.title": "Date",
       "weather.title": "Weather",
       "status.title": "Status",
+      "boost.title": "Boost",
+      "boost.aria": "{value} of browser memory in use. Click to free memory.",
+      "boost.ariaUnknown": "Browser memory reading unavailable. Click to free memory.",
+      "boost.free": "Free memory (light)",
+      "boost.busy": "Freeing memory\u2026",
+      "boost.freed": "Freed {mb} MB",
+      "boost.nothingFreed": "Memory was already tidy",
+      "boost.unknown": "Memory freed. This build cannot measure it.",
+      "boost.deep": "Free memory (deep)",
+      "boost.deepSoon": "Coming in Boost part three",
+      "boost.restore": "Restore",
+      "boost.restoreSoon": "Nothing to restore yet",
+      "boost.later": "More Boost actions arrive in later updates",
       "tray.label": "Sidebar widgets",
       "tray.move": "Move this widget",
       "tray.moveUp": "Move this widget up",
@@ -1261,6 +1274,19 @@ function nativeSidebarSide() {
       "date.title": "Data",
       "weather.title": "Pogoda",
       "status.title": "Stan",
+      "boost.title": "Boost",
+      "boost.aria": "Pami\u0119\u0107 przegl\u0105darki: {value}. Kliknij, aby j\u0105 zwolni\u0107.",
+      "boost.ariaUnknown": "Odczyt pami\u0119ci niedost\u0119pny. Kliknij, aby zwolni\u0107 pami\u0119\u0107.",
+      "boost.free": "Zwolnij pami\u0119\u0107 (lekko)",
+      "boost.busy": "Zwalnianie pami\u0119ci\u2026",
+      "boost.freed": "Zwolniono {mb} MB",
+      "boost.nothingFreed": "Pami\u0119\u0107 by\u0142a ju\u017c uporz\u0105dkowana",
+      "boost.unknown": "Pami\u0119\u0107 zwolniona. Ta wersja nie potrafi jej zmierzy\u0107.",
+      "boost.deep": "Zwolnij pami\u0119\u0107 (g\u0142\u0119boko)",
+      "boost.deepSoon": "Pojawi si\u0119 w cz\u0119\u015bci trzeciej Boost",
+      "boost.restore": "Przywr\u00f3\u0107",
+      "boost.restoreSoon": "Nie ma jeszcze czego przywraca\u0107",
+      "boost.later": "Kolejne dzia\u0142ania Boost pojawi\u0105 si\u0119 w nast\u0119pnych wersjach",
       "tray.label": "Widgety panelu bocznego",
       "tray.move": "Przenieś ten widget",
       "tray.moveUp": "Przenieś ten widget wyżej",
@@ -2833,119 +2859,71 @@ function nativeSidebarSide() {
   // ---- T3.9e: battery and memory ------------------------------------------------------------------------------
   // Nothing here reads the machine: every helper takes the numbers the caller collected, so the card is a painter
   // and the reading can be tested without a battery.
-  function batteryParts(info) {
-    if (!info || typeof info !== "object") return null;
-    const level = Number(info.level);
-    const charging = Boolean(info.charging);
-    if (!Number.isFinite(level)) return null;
-    const percent = Math.round(Math.max(0, Math.min(1, level)) * 100);
-    const state = charging ? "charging" : info.dischargingTime === Infinity || info.dischargingTime === 0 ? "plugged in" : "on battery";
-    return {
-      percent,
-      charging,
-      text: percent + "%",
-      title: percent + "% — " + state,
-      level: percent <= 10 ? "critical" : percent <= 25 ? "low" : "ok",
-    };
+  // ---- OW-90: the Boost card ---------------------------------------------------------------------------------
+  // Boost is a number and one action. The number comes from `additional/boost/` (the only place that knows how to ask
+  // the browser for its real total), so this card owns no reading of its own and no timer: the module's sampler runs
+  // only while the popup is open, and `onChange` is how the card hears about it.
+
+  // The compact line: "412 MB" while the reading is small, "1.4 GB" once it outgrows a megabyte count. A reading that
+  // does not exist is a dash, never a zero — the plan's rule, and the same one the retired Status card followed.
+  function boostParts(mb) {
+    const value = Number(mb);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    const text = value >= 1000 ? (Math.round(value / 100) / 10).toFixed(1) + " GB" : Math.round(value) + " MB";
+    // The level is the one thing this card grades: a browser near the machine's limit is worth a colour, and the
+    // number alone cannot say that (it has no limit to compare against), so the grade only says "growing".
+    return { mb: Math.round(value), text, level: value >= 4096 ? "low" : "ok" };
   }
 
-  // The chrome window has no `navigator.getBattery`; the platform owns the battery through the power manager
-  // (`navigator.getBattery()` on a content window, `Services`' power service in the browser window). The reading is
-  // normalised here once, so the card never has to know which one answered.
-  function readBatteryInfo(source) {
-    if (!source || typeof source !== "object") return null;
-    const level = source.level;
-    return {
-      level: Number.isFinite(Number(level)) ? Number(level) : Number(source.percent) / 100,
-      charging: Boolean(source.charging),
-      dischargingTime: source.dischargingTime,
-    };
+  // What a plain click means. Pure, so the rule is testable without a sidebar: a click while the module works does
+  // nothing (a second GC while the first settles is exactly the kind of pile-up the plan forbids), a click otherwise
+  // runs the light pass.
+  function resolveBoostClick(opts = {}) {
+    if (opts.enabled === false) return { action: "none" };
+    if (!opts.available) return { action: "none", reason: "module-missing" };
+    if (opts.running) return { action: "none", reason: "busy" };
+    return { action: "free", level: 1 };
   }
 
-  // Two different kinds of "nothing": a desktop simply has no battery (quiet — the setting asked for a battery, there
-  // is none), while a build that cannot report memory is a surprise worth one dash. Neither is ever drawn as 0%.
-  function unavailableParts(opts = {}, batterySupported = true, memorySupported = true) {
-    // OW-64: the words follow the widget language; the language comes in through `opts` so this stays pure.
+  // The menu, as data. The plan's rule is that the entries that do not work yet are shown greyed rather than hidden,
+  // so a person cannot think part three already shipped; `available: false` is what draws them disabled.
+  function boostMenuItems(opts = {}) {
     const lang = resolveWidgetLanguage(opts.language, opts.notesRaw);
-    const out = [];
-    if (opts.showMemory !== false && !memorySupported) {
-      out.push({ kind: "memory", text: "\u2014", title: widgetText(lang, "status.memoryUnavailable"), level: "muted", unavailable: true });
-    }
-    // OW-70: a machine with no battery is a desktop, not a fault. The owner has one and saw a card that looked broken,
-    // so "there is no battery" is now a TITLE only — the line itself stays empty rather than printing a complaint
-    // nobody can act on. It still never draws 0%, and the fact is kept where it is useful (the tooltip).
-    if (opts.showBattery !== false && !batterySupported && opts.showMemory === false) {
-      out.push({ kind: "battery", text: "", title: widgetText(lang, "status.noBatteryTitle"), level: "muted", unavailable: true });
-    }
-    return out;
+    const running = Boolean(opts.running);
+    const items = [
+      {
+        id: "free-light",
+        label: widgetText(lang, running ? "boost.busy" : "boost.free"),
+        available: !running,
+        primary: true,
+      },
+      {
+        id: "free-deep",
+        label: widgetText(lang, "boost.deep"),
+        available: false,
+        hint: widgetText(lang, "boost.deepSoon"),
+      },
+      {
+        id: "restore",
+        label: widgetText(lang, "boost.restore"),
+        available: false,
+        hint: widgetText(lang, "boost.restoreSoon"),
+      },
+    ];
+    return items;
   }
 
-  // "used / limit" from the two byte counts Firefox reports; a missing limit prints only what is used.
-  // OW-70: the platform's memory counters do not all have one shape. `getMemoryUsage()` hands back
-  // `{ usedSize, totalSize }` on some builds, `{ memorySize }` on others, and some callers pass a pair. One reader, so
-  // the card cannot be broken by a shape it has not met — which is what the owner saw as "ram info doesnt work".
-  function readMemoryUsage(raw) {
-    if (!raw) return null;
-    let used = NaN;
-    let limit = NaN;
-    if (Array.isArray(raw)) {
-      used = Number(raw[0]);
-      limit = Number(raw[1]);
-    } else if (typeof raw === "object") {
-      used = Number(raw.usedSize ?? raw.used ?? raw.memorySize ?? raw.usage);
-      limit = Number(raw.totalSize ?? raw.total ?? raw.limit ?? raw.max);
-    }
-    if (!Number.isFinite(used) || used <= 0) return null;
-    return { used, total: Number.isFinite(limit) && limit > 0 ? limit : 0 };
-  }
-  function memoryParts(usage, opts = {}) {
-    if (!usage || typeof usage !== "object") return null;
-    const used = Number(usage.usedSize ?? usage.used ?? usage.memorySize ?? usage.usage ?? (Array.isArray(usage) ? usage[0] : NaN));
-    const limit = Number(usage.totalSize ?? usage.total ?? usage.limit ?? usage.max ?? (Array.isArray(usage) ? usage[1] : NaN));
-    if (!Number.isFinite(used) || used <= 0) return null;
-    const gb = (bytes) => Math.round((bytes / (1024 ** 3)) * 10) / 10;
-    const hasLimit = Number.isFinite(limit) && limit > 0;
-    const text = hasLimit ? gb(used) + " / " + gb(limit) + " GB" : gb(used) + " GB";
-    return {
-      usedBytes: used,
-      limitBytes: hasLimit ? limit : 0,
-      sharePercent: hasLimit ? Math.round((used / limit) * 100) : 0,
-      text,
-      title: widgetText(resolveWidgetLanguage(opts.language, opts.notesRaw), "status.memoryTitle"),
-    };
-  }
-
-  // One line, only what the person asked for, in a stable order.
-  function statusLineParts(opts = {}, battery, memory) {
-    const out = [];
-    if (opts.showBattery !== false) {
-      const b = batteryParts(battery);
-      if (b) out.push({ kind: "battery", text: b.text + (b.charging ? " \u26a1" : ""), title: b.title, level: b.level });
-    }
-    if (opts.showMemory !== false) {
-      const m = memoryParts(memory, opts);
-      if (m) out.push({ kind: "memory", text: m.text, title: m.title, level: m.sharePercent >= 90 ? "critical" : m.sharePercent >= 75 ? "low" : "ok" });
-    }
-    return out;
-  }
-
-  // The card's whole line: real readings first, and only when a half has no reading does its honest placeholder show.
-  // One missing reading never removes the other, and a card with nothing readable still says so.
-  function composeStatusParts(opts = {}, battery, memory, support = {}) {
-    const real = statusLineParts(opts, battery, memory);
-    // Only a half that has neither a reading nor a supported source is worth mentioning.
-    const missing = unavailableParts(
-      opts,
-      support.battery !== false || Boolean(battery),
-      support.memory !== false || Boolean(memory),
-    ).filter((part) => !real.some((r) => r.kind === part.kind));
-    return [...real, ...missing];
-  }
-
-  // Battery changes are events; memory is a reading, so it is refreshed on a slow interval through the scheduler.
-  function nextStatusDelayMs(battery) {
-    if (battery && battery.charging) return 60000;
-    return 5 * 60000;
+  // The toast line after a run. `freedMB` is null when the build cannot measure memory at all: the run still
+  // happened, so the card says that instead of inventing a number.
+  function boostResultText(result, opts = {}) {
+    const lang = resolveWidgetLanguage(opts.language, opts.notesRaw);
+    if (!result || typeof result !== "object") return widgetText(lang, "boost.unknown");
+    // A finite `freedMB` is the answer; the two readings only matter when it is missing, which is exactly the
+    // "this build cannot measure memory" case — the run happened, so say that instead of inventing a number.
+    const freed = Number(result.freedMB);
+    if (result.freedMB == null || !Number.isFinite(freed)) return widgetText(lang, "boost.unknown");
+    if (freed <= 0) return widgetText(lang, "boost.nothingFreed");
+    return widgetText(lang, "boost.freed", { mb: Math.round(freed) });
   }
 
   // ---- T3.9d: stopwatch, quick timer and quick note -----------------------------------------------------------
@@ -3605,18 +3583,14 @@ function nativeSidebarSide() {
     readGeocodePayload,
     geocodeUrl,
     TIMER_PRESETS_MS,
-    batteryParts,
-    readMemoryUsage,
+    boostParts,
+    resolveBoostClick,
+    boostMenuItems,
+    boostResultText,
     cleanWidgetOrder,
     cleanWidgetColor, parseWidgetColor, contrastRatio, widgetAppearanceVars, CONTRAST_MIN,
     orderedByIds,
     moveInOrder,
-    memoryParts,
-    statusLineParts,
-    composeStatusParts,
-    readBatteryInfo,
-    unavailableParts,
-    nextStatusDelayMs,
     resolveClockClick,
     resolveClockPanelState,
     WIDGET_MODES,
@@ -4392,6 +4366,23 @@ function nativeSidebarSide() {
           if (!wasOn) return;
           if (getString(WIDGET_PREFS.CLOCK_MODE, DEFAULTS.CLOCK_MODE) === "timer") return;
           writeStringPref(WIDGET_PREFS.CLOCK_MODE, "timer");
+        } catch (_) {}
+      }
+
+      // OW-90: the Status card is replaced by Boost, so a person who had Status switched ON gets Boost switched on.
+      // A default of `false` for everybody was the Status card's accident (off unless asked); Boost ships on, and this
+      // step only makes sure an existing owner's explicit "yes" is not silently dropped by the swap. It never turns
+      // Boost off and it never touches a pref somebody already set for Boost.
+      function adoptLegacyStatusCard() {
+        try {
+          const def = registry.get("boost");
+          if (!def) return;
+          const legacyOn = getBool(WIDGET_PREFS.LEGACY_STATUS_ENABLED, false);
+          if (!legacyOn) return;
+          const type = Services.prefs.getPrefType?.(WIDGET_PREFS.BOOST_ENABLED);
+          // 0 = pref does not exist yet; only then does the old choice speak.
+          if (type) return;
+          Services.prefs.setBoolPref(WIDGET_PREFS.BOOST_ENABLED, true);
         } catch (_) {}
       }
 
@@ -5516,10 +5507,11 @@ function nativeSidebarSide() {
           if (widgetToastTimer !== null && typeof window.clearTimeout === "function") window.clearTimeout(widgetToastTimer);
           widgetToastTimer = null;
           if (typeof window.setTimeout !== "function") return;
+          // OW-90: the plan's own number for the Boost toast is 4 s.
           widgetToastTimer = window.setTimeout(() => {
             widgetToastTimer = null;
             if (widgetToastEl) widgetToastEl.hidden = true;
-          }, 5000);
+          }, 4000);
         } catch (_) {}
       }
 
@@ -5546,151 +5538,231 @@ function nativeSidebarSide() {
         });
       }
 
-      // ---- T3.9e: battery and memory ---------------------------------------------------------------------------
-      // Battery events come from the platform (charging, level change); memory is a reading, so it rides the
-      // scheduler's slow interval. Neither is polled per second, and neither runs while the sidebar is hidden.
-      // The browser window has no `navigator.getBattery`; the platform exposes the battery through the power
-      // manager. Either answer is normalised by readBatteryInfo(), and "no battery at all" is a fact worth printing,
-      // not a reason to hide the card.
-      let batteryRef = null;
-      let batterySeen = null;
-      let batterySupport = null; // null = not known yet, true = a reading is possible, false = this machine/build cannot
-      // OW-70: the memory reading, from every source the platform might offer, with the one that answered kept so the
-      // card can say where its number came from. A build without `getMemoryUsage` is not a build without memory: the
-      // resident-size counter is a second door, and the end of that road is "no reading", never a wrong number.
-      let memorySource = "";
-      const readMemory = () => {
+      // ---- OW-90: the Boost card, which replaces the Status card -----------------------------------------------
+      // The number and the action live together: the card shows what the browser is using and one click hands memory
+      // back. Nothing here reads the platform itself — `additional/boost/` owns the only reading — and nothing here
+      // polls: the module samples every 2 s only while the popup is open, and every value arrives through `onChange`.
+      //
+      // The card is a convenience, never the only door: with the tray disabled the Boost module still works through
+      // its API and (in part three) its shortcut. The README of `additional/boost/` says so too.
+      const boostModule = () => {
         try {
-          const usage = Services.appinfo?.getMemoryUsage?.();
-          const fromUsage = readMemoryUsage(usage);
-          if (fromUsage) { memorySource = "appinfo"; return fromUsage; }
-        } catch (_) {}
-        try {
-          // Fallback: the process' own resident size, when the app reports one.
-          const resident = Number(Services.appinfo?.getMemoryUsage?.()?.residentFast ?? NaN);
-          if (Number.isFinite(resident) && resident > 0) { memorySource = "resident"; return { used: resident, total: 0 }; }
-        } catch (_) {}
-        return null;
-      };
-      let memorySupport = null;
-      const memorySupported = () => {
-        if (memorySupport !== null) return memorySupport;
-        try {
-          memorySupport = Boolean(readMemory());
+          const api = window.ZentralBoost;
+          return api && typeof api.runLevel1 === "function" ? api : null;
         } catch (_) {
-          memorySupport = false;
+          return null;
         }
-        return memorySupport;
       };
-      const adoptBattery = (source) => {
-        if (disposed) return;
-        batteryRef = source;
-        batterySeen = batteryParts(readBatteryInfo(source));
-        // A source that answers but reports no usable level is still a battery the machine has.
-        batterySupport = true;
-        const changed = () => {
-          batterySeen = batteryParts(readBatteryInfo(batteryRef));
-          scheduler.refresh("status", { force: true, area: lastArea });
-        };
-        source.addEventListener?.("levelchange", changed);
-        source.addEventListener?.("chargingchange", changed);
-        registerCleanup(() => {
-          try {
-            source.removeEventListener?.("levelchange", changed);
-            source.removeEventListener?.("chargingchange", changed);
-          } catch (_) {}
-        });
-        scheduler.refresh("status", { force: true, area: lastArea });
-      };
-      const watchBattery = () => {
-        if (batteryRef || disposed) return;
-        // A content-side navigator, when the runtime hands one over, is the simplest source.
-        if (typeof navigator !== "undefined" && typeof navigator.getBattery === "function") {
-          try {
-            navigator.getBattery().then(adoptBattery).catch(() => { batterySupport = false; });
-            return;
-          } catch (_) {}
-        }
-        // The browser window reads the same power manager Firefox's own battery indicator uses.
-        try {
-          const power =
-            (typeof Services !== "undefined" ? Services.power : null) ||
-            (typeof Cc !== "undefined" && typeof Ci !== "undefined"
-              ? Cc["@mozilla.org/power/powermanagerservice;1"].getService(Ci.nsIPowerManagerService)
-              : null);
-          const battery = power?.battery;
-          if (!battery) {
-            batterySupport = false;
-            return;
-          }
-          adoptBattery(battery);
-          return;
-        } catch (_) {}
-        batterySupport = false;
-      };
+      let boostUnsubscribe = null;
+      let boostLastMB = null;
+      let boostRunning = false;
       registerWidget({
-        id: "status",
-        title: tw("status.title"),
+        id: "boost",
+        title: tw("boost.title"),
         showHeader: false,
         order: 50,
-        pref: WIDGET_PREFS.STATUS_ENABLED,
-        defaultEnabled: false,
-        refreshMs: 5 * 60000,
-        watchPrefs: [WIDGET_PREFS.STATUS_SHOW_BATTERY, WIDGET_PREFS.STATUS_SHOW_MEMORY],
+        pref: WIDGET_PREFS.BOOST_ENABLED,
+        defaultEnabled: DEFAULTS.BOOST_ENABLED,
+        // No cadence of its own: `fetch` answers from what the module last measured, so the scheduler never wakes the
+        // card for a reading it would have to take itself. A slow refresh is kept so a changed preference repaints.
+        refreshMs: 0,
         create({ document: doc }) {
           const wrap = doc.createElement("div");
-          wrap.className = "zw-status";
-          const batteryEl = doc.createElement("span");
-          batteryEl.className = "zw-status-item zw-status-battery";
-          const memoryEl = doc.createElement("span");
-          memoryEl.className = "zw-status-item zw-status-memory";
-          wrap.appendChild(batteryEl);
-          wrap.appendChild(memoryEl);
+          wrap.className = "zw-boost";
+          const valueEl = doc.createElement("span");
+          valueEl.className = "zw-boost-value";
+          valueEl.textContent = "\u2014";
+          const labelEl = doc.createElement("span");
+          labelEl.className = "zw-boost-label";
+          labelEl.textContent = tw("boost.title");
+          const menuBtn = doc.createElement("button");
+          menuBtn.type = "button";
+          menuBtn.className = "zw-boost-menu-btn";
+          menuBtn.setAttribute("aria-haspopup", "true");
+          menuBtn.setAttribute("aria-expanded", "false");
+          menuBtn.setAttribute("aria-label", tw("boost.later"));
+          menuBtn.textContent = "\u25be";
+          wrap.appendChild(valueEl);
+          wrap.appendChild(labelEl);
+          wrap.appendChild(menuBtn);
+
+          // The popup: a small list of what Boost can do. The entries that later parts add are drawn, greyed and
+          // explained — the plan's rule, and the reason a person can see that "deep" exists but is not ready.
+          const popup = doc.createElement("div");
+          popup.className = "zw-boost-popup";
+          popup.hidden = true;
+          popup.setAttribute("role", "menu");
+          wrap.appendChild(popup);
+
+          const paintValue = () => {
+            const parts = boostParts(boostLastMB);
+            valueEl.textContent = parts ? parts.text : "\u2014";
+            valueEl.setAttribute("data-zw-level", parts ? parts.level : "muted");
+            const lang = { language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), notesRaw: getString(NOTES_LANGUAGE_PREF, "en") };
+            wrap.setAttribute("aria-label", parts
+              ? widgetText(resolveWidgetLanguage(lang.language, lang.notesRaw), "boost.aria", { value: parts.text })
+              : widgetText(resolveWidgetLanguage(lang.language, lang.notesRaw), "boost.ariaUnknown"));
+            wrap.setAttribute("data-zw-boost", parts ? String(parts.mb) : "");
+          };
+
+          const paintMenu = () => {
+            while (popup.children.length) popup.children[0].remove();
+            const items = boostMenuItems({
+              running: boostRunning,
+              language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE),
+              notesRaw: getString(NOTES_LANGUAGE_PREF, "en"),
+            });
+            for (const item of items) {
+              const row = doc.createElement("button");
+              row.type = "button";
+              row.className = "zw-boost-menu-item";
+              row.setAttribute("role", "menuitem");
+              row.setAttribute("data-zw-boost-action", item.id);
+              row.textContent = item.label;
+              if (item.hint) row.title = item.hint;
+              row.disabled = !item.available;
+              row.setAttribute("aria-disabled", item.available ? "false" : "true");
+              if (item.available) {
+                row.addEventListener("click", (event) => {
+                  event?.preventDefault?.();
+                  event?.stopPropagation?.();
+                  closePopup();
+                  void runAction(item.id);
+                });
+              }
+              popup.appendChild(row);
+            }
+            // One line at the bottom says where the other entries will come from, translated like every other word.
+            const note = doc.createElement("div");
+            note.className = "zw-boost-menu-note";
+            note.textContent = tw("boost.later");
+            popup.appendChild(note);
+          };
+
+          const isPopupOpen = () => !popup.hidden;
+          const closePopup = () => {
+            if (popup.hidden) return false;
+            popup.hidden = true;
+            menuBtn.setAttribute("aria-expanded", "false");
+            return true;
+          };
+          const openPopup = () => {
+            paintMenu();
+            popup.hidden = false;
+            menuBtn.setAttribute("aria-expanded", "true");
+          };
+
+          const api = () => boostModule();
+
+          function runAction(id) {
+            if (id === "free-light") return runLight();
+            return Promise.resolve(null);
+          }
+
+          // One click, one pass. While the module works the card says so and refuses a second start, so a person
+          // cannot stack GC runs by clicking twice.
+          async function runLight() {
+            const boost = api();
+            if (!boost) return null;
+            const decision = resolveBoostClick({ available: true, running: boostRunning });
+            if (decision.action !== "free") return null;
+            boostRunning = true;
+            paintMenu();
+            showWidgetToast(tw("boost.busy"));
+            let result = null;
+            try {
+              result = await boost.runLevel1();
+            } catch (_) {
+              result = null;
+            } finally {
+              boostRunning = false;
+              paintMenu();
+            }
+            showWidgetToast(boostResultText(result, {
+              language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE),
+              notesRaw: getString(NOTES_LANGUAGE_PREF, "en"),
+            }));
+            return result;
+          }
+
+          // The module says when its reading changed; the card only repaints, it never asks.
+          const subscribe = () => {
+            const boost = api();
+            if (!boost || typeof boost.onChange !== "function") return;
+            try {
+              boostUnsubscribe = boost.onChange((value) => {
+                boostLastMB = typeof value === "number" ? value : (typeof boost.lastMB === "function" ? boost.lastMB() : null);
+                paintValue();
+              });
+            } catch (_) {
+              boostUnsubscribe = null;
+            }
+          };
+          subscribe();
+          boostLastMB = typeof api()?.lastMB === "function" ? api().lastMB() : null;
+          paintValue();
+
+          // A click on the card runs the light pass; a click on the arrow opens the menu. That split keeps the plan's
+          // "left click runs Level 1" true while the arrow still reaches the rest.
+          wrap.addEventListener("click", (event) => {
+            if (popup.contains?.(event?.target)) return;
+            if (event?.target === menuBtn) return;
+            if (event && ((event.button != null && event.button !== 0) || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)) return;
+            event?.preventDefault?.();
+            void runLight();
+          });
+          menuBtn.addEventListener("click", (event) => {
+            event?.preventDefault?.();
+            event?.stopPropagation?.();
+            if (isPopupOpen()) closePopup();
+            else openPopup();
+          });
+          // A click anywhere else closes the menu, and so does Escape. Both are cleanup-registered.
+          const onDocPointer = (event) => {
+            if (!isPopupOpen()) return;
+            if (wrap.contains?.(event?.target)) return;
+            closePopup();
+          };
+          const onKeyDown = (event) => {
+            if (event?.key !== "Escape") return;
+            if (closePopup()) event?.stopPropagation?.();
+          };
+          doc.addEventListener("pointerdown", onDocPointer);
+          doc.addEventListener("keydown", onKeyDown);
+          registerCleanup(() => {
+            try {
+              doc.removeEventListener("pointerdown", onDocPointer);
+              doc.removeEventListener("keydown", onKeyDown);
+              if (typeof boostUnsubscribe === "function") boostUnsubscribe();
+            } catch (_) {}
+            boostUnsubscribe = null;
+          });
+
           return {
             element: wrap,
             fetch() {
-              watchBattery();
-              const opts = {
-                showBattery: getBool(WIDGET_PREFS.STATUS_SHOW_BATTERY, DEFAULTS.STATUS_SHOW_BATTERY),
-                showMemory: getBool(WIDGET_PREFS.STATUS_SHOW_MEMORY, DEFAULTS.STATUS_SHOW_MEMORY),
-              };
-              const memory = readMemory();
-              return {
-                opts,
-                battery: batterySeen,
-                memory,
-                support: {
-                  battery: batterySupport !== false,
-                  memory: memorySupport !== false && memorySupported(),
-                },
-              };
+              return { mb: boostLastMB, available: Boolean(api()) };
             },
-            nextDelayMs(_now, cached) {
-              return nextStatusDelayMs(cached?.value?.battery);
+            render() {
+              // The number is painted by the module's callback; a render only keeps the arrow's state honest.
+              paintValue();
             },
-            render(value) {
-              // OW-64: the card's words follow the widget language, read now (not when the reading was taken).
-              const opts = { ...(value?.opts || { showBattery: true, showMemory: true }), language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), notesRaw: getString(NOTES_LANGUAGE_PREF, "en") };
-              const parts = composeStatusParts(opts, value?.battery, value?.memory, value?.support || {});
-              const find = (kind) => parts.find((p) => p.kind === kind);
-              const b = find("battery");
-              const m = find("memory");
-              batteryEl.hidden = !b;
-              memoryEl.hidden = !m;
-              batteryEl.textContent = b ? b.text : "";
-              batteryEl.title = b ? b.title : "";
-              batteryEl.setAttribute("data-zw-level", b ? b.level : "");
-              memoryEl.textContent = m ? m.text : "";
-              memoryEl.title = m ? m.title : "";
-              memoryEl.setAttribute("data-zw-level", m ? m.level : "");
-              wrap.hidden = !parts.length;
-              wrap.setAttribute("aria-label", parts.map((p) => p.title).join("; ") || "Status");
-              // OW-70: which source answered, in the DOM where the owner can look, not only in a console nobody opens.
-              wrap.setAttribute("data-zw-source", [m ? "memory:" + (memorySource || "none") : "", b ? "battery" : ""].filter(Boolean).join(" "));
+            dispose() {
+              try {
+                if (typeof boostUnsubscribe === "function") boostUnsubscribe();
+              } catch (_) {}
+              boostUnsubscribe = null;
             },
+            // The test seam and any other card that wants the action without a pointer.
+            runLight,
+            openMenu: openPopup,
+            closeMenu: closePopup,
           };
         },
       });
+
+      // The legacy choice is applied once both cards exist, so the migration can see the Boost definition.
+      adoptLegacyStatusCard();
 
       const onVisibilityOrResize = () => scheduleMeasure();
       const listen = (target, type, fn, opts) => {
