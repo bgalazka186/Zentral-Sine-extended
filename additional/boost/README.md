@@ -57,6 +57,22 @@ Both are read live, so switching them needs no restart. This module writes nothi
 - **Shortcut** (`zen.workspace.zentral.boost.shortcut`, empty by default): two keys minimum, parsed like the app
   shortcut module's own combinations, and it runs the light pass only — a keystroke never unloads a tab.
 
+## The RAM limiter (B5, `OW-92`)
+
+Off by default (`zen.workspace.zentral.boost.limit_enabled`). When on, Boost measures on a one-shot chain — every 60 s
+below the limit, every 10 s once the total is above 70 % of it — and acts only when the total crosses `limit_mb`:
+
+- **`soft`** (default): one notification with the reading and the target. Nothing is unloaded.
+- **`hard`**: the same deep pass OW-91 runs, in batches of three tabs, re-sampled after every batch, stopping at
+  `limit_mb × limit_target_pct / 100` or the moment nothing eligible is left. One report at the end.
+- **Cooldown** (`limit_cooldown_s`, 60): a hard run never starts again inside the window, whatever the reading says.
+- Still above the limit with nothing eligible: at most one line per ten minutes, never a loop of them.
+
+**What this can never do:** a real per-process or per-site memory hard cap is impossible from userscript JS in the
+browser window. The limiter works by putting tabs and panels to sleep, which is what actually gives memory back; it
+cannot make one page use less. If a single tab is the whole problem, the honest answer is "close or reload that tab",
+not a memory cap this module cannot enforce.
+
 ## Public API
 
 `window.ZentralBoost` (also on the runtime as the feature `boost`):
@@ -68,6 +84,9 @@ ZentralBoost.runLevel2();         // Promise<{...same, unloaded:{tabs,panels}, s
 ZentralBoost.restore();           // {panels, tabs} — panels wake now, tabs when clicked
 ZentralBoost.undoSize();          // how many things the last deep run put to sleep
 ZentralBoost.setBackgroundMode(appId, "live" | "throttled" | "asleep-allowed");
+ZentralBoost.decideLimiter({ totalMB, settings, lastRunAt, now });  // pure: {action, cadenceMs, reason, targetMB}
+ZentralBoost.onLimiterEvent(cb);   // notify | hard-done | nothing-eligible
+ZentralBoost.limiterState();
 ZentralBoost.onChange(cb);        // one callback for results and samples; returns an unsubscribe
 ZentralBoost.startSampling();     // balanced with stopSampling(); two callers at most (popup, limiter)
 ZentralBoost.lastMB();            // last sampled value
@@ -95,8 +114,7 @@ and is started after the runtime's native-ready barrier. The standalone build ru
 
 ## Not in this file (later tasks)
 
-`OW-92` adds the RAM limiter, `OW-93` the per-panel background behaviours behind the modes this file already stores,
-`OW-94` Game Mode. Each adds its own prefs and its own tests; none of them may introduce an interval.
+`OW-93` gives the panel modes their behaviours, `OW-94` adds Game Mode. Each adds its own prefs and its own tests; none of them may introduce an interval.
 
 ## Install as a standalone Sine feature
 

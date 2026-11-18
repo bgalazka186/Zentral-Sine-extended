@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Boost
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.322
+// @version 3.3.323
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.322, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.323, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.322";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.323";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -165,7 +165,7 @@ const __zentralShim = (function () {
       _observer: observer,
     };
   }
-  const numericItems = [];
+  const numericItems = [{"key":"zen.workspace.zentral.boost.limit_mb","text":"zen.workspace.zentral.boost.limit_mb_text","min":0,"max":65536,"def":4096},{"key":"zen.workspace.zentral.boost.limit_cooldown_s","text":"zen.workspace.zentral.boost.limit_cooldown_s_text","min":0,"max":3600,"def":60},{"key":"zen.workspace.zentral.boost.limit_target_pct","text":"zen.workspace.zentral.boost.limit_target_pct_text","min":0,"max":100,"def":85}];
   function nativeSidebarElement() {
       const tabs = window.gBrowser?.tabContainer;
       const candidates = [
@@ -1317,6 +1317,13 @@ function nativeSidebarSide() {
     KEEP_PINNED: "zen.workspace.zentral.boost.keep_pinned",
     // B4.6: the one shortcut that runs the light pass. Empty means none, and an empty shortcut installs no listener.
     SHORTCUT: "zen.workspace.zentral.boost.shortcut",
+    // B5 (OW-92): the RAM limiter. Off by default: a browser that unloads things on its own is a promise about the
+    // person's work, and that promise is theirs to make.
+    LIMIT_ENABLED: "zen.workspace.zentral.boost.limit_enabled",
+    LIMIT_MB: "zen.workspace.zentral.boost.limit_mb",
+    LIMIT_MODE: "zen.workspace.zentral.boost.limit_mode",
+    LIMIT_COOLDOWN_S: "zen.workspace.zentral.boost.limit_cooldown_s",
+    LIMIT_TARGET_PCT: "zen.workspace.zentral.boost.limit_target_pct",
   });
   // B2.1: sample only on demand. These are the two situations the plan allows a 2 s sampler.
   const SAMPLE_INTERVAL_MS = 2000;
@@ -1334,6 +1341,19 @@ function nativeSidebarSide() {
   const UNDO_CAP = 50;
   // B4.3: what a panel record may do in the background. `live` is the default for every existing record.
   const BACKGROUND_MODES = Object.freeze(["live", "throttled", "asleep-allowed"]);
+  // B5/OW-92: the limiter's own numbers. Two cadences, both one-shot chains: a slow idle check and a faster one while
+  // above 70 % of the limit. Nothing here is an interval.
+  const LIMIT_IDLE_MS = 60000;
+  const LIMIT_HOT_MS = 10000;
+  const LIMIT_HOT_SHARE = 0.7; // "above 70 % of the limit" is the plan's own line
+  const LIMIT_BATCH = 3;       // tabs per batch in a hard run, re-sampled after each
+  const LIMIT_NAG_MS = 10 * 60000; // nothing eligible: at most one toast per ten minutes
+  const DEFAULT_LIMIT = Object.freeze({
+    mb: 4096,
+    mode: "soft",
+    cooldownS: 60,
+    targetPct: 85,
+  });
 
   function standaloneReady(start) {
     let started = false;
@@ -1382,6 +1402,13 @@ function nativeSidebarSide() {
       const prefString = (key, fallback) => {
         try {
           return Services.prefs.getStringPref(key, fallback);
+        } catch (_) {
+          return fallback;
+        }
+      };
+      const prefInt = (key, fallback) => {
+        try {
+          return Services.prefs.getIntPref(key, fallback);
         } catch (_) {
           return fallback;
         }
@@ -1836,7 +1863,11 @@ function nativeSidebarSide() {
           // minute ago. Selection never moves: a tab that would need a successor is not unloaded by a deep run.
           if (options.allowTabs !== false) {
             const candidates = [...gBrowser.tabs].sort(policy().byOldestFirst);
+            // A limiter run takes one batch at a time and re-reads memory after it; a manual deep pass takes all of
+            // them. `batch` is the only difference, so both go through the same policy.
+            const limit = Number(options.batch) > 0 ? Number(options.batch) : Infinity;
             for (const tab of candidates) {
+              if (unloaded.tabs >= limit) break;
               const verdict = canUnload(tab, ctx);
               if (!verdict.allowed) {
                 if (verdict.reason !== "selected" && skipped.length < 5) skipped.push(verdict.reason);
@@ -2018,6 +2049,185 @@ function nativeSidebarSide() {
         } catch (_) {}
       }
 
+      /* ---------------- B5/OW-92: the RAM limiter ---------------- */
+
+      // Every decision is made here, as a pure function of the numbers, so the state machine can be proven without a
+      // browser: hysteresis (the hot cadence starts at 70 % of the limit and the slow one returns below the target),
+      // the cooldown, and the "nothing eligible" nag limit.
+      //
+      // @param {object} input
+      //   - `totalMB`      the current reading, or null when the build cannot measure
+      //   - `settings`     {enabled, limitMB, mode, cooldownS, targetPct}
+      //   - `lastRunAt`    when the limiter last acted (0 = never)
+      //   - `lastNagAt`    when it last said "nothing to do"
+      //   - `now`
+      // @returns {{action, cadenceMs, reason, targetMB}}
+      function decideLimiter(input = {}) {
+        const settings = {
+          enabled: input.settings?.enabled !== false,
+          limitMB: Number(input.settings?.limitMB) > 0 ? Number(input.settings.limitMB) : DEFAULT_LIMIT.mb,
+          mode: input.settings?.mode === "hard" ? "hard" : "soft",
+          cooldownS: Number.isFinite(Number(input.settings?.cooldownS)) ? Math.max(0, Number(input.settings.cooldownS)) : DEFAULT_LIMIT.cooldownS,
+          targetPct: Number(input.settings?.targetPct) > 0 ? Math.min(100, Number(input.settings.targetPct)) : DEFAULT_LIMIT.targetPct,
+        };
+        const cadenceIdle = settings.targetPct ? LIMIT_IDLE_MS : LIMIT_IDLE_MS;
+        const decide = (action, cadenceMs, reason) => ({
+          action, cadenceMs, reason, targetMB: Math.round((settings.limitMB * settings.targetPct) / 100),
+        });
+        if (!settings.enabled) return decide("none", LIMIT_IDLE_MS, "off");
+        const total = Number(input.totalMB);
+        if (!Number.isFinite(total) || total <= 0) return decide("none", LIMIT_IDLE_MS, "no-reading");
+        // Below the limit: a slow check, and specifically below the target so the two cadences do not oscillate.
+        if (total <= settings.limitMB) return decide("none", total > settings.limitMB * LIMIT_HOT_SHARE ? LIMIT_HOT_MS : LIMIT_IDLE_MS, "under-limit");
+        // Over the limit. The cooldown is a hard "do not act again yet", whatever the mode.
+        const since = Number(input.now || 0) - Number(input.lastRunAt || 0);
+        if (input.lastRunAt && since < settings.cooldownS * 1000) {
+          return decide("none", Math.max(1000, settings.cooldownS * 1000 - since), "cooldown");
+        }
+        if (settings.mode === "soft") return decide("notify", LIMIT_HOT_MS, "soft");
+        return decide("unload", LIMIT_HOT_MS, "hard");
+      }
+
+      // The nag rule, kept apart because it is about a person's attention rather than about memory: when a hard run
+      // can do nothing, say it once per ten minutes, not every ten seconds.
+      function shouldNag(lastNagAt, now) {
+        if (!lastNagAt) return true;
+        return Number(now) - Number(lastNagAt) >= LIMIT_NAG_MS;
+      }
+
+      const limiterSettings = () => ({
+        enabled: prefBool(PREF.LIMIT_ENABLED, false),
+        limitMB: prefInt(PREF.LIMIT_MB, DEFAULT_LIMIT.mb),
+        mode: prefString(PREF.LIMIT_MODE, DEFAULT_LIMIT.mode),
+        cooldownS: prefInt(PREF.LIMIT_COOLDOWN_S, DEFAULT_LIMIT.cooldownS),
+        targetPct: prefInt(PREF.LIMIT_TARGET_PCT, DEFAULT_LIMIT.targetPct),
+      });
+
+      const limiter = {
+        timer: 0,
+        lastRunAt: 0,
+        lastNagAt: 0,
+        lastAction: "",
+        lastReason: "",
+        runs: 0,
+      };
+
+      // One tick: read, decide, act, and arm exactly one more timer. The chain stops the moment the pref is off or the
+      // feature is destroyed, so a limiter that is not asked for costs nothing.
+      function limiterTick() {
+        limiter.timer = 0;
+        if (disposed) return;
+        const settings = limiterSettings();
+        if (!settings.enabled) {
+          limiter.lastAction = "none";
+          limiter.lastReason = "off";
+          return;
+        }
+        const totalMB = memoryMB();
+        const decision = decideLimiter({
+          totalMB,
+          settings,
+          lastRunAt: limiter.lastRunAt,
+          now: Date.now(),
+        });
+        limiter.lastAction = decision.action;
+        limiter.lastReason = decision.reason;
+        if (decision.action === "notify") {
+          limiter.lastRunAt = Date.now();
+          limiter.runs += 1;
+          for (const listener of limiterListeners) {
+            try {
+              listener({ kind: "limit", action: "notify", totalMB, limitMB: settings.limitMB, targetMB: decision.targetMB });
+            } catch (_) {}
+          }
+        } else if (decision.action === "unload") {
+          limiter.lastRunAt = Date.now();
+          limiter.runs += 1;
+          void limiterRunHard(settings, decision, totalMB);
+        }
+        armLimiter(decision.cadenceMs);
+      }
+
+      // A hard run in batches: three tabs, re-read, stop at the target or when nothing is left. `runLevel2` already
+      // does the policy work; this only decides when to stop, which is the part that makes a hard mode safe.
+      async function limiterRunHard(settings, decision, totalMB) {
+        let current = totalMB;
+        let rounds = 0;
+        let unloaded = { tabs: 0, panels: 0 };
+        // A hard run is a deep pass repeated until the number is where the person wants it, with a bounded number of
+        // rounds so a page that refuses to sleep cannot make this loop forever.
+        while (rounds < 12 && current > decision.targetMB) {
+          rounds += 1;
+          const result = await runLevel2({ batch: LIMIT_BATCH });
+          if (!result || result.by !== "level2") break;
+          unloaded.tabs += result.unloaded?.tabs || 0;
+          unloaded.panels += result.unloaded?.panels || 0;
+          const after = Number(result.afterMB);
+          if (!Number.isFinite(after) || after >= current) break; // nothing changed: stop rather than spin
+          current = after;
+          if (!(result.unloaded?.tabs || result.unloaded?.panels)) break;
+        }
+        for (const listener of limiterListeners) {
+          try {
+            listener({ kind: "limit", action: "hard-done", totalMB: current, unloaded, runs: rounds });
+          } catch (_) {}
+        }
+        // Still above the limit with nothing eligible: one quiet line per ten minutes, never a loop of them.
+        if (current > decision.targetMB && !unloaded.tabs && !unloaded.panels && shouldNag(limiter.lastNagAt, Date.now())) {
+          limiter.lastNagAt = Date.now();
+          for (const listener of limiterListeners) {
+            try {
+              listener({ kind: "limit", action: "nothing-eligible", totalMB: current, limitMB: settings.limitMB });
+            } catch (_) {}
+          }
+        }
+      }
+
+      function armLimiter(ms) {
+        clearTimer(limiter.timer);
+        limiter.timer = 0;
+        if (disposed) return;
+        if (!limiterSettings().enabled) return;
+        limiter.timer = setTimer(limiterTick, Math.max(1000, Number(ms) || LIMIT_IDLE_MS));
+      }
+
+      const limiterListeners = new Set();
+      function onLimiterEvent(cb) {
+        if (typeof cb !== "function") return () => {};
+        limiterListeners.add(cb);
+        return () => limiterListeners.delete(cb);
+      }
+
+      // Live settings: switching the limiter on starts the chain, switching it off stops it, and a changed number
+      // re-reads itself on the next tick (no restart, and no extra work now).
+      function installLimiter() {
+        armLimiter(LIMIT_IDLE_MS);
+        const observers = [];
+        for (const key of [PREF.LIMIT_ENABLED, PREF.LIMIT_MB, PREF.LIMIT_MODE, PREF.LIMIT_COOLDOWN_S, PREF.LIMIT_TARGET_PCT]) {
+          const observer = {
+            observe(_subject, _topic, data) {
+              if (!data || data === key) armLimiter(LIMIT_IDLE_MS);
+            },
+          };
+          try {
+            Services.prefs.addObserver(key, observer);
+            observers.push([key, observer]);
+          } catch (_) {}
+        }
+        onCleanup(() => {
+          for (const [key, observer] of observers) {
+            try {
+              Services.prefs.removeObserver(key, observer);
+            } catch (_) {}
+          }
+        });
+        onCleanup(() => {
+          clearTimer(limiter.timer);
+          limiter.timer = 0;
+          limiterListeners.clear();
+        });
+      }
+
       /* ---------------- public API ---------------- */
 
       let disposed = false;
@@ -2032,6 +2242,18 @@ function nativeSidebarSide() {
         setBackgroundMode,
         backgroundModeOf: (record) => modeOf(record),
         BACKGROUND_MODES,
+        // B5/OW-92: the limiter's decisions and its live state, for a caller (the widget, a live check) that wants to
+        // show them. The deciding itself is pure and tested on its own.
+        decideLimiter,
+        onLimiterEvent,
+        limiterState: () => ({
+          enabled: prefBool(PREF.LIMIT_ENABLED, false),
+          settings: limiterSettings(),
+          armed: Boolean(limiter.timer),
+          lastAction: limiter.lastAction,
+          lastReason: limiter.lastReason,
+          runs: limiter.runs,
+        }),
         onChange,
         startSampling,
         stopSampling,
@@ -2072,6 +2294,7 @@ function nativeSidebarSide() {
       window.ZentralBoost = api;
       window.addEventListener("unload", () => api.destroy(), { once: true });
       installShortcut();
+      installLimiter();
 
       // A build without requestProcInfo has a memory meter that can never answer: say so once and stay out of the way
       // (the plan's B2.1). Level 1 is still useful on its own, so the module keeps running rather than disabling

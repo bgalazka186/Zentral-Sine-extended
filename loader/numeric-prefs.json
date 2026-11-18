@@ -574,6 +574,27 @@
     "def": 0
   },
   {
+    "key": "zen.workspace.zentral.boost.limit_mb",
+    "text": "zen.workspace.zentral.boost.limit_mb_text",
+    "min": 0,
+    "max": 65536,
+    "def": 4096
+  },
+  {
+    "key": "zen.workspace.zentral.boost.limit_cooldown_s",
+    "text": "zen.workspace.zentral.boost.limit_cooldown_s_text",
+    "min": 0,
+    "max": 3600,
+    "def": 60
+  },
+  {
+    "key": "zen.workspace.zentral.boost.limit_target_pct",
+    "text": "zen.workspace.zentral.boost.limit_target_pct_text",
+    "min": 0,
+    "max": 100,
+    "def": 85
+  },
+  {
     "key": "zen.workspace.zentral.notes.autosave_seconds",
     "text": "zen.workspace.zentral.notes.autosave_seconds_text",
     "min": 2,

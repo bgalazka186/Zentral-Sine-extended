@@ -2499,6 +2499,56 @@
   },
   {
     "type": "text",
+    "label": "**Memory Boost · Limiter**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.boost.limit_enabled",
+    "label": "Keep browser RAM under a limit",
+    "description": "Off by default. When on, Boost watches the total and acts only when it crosses the limit below.",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.boost.limit_mb_text",
+    "label": "RAM limit (MB, total for all browser processes) [0 to 65536]",
+    "type": "string",
+    "defaultValue": "4096",
+    "placeholder": "4096"
+  },
+  {
+    "property": "zen.workspace.zentral.boost.limit_mode",
+    "label": "What happens at the limit",
+    "description": "Soft only tells you; hard unloads tabs and panels the tab policy allows, three at a time, until the target is met.",
+    "type": "dropdown",
+    "defaultValue": "soft",
+    "options": [
+      {
+        "label": "Soft — tell me only",
+        "value": "soft"
+      },
+      {
+        "label": "Hard — unload what the policy allows",
+        "value": "hard"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.boost.limit_cooldown_s_text",
+    "label": "Wait between limiter actions (seconds) [0 to 3600]",
+    "type": "string",
+    "defaultValue": "60",
+    "placeholder": "60"
+  },
+  {
+    "property": "zen.workspace.zentral.boost.limit_target_pct_text",
+    "label": "Stop a hard run at this share of the limit (%) [0 to 100]",
+    "type": "string",
+    "defaultValue": "85",
+    "placeholder": "85"
+  },
+  {
+    "type": "text",
     "label": "**Panels**",
     "size": "22px"
   },

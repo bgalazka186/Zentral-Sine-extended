@@ -173,6 +173,26 @@ test("Escape closes the menu, and so does a click outside it", async () => {
   api.destroy();
 });
 
+test("OW-92: the card says what the limiter did, in the same toast", async () => {
+  const h = createFakeSidebarHarness({ ...BASE });
+  const boost = makeBoostModule();
+  const limiterListeners = new Set();
+  boost.onLimiterEvent = (fn) => { limiterListeners.add(fn); return () => limiterListeners.delete(fn); };
+  h.window.ZentralBoost = boost;
+  const { api } = h.start();
+  await tick(50);
+  const toast = () => api.getTray().querySelector(".zw-toast");
+  for (const fn of [...limiterListeners]) fn({ action: "notify", totalMB: 5120, limitMB: 4096 });
+  await tick(20);
+  assert.equal(toast().hidden, false);
+  assert.match(toast().textContent, /5120 MB in use, above your 4096 MB limit/);
+  for (const fn of [...limiterListeners]) fn({ action: "nothing-eligible" });
+  await tick(20);
+  assert.match(toast().textContent, /nothing else may be unloaded/);
+  api.destroy();
+  assert.equal(limiterListeners.size, 0, "and the limiter subscription dies with the card");
+});
+
 test("the card unsubscribes when the shell is destroyed", async () => {
   const h = createFakeSidebarHarness({ ...BASE });
   const boost = makeBoostModule();

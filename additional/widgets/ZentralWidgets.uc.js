@@ -137,6 +137,9 @@
       "boost.deepDone": "Put {tabs} tab(s) and {panels} panel(s) to sleep, freed {mb} MB",
       "boost.restoreCount": "Restore ({count})",
       "boost.restored": "Woke {count} panel(s)",
+      "boost.limitHit": "{mb} MB in use, above your {limit} MB limit. Open Boost to free memory.",
+      "boost.limitDone": "Freed memory down to {mb} MB",
+      "boost.limitNothing": "Memory is high, but nothing else may be unloaded",
       "boost.restore": "Restore",
       "boost.restoreSoon": "Nothing to restore yet",
       "boost.later": "More Boost actions arrive in later updates",
@@ -194,6 +197,9 @@
       "boost.deepDone": "U\u015bpiono {tabs} kart i {panels} paneli, zwolniono {mb} MB",
       "boost.restoreCount": "Przywr\u00f3\u0107 ({count})",
       "boost.restored": "Obudzono {count} paneli",
+      "boost.limitHit": "W u\u017cyciu {mb} MB, powy\u017cej limitu {limit} MB. Otw\u00f3rz Boost, aby zwolni\u0107 pami\u0119\u0107.",
+      "boost.limitDone": "Zwolniono pami\u0119\u0107 do {mb} MB",
+      "boost.limitNothing": "Pami\u0119\u0107 jest wysoka, ale nie ma ju\u017c czego zwalnia\u0107",
       "boost.restore": "Przywr\u00f3\u0107",
       "boost.restoreSoon": "Nie ma jeszcze czego przywraca\u0107",
       "boost.later": "Kolejne dzia\u0142ania Boost pojawi\u0105 si\u0119 w nast\u0119pnych wersjach",
@@ -4675,6 +4681,31 @@
             }
           };
           subscribe();
+          // OW-92: the limiter acts on its own, so the card is where it says so — a soft notice, a finished hard run,
+          // or the once-per-ten-minutes "nothing left to do". Same toast as a click's result, because it is the same
+          // kind of sentence.
+          let limiterUnsubscribe = null;
+          const subscribeLimiter = () => {
+            const boost = api();
+            if (!boost || typeof boost.onLimiterEvent !== "function") return;
+            try {
+              limiterUnsubscribe = boost.onLimiterEvent((event) => {
+                const lang = { language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), notesRaw: getString(NOTES_LANGUAGE_PREF, "en") };
+                const code = resolveWidgetLanguage(lang.language, lang.notesRaw);
+                if (event?.action === "notify") {
+                  showWidgetToast(widgetText(code, "boost.limitHit", { mb: Math.round(Number(event.totalMB) || 0), limit: Math.round(Number(event.limitMB) || 0) }));
+                } else if (event?.action === "hard-done") {
+                  const freed = event.unloaded?.tabs || event.unloaded?.panels;
+                  if (freed) showWidgetToast(widgetText(code, "boost.limitDone", { mb: Math.round(Number(event.totalMB) || 0) }));
+                } else if (event?.action === "nothing-eligible") {
+                  showWidgetToast(widgetText(code, "boost.limitNothing"));
+                }
+              });
+            } catch (_) {
+              limiterUnsubscribe = null;
+            }
+          };
+          subscribeLimiter();
           boostLastMB = typeof api()?.lastMB === "function" ? api().lastMB() : null;
           paintValue();
 
@@ -4710,8 +4741,10 @@
               doc.removeEventListener("pointerdown", onDocPointer);
               doc.removeEventListener("keydown", onKeyDown);
               if (typeof boostUnsubscribe === "function") boostUnsubscribe();
+              if (typeof limiterUnsubscribe === "function") limiterUnsubscribe();
             } catch (_) {}
             boostUnsubscribe = null;
+            limiterUnsubscribe = null;
           });
 
           return {
@@ -4726,8 +4759,10 @@
             dispose() {
               try {
                 if (typeof boostUnsubscribe === "function") boostUnsubscribe();
+                if (typeof limiterUnsubscribe === "function") limiterUnsubscribe();
               } catch (_) {}
               boostUnsubscribe = null;
+              limiterUnsubscribe = null;
             },
             // The test seam and any other card that wants the action without a pointer.
             runLight,

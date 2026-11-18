@@ -31,6 +31,63 @@
       "description": "For example Accel+Shift+B. Empty means no shortcut.",
       "type": "input",
       "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.zentral.boost.limit_enabled",
+      "label": "Keep browser RAM under a limit",
+      "description": "Off by default. When on, Boost watches the total and acts only when it crosses the limit below.",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.boost.limit_mb",
+      "label": "RAM limit (MB, total for all browser processes)",
+      "description": "The number the limiter compares the measured total against.",
+      "type": "input",
+      "defaultValue": 4096,
+      "numeric": {
+        "min": 0,
+        "max": 65536
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.boost.limit_mode",
+      "label": "What happens at the limit",
+      "description": "Soft only tells you; hard unloads tabs and panels the tab policy allows, three at a time, until the target is met.",
+      "type": "dropdown",
+      "defaultValue": "soft",
+      "options": [
+        {
+          "label": "Soft — tell me only",
+          "value": "soft"
+        },
+        {
+          "label": "Hard — unload what the policy allows",
+          "value": "hard"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.boost.limit_cooldown_s",
+      "label": "Wait between limiter actions (seconds)",
+      "description": "A hard run never starts again inside this window, whatever the reading says.",
+      "type": "input",
+      "defaultValue": 60,
+      "numeric": {
+        "min": 0,
+        "max": 3600
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.boost.limit_target_pct",
+      "label": "Stop a hard run at this share of the limit (%)",
+      "description": "The limiter stops unloading once the total falls to this percentage of the limit.",
+      "type": "input",
+      "defaultValue": 85,
+      "numeric": {
+        "min": 0,
+        "max": 100
+      }
     }
   ],
   "settings": {
@@ -53,6 +110,31 @@
       "category": "boost",
       "section": "Memory",
       "owner": "boost"
+    },
+    "zen.workspace.zentral.boost.limit_enabled": {
+      "category": "boost",
+      "section": "Limiter",
+      "owner": "boost"
+    },
+    "zen.workspace.zentral.boost.limit_mb": {
+      "category": "boost",
+      "section": "Limiter",
+      "owner": "boost"
+    },
+    "zen.workspace.zentral.boost.limit_mode": {
+      "category": "boost",
+      "section": "Limiter",
+      "owner": "boost"
+    },
+    "zen.workspace.zentral.boost.limit_cooldown_s": {
+      "category": "boost",
+      "section": "Limiter",
+      "owner": "boost"
+    },
+    "zen.workspace.zentral.boost.limit_target_pct": {
+      "category": "boost",
+      "section": "Limiter",
+      "owner": "boost"
     }
   },
   "categories": [
@@ -63,6 +145,10 @@
         {
           "id": "Memory",
           "label": "Memory"
+        },
+        {
+          "id": "Limiter",
+          "label": "Limiter"
         }
       ]
     }

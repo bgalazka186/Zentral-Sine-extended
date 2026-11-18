@@ -352,6 +352,9 @@
       "sections": [
         {
           "label": "Memory"
+        },
+        {
+          "label": "Limiter"
         }
       ]
     },
@@ -1156,6 +1159,16 @@
     "zen.workspace.zentral.boost.startup_trim",
     "zen.workspace.zentral.boost.keep_pinned",
     "zen.workspace.zentral.boost.shortcut",
+    {
+      "type": "text",
+      "label": "**Memory Boost · Limiter**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.boost.limit_enabled",
+    "zen.workspace.zentral.boost.limit_mb",
+    "zen.workspace.zentral.boost.limit_mode",
+    "zen.workspace.zentral.boost.limit_cooldown_s",
+    "zen.workspace.zentral.boost.limit_target_pct",
     {
       "type": "text",
       "label": "**Panels**",

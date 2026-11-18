@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Widgets
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.322
+// @version 3.3.323
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.322, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.323, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.322";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.323";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1233,6 +1233,9 @@ function nativeSidebarSide() {
       "boost.deepDone": "Put {tabs} tab(s) and {panels} panel(s) to sleep, freed {mb} MB",
       "boost.restoreCount": "Restore ({count})",
       "boost.restored": "Woke {count} panel(s)",
+      "boost.limitHit": "{mb} MB in use, above your {limit} MB limit. Open Boost to free memory.",
+      "boost.limitDone": "Freed memory down to {mb} MB",
+      "boost.limitNothing": "Memory is high, but nothing else may be unloaded",
       "boost.restore": "Restore",
       "boost.restoreSoon": "Nothing to restore yet",
       "boost.later": "More Boost actions arrive in later updates",
@@ -1290,6 +1293,9 @@ function nativeSidebarSide() {
       "boost.deepDone": "U\u015bpiono {tabs} kart i {panels} paneli, zwolniono {mb} MB",
       "boost.restoreCount": "Przywr\u00f3\u0107 ({count})",
       "boost.restored": "Obudzono {count} paneli",
+      "boost.limitHit": "W u\u017cyciu {mb} MB, powy\u017cej limitu {limit} MB. Otw\u00f3rz Boost, aby zwolni\u0107 pami\u0119\u0107.",
+      "boost.limitDone": "Zwolniono pami\u0119\u0107 do {mb} MB",
+      "boost.limitNothing": "Pami\u0119\u0107 jest wysoka, ale nie ma ju\u017c czego zwalnia\u0107",
       "boost.restore": "Przywr\u00f3\u0107",
       "boost.restoreSoon": "Nie ma jeszcze czego przywraca\u0107",
       "boost.later": "Kolejne dzia\u0142ania Boost pojawi\u0105 si\u0119 w nast\u0119pnych wersjach",
@@ -5771,6 +5777,31 @@ function nativeSidebarSide() {
             }
           };
           subscribe();
+          // OW-92: the limiter acts on its own, so the card is where it says so — a soft notice, a finished hard run,
+          // or the once-per-ten-minutes "nothing left to do". Same toast as a click's result, because it is the same
+          // kind of sentence.
+          let limiterUnsubscribe = null;
+          const subscribeLimiter = () => {
+            const boost = api();
+            if (!boost || typeof boost.onLimiterEvent !== "function") return;
+            try {
+              limiterUnsubscribe = boost.onLimiterEvent((event) => {
+                const lang = { language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), notesRaw: getString(NOTES_LANGUAGE_PREF, "en") };
+                const code = resolveWidgetLanguage(lang.language, lang.notesRaw);
+                if (event?.action === "notify") {
+                  showWidgetToast(widgetText(code, "boost.limitHit", { mb: Math.round(Number(event.totalMB) || 0), limit: Math.round(Number(event.limitMB) || 0) }));
+                } else if (event?.action === "hard-done") {
+                  const freed = event.unloaded?.tabs || event.unloaded?.panels;
+                  if (freed) showWidgetToast(widgetText(code, "boost.limitDone", { mb: Math.round(Number(event.totalMB) || 0) }));
+                } else if (event?.action === "nothing-eligible") {
+                  showWidgetToast(widgetText(code, "boost.limitNothing"));
+                }
+              });
+            } catch (_) {
+              limiterUnsubscribe = null;
+            }
+          };
+          subscribeLimiter();
           boostLastMB = typeof api()?.lastMB === "function" ? api().lastMB() : null;
           paintValue();
 
@@ -5806,8 +5837,10 @@ function nativeSidebarSide() {
               doc.removeEventListener("pointerdown", onDocPointer);
               doc.removeEventListener("keydown", onKeyDown);
               if (typeof boostUnsubscribe === "function") boostUnsubscribe();
+              if (typeof limiterUnsubscribe === "function") limiterUnsubscribe();
             } catch (_) {}
             boostUnsubscribe = null;
+            limiterUnsubscribe = null;
           });
 
           return {
@@ -5822,8 +5855,10 @@ function nativeSidebarSide() {
             dispose() {
               try {
                 if (typeof boostUnsubscribe === "function") boostUnsubscribe();
+                if (typeof limiterUnsubscribe === "function") limiterUnsubscribe();
               } catch (_) {}
               boostUnsubscribe = null;
+              limiterUnsubscribe = null;
             },
             // The test seam and any other card that wants the action without a pointer.
             runLight,
