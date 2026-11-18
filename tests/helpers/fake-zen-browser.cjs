@@ -128,6 +128,10 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
       emit("TabClose", tab); tab.remove();
       if (deleteEmptyFolders && folder && !folder.querySelector("tab")) folder.delete();
     },
+    // OW-88: an unloaded placeholder keeps its element, label, icon and private URL; Gecko only drops the page. The
+    // fake does the same, and records every call so a test can prove placeholders are parked and real tabs are not.
+    discarded: [],
+    discardBrowser(tab, animate) { this.discarded.push(tab); tab.setAttribute("pending", "true"); tab.setAttribute("discarded", "true"); emit("TabBrowserDiscarded", tab); return true; },
     moveTabToExistingGroup(tab, folder) { folder.addTabs([tab]); emit("TabMove", tab); },
     moveTabBefore(tab, before) { before.parentElement?.insertBefore(tab, before); emit("TabMove", tab); },
   };
@@ -211,6 +215,8 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     fireTimer(ms) {
       // This harness can fire the boot timer out of chronological order. The
       // shared timer may then be overdue (0ms) instead of its 250ms debounce.
+      // Among equal candidates the OLDEST id wins: a drain/repair task scheduled before another zero-delay task is
+      // what a real event loop runs first, and picking the newest made a second 0 ms task look like the first.
       const found = [...timers].find(([, timer]) => Math.abs(timer.ms - ms) <= 10) || (ms === 250 ? [...timers].find(([, timer]) => timer.ms === 0) : null);
       if (!found) return false;
       timers.delete(found[0]); clockOffset += Math.max(0, Number(ms) || 0) + 10; found[1].fn(); return true;

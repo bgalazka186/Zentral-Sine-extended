@@ -1333,6 +1333,12 @@
       "unit": "hours"
     },
     {
+      "property": "zen.workspace.zentral.notes.park_pseudo_tabs",
+      "label": "Keep sidebar note/agenda placeholders unloaded (saves memory)",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
       "property": "zen.workspace.zentral.notes.debug_perf",
       "label": "DEBUG: sample how long Notes layout, drag and read-view work take (performance.now). Read the result with __zentralNotesPerf.report() in the Browser Console",
       "type": "checkbox",
@@ -1848,6 +1854,11 @@
     "zen.workspace.zentral.notes.zen_folder_top": {
       "category": "notes",
       "section": "Experiments (off by default)",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.park_pseudo_tabs": {
+      "category": "notes",
+      "section": "Performance",
       "owner": "notes"
     },
     "zen.workspace.zentral.notes.debug_perf": {

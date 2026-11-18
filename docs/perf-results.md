@@ -8,3 +8,4 @@ nobody took.
 | Task | What changed | Expected effect | Measured |
 | :--- | :----------- | :-------------- | :------- |
 | `OW-87` | `zen.workspace.zentral.debug.core` defaults to `false` in the schema, the preset and Core's fallback table; the logger honours the pref instead of hardcoding the core category on; the settings switch reads and writes it | a fresh install collects no debug lines by default, so the logger does no string work for them | not measured |
+| `OW-88` | Notes/Agenda sidebar placeholders are discarded after creation, after a session restore and after a click is answered (`parkPseudoTab`, one draining task + a bounded 3-try retry), behind `zen.workspace.zentral.notes.park_pseudo_tabs` (default on) | each live placeholder stops holding a content process: the owner measured ~11 of them at 43-51 MB each (~0.5 GB), so this is the biggest item that lives in Zentral code; rows, labels, icons and clicks are unchanged | not measured |

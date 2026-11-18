@@ -1712,6 +1712,27 @@
     "defaultValue": ""
   },
   {
+    "property": "zen.workspace.zentral.widgets.language",
+    "label": "Language of the widgets",
+    "description": "Follow the Notes language until you choose otherwise; a choice made here is kept.",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "options": [
+      {
+        "label": "Follow the Notes language",
+        "value": "auto"
+      },
+      {
+        "label": "English",
+        "value": "en"
+      },
+      {
+        "label": "Polski (Polish)",
+        "value": "pl"
+      }
+    ]
+  },
+  {
     "type": "text",
     "label": "**Sidebar Widgets · Clock & Date**",
     "size": "16px"
@@ -1799,6 +1820,69 @@
     "defaultValue": false
   },
   {
+    "property": "zen.workspace.zentral.widgets.timer.click_stopwatch",
+    "label": "Clicking the Clock starts and stops the stopwatch (long press asks for a duration)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.clock.mode",
+    "label": "Clock card face — a click turns it over",
+    "type": "dropdown",
+    "defaultValue": "clock",
+    "options": [
+      {
+        "label": "Clock (click for the timer)",
+        "value": "clock"
+      },
+      {
+        "label": "Timer (click for the clock)",
+        "value": "timer"
+      }
+    ],
+    "description": "The Clock card has two faces. This is the one it rests on; a click on the card turns it over, and a finished countdown turns the numbers red until the card is clicked."
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.timer.end_sound",
+    "label": "When a countdown ends: sound",
+    "type": "dropdown",
+    "defaultValue": "beep",
+    "options": [
+      {
+        "label": "No sound",
+        "value": "none"
+      },
+      {
+        "label": "The system beep",
+        "value": "beep"
+      },
+      {
+        "label": "A short two-note tone",
+        "value": "chime"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.timer.end_notice",
+    "label": "When a countdown ends: notice",
+    "type": "dropdown",
+    "defaultValue": "none",
+    "options": [
+      {
+        "label": "No notice",
+        "value": "none"
+      },
+      {
+        "label": "A line in the sidebar",
+        "value": "toast"
+      },
+      {
+        "label": "A system notification",
+        "value": "system"
+      }
+    ]
+  },
+  {
     "type": "text",
     "label": "**Sidebar Widgets · Weather**",
     "size": "16px"
@@ -1866,74 +1950,6 @@
   },
   {
     "type": "text",
-    "label": "**Sidebar Widgets · Timer**",
-    "size": "16px"
-  },
-  {
-    "property": "zen.workspace.zentral.widgets.timer.click_stopwatch",
-    "label": "Clicking the Clock starts and stops the stopwatch (long press asks for a duration)",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.widgets.clock.mode",
-    "label": "Clock card face — a click turns it over",
-    "type": "dropdown",
-    "defaultValue": "clock",
-    "options": [
-      {
-        "label": "Clock (click for the timer)",
-        "value": "clock"
-      },
-      {
-        "label": "Timer (click for the clock)",
-        "value": "timer"
-      }
-    ],
-    "description": "The Clock card has two faces. This is the one it rests on; a click on the card turns it over, and a finished countdown turns the numbers red until the card is clicked."
-  },
-  {
-    "property": "zen.workspace.zentral.widgets.timer.end_sound",
-    "label": "When a countdown ends: sound",
-    "type": "dropdown",
-    "defaultValue": "beep",
-    "options": [
-      {
-        "label": "No sound",
-        "value": "none"
-      },
-      {
-        "label": "The system beep",
-        "value": "beep"
-      },
-      {
-        "label": "A short two-note tone",
-        "value": "chime"
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.widgets.timer.end_notice",
-    "label": "When a countdown ends: notice",
-    "type": "dropdown",
-    "defaultValue": "none",
-    "options": [
-      {
-        "label": "No notice",
-        "value": "none"
-      },
-      {
-        "label": "A line in the sidebar",
-        "value": "toast"
-      },
-      {
-        "label": "A system notification",
-        "value": "system"
-      }
-    ]
-  },
-  {
-    "type": "text",
     "label": "**Sidebar Widgets · Status**",
     "size": "16px"
   },
@@ -1956,25 +1972,21 @@
     "defaultValue": true
   },
   {
-    "property": "zen.workspace.zentral.widgets.language",
-    "label": "Language of the widgets",
-    "description": "Follow the Notes language until you choose otherwise; a choice made here is kept.",
-    "type": "dropdown",
-    "defaultValue": "auto",
-    "options": [
-      {
-        "label": "Follow the Notes language",
-        "value": "auto"
-      },
-      {
-        "label": "English",
-        "value": "en"
-      },
-      {
-        "label": "Polski (Polish)",
-        "value": "pl"
-      }
-    ]
+    "type": "text",
+    "label": "**Sidebar Widgets · Appearance**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.appearance.background",
+    "label": "Card background colour (#rrggbb or empty to follow the theme)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.appearance.text",
+    "label": "Card text colour (#rrggbb or empty to follow the theme)",
+    "type": "string",
+    "defaultValue": ""
   },
   {
     "type": "text",
@@ -2012,18 +2024,6 @@
   {
     "property": "zen.workspace.zentral.widgets.order",
     "label": "Widget order (ids, top to bottom; empty = each widget's own place)",
-    "type": "string",
-    "defaultValue": ""
-  },
-  {
-    "property": "zen.workspace.zentral.widgets.appearance.background",
-    "label": "Card background colour (#rrggbb or empty to follow the theme)",
-    "type": "string",
-    "defaultValue": ""
-  },
-  {
-    "property": "zen.workspace.zentral.widgets.appearance.text",
-    "label": "Card text colour (#rrggbb or empty to follow the theme)",
     "type": "string",
     "defaultValue": ""
   },
@@ -3413,6 +3413,12 @@
     "type": "string",
     "defaultValue": "100000",
     "placeholder": "100000"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.park_pseudo_tabs",
+    "label": "Keep sidebar note/agenda placeholders unloaded (saves memory)",
+    "type": "checkbox",
+    "defaultValue": true
   },
   {
     "type": "text",

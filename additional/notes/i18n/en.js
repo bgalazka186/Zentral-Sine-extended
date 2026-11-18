@@ -713,6 +713,8 @@
       "settings.heading.versionHistory": "Version history",
       "settings.heading.reminders": "Reminders",
       "settings.heading.performance": "Performance",
+      // OW-88: the Memory heading (placeholder parking)
+      "settings.heading.memory": "Memory",
       "settings.heading.zenSpaces": "Zen spaces",
       "settings.heading.zenExperiment": "Experiment, off by default: not verified in a live Zen",
       "settings.heading.agendaFolder": "Agenda folder",

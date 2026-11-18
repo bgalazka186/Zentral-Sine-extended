@@ -243,6 +243,8 @@
       REMINDER_HISTORY_DAYS: "zen.workspace.zentral.notes.reminder_history_days",
       CAPTURE_FORMAT: "zen.workspace.zentral.notes.quick_capture_format",
       DEBUG_PERF: "zen.workspace.zentral.notes.debug_perf",
+      // OW-88: keep sidebar placeholders unloaded so each one stops holding a whole content process (~50 MB each).
+      PARK_PSEUDO: "zen.workspace.zentral.notes.park_pseudo_tabs",
     });
     // AU-B4b: active interface language and translation helpers backed by CALENDAR_PART or directly by window.__zentralNotesLangTables.
     function notesLang() {
@@ -5652,6 +5654,9 @@
           { id: "agendaFoldQuietStart", label: "Quiet hours start", pref: PREF.AGENDA_FOLD_QUIET_START, kind: "text", def: "22:00" },
           { id: "agendaFoldQuietEnd", label: "Quiet hours end", pref: PREF.AGENDA_FOLD_QUIET_END, kind: "text", def: "07:00" },
           S("agendaFoldDueHours", "Fold when nothing is due within (hours; 0 = only when nothing is left)", PREF.AGENDA_FOLD_DUE_HOURS, 0, 168, "hours", 0),
+          { kind: "heading", i18nKey: "settings.heading.memory", label: "Memory" },
+          // OW-88: the one switch the plan asks for. Off = the old behaviour exactly (placeholders stay loaded).
+          { id: "parkPseudo", label: "Keep sidebar note/agenda placeholders unloaded (saves memory)", pref: PREF.PARK_PSEUDO, kind: "bool", def: true },
           { kind: "heading", i18nKey: "settings.heading.diagnostics", label: "Diagnostics" },
           { id: "perf", label: "Sample layout / drag timings (read __zentralNotesPerf.report())", pref: PREF.DEBUG_PERF, kind: "bool", def: false },
         ],
@@ -32234,7 +32239,18 @@
       // True while our own code is changing tabs (and shortly after): the tab events it causes are not "someone else did it".
       let zenBusy = false;
       let zenQuietUntil = 0;
+      // OW-88: how many of OUR OWN quiet windows are open right now. Counting them (instead of writing an absolute
+      // deadline) means a nested/long operation cannot shorten a window another one still needs.
+      let zenQuietDepth = 0;
       const zenEventsIgnored = () => zenBusy || Date.now() < zenQuietUntil;
+      function zenQuiet(ms = 500) {
+        zenQuietDepth += 1;
+        try {
+          zenQuietUntil = Math.max(zenQuietUntil, Date.now() + Math.max(0, Number(ms) || 0));
+        } finally {
+          zenQuietDepth = Math.max(0, zenQuietDepth - 1);
+        }
+      }
       // A markerless restored Notes placeholder is recognized only from its
       // current/live pseudo URL (or the current SessionStore entry), never a
       // stale display label, historical entry, or cached positive result.
@@ -32251,6 +32267,95 @@
         return tab.closest?.("zen-folder") === parentEl;
       }
       let notesCtrlTabFilter = null;
+      // OW-88 (plan B1): a Notes/Agenda sidebar row is an about:blank placeholder, and every live about:blank loader
+      // costs a whole content process (the owner measured ~11 of them, 43-51 MB each, ~0.5 GB). Discarding the tab
+      // keeps the row exactly as it is: the element, its label, icon, attributes and the private URL all survive, a
+      // click still opens the note (the guards read the marker and `_zentralNotesUrl`, not the page), and Gecko
+      // reloads about:blank only if something focuses the tab. It never touches a real note tab.
+      const parkPseudoPref = () => {
+        try { return prefBool(PREF.PARK_PSEUDO, true); } catch (_) { return true; }
+      };
+      const isPseudoPlaceholderTab = (tab) => !!(tab && (zenManagedTab(tab) ||
+        tab.hasAttribute?.(AGENDA_ATTR) || /^about:blank#zn-agenda-/.test(String(tab._zentralNotesUrl || ""))));
+      // Why a tab was left alone, or "" when it was parked. Returned (not logged) so a test can read the reason and a
+      // later session does not have to guess what the guards were.
+      function parkPseudoTab(tab) {
+        if (!parkPseudoPref()) return "pref-off";
+        if (!tab || !tab.isConnected) return "disconnected";
+        if (disposed || zen.dead) return "off";
+        if (tab.hasAttribute?.("pending")) return "already-pending";
+        if (window.gBrowser?.selectedTab === tab) return "selected";
+        if (zenBusy) return "busy";
+        if (!isPseudoPlaceholderTab(tab)) return "not-a-placeholder";
+        if (typeof window.gBrowser?.discardBrowser !== "function") return "no-discard";
+        const wasQuiet = zenEventsIgnored();
+        try {
+          window.gBrowser.discardBrowser(tab, true);
+        } catch (_) {
+          return "failed";
+        } finally {
+          // The discard fires TabBrowserDiscarded, a tab event like any other: it must not start a projection repair run.
+          if (!wasQuiet) zenQuiet(500);
+        }
+        try { window.__zentralNotesTestSeam?.onPseudoTabParked?.(tab); } catch (_) {}
+        return "";
+      }
+      // Never synchronously inside addTab/TabOpen/SSTabRestored: the caller is still marking and pinning the tab, and
+      // discarding a tab a native handler is still looking at is how the old placeholder bugs started.
+      // One deferred task drains every placeholder asked for in the same turn (a projection run creates ten at once).
+      // A single "last tab wins" timer would leave nine of them holding a content process.
+      let zenParkTimer = 0;
+      let zenParkRetryTimer = 0;
+      const zenParkQueue = new Set();
+      const zenParkAttempts = new WeakMap();
+      // Not 0 ms: the activation/hand-back tasks the click path queues are 0 ms, and a parking task must never run
+      // ahead of them in the same turn (existing Notes tests fire exactly one 0 ms task and expect the hand-back).
+      // Chosen away from every delay the sheet already uses (0/16/50/60/300/500/1000/6000/6500/90000), so a parking
+      // task can never be mistaken for an interaction hand-back or a repair debounce by a test that fires one timer by
+      // its delay. Nothing a person can see waits on them.
+      const ZEN_PARK_DELAY_MS = 1200;
+      const ZEN_PARK_RETRY_MS = 2500;
+      const ZEN_PARK_RETRY_MAX = 3;
+      onCleanup(() => {
+        window.clearTimeout(zenParkTimer);
+        window.clearTimeout(zenParkRetryTimer);
+        zenParkQueue.clear();
+      });
+      // "busy" and "selected" are temporary by nature: the hand-back that answers a click is still running, or the
+      // selection is still on its way back. A bounded retry (3 tries, 800 ms apart) parks the row once that settles;
+      // no polling, and a tab that stays unloadable is simply left alone after the third attempt.
+      function drainPseudoTabParkQueue() {
+        zenParkTimer = 0;
+        const tabs = [...zenParkQueue];
+        zenParkQueue.clear();
+        let retry = false;
+        for (const tab of tabs) {
+          let reason = "failed";
+          try { reason = parkPseudoTab(tab); } catch (error) { warn(error); }
+          if (reason === "busy" || reason === "selected") {
+            const tries = (zenParkAttempts.get(tab) || 0) + 1;
+            zenParkAttempts.set(tab, tries);
+            if (tries <= ZEN_PARK_RETRY_MAX) {
+              zenParkQueue.add(tab);
+              retry = true;
+            }
+          } else {
+            zenParkAttempts.delete(tab);
+          }
+        }
+        if (retry && !zenParkRetryTimer) {
+          zenParkRetryTimer = window.setTimeout(() => {
+            zenParkRetryTimer = 0;
+            drainPseudoTabParkQueue();
+          }, ZEN_PARK_RETRY_MS);
+        }
+      }
+      function scheduleParkPseudoTab(tab) {
+        if (!tab) return;
+        zenParkQueue.add(tab);
+        if (zenParkTimer) return;
+        zenParkTimer = window.setTimeout(drainPseudoTabParkQueue, ZEN_PARK_DELAY_MS);
+      }
       function addManagedPseudoTab(url) {
         pseudoTabCreationDepth++;
         try {
@@ -32270,6 +32375,7 @@
         tab.setAttribute(NOTES_ATTR, key); // marked BEFORE pinning, like the add-on host tabs
         tab._zentralNotesUrl = url;
         window.gBrowser.pinTab(tab);
+        scheduleParkPseudoTab(tab); // OW-88
         return tab;
       }
       // #6a: the seed tab exists only because gZenFolders.createFolder needs a tab. Unless the user asked for the
@@ -32684,7 +32790,9 @@
       function agendaNewTab(key) {
         const url = agendaTabUrl(key), tab = addManagedPseudoTab(url);
         if (!tab) return null;
-        tab.setAttribute(AGENDA_ATTR, key); tab._zentralNotesUrl = url; window.gBrowser.pinTab(tab); return tab;
+        tab.setAttribute(AGENDA_ATTR, key); tab._zentralNotesUrl = url; window.gBrowser.pinTab(tab);
+        scheduleParkPseudoTab(tab); // OW-88
+        return tab;
       }
       // SB6.6: closing an Agenda tab. The preference says what happens; a closed projection key is remembered for the
       // local day only, so an item hidden today is back tomorrow without a timer and without touching the item.
@@ -34932,6 +35040,7 @@
         }
         cleanRestoredPseudoTabs([event.target]);
         if (folder && kind) cleanDisabledPseudoFolders(folder);
+        scheduleParkPseudoTab(event.target); // OW-88: a restored placeholder comes back live, park it again
       };
       if (lifecycle?.listen) {
         const offPseudoRestore = lifecycle.listen(window, "SSTabRestored", onPseudoTabRestored, true);
@@ -35051,6 +35160,7 @@
               const back = safe(prev) ? prev : [...window.gBrowser.tabs].find(safe);
               if (back) window.gBrowser.selectedTab = back;
               activateZenTab(tab);
+              scheduleParkPseudoTab(tab); // OW-88: the click was answered, so the row goes back to sleep
               zen.schedule(0);
             } catch (error) { warn(error); }
           }, 0);
@@ -35067,6 +35177,7 @@
             const back = safe(prev) ? prev : [...window.gBrowser.tabs].find(safe);
             if (back) window.gBrowser.selectedTab = back;
             activateZenTab(tab);
+            scheduleParkPseudoTab(tab); // OW-88: same hand-back, same parking
           } catch (error) { warn(error); }
         }, 0);
       };
@@ -36429,7 +36540,11 @@
           // (showNotes → the sheet handle) and the card itself.
           showNotes,
           openReminderHistory: () => showNotes("").then((handle) => sheetOf(handle)?.openReminderHistory?.()),
-          openIcsImport: () => showNotes("").then((handle) => sheetOf(handle)?.openIcsImport?.()) };
+          openIcsImport: () => showNotes("").then((handle) => sheetOf(handle)?.openIcsImport?.()),
+          // OW-88: the parking guards are what proves placeholders do not hold a content process; a test drives them
+          // and reads the returned reason instead of guessing from the DOM.
+          parkPseudoTab, scheduleParkPseudoTab, drainPseudoTabParkQueue, isPseudoPlaceholderTab, zenManagedTab,
+          zenQuietDepth: () => zenQuietDepth, parkQueueSize: () => zenParkQueue.size };
         window.__zentralNotesTestSeam.sidebar = sidebar;
         onCleanup(() => {
           if (window.__zentralNotesTestSeam?.sidebar === sidebar) delete window.__zentralNotesTestSeam.sidebar;
