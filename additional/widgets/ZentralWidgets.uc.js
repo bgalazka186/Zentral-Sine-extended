@@ -4327,6 +4327,7 @@
               const row = doc.createElement("span");
               row.className = "zw-weather-outlook-line";
               if (line && typeof line === "object") {
+                row.classList.add("zw-weather-outlook-week-line");
                 // A week row: glyph, day name, high/low. Each part its own span so the glyph can be sized on its own
                 // and a narrow card can drop the low without dropping the row.
                 if (line.icon) {
