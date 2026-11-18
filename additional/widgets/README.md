@@ -24,6 +24,19 @@ Full installation uses root `theme.json` and `preferences.json`, plus `loader/`;
   - **Date** (`zen.workspace.zentral.widgets.date.*`): mini calendar badge + weekday/date (`long` / `short` / `iso`), optional year and ISO week number (`W#`), boundary-aligned to local midnight (wakes up once per day, and catches missed midnight transitions on resume).
   - **Boost** (`zen.workspace.zentral.widgets.boost.enabled`, default on, OW-90): the browser's RAM and the action that lowers it, in one card. It **replaced the Status card** (battery + memory); the battery half left with it, because a desktop has none and the owner read the old "no battery" line as a broken widget. The card owns no reading and no timer of its own: `additional/boost/` measures, samples every 2 s only while the popup is open, and the card hears every value through `onChange`. A click on the card runs `runLevel1()` and toasts what was freed (4 s, `role="status"`); the arrow opens a small menu that expands the card inline (no `z-index`, no overlay) with **Free memory (light)** working and **deep** / **Restore** drawn greyed until OW-91 ships them, so nobody thinks they arrived early. A missing Boost module leaves a dash and a card that does nothing, never an error; the tray's `pause_when_hidden` applies like every other card.
 
+## Weather location data and network privacy (OW-107 audit)
+
+Weather is off by default. It does not read browser/device geolocation, call `navigator.geolocation`, or derive a position from the network. A location comes from the place name or coordinates that the owner enters in Zentral Settings.
+
+When Weather is enabled, there are two HTTPS destinations:
+
+1. **Place-name lookup:** `https://geocoding-api.open-meteo.com/v1/search`. When a saved place has a name but no valid coordinate pair, Zentral sends that name (trimmed and capped at 80 characters) with `count=1`, `language=en` and `format=json`. This happens after a relevant place-setting change or when Weather starts enabled with an unresolved saved place. It does not run as a periodic poll.
+2. **Forecast:** `https://api.open-meteo.com/v1/forecast`. The request sends the selected latitude and longitude, unit options, `timezone=auto`, the requested current/daily weather fields and a seven-day forecast window. It does **not** send the saved display name.
+
+Both requests use `fetch()` with `credentials: "omit"`, `cache: "no-store"` and `referrerPolicy: "no-referrer"`: browser cookies/HTTP credentials are not attached, the browser is asked not to use its HTTP cache, and the page referrer is suppressed. The calls do not use an API key. Open-Meteo still necessarily receives the query parameters described above and ordinary connection metadata such as the caller's IP address, request time and browser/network headers; this code cannot establish the provider's server-side retention policy. A user who enters a precise home address as the place name will disclose that text to the geocoding endpoint, so a town/city name or deliberately approximate coordinates are preferable for privacy.
+
+Configured names and coordinates are stored in the widget's browser preferences (`zen.workspace.zentral.widgets.weather.places`, with legacy single-place preferences retained for migration). A name saved while Weather is disabled is not geocoded until the widget is enabled. Disabling Weather invalidates pending lookup results; it cannot retract a request already sent.
+
 ## Install as a standalone Sine feature
 
 In Sine, add this folder as a mod using:

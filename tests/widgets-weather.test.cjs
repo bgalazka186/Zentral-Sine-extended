@@ -267,16 +267,18 @@ test("OW-54: the outlook is styled to wrap, never to be cut", () => {
   assert.ok(!/zw-weather-outlook\[data-zw-outlook-face\]/.test(css), "no dotted underline for a click that no longer exists");
 });
 
-/* OW-51: typing a name used to look like a failure, because the name is only a label and the numbers did the work.
- * The settings now say so, and the two coordinates are described as what they are: the real input. */
-test("the place setting says a typed name is a label, and the coordinates are the real input", () => {
+/* OW-107: the place label must tell the truth about both outbound requests. */
+test("the place setting discloses geocoding and forecast coordinates separately", () => {
   const schema = SETTINGS.schema;
   const row = (suffix) => schema.find((item) => String(item.property).endsWith(suffix));
   const place = row("weather.place");
   const lat = row("weather.latitude");
   const lon = row("weather.longitude");
-  assert.ok(/only a label/i.test(place.label + " " + (place.description || "")), "the label says what a name is for");
-  assert.ok(/latitude and longitude/i.test(place.description || ""), "and points at what is actually used");
+  assert.match(place.label, /lookup and display/i);
+  assert.match(place.description, /sent once to Open-Meteo's geocoding endpoint/i);
+  assert.match(place.description, /forecast requests send latitude and longitude/i);
+  assert.match(place.description, /do not include the display name/i);
+  assert.match(place.description, /No browser or device geolocation is read/i);
   for (const item of [lat, lon]) {
     assert.match(item.label, /filled by the name lookup/i, "the coordinates explain where their value comes from");
     assert.match(item.label, /edit to override/i, "and that they can be typed by hand");
