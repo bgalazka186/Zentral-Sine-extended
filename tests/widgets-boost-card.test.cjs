@@ -108,9 +108,14 @@ test("a click runs Level 1 once and toasts what was freed", async () => {
   api.destroy();
 });
 
-test("the arrow opens a menu whose later entries are greyed, not hidden", async () => {
+test("the menu offers what the build can really do, and greys the rest", async () => {
   const h = createFakeSidebarHarness({ ...BASE });
+  // A module with the policy (so deep works) but nothing asleep (so Restore is greyed with its reason).
   const boost = makeBoostModule();
+  boost.state = () => ({ policy: true, undoSize: 0 });
+  boost.calls.runLevel2 = 0;
+  boost.runLevel2 = async () => { boost.calls.runLevel2 += 1; return { by: "level2", freedMB: 10, unloaded: { tabs: 3, panels: 0 } }; };
+  boost.restore = () => ({ panels: 0, tabs: 0 });
   h.window.ZentralBoost = boost;
   const { api } = h.start();
   await tick(50);
@@ -125,15 +130,23 @@ test("the arrow opens a menu whose later entries are greyed, not hidden", async 
   const items = popup.querySelectorAll(".zw-boost-menu-item");
   assert.equal(items.length, 3, "light, deep and restore");
   assert.equal(items[0].disabled, false, "the light pass works");
-  assert.equal(items[1].disabled, true, "deep arrives in part three");
-  assert.equal(items[2].disabled, true, "restore with it");
-  assert.ok(items[1].title, "and each says why in a tooltip");
-  // The one working entry runs the pass and closes the menu.
-  fire(items[0], "click");
+  assert.equal(items[1].disabled, false, "OW-91 made the deep pass real");
+  assert.equal(items[2].disabled, true, "nothing is asleep yet, so there is nothing to restore");
+  // The deep entry runs the deep pass, and the toast says what went to sleep.
+  fire(items[1], "click");
   assert.equal(popup.hidden, true, "choosing a command closes the menu");
-  assert.equal(boost.calls.runLevel1, 1);
-  boost.finishRun();
   await tick(30);
+  assert.equal(boost.calls.runLevel2, 1, "the deep pass ran once");
+  const toast = api.getTray().querySelector(".zw-toast");
+  assert.equal(toast.textContent, "Put 3 tab(s) and 0 panel(s) to sleep, freed 10 MB");
+  // The arrow again: Restore is offered as soon as the module reports something asleep.
+  boost.state = () => ({ policy: true, undoSize: 3 });
+  fire(arrow, "click");
+  const after = popup.querySelectorAll(".zw-boost-menu-item");
+  assert.equal(after[2].disabled, false, "three things asleep is three to wake");
+  assert.equal(after[2].textContent, "Restore (3)");
+  fire(after[2], "click");
+  await tick(20);
   api.destroy();
 });
 

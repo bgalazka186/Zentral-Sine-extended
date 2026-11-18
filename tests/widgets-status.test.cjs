@@ -64,16 +64,35 @@ test("a click means one light pass, and nothing while one is running", () => {
   assert.equal(c.resolveBoostClick({ available: true, enabled: false }).action, "none", "the kill switch is honoured");
 });
 
-test("the menu shows what later parts add, greyed and explained", () => {
-  const items = c.boostMenuItems({ running: false });
+test("the menu greys only what the build cannot do, and explains why", () => {
+  // OW-91 made the deep pass real, so `deep` is offered when the module has the shared tab policy ...
+  const items = c.boostMenuItems({ running: false, canDeep: true });
   assert.deepEqual(json(items.map((i) => i.id)), ["free-light", "free-deep", "restore"]);
-  assert.equal(items[0].available, true, "the light pass works today");
-  assert.equal(items[1].available, false, "deep is part three");
-  assert.ok(items[1].hint, "and it says so instead of vanishing");
-  assert.equal(items[2].available, false, "restore comes with it");
-  const busy = c.boostMenuItems({ running: true });
+  assert.equal(items[0].available, true, "the light pass always works");
+  assert.equal(items[1].available, true, "the deep pass works when the policy is there");
+  assert.equal(items[1].hint, "", "and needs no excuse");
+  // ... and greyed with the reason when it is not, which is what an older full pack looks like.
+  const noPolicy = c.boostMenuItems({ running: false, canDeep: false });
+  assert.equal(noPolicy[1].available, false, "no policy, no deep pass");
+  assert.ok(noPolicy[1].hint, "and the entry says why it is grey");
+  // Restore is offered exactly when something is asleep.
+  assert.equal(items[2].available, false, "nothing to restore before a deep pass");
+  const withUndo = c.boostMenuItems({ running: false, canDeep: true, undoSize: 4 });
+  assert.equal(withUndo[2].available, true, "four things asleep is four to wake");
+  assert.equal(withUndo[2].label, "Restore (4)", "and the count is in the entry");
+  const busy = c.boostMenuItems({ running: true, canDeep: true, undoSize: 4 });
   assert.equal(busy[0].available, false, "while a pass runs the entry is disabled");
   assert.equal(busy[0].label, "Freeing memory\u2026", "and it says what is happening");
+  assert.equal(busy[1].available, false, "a second pass cannot start either");
+  assert.equal(busy[2].available, false, "and neither can a restore mid-pass");
+});
+
+test("a deep pass says what it put to sleep as well as what it freed", () => {
+  const deep = c.boostResultText({ by: "level2", freedMB: 300, unloaded: { tabs: 7, panels: 2 } });
+  assert.equal(deep, "Put 7 tab(s) and 2 panel(s) to sleep, freed 300 MB");
+  assert.equal(c.boostResultText({ by: "level2", freedMB: 0, unloaded: { tabs: 0, panels: 0 } }),
+    "Memory was already tidy", "a deep pass that found nothing to sleep falls back to the plain line");
+  assert.equal(c.WIDGET_STRINGS.en["boost.restored"].replace("{count}", "3"), "Woke 3 panel(s)");
 });
 
 test("the toast line never invents a number", () => {

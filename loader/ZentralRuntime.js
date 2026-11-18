@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Zentral Core and Settings
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.320
+// @version 3.3.322
 // ==/UserScript==
 /*
  * ZENTRAL FILE GUIDE - loader/ZentralRuntime.js
@@ -38,7 +38,7 @@
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
-  const VERSION = "3.3.320";
+  const VERSION = "3.3.322";
   // Sine installs this package under theme.json's id. Resolve from the
   // executing script so local folders and installed copies use their own files.
   // Keep this universal: never hard-code a mod id, folder name, or profile path.
@@ -2872,6 +2872,9 @@
   );
 
   moduleLoader.load("loader/ZentralShared.js");
+  // OW-91: one tab policy for every module that unloads a tab (TabUnload and Boost). It is a plain component, so a
+  // feature that needs it reads `window.ZentralTabPolicy` (standalone builds embed the same file verbatim).
+  moduleLoader.load("loader/ZentralTabPolicy.js");
   const {
     Constants,
     Core,

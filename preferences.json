@@ -2484,6 +2484,20 @@
     "defaultValue": true
   },
   {
+    "property": "zen.workspace.zentral.boost.keep_pinned",
+    "label": "Unloading may include pinned and Essential tabs",
+    "description": "Off by default: they restore on demand like any tab, but they are your shortlist. Turn this on to let a deep pass include them.",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.boost.shortcut",
+    "label": "Keyboard shortcut for Free memory (light)",
+    "description": "For example Accel+Shift+B. Empty means no shortcut.",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
     "type": "text",
     "label": "**Panels**",
     "size": "22px"

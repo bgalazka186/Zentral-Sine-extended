@@ -3,12 +3,19 @@
   "themeId": "zentral-boost",
   "name": "Zentral Boost",
   "description": "Read browser RAM on demand and give memory back without closing anything. Standalone part of Zentral Extended.",
-  "version": "3.3.320",
+  "version": "3.3.322",
   "entry": "ZentralBoost.uc.js",
   "output": "ZentralBoost.standalone.uc.js",
   "settings": "settings.json",
   "tags": [
     "memory",
     "zen"
-  ]
+  ],
+  "sharedSources": [
+    "loader/ZentralTabPolicy.js"
+  ],
+  "fullPackOnly": [
+    "Zentral"
+  ],
+  "fullPackOnlyReason": "The panel layer (`window.Zentral.Panels`) only exists in the full pack. Every use is guarded: a standalone Boost has no Essential panels to put to sleep, so a deep pass there unloads tabs only."
 }

@@ -29,6 +29,11 @@
   const PREF = Object.freeze({
     ENABLED: "zen.workspace.zentral.boost.enabled",
     STARTUP_TRIM: "zen.workspace.zentral.boost.startup_trim",
+    // B4 (OW-91): pinned and Essential tabs are the person's shortlist. Off by default: they restore on demand like
+    // any other tab, so a deep run may include them only when asked.
+    KEEP_PINNED: "zen.workspace.zentral.boost.keep_pinned",
+    // B4.6: the one shortcut that runs the light pass. Empty means none, and an empty shortcut installs no listener.
+    SHORTCUT: "zen.workspace.zentral.boost.shortcut",
   });
   // B2.1: sample only on demand. These are the two situations the plan allows a 2 s sampler.
   const SAMPLE_INTERVAL_MS = 2000;
@@ -41,6 +46,11 @@
   const TRIM_IDLE_TIMEOUT_MS = 30000;
   const TRIM_MAX_WAIT_MS = 6 * 60 * 1000;
   const INPUT_EVENTS = ["keydown", "mousedown", "wheel", "touchstart", "pointerdown"];
+  // B4.5: Restore remembers what it put to sleep, for this session only. The cap keeps the record bounded; the state is
+  // deliberately lost on restart, because a restored tab is the browser's own job after that.
+  const UNDO_CAP = 50;
+  // B4.3: what a panel record may do in the background. `live` is the default for every existing record.
+  const BACKGROUND_MODES = Object.freeze(["live", "throttled", "asleep-allowed"]);
 
   function standaloneReady(start) {
     let started = false;
@@ -82,6 +92,13 @@
       const prefBool = (key, fallback) => {
         try {
           return Services.prefs.getBoolPref(key, fallback);
+        } catch (_) {
+          return fallback;
+        }
+      };
+      const prefString = (key, fallback) => {
+        try {
+          return Services.prefs.getStringPref(key, fallback);
         } catch (_) {
           return fallback;
         }
@@ -211,11 +228,8 @@
                   beforeMB != null && afterMB != null ? Math.max(0, beforeMB - afterMB) : null,
                 by: freedBy,
               };
-              for (const listener of changeListeners) {
-                try {
-                  listener(result);
-                } catch (_) {}
-              }
+              lastSampleMB = afterMB != null ? afterMB : lastSampleMB;
+              emit(afterMB != null ? afterMB : lastSampleMB);
               resolve(result);
             }, LEVEL1_SETTLE_MS);
           };
@@ -250,6 +264,17 @@
         });
       }
 
+      // The GC/CC pair on its own, for Level 2's settle (the manager's minimize already ran as Level 1's part of a deep
+      // pass only when a caller asks for both halves; a deep pass keeps its own numbers honest by doing the same work).
+      function runGcCc() {
+        try {
+          if (typeof ChromeUtils?.forceGC === "function") ChromeUtils.forceGC();
+        } catch (_) {}
+        try {
+          if (typeof ChromeUtils?.forceCC === "function") ChromeUtils.forceCC();
+        } catch (_) {}
+      }
+
       // Destroy while a Level 1 run is settling must not touch a disposed feature.
       onCleanup(() => {
         clearTimer(level1Timer);
@@ -264,15 +289,21 @@
       let samplerUsers = 0; // the popup and the limiter (OW-92) are the only two callers
       let lastSampleMB = null;
 
+      // One door for "the total changed": a sample and a run both report here, so a card cannot tell them apart by
+      // accident. A listener that throws is one listener's problem, never the module's.
+      const emit = (value) => {
+        for (const listener of changeListeners) {
+          try {
+            listener(value);
+          } catch (_) {}
+        }
+      };
+
       const sampleOnce = () => {
         const value = memoryMB();
         if (value != null) {
           lastSampleMB = value;
-          for (const listener of changeListeners) {
-            try {
-              listener({ totalMB: value, kind: "sample" });
-            } catch (_) {}
-          }
+          emit(value);
         }
         return value;
       };
@@ -418,12 +449,306 @@
 
       onCleanup(clearTrimTimers);
 
+      /* ---------------- B4/OW-91: Level 2, what may go to sleep, and Restore ---------------- */
+
+      // The policy table is shared with TabUnload: `loader/ZentralTabPolicy.js`, embedded in the standalone build and
+      // loaded once by the runtime in the full pack. Without it (an old full pack) the module refuses to run a deep
+      // pass rather than guessing: unloading a tab that is playing music is not something to re-derive here.
+      const policy = () => window.ZentralTabPolicy || null;
+
+      // The panel side. `ZentralPanels` publishes these on the window in the full pack; a standalone Boost has no
+      // panels at all, which is why every use is guarded and a missing panel layer is normal, not an error.
+      const panels = () => {
+        const api = window.Zentral;
+        const ctx = api?.Panels || api?.panels || null;
+        return ctx && typeof ctx === "object" ? ctx : null;
+      };
+      const essentialRecords = () => {
+        try {
+          const map = panels()?.essentialPanels;
+          if (!map || typeof map.values !== "function") return [];
+          return [...map.values()].filter((record) => record?.tab);
+        } catch (_) {
+          return [];
+        }
+      };
+
+      // The video preview's source tab, when the video module is up: unloading it would blank the preview, so it is one
+      // of the policy's never-rules.
+      const videoSourceTab = () => {
+        try {
+          const source = window.Zentral?.Video?.sourceTab || window.__zentralVideoSourceTab;
+          return source?.isConnected ? source : null;
+        } catch (_) {
+          return null;
+        }
+      };
+
+      const modeOf = (record) => {
+        const raw = String(record?.backgroundMode || "");
+        return BACKGROUND_MODES.includes(raw) ? raw : "live";
+      };
+
+      // The undo record: what a deep run put to sleep, newest last, capped. Panels and tabs are kept apart because
+      // Restore treats them differently (panels wake now, tabs wake when clicked).
+      const undoState = { panels: [], tabs: [] };
+      const rememberUndone = (kind, entry) => {
+        const list = undoState[kind];
+        list.push(entry);
+        while (list.length > UNDO_CAP) list.shift();
+      };
+      const undoSize = () => undoState.panels.length + undoState.tabs.length;
+
+      // One tab's verdict, with every input the policy cannot read passed in. `cache` keeps the per-tab attribute reads
+      // out of the loop below; nothing here is async.
+      const canUnload = (tab, ctx) => {
+        const table = policy();
+        if (!table) return { allowed: false, reason: "no-policy" };
+        return table.isUnloadable(tab, {
+          keepPinned: prefBool(PREF.KEEP_PINNED, false),
+          videoSourceTab: ctx.videoSourceTab,
+          selectedTab: ctx.selectedTab,
+          sessionUrl: ctx.sessionUrlFor?.(tab) || "",
+          isHostTab: ctx.isHostTab,
+          isPrivate: ctx.isPrivate,
+        });
+      };
+
+      // A deep run, in three steps that can each say no: tabs by the policy (oldest first), then panel records whose
+      // mode allows sleep, then the wake-up list for Restore. The counts and the freed number are the result.
+      let level2Busy = false;
+      async function runLevel2(options = {}) {
+        if (level2Busy) return null;
+        if (!policy()) {
+          warn("the tab policy is not loaded, so the deep pass is not offered in this build");
+          return null;
+        }
+        const gBrowser = window.gBrowser;
+        if (!gBrowser || !Array.isArray(gBrowser.tabs)) return null;
+        if (options.allowTabs !== false && typeof gBrowser.explicitUnloadTabs !== "function" && typeof gBrowser.discardBrowser !== "function") {
+          // A build that cannot put a tab to sleep gets the light pass and an honest zero, never a fake count.
+          return runLevel1();
+        }
+        level2Busy = true;
+        try {
+          const beforeMB = memoryMB();
+          const ctx = {
+            videoSourceTab: videoSourceTab(),
+            selectedTab: gBrowser.selectedTab,
+            sessionUrlFor: (tab) => {
+              try {
+                const state = JSON.parse(window.SessionStore?.getTabState?.(tab) || "{}");
+                const entries = Array.isArray(state.entries) ? state.entries : [];
+                const index = entries.length ? Math.max(0, Math.min(entries.length - 1, (Number(state.index) || 1) - 1)) : -1;
+                return index >= 0 ? String(entries[index]?.url || "") : "";
+              } catch (_) {
+                return "";
+              }
+            },
+            isHostTab: (tab) => Boolean(tab?.hasAttribute?.("bgalazka-addon-host") || tab?.hasAttribute?.("bgalazka-addon-host-fallback")),
+          };
+          const unloaded = { tabs: 0, panels: 0 };
+          const skipped = [];
+          // Tabs: oldest `lastAccessed` first, so the tab nobody has looked at for hours goes before the one from a
+          // minute ago. Selection never moves: a tab that would need a successor is not unloaded by a deep run.
+          if (options.allowTabs !== false) {
+            const candidates = [...gBrowser.tabs].sort(policy().byOldestFirst);
+            for (const tab of candidates) {
+              const verdict = canUnload(tab, ctx);
+              if (!verdict.allowed) {
+                if (verdict.reason !== "selected" && skipped.length < 5) skipped.push(verdict.reason);
+                continue;
+              }
+              try {
+                if (typeof gBrowser.explicitUnloadTabs === "function") await gBrowser.explicitUnloadTabs([tab]);
+                else {
+                  await gBrowser.prepareDiscardBrowser?.(tab);
+                  gBrowser.discardBrowser?.(tab, true);
+                }
+                unloaded.tabs += 1;
+                rememberUndone("tabs", {
+                  tab: null, // the element is gone from the session's point of view; the URL is what Restore lists
+                  url: String(tab.linkedBrowser?.currentURI?.spec || ""),
+                  title: String(tab.label || ""),
+                  when: Date.now(),
+                });
+              } catch (_) {
+                skipped.push("unload-failed");
+              }
+            }
+          }
+          // Panels: only records the person marked `asleep-allowed`. `live` and `throttled` stay exactly as they are —
+          // the mode is theirs, and this pass does not read it as advice.
+          if (options.allowPanels !== false) {
+            for (const record of essentialRecords()) {
+              if (modeOf(record) !== "asleep-allowed") continue;
+              const verdict = canUnload(record.tab, ctx);
+              if (!verdict.allowed) {
+                if (skipped.length < 8) skipped.push("panel:" + verdict.reason);
+                continue;
+              }
+              try {
+                if (typeof gBrowser.explicitUnloadTabs === "function") await gBrowser.explicitUnloadTabs([record.tab]);
+                else gBrowser.discardBrowser?.(record.tab, true);
+                unloaded.panels += 1;
+                rememberUndone("panels", { appId: record.app?.id || record.appId, title: String(record.app?.name || ""), when: Date.now() });
+              } catch (_) {
+                skipped.push("panel-unload-failed");
+              }
+            }
+          }
+          // Gecko frees after the sleep, not during it: the same 3 s settle as Level 1, for the same reason.
+          const afterMB = await new Promise((resolve) => {
+            setTimer(() => {
+              runGcCc();
+              setTimer(() => resolve(memoryMB()), LEVEL1_SETTLE_MS);
+            }, LEVEL1_SETTLE_MS);
+          });
+          const freedMB = beforeMB != null && afterMB != null ? Math.max(0, beforeMB - afterMB) : null;
+          lastSampleMB = afterMB;
+          emit(afterMB);
+          return { beforeMB, afterMB, freedMB, by: "level2", unloaded, skipped, undoSize: undoSize() };
+        } finally {
+          level2Busy = false;
+        }
+      }
+
+      // Restore: wakes what a deep run put to sleep. Panel records wake immediately (that is the promise Restore makes),
+      // tabs are listed — waking them all at once would undo the run and cost the memory back in one go.
+      function restore() {
+        const restored = { panels: 0, tabs: 0 };
+        const ctx = panels();
+        for (const record of undoState.panels.splice(0)) {
+          try {
+            const live = essentialRecords().find((r) => (r.app?.id || r.appId) === record.appId);
+            if (live && typeof ctx?.loadEssentialInBackground === "function") {
+              ctx.loadEssentialInBackground(live, false);
+              restored.panels += 1;
+            }
+          } catch (_) {}
+        }
+        // The tab list is what remains: Restore reports how many URLs are waiting for a click, and clears the record.
+        restored.tabs = undoState.tabs.length;
+        undoState.tabs.length = 0;
+        return restored;
+      }
+
+      // The panel tile's menu reads and writes one record's mode through the panel module's own store, so a mode set
+      // here is the mode everyone else sees. `saveEssentialSettings` is the documented writer.
+      function setBackgroundMode(appId, mode) {
+        if (!BACKGROUND_MODES.includes(mode)) return null;
+        const record = essentialRecords().find((r) => (r.app?.id || r.appId) === appId);
+        if (!record) return null;
+        record.backgroundMode = mode;
+        try {
+          panels()?.saveEssentialSettings?.(record);
+        } catch (_) {
+          return null;
+        }
+        return { appId, mode };
+      }
+
+      // ---- B4.6: the one shortcut, following the app-shortcut module's own parser ----
+      const isMac = () => {
+        try {
+          return Services.appinfo.OS === "Darwin";
+        } catch (_) {
+          return false;
+        }
+      };
+      const KEY_ALIASES = { esc: "Escape", escape: "Escape", space: "Space", enter: "Enter", tab: "Tab", delete: "Delete" };
+      const normalizeKey = (rawKey, code = "") => {
+        const c = String(code || "");
+        if (/^Key([A-Z])$/.test(c)) return c.slice(3);
+        if (/^Digit([0-9])$/.test(c)) return c.slice(5);
+        if (/^F([1-9]|1[0-9]|2[0-4])$/i.test(c)) return c.toUpperCase();
+        const k = String(rawKey || "");
+        if (/^[a-zA-Z]$/.test(k)) return k.toUpperCase();
+        if (/^[0-9]$/.test(k)) return k;
+        if (/^F([1-9]|1[0-9]|2[0-4])$/i.test(k)) return k.toUpperCase();
+        return KEY_ALIASES[k.toLowerCase()] || "";
+      };
+      // "Accel+Shift+B" -> a spec. The same token set the app shortcuts accept, minus the ones a single-key shortcut
+      // would need: a boost shortcut must combine at least two keys, so it can never swallow ordinary typing.
+      function parseShortcut(text) {
+        if (!text || typeof text !== "string") return null;
+        const spec = { ctrl: false, alt: false, shift: false, meta: false, key: "" };
+        for (const token of String(text).split("+").map((t) => t.trim()).filter(Boolean)) {
+          const lower = token.toLowerCase();
+          if (lower === "ctrl" || lower === "control") spec.ctrl = true;
+          else if (lower === "alt" || lower === "option" || lower === "opt") spec.alt = true;
+          else if (lower === "shift") spec.shift = true;
+          else if (["meta", "cmd", "command", "super", "os"].includes(lower)) spec.meta = true;
+          else if (["accel", "mod", "primary"].includes(lower)) {
+            if (isMac()) spec.meta = true;
+            else spec.ctrl = true;
+          } else {
+            const key = normalizeKey(token);
+            if (!key || spec.key) return null;
+            spec.key = key;
+          }
+        }
+        if (!spec.key) return null;
+        const count = (spec.ctrl ? 1 : 0) + (spec.alt ? 1 : 0) + (spec.shift ? 1 : 0) + (spec.meta ? 1 : 0) + 1;
+        return count >= 2 ? spec : null;
+      }
+      function matchesShortcut(event, spec) {
+        if (!event || !spec?.key) return false;
+        if (!!event.ctrlKey !== spec.ctrl || !!event.altKey !== spec.alt) return false;
+        if (!!event.shiftKey !== spec.shift || !!event.metaKey !== spec.meta) return false;
+        return normalizeKey(event.key, event.code) === spec.key;
+      }
+      let shortcutSpec = null;
+      let shortcutObserver = null;
+      function readShortcut() {
+        shortcutSpec = parseShortcut(prefString(PREF.SHORTCUT, ""));
+      }
+      function installShortcut() {
+        readShortcut();
+        // One listener for the whole window, registered with the module's cleanups. It runs the light pass only: the
+        // deep pass closes nothing on a keystroke.
+        const onKey = (event) => {
+          if (!shortcutSpec || !matchesShortcut(event, shortcutSpec)) return;
+          if (event.repeat) return;
+          event.preventDefault?.();
+          event.stopPropagation?.();
+          void runLevel1();
+        };
+        window.addEventListener("keydown", onKey, true);
+        onCleanup(() => {
+          window.removeEventListener("keydown", onKey, true);
+        });
+        // A pref change re-reads the combination without a restart, like every other Boost setting.
+        try {
+          shortcutObserver = {
+            observe(_subject, _topic, data) {
+              if (!data || data === PREF.SHORTCUT) readShortcut();
+            },
+          };
+          Services.prefs.addObserver(PREF.SHORTCUT, shortcutObserver);
+          onCleanup(() => {
+            try {
+              Services.prefs.removeObserver(PREF.SHORTCUT, shortcutObserver);
+            } catch (_) {}
+            shortcutObserver = null;
+          });
+        } catch (_) {}
+      }
+
       /* ---------------- public API ---------------- */
 
       let disposed = false;
       const api = {
         memoryMB,
         runLevel1,
+        // B4/OW-91: the deep pass, its undo record, and the panel modes. Each refuses politely when its layer is
+        // missing (no shared policy, no panel module) instead of throwing at a caller that only wanted a button.
+        runLevel2,
+        restore,
+        undoSize,
+        setBackgroundMode,
+        backgroundModeOf: (record) => modeOf(record),
+        BACKGROUND_MODES,
         onChange,
         startSampling,
         stopSampling,
@@ -439,6 +764,11 @@
           samplerUsers,
           lastInputAt,
           memorySupport,
+          level2Busy,
+          undoSize: undoSize(),
+          shortcut: shortcutSpec ? "set" : "",
+          policy: Boolean(policy()),
+          panels: essentialRecords().length,
         }),
         destroy,
       };
@@ -458,6 +788,7 @@
 
       window.ZentralBoost = api;
       window.addEventListener("unload", () => api.destroy(), { once: true });
+      installShortcut();
 
       // A build without requestProcInfo has a memory meter that can never answer: say so once and stay out of the way
       // (the plan's B2.1). Level 1 is still useful on its own, so the module keeps running rather than disabling

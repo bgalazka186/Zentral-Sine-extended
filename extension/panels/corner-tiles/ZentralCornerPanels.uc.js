@@ -524,6 +524,11 @@
         userContextId: record.userContextId,
         width: record.app.width,
         zoom: record.app.zoom,
+        // OW-91 (plan B4.3): what this panel may do in the background. `live` for every record written before this
+        // existed, so the saved shape does not change for anybody who never touches the setting.
+        backgroundMode: ["live", "throttled", "asleep-allowed"].includes(record.backgroundMode)
+          ? record.backgroundMode
+          : "live",
       };
       essentialSettingsCache.set(record.tab, value);
       try {
@@ -837,6 +842,11 @@
               loadedSource: null,
               preloadAttempted: false,
               mobileUa: settings.mobileUa === true,
+              // OW-91: the mode a person set on the tile's menu comes back with the record; a record saved before the
+              // setting existed is live, which is exactly what those panels did before.
+              backgroundMode: ["live", "throttled", "asleep-allowed"].includes(settings.backgroundMode)
+                ? settings.backgroundMode
+                : "live",
               userContextId:
                 Number.isInteger(settings.userContextId) &&
                 settings.userContextId >= 0

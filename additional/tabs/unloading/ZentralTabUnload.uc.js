@@ -160,7 +160,13 @@
         return tab;
       }
 
+      // OW-91 (plan B4.1): the predicates live in one place now — `loader/ZentralTabPolicy.js`, which this module's
+      // standalone build embeds verbatim. The local names stay, because the handlers below read like the behaviour
+      // they implement, and a caller of the policy is what this module is.
+      const tabPolicy = () => window.ZentralTabPolicy || null;
       function isNormalTabAlreadyUnloaded(tab) {
+        const policy = tabPolicy();
+        if (policy) return policy.isUnloadable_AlreadyUnloaded(tab);
         return !!(
           !tab?.linkedPanel ||
           tab.hasAttribute("pending") ||
@@ -181,6 +187,8 @@
         return !!tab?.hasAttribute?.("bgalazka-notes-item");
       }
       function isSuccessorCandidate(tab, current) {
+        const policy = tabPolicy();
+        if (policy) return policy.isSuccessorCandidate(tab, current);
         return !!(
           tab !== current &&
           tab?.isConnected &&

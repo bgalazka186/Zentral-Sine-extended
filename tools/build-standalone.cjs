@@ -149,10 +149,21 @@ function build(manifestFile) {
   for (const asset of m.assets || [])
     if (!fs.existsSync(path.join(dir, asset)))
       throw new Error(`${m.id}: asset ${asset} must exist next to the module`);
+  // `sharedSources` are repo files OUTSIDE the module folder that the entry depends on (OW-91: the tab policy both
+  // unloaders use). They are embedded source, not assets: they run inside the same wrapper, before the entry.
+  const shared = (m.sharedSources || []).map((file) => {
+    const abs = path.join(root, file);
+    if (!fs.existsSync(abs)) throw new Error(`${m.id}: shared source ${file} does not exist`);
+    const text = fs.readFileSync(abs, "utf8");
+    if (/\bquerySelector|\bdocument\./.test(text) && /module\.exports|require\(/.test(text))
+      throw new Error(`${m.id}: shared source ${file} looks like Node code`);
+    return { file, text };
+  });
   for (const [file, text] of [
     [m.entry, source],
     ...Object.entries(included),
     ...extras.map((e) => [e.file, e.text]),
+    ...shared.map((x) => [x.file, x.text]),
   ]) {
     if (/ZentralModuleLoader/.test(text))
       throw new Error(`${m.id}: ${file} still names the full pack's module loader`);
@@ -163,7 +174,7 @@ function build(manifestFile) {
       throw new Error(`${m.id}: ${file} does not parse as an embedded source: ${error.message}`);
     }
   }
-  const allSources = [source, ...Object.values(included), ...extras.map((e) => e.text)];
+  const allSources = [source, ...Object.values(included), ...extras.map((e) => e.text), ...shared.map((x) => x.text)];
   const allText = allSources.join("\n");
   // Members a module only touches when the full pack is present (guarded in
   // the source). Declared per manifest so every exception is visible.
@@ -182,7 +193,9 @@ function build(manifestFile) {
     throw new Error(
       `${m.id}: depends on the module loader; declare "loader" with include/texts, or keep it full-pack only (see docs/SINE-MODULAR-INSTALL.md).`,
     );
-  if (/window\.Zentral\b/.test(allText))
+  // `window.Zentral` is the full pack's UI namespace. A module may touch it only when every use is guarded and the
+  // manifest says so; otherwise this is a real dependency on a pack that is not installed.
+  if (/window\.Zentral\b/.test(allText) && !fullOnly.has("Zentral"))
     throw new Error(`${m.id}: reads window.Zentral (the full pack's UI namespace); not standalone-ready.`);
   if (/\b(shared|services)\b\s*[,}]\s*(?:=\s*\{\})?\s*\)\s*\{/.test(allText))
     throw new Error(
@@ -330,7 +343,7 @@ function build(manifestFile) {
       .split("__FEATURE_VERSION__")
       .join(version)
       .replace("/*__NUMERIC_ITEMS__*/ []", () => JSON.stringify(numericItems)) +
-    `\n${loaderPart}${wrapPart}${source}\n})();\n`;
+    `\n${loaderPart}${wrapPart}${shared.map((x) => `// ---- shared: ${x.file}\n${x.text}\n`).join("")}${source}\n})();\n`;
   const lockFile = path.join(dir, "standalone.lock.json");
   const lock = fs.existsSync(lockFile)
     ? JSON.parse(fs.readFileSync(lockFile, "utf8"))

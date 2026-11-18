@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Widgets
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.320
+// @version 3.3.322
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.320, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.322, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.320";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.322";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1229,7 +1229,10 @@ function nativeSidebarSide() {
       "boost.nothingFreed": "Memory was already tidy",
       "boost.unknown": "Memory freed. This build cannot measure it.",
       "boost.deep": "Free memory (deep)",
-      "boost.deepSoon": "Coming in Boost part three",
+      "boost.deepSoon": "Needs the shared tab policy",
+      "boost.deepDone": "Put {tabs} tab(s) and {panels} panel(s) to sleep, freed {mb} MB",
+      "boost.restoreCount": "Restore ({count})",
+      "boost.restored": "Woke {count} panel(s)",
       "boost.restore": "Restore",
       "boost.restoreSoon": "Nothing to restore yet",
       "boost.later": "More Boost actions arrive in later updates",
@@ -1283,7 +1286,10 @@ function nativeSidebarSide() {
       "boost.nothingFreed": "Pami\u0119\u0107 by\u0142a ju\u017c uporz\u0105dkowana",
       "boost.unknown": "Pami\u0119\u0107 zwolniona. Ta wersja nie potrafi jej zmierzy\u0107.",
       "boost.deep": "Zwolnij pami\u0119\u0107 (g\u0142\u0119boko)",
-      "boost.deepSoon": "Pojawi si\u0119 w cz\u0119\u015bci trzeciej Boost",
+      "boost.deepSoon": "Wymaga wsp\u00f3lnej polityki kart",
+      "boost.deepDone": "U\u015bpiono {tabs} kart i {panels} paneli, zwolniono {mb} MB",
+      "boost.restoreCount": "Przywr\u00f3\u0107 ({count})",
+      "boost.restored": "Obudzono {count} paneli",
       "boost.restore": "Przywr\u00f3\u0107",
       "boost.restoreSoon": "Nie ma jeszcze czego przywraca\u0107",
       "boost.later": "Kolejne dzia\u0142ania Boost pojawi\u0105 si\u0119 w nast\u0119pnych wersjach",
@@ -2890,6 +2896,10 @@ function nativeSidebarSide() {
   function boostMenuItems(opts = {}) {
     const lang = resolveWidgetLanguage(opts.language, opts.notesRaw);
     const running = Boolean(opts.running);
+    // OW-91 made the deep pass real. `deep` is offered when the module can do it (it needs the shared tab policy) and
+    // `restore` only when something was actually put to sleep, so a greyed entry now means a fact, not "not yet".
+    const canDeep = opts.canDeep !== false;
+    const undoSize = Number(opts.undoSize) || 0;
     const items = [
       {
         id: "free-light",
@@ -2900,14 +2910,16 @@ function nativeSidebarSide() {
       {
         id: "free-deep",
         label: widgetText(lang, "boost.deep"),
-        available: false,
-        hint: widgetText(lang, "boost.deepSoon"),
+        available: !running && canDeep,
+        hint: canDeep ? "" : widgetText(lang, "boost.deepSoon"),
       },
       {
         id: "restore",
-        label: widgetText(lang, "boost.restore"),
-        available: false,
-        hint: widgetText(lang, "boost.restoreSoon"),
+        label: undoSize
+          ? widgetText(lang, "boost.restoreCount", { count: undoSize })
+          : widgetText(lang, "boost.restore"),
+        available: !running && undoSize > 0,
+        hint: undoSize ? "" : widgetText(lang, "boost.restoreSoon"),
       },
     ];
     return items;
@@ -2918,6 +2930,18 @@ function nativeSidebarSide() {
   function boostResultText(result, opts = {}) {
     const lang = resolveWidgetLanguage(opts.language, opts.notesRaw);
     if (!result || typeof result !== "object") return widgetText(lang, "boost.unknown");
+    // A deep pass says what it put to sleep as well as what it freed; the light pass has nothing to add.
+    if (result.by === "level2" && result.unloaded) {
+      const tabs = Number(result.unloaded.tabs) || 0;
+      const panels = Number(result.unloaded.panels) || 0;
+      if (tabs || panels) {
+        return widgetText(lang, "boost.deepDone", {
+          tabs,
+          panels,
+          mb: Number.isFinite(Number(result.freedMB)) ? Math.round(Number(result.freedMB)) : 0,
+        });
+      }
+    }
     // A finite `freedMB` is the answer; the two readings only matter when it is missing, which is exactly the
     // "this build cannot measure memory" case — the run happened, so say that instead of inventing a number.
     const freed = Number(result.freedMB);
@@ -5607,8 +5631,11 @@ function nativeSidebarSide() {
 
           const paintMenu = () => {
             while (popup.children.length) popup.children[0].remove();
+            const state = typeof api()?.state === "function" ? api().state() : {};
             const items = boostMenuItems({
               running: boostRunning,
+              canDeep: state.policy !== false,
+              undoSize: Number(state.undoSize) || 0,
               language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE),
               notesRaw: getString(NOTES_LANGUAGE_PREF, "en"),
             });
@@ -5656,7 +5683,52 @@ function nativeSidebarSide() {
 
           function runAction(id) {
             if (id === "free-light") return runLight();
+            if (id === "free-deep") return runDeep();
+            if (id === "restore") return runRestore();
             return Promise.resolve(null);
+          }
+
+          // OW-91: one deep pass, with the same "one at a time" rule as the light one. The result carries how many tabs
+          // and panels went to sleep, and the card says so instead of only a number.
+          async function runDeep() {
+            const boost = api();
+            if (!boost || typeof boost.runLevel2 !== "function") return null;
+            if (boostRunning) return null;
+            boostRunning = true;
+            paintMenu();
+            showWidgetToast(tw("boost.busy"));
+            let result = null;
+            try {
+              result = await boost.runLevel2();
+            } catch (_) {
+              result = null;
+            } finally {
+              boostRunning = false;
+              paintMenu();
+            }
+            showWidgetToast(boostResultText(result, {
+              language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE),
+              notesRaw: getString(NOTES_LANGUAGE_PREF, "en"),
+            }));
+            return result;
+          }
+
+          // Restore wakes what the last deep pass put to sleep; the toast reports the count the module restored.
+          function runRestore() {
+            const boost = api();
+            if (!boost || typeof boost.restore !== "function") return Promise.resolve(null);
+            let restored = null;
+            try {
+              restored = boost.restore();
+            } catch (_) {
+              restored = null;
+            }
+            paintMenu();
+            const lang = { language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), notesRaw: getString(NOTES_LANGUAGE_PREF, "en") };
+            if (restored && restored.panels) {
+              showWidgetToast(widgetText(resolveWidgetLanguage(lang.language, lang.notesRaw), "boost.restored", { count: restored.panels }));
+            }
+            return Promise.resolve(restored);
           }
 
           // One click, one pass. While the module works the card says so and refuses a second start, so a person

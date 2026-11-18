@@ -17,6 +17,20 @@
       "label": "Free memory once after startup, when the browser has been quiet for 90 seconds",
       "type": "checkbox",
       "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.boost.keep_pinned",
+      "label": "Unloading may include pinned and Essential tabs",
+      "description": "Off by default: they restore on demand like any tab, but they are your shortlist. Turn this on to let a deep pass include them.",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.boost.shortcut",
+      "label": "Keyboard shortcut for Free memory (light)",
+      "description": "For example Accel+Shift+B. Empty means no shortcut.",
+      "type": "input",
+      "defaultValue": ""
     }
   ],
   "settings": {
@@ -26,6 +40,16 @@
       "owner": "boost"
     },
     "zen.workspace.zentral.boost.startup_trim": {
+      "category": "boost",
+      "section": "Memory",
+      "owner": "boost"
+    },
+    "zen.workspace.zentral.boost.keep_pinned": {
+      "category": "boost",
+      "section": "Memory",
+      "owner": "boost"
+    },
+    "zen.workspace.zentral.boost.shortcut": {
       "category": "boost",
       "section": "Memory",
       "owner": "boost"

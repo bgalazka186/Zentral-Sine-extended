@@ -33,8 +33,29 @@ works and whose **deep** / **Restore** entries are greyed until OW-91. The card'
 | :--- | :------ | :------ |
 | `zen.workspace.zentral.boost.enabled` | `true` | The widget and the API exist (OW-90). |
 | `zen.workspace.zentral.boost.startup_trim` | `true` | The single post-startup trim runs. Off = only explicit "free memory" actions. |
+| `zen.workspace.zentral.boost.keep_pinned` | `false` | A deep pass may include pinned and Essential tabs. |
+| `zen.workspace.zentral.boost.shortcut` | `""` | Keyboard shortcut for the light pass, e.g. `Accel+Shift+B`; empty installs nothing. |
 
 Both are read live, so switching them needs no restart. This module writes nothing to disk and keeps no history.
+
+## Unload what is not in use (B4, `OW-91`)
+
+- **One tab policy.** `loader/ZentralTabPolicy.js` answers "may this tab be unloaded?" for both this module and the
+  middle-click unloader, so the "never" list cannot drift apart: the selected tab, a Zentral host tab, a Notes/Agenda
+  placeholder, an audible tab, a sharing tab, a picture-in-picture tab, the video preview's source tab, an already
+  sleeping tab, and — unless `zen.workspace.zentral.boost.keep_pinned` says otherwise — pinned and Essential tabs.
+  Each refusal is a named reason, which is what `state()` and the tests read.
+- **Deep pass** (`runLevel2()`): Level 1 plus every eligible tab **oldest `lastAccessed` first**, plus the Essential
+  panel records whose own mode is `asleep-allowed`. Sleep is `gBrowser.explicitUnloadTabs([tab])` with the same
+  `discardBrowser` fallback TabUnload uses; panels wake through `loadEssentialInBackground(record, true)`. Nothing is
+  closed, and the selection never moves — a tab that would need a successor is simply not unloaded by a deep run.
+- **Restore** (`restore()`): an in-memory `undoState` (cap 50) of what the last deep run put to sleep. Panels wake
+  immediately; tabs are listed and reload when clicked. The record is deliberately lost on restart.
+- **Panel background modes** (`.setBackgroundMode(appId, mode)`, saved with the app settings): `live` (default for
+  every existing record), `throttled` (a promise nothing in this build breaks) and `asleep-allowed` (the only one a
+  deep pass sleeps). The tile's own context menu carries them under **Background mode**.
+- **Shortcut** (`zen.workspace.zentral.boost.shortcut`, empty by default): two keys minimum, parsed like the app
+  shortcut module's own combinations, and it runs the light pass only — a keystroke never unloads a tab.
 
 ## Public API
 
@@ -43,6 +64,10 @@ Both are read live, so switching them needs no restart. This module writes nothi
 ```js
 ZentralBoost.memoryMB();          // total MB, or null when this build cannot answer
 ZentralBoost.runLevel1();         // Promise<{beforeMB, afterMB, freedMB, by}>
+ZentralBoost.runLevel2();         // Promise<{...same, unloaded:{tabs,panels}, skipped, undoSize}>
+ZentralBoost.restore();           // {panels, tabs} — panels wake now, tabs when clicked
+ZentralBoost.undoSize();          // how many things the last deep run put to sleep
+ZentralBoost.setBackgroundMode(appId, "live" | "throttled" | "asleep-allowed");
 ZentralBoost.onChange(cb);        // one callback for results and samples; returns an unsubscribe
 ZentralBoost.startSampling();     // balanced with stopSampling(); two callers at most (popup, limiter)
 ZentralBoost.lastMB();            // last sampled value
@@ -70,8 +95,8 @@ and is started after the runtime's native-ready barrier. The standalone build ru
 
 ## Not in this file (later tasks)
 
-`OW-91` unloads what is not in use (with one-click Restore), `OW-92` adds the RAM limiter, `OW-93` the per-panel
-background modes, `OW-94` Game Mode. Each adds its own prefs and its own tests; none of them may introduce an interval.
+`OW-92` adds the RAM limiter, `OW-93` the per-panel background behaviours behind the modes this file already stores,
+`OW-94` Game Mode. Each adds its own prefs and its own tests; none of them may introduce an interval.
 
 ## Install as a standalone Sine feature
 

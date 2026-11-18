@@ -230,9 +230,13 @@ test("a missing or throwing reporter manager still frees what it can", async () 
 });
 
 test("nothing is closed, unloaded or reloaded by Level 1", () => {
-  // The module has no browser-closing code at all; the claim is pinned on the source so a later edit cannot add one.
+  // OW-91 added the deep pass, which does unload tabs — so the claim is pinned where it belongs: inside `runLevel1`
+  // itself, from its first line to the next section. An edit that teaches the light pass to close something fails here.
+  const start = SRC.indexOf("function runLevel1()");
+  const body = SRC.slice(start, SRC.indexOf("// Destroy while a Level 1 run is settling", start));
+  assert.ok(body.length > 800, "runLevel1 was found");
   for (const forbidden of ["removeTab", "explicitUnloadTabs", "discardBrowser", "reloadTab"]) {
-    assert.equal(SRC.includes(forbidden), false, `${forbidden} must not appear in the Level 1 module`);
+    assert.equal(body.includes(forbidden), false, `${forbidden} must not appear in runLevel1`);
   }
 });
 

@@ -2703,5 +2703,71 @@
     ctx.retryPanelTask("mobile-menu", () =>
       ctx.safeCall(ensureMobileUaMenuItem, "ensureMobileUaMenuItem"),
     );
+
+    // ---- OW-91 (plan B4.3): the background mode of an Essential panel ------------------------------------------
+    // Three modes on the tile's own menu: Live (unchanged), Throttled (unchanged for now — it is a promise the person
+    // makes, and nothing in this build throttles), and Allow sleep (Boost's deep pass may put this panel to rest). The
+    // value rides the record itself and is saved by `saveEssentialSettings`, so it survives a restart with the rest of
+    // the app's settings and Boost reads exactly what the person set here.
+    const BG_MODES = [
+      ["live", "Background mode: Live"],
+      ["throttled", "Background mode: Throttled"],
+      ["asleep-allowed", "Background mode: Allow sleep"],
+    ];
+    function ensureBackgroundModeMenu() {
+      const popup = document.getElementById("zen-apps-sidebar-tile-context");
+      if (!popup) return false;
+      const anchor =
+        popup.querySelector("#zen-apps-sidebar-mobile-ua-item") ||
+        popup.querySelector("#zen-apps-sidebar-preload-item");
+      if (!anchor) return false;
+      if (popup.querySelector("#zentral-panel-background-mode-menu")) return true;
+      const menu = document.createXULElement("menu");
+      menu.id = "zentral-panel-background-mode-menu";
+      menu.setAttribute("label", "Background mode");
+      const sub = document.createXULElement("menupopup");
+      sub.id = "zentral-panel-background-mode-popup";
+      const items = new Map();
+      for (const [mode, label] of BG_MODES) {
+        const item = document.createXULElement("menuitem");
+        item.id = "zentral-panel-background-mode-" + mode;
+        item.setAttribute("label", label);
+        item.setAttribute("type", "radio");
+        item.setAttribute("name", "zentral-panel-background-mode");
+        item.addEventListener("command", () => {
+          const appId = popup.dataset.activeAppId;
+          const record = appId ? ctx.essentialPanels.get(appId) : null;
+          if (!record) return;
+          record.backgroundMode = mode;
+          ctx.saveEssentialSettings(record);
+          for (const [value, el] of items) {
+            if (value === mode) el.setAttribute("checked", "true");
+            else el.removeAttribute("checked");
+          }
+        });
+        items.set(mode, item);
+        sub.appendChild(item);
+      }
+      menu.appendChild(sub);
+      anchor.insertAdjacentElement("afterend", menu);
+      // Same contract as the native rows: the active app decides visibility and the checked mode, read live so a
+      // Boost deep pass that changed something is visible the next time the menu opens.
+      popup.addEventListener("popupshowing", () => {
+        const appId = popup.dataset.activeAppId || "";
+        // Only Essential records have this mode; a plain app tile has no record to store it on.
+        const record = appId ? ctx.essentialPanels.get(appId) : null;
+        menu.hidden = !record;
+        if (!record) return;
+        const current = record.backgroundMode || "live";
+        for (const [value, el] of items) {
+          if (value === current) el.setAttribute("checked", "true");
+          else el.removeAttribute("checked");
+        }
+      });
+      return true;
+    }
+    ctx.retryPanelTask("background-mode-menu", () =>
+      ctx.safeCall(ensureBackgroundModeMenu, "ensureBackgroundModeMenu"),
+    );
   });
 })();
