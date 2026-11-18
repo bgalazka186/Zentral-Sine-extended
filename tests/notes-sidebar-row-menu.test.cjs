@@ -116,6 +116,73 @@ async function test(name, fn) { await fn(); passed++; console.log("ok - " + name
     }
   });
 
+  await test("OW-98: a contextmenu someone already cancelled still opens our menu", async () => {
+    // The owner's report: a normal tab's right-click wins over ours on a row where a note lives. The cause was the
+    // guard, not the row: `if (event.defaultPrevented) return` read Zen having cancelled the event as "someone else
+    // owns this", and Zen's handler is older than ours, so that was every right-click on every one of our rows. A
+    // cancelled contextmenu on one of OUR rows is exactly the case to take over.
+    const h = await host();
+    try {
+      const note = h.seam.store.create("Prevented note");
+      h.seam.zen.runNow();
+      const tab = noteTabOf(h, note.id);
+      assert.ok(tab, "the note has a sidebar row");
+
+      // Cancelled before our listener is reached, which is what an older capture listener does.
+      const event = new h.Ev("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 120, clientY: 240 });
+      event.preventDefault();
+      assert.equal(event.defaultPrevented, true, "the event arrives already cancelled");
+      tab.dispatchEvent(event);
+
+      const menu = ownMenu(h);
+      assert.ok(menu, "our menu opens anyway — this is the bug the owner reported");
+      const labels = menu.querySelectorAll("menuitem").map((m) => m.getAttribute("label"));
+      assert.ok(labels.includes("Open note"), "with the note's own actions");
+      assert.equal(event.defaultPrevented, true, "and Zen's native menu stays suppressed");
+    } finally {
+      await h.destroy();
+    }
+  });
+
+  await test("OW-98: a plain tab is still Zen's, even after our rows were used", async () => {
+    // The fix must not spill: taking over a cancelled event is only ever for our own rows.
+    const h = await host();
+    try {
+      const note = h.seam.store.create("Mine");
+      h.seam.zen.runNow();
+      const ourTab = noteTabOf(h, note.id);
+      const press = new h.Ev("mousedown", { bubbles: true, cancelable: true, button: 2 });
+      ourTab.dispatchEvent(press);
+
+      h.window.gBrowser.addTab("https://example.com/", { deferTabOpen: true });
+      const foreign = h.document.querySelectorAll("tab").find((t) => (t.linkedBrowser?.currentURI?.spec || "") === "https://example.com/");
+      const event = rightClick(h, foreign);
+      assert.equal(event.defaultPrevented, false, "the foreign tab keeps Zen's menu");
+      assert.equal(ownMenu(h), null, "and ours never opens for it");
+    } finally {
+      await h.destroy();
+    }
+  });
+
+  await test("OW-98: the press alone opens our menu, before any contextmenu arrives", async () => {
+    // On a Zen that opens its tab menu from the button press, the contextmenu may never be ours to answer. The press
+    // handler must therefore be enough on its own — but only on our rows.
+    const h = await host();
+    try {
+      const note = h.seam.store.create("Press-only note");
+      h.seam.zen.runNow();
+      const tab = noteTabOf(h, note.id);
+      assert.ok(tab);
+      const press = new h.Ev("pointerdown", { bubbles: true, cancelable: true, button: 2, clientX: 120, clientY: 240 });
+      tab.dispatchEvent(press);
+      const event = rightClick(h, tab);
+      assert.equal(event.defaultPrevented, true, "our row answers the right-click");
+      assert.ok(ownMenu(h), "and the menu is ours");
+    } finally {
+      await h.destroy();
+    }
+  });
+
   await test("a foreign tab keeps Zen's native menu, ours never opens", async () => {
     const h = await host();
     try {

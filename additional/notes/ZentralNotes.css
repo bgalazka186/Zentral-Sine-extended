@@ -1445,6 +1445,34 @@
    the controls and a wrapped header would move them out from between the name and the period. The name ellipsises
    instead, which is what the owner asked for (the controls outrank the name). */
 .zentral-notes-sheet .zn-calendar-pane-head { flex-wrap: nowrap; row-gap: 2px; min-width: 0; }
+/* OW-97: when the header runs out of room, it gives up its pieces in the owner's order and never pushes anything out of
+   the window. Three rules, in order of what goes first:
+     1. the calendar's name ("Calendar"), which is the least informative thing in the row;
+     2. the long period ("17 Nov 2026 – 4 Jan 2027"), which is useful but is repeated by the grid below it;
+     3. only then does the row stop shrinking, and the buttons keep every pixel they had.
+   The controls (prev/today/next/the view toggle, then settings and Big Picture) are `flex: 0 0 auto` and never shrink;
+   the name starts from a tiny `flex-basis` so it is the first to lose width, and the period comes next. */
+.zentral-notes-sheet .zn-calendar-pane-head > strong { flex: 0 1 auto; min-width: 0; }
+.zentral-notes-sheet .zn-calendar-head-nav { flex: 0 0 auto; }
+.zentral-notes-sheet .zn-calendar-head-nav > .zn-chip { flex: 0 0 auto; }
+.zentral-notes-sheet .zn-calendar-pane-head-right { flex: 0 1 auto; min-width: 0; }
+.zentral-notes-sheet .zn-calendar-pane-head-right > .zn-btn { flex: 0 0 auto; }
+/* The name goes first: it may shrink to nothing before the period loses a character. */
+.zentral-notes-sheet .zn-calendar-pane-head > strong { flex-shrink: 999; }
+/* Then the period, which keeps its text but ellipsises. */
+.zentral-notes-sheet .zn-calendar-pane-hint { flex: 0 1 auto; flex-shrink: 1; }
+/* The two icon buttons are chips like prev/next: a fixed square, so a word in a translation can never widen them again. */
+.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-today,
+.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-view-toggle { width: 26px; height: 24px; padding: 0; justify-content: center; }
+.zentral-notes-sheet .zn-calendar-today { position: relative; }
+/* "Today" is a calendar with a dot in the last row: the glyph alone in a row of arrows reads as "go to a date". */
+.zentral-notes-sheet .zn-calendar-today-dot { position: absolute; right: 5px; bottom: 4px; width: 3px; height: 3px; border-radius: 50%; background: currentColor; }
+/* The view toggle points where the next press goes: down to the week, up back to the month. */
+.zentral-notes-sheet .zn-calendar-view-toggle[data-next="week"] svg { transform: rotate(0deg); }
+.zentral-notes-sheet .zn-calendar-view-toggle[data-next="month"] svg { transform: rotate(180deg); }
+.zentral-notes-sheet .zn-calendar-view-toggle svg { transition: transform .12s ease; }
+@media (prefers-reduced-motion: reduce) { .zentral-notes-sheet .zn-calendar-view-toggle svg { transition: none; } }
+
 .zentral-notes-sheet .zn-calendar-pane-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .zentral-notes-sheet[data-all-chrome="compact"] .zn-head,
 .zentral-notes-sheet[data-all-chrome="tight"] .zn-head { padding: 2px 4px; gap: 1px; }

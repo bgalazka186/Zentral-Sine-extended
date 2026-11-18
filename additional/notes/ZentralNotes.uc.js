@@ -1597,7 +1597,7 @@
     // calendar) the view keys still have to be known, or `setMeta` would put them back into meta.json. This list is a
     // mirror of `CALENDAR_PART.UI_STATE_KEYS` and a test keeps the two equal.
     const UI_KEYS_FALLBACK = Object.freeze(["calendarView", "calendarCursor", "calendarTab", "calendarLayout",
-      "calendarSplitLR", "calendarSplitTB", "calendarTreeCollapsed", "calendarPaneCollapsed",
+      "calendarSplitLR", "calendarSplitTB", "calendarTreeWidth", "calendarTreeCollapsed", "calendarPaneCollapsed",
       "calendarFiltersCollapsed", "calendarBigPictureFiltersCollapsed", "calendarBigPictureTreeCollapsed", "calendarBigPictureSize",
       "calendarScale", "calendarPicker", "calendarWeekStart", "calendarWeekNumbers", "calendarWeekSpan",
       "calendarSnap", "calendarDaysForward", "calendarFilterKind", "calendarFilterCategory",
@@ -7780,7 +7780,7 @@
         // T3.8: the note shown beside the edited one ("" = no second pane).
         splitCompanion: { id: "", share: 50, side: "auto" },
         allNewChoice: "note", calendarClockMode: "both", spellLanguages: [],
-        calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarFiltersCollapsed: false, calendarBigPictureFiltersCollapsed: false, calendarBigPictureTreeCollapsed: false, calendarTab: "tree",
+        calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarTreeWidth: 0, calendarFiltersCollapsed: false, calendarBigPictureFiltersCollapsed: false, calendarBigPictureTreeCollapsed: false, calendarTab: "tree",
         calendarBigPictureSize: CALENDAR_PART ? CALENDAR_PART.DEFAULT_CALENDAR_BIG_PICTURE_SIZE : 90,
         calendarView: "month", calendarWeekStart: 1, calendarWeekNumbers: false, calendarWeekSpan: { days: 7, anchor: "weekStart" }, calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarBigPictureFilterKind: "all", calendarBigPictureFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
         // The hours Week and Day show ({ on, startMin, endMin }; off = the whole day). Replaced as a whole, never changed in place.
@@ -17285,7 +17285,10 @@
       // OW-74: the basic controls live in the header, between the calendar name and the long period name, so hiding the
       // control strip can never take away the means to move between months or come back to today. They are MOVED into
       // this slot (not copied): the strip keeps the same three nodes, so there is one button, one id and one listener.
-      const btnCalendarViewToggle = h("button", { type: "button", class: "zn-chip zn-calendar-view-toggle", "aria-label": t("cal.view.toggleAria") }, t("cal.view.month"));
+      // OW-97: a chevron, for the same reason. It points the way the view will move — a down chevron when the next
+      // press shows the week, an up one when it goes back to the month — so the glyph alone says what the click does.
+      const btnCalendarViewToggle = h("button", { type: "button", class: "zn-chip zn-calendar-view-toggle", "aria-label": t("cal.view.toggleAria") },
+        icon("chevron", 14));
       const calendarHeadNav = h("div", { class: "zn-calendar-head-nav", role: "group", "aria-label": t("cal.headNav.aria") });
       const calendarHeader = h("div", { class: "zn-calendar-pane-head" }, calendarHeadingEl, calendarHeadNav, calendarHeadRight);
       // Zen can close a panel when a native <select> opens its platform popup. Calendar controls therefore use
@@ -17298,7 +17301,12 @@
       // Week and Day only: one press switches between the chosen hours and all 24 (the hours themselves: Tools).
       const calendarHoursToggle = h("button", { type: "button", class: "zn-chip zn-calendar-hours-toggle", "aria-pressed": "false", "aria-label": t("cal.hours.showOnlyAria", { hours: "08:00–20:00" }) }, "08–20");
       const calendarPrev = h("button", { type: "button", class: "zn-chip zn-calendar-nav", "aria-label": t("cal.nav.prevPeriod"), title: t("cal.nav.prevPeriod") }, "‹");
-      const calendarToday = h("button", { type: "button", class: "zn-chip zn-calendar-today", title: t("cal.todayBtn") }, t("cal.todayBtn"));
+      // OW-97: an icon, not the words "Go to today". The label is long in every language and the header has to give
+      // its room to the title and the dates first; the glyph is a calendar (the same one the pane's own heading uses)
+      // with a filled dot under it, which is how every calendar app draws "today". The words live on in the title and
+      // the accessible name, so nothing is lost to a screen reader or a tooltip.
+      const calendarToday = h("button", { type: "button", class: "zn-chip zn-calendar-today", title: t("cal.todayBtn"), "aria-label": t("cal.todayBtn") },
+        icon("calendar", 14), h("span", { class: "zn-calendar-today-dot", "aria-hidden": "true" }));
       const calendarNext = h("button", { type: "button", class: "zn-chip zn-calendar-nav", "aria-label": t("cal.nav.nextPeriod"), title: t("cal.nav.nextPeriod") }, "›");
       const calendarDaysSelect = h("button", { type: "button", class: "zn-chip zn-calendar-days-select", "aria-label": t("cal.days.forwardAria"), "aria-haspopup": "menu" }, tCount("cal.days", 7));
       const calendarKindSelect = h("button", { type: "button", class: "zn-chip zn-calendar-kind-filter", "aria-label": t("cal.filter.kindAria"), "aria-haspopup": "menu" }, t("cal.filter.allItems"));
@@ -17738,7 +17746,9 @@
         const isWeek = view === "week";
         // The label names where the press will take you, so a person in Month reads "Week" and vice versa.
         btnCalendarViewToggle.dataset.value = isWeek ? "week" : "month";
-        btnCalendarViewToggle.textContent = t(isWeek ? "cal.view.month" : "cal.view.week");
+        // Never text: the button is a glyph, and writing a word here would put the crowding back.
+        btnCalendarViewToggle.dataset.next = isWeek ? "month" : "week";
+        btnCalendarViewToggle.replaceChildren(icon("chevron", 14));
         btnCalendarViewToggle.setAttribute("aria-pressed", isWeek ? "true" : "false");
         btnCalendarViewToggle.setAttribute("aria-label", t("cal.view.toggleAria"));
         btnCalendarViewToggle.title = t("cal.view.toggleTitle");
@@ -17818,10 +17828,41 @@
         const share = picked.orientation === "lr"
           ? CALENDAR_PART?.cleanCalendarShare?.(store.meta.calendarSplitLR, 0.36) ?? 0.36
           : CALENDAR_PART?.cleanCalendarShare?.(store.meta.calendarSplitTB, 0.42) ?? 0.42;
-        // OW-80: the card's tree slot carries the share there; setting a flex-basis on the moved pane would fight it.
-        if (!bigPicture) treePane.style.flexBasis = `${Math.round(share * 1000) / 10}%`;
-        else treePane.style.removeProperty("flex-basis");
-        applyTreePaneSqueeze(treePaneEffectiveWidth(dims, picked.orientation, share, active, tabs, calendarCollapsed));
+        // OW-97: the tree is a fixed width and the calendar takes what is left, so stretching the window widens only
+        // the calendar. The old percentage share is still read once, to seed the width for anyone who had set one, and
+        // it is still what a drag in the horizontal (top/bottom) layout means — there the split is a height, not a
+        // width, and a pixel width would be the wrong unit.
+        // A document written before this rule has a share and no width: the width is seeded from the share once, at
+        // the window it is being read in, and stored, so the next stretch of the window moves only the calendar.
+        const storedWidth = Number(store.meta.calendarTreeWidth) > 0
+          ? store.meta.calendarTreeWidth
+          : Math.round((Number(dims?.width) || 0) * share);
+        const treeWidth = picked.orientation === "lr"
+          ? CALENDAR_PART?.clampTreePaneWidth?.(storedWidth, Number(dims?.width) || 0)
+            ?? null
+          : null;
+        // A collapsed calendar or the tabs layout gives the tree the whole pane: a fixed width there would leave a
+        // permanent gap where the calendar used to be, which is the one thing a pixel width can get wrong and a share
+        // could not. The width only applies while both panes are actually side by side.
+        const widthApplies = !bigPicture && !calendarCollapsed && !tabs;
+        if (!bigPicture && widthApplies) {
+          if (treeWidth) {
+            treePane.style.flex = `0 0 ${treeWidth}px`;
+            treePane.style.removeProperty("flex-basis");
+          } else if (picked.orientation === "lr") {
+            treePane.style.removeProperty("flex");
+            treePane.style.flexBasis = `${Math.round(share * 1000) / 10}%`;
+          } else {
+            treePane.style.removeProperty("flex");
+            treePane.style.flexBasis = `${Math.round(share * 1000) / 10}%`;
+          }
+        } else {
+          treePane.style.removeProperty("flex-basis");
+          treePane.style.removeProperty("flex");
+        }
+        // The same condition as the style above: a width that does not apply must not squeeze the tree either, or the
+        // rows would compact themselves for a pane that is not beside them.
+        applyTreePaneSqueeze((widthApplies && treeWidth) || treePaneEffectiveWidth(dims, picked.orientation, share, active, tabs, calendarCollapsed));
         allSplitter.setAttribute("aria-orientation", picked.orientation === "lr" ? "vertical" : "horizontal");
         allSplitter.setAttribute("aria-valuenow", String(Math.round(share * 100)));
         allSplitter.setAttribute("aria-valuetext", t("tree.layout.splitterText", { percent: Math.round(share * 100) }));
@@ -17856,7 +17897,11 @@
         calendarPrev.title = t("cal.nav.prevPeriod");
         calendarPrev.setAttribute("aria-label", t("cal.nav.prevPeriod"));
         calendarToday.title = t("cal.todayBtn");
-        calendarToday.textContent = t("cal.todayBtn");
+        calendarToday.setAttribute("aria-label", t("cal.todayBtn"));
+        // The glyph and its dot are built once, in the header; a re-translate must not turn the button back into words.
+        if (!calendarToday.querySelector("svg")) {
+          calendarToday.replaceChildren(icon("calendar", 14), h("span", { class: "zn-calendar-today-dot", "aria-hidden": "true" }));
+        }
         calendarNext.title = t("cal.nav.nextPeriod");
         calendarNext.setAttribute("aria-label", t("cal.nav.nextPeriod"));
         calendarViewSelect.setAttribute("aria-label", t("cal.view.aria"));
@@ -17900,11 +17945,21 @@
         if (!calendarSplitDrag) return;
         const clean = CALENDAR_PART.cleanCalendarShare(share, calendarSplitDrag.startShare);
         calendarSplitDrag.share = clean;
+        // OW-97: a left/right drag sets a width in pixels; only a top/bottom drag is still a share, because there the
+        // splitter moves a height. The width is taken from the drag itself, not read back from the DOM, so the pane
+        // follows the pointer exactly and hands the rest to the calendar.
+        if (calendarSplitDrag.orientation === "lr") {
+          const width = CALENDAR_PART.clampTreePaneWidth(Math.round(clean * calendarSplitDrag.width), calendarSplitDrag.width);
+          calendarSplitDrag.treeWidth = width;
+          treePane.style.removeProperty("flex-basis");
+          treePane.style.flex = `0 0 ${width}px`;
+          applyTreePaneSqueeze(width);
+          allSplitter.setAttribute("aria-valuenow", String(width));
+          allSplitter.setAttribute("aria-valuetext", `${width} pixels for the notes tree`);
+          return;
+        }
         treePane.style.flexBasis = `${Math.round(clean * 1000) / 10}%`;
-        const dragTreeW = calendarSplitDrag.orientation === "lr"
-          ? Math.max(0, Math.round(calendarSplitDrag.width * clean - 7))
-          : calendarSplitDrag.width;
-        applyTreePaneSqueeze(dragTreeW);
+        applyTreePaneSqueeze(calendarSplitDrag.width);
         allSplitter.setAttribute("aria-valuenow", String(Math.round(clean * 100)));
         allSplitter.setAttribute("aria-valuetext", `${Math.round(clean * 100)} percent for folder tree`);
       }
@@ -17912,8 +17967,14 @@
         if (!calendarSplitDrag) return;
         const drag = calendarSplitDrag;
         calendarSplitDrag = null;
-        const key = drag.orientation === "lr" ? "calendarSplitLR" : "calendarSplitTB";
-        store.setMeta({ [key]: drag.share });
+        // Both keys are written on a left/right drag: the width is what draws, and the share stays in step so a user
+        // who switches to the top/bottom layout — or has an older version restore this document — still lands where
+        // they were, instead of on a split they never chose.
+        if (drag.orientation === "lr") {
+          store.setMeta({ calendarTreeWidth: Number(drag.treeWidth) || CALENDAR_PART.cleanTreePaneWidth(store.meta.calendarTreeWidth), calendarSplitLR: drag.share });
+          return;
+        }
+        store.setMeta({ calendarSplitTB: drag.share });
       }
       // The "All notes" menu's new-item row: the label depends on what the store and the Agenda offer.
       function syncAllNewButton() {
@@ -19385,8 +19446,11 @@
         calendarContent.setAttribute("aria-label", t("cal.itemsRegion.aria"));
         calendarPrev.setAttribute("aria-label", t("cal.nav.prevPeriod"));
         calendarNext.setAttribute("aria-label", t("cal.nav.nextPeriod"));
-        calendarToday.textContent = t("cal.todayBtn");
         calendarToday.title = t("cal.todayBtn");
+        calendarToday.setAttribute("aria-label", t("cal.todayBtn"));
+        if (!calendarToday.querySelector("svg")) {
+          calendarToday.replaceChildren(icon("calendar", 14), h("span", { class: "zn-calendar-today-dot", "aria-hidden": "true" }));
+        }
         calendarViewSelect.setAttribute("aria-label", t("cal.view.aria"));
         calendarSizeSelect.setAttribute("aria-label", t("cal.size.aria"));
         calendarSnapSelect.setAttribute("aria-label", t("cal.snap.aria"));
@@ -21014,6 +21078,10 @@
         // OW-96: one read of the widget's forecast for the whole render, then a map lookup per day. The card owns the
         // fetching; the calendar only asks what it already has, so a calendar render never starts a network request.
         const calWeather = mode === "week" ? calendarWeatherByDay(nowMs()) : null;
+        // OW-99: the row-start test used to be `days.indexOf(day)` inside three loops — a quadratic scan, twice over,
+        // on the one path (48 days) where it matters, and computed twice on the 7-day path where the answer is never
+        // used. A counter and one `rows === 2` guard cost nothing and say the same thing.
+        let headIndex = 0;
         for (const day of days) {
           const isToday = C.localDateKey(day) === todayKey;
           const wf = calendarWorkFreeInfo(day);
@@ -21027,7 +21095,8 @@
           dayHead.addEventListener("click", () => { store.setMeta({ calendarCursor: C.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); });
           bindCalendarDayContext(dayHead, day);
           // Each wrapped row starts on its own line under column one, never half a column off.
-          if (weekRowPlan.rows === 2 && days.indexOf(day) % headPerRow === 0) dayHead.style.gridColumnStart = "1";
+          if (weekRowPlan.rows === 2 && headIndex % headPerRow === 0) dayHead.style.gridColumnStart = "1";
+          headIndex++;
           header.append(dayHead);
         }
         const allDayRow = h("div", { class: "zn-cal-time-allday-row", "aria-label": t("cal.allDayRow.aria") });
@@ -21040,12 +21109,15 @@
           allDayRow.dataset.rows = "2";
         }
         allDayRow.append(h("span", { class: "zn-cal-time-all-label" }, t("cal.allDay")));
+        // Its own counter: this loop walks `workDays`, which a patch narrows, so it cannot share the header's index.
+        let allDayIndex = 0;
         for (const day of workDays) {
           const isToday = C.localDateKey(day) === todayKey;
           const cell = h("div", { class: "zn-cal-time-allday-cell" + (isToday ? " is-today" : ""), tabindex: "0", "aria-label": t("cal.allDayFor.aria", { day: fmt(day) }), "data-day": C.ymd(new Date(day)) });
           applyWorkFreeAttrs(cell, calendarWorkFreeInfo(day));
           bindCalendarDayContext(cell, day);
-          if (weekRowPlan.rows === 2 && days.indexOf(day) % headPerRow === 0) cell.style.gridColumnStart = "2";
+          if (weekRowPlan.rows === 2 && allDayIndex % headPerRow === 0) cell.style.gridColumnStart = "2";
+          allDayIndex++;
           for (const item of C.allDayOf(expanded, day)) {
             const button = calendarItemButton(item, true);
             // A drag in the all-day row moves a reminder by days and never reads the height of an hour (which is not
@@ -21154,6 +21226,7 @@
         // A patch cannot re-flow a grid whose shape changed: the caller draws the whole view instead.
         if (patch && weekRowPlan.rows !== 1) return "refit";
         const work = C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK);
+        let columnIndex = 0;
         for (const day of workDays) {
           const dayKey = C.localDateKey(day);
           const { bounds, entries } = laidOut.get(dayKey);
@@ -21268,7 +21341,9 @@
           applyWorkFreeAttrs(col, calendarWorkFreeInfo(day));
           // The row comes from the day's place in `days`, not in `workDays`: a patch draws a subset, and the row a
           // column belongs to must not move because its neighbours were skipped.
-          if (weekRowPlan.rows === 2 && days.indexOf(day) % perRow === 0) { col.style.gridColumnStart = "1"; col.classList.add("is-row-start"); }
+          // Same counter rule as the two rows above: `workDays` is what is drawn, so it is what decides the row.
+          if (weekRowPlan.rows === 2 && columnIndex % perRow === 0) { col.style.gridColumnStart = "1"; col.classList.add("is-row-start"); }
+          columnIndex++;
           columns.append(col);
         }
         gridRow.dataset.rows = String(weekRowPlan.rows);
@@ -35441,9 +35516,19 @@
         else focus();
       }
       // One place decides whether a right-click gets our menu: only our own rows, and only when nothing else took it.
+      //
+      // OW-98: `event.defaultPrevented` used to be the first word, and that is what let Zen win. Zen opens its tab
+      // menu from its own handler, and whichever listener is older runs first — ours is added when Notes loads, Zen's
+      // when the window is built. On our own rows ours therefore ran *after* Zen had already cancelled the event, and
+      // the guard turned our menu off exactly where it was wanted. The guard is now only about events something else
+      // has already claimed *in a way that is not Zen's tab menu*: a click inside one of our own popups, a synthetic
+      // event with no target, and the popupshowing path. A cancelled contextmenu on one of our rows is precisely the
+      // case to take over, not to skip.
       function onOwnRowContextMenu(event) {
-        // Clicks inside one of our own menus, and `popupshowing` alone, never arrive here.
-        if (disposed || event.defaultPrevented) return;
+        if (disposed) return;
+        if (event?.__znOwnRowMenu) return;
+        // A click inside one of our own menus never arrives here, but a nested popup's own contextmenu can.
+        if (pseudoEventInside(event, ownRowMenu)) return;
         const own = ownRowOf(event);
         if (!own || (own.kind === "note" && zenMode() === "off")) return;
         // Ctrl/Meta keep Zen's native menu reachable for one click without hunting a submenu.
@@ -35451,6 +35536,24 @@
         if (!openOwnRowMenu(event, own)) return;
         event.preventDefault?.();
         event.stopImmediatePropagation?.();
+      }
+
+      // OW-98, the other half: on a real Zen the native tab menu is not always opened from a `contextmenu` listener we
+      // can out-order — some tabs open it from the button press itself. This takes the press before anything above it
+      // can act on it, and only on our own rows: a plain tab keeps every millisecond of Zen's behaviour.
+      //
+      // It is deliberately a *silent* claim: the press is not cancelled (focus and selection still happen the way the
+      // sidebar does them), and no menu is opened here — `contextmenu` still comes and `onOwnRowContextMenu` opens ours.
+      // What the press does is remember that Zen must not answer this one, so `onTabMenuShowing` can keep our native
+      // rows out of a menu that opened before our contextmenu handler ran.
+      let ownRowPress = 0;
+      function onOwnRowPress(event) {
+        if (disposed || !event || event.button !== 2) return;
+        const own = ownRowOf(event);
+        if (!own || (own.kind === "note" && zenMode() === "off")) return;
+        if (event.ctrlKey || event.metaKey) return;
+        // The timestamp lets `onTabMenuShowing` tell "Zen opened its menu for this press" from a stale flag.
+        ownRowPress = Date.now();
       }
       const ZEN_MENU_ITEMS = [
         ["open", "sidebar.note.open", (tab) => activateZenTab(tab)],
@@ -35476,6 +35579,15 @@
         const menu = ev.target;
         if (menu?.id !== "tabContextMenu") return;
         const tab = window.TabContextMenu?.contextTab;
+        // OW-98: our row, pressed just now → our own menu owns this click. Close the native one before it is drawn, so
+        // there is never a frame with two menus, and say so plainly rather than showing native items beside ours.
+        if (tab && Date.now() - ownRowPress < 1200 && ownRowOf({ target: tab })?.kind) {
+          ownRowPress = 0;
+          try { menu.hidePopup?.(); } catch (_) {}
+          zenCtxTab = null;
+          document.documentElement.removeAttribute("zentral-notes-ctx");
+          return;
+        }
         zenCtxTab = tab && zenNoteIdFromTab(tab) && zenManagedTab(tab) ? tab : null;
         // Our items exist only for our tabs: for any other tab they are hidden and the native menu is untouched.
         for (const own of menu.querySelectorAll("[zentral-notes-own]")) own.hidden = !zenCtxTab;
@@ -35636,6 +35748,9 @@
         window[act]("popupshowing", notesHoverCard.popup, true);
         window[act]("resize", notesHoverCard.position, true);
         for (const ty of ["mousedown", "click", "mouseup", "auxclick"]) window[act](ty, onZenMouse, true);
+        // OW-98: the press, so a native tab menu Zen opened from the button cannot keep our rows to itself. It lives
+        // with the rest of the sidebar binding, so turning the feature off removes it with everything else.
+        window[act]("pointerdown", onOwnRowPress, true);
         for (const ty of ZEN_TAB_EVENTS) window[act](ty, onZenTabEvent, true);
         for (const ty of ["FolderGrouped", "FolderUngrouped"]) window[act](ty, onZenFolderEvent, true);
         window[act]("TabAttrModified", onZenAttr, true);

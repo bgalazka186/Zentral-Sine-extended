@@ -207,12 +207,17 @@ const io = {
 
   // The month/week toggle writes the same state as the view menu and they agree.
   const viewSelect = root.querySelector(".zn-calendar-view-select");
-  assert.equal(toggle.textContent.trim(), en.strings["cal.view.week"], "in Month the toggle offers Week");
+  // OW-97: the toggle is a glyph now, and its DIRECTION says what the next press offers. The words live on in the
+  // title and the accessible name; asserting textContent here would pin the very thing the owner asked to remove.
+  assert.equal(toggle.dataset.next, "week", "in Month the toggle offers Week");
+  assert.ok(toggle.querySelector("svg"), "and it draws that offer as a chevron, not as a word");
+  assert.equal(toggle.textContent.trim(), "", "no word in it at all");
   toggle.click();
   await flushRaf();
   assert.equal(store.meta.calendarView, "week", "the toggle switched to Week");
   assert.equal(viewSelect.textContent.trim(), en.strings["cal.view.week"], "the view menu follows the toggle");
-  assert.equal(toggle.textContent.trim(), en.strings["cal.view.month"], "the toggle now offers Month");
+  assert.equal(toggle.dataset.next, "month", "the toggle now offers Month");
+  assert.equal(toggle.textContent.trim(), "", "still a glyph, never a word");
   assert.equal(toggle.getAttribute("aria-pressed"), "true", "the toggle reads as pressed while Week is shown");
   toggle.click();
   await flushRaf();

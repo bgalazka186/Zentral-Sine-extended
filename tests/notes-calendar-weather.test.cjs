@@ -131,4 +131,17 @@ test("the widget publishes the cache seam the calendar relies on", () => {
   assert.ok(!/\bfetch\(|requestRefresh/.test(body), "and it cannot trigger one either");
 });
 
+test("the widget hands back the same list for the same reading, not a new one per calendar render", () => {
+  // OW-99: a 48-day week repaints on every scroll step and asks the widget each time. The reading is one object
+  // between refreshes, so the mapped list is built once and the identity proves it — a fresh array each time would be
+  // invisible in a test that only compared values.
+  const body = WIDGETS_SRC.slice(WIDGETS_SRC.indexOf("weatherDays: () => {"), WIDGETS_SRC.indexOf("weatherDays: () => {") + 1400);
+  assert.match(body, /weatherDaysCache\.source === cached/, "the cache is keyed on the reading's own identity");
+  assert.match(body, /weatherDaysCache = \{ source: cached, list: result \}/, "and remembers exactly that reading");
+  // The declaration has to be above the API object that closes over it, or the first call is a TDZ throw.
+  const decl = WIDGETS_SRC.indexOf("let weatherDaysCache");
+  const api = WIDGETS_SRC.indexOf("const api = {");
+  assert.ok(decl > 0 && decl < api, "declared before the API object, not after it");
+});
+
 console.log(`\n${passed} calendar-weather tests passed`);

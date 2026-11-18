@@ -28,4 +28,26 @@ const flush = async () => { for (let i = 0; i < 5; i++) { raf.splice(0).forEach(
     console.log(`Day calendar redraw ${count}: ${elapsed.toFixed(1)}ms`);
     sheet.destroy(); await store.close();
   }
+
+  // OW-96/OW-99: the 48-day week is the widest thing this calendar draws, and it is where a quadratic row test or a
+  // per-render allocation shows. It gets its own budget so a future change to the wrapping cannot quietly double it.
+  for (const count of [0, 200]) {
+    files.clear();
+    const store = c.createStore({ io, notify() {}, windowId: "calendar-perf-week", getDir: async () => "/perf", getMaxSaveMs: () => 1000, setTimer: setTimeout, clearTimer: clearTimeout });
+    await store.open(); store.create("Week performance"); const day = C.dayStart(Date.now());
+    for (let i = 0; i < count; i++) store.items.upsert({ id: "wk-" + i, summary: "Item " + i, start: { dateTime: new Date(day + (i % 40) * 86400000 + 9 * 3600000).toISOString() }, x: { kind: "event", src: "manual" } });
+    store.setMeta({ calendarView: "week", calendarWeekSpan: { days: 48, anchor: "today" }, calendarCursor: C.localDateKey(day) });
+    await store.flush();
+    const host = new El("div"), adapter = { position: "fixed", host, attach: root => host.append(root), getArea: () => ({ left: 0, top: 0, width: 2200, height: 720 }), watch: () => () => {}, setActive() {}, rewatch() {} };
+    const sheet = c.createSheet({ store, adapter, env: { getPref: (_k, d) => d, setPref() {}, openLink() {} }, ensureStore: () => store.open() }); sheet.root.ownerDocument = document;
+    await sheet.open(); await flush(); sheet.root.all().find(el => el.title === "All notes").click(); await flush();
+    const heads = sheet.root.querySelectorAll(".zn-cal-time-day-head");
+    assert.equal(heads.length, 48, `48 day heads are drawn (got ${heads.length})`);
+    const start = performance.now(); sheet.refreshCalendar(); const elapsed = performance.now() - start;
+    // 48 columns is six times the days of a normal week; the ceiling is scaled from the same budget, generously.
+    const ceiling = scaleBudget(count === 0 ? 6000 : 14000);
+    assert.ok(elapsed < ceiling, `48-day week render took ${elapsed.toFixed(1)}ms (ceiling ${ceiling.toFixed(0)}ms)`);
+    console.log(`48-day week redraw (${count} items): ${elapsed.toFixed(1)}ms`);
+    sheet.destroy(); await store.close();
+  }
 })().catch(e => { console.error(e); process.exitCode = 1; });

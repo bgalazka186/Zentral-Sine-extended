@@ -5100,6 +5100,10 @@
 
       syncWidgetsAndLayout();
 
+      // OW-99: the calendar's read of the weather (see `weatherDays` below). Declared above the API object, because a
+      // card-scoped `let` placed after the function that writes it is a TDZ throw the first time it is asked.
+      let weatherDaysCache = { source: null, list: [] };
+
       const api = {
         core,
         registerWidget,
@@ -5123,6 +5127,8 @@
             scheduler.refresh(id, { force: true, area: lastArea });
           }
         },
+        // Declared here, above its only writer: a card-scoped `let` below the function that assigns it is a TDZ throw
+        // the first time the calendar asks (the same trap the weather card's own `repaintWeather` hit in OW-95).
         getCachedValue: (id) => scheduler.getCached(normalizeWidgetId(id) || id),
         // OW-96: the calendar draws one small symbol per day from this, and it must not have to know how the widget
         // stores its cache. Read-only on purpose: the calendar asks, the widget owns the request and the refresh.
@@ -5131,9 +5137,13 @@
           try {
             const cached = scheduler.getCached("weather");
             if (!cached) return [];
+            // OW-99: the calendar asks once per week render, and at 48 days that is a render per scroll. The reading is
+            // the same object between refreshes, so the mapped list is built once per reading and handed back as-is —
+            // the caller must not mutate it, which the comment above says.
+            if (weatherDaysCache.source === cached) return weatherDaysCache.list;
             const days = Array.isArray(cached.week) ? cached.week : [];
             const units = cleanWeatherUnits(cached.units);
-            return days
+            const result = days
               .filter((day) => day && typeof day.date === "string" && day.date)
               .map((day) => ({
                 key: String(day.date).slice(0, 10),
@@ -5143,6 +5153,8 @@
                 low: day.low,
                 units,
               }));
+            weatherDaysCache = { source: cached, list: result };
+            return result;
           } catch (_) {
             return [];
           }
