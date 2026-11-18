@@ -3236,6 +3236,24 @@
         let queuedFullScan = false;
         let sources = [];
         let current = null;
+        // OW-113: Boost asks for the tab behind the sidebar's selected video source before it unloads anything.
+        // `current` is the module state every controller already writes (`deps.current = source`), so a getter over
+        // it needs no second writer, no listener and no polling. A panel-only source has no ordinary tab, and a
+        // disconnected/closing tab is not a live source. Destroy removes the getter (see below).
+        const sourceTabGetter = () => {
+          const sourceTab = current?.tab;
+          return sourceTab && sourceTab.isConnected !== false && !sourceTab.closing
+            ? sourceTab
+            : null;
+        };
+        let sourceTabGetterInstalled = false;
+        try {
+          Object.defineProperty(window, "__zentralVideoSourceTab", {
+            configurable: true,
+            get: sourceTabGetter,
+          });
+          sourceTabGetterInstalled = true;
+        } catch (_) {}
         let box = null;
         let canvas = null;
         let caption = null;
@@ -3848,6 +3866,19 @@
         window.addEventListener("scroll", onVisibilityWake, true);
         function destroy() {
           if (disposed) return;
+          // OW-113: never leave a stale source tab published after this window's preview is gone. Only delete the
+          // property if it is still OUR getter — a newer instance may have replaced it.
+          if (sourceTabGetterInstalled) {
+            try {
+              const descriptor = Object.getOwnPropertyDescriptor(
+                window,
+                "__zentralVideoSourceTab",
+              );
+              if (descriptor?.get === sourceTabGetter)
+                delete window.__zentralVideoSourceTab;
+            } catch (_) {}
+            sourceTabGetterInstalled = false;
+          }
           try {
             unsubscribePerformance?.();
           } catch (_) {}
@@ -3931,6 +3962,10 @@
             captureIntervalMs,
             captureRateDescription,
             captureWidth,
+            // OW-113: let a suite drive the very state the controllers write (`deps.current = source`).
+            setVideoSource: (source) => {
+              current = source || null;
+            },
             RENDER_MODES: [...RENDER_MODES],
             LIVE_MODES: [...LIVE_MODES],
             renderCandidates,
@@ -3942,6 +3977,8 @@
         window.ZentralVideoPreview = {
           destroy,
           refresh: scan,
+          // OW-113: the same live getter Boost reads from the window, useful for diagnostics too.
+          sourceTab: sourceTabGetter,
           diagnostics: () => ({
             ...diagnostics,
             build: BUILD,

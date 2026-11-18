@@ -44,6 +44,8 @@ Enable `sine.allow-unsafe-js` and restart Zen after the first install. Sine pull
 
 The actor resource alias resolves the installed Sine chrome path to its file or JAR location before registration. A separate resolved actor identity avoids reusing an older failed module cache. Registration failures remain visible in video diagnostics.
 
+**OW-113:** the preview publishes `window.__zentralVideoSourceTab` as a live, read-only getter over its own `current` source state (also available as `ZentralVideoPreview.sourceTab()`). It returns the ordinary tab behind the selected video source, or `null` for no source, a panel-only source or a stale tab, and is deleted on `destroy()`. Boost reads it before unloading anything, so a paused/muted source does not blank the sidebar preview.
+
 Definite actor query failures stop automatic actor discovery for that document. Navigation creates a fresh document and allows another attempt; explicitly running video diagnostics also retries. Timeouts and document-destruction cancellations do not disable the actor. This recovery adds no polling or retry timers. Requests from an obsolete scan or navigated document cannot publish sources or overwrite discovery diagnostics.
 
 Temporary enlarged preview is owned by `controllers/ZentralVideoEnlarge.js`; see that folder's README for UI actions, compact-sidebar behavior and capability fallback. No separate stream, Apps dependency or OS Picture-in-Picture window is created.

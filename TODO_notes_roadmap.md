@@ -77,7 +77,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
-|    33 | `OW-113`    | `OPEN`    | Med                 | M      | none              | Boost F3: expose the Big Picture/video source tab so its "never unload" rule is live code, not dead code  |
 |    34 | `OW-114`    | `OPEN`    | Low                 | S      | none              | Boost F4: CSS audit of `[pending]` rules that change a parked Notes/Agenda placeholder's look + narrow override |
 |    35 | `OW-115`    | `OPEN`    | Low                 | S      | OW-111..OW-114    | Boost F5 (optional): show the deep pass's skipped reasons in the popup and pinned/unpinned counts in `state()` |
 |    36 | `T2.13`     | `DONE`    | Med                 | M      | all other Track 2 | ICS export/import and Google-sync groundwork (always last in Track 2)                                    |
@@ -805,25 +804,6 @@ own wording; the tests are written first, run against the current code, and the 
 still has the defect. Version stays `3.4.0`, build chain uses `--keep-version`, `docs/perf-results.md` gets one
 line per shipped row. All five are `OW-*` code tasks, so rule 1 puts them ahead of `T4.3a`.
 
-#### `OW-113` (F3) — The Big Picture source tab is never exposed
-
-**Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Depends on:** none · **Source:** owner audit F3
-
-**Problem (verified):** `videoSourceTab()` in `ZentralBoost.uc.js` reads
-`window.Zentral?.Video?.sourceTab || window.__zentralVideoSourceTab`. There is no writer of either anywhere in the
-repository (`grep -rn "__zentralVideoSourceTab\|Video.sourceTab" additional/video/**` finds none), and
-`window.Zentral.Video` is not published. So only an AUDIBLE source tab survives the deep pass; a paused/muted source
-can be unloaded and the preview blanked.
-
-**Plan (in this order):** read how `additional/video/controllers/ZentralVideoDiscovery.js` and
-`ZentralVideoSidebar.js` keep `deps.current` (the selected source carries `.tab`), then expose a getter that returns
-that tab element or `null` through `window.__zentralVideoSourceTab` (the name Boost already reads), defined in the
-video module's own init and torn down on destroy. No new pref, no polling.
-
-**Tests / done when:** with a fake video module state, Level 2, the limiter and Game Mode leave that tab loaded even
-when it is not audible; with no source the getter returns `null`; destroy removes the getter. Red on the current
-code, green after.
-
 #### `OW-114` (F4) — Parked placeholders look "unloaded" (visual regression check)
 
 **Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Depends on:** none · **Source:** owner audit F4
@@ -921,10 +901,10 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and version here in place. Keep the project version at 3.4.0 until the owner explicitly says otherwise.**
 
-State: **3.4.0 on beta**. Prerequisites `OW-108`–`OW-110` (through `0090091`, merged here as `c86d4b6`) are included. The owner's Boost-audit findings F1–F5 were added as `OW-111`–`OW-115`; F1 (`OW-111`) and F2 (`OW-112`) are DONE (see `docs/LEGACY_done_rows.md`). `OW-113` (F3) is next, then `OW-114` (F4). The remaining `OW-*` code tasks take priority over `T4.3a`..`T4.3c` and `ST7.4`; `OW-66` is the owner's live-Zen check with no code work (skip).
+State: **3.4.0 on beta**. Prerequisites `OW-108`–`OW-110` (through `0090091`, merged here as `c86d4b6`) are included. The owner's Boost-audit findings F1–F5 were added as `OW-111`–`OW-115`; F1 (`OW-111`), F2 (`OW-112`) and F3 (`OW-113`) are DONE (see `docs/LEGACY_done_rows.md`). `OW-114` (F4) is next. The remaining `OW-*` code tasks take priority over `T4.3a`..`T4.3c` and `ST7.4`; `OW-66` is the owner's live-Zen check with no code work (skip).
 
-Completed this session: added F1–F5 to the roadmap as rows + task blocks, then shipped `OW-111` and `OW-112`. F1 was verified against the CURRENT code: `runLevel2` swept `essentialPanels` record tabs with `keep_pinned`, so `asleep-allowed` was a no-op by default while `keep_pinned: true` unloaded `live` records; `ow-111` (11 cases) and the realistic `ow-91` fixtures were RED on HEAD and GREEN after the fix. F2 was verified as still present: `keep_pinned = true` meant "may unload". `ow-112` (7 cases: schema/layout/generated prefs, unchanged default, one-time migration, explicit-new-choice precedence, read-only fallback) was RED on the `OW-111` HEAD and GREEN after the rename to `unload_pinned` (same label, same `false` default, old pref declared only as an external fallback). Both tasks ran the `--keep-version` chain, full suite (`269/269` after the second new suite) and `git diff --check` green; `docs/perf-results.md` has one line per task.
+Completed this session: added F1–F5 to the roadmap as rows + task blocks, then shipped `OW-111`, `OW-112` and `OW-113`. F1 was verified against the CURRENT code: `runLevel2` swept `essentialPanels` record tabs with `keep_pinned`, so `asleep-allowed` was a no-op by default while `keep_pinned: true` unloaded `live` records; `ow-111` (11 cases) and the realistic `ow-91` fixtures were RED on HEAD and GREEN after the fix. F2 was verified as still present: `keep_pinned = true` meant "may unload"; `ow-112` (7 cases) was RED on the `OW-111` HEAD and GREEN after the rename to `unload_pinned` (same label, same `false` default, old pref only an external fallback). F3 was verified as still present: nothing wrote `window.Zentral.Video.sourceTab` or `window.__zentralVideoSourceTab`; `ow-113` (5 cases) was RED on the `OW-112` HEAD and GREEN after the video module published a live getter over `deps.current` (`sourceTab()` / `__zentralVideoSourceTab`), torn down on destroy. Every task ran the `--keep-version` chain, full suite (`270/270` after the third new suite) and `git diff --check` green; `docs/perf-results.md` has one line per task.
 
-Known debts: no live Zen/Sine runtime is available in this session; repository tests and CI must be used where possible, and live-only claims must not be presented as verified. F3 (no writer of `window.Zentral.Video.sourceTab` / `window.__zentralVideoSourceTab`) and F4 (four `[pending]` rules in `additional/tabs/ZentralTabDensity.css`) were verified as still present but are NOT yet fixed. F4's OWNER GATE (compare sidebar rows before/after) and third-party Arc/Zen `[pending]` styles cannot be checked here.
+Known debts: no live Zen/Sine runtime is available in this session; repository tests and CI must be used where possible, and live-only claims must not be presented as verified. F4 (four `[pending]` rules in `additional/tabs/ZentralTabDensity.css`) was verified as still present but is NOT yet fixed. F4's OWNER GATE (compare sidebar rows before/after: labels, icons, opacity, spacing) and third-party Arc/Zen `[pending]` styles cannot be checked here; the handoff must say so.
 
-Next action: `OW-113` (F3) — tests red first, then expose the video module's selected source tab through `window.__zentralVideoSourceTab`, torn down on destroy, so Level 2/limiter/Game Mode keep a non-audible source loaded. Then `OW-114` (CSS audit + narrow override + handoff report) → `OW-115` (F5 only after F1–F4 are shipped) → `T4.3a` → `T4.3b` → `T4.3c` → `ST7.4`. Keep the version at 3.4.0; never `--bump`.
+Next action: `OW-114` (F4) — tests/CSS audit first, list every `[pending]` rule touching a pinned Notes/Agenda placeholder in the handoff, add a narrow override only if OUR CSS changes its look, then `OW-115` (F5 only after F1–F4 are shipped) → `T4.3a` → `T4.3b` → `T4.3c` → `ST7.4`. Keep the version at 3.4.0; never `--bump`.

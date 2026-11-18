@@ -604,6 +604,7 @@ const baseline = (env) => {
     assert.equal(env.window.__zentralStandalone?.video, undefined, "handle released");
     assert.equal(env.window.__zentralVideoLoader, undefined, "private loader destroyed");
     assert.equal(env.window.ZentralVideoPreview, undefined, "half-built API removed");
+    assert.equal(env.window.__zentralVideoSourceTab, undefined, "OW-113 source-tab getter removed after a failed start");
   });
 
   await test("sidebar helpers and lifecycle scope are verbatim runtime copies", () => {
