@@ -134,6 +134,58 @@ function createFakeSidebarHarness(initialPrefs = {}, { fetch: fetchImpl = null, 
       if (idx >= 0) this.parentNode.children.splice(idx, 1);
       this.parentNode = null;
     }
+    replaceChildren(...nodes) {
+      for (const ch of [...this.children]) ch.parentNode = null;
+      this.children = [];
+      for (const n of nodes) {
+        if (n && typeof n === "object") this.appendChild(n);
+      }
+    }
+    get classList() {
+      const self = this;
+      const tokens = () => self.className.split(/\s+/).filter(Boolean);
+      return {
+        contains: (name) => tokens().includes(name),
+        add: (...names) => {
+          const list = tokens();
+          for (const n of names) {
+            if (n && !list.includes(n)) list.push(n);
+          }
+          self.className = list.join(" ");
+        },
+        remove: (...names) => {
+          self.className = tokens().filter((t) => !names.includes(t)).join(" ");
+        },
+        toggle: (name, force) => {
+          const has = tokens().includes(name);
+          const next = force === undefined ? !has : Boolean(force);
+          if (next) {
+            if (!has) self.className = [...tokens(), name].join(" ");
+          } else if (has) {
+            self.className = tokens().filter((t) => t !== name).join(" ");
+          }
+          return next;
+        },
+      };
+    }
+    click() {
+      let stopped = false;
+      const evt = {
+        type: "click",
+        target: this,
+        currentTarget: this,
+        preventDefault() {},
+        stopPropagation() { stopped = true; },
+      };
+      let cur = this;
+      while (cur && !stopped) {
+        evt.currentTarget = cur;
+        for (const [type, fn] of cur._listeners) {
+          if (type === "click") fn(evt);
+        }
+        cur = cur.parentNode;
+      }
+    }
     contains(other) {
       let cur = other;
       while (cur) {

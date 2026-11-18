@@ -1748,19 +1748,29 @@
             (essential?.app.preload && essential.tab.isConnected) ||
             window.Zentral?.Apps?.isAppPreloadEnabled?.(browser._bgalazkaAppId)
           );
+          const gameModeOn = Boolean(window.ZentralBoost?.gameModeState?.().on);
+          const audible = Boolean(
+            essential?.tab?.soundPlaying || browser.audioPlaying,
+          );
           const host = addonHostByAppId.get(browser._bgalazkaAppId);
           if (host?.adoptedByZentral && host.browser === browser) {
             // The native tab switcher must not override Zentral's policy for
             // a reparented browser. This protection does not require painting.
-            browser.zenModeActive = visible || notifications;
+            browser.zenModeActive =
+              visible || (gameModeOn ? audible : notifications);
           }
           // OW-93 (plan B6): a record whose background mode is `throttled` keeps its document ACTIVE only while it is
           // visible. Hidden, it goes inactive and stops painting, so Gecko throttles its timers and animations (that is
           // the 35 % of a core a non-notification page can burn while invisible) while the browser stays loaded — its
           // sockets, title events and badge callbacks keep working. `live` records are exactly as they were, and
           // `asleep-allowed` is about unloading, not about activity, so it takes the same path as `live` here.
+          // While Game Mode is active, hidden non-audible panels stay inactive even if `notifications` is true.
           const throttled = essential?.backgroundMode === "throttled";
-          const active = throttled ? visible : visible || notifications;
+          const active = gameModeOn
+            ? visible || audible
+            : throttled
+              ? visible
+              : visible || notifications;
           if (browser.docShellIsActive !== active)
             browser.docShellIsActive = active;
           // docShellIsActive=true also enables layers. Turn them back off for

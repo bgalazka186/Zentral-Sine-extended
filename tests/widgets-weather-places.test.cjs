@@ -161,9 +161,9 @@ test("the week is one row per day, in order, with a readable label", () => {
   const parts = c.weatherViewParts(VALUE, "week", { units: "metric" });
   assert.equal(parts.lines.length, 4, "every day the reading has");
   assert.deepEqual(plain(parts.lines.map((l) => l.icon)), ["sun", "rain", "cloud", "snow"]);
-  assert.equal(parts.lines[0].day, "Today", "the first row is named for what it is");
-  assert.equal(parts.lines[1].day, "Tomorrow");
-  assert.equal(parts.lines[2].day, "Cloudy", "then the day's own weather word, so seven rows can be told apart");
+  assert.equal(parts.lines[0].day, "Clear", "OW-109: every row keeps its actual weather description");
+  assert.equal(parts.lines[1].day, "Rain", "OW-109: tomorrow keeps its actual weather description");
+  assert.equal(parts.lines[2].day, "Cloudy", "and later days keep theirs too");
   assert.equal(parts.lines[2].label, "Cloudy", "and the weather word is still there for the tooltip");
   assert.equal(parts.lines[2].high, "16\u00b0C");
   assert.equal(parts.lines[2].low, "8\u00b0C");

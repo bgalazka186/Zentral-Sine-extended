@@ -1186,6 +1186,8 @@ function nativeSidebarSide() {
     WEATHER_UNITS: "zen.workspace.zentral.widgets.weather.units",
     WEATHER_REFRESH_MINUTES: "zen.workspace.zentral.widgets.weather.refresh_minutes",
     WEATHER_PLACES: "zen.workspace.zentral.widgets.weather.places",
+    WEATHER_DEFAULT_VIEW: "zen.workspace.zentral.widgets.weather.default_view",
+    WEATHER_VIEW: "zen.workspace.zentral.widgets.weather.view",
     TIMER_ENABLED: "zen.workspace.zentral.widgets.timer.enabled",
     // Retired by OW-90 with the card it belonged to; read once so an owner's choice survives the swap.
     LEGACY_STATUS_ENABLED: "zen.workspace.zentral.widgets.status.enabled",
@@ -1229,6 +1231,8 @@ function nativeSidebarSide() {
     WEATHER_LONGITUDE: "",
     WEATHER_UNITS: "auto",
     WEATHER_REFRESH_MINUTES: 30,
+    WEATHER_DEFAULT_VIEW: "today",
+    WEATHER_VIEW: "",
     TIMER_ENABLED: true,
     TIMER_CLICK_STOPWATCH: true,
     CLOCK_QUICK_NOTE: true,
@@ -1272,6 +1276,7 @@ function nativeSidebarSide() {
       "boost.deepDone": "Put {tabs} tab(s) and {panels} panel(s) to sleep, freed {mb} MB",
       "boost.restoreCount": "Restore ({count})",
       "boost.restored": "Woke {count} panel(s)",
+      "boost.restoredTabs": "{count} sleeping tab(s) ready to reload on click",
       "boost.limitHit": "{mb} MB in use, above your {limit} MB limit. Open Boost to free memory.",
       "boost.limitDone": "Freed memory down to {mb} MB",
       "boost.limitNothing": "Memory is high, but nothing else may be unloaded",
@@ -1312,6 +1317,13 @@ function nativeSidebarSide() {
       "timer.stopTitle": "Stop the countdown",
       "timer.stopStopwatchTitle": "Stop the stopwatch",
       "timer.startStopwatchTitle": "Start the stopwatch",
+      "weather.view.today": "Today",
+      "weather.view.tomorrow": "Tomorrow",
+      "weather.view.week": "Week",
+      "weather.viewsLabel": "Weather views",
+      "weather.weekTitle": "This week",
+      "weather.tomorrowUnavailable": "Tomorrow's forecast is not in this reading",
+      "weather.cardAria": "{place}showing {view}. Click for the next view{placesHint}, hold to go back to default",
     }),
     pl: Object.freeze({
       "clock.title": "Zegar",
@@ -1330,6 +1342,7 @@ function nativeSidebarSide() {
       "boost.deepDone": "U\u015bpiono {tabs} kart i {panels} paneli, zwolniono {mb} MB",
       "boost.restoreCount": "Przywr\u00f3\u0107 ({count})",
       "boost.restored": "Obudzono {count} paneli",
+      "boost.restoredTabs": "{count} u\u015bpionych kart wczyta si\u0119 po klikni\u0119ciu",
       "boost.limitHit": "W u\u017cyciu {mb} MB, powy\u017cej limitu {limit} MB. Otw\u00f3rz Boost, aby zwolni\u0107 pami\u0119\u0107.",
       "boost.limitDone": "Zwolniono pami\u0119\u0107 do {mb} MB",
       "boost.limitNothing": "Pami\u0119\u0107 jest wysoka, ale nie ma ju\u017c czego zwalnia\u0107",
@@ -1370,6 +1383,13 @@ function nativeSidebarSide() {
       "timer.stopTitle": "Zatrzymaj odliczanie",
       "timer.stopStopwatchTitle": "Zatrzymaj stoper",
       "timer.startStopwatchTitle": "Uruchom stoper",
+      "weather.view.today": "Dzi\u015b",
+      "weather.view.tomorrow": "Jutro",
+      "weather.view.week": "Tydzie\u0144",
+      "weather.viewsLabel": "Widoki pogody",
+      "weather.weekTitle": "Ten tydzie\u0144",
+      "weather.tomorrowUnavailable": "Prognoza na jutro nie jest dost\u0119pna w tym odczycie",
+      "weather.cardAria": "{place}widok: {view}. Kliknij, aby prze\u0142\u0105czy\u0107 widok{placesHint}, przytrzymaj, aby wr\u00f3ci\u0107 do domy\u015blnego",
     }),
   });
   // What the widgets are really set to right now. `notesRaw` is the Notes language as read from its pref; the caller
@@ -2756,6 +2776,14 @@ function nativeSidebarSide() {
         } catch (err) {
           onError(id, err);
         }
+        // Calendar reads the weather cache rather than owning a request. Notify an already-open Week
+        // calendar after the cache has changed so its next render sees the new forecast (or cleared error).
+        if (id === "weather" && value !== undefined) {
+          try {
+            const Evt = typeof window.CustomEvent === "function" ? window.CustomEvent : window.Event;
+            window.dispatchEvent?.(new Evt("zentral-weather-updated"));
+          } catch (_) {}
+        }
         if (!idle()) scheduleNext(current, { lastValue: stored?.value });
         return true;
       };
@@ -3411,6 +3439,42 @@ function nativeSidebarSide() {
     return p ? `${baseId}:${p.latitude},${p.longitude}` : baseId;
   }
 
+  // OW-108: weatherRequestUrl asks Open-Meteo for `timeformat=unixtime`, so `daily.time` arrives as Unix seconds
+  // while hand-crafted fixtures/caches may carry ISO `YYYY-MM-DD`. Normalize both to `YYYY-MM-DD` in the forecast's
+  // timezone (falling back to local time) so Calendar date lookups always match.
+  function weatherDateKey(rawDate, timeZone) {
+    if (rawDate == null) return "";
+    const str = String(rawDate).trim();
+    if (!str) return "";
+    const iso = /^(\d{4}-\d{2}-\d{2})/.exec(str);
+    if (iso) return iso[1];
+    if (!/^-?\d+(?:\.\d+)?$/.test(str)) return "";
+    const num = Number(str);
+    if (!Number.isFinite(num)) return "";
+    const ms = Math.abs(num) >= 1e12 ? num : num * 1000;
+    const date = new Date(ms);
+    if (!Number.isFinite(date.getTime())) return "";
+    const tz = typeof timeZone === "string" ? timeZone.trim() : "";
+    if (tz) {
+      try {
+        const parts = new Intl.DateTimeFormat("en-US", {
+          timeZone: tz,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).formatToParts(date);
+        const y = parts.find((p) => p.type === "year")?.value;
+        const m = parts.find((p) => p.type === "month")?.value;
+        const d = parts.find((p) => p.type === "day")?.value;
+        if (y && m && d) return `${y}-${m}-${d}`;
+      } catch (_) {}
+    }
+    const y = String(date.getFullYear()).padStart(4, "0");
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
   function weatherRequestUrl(place, units) {
     const p = cleanWeatherPlace(place?.latitude, place?.longitude);
     if (!p) return "";
@@ -3469,13 +3533,37 @@ function nativeSidebarSide() {
     return null;
   }
 
-  // OW-95: the weather card has three VIEWS, in a fixed order, and a click walks them. "Today", "Tomorrow" and "Week"
-  // are not three different readings — one request already carries the whole week — so a view is a lens on the same
-  // cached value: switching never fetches, and the numbers a person compares are always from the same instant.
+  // OW-95 / OW-109: the weather card has three VIEWS, in a fixed order, and a user-controlled view switch + saved default.
+  // "Today", "Tomorrow" and "Week" are not three different readings — one request already carries the whole week —
+  // so a view is a lens on the same cached value: switching never fetches, and the numbers compared are from the same instant.
   const WEATHER_VIEWS = Object.freeze(["today", "tomorrow", "week"]);
-  const cleanWeatherView = (raw) => (WEATHER_VIEWS.includes(raw) ? raw : "today");
-  // A click moves to the next view and wraps. `hold` (a long press, or Escape) goes back to the first view, which is
-  // "today" — the card's main face, the one a glance should always be able to reach.
+  const cleanWeatherView = (raw) => {
+    const value = String(raw ?? "").trim().toLowerCase();
+    return WEATHER_VIEWS.includes(value) ? value : "today";
+  };
+  function resolveWeatherView(savedView, defaultView) {
+    const saved = String(savedView ?? "").trim().toLowerCase();
+    if (WEATHER_VIEWS.includes(saved)) return saved;
+    const fallback = String(defaultView ?? "").trim().toLowerCase();
+    return WEATHER_VIEWS.includes(fallback) ? fallback : "today";
+  }
+  function weatherDayNumberLabel(rawDate, opts = {}) {
+    const key = weatherDateKey(rawDate, opts.timeZone);
+    if (!key) return "";
+    const y = Number(key.slice(0, 4));
+    const m = Number(key.slice(5, 7));
+    const d = Number(key.slice(8, 10));
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d) || d < 1 || d > 31) return "";
+    const locale = opts.locale || (String(opts.lang || "").toLowerCase().startsWith("pl") ? "pl" : "en");
+    let dayNum = "";
+    try {
+      dayNum = getClockDateTimeFormat(locale, { timeZone: "UTC", day: "numeric" }).format(new Date(Date.UTC(y, m - 1, d)));
+    } catch (_) {
+      dayNum = String(d);
+    }
+    return dayNum ? dayNum + "." : "";
+  }
+  // A click moves to the next view and wraps. `hold` (a long press, or Escape) goes back to the configured default view.
   function nextWeatherView(current) {
     const at = WEATHER_VIEWS.indexOf(cleanWeatherView(current));
     return WEATHER_VIEWS[(at + 1) % WEATHER_VIEWS.length];
@@ -3484,6 +3572,9 @@ function nativeSidebarSide() {
   // here is testable without a sidebar, a place or a network.
   function weatherViewParts(value, view, opts = {}) {
     const days = Array.isArray(value?.week) ? value.week : [];
+    const lang = opts.lang ? (String(opts.lang).toLowerCase().startsWith("pl") ? "pl" : "en") : null;
+    const uiLang = lang || "en";
+    const timeZone = opts.timeZone || value?.timezone || "";
     // The reading's own units always win over the caller's: a cached metric value labelled °F is a lie, and the caller
     // (the card, a test) cannot know better than the value itself. `opts.units` is only the fallback for a hand-made
     // value that carries none.
@@ -3491,43 +3582,59 @@ function nativeSidebarSide() {
     const labels = weatherUnitLabels(units, value?.countryCode || opts.countryCode);
     const temp = (n) => (n == null || !Number.isFinite(Number(n)) ? "" : Math.round(Number(n)) + labels.temperature);
     const range = (day) => (day && (day.high != null || day.low != null) ? temp(day.high) + " / " + temp(day.low) : "");
+    const resolveLabel = (entry) => {
+      if (lang && entry?.code != null) return weatherCodeInfo(entry.code, lang).label;
+      if (entry?.label) return String(entry.label);
+      if (entry?.code != null) return weatherCodeInfo(entry.code, uiLang).label;
+      return "";
+    };
     const icon = cleanWeatherView(view);
     if (icon === "tomorrow") {
       const day = days[1] || null;
-      if (!day) return { view: icon, empty: true, text: "Tomorrow's forecast is not in this reading" };
+      if (!day) return { view: icon, empty: true, text: widgetText(uiLang, "weather.tomorrowUnavailable") };
+      const label = resolveLabel(day);
+      const tomorrowWord = widgetText(uiLang, "weather.view.tomorrow");
       return {
         view: icon,
         icon: day.icon,
-        label: day.label,
+        label,
         range: range(day),
         temperature: temp(day.high),
-        text: "Tomorrow " + (day.label || "") + " " + range(day),
+        text: [tomorrowWord, label, range(day)].filter(Boolean).join(" "),
       };
     }
     if (icon === "week") {
-      // The week view is a list, not a sentence: one line per day, which is what a narrow card can actually read.
-      const lines = days.map((day, index) => ({
-        index,
-        icon: day.icon,
-        // `day` is what the row is called: today and tomorrow are named for when they are, everything after that for
-        // what the sky does — a week list where every row says "Rain" cannot be told apart.
-        day: index === 0 ? "Today" : index === 1 ? "Tomorrow" : day.label || "",
-        // The weather word is kept for the tooltip; a row has no space for both, and the glyph already says the word.
-        label: day.label || "",
-        high: temp(day.high),
-        low: temp(day.low),
-        text: (index === 0 ? "Today" : index === 1 ? "Tomorrow" : day.label || "") + " " + range(day),
-      }));
+      const todayWord = widgetText(uiLang, "weather.view.today");
+      const tomorrowWord = widgetText(uiLang, "weather.view.tomorrow");
+      // OW-109: Week view keeps the actual weather description visible for every day (including today and tomorrow)
+      // alongside a compact day-of-month label (18., 19., 20., ...).
+      const lines = days.map((day, index) => {
+        const label = resolveLabel(day);
+        const dateLabel = weatherDayNumberLabel(day?.date, { timeZone, lang: uiLang, locale: opts.locale });
+        const when = index === 0 ? todayWord : index === 1 ? tomorrowWord : "";
+        return {
+          index,
+          icon: day.icon,
+          dateLabel,
+          when,
+          day: label,
+          label,
+          high: temp(day.high),
+          low: temp(day.low),
+          text: [dateLabel, label, range(day)].filter(Boolean).join(" "),
+        };
+      });
       return { view: icon, lines, empty: !lines.length, text: lines.map((l) => l.text).join(" \u00b7 ") };
     }
     // Today: the reading the card is named for.
+    const todayLabel = resolveLabel(value);
     return {
       view: "today",
       icon: value?.icon,
-      label: value?.label,
+      label: todayLabel,
       range: value?.high != null || value?.low != null ? temp(value.high) + " / " + temp(value.low) : "",
       temperature: temp(value?.temperature),
-      text: [value?.label, temp(value?.temperature)].filter(Boolean).join(" "),
+      text: [todayLabel, temp(value?.temperature)].filter(Boolean).join(" "),
     };
   }
 
@@ -3729,6 +3836,7 @@ function nativeSidebarSide() {
     weatherPlaceReady,
     weatherPlacesFromLegacy,
     weatherCacheKeyFor,
+    weatherDateKey,
     WEATHER_PLACES_MAX,
     weatherRequestUrl,
     readWeatherPayload,
@@ -3736,9 +3844,11 @@ function nativeSidebarSide() {
     isWetDay,
     nextWetDay,
     weatherOutlookParts,
-    // OW-95: the three views and the two gestures, exported so the rules are testable without a card.
+    // OW-95 / OW-109: the three views and the two gestures, exported so the rules are testable without a card.
     WEATHER_VIEWS,
     cleanWeatherView,
+    resolveWeatherView,
+    weatherDayNumberLabel,
     nextWeatherView,
     weatherViewParts,
     weatherUnitLabels,
@@ -4684,9 +4794,26 @@ function nativeSidebarSide() {
         };
       }
 
-      // OW-57/OW-95: which place and which view are showing. Per-window state like the timer's: what a person glanced
-      // at is not a setting, and two windows may look at two places. A missing id means "the list decides" (first).
-      const weatherView = { placeId: "", view: "today", mounted: false };
+      // OW-57/OW-95/OW-109: active place + view state. The view initializes from the persisted user selection
+      // (`weather.view`) when valid, falling back to the configured `weather.default_view` (validated, default "today").
+      const readDefaultWeatherView = () =>
+        cleanWeatherView(getString(WIDGET_PREFS.WEATHER_DEFAULT_VIEW, DEFAULTS.WEATHER_DEFAULT_VIEW));
+      const readInitialWeatherView = () =>
+        resolveWeatherView(getString(WIDGET_PREFS.WEATHER_VIEW, DEFAULTS.WEATHER_VIEW), readDefaultWeatherView());
+      const weatherView = { placeId: "", view: readInitialWeatherView(), mounted: false };
+      let weatherRepaintHook = null;
+
+      for (const pref of [
+        WIDGET_PREFS.WEATHER_DEFAULT_VIEW,
+        WIDGET_PREFS.WEATHER_VIEW,
+        WIDGET_PREFS.LANGUAGE,
+        NOTES_LANGUAGE_PREF,
+      ]) {
+        watchPref(pref, () => {
+          weatherView.view = readInitialWeatherView();
+          try { weatherRepaintHook?.(); } catch (_) {}
+        });
+      }
 
       // The saved places. The JSON pref is the truth once it exists; a build that only ever had the three single
       // prefs reads them as one place, and the first read writes that place into the JSON pref so nothing is lost.
@@ -5403,6 +5530,7 @@ function nativeSidebarSide() {
           return weatherCacheKeyFor("weather", opts.place_);
         },
         create({ document: doc, requestRefresh }) {
+          weatherView.view = readInitialWeatherView();
           const wrap = doc.createElement("div");
           wrap.className = "zw-weather";
 
@@ -5428,6 +5556,14 @@ function nativeSidebarSide() {
           metaEl.appendChild(rangeEl);
           metaEl.appendChild(detailsEl);
 
+          // OW-109: direct user-controlled view switch (Today / Tomorrow / Week) independent from the default setting.
+          const viewsEl = doc.createElement("div");
+          viewsEl.className = "zw-weather-views";
+          viewsEl.setAttribute("role", "group");
+          viewsEl.setAttribute("aria-label", tw("weather.viewsLabel"));
+          viewsEl.hidden = true;
+          const viewButtons = new Map();
+
           const placeEl = doc.createElement("div");
           placeEl.className = "zw-card-meta zw-weather-place";
 
@@ -5447,6 +5583,7 @@ function nativeSidebarSide() {
           wrap.appendChild(main);
           wrap.appendChild(metaEl);
           wrap.appendChild(outlookEl);
+          wrap.appendChild(viewsEl);
           wrap.appendChild(placeEl);
 
           const areaWidth = () => {
@@ -5472,8 +5609,7 @@ function nativeSidebarSide() {
               row.className = "zw-weather-outlook-line";
               if (line && typeof line === "object") {
                 row.classList.add("zw-weather-outlook-week-line");
-                // A week row: glyph, day name, high/low. Each part its own span so the glyph can be sized on its own
-                // and a narrow card can drop the low without dropping the row.
+                // A week row: glyph, compact date + actual weather description, high/low.
                 if (line.icon) {
                   const glyph = doc.createElement("span");
                   glyph.className = "zw-weather-outlook-icon";
@@ -5482,13 +5618,22 @@ function nativeSidebarSide() {
                 }
                 const name = doc.createElement("span");
                 name.className = "zw-weather-outlook-day";
-                name.textContent = line.day || line.label || "";
+                if (line.dateLabel) {
+                  const dateSpan = doc.createElement("span");
+                  dateSpan.className = "zw-weather-outlook-date";
+                  dateSpan.textContent = line.dateLabel;
+                  name.appendChild(dateSpan);
+                }
+                const descSpan = doc.createElement("span");
+                descSpan.className = "zw-weather-outlook-desc";
+                descSpan.textContent = line.label || line.day || "";
+                name.appendChild(descSpan);
                 row.appendChild(name);
                 const temps = doc.createElement("span");
                 temps.className = "zw-weather-outlook-temps";
                 temps.textContent = [line.high, line.low].filter(Boolean).join(" / ");
                 row.appendChild(temps);
-                row.title = line.text || "";
+                row.title = [line.when, line.text].filter(Boolean).join(" \u2014 ");
               } else {
                 row.textContent = String(line);
               }
@@ -5504,10 +5649,22 @@ function nativeSidebarSide() {
           // The card's own click is not the outlook's business any more; OW-57 owns a click on the card (place cycling).
           outlookEl.addEventListener("click", (e) => e.stopPropagation());
 
+          const syncViewButtons = (activeView, hasValue) => {
+            viewsEl.hidden = !hasValue;
+            viewsEl.setAttribute("aria-label", tw("weather.viewsLabel"));
+            for (const [viewId, btn] of viewButtons.entries()) {
+              const active = viewId === activeView;
+              btn.textContent = tw("weather.view." + viewId);
+              btn.setAttribute("aria-pressed", active ? "true" : "false");
+              btn.classList.toggle("is-active", active);
+            }
+          };
+
           const paint = (value, info = {}) => {
             lastPainted = value;
             lastPaintInfo = info || {};
             const opts = readWeatherOpts();
+            const lang = widgetLang();
             placeEl.textContent = opts.place || "Set a place in Settings";
             // A control only when a click can do something: one place is a label, not a button.
             const readyPlaces = opts.places.filter(weatherPlaceReady);
@@ -5517,12 +5674,16 @@ function nativeSidebarSide() {
             wrap.setAttribute("role", "button");
             wrap.setAttribute("tabindex", "0");
             wrap.setAttribute("aria-roledescription", "weather card");
-            const viewName = { today: "today", tomorrow: "tomorrow", week: "this week" }[cleanWeatherView(weatherView.view)];
-            wrap.setAttribute("aria-label",
-              `${opts.place || ""}: showing ${viewName}. Click for the next view` +
-              (readyPlaces.length > 1 ? `, Ctrl+click or middle click for the next place (${readyPlaces.length} saved)` : "") +
-              ", hold to go back to today");
+            const view = cleanWeatherView(weatherView.view);
+            const viewName = tw("weather.view." + view);
+            const placesHint = readyPlaces.length > 1 ? `, ${readyPlaces.length} saved places` : "";
+            wrap.setAttribute("aria-label", tw("weather.cardAria", {
+              place: opts.place ? opts.place + ": " : "",
+              view: viewName,
+              placesHint,
+            }));
             wrap.setAttribute("data-zw-weather", value ? (info.cached ? "cached" : "live") : info.error ? "error" : "empty");
+            syncViewButtons(view, Boolean(value));
             if (!value) {
               iconEl.textContent = "\u2601";
               tempEl.textContent = info.error ? "\u2014" : "";
@@ -5535,20 +5696,24 @@ function nativeSidebarSide() {
             }
             const parts = formatWeatherParts(value, opts.units);
             // OW-95: the view decides the first three lines; the outlook carries whatever the view does not fit.
-            const view = cleanWeatherView(weatherView.view);
             wrap.setAttribute("data-zw-weather-view", view);
             let viewParts = null;
             try {
               // The reading's own units, never the current pref: a cached metric value shown as °F would be a lie,
               // and Open-Meteo converts server-side, so only the reading knows what its numbers are.
-              viewParts = weatherViewParts(value, view, { units: cleanWeatherUnits(value.units), countryCode: value.countryCode });
+              viewParts = weatherViewParts(value, view, {
+                units: cleanWeatherUnits(value.units),
+                countryCode: value.countryCode,
+                lang,
+                timeZone: value.timezone,
+              });
             } catch (err) {
               console.warn("[ZentralWidgets] weather view failed:", err);
             }
             const shown = viewParts && !viewParts.empty ? viewParts : null;
             iconEl.textContent = WEATHER_ICON_GLYPHS[(shown || parts).icon] || WEATHER_ICON_GLYPHS.unknown;
             tempEl.textContent = view === "week" ? "" : (shown || parts).temperature ?? parts.temperature;
-            labelEl.textContent = view === "week" ? "This week" : (shown || parts).label;
+            labelEl.textContent = view === "week" ? tw("weather.weekTitle") : (shown || parts).label;
             rangeEl.textContent = view === "week" ? "" : (shown || parts).range ?? "";
             detailsEl.textContent = view === "today" ? parts.details : "";
             try {
@@ -5564,7 +5729,7 @@ function nativeSidebarSide() {
               outlookEl.hidden = true;
               console.warn("[ZentralWidgets] weather outlook failed:", err);
             }
-            wrap.setAttribute("aria-label", (opts.place ? opts.place + ": " : "") + (view === "week" ? "This week" : (shown || parts).text));
+            wrap.setAttribute("aria-label", (opts.place ? opts.place + ": " : "") + (view === "week" ? tw("weather.weekTitle") : (shown || parts).text));
           };
           repaintWeather = () => {
             if (!lastPainted) return false;
@@ -5576,42 +5741,68 @@ function nativeSidebarSide() {
               return false;
             }
           };
+          weatherRepaintHook = repaintWeather;
 
-          // OW-95: the whole card is the control, and the two gestures are the two axes.
-          //   click  -> the next view: today, tomorrow, week, back to today. The data does not change, so this never
-          //             fetches: three views are one reading.
-          //   hold   -> back to the main face: TODAY, and the first saved place. A long press is the "reset" a person
-          //             reaches for after wandering, and it must work even with one place and an empty cache.
-          // The place is cycled by the hold's sibling, the middle click / the keyboard: `Ctrl`+Enter or a middle click
-          // steps the place, because a card with unlimited places still needs a way to reach the second one.
+          // OW-95 / OW-109: direct view buttons + card click cycling.
+          //   click  -> the next view: today, tomorrow, week, back to today. Saved independently from default_view.
+          //   hold   -> back to the configured default view and the first saved place.
           const setView = (next) => {
             const clean = cleanWeatherView(next);
-            if (clean === weatherView.view) return false;
+            const changed = clean !== weatherView.view;
             weatherView.view = clean;
-            repaintWeather?.();
-            return true;
+            writeStringPref(WIDGET_PREFS.WEATHER_VIEW, clean);
+            if (changed) repaintWeather?.();
+            return changed;
           };
+          for (const viewId of WEATHER_VIEWS) {
+            const btn = doc.createElement("button");
+            btn.type = "button";
+            btn.className = "zw-weather-view-btn";
+            btn.setAttribute("data-zw-view", viewId);
+            btn.textContent = tw("weather.view." + viewId);
+            btn.setAttribute("aria-pressed", viewId === weatherView.view ? "true" : "false");
+            btn.classList.toggle("is-active", viewId === weatherView.view);
+            btn.addEventListener("pointerdown", (e) => e.stopPropagation());
+            btn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              setView(viewId);
+            });
+            viewButtons.set(viewId, btn);
+            viewsEl.appendChild(btn);
+          }
           const cycleView = () => setView(nextWeatherView(weatherView.view));
-          // Back to the main face: today, and the first saved place. Both halves are reset because "the main one" is a
-          // place AND a view to the person who asked for it; a hold that left them on another city would be a puzzle.
+          // Back to the main face: configured default view, and the first saved place.
           const revertToMain = () => {
             let changed = false;
-            if (weatherView.view !== "today") {
-              weatherView.view = "today";
+            const defaultView = readDefaultWeatherView();
+            if (weatherView.view !== defaultView) {
+              weatherView.view = defaultView;
               changed = true;
+            }
+            if (getString(WIDGET_PREFS.WEATHER_VIEW, "").trim()) {
+              writeStringPref(WIDGET_PREFS.WEATHER_VIEW, "");
             }
             const places = readWeatherPlaces().filter(weatherPlaceReady);
             const main = places[0] || null;
+            const notifyCalendar = () => {
+              try {
+                const Evt = typeof window.CustomEvent === "function" ? window.CustomEvent : window.Event;
+                window.dispatchEvent?.(new Evt("zentral-weather-updated"));
+              } catch (_) {}
+            };
+            let placeChanged = false;
             if (main && main.id !== weatherView.placeId) {
               weatherView.placeId = main.id;
               changed = true;
+              placeChanged = true;
             }
             // Repaint from the last painted value at once. A view is a lens on data the card already has, so waiting
             // for a fetch (or for a scheduler tick) would show a stale face for no reason.
             if (changed) {
               repaintWeather?.();
+              if (placeChanged) notifyCalendar();
               try {
-                requestRefresh({ force: false });
+                requestRefresh({ force: placeChanged });
               } catch (_) {}
             }
             return changed;
@@ -5624,6 +5815,10 @@ function nativeSidebarSide() {
             if (!next || next.id === active?.id) return false;
             weatherView.placeId = next.id;
             requestRefresh({ force: true });
+            try {
+              const Evt = typeof window.CustomEvent === "function" ? window.CustomEvent : window.Event;
+              window.dispatchEvent?.(new Evt("zentral-weather-updated"));
+            } catch (_) {}
             return true;
           };
           // A hold is a real gesture, not a click variant: 550 ms is long enough not to fire while someone is reading
@@ -5698,16 +5893,23 @@ function nativeSidebarSide() {
               const opts = readWeatherOpts();
               return weatherCacheKeyFor("weather", opts.place_);
             },
-            fetch({ now, cachedValue }) {
+            fetch({ now, cachedValue, updatedAt }) {
               const opts = readWeatherOpts();
               if (!opts.place_) return null; // no place, no request, no network
-              if (cachedValue && isWeatherCacheFresh(now, { value: cachedValue, updatedAt: now }, opts.refreshMinutes)) return undefined;
+              const sameUnits = cachedValue && cleanWeatherUnits(cachedValue.units) === opts.units;
+              if (cachedValue && sameUnits && isWeatherCacheFresh(now, { value: cachedValue, updatedAt }, opts.refreshMinutes)) return undefined;
               const url = weatherRequestUrl(opts.place_, opts.units);
               if (!url) return null;
               return fetch(url, { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" })
-                .then((res) => (res && res.ok ? res.json() : null))
-                .then((payload) => (payload ? readWeatherPayload(payload, opts.units, widgetLang()) : null))
-                .catch(() => null);
+                .then((res) => {
+                  if (!res || !res.ok) throw new Error("Weather request failed");
+                  return res.json();
+                })
+                .then((payload) => {
+                  const parsed = payload ? readWeatherPayload(payload, opts.units, widgetLang()) : null;
+                  if (!parsed) throw new Error("Weather payload invalid");
+                  return parsed;
+                });
             },
             isStale(now, cached) {
               return !cached?.value || !isWeatherCacheFresh(now, cached, readWeatherOpts().refreshMinutes);
@@ -5721,6 +5923,10 @@ function nativeSidebarSide() {
               } catch (err) {
                 console.warn("[ZentralWidgets] weather render failed:", err);
               }
+            },
+            dispose() {
+              cancelHold();
+              if (weatherRepaintHook === repaintWeather) weatherRepaintHook = null;
             },
           };
         },
@@ -6034,20 +6240,43 @@ function nativeSidebarSide() {
             popup.appendChild(note);
           };
 
+          const api = () => boostModule();
+          let boostSampling = false;
+          const stopCardSampling = () => {
+            if (!boostSampling) return;
+            boostSampling = false;
+            try {
+              api()?.stopSampling?.();
+            } catch (_) {}
+          };
+          const startCardSampling = () => {
+            if (boostSampling) return;
+            const boost = api();
+            if (!boost || typeof boost.startSampling !== "function") return;
+            boostSampling = true;
+            try {
+              boost.startSampling();
+            } catch (_) {
+              boostSampling = false;
+            }
+          };
+
           const isPopupOpen = () => !popup.hidden;
           const closePopup = () => {
             if (popup.hidden) return false;
             popup.hidden = true;
             menuBtn.setAttribute("aria-expanded", "false");
+            stopCardSampling();
             return true;
           };
           const openPopup = () => {
+            ensureSubscribed();
+            paintValue();
             paintMenu();
             popup.hidden = false;
             menuBtn.setAttribute("aria-expanded", "true");
+            startCardSampling();
           };
-
-          const api = () => boostModule();
 
           function runAction(id) {
             if (id === "free-light") return runLight();
@@ -6112,8 +6341,11 @@ function nativeSidebarSide() {
             }
             paintMenu();
             const lang = { language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), notesRaw: getString(NOTES_LANGUAGE_PREF, "en") };
+            const code = resolveWidgetLanguage(lang.language, lang.notesRaw);
             if (restored && restored.panels) {
-              showWidgetToast(widgetText(resolveWidgetLanguage(lang.language, lang.notesRaw), "boost.restored", { count: restored.panels }));
+              showWidgetToast(widgetText(code, "boost.restored", { count: restored.panels }));
+            } else if (restored && restored.tabs) {
+              showWidgetToast(widgetText(code, "boost.restoredTabs", { count: restored.tabs }));
             }
             return Promise.resolve(restored);
           }
@@ -6146,6 +6378,7 @@ function nativeSidebarSide() {
 
           // The module says when its reading changed; the card only repaints, it never asks.
           const subscribe = () => {
+            if (boostUnsubscribe) return;
             const boost = api();
             if (!boost || typeof boost.onChange !== "function") return;
             try {
@@ -6153,16 +6386,19 @@ function nativeSidebarSide() {
                 boostLastMB = typeof value === "number" ? value : (typeof boost.lastMB === "function" ? boost.lastMB() : null);
                 paintValue();
               });
+              if (boostLastMB == null && typeof boost.lastMB === "function") {
+                boostLastMB = boost.lastMB();
+              }
             } catch (_) {
               boostUnsubscribe = null;
             }
           };
-          subscribe();
           // OW-92: the limiter acts on its own, so the card is where it says so — a soft notice, a finished hard run,
           // or the once-per-ten-minutes "nothing left to do". Same toast as a click's result, because it is the same
           // kind of sentence.
           let limiterUnsubscribe = null;
           const subscribeLimiter = () => {
+            if (limiterUnsubscribe) return;
             const boost = api();
             if (!boost || typeof boost.onLimiterEvent !== "function") return;
             try {
@@ -6182,8 +6418,11 @@ function nativeSidebarSide() {
               limiterUnsubscribe = null;
             }
           };
-          subscribeLimiter();
-          boostLastMB = typeof api()?.lastMB === "function" ? api().lastMB() : null;
+          const ensureSubscribed = () => {
+            subscribe();
+            subscribeLimiter();
+          };
+          ensureSubscribed();
           paintValue();
 
           // A click on the card runs the light pass; a click on the arrow opens the menu. That split keeps the plan's
@@ -6201,7 +6440,7 @@ function nativeSidebarSide() {
             if (isPopupOpen()) closePopup();
             else openPopup();
           });
-          // A click anywhere else closes the menu, and so does Escape. Both are cleanup-registered.
+          // A click anywhere else closes the menu, and so does Escape. Both are cleanup-registered AND removed on dispose().
           const onDocPointer = (event) => {
             if (!isPopupOpen()) return;
             if (wrap.contains?.(event?.target)) return;
@@ -6213,7 +6452,9 @@ function nativeSidebarSide() {
           };
           doc.addEventListener("pointerdown", onDocPointer);
           doc.addEventListener("keydown", onKeyDown);
-          registerCleanup(() => {
+          const teardownCard = () => {
+            closePopup();
+            stopCardSampling();
             try {
               doc.removeEventListener("pointerdown", onDocPointer);
               doc.removeEventListener("keydown", onKeyDown);
@@ -6222,24 +6463,22 @@ function nativeSidebarSide() {
             } catch (_) {}
             boostUnsubscribe = null;
             limiterUnsubscribe = null;
-          });
+          };
+          registerCleanup(teardownCard);
 
           return {
             element: wrap,
             fetch() {
+              ensureSubscribed();
               return { mb: boostLastMB, available: Boolean(api()) };
             },
             render() {
-              // The number is painted by the module's callback; a render only keeps the arrow's state honest.
+              // The number is painted by the module's callback; ensure late-registered Boost binds if it appeared later.
+              ensureSubscribed();
               paintValue();
             },
             dispose() {
-              try {
-                if (typeof boostUnsubscribe === "function") boostUnsubscribe();
-                if (typeof limiterUnsubscribe === "function") limiterUnsubscribe();
-              } catch (_) {}
-              boostUnsubscribe = null;
-              limiterUnsubscribe = null;
+              teardownCard();
             },
             // The test seam and any other card that wants the action without a pointer.
             runLight,
@@ -6342,33 +6581,55 @@ function nativeSidebarSide() {
         // Returns [{ key, icon, label, high, low, units }] where `key` is the local date (YYYY-MM-DD), or an empty list.
         weatherDays: () => {
           try {
-            const cached = scheduler.getCached("weather");
+            const place = readWeatherOpts().place_;
+            const entry = scheduler.getCached("weather") || (place ? scheduler.getCached(weatherCacheKeyFor("weather", place)) : null);
+            const cached = entry?.value || null;
             if (!cached) return [];
             // OW-99: the calendar asks once per week render, and at 48 days that is a render per scroll. The reading is
-            // the same object between refreshes, so the mapped list is built once per reading and handed back as-is —
-            // the caller must not mutate it, which the comment above says.
+            // the same object between refreshes, so the mapped list is built once per reading and handed back as-is.
             if (weatherDaysCache.source === cached) return weatherDaysCache.list;
             const days = Array.isArray(cached.week) ? cached.week : [];
             const units = cleanWeatherUnits(cached.units);
-            const result = days
-              .filter((day) => day && typeof day.date === "string" && day.date)
-              .map((day) => ({
-                key: String(day.date).slice(0, 10),
+            const result = [];
+            for (const day of days) {
+              if (!day) continue;
+              const key = weatherDateKey(day.date, cached.timezone);
+              if (!key) continue;
+              result.push({
+                key,
                 icon: day.icon || "unknown",
+                glyph: WEATHER_ICON_GLYPHS[day.icon] || "",
                 label: day.label || "",
                 high: day.high,
                 low: day.low,
                 units,
-              }));
+              });
+            }
             weatherDaysCache = { source: cached, list: result };
             return result;
           } catch (_) {
             return [];
           }
         },
-        setCachedValue: (id, value, updatedAt) =>
-          scheduler.setCached(normalizeWidgetId(id) || id, value, updatedAt),
-        clearCache: (id) => scheduler.clearCache(id),
+        setCachedValue: (id, value, updatedAt) => {
+          const norm = normalizeWidgetId(id) || id;
+          scheduler.setCached(norm, value, updatedAt);
+          if (norm === "weather" || String(norm).startsWith("weather:")) {
+            try {
+              const Evt = typeof window.CustomEvent === "function" ? window.CustomEvent : window.Event;
+              window.dispatchEvent?.(new Evt("zentral-weather-updated"));
+            } catch (_) {}
+          }
+        },
+        clearCache: (id) => {
+          scheduler.clearCache(id);
+          if (id == null || id === "weather" || String(id).startsWith("weather:")) {
+            try {
+              const Evt = typeof window.CustomEvent === "function" ? window.CustomEvent : window.Event;
+              window.dispatchEvent?.(new Evt("zentral-weather-updated"));
+            } catch (_) {}
+          }
+        },
         getArea: () => ({ ...lastArea }),
         getTray: () => tray,
         isPaused: () => scheduler.isPaused(),

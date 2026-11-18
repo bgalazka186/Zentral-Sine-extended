@@ -49,6 +49,7 @@
     "zen.workspace.zentral.widgets.weather.longitude",
     "zen.workspace.zentral.widgets.weather.units",
     "zen.workspace.zentral.widgets.weather.places",
+    "zen.workspace.zentral.widgets.weather.default_view",
     "zen.workspace.zentral.widgets.weather.refresh_minutes",
     {
       "type": "text",
@@ -83,9 +84,10 @@
   ],
   "externalPrefs": [
     "zen.workspace.zentral.widgets.timer.enabled",
-    "zen.workspace.zentral.widgets.status.enabled"
+    "zen.workspace.zentral.widgets.status.enabled",
+    "zen.workspace.zentral.widgets.weather.view"
   ],
-  "externalPrefsReason": "OW-60 reads the retired standalone Timer card pref once, to put that owner on the Clock's timer face. OW-90 reads the retired Status card's enabled pref once, to carry that owner's choice over to Boost. Neither is a setting any more.",
+  "externalPrefsReason": "OW-60 reads the retired standalone Timer card pref once, to put that owner on the Clock's timer face. OW-90 reads the retired Status card's enabled pref once, to carry that owner's choice over to Boost. OW-109 stores the user's active weather view selection independently from weather.default_view without adding a duplicate control to Settings.",
   "borrowedSettings": [
     {
       "from": "additional/notes/settings.json",
