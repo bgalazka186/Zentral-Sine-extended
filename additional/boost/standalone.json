@@ -14,6 +14,10 @@
   "sharedSources": [
     "loader/ZentralTabPolicy.js"
   ],
+  "externalPrefs": [
+    "zen.workspace.zentral.boost.keep_pinned"
+  ],
+  "externalPrefsReason": "OW-112 reads the retired keep_pinned pref once, to carry an owner's existing 'on' choice over to unload_pinned and use it as a read-only fallback for one release. It is no longer a user-facing setting.",
   "fullPackOnly": [
     "Zentral"
   ],

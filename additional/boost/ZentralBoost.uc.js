@@ -29,9 +29,12 @@
   const PREF = Object.freeze({
     ENABLED: "zen.workspace.zentral.boost.enabled",
     STARTUP_TRIM: "zen.workspace.zentral.boost.startup_trim",
-    // B4 (OW-91): pinned and Essential tabs are the person's shortlist. Off by default: they restore on demand like
-    // any other tab, so a deep run may include them only when asked.
-    KEEP_PINNED: "zen.workspace.zentral.boost.keep_pinned",
+    // OW-112: the old `keep_pinned` name said the opposite of what it did — `true` meant a deep pass MAY UNLOAD
+    // pinned/Essential tabs. The checkbox label always said so; now the pref does too. Off by default, unchanged.
+    UNLOAD_PINNED: "zen.workspace.zentral.boost.unload_pinned",
+    // Retired name, read only for one release so an existing `true` choice is carried over (and used as a
+    // fallback if that write is refused). Declared as an external pref in `standalone.json`, never a second switch.
+    LEGACY_KEEP_PINNED: "zen.workspace.zentral.boost.keep_pinned",
     // B4.6: the one shortcut that runs the light pass. Empty means none, and an empty shortcut installs no listener.
     SHORTCUT: "zen.workspace.zentral.boost.shortcut",
     // B5 (OW-92): the RAM limiter. Off by default: a browser that unloads things on its own is a promise about the
@@ -139,6 +142,30 @@
           return fallback;
         }
       };
+
+      // OW-112: `unload_pinned` says what it does. A pref that somebody already set wins; otherwise the retired
+      // `keep_pinned = true` is still honoured as a read-only fallback for one release. A one-time migration writes
+      // the new pref so the choice survives after that fallback is removed, without ever overwriting an explicit
+      // new choice (including an explicit `false`).
+      const prefHasUserValue = (key) => {
+        try {
+          return Services.prefs.prefHasUserValue?.(key) === true;
+        } catch (_) {
+          return false;
+        }
+      };
+      const mayUnloadPinned = () => {
+        if (prefHasUserValue(PREF.UNLOAD_PINNED)) return prefBool(PREF.UNLOAD_PINNED, false);
+        return prefBool(PREF.LEGACY_KEEP_PINNED, false) || prefBool(PREF.UNLOAD_PINNED, false);
+      };
+      const migrateUnloadPinned = () => {
+        try {
+          if (!prefBool(PREF.LEGACY_KEEP_PINNED, false)) return;
+          if (prefHasUserValue(PREF.UNLOAD_PINNED)) return;
+          Services.prefs.setBoolPref(PREF.UNLOAD_PINNED, true);
+        } catch (_) {}
+      };
+      migrateUnloadPinned();
 
       /* ---------------- teardown ---------------- */
 
@@ -591,12 +618,12 @@
 
       // One tab's verdict, with every input the policy cannot read passed in. `opts.panelRecord` marks a tab that
       // backs an Essential-panel record and `opts.panelConsent` is that record's explicit permission to sleep it
-      // (OW-111): the mode belongs to the panel loop, not to the `keep_pinned` pref or a generic tab sweep.
+      // (OW-111): the mode belongs to the panel loop, not to the `unload_pinned` pref or a generic tab sweep.
       const canUnload = (tab, ctx, opts = {}) => {
         const table = policy();
         if (!table) return { allowed: false, reason: "no-policy" };
         return table.isUnloadable(tab, {
-          keepPinned: prefBool(PREF.KEEP_PINNED, false),
+          keepPinned: ctx.keepPinned,
           videoSourceTab: ctx.videoSourceTab,
           selectedTab: ctx.selectedTab,
           sessionUrl: ctx.sessionUrlFor?.(tab) || "",
@@ -634,6 +661,8 @@
           const beforeMB = memoryMB();
           if (beforeMB != null) lastSampleMB = beforeMB;
           const ctx = {
+            // OW-112: read the consent once for the whole run, not once per tab.
+            keepPinned: mayUnloadPinned(),
             videoSourceTab: videoSourceTab(),
             selectedTab: gBrowser.selectedTab,
             sessionUrlFor: (tab) => {
@@ -654,7 +683,7 @@
           const skipped = [];
           // OW-111: the tabs behind Essential-panel records are read ONCE, before either loop. A record tab belongs
           // to its record's `backgroundMode`: the TAB loop must never decide for it (that was how a `live` WhatsApp
-          // could be unloaded just because `keep_pinned` was on), and the PANEL loop may sleep it only with the
+          // could be unloaded just because `unload_pinned` was on), and the PANEL loop may sleep it only with the
           // mode's consent even though the tab is pinned/Essential.
           const records = essentialRecords();
           const recordTabs = new Set(records.map((r) => r.tab).filter(Boolean));
@@ -668,7 +697,7 @@
             for (const tab of candidates) {
               if (disposed || unloaded.tabs >= limit) break;
               // A record tab is owned ONLY by the panel loop below; the policy says so with its own named reason,
-              // so a live record stays loaded whatever the `keep_pinned` pref says.
+              // so a live record stays loaded whatever the `unload_pinned` pref says.
               const verdict = canUnload(tab, ctx, { panelRecord: recordTabs.has(tab) });
               if (!verdict.allowed) {
                 if (verdict.reason !== "selected" && verdict.reason !== "panel-record" && skipped.length < 5) skipped.push(verdict.reason);
@@ -704,7 +733,7 @@
               if (disposed) break;
               if (!modes.includes(modeOf(record))) continue;
               // OW-111: consent comes from THIS record's mode (or Stronger saver's all-modes switch), not from
-              // `keep_pinned`. It waives only the pinned/Essential rule; audible/selected/PiP/etc. still win.
+              // `unload_pinned`. It waives only the pinned/Essential rule; audible/selected/PiP/etc. still win.
               const verdict = canUnload(record.tab, ctx, { panelRecord: true, panelConsent: true });
               if (!verdict.allowed) {
                 if (skipped.length < 8) skipped.push("panel:" + verdict.reason);

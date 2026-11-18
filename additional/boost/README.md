@@ -33,7 +33,7 @@ works and whose **deep** / **Restore** entries are greyed until OW-91. The card'
 | :--- | :------ | :------ |
 | `zen.workspace.zentral.boost.enabled` | `true` | The widget and the API exist (OW-90). |
 | `zen.workspace.zentral.boost.startup_trim` | `true` | The single post-startup trim runs. Off = only explicit "free memory" actions. |
-| `zen.workspace.zentral.boost.keep_pinned` | `false` | A deep pass may include pinned and Essential tabs. |
+| `zen.workspace.zentral.boost.unload_pinned` | `false` | A deep pass may include pinned and Essential tabs. Renamed from `keep_pinned` in 3.4.0 (the old name said the opposite); an existing `true` is migrated once and read as a fallback for one release. |
 | `zen.workspace.zentral.boost.shortcut` | `""` | Keyboard shortcut for the light pass, e.g. `Accel+Shift+B`; empty installs nothing. |
 
 Both are read live, so switching them needs no restart. This module writes nothing to disk and keeps no history.
@@ -43,7 +43,7 @@ Both are read live, so switching them needs no restart. This module writes nothi
 - **One tab policy.** `loader/ZentralTabPolicy.js` answers "may this tab be unloaded?" for both this module and the
   middle-click unloader, so the "never" list cannot drift apart: the selected tab, a Zentral host tab, a Notes/Agenda
   placeholder, an audible tab, a sharing tab, a picture-in-picture tab, the video preview's source tab, an already
-  sleeping tab, and — unless `zen.workspace.zentral.boost.keep_pinned` says otherwise — pinned and Essential tabs.
+  sleeping tab, and — unless `zen.workspace.zentral.boost.unload_pinned` says otherwise — pinned and Essential tabs.
   Each refusal is a named reason, which is what `state()` and the tests read.
 - **Deep pass** (`runLevel2()`): Level 1 plus every eligible tab **oldest `lastAccessed` first**, plus the Essential
   panel records whose own mode is `asleep-allowed`. A tab that backs an Essential-panel record is owned by its record

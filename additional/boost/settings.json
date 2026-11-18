@@ -19,9 +19,9 @@
       "defaultValue": true
     },
     {
-      "property": "zen.workspace.zentral.boost.keep_pinned",
+      "property": "zen.workspace.zentral.boost.unload_pinned",
       "label": "Unloading may include pinned and Essential tabs",
-      "description": "Off by default: they restore on demand like any tab, but they are your shortlist. Turn this on to let a deep pass include them.",
+      "description": "Off by default: they restore on demand like any tab, but they are your shortlist. Turn this on to let a deep pass include them. Renamed from keep_pinned in 3.4.0; an existing 'on' choice is carried over once.",
       "type": "checkbox",
       "defaultValue": false
     },
@@ -115,7 +115,7 @@
       "section": "Memory",
       "owner": "boost"
     },
-    "zen.workspace.zentral.boost.keep_pinned": {
+    "zen.workspace.zentral.boost.unload_pinned": {
       "category": "boost",
       "section": "Memory",
       "owner": "boost"

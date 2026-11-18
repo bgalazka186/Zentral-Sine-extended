@@ -311,7 +311,7 @@ test("pinned and Essential tabs join only when the person said so", async () => 
 
   const on = bootBoost({
     tabs: [tab({ url: "https://pinned/", pinned: true }), tab({ url: "https://essential/", attrs: ["zen-essential"] })],
-    prefs: { "zen.workspace.zentral.boost.keep_pinned": true },
+    prefs: { "zen.workspace.zentral.boost.unload_pinned": true },
   });
   on.gBrowser.selectedTab = null;
   pending = on.api.runLevel2();
@@ -353,7 +353,7 @@ test("OW-111: record tabs obey their mode, not keep_pinned, and are never counte
   const h = bootBoost({
     tabs: [live.tab, throttled.tab, asleep.tab],
     panels: [live, throttled, asleep],
-    prefs: { "zen.workspace.zentral.boost.keep_pinned": true },
+    prefs: { "zen.workspace.zentral.boost.unload_pinned": true },
   });
   h.gBrowser.selectedTab = null;
   const pending = h.api.runLevel2();

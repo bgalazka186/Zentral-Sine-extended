@@ -20,7 +20,7 @@ const POLICY_SRC = fs.readFileSync(path.join(REPO, "loader/ZentralTabPolicy.js")
 const BOOST_SRC = fs.readFileSync(path.join(REPO, "additional/boost/ZentralBoost.uc.js"), "utf8");
 const SWITCH_SRC = fs.readFileSync(path.join(REPO, "loader/ZentralPerformanceSwitch.js"), "utf8");
 
-const OLD_PINNED_PREF = "zen.workspace.zentral.boost.keep_pinned";
+const PINNED_PREF = "zen.workspace.zentral.boost.unload_pinned";
 
 let passed = 0;
 const tests = [];
@@ -204,7 +204,7 @@ test("F1 (a): a live pinned record is not unloaded when keep_pinned is false", a
 
 test("F1 (b): a live pinned record is STILL not unloaded when keep_pinned is TRUE", async () => {
   const live = record("messenger", "live", { url: "https://messenger.example/" });
-  const h = boot({ tabs: [live.tab], panels: [live], prefs: { [OLD_PINNED_PREF]: true } });
+  const h = boot({ tabs: [live.tab], panels: [live], prefs: { [PINNED_PREF]: true } });
   const pending = h.api.runLevel2();
   await h.settle();
   const result = await pending;
@@ -228,7 +228,7 @@ test("F1 (c): an asleep-allowed pinned record IS unloaded with keep_pinned false
 
 test("F1 (d): a throttled record is not unloaded, even with keep_pinned true", async () => {
   const throttled = record("arena", "throttled", { url: "https://arena.example/" });
-  const h = boot({ tabs: [throttled.tab], panels: [throttled], prefs: { [OLD_PINNED_PREF]: true } });
+  const h = boot({ tabs: [throttled.tab], panels: [throttled], prefs: { [PINNED_PREF]: true } });
   const pending = h.api.runLevel2();
   await h.settle();
   await pending;
@@ -253,7 +253,7 @@ test("F1 (f): an audible or selected record is never unloaded in any mode", asyn
   const audible = record("music", "asleep-allowed", { url: "https://music.example/", soundPlaying: true });
   const selected = record("selected", "live", { url: "https://selected.example/" });
   const h = boot({ tabs: [audible.tab, selected.tab], panels: [audible, selected],
-    prefs: { [OLD_PINNED_PREF]: true } });
+    prefs: { [PINNED_PREF]: true } });
   h.gBrowser.selectedTab = selected.tab;
   const pending = h.api.runLevel2({ allowModes: ["live", "throttled", "asleep-allowed"] });
   await h.settle();
@@ -284,7 +284,7 @@ test("F1: the limiter never unloads a live record, even with keep_pinned true", 
   const h = boot({
     tabs: [live.tab, old], panels: [live], readings: [5000, 4800, 4800, 4800],
     prefs: {
-      [OLD_PINNED_PREF]: true,
+      [PINNED_PREF]: true,
       "zen.workspace.zentral.boost.limit_enabled": true,
       "zen.workspace.zentral.boost.limit_mb": 100,
       "zen.workspace.zentral.boost.limit_mode": "hard",
@@ -303,7 +303,7 @@ test("F1: the limiter never unloads a live record, even with keep_pinned true", 
 test("F1: Game Mode's Level 2 never unloads a record tab", async () => {
   const live = record("messenger", "live", { url: "https://messenger.example/" });
   const old = tab({ url: "https://old.example/", lastAccessed: 1 });
-  const h = boot({ tabs: [live.tab, old], panels: [live], prefs: { [OLD_PINNED_PREF]: true } });
+  const h = boot({ tabs: [live.tab, old], panels: [live], prefs: { [PINNED_PREF]: true } });
   h.api.setGameMode(true);
   await h.settle();
   assert.equal(wasUnloaded(h, live.tab), false, "Game Mode's allowPanels:false pass skips record tabs");
@@ -324,7 +324,7 @@ test("F1: an ordinary pinned tab still follows the pref, and TabUnload's policy 
   off.destroy();
 
   const plain2 = tab({ url: "https://plain.example/", pinned: true });
-  const on = boot({ tabs: [plain2], prefs: { [OLD_PINNED_PREF]: true } });
+  const on = boot({ tabs: [plain2], prefs: { [PINNED_PREF]: true } });
   pending = on.api.runLevel2();
   await on.settle();
   await pending;
