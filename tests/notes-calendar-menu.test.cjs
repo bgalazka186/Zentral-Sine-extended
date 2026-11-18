@@ -342,7 +342,10 @@ const openCalendarRow = (root, trigger, label, match = (text, want) => text === 
   store.items.upsertCategory({ name: "Personal", color: "#decade" });
   const openCreate = async (label) => {
     // OW-75: creation entries moved under the Notes "+" menu's Calendar group, where the owner asked them to be.
-    const entry = openCalendarRow(root, ".zn-new-menu", label);
+    // OW-84: a kind is offered once, so the timed variants are the plain "New reminder" / "New event" rows (they open
+    // the same composer on the same selected day); only the all-day modes still live in their own group.
+    const rowLabel = label === "Create timed reminder…" ? "New reminder" : label === "Create timed event…" ? "New event" : label;
+    const entry = openCalendarRow(root, ".zn-new-menu", rowLabel);
     assert.ok(entry, `Notes + menu offers ${label}`);
     entry.click(); await flush();
     const card = q(root, ".zn-cal-compose-card");

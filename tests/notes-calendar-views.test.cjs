@@ -555,6 +555,123 @@ const setSize = async (root, px) => {
   assert.equal(createdByDrag.start.dateTime, new Date(cal.zonedDateTimeToMs(zoneKey, "08:00", zone)).toISOString());
   store.items.remove(createdByDrag.id);
 
+  // ---- OW-82: a real drag that ends on empty space is a throw-away gesture, and it asks first.
+  // The harness above already has a movable "Drag me" event; this block stages it and drops it where no track is.
+  // The earlier drag assertions in this file leave a 1296px-tall track rect behind. Set every rect this gesture reads
+  // so "empty space" really is outside each track: pane tall, tracks only the top half, the drop point lower down.
+  const stageRect = (el, bottom) => { if (el) el.getBoundingClientRect = () => ({ left: 0, right: 400, top: 0, bottom, width: 400, height: bottom }); };
+  const stageDrag = (x, y) => {
+    stageRect(calendarPane, 1400);
+    stageRect(q(root, ".zn-cal-time-scroll"), 1400);
+    for (const track of root.querySelectorAll(".zn-cal-time-track")) stageRect(track, 800);
+    for (const cell of root.querySelectorAll(".zn-cal-time-allday-cell")) stageRect(cell, 800);
+    const button = root.querySelectorAll(".zn-cal-time-event").find((el) => el.textContent.includes("Drag me"));
+    assert.ok(button?.classList.contains("is-movable"));
+    button.setPointerCapture = () => {};
+    button.dispatchEvent(pointer("pointerdown", 200, 700));
+    root.dispatchEvent(pointer("pointermove", x, y));
+    return button;
+  };
+  const cardText = () => (q(root, ".zn-dialog-card")?.textContent || "");
+  const cardButton = (want) => [...(q(root, ".zn-dialog-card")?.querySelectorAll("button") || [])].find((b) => b.textContent.trim() === want);
+
+  // 1. Empty space inside the calendar asks, and names the item.
+  let dragBtn = stageDrag(200, 1000);
+  assert.ok(q(root, ".zn-cal-drag-hint"), "while over empty space the drag says what a release will do");
+  assert.match(q(root, ".zn-cal-drag-hint").textContent, /delete/i);
+  root.dispatchEvent(pointer("pointerup", 200, 1000));
+  await flushRaf();
+  assert.equal(q(root, ".zn-cal-drag-hint"), null, "the hint never outlives the drag");
+  assert.match(cardText(), /Drag me/, "the card names the item");
+  assert.match(cardText(), /cannot be undone/i);
+  assert.ok(store.items.list().some((item) => item.summary === "Drag me"), "nothing is deleted before the answer");
+  assert.equal(document.activeElement, cardButton("Cancel"), "the safe answer has the focus");
+
+  // 2. Keep changes nothing.
+  cardButton("Cancel").click();
+  await flushRaf();
+  assert.equal(q(root, ".zn-dialog-card"), null);
+  assert.ok(store.items.list().some((item) => item.summary === "Drag me"), "Keep keeps it");
+
+  // 3. Delete removes it, once.
+  dragBtn = stageDrag(200, 1000);
+  root.dispatchEvent(pointer("pointerup", 200, 1000));
+  await flushRaf();
+  cardButton("Delete event").click();
+  await flushRaf();
+  assert.equal(store.items.list().filter((item) => item.summary === "Drag me").length, 0, "Delete removes the item");
+  assert.equal(root.querySelectorAll(".zn-cal-time-event").filter((el) => el.textContent.includes("Drag me")).length, 0, "and the calendar redraws without it");
+
+  // 4. A drop on a real slot never asks.
+  store.items.upsert({ id: "drag-ui-event", summary: "Drag me", start: { dateTime: new Date(dragStart).toISOString() }, end: { dateTime: new Date(dragStart + 3600000).toISOString() }, x: { kind: "event", src: "manual" } });
+  await flushRaf();
+  dragBtn = stageDrag(200, 400);
+  root.dispatchEvent(pointer("pointerup", 200, 400));
+  await flushRaf();
+  assert.equal(q(root, ".zn-dialog-card"), null, "a drop that lands on a real slot asks nothing");
+  assert.ok(store.items.list().some((item) => item.summary === "Drag me"), "and deletes nothing");
+  assert.ok(q(root, ".zn-cal-time-event") !== null);
+
+  // 5. The five-minute button: one question, then silence, then the question comes back.
+  const realNow = Date.now;
+  let fakeNow = realNow();
+  Date.now = () => fakeNow;
+  try {
+    dragBtn = stageDrag(200, 1000);
+    root.dispatchEvent(pointer("pointerup", 200, 1000));
+    await flushRaf();
+    cardButton("Delete and don't ask for 5 minutes").click();
+    await flushRaf();
+    assert.equal(store.items.list().filter((item) => item.summary === "Drag me").length, 0, "the five-minute button deletes now");
+
+    const again = () => {
+      store.items.upsert({ id: "drag-ui-event", summary: "Drag me", start: { dateTime: new Date(dragStart).toISOString() }, end: { dateTime: new Date(dragStart + 3600000).toISOString() }, x: { kind: "event", src: "manual" } });
+    };
+    again();
+    await flushRaf();
+    dragBtn = stageDrag(200, 1000);
+    root.dispatchEvent(pointer("pointerup", 200, 1000));
+    await flushRaf();
+    assert.equal(q(root, ".zn-dialog-card"), null, "inside the window the same gesture asks nothing");
+    assert.equal(store.items.list().filter((item) => item.summary === "Drag me").length, 0, "and deletes straight away");
+
+    // Four minutes later: still quiet.
+    fakeNow += 4 * 60 * 1000;
+    again();
+    await flushRaf();
+    dragBtn = stageDrag(200, 1000);
+    root.dispatchEvent(pointer("pointerup", 200, 1000));
+    await flushRaf();
+    assert.equal(q(root, ".zn-dialog-card"), null, "the window is still open at four minutes");
+    assert.equal(store.items.list().filter((item) => item.summary === "Drag me").length, 0);
+
+    // Past five minutes: it asks again.
+    fakeNow += 61 * 1000;
+    again();
+    await flushRaf();
+    dragBtn = stageDrag(200, 1000);
+    root.dispatchEvent(pointer("pointerup", 200, 1000));
+    await flushRaf();
+    assert.ok(q(root, ".zn-dialog-card"), "after five minutes the question is back");
+    cardButton("Cancel").click();
+    await flushRaf();
+  } finally {
+    Date.now = realNow;
+  }
+
+  // 6. A create-drag over empty space is not a throw-away gesture: there is nothing to delete.
+  const beforeEmptyDrag = store.items.list().length;
+  const sc2 = q(root, ".zn-cal-time-scroll");
+  sc2.getBoundingClientRect = () => ({ left: 0, right: 400, top: 0, bottom: 1296, width: 400, height: 1296 });
+  const emptyGrid2 = q(root, ".zn-cal-time-track");
+  emptyGrid2.setPointerCapture = () => {};
+  emptyGrid2.dispatchEvent(pointer("pointerdown", 200, 400));
+  root.dispatchEvent(pointer("pointermove", 200, 1000));
+  root.dispatchEvent(pointer("pointerup", 200, 1000));
+  await flushRaf();
+  assert.equal(q(root, ".zn-dialog-card"), null, "an empty-space drag that was making something asks nothing");
+  assert.equal(store.items.list().length, beforeEmptyDrag);
+
   assert.equal(store.meta.calendarSnap, 15);
   await chooseMenu(root, ".zn-calendar-snap-select", "30 minutes");
   assert.equal(store.meta.calendarSnap, 30);

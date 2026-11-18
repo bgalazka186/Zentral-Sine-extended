@@ -54,16 +54,27 @@ const flushRaf = async () => {
 
   // 2. CSS overflow safety & wrapping contract for all non-calendar All-notes chrome bars
   assert.match(css, /\.zentral-notes-sheet\[data-view="list"\]\s+\.zn-head\s*\{[^}]*flex-wrap:\s*wrap/, "list-view sheet header wraps safely instead of clipping buttons");
-  // OW-73: the owner reported that the toolbar and the filter chips fit on one line but wrapped onto two. Wrapping is
-  // no longer the safety mechanism for these two rows — one line is. Safety is now a readable minimum plus a horizontal
-  // scroll, so an item can never be squeezed into a sliver and nothing is ever clipped without a way to reach it.
-  assert.match(css, /\.zentral-notes-sheet\s+\.zn-all-toolbar\s*\{[^}]*flex-wrap:\s*nowrap/, "all-notes toolbar is one line, never two (OW-73)");
-  assert.match(css, /\.zentral-notes-sheet\s+\.zn-all-toolbar\s*\{[^}]*overflow-x:\s*auto/, "all-notes toolbar can be scrolled rather than wrapped");
-  assert.match(css, /\.zentral-notes-sheet\s+\.zn-all-toolbar\s+\.zn-btn\s*\{[^}]*min-width:\s*22px/, "toolbar buttons keep a tappable width");
+  // OW-73 was reverted (OW-85): it made the All-notes toolbar and the filter chips one unbending line, but the owner
+  // meant a different row. Those two Notes rows are back to wrapping, which is their own safety mechanism, and the row
+  // that really had to fit is the sheet bar under the title.
+  assert.match(css, /\.zentral-notes-sheet\s+\.zn-all-toolbar\s*\{[^}]*flex-wrap:\s*wrap/, "the tabs strip wraps rather than clipping");
+  assert.match(css, /\.zentral-notes-sheet\s+\.zn-chips\s*\{[^}]*flex-wrap:\s*wrap/, "filter chips wrap rather than clipping Trash/Tags");
   assert.match(css, /\.zentral-notes-sheet\s+\.zn-list-head\s*\{[^}]*flex-wrap:\s*wrap/, "search & create row wraps safely");
-  assert.match(css, /\.zentral-notes-sheet\s+\.zn-chips\s*\{[^}]*flex-wrap:\s*nowrap/, "filter chips row is one line (OW-73)");
-  assert.match(css, /\.zentral-notes-sheet\s+\.zn-chips\s*\{[^}]*overflow-x:\s*auto/, "filter chips row scrolls rather than clipping Trash/Tags");
-  assert.match(css, /\.zentral-notes-sheet\s+\.zn-chips\s+\.zn-chip\s*\{[^}]*min-width:\s*4\.5em/, "filter chips never shrink to unreadable slivers");
+  // OW-85: the row the owner pointed at ("just under All notes title element and above Search Notes element") holds the
+  // title and the three layout buttons. It never clips: it wraps, and it scrolls if it still cannot fit.
+  assert.match(css, /\.zentral-notes-sheet\s+\.zn-head\s*\{[^}]*flex-wrap:\s*wrap/, "the sheet bar wraps instead of cutting a button at the window edge");
+  assert.match(css, /\.zentral-notes-sheet\s+\.zn-head\s*\{[^}]*overflow-x:\s*auto/, "the sheet bar scrolls rather than clipping");
+  assert.match(css, /\.zentral-notes-sheet\s+\.zn-head\s*>\s*\.zn-btn\s*\{[^}]*flex:\s*0\s+0\s+auto/, "sheet bar buttons never shrink to slivers");
+  // OW-85: the three layout buttons belong in that bar, and the strip above the tree no longer carries a second row of
+  // them. This is the owner's correction: "the correct element is just under All notes title element and above Search
+  // Notes element".
+  {
+    const src = require("node:fs").readFileSync(require("node:path").resolve(__dirname, "../additional/notes/ZentralNotes.uc.js"), "utf8");
+    assert.match(src, /head\.insertBefore\(btnCalendarLayout, btnCalendarTree\)/, "the layout button is moved into the sheet bar");
+    assert.match(src, /head\.insertBefore\(btnCalendarTree, btnCalendarPane\)/, "the tree toggle is moved into the sheet bar");
+    assert.match(src, /head\.insertBefore\(btnCalendarPane, btnCategory\)/, "the calendar toggle is moved into the sheet bar");
+    assert.match(src, /const allToolbar = h\("div", \{ class: "zn-all-toolbar" \}, h\("span", \{ class: "zn-grow" \}\), tabTree, tabCalendar\)/, "the strip above the tree keeps only the tabs switcher");
+  }
   assert.match(css, /\.zentral-notes-sheet\s+\.zn-batch-bar\s*\{[^}]*flex-wrap:\s*wrap/, "batch toolbar wraps safely");
   // OW-74: the calendar head now carries the prev / today / next controls, so it must not wrap — a wrapped head would
   // move them out from between the name and the period. The name is the item that gives ground instead.

@@ -202,7 +202,22 @@
   padding: 4px 6px;
   border-top: 3px solid var(--zn-note);
   border-bottom: 1px solid var(--zn-line);
+  /* OW-85: one row, and nothing may be cut by the window edge. The bar holds the title, the three layout buttons and
+     the note's own actions, so it is the title that gives ground (it already ellipsises) and then the buttons that are
+     least needed; the row wraps only if the sheet is genuinely too narrow, and it scrolls rather than clipping. */
+  flex-wrap: wrap;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
 }
+.zentral-notes-sheet .zn-head::-webkit-scrollbar { height: 0; }
+/* While the calendar workspace is on screen only these three layout buttons are useful; in the editor they are hidden
+   in JS. Keep them from being pushed out by the title. */
+.zentral-notes-sheet .zn-head > .zn-btn { flex: 0 0 auto; }
+.zentral-notes-sheet .zn-head > .zn-calendar-layout-btn,
+.zentral-notes-sheet .zn-head > .zn-calendar-tree-toggle,
+.zentral-notes-sheet .zn-head > .zn-calendar-pane-toggle { flex: 0 0 auto; }
 .zentral-notes-sheet .zn-title {
   appearance: none;
   flex: 1 1 auto;
@@ -307,15 +322,10 @@
 }
 .zentral-notes-sheet .zn-all-layout { display: flex; flex-direction: column; }
 .zentral-notes-sheet .zn-all-layout[hidden] { display: none !important; }
-/* OW-73: one line, always. The owner reported that "Recent" and the three layout buttons fit but wrapped onto a
-   second row. Two things caused it: the toolbar itself wrapped, and every child was `flex: 0 0 auto`, so no item
-   could ever give ground to avoid the break. The toolbar therefore never wraps, and the chips — the only flexible
-   labels in the row — shrink and ellipsise (they already carry overflow/text-overflow/nowrap) when the pane is
-   genuinely narrow. The layout buttons keep their hit area: they shrink last and never below their icon width. */
-.zentral-notes-sheet .zn-all-toolbar { display: flex; align-items: center; flex-wrap: nowrap; gap: 3px 4px; flex: 0 0 auto; min-width: 0; padding: 3px 6px; border-bottom: 1px solid var(--zn-line); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
-.zentral-notes-sheet .zn-all-toolbar::-webkit-scrollbar { height: 0; }
-.zentral-notes-sheet .zn-all-toolbar .zn-btn { flex: 0 1 auto; min-width: 22px; }
-.zentral-notes-sheet .zn-all-toolbar .zn-chip { flex: 0 1 auto; }
+/* OW-73 was reverted at 3.3.306 (OW-85): it targeted the wrong row. See the sheet bar below. */
+.zentral-notes-sheet .zn-all-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 4px; flex: 0 0 auto; min-width: 0; padding: 3px 6px; border-bottom: 1px solid var(--zn-line); }
+.zentral-notes-sheet .zn-all-toolbar .zn-btn { flex: 0 0 auto; }
+.zentral-notes-sheet .zn-all-toolbar .zn-chip { flex: 0 0 auto; }
 .zentral-notes-sheet .zn-all-toolbar .zn-grow { flex: 1 1 auto; min-width: 0; }
 .zentral-notes-sheet .zn-all-toolbar .zn-calendar-tab { display: none; }
 .zentral-notes-sheet .zn-all-layout[data-layout="tabs"] .zn-all-toolbar .zn-calendar-tab { display: inline-flex; }
@@ -340,7 +350,26 @@
 .zentral-notes-sheet .zn-calendar-pane-head > strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .zentral-notes-sheet .zn-calendar-head-nav { display: flex; align-items: center; flex: 0 0 auto; min-width: 0; gap: 3px; }
 .zentral-notes-sheet .zn-calendar-head-nav > .zn-chip { flex: 0 0 auto; }
-.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-nav { min-width: 22px; padding: 0 6px; }
+/* OW-83 (owner, 2026-11-18: "the buttons you added to calendar control row are WAY too big, i asked specifically
+   for small < o > chevrons"). The chevrons keep the chip's click box but lose its pill: no border, no pill radius, no
+   side padding, a 20px square, and the glyph drawn at 1em rather than the chip's 0.92em. Measured before: 22x20 with a
+   999px radius and a 1px border, visually the same weight as "Go to today" beside them. */
+.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-nav {
+  min-width: 20px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 1em;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-nav:hover { background: var(--zn-hover); color: var(--zn-text); }
+.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-nav:focus-visible { outline: 2px solid var(--zn-accent); outline-offset: -1px; }
 .zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-view-toggle { min-width: 0; white-space: nowrap; }
 .zentral-notes-sheet .zn-calendar-pane-head-right { display: flex; align-items: center; flex: 0 0 auto; min-width: 0; gap: 6px; }
 .zentral-notes-sheet .zn-calendar-pane-hint { color: var(--zn-muted); font-size: 0.82em; }
@@ -549,11 +578,10 @@
   border-bottom-left-radius: 0;
 }
 .zentral-notes-sheet .zn-new-menu:hover { opacity: 1; }
-.zentral-notes-sheet .zn-chips { display: flex; align-items: center; flex-wrap: nowrap; gap: 3px 4px; min-width: 0; padding: 0 6px 4px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
-.zentral-notes-sheet .zn-chips::-webkit-scrollbar { height: 0; }
+.zentral-notes-sheet .zn-chips { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 4px; min-width: 0; padding: 0 6px 4px; }
 /* The chips shrink before anything may move to a second row, but never into an unreadable sliver: the 4.5em floor keeps
    a tappable label, the label ellipsises, and the row scrolls on the rare pane narrow enough to beat the floor. */
-.zentral-notes-sheet .zn-chips .zn-chip { flex: 0 1 auto; min-width: 4.5em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zentral-notes-sheet .zn-chips .zn-chip { flex: 0 0 auto; }
 /* UI4.10: a chip is a control, so it follows the text size with its label instead of staying at 12px (at 28px text the
    label was large and the On / Off chips beside it small). The em sizes keep the old look at the default 13px and grow
    with it; the padding and the line height are shares of the same text, so the pill never becomes tighter than its text. */
@@ -1418,7 +1446,7 @@
 .zentral-notes-sheet[data-all-chrome="compact"] .zn-head > .zn-btn { width: 24px; height: 24px; }
 .zentral-notes-sheet[data-all-chrome="tight"] .zn-head > .zn-btn { width: 22px; height: 22px; }
 .zentral-notes-sheet[data-all-chrome="compact"] .zn-all-toolbar,
-.zentral-notes-sheet[data-all-chrome="tight"] .zn-all-toolbar { padding: 2px 4px; gap: 2px 3px; flex-wrap: nowrap; }
+.zentral-notes-sheet[data-all-chrome="tight"] .zn-all-toolbar { padding: 2px 4px; gap: 2px 3px; }
 .zentral-notes-sheet[data-all-chrome="compact"] .zn-all-toolbar .zn-btn,
 .zentral-notes-sheet[data-all-chrome="tight"] .zn-all-toolbar .zn-btn { width: 22px; height: 22px; }
 .zentral-notes-sheet[data-all-chrome="compact"] .zn-all-toolbar .zn-chip,
@@ -2930,6 +2958,23 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
 .zentral-notes-sheet :is(.zn-cal-time-event, .zn-cal-time-reminder, .zn-cal-time-allday-cell .zn-cal-item).is-dragging { cursor: grabbing; opacity: .55; }
 .zentral-notes-sheet .zn-cal-drag-preview { position: absolute; z-index: 6; left: 0; right: 0; padding: 2px 4px; border-top: 2px solid var(--zn-accent); background: var(--zn-surface); color: var(--zn-text); font-size: .7em; pointer-events: none; }
 .zentral-notes-sheet .zn-cal-drag-preview.is-note-drop { border-radius: 4px; box-shadow: 0 2px 6px rgba(0, 0, 0, .18); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* OW-82: a drag over empty space says what releasing will do. It sits over the sheet, follows nothing (the pointer
+   already says where you are), and never eats a pointer event. */
+.zentral-notes-sheet .zn-cal-drag-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 8;
+  padding: 4px 10px;
+  border: 1px dashed color-mix(in srgb, #ff6b6b 70%, transparent);
+  border-radius: 999px;
+  background: var(--zn-surface);
+  color: var(--zn-text);
+  font-size: .78em;
+  pointer-events: none;
+  white-space: nowrap;
+}
 .zentral-notes-sheet :is(.zn-cal-month-cell, .zn-cal-picker-day, .zn-cal-time-allday-cell, .zn-cal-time-track).is-note-drop { outline: 2px dashed var(--zn-accent); outline-offset: -2px; background: color-mix(in srgb, var(--zn-accent) 16%, transparent); }
 .zentral-notes-sheet .zn-cal-time-allday-cell { position: relative; }
 
@@ -3200,6 +3245,13 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
   text-align: center;
   color: var(--zn-muted);
 }
+/* The tree's placeholder is an empty box holding the column's width, not the calendar's "return here" card. */
+.zentral-notes-sheet .zn-tree-pane.zn-cal-bigpicture-placeholder {
+  min-height: 40px;
+  border: 1px dashed var(--zn-line);
+  border-radius: var(--zn-radius, 8px);
+  background: color-mix(in srgb, var(--zn-hover) 14%, transparent);
+}
 .zentral-notes-sheet .zn-cal-bigpicture-placeholder-text {
   font-size: 0.9em;
 }
@@ -3302,6 +3354,30 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
   min-height: 0;
   background: transparent;
 }
+/* OW-80: the Notes tree on the left edge of the Big Picture card. It is the same node as the docked sheet's tree, so
+   it keeps every function; only the box around it is new. The share is the calendar's own tree share, so the splitter
+   value the person already set applies here too. */
+.zentral-notes-sheet .zn-cal-bigpicture-tree-slot {
+  display: flex;
+  flex: 0 0 var(--zn-calendar-tree-share, 36%);
+  min-width: 0;
+  min-height: 0;
+  max-width: 62%;
+  container-type: inline-size;
+  border-right: 1px solid var(--zn-line);
+  overflow: hidden;
+}
+.zentral-notes-sheet .zn-cal-bigpicture-tree-slot[hidden] { display: none; }
+.zentral-notes-sheet .zn-cal-bigpicture-tree-slot > .zn-tree-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  /* The docked pane's own share is the slot's job now; left as-is it would fight the slot. */
+  flex-basis: auto;
+}
+/* Under the tabs layout the docked tree is hidden by a rule that follows the tree node around. In the card the tree is
+   a real column with its own toggle, so that rule must not reach it (OW-80). */
+.zentral-notes-sheet[data-big-picture="true"] .zn-cal-bigpicture-tree-slot > .zn-tree-pane { display: flex !important; }
 /* Non-popover fallback: keep menus and calendar dialogs above the Big Picture card via DOM order at the same layer. */
 .zentral-notes-sheet[data-big-picture="true"] .zn-menu:not([popover]),
 .zentral-notes-sheet[data-big-picture="true"] .zn-dialog:not([popover]) {

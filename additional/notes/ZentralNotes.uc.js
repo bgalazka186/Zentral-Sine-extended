@@ -1584,7 +1584,7 @@
     // mirror of `CALENDAR_PART.UI_STATE_KEYS` and a test keeps the two equal.
     const UI_KEYS_FALLBACK = Object.freeze(["calendarView", "calendarCursor", "calendarTab", "calendarLayout",
       "calendarSplitLR", "calendarSplitTB", "calendarTreeCollapsed", "calendarPaneCollapsed",
-      "calendarFiltersCollapsed", "calendarBigPictureFiltersCollapsed", "calendarBigPictureSize",
+      "calendarFiltersCollapsed", "calendarBigPictureFiltersCollapsed", "calendarBigPictureTreeCollapsed", "calendarBigPictureSize",
       "calendarScale", "calendarPicker", "calendarWeekStart", "calendarWeekNumbers", "calendarWeekSpan",
       "calendarSnap", "calendarDaysForward", "calendarFilterKind", "calendarFilterCategory",
       "calendarBigPictureFilterKind", "calendarBigPictureFilterCategory", "calendarHours",
@@ -5441,7 +5441,7 @@
       { id: "setext", label: "Text over === or --- is a heading", pref: PREF.SETEXT, kind: "bool", def: false },
       { id: "theme", label: "Theme", pref: PREF.THEME, kind: "choice", def: "zentral", choices: NOTE_THEMES.map(([k, t]) => [k, t]) },
     ]);
-    const QUICK_IDS = Object.freeze(["font", "lineHeight", "wrap", "blank", "breaks", "sync", "copy", "mdFlavor", "theme"]);
+    const QUICK_IDS = Object.freeze(["font", "lineHeight", "wrap", "blank", "breaks", "sync", "copy", "mdFlavor", "theme", "noteDropKind"]);
     // QUICK_OPTIONS is built after SETTINGS_TABS (below): the Markdown mode lives in a settings tab, not in WRITING_OPTIONS.
     const stepOption = (opt, current, dir) => clampInt((Number(current) || opt.def) + dir * opt.step, opt.min, opt.max);
 
@@ -5511,6 +5511,13 @@
           { id: "hover", label: "Hide on an outside click instead of closing; bring back from the top edge", pref: PREF.HOVER_REVEAL, kind: "bool", def: false },
           { kind: "heading", i18nKey: "settings.heading.splitView", label: "Split view" },
           S("widePct", "Width of the sheet in split view (100% = normal)", PREF.WIDE_PERCENT, 130, 300, "%", 200),
+        ],
+      },
+      {
+        id: "calendar", label: "Calendar", items: [
+          // OW-81: the owner's "add settings in quick setting so default it creates events/reminders". "Ask" keeps the
+          // composer's own default, so nothing changes for anyone who does not touch this.
+          { id: "noteDropKind", label: "A note dragged onto the calendar becomes", meta: "calendarNoteDropKind", kind: "choice", def: "ask", choices: [["ask", "Ask each time"], ["event", "An event"], ["reminder", "A reminder"]] },
         ],
       },
       {
@@ -7738,7 +7745,7 @@
         // T3.8: the note shown beside the edited one ("" = no second pane).
         splitCompanion: { id: "", share: 50, side: "auto" },
         allNewChoice: "note", calendarClockMode: "both", spellLanguages: [],
-        calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarFiltersCollapsed: false, calendarBigPictureFiltersCollapsed: false, calendarTab: "tree",
+        calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarFiltersCollapsed: false, calendarBigPictureFiltersCollapsed: false, calendarBigPictureTreeCollapsed: false, calendarTab: "tree",
         calendarBigPictureSize: CALENDAR_PART ? CALENDAR_PART.DEFAULT_CALENDAR_BIG_PICTURE_SIZE : 90,
         calendarView: "month", calendarWeekStart: 1, calendarWeekNumbers: false, calendarWeekSpan: { days: 7, anchor: "weekStart" }, calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarBigPictureFilterKind: "all", calendarBigPictureFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
         // The hours Week and Day show ({ on, startMin, endMin }; off = the whole day). Replaced as a whole, never changed in place.
@@ -7748,7 +7755,9 @@
         calendarPicker: CALENDAR_PART ? CALENDAR_PART.cleanCalendarPicker(null) : { mode: "auto", minWidth: 470, minHeight: 360, colorMode: "count" },
         calendarHolidays: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHolidays(null, calendarHolidayLocale) : { enabled: true, region: "none", locales: [], weekend: "auto", personalDays: [] },
         calendarAlertSettings: CALENDAR_PART ? CALENDAR_PART.cleanAlertSettings(null) : {}, calendarNoteAlertOverrides: {},
-        calendarAgendaDefaults: {}, calendarNoteAgendaOverrides: {} };
+        calendarAgendaDefaults: {}, calendarNoteAgendaOverrides: {},
+        // OW-81: what a note dragged onto the calendar becomes. "ask" = the composer's own default, as before.
+        calendarNoteDropKind: "ask" };
       let meta = { ...DEFAULT_META };
       let baseDir = null;
       let dir = null;
@@ -8592,6 +8601,7 @@
             meta.allNewChoice = CALENDAR_PART.cleanAllNotesNewChoice(raw.allNewChoice);
             meta.calendarClockMode = CALENDAR_PART.cleanClockMode(raw.calendarClockMode);
             meta.calendarLayout = CALENDAR_PART.cleanCalendarLayout(raw.calendarLayout);
+            if (typeof raw.calendarNoteDropKind === "string") meta.calendarNoteDropKind = CALENDAR_PART.cleanNoteDropKind(raw.calendarNoteDropKind);
             meta.calendarSplitLR = CALENDAR_PART.cleanCalendarShare(raw.calendarSplitLR, DEFAULT_META.calendarSplitLR);
             meta.calendarSplitTB = CALENDAR_PART.cleanCalendarShare(raw.calendarSplitTB, DEFAULT_META.calendarSplitTB);
             meta.calendarTreeCollapsed = raw.calendarTreeCollapsed === true;
@@ -8599,6 +8609,7 @@
             if (meta.calendarTreeCollapsed && meta.calendarPaneCollapsed) meta.calendarTreeCollapsed = meta.calendarPaneCollapsed = false;
             meta.calendarFiltersCollapsed = raw.calendarFiltersCollapsed === true;
             meta.calendarBigPictureFiltersCollapsed = raw.calendarBigPictureFiltersCollapsed === true;
+            meta.calendarBigPictureTreeCollapsed = raw.calendarBigPictureTreeCollapsed === true;
             meta.calendarTab = raw.calendarTab === "calendar" ? "calendar" : "tree";
             meta.calendarBigPictureSize = CALENDAR_PART.cleanCalendarBigPictureSize(raw.calendarBigPictureSize);
             meta.calendarView = ["month", "upcoming", "agenda", "week", "day"].includes(raw.calendarView) ? raw.calendarView : "month";
@@ -16911,7 +16922,11 @@
       calOnlyEl.hidden = true;
       const remindEl = h("button", { type: "button", class: "zn-remind", title: "Reminder" });
       remindEl.hidden = true;
-      const head = h("div", { class: "zn-head" }, btnList, titleEl, labelEl, calOnlyEl, btnCategory, remindEl, btnPin, btnColor, btnKeep, btnHover, btnDock, btnClick, btnSize, btnMore, btnClose);
+      // OW-85 (owner, 2026-11-18: "the correct element is just under All notes title element and above Search Notes
+      // element"): the split view / folder tree / hide calendar buttons live in this one bar, not on a row of their own
+      // that pushed the tree down. They are placed right after the title, before the note's own actions.
+      const head = h("div", { class: "zn-head" }, btnList, titleEl, labelEl, calOnlyEl,
+        btnCategory, remindEl, btnPin, btnColor, btnKeep, btnHover, btnDock, btnClick, btnSize, btnMore, btnClose);
 
       const tBold = iconButton("bold", "Bold (Ctrl+B)");
       const tItalic = iconButton("italic", "Italic (Ctrl+I)");
@@ -17209,7 +17224,14 @@
       const btnCalendarPane = iconButton("calendar", t("tree.layout.hideCalendar"), "zn-calendar-pane-toggle");
       const tabTree = h("button", { type: "button", class: "zn-chip zn-calendar-tab", role: "tab", "aria-selected": "true" }, t("tree.tab.tree"));
       const tabCalendar = h("button", { type: "button", class: "zn-chip zn-calendar-tab", role: "tab", "aria-selected": "false" }, t("tree.tab.calendar"));
-      const allToolbar = h("div", { class: "zn-all-toolbar" }, btnCalendarLayout, btnCalendarTree, btnCalendarPane, h("span", { class: "zn-grow" }), tabTree, tabCalendar);
+      // Only the tabs layout's switcher is left here; the three layout buttons moved up into the sheet bar (OW-85).
+      const allToolbar = h("div", { class: "zn-all-toolbar" }, h("span", { class: "zn-grow" }), tabTree, tabCalendar);
+      // OW-85: the three layout buttons belong in the sheet bar the owner pointed at — "just under All notes title
+      // element and above Search Notes element" — not on a row of their own above the tree. They are inserted here,
+      // after the title, because this is where they are built.
+      head.insertBefore(btnCalendarPane, btnCategory);
+      head.insertBefore(btnCalendarTree, btnCalendarPane);
+      head.insertBefore(btnCalendarLayout, btnCalendarTree);
       const treePane = h("section", { class: "zn-tree-pane", "aria-label": t("tree.pane.aria") }, listEl);
       const calendarPeriod = h("span", { class: "zn-calendar-pane-hint", "aria-live": "polite" }, "");
       const calendarHeadingEl = h("strong", {}, t("cal.heading"));
@@ -17361,6 +17383,18 @@
           height: Math.max(0, Number(docEl.clientHeight) || Number(window.innerHeight) || 0),
         };
       }
+      // OW-80: the tree in the Big Picture card. `collapsed` puts it away and hands the width to the calendar; the
+      // choice is stored like the filters' own collapsed flag, so the card opens the way it was left.
+      function applyBigPictureTree(collapsed) {
+        const bp = bigPicture;
+        if (!bp) return;
+        const hide = collapsed === undefined ? store.meta.calendarBigPictureTreeCollapsed === true : collapsed;
+        bp.treeSlot.hidden = hide;
+        bp.btnTree?.setAttribute("aria-pressed", String(!hide));
+        bp.btnTree?.setAttribute("aria-label", t(hide ? "cal.bigPicture.treeShow" : "cal.bigPicture.treeHide"));
+        root.dataset.bigPictureTree = hide ? "hidden" : "shown";
+        if (store.meta.calendarBigPictureTreeCollapsed !== hide) store.setMeta({ calendarBigPictureTreeCollapsed: hide });
+      }
       function applyCalendarBigPictureBox() {
         if (!bigPicture || !CALENDAR_PART) return null;
         const pct = CALENDAR_PART.cleanCalendarBigPictureSize(store.meta.calendarBigPictureSize);
@@ -17453,6 +17487,16 @@
         } else {
           allPanels.append(calendarPane);
         }
+        // OW-80: put the tree back where it came from, before the calendar, so the sheet is whole again.
+        if (bp.treePlaceholder?.parentElement) {
+          bp.treePlaceholder.replaceWith(treePane);
+        } else if (bp.treeParent) {
+          const ref = bp.treeNext && bp.treeNext.parentElement === bp.treeParent ? bp.treeNext : null;
+          bp.treeParent.insertBefore(treePane, ref);
+        } else {
+          allPanels.insertBefore(treePane, allPanels.firstChild);
+        }
+        delete treePane.dataset.bigPicture;
         bp.backdrop.remove();
         delete calendarPane.dataset.bigPicture;
         delete root.dataset.bigPicture;
@@ -17517,6 +17561,15 @@
         const placeholderBtn = h("button", { type: "button", class: "zn-chip" }, t("cal.bigPicture.returnHere"));
         const placeholder = h("div", { class: "zn-calendar-pane zn-cal-bigpicture-placeholder" }, placeholderText, placeholderBtn);
         hostParent.insertBefore(placeholder, calendarPane);
+        // OW-80: the Notes tree comes too. "to big view calendar add on left edge notes tree, and all its functions like
+        // drag to create". It is MOVED, like the calendar: the same node keeps search, create, folder menus, rename,
+        // multi-select and the note-drag path, and its own placeholder holds the spot it must return to.
+        const treeParent = treePane.parentElement || allPanels;
+        const treeChildren = [...(treeParent.children || [])];
+        const treeIdx = treeChildren.indexOf(treePane);
+        const treeNext = treeIdx >= 0 ? (treeChildren[treeIdx + 1] || null) : null;
+        const treePlaceholder = h("div", { class: "zn-tree-pane zn-cal-bigpicture-placeholder", "aria-hidden": "true" });
+        treeParent.insertBefore(treePlaceholder, treePane);
         const titleEl = h("strong", { class: "zn-cal-bigpicture-title" }, t("cal.bigPicture.title"));
         const sizeButtons = new Map();
         const sizeGroup = h("div", { class: "zn-cal-bigpicture-sizes", role: "group", "aria-label": t("cal.bigPicture.sizeGroupAria") });
@@ -17528,13 +17581,28 @@
           sizeGroup.append(btn);
         }
         const btnClose = iconButton("x", t("cal.bigPicture.close"), "zn-cal-bigpicture-close");
-        const bar = h("div", { class: "zn-cal-bigpicture-bar" }, titleEl, h("span", { class: "zn-grow" }), sizeGroup, btnClose);
+        // OW-80: the tree can be put away, because "left edge" is a default and not always what a person wants on a
+        // small screen. The choice is remembered with the calendar's UI state.
+        const btnTree = iconButton("columns", t("cal.bigPicture.treeHide"), "zn-cal-bigpicture-tree");
+        btnTree.setAttribute("aria-pressed", "true");
+        const bar = h("div", { class: "zn-cal-bigpicture-bar" }, titleEl, h("span", { class: "zn-grow" }), btnTree, sizeGroup, btnClose);
         const stage = h("div", { class: "zn-cal-bigpicture-stage" });
+        const treeSlot = h("div", { class: "zn-cal-bigpicture-tree-slot" });
         const card = h("div", { class: "zn-cal-bigpicture-card", role: "dialog", "aria-modal": "true", "aria-label": t("cal.bigPicture.dialogAria"), tabindex: "-1" }, bar, stage);
         const backdrop = h("div", { class: "zn-cal-bigpicture-backdrop", role: "presentation" }, card);
         placeholderBtn.addEventListener("click", () => closeCalendarBigPicture({ restoreFocus: true }));
         btnClose.addEventListener("click", () => closeCalendarBigPicture({ restoreFocus: true }));
-        stage.append(calendarPane);
+        // OW-80: show or put away the tree; the calendar takes the whole card when it goes.
+        btnTree.addEventListener("click", () => {
+          if (bigPicture !== bp) return;
+          const next = bp.treeSlot.hidden !== true ? true : false;
+          applyBigPictureTree(next);
+          scheduleCalendarFit();
+        });
+        stage.append(treeSlot, calendarPane);
+        treeSlot.append(treePane);
+        treePane.hidden = false;
+        treePane.dataset.bigPicture = "true";
         calendarPane.hidden = false;
         calendarPane.dataset.bigPicture = "true";
         root.dataset.bigPicture = "true";
@@ -17553,8 +17621,9 @@
           delete backdrop.dataset.topLayer;
         }
         const bp = {
-          backdrop, card, bar, stage, titleEl, sizeGroup, sizeButtons, btnClose,
+          backdrop, card, bar, stage, titleEl, sizeGroup, sizeButtons, btnClose, btnTree, treeSlot,
           placeholder, placeholderText, placeholderBtn, hostParent, hostNext, openerFocus,
+          treePlaceholder, treeParent, treeNext,
           box: null, cleanups: [],
         };
         bigPicture = bp;
@@ -17606,6 +17675,7 @@
         const filtersChanged = beforeFilters.kind !== afterFilters.kind || beforeFilters.category !== afterFilters.category;
         syncCalendarBigPictureButton();
         syncCalendarControlsToggle();
+        applyBigPictureTree();
         applyCalendarBigPictureBox();
         restorePaneScrollSnapshot(enterState);
         if (filtersChanged) renderCalendar();
@@ -17682,7 +17752,10 @@
         const picked = CALENDAR_PART?.calendarLayoutFor?.(mode, dims.width, dims.height) || { orientation: "lr", tabs: false };
         const treeCollapsed = active && store.meta.calendarTreeCollapsed === true;
         const calendarCollapsed = active && store.meta.calendarPaneCollapsed === true;
-        if (bigPicture && (!active || calendarCollapsed)) {
+        // OW-80: opening a note from the tree inside the card sets `view` to the editor, which made `active` false here
+        // and closed the card the moment it was used. The card only closes when the calendar itself is put away, or when
+        // the person leaves All notes from outside the card.
+        if (bigPicture && (calendarCollapsed || (!active && !bigPicture.keepOnOpenNote))) {
           closeCalendarBigPicture({ restoreFocus: false });
           return;
         }
@@ -17696,7 +17769,9 @@
         allPanels.dataset.tab = tab;
         allPanels.dataset.treeCollapsed = treeCollapsed ? "true" : "false";
         allPanels.dataset.calendarCollapsed = calendarCollapsed ? "true" : "false";
-        treePane.hidden = active && (treeCollapsed || (tabs && tab !== "tree"));
+        // OW-80: in the Big Picture card the tree is a column of the card with its own toggle, so the tabs layout's
+        // "one pane at a time" rule and the docked collapse flags do not apply to it there.
+        treePane.hidden = !bigPicture && active && (treeCollapsed || (tabs && tab !== "tree"));
         if (bigPicture) {
           calendarPane.hidden = false;
           if (bigPicture.placeholder) bigPicture.placeholder.hidden = !active || calendarCollapsed || (tabs && tab !== "calendar");
@@ -17708,7 +17783,9 @@
         const share = picked.orientation === "lr"
           ? CALENDAR_PART?.cleanCalendarShare?.(store.meta.calendarSplitLR, 0.36) ?? 0.36
           : CALENDAR_PART?.cleanCalendarShare?.(store.meta.calendarSplitTB, 0.42) ?? 0.42;
-        treePane.style.flexBasis = `${Math.round(share * 1000) / 10}%`;
+        // OW-80: the card's tree slot carries the share there; setting a flex-basis on the moved pane would fight it.
+        if (!bigPicture) treePane.style.flexBasis = `${Math.round(share * 1000) / 10}%`;
+        else treePane.style.removeProperty("flex-basis");
         applyTreePaneSqueeze(treePaneEffectiveWidth(dims, picked.orientation, share, active, tabs, calendarCollapsed));
         allSplitter.setAttribute("aria-orientation", picked.orientation === "lr" ? "vertical" : "horizontal");
         allSplitter.setAttribute("aria-valuenow", String(Math.round(share * 100)));
@@ -18236,8 +18313,14 @@
           if (mode !== "read") ta.setSelectionRange(ta.value.length, ta.value.length);
         } catch (_) {}
       }
-      function openNote(id, { focus = true } = {}) {
-        closeCalendarBigPicture({ restoreFocus: false });
+      function openNote(id, { focus = true, keepBigPicture = false } = {}) {
+        // OW-80: the Notes tree now lives inside the Big Picture card. Opening a note from there must not close the
+        // view the person is working in; every other caller still gets the old behaviour (the card goes away).
+        if (keepBigPicture && bigPicture) {
+          // Hold the card open across this open; the next layout pass clears the flag.
+          bigPicture.keepOnOpenNote = true;
+          queueMicrotask(() => { if (bigPicture) bigPicture.keepOnOpenNote = false; });
+        } else closeCalendarBigPicture({ restoreFocus: false });
         closeMenu();
         if (currentId && currentId !== id) store.discardIfEmpty(currentId);
         store.setMeta({ lastNoteId: id, recent: pushRecent(store.meta.recent, id) });
@@ -20239,6 +20322,8 @@
       // Escape, pointer cancellation, panel close or teardown discards the preview.
       let calendarDrag = null, calendarMoveUndo = null, calendarDragClickTimer = 0, calendarSuppressedClick = null;
       let calendarNoteDrop = null, calendarDragNoteId = "", noteDragCanceled = false;
+      // OW-80: every note the current drag carries — one, or the whole tree selection.
+      let calendarDragNoteIds = [];
       // The Week / Day grid as it is drawn now (OW-04, OW-03): { startMin, endMin } the hours it shows, `hourPx` the
       // height of an hour, `fit` whether that height is fitted to the timeline, `openMin` the minute a timeline that
       // scrolls opens at. And per day what was laid out in it ({ startMin, endMin, item }), kept so that an update of
@@ -20325,6 +20410,7 @@
         calendarDrag = null;
         if (!g) return;
         g.preview?.remove();
+        g.dropHint?.remove(); // OW-82: the "drop to delete" hint never outlives the drag
         if (g.active) { g.button._znSuppressDragClick = true; calendarSuppressedClick = { button: g.button, pointerId: g.pointerId }; }
         g.button.classList.remove("is-dragging");
         try { if (g.button.hasPointerCapture?.(g.pointerId)) g.button.releasePointerCapture(g.pointerId); } catch (_) {}
@@ -20353,7 +20439,23 @@
         const targetCivilMin = !point || g.allDay ? 0 : CALENDAR_PART.timelineToCivilMinute(g.grid?.timeline, point.minute);
         const placement = point && (g.create ? { date: point.day, minute: point.minute } : g.allDay ? { date: point.day } : g.edge ? CALENDAR_PART.calendarResizePlacement(g.before, g.edge, g.originDay, originCivilMin, point.day, targetCivilMin, g.zone, g.snap) : CALENDAR_PART.calendarMovePlacement(g.occurrence || g.before, g.originDay, originCivilMin, point.day, targetCivilMin, g.zone, g.snap));
         g.placement = placement;
-        if (!placement) { g.preview?.remove(); g.preview = null; return; }
+        if (!placement) {
+          g.preview?.remove();
+          g.preview = null;
+          // OW-82: while an item is over empty space, say what a release would do, so the gesture is discoverable
+          // instead of a surprise. A create-drag or a resize has no throw-away meaning and says nothing.
+          if (g.active && !g.create && !g.edge && isCalendarEmptyDropPoint(event)) {
+            if (!g.dropHint) g.dropHint = h("div", { class: "zn-cal-drag-hint", "aria-hidden": "true" });
+            if (g.dropHint.parentElement !== root) root.append(g.dropHint);
+            g.dropHint.textContent = "Drop to delete\u2026";
+          } else {
+            g.dropHint?.remove();
+            g.dropHint = null;
+          }
+          return;
+        }
+        g.dropHint?.remove();
+        g.dropHint = null;
         if (!g.preview) g.preview = h("div", { class: "zn-cal-drag-preview", "aria-hidden": "true" });
         if (g.preview.parentElement !== point.track) point.track.append(g.preview);
         g.preview.style.top = g.allDay ? "0px" : Math.max(0, CALENDAR_PART.gridOffsetOf(point.minute, g.hourHeight, g.grid)) + "px";
@@ -20361,15 +20463,77 @@
         g.preview.textContent = g.allDay ? placement.date + " · all day" : placement.date + " " + String(Math.floor(shownMinute / 60)).padStart(2, "0") + ":" + String(shownMinute % 60).padStart(2, "0");
         event.preventDefault();
       }
+      // OW-82: "did this release land on empty space?" — the grid's own clips are the honest answer, not the event
+      // target (a pointer capture reports the button that started the drag). A release outside the calendar pane, or
+      // inside it but on no track and no month cell, counts as empty.
+      function isCalendarEmptyDropPoint(event) {
+        if (!Number.isFinite(event?.clientX) || !Number.isFinite(event?.clientY)) return false;
+        const inside = (node) => {
+          if (!node?.getBoundingClientRect) return false;
+          const r = node.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && event.clientX >= r.left && event.clientX < r.right && event.clientY >= r.top && event.clientY < r.bottom;
+        };
+        const inPane = inside(calendarPane) || inside(bigPicture?.stage);
+        // Outside the calendar altogether: not a throw-away gesture, just a drag that ended elsewhere.
+        if (!inPane) return false;
+        for (const el of calendarContent.querySelectorAll(".zn-cal-time-track, .zn-cal-time-allday-cell, .zn-cal-month-cell, .zn-cal-picker-day")) {
+          if (inside(el)) return false;
+        }
+        return true;
+      }
+      // OW-82: the five-minute "do not ask" window lives in the sheet, not in the store: it must not survive a restart.
+      let dragDeleteQuietUntil = 0;
+      function askDeleteByDrag(item) {
+        const current = currentCalendarItem(item);
+        if (!current) return;
+        const kind = CALENDAR_PART.isReminder(current) ? "reminder" : "event";
+        const name = String(current.summary || "Untitled item").trim() || "Untitled item";
+        const remove = () => {
+          const latest = currentCalendarItem(current);
+          if (!latest) return flash("That calendar item is no longer available");
+          // The same ownership rules as the menu's Delete: a linked line is removed from its note, never orphaned.
+          if (!CALENDAR_PART.itemIsFreeStanding?.(latest) && !CALENDAR_PART.isMirroredAgendaItem(latest)) {
+            flash("Remove this item from its source note instead");
+            return;
+          }
+          if (latest.rev !== current.rev || latest.updated !== current.updated) return flash("The item changed; nothing was deleted");
+          if (!store.deleteCalendarItem(latest.id)) return flash("Could not safely delete the calendar item or its Agenda line");
+          renderCalendar();
+          flash("Calendar item deleted");
+        };
+        if (Date.now() < dragDeleteQuietUntil) return remove();
+        const keep = chip(t("common.cancel"));
+        const quiet = chip("Delete and don't ask for 5 minutes");
+        const del = chip("Delete " + kind, true);
+        openCalendarCard("Delete this " + kind + "?",
+          h("p", { class: "zn-empty" }, `You dropped “${name}” on empty space. Deleting it cannot be undone.`),
+          h("div", { class: "zn-dialog-actions" }, quiet, keep, del));
+        keep.addEventListener("click", () => { closeDialog(); renderCalendar(); });
+        keep.focus({ preventScroll: true }); // the safe answer has the focus; Delete has to be chosen on purpose
+        del.addEventListener("click", () => { closeDialog(); remove(); });
+        quiet.addEventListener("click", () => {
+          dragDeleteQuietUntil = Date.now() + 5 * 60 * 1000;
+          closeDialog();
+          remove();
+          flash("Deleting without asking for 5 minutes");
+        });
+      }
       function commitCalendarDrag(event) {
         const g = calendarDrag;
         if (!g || (event.pointerId !== undefined && event.pointerId !== g.pointerId)) return;
         if (g.active) updateCalendarDrag(event);
         const placement = g.active ? g.placement : null;
+        // OW-82: a drag that really moved and came to rest on empty space is a throw-away gesture ("when user drags
+        // reminder to empty space it asks him if he wants to delete it"). A create-drag and a resize are not: the first
+        // is making something, the second is changing an edge. Decided before the state is cleared.
+        const throwAway = !placement && g.active && !g.create && !g.edge && !!g.before && isCalendarEmptyDropPoint(event);
         cancelCalendarDrag();
         // Native click follows pointerup in this task; clear suppression afterwards.
         releaseCalendarSuppressedClick(event);
-        if (!placement) return;
+        if (!placement) {
+          if (throwAway) askDeleteByDrag(g.before);
+          return;
+        }
         if (g.create) {
           const range = CALENDAR_PART.calendarDraftRange(g.originDay, CALENDAR_PART.timelineToCivilMinute(g.grid?.timeline, g.originMinute), placement.date, CALENDAR_PART.timelineToCivilMinute(g.grid?.timeline, placement.minute), g.zone, g.snap);
           if (!range) return flash("Select a valid non-empty calendar time range");
@@ -20535,6 +20699,34 @@
         const source = id ? store.get(id) : null;
         return source && !source.trashed ? source.id : "";
       }
+      // OW-80: several notes dropped on one calendar slot. "one note one item" is not the only useful answer, and the
+      // person is the only one who knows which they meant, so ask once and say what each choice will do.
+      function askMultiNoteDrop(noteIds, slot) {
+        const count = noteIds.length;
+        // C.parseYmd gives a civil date; calendarDayLabel wants milliseconds, and adds the weekday itself.
+        const parsed = CALENDAR_PART?.parseYmd?.(slot?.date || "") || null;
+        const dayText = parsed ? ` on ${calendarDayLabel(parsed.getTime(), { year: true })}` : "";
+        const names = noteIds.slice(0, 3).map((id) => titleOf(store.get(id)?.body) || "Untitled note");
+        const cancel = chip(t("common.cancel"));
+        const each = chip(`One item each (${count})`);
+        const one = chip("One item for all of them", true);
+        openCalendarCard("What should the drop make?",
+          h("p", {}, `${count} notes${dayText}: ${names.join(", ")}${count > 3 ? ` and ${count - 3} more` : ""}.`),
+          h("p", { class: "zn-empty" }, "One item for all of them links every note to a single item; one item each opens the composer for the first note, then the next, for a different day or time per note."),
+          h("div", { class: "zn-dialog-actions" }, cancel, each, one));
+        cancel.addEventListener("click", () => closeDialog());
+        cancel.focus({ preventScroll: true });
+        // One shared item: exactly what a single-note drop does, with the rest of the names in its description so nothing
+        // is silently dropped and the person can split them in the composer if that is what they meant.
+        one.addEventListener("click", () => {
+          closeDialog();
+          composeFromNote(noteIds[0], slot, { alsoNotes: noteIds.slice(1) });
+        });
+        each.addEventListener("click", () => {
+          closeDialog();
+          composeFromNote(noteIds[0], slot);
+        });
+      }
       function resolveCalendarNoteDrop(event) {
         const C = CALENDAR_PART;
         const el = event?.target?.closest ? event.target : event?.target?.parentElement;
@@ -20611,12 +20803,17 @@
         if (!hasNoteDragPayload(event)) return;
         const hit = resolveCalendarNoteDrop(event) || (calendarNoteDrop ? { slot: calendarNoteDrop.slot } : null);
         const id = readNoteDragId(event);
+        // OW-80: the notes this drag carries. A single note keeps today's one-step composer; several ask first, because
+        // one drop cannot mean five separate items without the person saying which shape they want.
+        const notes = (calendarDragNoteIds.length > 1 ? calendarDragNoteIds : []).filter((noteId) => !!store.get(noteId) && !store.get(noteId).trashed);
         dragNoteId = "";
         calendarDragNoteId = "";
+        calendarDragNoteIds = [];
         clearCalendarNoteDrop();
         if (!hit) return;
         event.preventDefault();
         event.stopPropagation();
+        if (notes.length > 1) { askMultiNoteDrop(notes, hit.slot); return; }
         if (id && isOpen && !destroyed) composeFromNote(id, hit.slot);
       }, true);
       listen(window, "keydown", (event) => {
@@ -21466,7 +21663,7 @@
       }
       // OW-05 / OW-02 share one note-to-composer path. when may be a local date key or a target
       // { date, startTime, endDate, endTime, allDay, kind, tz } supplied by a calendar drop.
-      function composeFromNote(noteId, when = null) {
+      function composeFromNote(noteId, when = null, opts = {}) {
         const C = CALENDAR_PART;
         if (!C || !store.items) return flash("Calendar item storage is unavailable");
         const source = typeof noteId === "string" ? store.get(noteId) : null;
@@ -21487,12 +21684,30 @@
         const options = {
           date, noteId: source.id, summary: titleOf(source.body) || "Reminder", linkCurrent: false,
         };
+        // OW-80: a shared item for several notes names the others in its description, so nothing about the drop is
+        // hidden and the person can split them out in the composer if that is what they meant.
+        const also = Array.isArray(opts.alsoNotes) ? opts.alsoNotes.filter((id) => !!store.get(id) && !store.get(id).trashed) : [];
+        if (also.length) {
+          const titles = also.map((id) => titleOf(store.get(id).body) || "Untitled note");
+          options.description = `Also from: ${titles.join(", ")}`;
+        }
         if (target) {
           if (C.KINDS.includes(target.kind)) options.kind = target.kind;
           if (typeof target.allDay === "boolean") options.allDay = target.allDay;
           for (const key of ["startTime", "endDate", "endTime", "tz"]) {
             if (typeof target[key] === "string" && target[key].trim()) options[key] = target[key].trim();
           }
+        }
+        // OW-81: the person's own answer wins over the slot's habit. A drop on a Month cell or the all-day strip is
+        // computed as an all-day *reminder*, and a drop on an hour track as an *event*; with the setting on Event or
+        // Reminder that prefill must follow the setting instead, or the option would do nothing on the surfaces it is
+        // meant for. "Ask" leaves the slot exactly as it was.
+        const dropKind = C.cleanNoteDropKind(store.meta.calendarNoteDropKind);
+        if (dropKind !== "ask") {
+          options.kind = dropKind;
+          if (!(target && typeof target.allDay === "boolean")) options.allDay = false;
+          // The composer's end date falls back to the start date on its own, and a reminder never shows the field,
+          // so nothing else has to be cleaned up here.
         }
         return askCalendarComposer(options);
       }
@@ -22902,10 +23117,15 @@
             e.dataTransfer?.setData("text/plain", n.id);
             if (e.dataTransfer) e.dataTransfer.effectAllowed = "copyMove";
           } catch (_) {}
+          // OW-80: "when dragging whole bunch of them to calendar ask user what they want to do". A drag of a selected
+          // row carries the whole selection, so the drop can ask once for all of them instead of quietly making one item
+          // from whichever row the pointer happened to start on.
+          calendarDragNoteIds = selectedNoteIdsForDrag(n.id);
         });
         item.addEventListener("dragend", () => {
           dragNoteId = "";
           calendarDragNoteId = "";
+          calendarDragNoteIds = [];
           noteDragCanceled = false;
           clearCalendarNoteDrop();
         });
@@ -22994,13 +23214,20 @@
         act,
       );
       const open = () => {
-        openNote(n.id);
+        // OW-80: when the tree is standing in the Big Picture card, a row opens its note without closing the card the
+        // person is working in. In the docked sheet the old behaviour is unchanged.
+        openNote(n.id, { keepBigPicture: bigPicture && !!treePane.closest?.(".zn-cal-bigpicture-card") });
       };
       const rowKey = (opts.pinnedRow ? "p:" : "n:") + n.id;
       if (!trashed && treeSelection.selected.has(rowKey)) {
         item.classList.add("is-selected");
         item.setAttribute("aria-selected", "true");
       }
+      // OW-80: in the card a click selects, so opening the note is the double click (and Enter, below) — the usual
+      // "select first, then act" of a file list.
+      item.addEventListener("dblclick", (e) => {
+        if (!trashed && treeInBigPicture()) { e.preventDefault?.(); open(); }
+      });
       item.addEventListener("click", (e) => {
         if (!trashed && handleRowSelectionClick(e, rowKey)) return;
         if (!trashed) { treeSelection = applyTreeSelection(treeSelection, rowKey, selectableListKeys(), {}); paintTreeSelection(); }
@@ -23089,11 +23316,33 @@
         treeSelection = { selected: next, anchor: next.has(treeSelection.anchor) ? treeSelection.anchor : "" };
         paintTreeSelection();
       }
+      // OW-80: the tree can stand in the Big Picture card, where a plain click selects instead of leaving the view.
+      const treeInBigPicture = () => !!bigPicture && !!treePane.closest?.(".zn-cal-bigpicture-card");
+      // OW-80: the notes a drag from the tree carries. A pressed row outside the selection means "just this one"; a
+      // pressed row inside it means "all of them", which is what dragging a run of selected notes has to mean.
+      function selectedNoteIdsForDrag(pressedId) {
+        const key = "n:" + pressedId;
+        if (!treeSelection.selected.has(key)) return pressedId ? [pressedId] : [];
+        return [...treeSelection.selected]
+          .filter((k) => k.startsWith("n:"))
+          .map((k) => k.slice(2))
+          .filter((id) => !!store.get(id));
+      }
       function handleRowSelectionClick(e, key) {
         if (filter === "trash") return false;
         const shift = !!e.shiftKey;
         const toggle = !!(e.ctrlKey || e.metaKey);
-        if (!shift && !toggle) return false;
+        // In the docked sheet a plain click opens the note, as it always has. In the card it selects the row (one row,
+        // or the whole run with Shift / Ctrl, exactly as in the docked tree) and the note becomes current, so the
+        // person can pick several notes to drag onto the calendar without the card closing under them.
+        if (!shift && !toggle) {
+          if (!treeInBigPicture()) return false;
+          e.preventDefault?.();
+          e.stopPropagation?.();
+          treeSelection = applyTreeSelection(treeSelection, key, selectableListKeys(), { toggle: true });
+          paintTreeSelection();
+          return true;
+        }
         e.preventDefault?.();
         e.stopPropagation?.();
         treeSelection = applyTreeSelection(treeSelection, key, selectableListKeys(), { shift, toggle });
@@ -25927,7 +26176,12 @@
       // A choice row with more than three options, or with long option names, is a dropdown: a row of chips for those wraps
       // and overflows at larger text sizes. Short sets (On/Off, Plain/Filled/Outlined) stay chips.
       const choiceIsDropdown = (choices) => choices.length > 3 || choices.some(([, text]) => String(text).length > 16);
-      const settingsTabLabel = (tab) => t("settings.tab." + tab.id);
+      // OW-81/OW-79: a tab whose translation is missing shows its own label, never "settings.tab.calendar".
+      const settingsTabLabel = (tab) => {
+        const key = "settings.tab." + tab.id;
+        const text = t(key);
+        return text === key ? tab.label : text;
+      };
       const settingsHeadingLabel = (o) => (o.i18nKey ? t(o.i18nKey) : o.label);
       const settingsOptLabel = (o) => {
         const key = "settings.opt." + o.id;
@@ -28261,6 +28515,11 @@
           { id: "note", icon: "plus", label: t("menu.new.note"), active: true, enabled: true, reason: "" },
           { id: "folder", icon: "folder", label: t("menu.new.folder"), active: false, enabled: true, reason: "" },
         ];
+        // OW-84 (owner, 2026-11-18: "now create reminder create whole day reminder are doubled in one + menu"). "New
+        // reminder" and the Create group's "Create timed reminder…" opened the same composer, and so did "New event" and
+        // "Create timed event…". A kind is now offered once: the plain row makes the item on the calendar's selected
+        // day (what it always did), and the Create group keeps only the all-day variants, which are a different thing
+        // rather than a second name for the same one.
         const rows = entries.map((entry) => ({
           icon: entry.active ? "check" : entry.icon,
           label: entry.label,
@@ -28273,10 +28532,9 @@
         // the primary list stays short. The composer opens on the calendar's selected day, as it did from Tools.
         if (opts.calendarAvailable) {
           rows.push({ sep: true });
-          rows.push({ id: "cal-tools-create", icon: "calendar", label: t("cal.toolsMenu.create"), group: [
-            { icon: "calendar", label: t("cal.toolsMenu.createTimedEvent"), action: () => queueMicrotask(() => askCreateCalendarItem("event", false, selectedCalendarDayKey())) },
+          // The reminder row above asks the day first; these are its all-day siblings under one heading.
+          rows.push({ id: "cal-tools-create", icon: "calendar", label: t("menu.new.allDay"), group: [
             { icon: "calendar", label: t("cal.toolsMenu.createAllDayEvent"), action: () => queueMicrotask(() => askCreateCalendarItem("event", true, selectedCalendarDayKey())) },
-            { icon: "bell", label: t("cal.toolsMenu.createTimedReminder"), action: () => queueMicrotask(() => askCreateCalendarItem("reminder", false, selectedCalendarDayKey())) },
             { icon: "bell", label: t("cal.toolsMenu.createAllDayReminder"), action: () => queueMicrotask(() => askCreateCalendarItem("reminder", true, selectedCalendarDayKey())) },
           ] });
         }

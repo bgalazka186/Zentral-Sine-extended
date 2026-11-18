@@ -44,32 +44,19 @@ function rule(selector, mustInclude = "") {
   return chosen.join("\n");
 }
 
-// ---- OW-73: one line, never two -------------------------------------------------------------------------------
+// ---- OW-73 reverted, OW-85: the row that had to fit is the sheet bar, not the Notes rows ----------------------
 {
-  const toolbar = rule(".zentral-notes-sheet .zn-all-toolbar", "flex-wrap");
-  assert.match(toolbar, /flex-wrap:\s*nowrap/, "the All-notes toolbar is one line");
-  assert.match(toolbar, /overflow-x:\s*auto/, "the toolbar scrolls instead of wrapping when it truly runs out of room");
-  assert.doesNotMatch(toolbar, /flex-wrap:\s*wrap/, "nothing puts the toolbar back to two lines");
+  // OW-85 (the owner, 2026-11-18): "you targeted wrong thing ... you targeted Notes only buttons, now they getting cut
+  // by window edge. first revert this changes." The All-notes toolbar and the chips row are back to wrapping; the bar
+  // that must hold one row without clipping anything is the sheet bar under the title.
+  assert.match(rule(".zentral-notes-sheet .zn-all-toolbar", "flex-wrap"), /flex-wrap:\s*wrap/, "the tabs strip wraps rather than clipping");
+  assert.match(rule(".zentral-notes-sheet .zn-chips", "flex-wrap"), /flex-wrap:\s*wrap/, "the filter chips wrap rather than clipping");
 
-  const chips = rule(".zentral-notes-sheet .zn-chips", "flex-wrap");
-  assert.match(chips, /flex-wrap:\s*nowrap/, "the filter chips row (All / Recent / Trash / Tags / Empty) is one line");
-  assert.match(chips, /overflow-x:\s*auto/, "the chips row scrolls instead of wrapping");
-
-  const chip = rule(".zentral-notes-sheet .zn-chips .zn-chip");
-  assert.match(chip, /flex:\s*0\s+1\s+auto/, "a chip gives ground before anything may wrap");
-  assert.match(chip, /min-width:\s*4\.5em/, "a chip never shrinks into an unreadable sliver");
-  assert.match(chip, /text-overflow:\s*ellipsis/, "a squeezed chip ellipsises its label");
-  assert.match(chip, /white-space:\s*nowrap/, "a chip label never wraps inside its pill");
-
-  const button = rule(".zentral-notes-sheet .zn-all-toolbar .zn-btn");
-  assert.match(button, /min-width:\s*22px/, "the layout buttons keep a tappable width");
-
-  // compact and tight share one selector list; both must keep the row on one line.
-  const chromeAt = css.indexOf('.zentral-notes-sheet[data-all-chrome="compact"] .zn-all-toolbar,');
-  assert.ok(chromeAt >= 0, "the compact / tight chrome override exists");
-  assert.ok(css.slice(chromeAt, chromeAt + 260).includes('[data-all-chrome="tight"] .zn-all-toolbar'), "the override covers both compact and tight");
-  const chromeBlock = rows(css.slice(chromeAt, css.indexOf("}", chromeAt) + 1));
-  assert.match(chromeBlock, /flex-wrap:\s*nowrap/, "the compact / tight chrome does not re-introduce a second row");
+  const head = rule(".zentral-notes-sheet .zn-head");
+  assert.match(head, /overflow-x:\s*auto/, "the sheet bar scrolls rather than clipping a button at the window edge");
+  const headBtn = rule(".zentral-notes-sheet .zn-head > .zn-btn");
+  assert.match(headBtn, /flex:\s*0\s+0\s+auto/, "a sheet bar button is never squeezed to a sliver");
+  assert.doesNotMatch(rule(".zentral-notes-sheet .zn-head"), /overflow:\s*hidden/, "the sheet bar never hides a button");
 }
 
 // ---- OW-74: the controls live in the header and outrank the name ----------------------------------------------
@@ -241,6 +228,22 @@ const io = {
   }
   assert.notEqual(en.strings["cal.view.toggleAria"], pl.strings["cal.view.toggleAria"], "the new strings are actually translated");
 
+  // ---- OW-83: the owner asked for small < o > chevrons and got pills ------------------------------------------
+  {
+    // Measured in a real headless Chromium before the fix: the two chevrons were 22x20 with a 999px radius and a 1px
+    // border, the same visual weight as "Go to today" beside them. The owner's words: "WAY too big, i asked
+    // specifically for small < o > chevrons".
+    const nav = rule(".zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-nav");
+    assert.match(nav, /border:\s*0/, "a chevron has no pill border");
+    assert.match(nav, /border-radius:\s*4px/, "a chevron is a small square, not a pill");
+    assert.match(nav, /width:\s*20px/, "a chevron is 20px wide");
+    assert.match(nav, /height:\s*20px/, "a chevron is 20px tall");
+    assert.match(nav, /padding:\s*0/, "a chevron has no side padding");
+    assert.doesNotMatch(nav, /border-radius:\s*999px/, "nothing puts the pill back");
+    // The glyph itself is drawn at 1em, not the chip's 0.92em: a small button must not make a smaller glyph smaller.
+    assert.match(nav, /font-size:\s*1em/, "the chevron glyph keeps its size while the button shrinks");
+  }
+
   await store.close();
-  console.log("OW-73 / OW-74 calendar header and one-line toolbar tests passed");
+  console.log("OW-73 / OW-74 / OW-83 calendar header and one-line toolbar tests passed");
 })().catch((err) => { console.error(err); process.exit(1); });
