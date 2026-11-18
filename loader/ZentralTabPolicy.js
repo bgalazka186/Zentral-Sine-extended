@@ -29,6 +29,9 @@
     hidden: "hidden-panel",
     essential: "essential-live",
     pinned: "pinned-kept",
+    // OW-111 (owner audit F1): a tab that backs an Essential-panel record is owned by the record's own
+    // `backgroundMode`, never by a generic tab sweep. The mode is the person's explicit consent.
+    panelRecord: "panel-record",
     audible: "audible",
     sharing: "sharing",
     pictureInPicture: "picture-in-picture",
@@ -109,6 +112,10 @@
    *   - `sessionUrl`      the tab's session entry URL, for a placeholder whose live URL is about:blank
    *   - `isHostTab`       the caller's own host-tab test (Zentral's hidden panel tabs), when it has one
    *   - `selectedTab`     the window's selected tab, when the caller is not in a window that owns `gBrowser`
+   *   - `isPanelRecord`   (bool) this tab backs an Essential-panel record (Boost's deep pass knows the record set)
+   *   - `panelConsent`    (bool) the record's mode (or Stronger saver) explicitly allows sleeping it, which
+   *                       waives ONLY the pinned/Essential rule. Every other never-rule still applies.
+   *                       Callers that pass neither input (TabUnload) get exactly the old answers.
    * @returns {{allowed: boolean, reason: string}}
    */
   function isUnloadable(tab, ctx = {}) {
@@ -132,8 +139,14 @@
     if (isSharing(tab)) return decide(false, REASONS.sharing);
     if (isAudible(tab)) return decide(false, REASONS.audible);
     if (ctx.videoSourceTab && ctx.videoSourceTab === tab) return decide(false, REASONS.videoSource);
+    // OW-111: a panel-record tab belongs to the record's own mode, not to a generic tab sweep. Without the mode's
+    // consent it is refused with its own named reason, so a `keepPinned` pref can never make Boost's TAB loop
+    // unload a `live` WhatsApp/Messenger record. `panelConsent` is the person's explicit `asleep-allowed` (or the
+    // Stronger-saver switch), and waives ONLY the pinned/Essential rule below — audible/selected/PiP/etc. already
+    // had their say above. TabUnload passes neither input, so its behaviour is exactly unchanged.
+    if (ctx.isPanelRecord && !ctx.panelConsent) return decide(false, REASONS.panelRecord);
     // Pinned and Essentials are the person's own shortlist: unloadable only when they said so.
-    if ((tab.pinned || tab.hasAttribute?.("zen-essential")) && !ctx.keepPinned) {
+    if ((tab.pinned || tab.hasAttribute?.("zen-essential")) && !ctx.keepPinned && !ctx.panelConsent) {
       return decide(false, tab.hasAttribute?.("zen-essential") ? REASONS.essential : REASONS.pinned);
     }
     if (ctx.isPrivate && ctx.isPrivate(tab)) return decide(false, REASONS.private);

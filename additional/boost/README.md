@@ -46,7 +46,10 @@ Both are read live, so switching them needs no restart. This module writes nothi
   sleeping tab, and — unless `zen.workspace.zentral.boost.keep_pinned` says otherwise — pinned and Essential tabs.
   Each refusal is a named reason, which is what `state()` and the tests read.
 - **Deep pass** (`runLevel2()`): Level 1 plus every eligible tab **oldest `lastAccessed` first**, plus the Essential
-  panel records whose own mode is `asleep-allowed`. Sleep is `gBrowser.explicitUnloadTabs([tab])` with the same
+  panel records whose own mode is `asleep-allowed`. A tab that backs an Essential-panel record is owned by its record
+  (`OW-111`): the generic tab sweep skips it, and the record's mode is the consent that lets a pinned/Essential tab
+  sleep — `live` and `throttled` stay loaded even when the pinned-tab pref is on, while Stronger saver may sleep all
+  three modes. Every other "never" rule still wins. Sleep is `gBrowser.explicitUnloadTabs([tab])` with the same
   `discardBrowser` fallback TabUnload uses; panels wake through `loadEssentialInBackground(record, true)`. Nothing is
   closed, and the selection never moves — a tab that would need a successor is simply not unloaded by a deep run.
 - **Restore** (`restore()`): an in-memory `undoState` (cap 50) of what the last deep run put to sleep. Panels wake

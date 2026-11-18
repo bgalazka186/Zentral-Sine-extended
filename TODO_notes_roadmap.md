@@ -77,7 +77,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
-|    31 | `OW-111`    | `OPEN`    | High (correctness)  | M      | none              | Boost F1: panel-record tabs must obey their `backgroundMode` in EVERY pass (Level 2, limiter, Game Mode) |
 |    32 | `OW-112`    | `OPEN`    | Low                 | S      | OW-111            | Boost F2: rename the misleading pref `keep_pinned` to `unload_pinned`, migrate once, keep old as fallback |
 |    33 | `OW-113`    | `OPEN`    | Med                 | M      | none              | Boost F3: expose the Big Picture/video source tab so its "never unload" rule is live code, not dead code  |
 |    34 | `OW-114`    | `OPEN`    | Low                 | S      | none              | Boost F4: CSS audit of `[pending]` rules that change a parked Notes/Agenda placeholder's look + narrow override |
@@ -807,36 +806,6 @@ own wording; the tests are written first, run against the current code, and the 
 still has the defect. Version stays `3.4.0`, build chain uses `--keep-version`, `docs/perf-results.md` gets one
 line per shipped row. All five are `OW-*` code tasks, so rule 1 puts them ahead of `T4.3a`.
 
-#### `OW-111` (F1) — Panel-record tabs must obey their `backgroundMode` in EVERY pass
-
-**Status:** `OPEN` · **Impact:** High (correctness) · **Effort:** M · **Depends on:** none · **Source:** owner audit F1
-
-**Problem (verified against the current code, not just the report):** `runLevel2` loops over `gBrowser.tabs` and
-asks `ZentralTabPolicy.isUnloadable` without skipping the tabs that back `essentialPanels` records; those records'
-tabs are pinned / `zen-essential` in a real Zen. `canUnload` passes `keepPinned: prefBool(boost.keep_pinned, false)`
-for **both** loops, so with the default `false` the policy refuses a pinned record tab and `asleep-allowed` is a
-no-op; with `keep_pinned` on, the TAB loop unloads `live` records (WhatsApp, Messenger) too. The existing
-`panelRecord(...)` fixture in `tests/ow-91-boost-deep.test.cjs` builds both branches of its `attrs` ternary as `[]`,
-so no test has ever given a record a pinned or Essential tab.
-
-**Plan (in this order):**
-1. Build a `Set` of `record.tab` once per deep run; the TAB loop skips those tabs — a record tab is owned ONLY by the
-   panel loop.
-2. The panel loop decides with the record's mode: `asleep-allowed` may sleep even when the tab is pinned/Essential
-   (the mode is the person's explicit consent), `live` and `throttled` are never slept by Level 2 or the limiter,
-   Stronger saver (`allowModes` = all modes) may sleep every record. Every other never-rule (selected, audible,
-   sharing, PiP, video source, already pending, host, placeholder, private) still applies to record tabs.
-3. Implement with a `ctx.panelConsent` / `ctx.isPanelRecord` input to `ZentralTabPolicy.isUnloadable` (with its own
-   named reason) so `keepPinned` is waived ONLY for a consenting record tab. `ZentralTabUnload` passes neither input
-   and keeps exactly today's answers.
-
-**Tests / done when:** `tests/ow-111-panel-record-modes.test.cjs` drives `runLevel2`, the limiter and Game Mode with
-records whose tabs are `pinned: true` and, separately, `attrs: ["zen-essential"]`: (a) `live` + keep_pinned false →
-not unloaded, (b) `live` + keep_pinned TRUE → still not unloaded by Level 2 or the limiter, (c) `asleep-allowed` +
-keep_pinned false → unloaded, (d) `throttled` → not unloaded, (e) Stronger saver → all three unloaded, (f) an
-audible/selected record is never unloaded in any mode. `tests/ow-91-boost-deep.test.cjs` fixtures become realistic.
-Red on the current code, green after.
-
 #### `OW-112` (F2) — Rename the misleading pref `keep_pinned`
 
 **Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Depends on:** OW-111 · **Source:** owner audit F2
@@ -971,10 +940,10 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and version here in place. Keep the project version at 3.4.0 until the owner explicitly says otherwise.**
 
-State: **3.4.0 on beta**. Prerequisites `OW-108`–`OW-110` (through `0090091`, merged here as `c86d4b6`) are included; the roadmap through `OW-110` is complete (see `docs/LEGACY_done_rows.md`). The owner's Boost-audit findings F1–F5 were added as `OW-111`–`OW-115` at the TOP of the Master Order: they are eligible `OW-*` code tasks, so rule 1 puts them ahead of `T4.3a`. Still open after them: `T4.3a`..`T4.3c`, `ST7.4`, and the owner live-check item `OW-66` (no code work, skip).
+State: **3.4.0 on beta**. Prerequisites `OW-108`–`OW-110` (through `0090091`, merged here as `c86d4b6`) are included. The owner's Boost-audit findings F1–F5 were added as `OW-111`–`OW-115`; `OW-111` (F1) is DONE (see `docs/LEGACY_done_rows.md`), `OW-112` (F2) is next. The remaining `OW-*` code tasks take priority over `T4.3a`..`T4.3c` and `ST7.4`; `OW-66` is the owner's live-Zen check with no code work (skip).
 
-Completed this session: added the five Boost-audit findings to the roadmap (rows + task blocks); no code shipped yet. Verified against the CURRENT code (not the old patch) that F1 is real (the tab loop never skips `essentialPanels` record tabs; `canUnload` feeds `keep_pinned` to both loops, so `asleep-allowed` is a no-op by default and `keep_pinned: true` unloads `live` records), F2 is real (`keep_pinned = true` means "may unload"), F3 is real (no writer of `window.Zentral.Video.sourceTab` or `window.__zentralVideoSourceTab` anywhere), and F4 has four `[pending]` rules in `additional/tabs/ZentralTabDensity.css` to audit. `OW-111` is the current task.
+Completed this session: added F1–F5 to the roadmap as rows + task blocks, then shipped `OW-111`. F1 was verified against the CURRENT code (not the old patch): the tab loop never skipped `essentialPanels` record tabs, and `canUnload` fed `keep_pinned` to both loops, so `asleep-allowed` was a no-op by default while `keep_pinned: true` unloaded `live` records. New `tests/ow-111-panel-record-modes.test.cjs` (11 cases: Level 2, limiter, Game Mode, pinned and `zen-essential`, audible/selected, Stronger saver, TabUnload unchanged) and the realistic pinned fixtures + regression in `ow-91` were both RED on the HEAD sources and GREEN after the fix. `runLevel2` now builds one `recordTabs` Set and delegates record tabs to the panel loop; `ZentralTabPolicy.isUnloadable` gained `isPanelRecord`/`panelConsent` with the `panel-record` reason and waives ONLY the pinned/Essential rule; `ZentralTabUnload` passes neither input. The `--keep-version` release chain, `node tests/run-all.cjs` (268/268) and `git diff --check` are green; `docs/perf-results.md` has one `OW-111` line.
 
-Known debts: no live Zen/Sine runtime is available in this session; repository tests and CI must be used where possible, and live-only claims must not be presented as verified. The F4 owner gate (compare sidebar rows before/after) and third-party Arc/Zen `[pending]` styles cannot be checked here.
+Known debts: no live Zen/Sine runtime is available in this session; repository tests and CI must be used where possible, and live-only claims must not be presented as verified. F2 (`keep_pinned = true` means "may unload") and F3 (no writer of `window.Zentral.Video.sourceTab` / `window.__zentralVideoSourceTab`) were verified as still present but are NOT yet fixed. F4 has four `[pending]` rules in `additional/tabs/ZentralTabDensity.css` to audit; its OWNER GATE (compare sidebar rows before/after) and third-party Arc/Zen `[pending]` styles cannot be checked here.
 
-Next action: `OW-111` (F1) first — tests red, then fix, release chain with `--keep-version`, full suite, `git diff --check`, docs, one commit/push — then `OW-112` → `OW-113` → `OW-114` → `OW-115`, then `T4.3a` → `T4.3b` → `T4.3c` → `ST7.4`. Keep the version at 3.4.0; never `--bump`.
+Next action: `OW-112` (F2) — tests red first, then rename `keep_pinned` → `unload_pinned` with one-time migration and old-pref fallback, no default change; `--keep-version` chain, full suite, `git diff --check`, docs, one commit/push. Then `OW-113` → `OW-114` → `OW-115` (F5 only after F1–F4 are shipped) → `T4.3a` → `T4.3b` → `T4.3c` → `ST7.4`. Keep the version at 3.4.0; never `--bump`.

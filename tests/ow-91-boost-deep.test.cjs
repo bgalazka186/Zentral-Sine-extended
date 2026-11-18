@@ -251,11 +251,17 @@ function bootBoost({ prefs = {}, tabs = [], panels = [], sessionUrls = {} } = {}
   };
 }
 
-const panelRecord = (id, mode, spec = {}) => ({
-  app: { id, name: id, url: "https://example.com/" },
-  tab: tab({ attrs: mode === "asleep-allowed" ? [] : [], url: "https://example.com/", ...spec }),
-  backgroundMode: mode,
-});
+// OW-111: a real Essential-panel record's tab is pinned (or zen-essential). The old fixture built BOTH branches of
+// its `attrs` ternary as `[]`, so no test ever exercised the policy's pinned/Essential rule against a record tab.
+// `recordTab: false` is available only for the legacy source-rule checks that need an ordinary tab.
+const panelRecord = (id, mode, spec = {}) => {
+  const { recordTab = true, ...tabSpec } = spec;
+  return {
+    app: { id, name: id, url: "https://example.com/" },
+    tab: tab({ attrs: recordTab ? ["pinned"] : [], pinned: recordTab, url: "https://example.com/", ...tabSpec }),
+    backgroundMode: mode,
+  };
+};
 
 test("a deep pass unloads ordinary background tabs and leaves every protected one alone", async () => {
   const selected = tab({ url: "https://selected.example/" });
@@ -333,6 +339,30 @@ test("panels sleep only when their own mode allows it, and Restore wakes exactly
   assert.equal(h.loaded[0]?.id, "asleep-app");
   assert.equal(h.loaded[0]?.automatic, false);
   assert.equal(h.api.undoSize(), 0, "and the record is cleared");
+  h.destroy();
+});
+
+test("OW-111: record tabs obey their mode, not keep_pinned, and are never counted twice", async () => {
+  // These record tabs are real gBrowser.tabs, pinned, exactly as Zen shows WhatsApp/Messenger/arena.ai.
+  // Before OW-111: keep_pinned true let the TAB loop sleep all three; keep_pinned false stopped even the
+  // asleep-allowed one. Both are wrong. The dedicated suite (`ow-111-panel-record-modes.test.cjs`) covers the
+  // limiter and Game Mode; this is the Level 2 seam in the module's own deep-pass suite.
+  const live = panelRecord("live-app", "live", { url: "https://live.example/" });
+  const throttled = panelRecord("throttled-app", "throttled", { url: "https://throttled.example/" });
+  const asleep = panelRecord("asleep-app", "asleep-allowed", { url: "https://asleep.example/" });
+  const h = bootBoost({
+    tabs: [live.tab, throttled.tab, asleep.tab],
+    panels: [live, throttled, asleep],
+    prefs: { "zen.workspace.zentral.boost.keep_pinned": true },
+  });
+  h.gBrowser.selectedTab = null;
+  const pending = h.api.runLevel2();
+  await h.settle();
+  const result = await pending;
+  assert.deepEqual(h.unloadCalls.map((t) => t.linkedBrowser?.currentURI?.spec), ["https://asleep.example/"],
+    "only the consenting record: keep_pinned true must not wake a live record into the tab loop");
+  assert.equal(result.unloaded.tabs, 0, "a record tab is never an ordinary tab too");
+  assert.equal(result.unloaded.panels, 1);
   h.destroy();
 });
 

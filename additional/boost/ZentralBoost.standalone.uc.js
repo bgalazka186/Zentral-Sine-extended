@@ -1166,6 +1166,9 @@ function nativeSidebarSide() {
     hidden: "hidden-panel",
     essential: "essential-live",
     pinned: "pinned-kept",
+    // OW-111 (owner audit F1): a tab that backs an Essential-panel record is owned by the record's own
+    // `backgroundMode`, never by a generic tab sweep. The mode is the person's explicit consent.
+    panelRecord: "panel-record",
     audible: "audible",
     sharing: "sharing",
     pictureInPicture: "picture-in-picture",
@@ -1246,6 +1249,10 @@ function nativeSidebarSide() {
    *   - `sessionUrl`      the tab's session entry URL, for a placeholder whose live URL is about:blank
    *   - `isHostTab`       the caller's own host-tab test (Zentral's hidden panel tabs), when it has one
    *   - `selectedTab`     the window's selected tab, when the caller is not in a window that owns `gBrowser`
+   *   - `isPanelRecord`   (bool) this tab backs an Essential-panel record (Boost's deep pass knows the record set)
+   *   - `panelConsent`    (bool) the record's mode (or Stronger saver) explicitly allows sleeping it, which
+   *                       waives ONLY the pinned/Essential rule. Every other never-rule still applies.
+   *                       Callers that pass neither input (TabUnload) get exactly the old answers.
    * @returns {{allowed: boolean, reason: string}}
    */
   function isUnloadable(tab, ctx = {}) {
@@ -1269,8 +1276,14 @@ function nativeSidebarSide() {
     if (isSharing(tab)) return decide(false, REASONS.sharing);
     if (isAudible(tab)) return decide(false, REASONS.audible);
     if (ctx.videoSourceTab && ctx.videoSourceTab === tab) return decide(false, REASONS.videoSource);
+    // OW-111: a panel-record tab belongs to the record's own mode, not to a generic tab sweep. Without the mode's
+    // consent it is refused with its own named reason, so a `keepPinned` pref can never make Boost's TAB loop
+    // unload a `live` WhatsApp/Messenger record. `panelConsent` is the person's explicit `asleep-allowed` (or the
+    // Stronger-saver switch), and waives ONLY the pinned/Essential rule below — audible/selected/PiP/etc. already
+    // had their say above. TabUnload passes neither input, so its behaviour is exactly unchanged.
+    if (ctx.isPanelRecord && !ctx.panelConsent) return decide(false, REASONS.panelRecord);
     // Pinned and Essentials are the person's own shortlist: unloadable only when they said so.
-    if ((tab.pinned || tab.hasAttribute?.("zen-essential")) && !ctx.keepPinned) {
+    if ((tab.pinned || tab.hasAttribute?.("zen-essential")) && !ctx.keepPinned && !ctx.panelConsent) {
       return decide(false, tab.hasAttribute?.("zen-essential") ? REASONS.essential : REASONS.pinned);
     }
     if (ctx.isPrivate && ctx.isPrivate(tab)) return decide(false, REASONS.private);
@@ -1912,9 +1925,10 @@ function nativeSidebarSide() {
       };
       const undoSize = () => undoState.panels.length + undoState.tabs.length;
 
-      // One tab's verdict, with every input the policy cannot read passed in. `cache` keeps the per-tab attribute reads
-      // out of the loop below; nothing here is async.
-      const canUnload = (tab, ctx) => {
+      // One tab's verdict, with every input the policy cannot read passed in. `opts.panelRecord` marks a tab that
+      // backs an Essential-panel record and `opts.panelConsent` is that record's explicit permission to sleep it
+      // (OW-111): the mode belongs to the panel loop, not to the `keep_pinned` pref or a generic tab sweep.
+      const canUnload = (tab, ctx, opts = {}) => {
         const table = policy();
         if (!table) return { allowed: false, reason: "no-policy" };
         return table.isUnloadable(tab, {
@@ -1924,6 +1938,8 @@ function nativeSidebarSide() {
           sessionUrl: ctx.sessionUrlFor?.(tab) || "",
           isHostTab: ctx.isHostTab,
           isPrivate: ctx.isPrivate,
+          isPanelRecord: Boolean(opts.panelRecord),
+          panelConsent: Boolean(opts.panelConsent),
         });
       };
 
@@ -1972,6 +1988,12 @@ function nativeSidebarSide() {
           };
           const unloaded = { tabs: 0, panels: 0 };
           const skipped = [];
+          // OW-111: the tabs behind Essential-panel records are read ONCE, before either loop. A record tab belongs
+          // to its record's `backgroundMode`: the TAB loop must never decide for it (that was how a `live` WhatsApp
+          // could be unloaded just because `keep_pinned` was on), and the PANEL loop may sleep it only with the
+          // mode's consent even though the tab is pinned/Essential.
+          const records = essentialRecords();
+          const recordTabs = new Set(records.map((r) => r.tab).filter(Boolean));
           // Tabs: oldest `lastAccessed` first, so the tab nobody has looked at for hours goes before the one from a
           // minute ago. Selection never moves: a tab that would need a successor is not unloaded by a deep run.
           if (options.allowTabs !== false) {
@@ -1981,9 +2003,11 @@ function nativeSidebarSide() {
             const limit = Number(options.batch) > 0 ? Number(options.batch) : Infinity;
             for (const tab of candidates) {
               if (disposed || unloaded.tabs >= limit) break;
-              const verdict = canUnload(tab, ctx);
+              // A record tab is owned ONLY by the panel loop below; the policy says so with its own named reason,
+              // so a live record stays loaded whatever the `keep_pinned` pref says.
+              const verdict = canUnload(tab, ctx, { panelRecord: recordTabs.has(tab) });
               if (!verdict.allowed) {
-                if (verdict.reason !== "selected" && skipped.length < 5) skipped.push(verdict.reason);
+                if (verdict.reason !== "selected" && verdict.reason !== "panel-record" && skipped.length < 5) skipped.push(verdict.reason);
                 continue;
               }
               try {
@@ -2012,10 +2036,12 @@ function nativeSidebarSide() {
             // and this pass does not read it as consent. A Stronger-saver Game Mode pass passes `allowModes` with every
             // mode, because that switch IS the consent (plan B7.2).
             const modes = Array.isArray(options.allowModes) ? options.allowModes : ["asleep-allowed"];
-            for (const record of essentialRecords()) {
+            for (const record of records) {
               if (disposed) break;
               if (!modes.includes(modeOf(record))) continue;
-              const verdict = canUnload(record.tab, ctx);
+              // OW-111: consent comes from THIS record's mode (or Stronger saver's all-modes switch), not from
+              // `keep_pinned`. It waives only the pinned/Essential rule; audible/selected/PiP/etc. still win.
+              const verdict = canUnload(record.tab, ctx, { panelRecord: true, panelConsent: true });
               if (!verdict.allowed) {
                 if (skipped.length < 8) skipped.push("panel:" + verdict.reason);
                 continue;
