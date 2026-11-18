@@ -3363,13 +3363,12 @@
         registry.set(id, cleanDef);
         if (cleanDef.pref) {
           watchPref(cleanDef.pref, () => {
-            syncWidgetsAndLayout();
-            if (cleanDef.id === "weather") {
-              // A saved name is not sent anywhere while Weather is off. Enabling it resolves any
-              // saved name-only places; disabling it invalidates an in-flight lookup result.
-              if (getBool(WIDGET_PREFS.WEATHER_ENABLED, DEFAULTS.WEATHER_ENABLED)) lookupMissingWeatherPlaces();
-              else placeLookupToken++;
+            // Invalidate before syncWidgetsAndLayout unmounts the Weather card. Re-enabling creates
+            // the card again, whose own startup path resolves any saved name-only places.
+            if (cleanDef.id === "weather" && !getBool(WIDGET_PREFS.WEATHER_ENABLED, DEFAULTS.WEATHER_ENABLED)) {
+              placeLookupToken++;
             }
+            syncWidgetsAndLayout();
           });
         }
         if (cleanDef.refreshPref) {
@@ -4642,7 +4641,7 @@
         return fetch(url, { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" })
           .then((res) => (res && res.ok ? res.json() : null))
           .then((payload) => {
-            if (disposed || token !== placeLookupToken) return false;
+            if (disposed || token !== placeLookupToken || !getBool(WIDGET_PREFS.WEATHER_ENABLED, DEFAULTS.WEATHER_ENABLED)) return false;
             const hit = readGeocodePayload(payload);
             if (!hit) return false;
             if (placeId) return applyGeocodeHit(hit, placeId);
