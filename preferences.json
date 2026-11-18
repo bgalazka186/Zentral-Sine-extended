@@ -3077,6 +3077,18 @@
     ]
   },
   {
+    "property": "zen.workspace.zentral.notes.calendar_weather_week",
+    "label": "Calendar week view: weather symbol and temperature above the day name",
+    "type": "bool",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.calendar_weather_month",
+    "label": "Calendar month view: weather symbol in the day cell (off by default: a month cell has little room)",
+    "type": "bool",
+    "defaultValue": false
+  },
+  {
     "property": "zen.workspace.zentral.notes.language",
     "label": "Notes language",
     "type": "dropdown",
