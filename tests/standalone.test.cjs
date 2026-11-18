@@ -649,6 +649,30 @@ const baseline = (env) => {
     runBuild(["--check"]);
   });
 
+  await test("build: --keep-version regenerates changed content without changing the package version", () => {
+    runBuild(["--check"]);
+    const moduleDir = path.join(buildRoot, path.relative(root, manifests[0].dir));
+    const src = path.join(moduleDir, manifests[0].m.entry);
+    const lockFile = path.join(moduleDir, "standalone.lock.json");
+    const original = fs.readFileSync(src, "utf8");
+    const oldLock = JSON.parse(fs.readFileSync(lockFile, "utf8"));
+    const manifestVersion = JSON.parse(fs.readFileSync(path.join(moduleDir, "standalone.json"), "utf8")).version;
+    fs.writeFileSync(src, original + "\n// same-version test change\n");
+    try {
+      runBuild(["--keep-version"]);
+      const nextLock = JSON.parse(fs.readFileSync(lockFile, "utf8"));
+      assert.equal(nextLock.version, manifestVersion, "the content lock stays at the owner's chosen version");
+      assert.notEqual(nextLock.hash, oldLock.hash, "the regenerated content hash records the new bundle");
+      assert.equal(JSON.parse(fs.readFileSync(path.join(moduleDir, "theme.json"), "utf8")).version, manifestVersion);
+      assert.ok(fs.readFileSync(path.join(moduleDir, manifests[0].m.output), "utf8").includes("// @version " + manifestVersion + "\n"));
+      runBuild(["--check"]);
+    } finally {
+      fs.writeFileSync(src, original);
+      runBuild(["--keep-version"]);
+    }
+    runBuild(["--check"]);
+  });
+
   for (const [label, code, pattern] of [
     ["module loader", "window.ZentralModuleLoader.load('x');", /module loader/],
     ["unprovided runtime member", "window.ZentralRuntime?.snapshot();", /does not provide/],

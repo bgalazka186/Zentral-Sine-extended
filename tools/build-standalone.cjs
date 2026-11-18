@@ -4,9 +4,10 @@
  * Output goes NEXT TO the source so Sine can be pointed at the module folder:
  *   <dir>/theme.json, <dir>/preferences.json, <dir>/<output>.uc.js, <dir>/standalone.lock.json
  *
- * Usage: node tools/build-standalone.cjs [--check] [--bump]
- *   --check  build in memory, fail if committed files differ (CI / pre-commit)
- *   --bump   if content changed but version did not, raise the patch version
+ * Usage: node tools/build-standalone.cjs [--check] [--bump|--keep-version]
+ *   --check        build in memory, fail if committed files differ (CI / pre-commit)
+ *   --bump         if content changed but version did not, raise the patch version
+ *   --keep-version regenerate output and content lock without changing the declared version (development branches)
  *
  * Rules enforced:
  *  - content changed => version must change (Sine updates by version);
@@ -20,6 +21,8 @@ const fs = require("node:fs"),
   vm = require("node:vm");
 const root = path.resolve(__dirname, ".."),
   args = new Set(process.argv.slice(2));
+if (args.has("--bump") && args.has("--keep-version"))
+  throw new Error("--bump and --keep-version are mutually exclusive");
 const SHIM = path.join(root, "loader/standalone/ZentralStandaloneShim.js"),
   RUNTIME = path.join(root, "loader/ZentralRuntime.js");
 const SIDEBAR_FUNCTIONS = [
@@ -355,15 +358,20 @@ function build(manifestFile) {
   const contentHash = sha(bundleFor("0.0.0") + css + json(prefs) + assetText);
   let version = m.version;
   if (lock && lock.hash !== contentHash && lock.version === version) {
-    if (!args.has("--bump"))
-      throw new Error(
-        `${m.id}: content changed but version is still ${version}. ` +
-          `Raise "version" in ${path.relative(root, manifestFile)} (or run with --bump), otherwise Sine will not update users.`,
-      );
-    const [a, b, c] = version.split(".").map(Number);
-    version = `${a}.${b}.${c + 1}`;
-    m.version = version;
-    fs.writeFileSync(manifestFile, json(m));
+    // Development branches may deliberately keep the package version fixed while
+    // regenerating its bundle. Sine's version-based update detection is therefore
+    // unchanged; this opt-in is reserved for branches whose owner has locked it.
+    if (!args.has("--keep-version")) {
+      if (!args.has("--bump"))
+        throw new Error(
+          `${m.id}: content changed but version is still ${version}. ` +
+            `Raise "version" in ${path.relative(root, manifestFile)} (or run with --bump or --keep-version), otherwise Sine will not update users.`,
+        );
+      const [a, b, c] = version.split(".").map(Number);
+      version = `${a}.${b}.${c + 1}`;
+      m.version = version;
+      fs.writeFileSync(manifestFile, json(m));
+    }
   }
   const theme = {
     id: m.themeId,

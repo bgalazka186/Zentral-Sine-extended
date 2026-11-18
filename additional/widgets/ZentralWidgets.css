@@ -39,12 +39,7 @@
 
 /* ---- OW-71 / OW-72: reordering and appearance -------------------------------------
    The tray gains a small handle per card and a set of colour variables that every card (and every future card)
-   inherits. The variables are written on the tray by the shell, never on a card, so one place decides the look. */
-#zentral-sidebar-widgets .zw-card {
-  background: var(--zw-card-bg, color-mix(in srgb, var(--zen-colors-tertiary, var(--toolbar-field-background-color, rgba(127, 127, 127, 0.14))) 78%, transparent)) !important;
-  color: var(--zw-card-text, inherit) !important;
-  border-color: var(--zw-card-line, color-mix(in srgb, currentColor 11%, transparent)) !important;
-}
+   inherits. The variables are written on the tray by the shell; the effective card rules below consume them. */
 
 /* The handle is quiet until the card is hovered or it is focused: it is a tool, not decoration. */
 #zentral-sidebar-widgets .zw-grip {
@@ -119,13 +114,13 @@
   min-width: 0 !important;
   padding: 8px 10px !important;
   border-radius: var(--zw-radius, 10px) !important;
-  border: 1px solid color-mix(in srgb, currentColor 11%, transparent) !important;
-  background: color-mix(
+  border: 1px solid var(--zw-card-line, color-mix(in srgb, currentColor 11%, transparent)) !important;
+  background: var(--zw-card-bg, color-mix(
     in srgb,
     var(--zen-colors-tertiary, var(--toolbar-field-background-color, rgba(127, 127, 127, 0.14))) 78%,
     transparent
-  ) !important;
-  color: inherit !important;
+  )) !important;
+  color: var(--zw-card-text, inherit) !important;
   overflow: hidden !important;
   font-variant-numeric: tabular-nums !important;
   transition: border-color 140ms ease, background-color 140ms ease !important;
@@ -133,11 +128,11 @@
 
 #zentral-sidebar-widgets .zw-card:hover {
   border-color: color-mix(in srgb, currentColor 20%, transparent) !important;
-  background: color-mix(
+  background: var(--zw-card-bg, color-mix(
     in srgb,
     var(--zen-colors-tertiary, var(--toolbar-field-background-color, rgba(127, 127, 127, 0.2))) 88%,
     transparent
-  ) !important;
+  )) !important;
 }
 
 #zentral-sidebar-widgets .zw-card[data-zw-clickable="true"] {
@@ -146,11 +141,11 @@
 
 #zentral-sidebar-widgets .zw-card[data-zw-clickable="true"]:hover {
   border-color: color-mix(in srgb, var(--zen-primary-color, currentColor) 42%, transparent) !important;
-  background: color-mix(
+  background: var(--zw-card-bg, color-mix(
     in srgb,
     var(--zen-primary-color, var(--zen-colors-tertiary, rgba(127, 127, 127, 0.2))) 14%,
     var(--zen-colors-tertiary, var(--toolbar-field-background-color, rgba(127, 127, 127, 0.16)))
-  ) !important;
+  )) !important;
 }
 
 #zentral-sidebar-widgets .zw-card[data-zw-clickable="true"]:active {

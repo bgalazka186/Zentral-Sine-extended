@@ -231,9 +231,18 @@ const BASE = {
     api.destroy();
   });
 
-  await test("OW-72: the CSS reads the choice, with the theme as the fallback", () => {
-    assert.match(CSS, /\.zw-card \{[^}]*background: var\(--zw-card-bg,/, "the card background falls back to the theme");
-    assert.match(CSS, /\.zw-card \{[^}]*color: var\(--zw-card-text,/, "and so does its text");
+  await test("OW-105: the effective card and hover rules honour forced colours", () => {
+    const baseStart = CSS.indexOf("/* New-tab-page-style translucent widget card */");
+    const hoverStart = CSS.indexOf("#zentral-sidebar-widgets .zw-card:hover", baseStart);
+    const clickableHoverStart = CSS.indexOf('#zentral-sidebar-widgets .zw-card[data-zw-clickable="true"]:hover', hoverStart);
+    assert.ok(baseStart >= 0 && hoverStart > baseStart && clickableHoverStart > hoverStart, "the real card rules are present in cascade order");
+    const base = CSS.slice(baseStart, hoverStart);
+    const hover = CSS.slice(hoverStart, clickableHoverStart);
+    const clickableHover = CSS.slice(clickableHoverStart, CSS.indexOf("#zentral-sidebar-widgets .zw-card[data-zw-clickable=\"true\"]:active", clickableHoverStart));
+    assert.match(base, /background:\s*var\(--zw-card-bg,/, "the final base-card background consumes the tray override");
+    assert.match(base, /color:\s*var\(--zw-card-text,/, "the final base-card text consumes the tray override");
+    assert.match(hover, /background:\s*var\(--zw-card-bg,/, "ordinary hover does not replace a forced background");
+    assert.match(clickableHover, /background:\s*var\(--zw-card-bg,/, "clickable-card hover does not replace a forced background");
   });
 
   console.log(passed + " widget report tests passed");
