@@ -25,6 +25,7 @@ docs/*
 !docs/MENU_BASELINE.md
 !docs/perf-results.md
 !docs/ow-114-pending-css-audit.md
+!docs/st7-4-agenda-rows-research.md
 patches/
 zentral/upstream/
 
