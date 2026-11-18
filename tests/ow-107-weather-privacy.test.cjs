@@ -94,7 +94,9 @@ function weatherFetch(calls) {
   }) });
   await wait();
   const savedAfterDisable = JSON.parse(h2.Services.prefs.getStringPref(PREF.places, "[]"));
-  assert.equal(savedAfterDisable[0].latitude, null, "a lookup finishing after disable cannot persist coordinates");
+  assert.ok(savedAfterDisable[0], "the named place remains saved");
+  assert.equal(savedAfterDisable[0].latitude ?? null, null, "a lookup finishing after disable cannot persist latitude");
+  assert.equal(savedAfterDisable[0].longitude ?? null, null, "a lookup finishing after disable cannot persist longitude");
   api2.destroy();
 
   // Static defense: location access must remain user-input-only; no silent device geolocation.
