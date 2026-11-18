@@ -80,6 +80,8 @@ A setting from before 3.3.176 is converted once: Comfortable becomes Fit, Compac
 
 Resizing no longer draws the calendar again with every px. Month fits its cells where they are, and Week and Day are drawn again only when the fitted height of an hour changes (it moves in quarter px).
 
+Every menu the sheet opens (calendar View, Size, Snap, Days, Kind filter, Category filter, Tools, the month cell and the calendar item; the notes `+` menu, a note row) was measured the same way, by `tools/audit-notes-menus.cjs`: 11 menus across 3 text sizes, 2 sheet sizes, 2 sheet heights and both kinds of scrollbar — 264 measurements, 0 findings. It checks that a row is not shorter than its label, that a label is not cut, that a menu fits the window it opened into, that it does not cover the button that opened it, and that every submenu level offers a Back row. The numbers are kept in `docs/MENU_BASELINE.md`; `--compare docs/MENU_BASELINE.md` fails when one moves by more than 4 px. At 13 px text the calendar Tools menu is 196 px (6 rows) and the `+` menu 196 px (6 rows); at 28 px text in a narrow sheet they are 331 px, still inside the window.
+
 Where the hours and the weeks fit, nothing scrolls and no room is left empty; where they cannot fit, they have their smallest height. Both were measured in a headless Chromium (`tools/audit-notes-calendar-fit.cjs`: text sizes 8 to 28 px, sheets 330 to 1000 px high, panes side by side and one above the other, both kinds of scrollbar). At the default text size, with the panes side by side and nothing in the all-day row, 24 hours fit from a sheet about 710 px high and 08–20 from about 500 px. Zen draws with Gecko; live behaviour in Zen is not verified.
 
 ### Markdown supported

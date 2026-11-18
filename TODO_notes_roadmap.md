@@ -98,7 +98,7 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 |   100 | `OW-74`     | `DONE`    | High                | M      | —                 | With the calendar control strip hidden the basic controls must still be reachable, sitting right of the calendar name and left of the long month name, and outranking the name |
 |   101 | `OW-75`     | `DONE`    | Med                 | M      | —                 | Re-see every calendar menu — they are unreadable: regroup by how often each option is used, move the "create … from calendar" extras under Notes "+" |
 |   102 | `OW-76`     | `DONE`    | Med                 | M      | —                 | Calendar and notes must copy the style of Zentral's appearance themes by default, with extra customisation only if the person opts in |
-|   103 | `OW-77`     | `OPEN`    | Med                 | M      | —                 | A visual audit of every calendar/notes menu in real Chromium (the fit-audit harness) so "unreadable" is measured, not argued, and stays measured |
+|   103 | `OW-77`     | `DONE`    | Med                 | M      | —                 | A visual audit of every calendar/notes menu in real Chromium (the fit-audit harness) so "unreadable" is measured, not argued, and stays measured |
 |   104 | `OW-78`     | `DONE`    | Med                 | S      | —                 | One theme-resolution path: the CSS `--zn-*` variables and the JS resolver must agree, so `zentral` cannot mean two different palettes |
 |   105 | `OW-79`     | `DONE`    | Low-Med             | M      | —                 | More languages without code: a language file must be droppable in, and a missing translation must never show a raw key like `cal.todayBtn` |
 |   106 | `OW-80`     | `DONE`    | High                | L      | —                 | Big Picture: the Notes tree must be there too, on the left edge, with all of its functions — including drag of a note into the calendar to create an item |
@@ -297,7 +297,7 @@ uses while a tab is being dragged cannot be reproduced in the fake sidebar; it n
 
 #### `OW-77` — Measure every calendar and notes menu, in a real browser, and keep the numbers
 
-**Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Depends on:** OW-75 · **Source:** Owner decision (2026-11-18), "go for it, going to be useful in the future, you can get all zentral elements there"
+**Status:** `DONE` (3.3.314) · **Impact:** Med · **Effort:** M · **Depends on:** OW-75 · **Source:** Owner decision (2026-11-18), "go for it, going to be useful in the future, you can get all zentral elements there"
 
 **Problem:** OW-75 was decided by measuring the menus by hand in the headless-Chromium harness of
 `tools/audit-notes-calendar-fit.cjs` (the Tools menu was 18 rows, 568 px at 13 px text and 619 px with a scrollbar at
@@ -320,6 +320,42 @@ is in the suite, because a fake DOM has no layout.
 
 **Tests / done when:** The tool runs at 0 findings on the current build, every calendar menu appears in its output with a
 row height and a verdict, and the recipe is documented so the next session can re-run it.
+
+**Done at 3.3.314.** `tools/audit-notes-menus.cjs` opens the real sheet in a headless Chromium (nothing mocked but the
+disk) and opens **11 menus**: calendar View, Size, Snap, Days, Kind filter, Category filter, Tools, the month cell and the
+calendar item context menus; the notes `+` menu and a note row. It also opens every group row inside each of them and
+comes back through its Back row. Grid: 3 text sizes (13/20/28 px) × 2 sheet widths (1100/620) × 2 sheet heights
+(560/720) × both scrollbar kinds = **264 measurements, 0 findings**, 16 cells "not applicable" (a 620 px sheet draws
+Month as the date-only picker, so there are no cells or marks to right-click — counted apart, never as a defect).
+
+**What it measures, per menu:** a row shorter than its own label (`row-tight`), a row over 2.6× the text size for one
+line (`row-tall`), a label wider than its box with no ellipsis (`label-clipped`), a menu taller than the window and not
+scrollable (`menu-too-tall`), a menu whose box leaves the window (`menu-off-window`), a group level with no Back row
+(`group-no-back`), a group that loses its parent level (`group-loses`), an empty menu, and a page error.
+
+**The numbers are kept.** `docs/MENU_BASELINE.md` is generated with `--baseline` (one row per measurement: rows, menu
+height, verdict) and `--compare docs/MENU_BASELINE.md` fails when any menu height moves by more than `--tolerance` px.
+At 13 px text the calendar Tools menu is 196 px (6 rows, 29.5 px each) and the `+` menu 196 px (6 rows); the largest is
+the month cell menu at 10 rows, growing from 343.5 px at 13 px text to 591 px at 28 px.
+
+**The tool was proved to catch defects, not just to pass.** Giving every menu row a 6 px height produced **67**
+`row-tight` findings across all 11 menus; raising the rows' padding from 5 px to 18 px moved **226 of 264** baseline rows
+and made `--compare` exit 1 with named menus (Tools 331 → 448 px, `+` 331 → 487 px). Both were reverted; the 0-finding
+run above is on the real stylesheet.
+
+**A real bug the tool found in itself, and one in the report:** the first version removed the open menu node by hand
+between measurements, which left the sheet's own menu variable pointing at a detached element, so the next `fill` threw
+"the node to be removed is no longer a child of this node" — it now closes menus the way a person does, with a
+pointerdown outside. And skipped cells were still averaged into their menu's height range with an uninitialised value,
+which made a 300 px menu look like it ran to 720 px; they are now excluded.
+
+**Not in the suite**, deliberately: it needs a browser. The recipe is in the tool's header and in
+`additional/notes/README.md` beside the other audits (`mkdir /tmp/ch && npm i @sparticuz/chromium puppeteer-core`, then
+`AWS_EXECUTION_ENV=AWS_Lambda_nodejs22.x NODE_PATH=/tmp/ch/node_modules node tools/audit-notes-menus.cjs`).
+
+**Honest limits:** measured in Blink; Zen draws with Gecko, which differs by a line's height and a glyph's width — the
+verdicts are written for that ("tight" only when a label is actually cut, not when it is near the edge). Quick settings
+opens a card, not a menu (`openCard` + `fitCard`), so it is measured by the settings-layout audit, not here.
 
 #### `OW-78` — One palette: the CSS variables and the JS resolver must agree
 
@@ -763,4 +799,4 @@ Known debts / owner requirements: LIMITS of `OW-04`: the pointer is held to the 
 
 Planning only, no code (2026-11-17, version 3.3.244): the owner's holiday list added as `OW-43` (holiday sets split from the interface language, any language picks any set, first sets `PL` + `US`), `OW-44` (any number of sets at once), `OW-45` (one-place year table for movable/one-off dates such as the Polish election day and `niedziela handlowa`), `OW-46` (one master off switch) and `T2.13a` (how holidays behave when the `T2.13` ICS/Google groundwork is built: local sets are never imported or synced). They sit at the top of the Master Order; `T3.3` follows them.
 
-Next action: `OW-77` (a real-Chromium audit of every Notes and calendar menu, so "unreadable" stays measured), then `ST7.4` and the `T4.3a`→`b`→`c` extraction chain. `OW-66` is the owner's live check of `OW-58`–`OW-65` and `OW-73`–`OW-76` in the real sidebar and needs no code from a session. Finished lately: `OW-21` (find and replace, 3.3.300), `OW-65` (the Clock card's shape, 3.3.301), `OW-22` (next match not on screen, 3.3.302), `OW-67`–`OW-72` (the six widget reports, 3.3.303) and `OW-73`–`OW-76` (the four calendar reports, 3.3.304: the one-line toolbar, the header controls that outlive the strip, the regrouped menus and the Zentral appearance theme). Then 3.3.307: `OW-80`/`OW-86` (the tree in Big Picture — moved, not copied; a click selects there, a double click opens, and a multi-note drop asks), `OW-81` (the quick-settings default for a dropped note, measured to still fit the card), `OW-82` (drop on empty space asks, with a five-minute silent window), and the owner's three corrections `OW-83` (small bare chevrons), `OW-84` (no creation offered twice in the `+` menu) and `OW-85` (**`OW-73` reverted** — it targeted the Notes rows; the layout buttons now sit in the bar under the title, where nothing is cut at 420, 340 or 300px). `ST7.3` stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.
+Next action: `ST7.4` (render Agenda rows without real tabs — research) and the `T4.3a`→`b`→`c` extraction chain, both large. `OW-66` is the owner's live check of `OW-58`–`OW-65`, `OW-73`–`OW-76` and `OW-80`–`OW-86` in the real sidebar and needs no code from a session. Finished lately: `OW-21` (find and replace, 3.3.300), `OW-65` (the Clock card's shape, 3.3.301), `OW-22` (next match not on screen, 3.3.302), `OW-67`–`OW-72` (the six widget reports, 3.3.303) and `OW-73`–`OW-76` (the four calendar reports, 3.3.304). Then 3.3.307: `OW-80`/`OW-86` (the tree in Big Picture — moved, not copied; a click selects there, a double click opens, and a multi-note drop asks), `OW-81` (the quick-settings default for a dropped note), `OW-82` (drop on empty space asks, with a five-minute silent window), and the owner's three corrections `OW-83` (small bare chevrons), `OW-84` (no creation offered twice in the `+` menu) and `OW-85` (`OW-73` reverted — the layout buttons now sit in the bar under the title, where nothing is cut at 420, 340 or 300px). 3.3.309: `T2.13` (the `.ics` writer, `syncState`, and the round trip that proves `import → export → import` is the same calendar). 3.3.310: `T2.13a` (an imported holiday calendar is never a local holiday — `isWorkFree` cannot see the item store, the mark is a neutral imported look, and both the import card and the holidays settings say so). 3.3.311: `OW-78` (one palette — the CSS chain reads the resolved token first and the resolver was found hardcoding two themes' text colours). 3.3.313: `OW-79` (a language is a data file, and a key no table has draws readable words, never a dotted key). 3.3.314: `OW-77` (`tools/audit-notes-menus.cjs` — 11 menus, 264 measurements, 0 findings, baseline in `docs/MENU_BASELINE.md`). `ST7.3` stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.
