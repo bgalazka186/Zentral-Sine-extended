@@ -115,10 +115,13 @@ test("a reading that cannot be taken says so instead of vanishing", () => {
   assert.equal(none[0].kind, "memory");
   assert.equal(none[0].text, "\u2014");
   assert.equal(none[0].unavailable, true);
-  // A battery-only card on a machine with no battery says why it is empty.
+  // OW-70: a battery-only card on a desktop (no battery) is QUIET — the owner has no battery and read the old "no
+  // battery" line as a broken widget. The fact survives in the title, where it explains without nagging.
   const batteryOnly = c.composeStatusParts({ showBattery: true, showMemory: false }, null, null, { battery: false, memory: false });
   assert.equal(batteryOnly.length, 1);
-  assert.equal(batteryOnly[0].text, "no battery");
+  assert.equal(batteryOnly[0].text, "", "a desktop is not an error message");
+  assert.match(batteryOnly[0].title, /no battery/i, "the reason is still there for whoever wants it");
+  assert.equal(batteryOnly[0].unavailable, true);
   // A real reading is never replaced by a placeholder.
   const mixed = c.composeStatusParts({ showBattery: true, showMemory: true }, { level: 0.7 }, null, { battery: true, memory: false });
   assert.deepEqual(json(mixed.map((p) => p.kind)), ["battery", "memory"], "the reading, then the dash");

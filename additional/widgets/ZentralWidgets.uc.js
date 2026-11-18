@@ -52,6 +52,10 @@
     WEATHER_PLACES: "zen.workspace.zentral.widgets.weather.places",
     TIMER_ENABLED: "zen.workspace.zentral.widgets.timer.enabled",
     TIMER_CLICK_STOPWATCH: "zen.workspace.zentral.widgets.timer.click_stopwatch",
+    CLOCK_QUICK_NOTE: "zen.workspace.zentral.widgets.clock.quick_note",
+    ORDER: "zen.workspace.zentral.widgets.order",
+    APPEARANCE_BG: "zen.workspace.zentral.widgets.appearance.background",
+    APPEARANCE_TEXT: "zen.workspace.zentral.widgets.appearance.text",
     // OW-56: one Clock card, two faces; and what a finished countdown does.
     CLOCK_MODE: "zen.workspace.zentral.widgets.clock.mode",
     TIMER_END_SOUND: "zen.workspace.zentral.widgets.timer.end_sound",
@@ -89,6 +93,10 @@
     WEATHER_REFRESH_MINUTES: 30,
     TIMER_ENABLED: true,
     TIMER_CLICK_STOPWATCH: true,
+    CLOCK_QUICK_NOTE: true,
+    ORDER: "",
+    APPEARANCE_BG: "",
+    APPEARANCE_TEXT: "",
     CLOCK_MODE: "clock",
     TIMER_END_SOUND: "beep",
     TIMER_END_NOTICE: "none",
@@ -117,6 +125,11 @@
       "weather.title": "Weather",
       "status.title": "Status",
       "tray.label": "Sidebar widgets",
+      "tray.move": "Move this widget",
+      "tray.moveUp": "Move this widget up",
+      "tray.moveDown": "Move this widget down",
+      "tray.moved": "{title} moved to position {position} of {total}",
+      "tray.moveHint": "Drag, or press Alt+Up / Alt+Down",
       "clock.aria": "Clock. Click for the timer.",
       "clock.ariaAlert": "Countdown finished. ",
       "timer.aria": "Timer {value}{kind}. Click for the clock.",
@@ -153,6 +166,11 @@
       "weather.title": "Pogoda",
       "status.title": "Stan",
       "tray.label": "Widgety panelu bocznego",
+      "tray.move": "Przenieś ten widget",
+      "tray.moveUp": "Przenieś ten widget wyżej",
+      "tray.moveDown": "Przenieś ten widget niżej",
+      "tray.moved": "{title} przeniesiono na pozycję {position} z {total}",
+      "tray.moveHint": "Przeciągnij albo użyj Alt+góra / Alt+dół",
       "clock.aria": "Zegar. Kliknij, aby otworzyć minutnik.",
       "clock.ariaAlert": "Minutnik zakończony. ",
       "timer.aria": "Minutnik {value}{kind}. Kliknij, aby wrócić do zegara.",
@@ -292,6 +310,101 @@
     return /^[a-z0-9][a-z0-9_-]{0,47}$/.test(s) ? s : "";
   }
 
+  // OW-71: the order the person chose, applied to whatever widgets exist. Three promises, in this order:
+  //   1. the stored ids that still exist come first, in the stored order;
+  //   2. an id nobody recognises is dropped silently (a widget was removed; that is not the person's mistake);
+  //   3. every widget NOT in the stored list follows, in its own default order — so a new widget appears without the
+  //      person having to re-order anything, and nothing is ever lost from the tray.
+  const cleanWidgetOrder = (raw) => {
+    const out = [];
+    if (typeof raw !== "string") return out;
+    for (const part of raw.split(/[\s,;]+/)) {
+      const id = normalizeWidgetId(part);
+      if (id && !out.includes(id)) out.push(id);
+    }
+    return out;
+  };
+  // `defs` is every enabled definition in its DEFAULT order.
+  function orderedByIds(defs, orderIds) {
+    const list = Array.isArray(defs) ? defs : [];
+    const wanted = Array.isArray(orderIds) ? orderIds : [];
+    const byId = new Map(list.map((d) => [d.id, d]));
+    const out = [];
+    for (const id of wanted) {
+      const def = byId.get(id);
+      if (def && !out.includes(def)) out.push(def);
+    }
+    for (const def of list) if (!out.includes(def)) out.push(def);
+    return out;
+  }
+  // The stored order after moving `id` one place in `dir` (-1 up, +1 down), among the ids that exist right now.
+  function moveInOrder(ids, id, dir, existing) {
+    const list = (Array.isArray(ids) ? ids : []).filter((x) => !existing || existing.includes(x));
+    const at = list.indexOf(id);
+    if (at < 0) return list;
+    const to = at + (dir < 0 ? -1 : 1);
+    if (to < 0 || to >= list.length) return list;
+    const next = list.slice();
+    next.splice(at, 1);
+    next.splice(to, 0, id);
+    return next;
+  }
+
+  // OW-72: the colours a person may pick. "" means "follow the theme", which is the default and writes nothing at all.
+  // Anything stored is normalised to lowercase #rrggbb, so a half-typed value can never reach the stylesheet.
+  const THEME_COLOR = /^#[0-9a-f]{6}$/;
+  function cleanWidgetColor(raw) {
+    const v = String(raw ?? "").trim().toLowerCase();
+    if (!v) return "";
+    if (/^#[0-9a-f]{3}$/.test(v)) return "#" + v[1] + v[1] + v[2] + v[2] + v[3] + v[3];
+    if (THEME_COLOR.test(v)) return v;
+    // A named colour is accepted only when the platform can parse it (rgb/name/hsl all come back as rgb()).
+    return "";
+  }
+  function parseWidgetColor(raw) {
+    const v = String(raw ?? "").trim().toLowerCase();
+    if (!v) return null;
+    if (/^#[0-9a-f]{3}([0-9a-f]{3})?$/.test(v)) {
+      const hex = v.length === 4 ? "#" + v[1] + v[1] + v[2] + v[2] + v[3] + v[3] : v;
+      return { r: parseInt(hex.slice(1, 3), 16), g: parseInt(hex.slice(3, 5), 16), b: parseInt(hex.slice(5, 7), 16) };
+    }
+    const m = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(v);
+    if (m) return { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]) };
+    return null;
+  }
+  // WCAG relative luminance and contrast ratio: the honest test of "is this readable", not a guess about "light" or
+  // "dark". AA for normal text is 4.5:1.
+  function relativeLuminance(c) {
+    const ch = [c.r, c.g, c.b].map((v) => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+  }
+  function contrastRatio(a, b) {
+    const la = relativeLuminance(a);
+    const lb = relativeLuminance(b);
+    const hi = Math.max(la, lb);
+    const lo = Math.min(la, lb);
+    return (hi + 0.05) / (lo + 0.05);
+  }
+  // What the person chose, as CSS custom properties for the tray. An unreadable pair is REFUSED here (not written and
+  // then complained about), so the cards can never end up invisible; the caller decides whether to say why.
+  const CONTRAST_MIN = 4.5;
+  function widgetAppearanceVars(bgRaw, textRaw) {
+    const bg = cleanWidgetColor(bgRaw);
+    const text = cleanWidgetColor(textRaw);
+    if (!bg && !text) return { vars: {}, readable: true, contrast: 0, refused: false };
+    const refused =
+      Boolean(bg && text) && contrastRatio(parseWidgetColor(bg), parseWidgetColor(text)) < CONTRAST_MIN;
+    if (refused) return { vars: {}, readable: false, contrast: contrastRatio(parseWidgetColor(bg), parseWidgetColor(text)), refused: true };
+    const vars = {};
+    if (bg) vars["--zw-card-bg"] = bg;
+    if (text) vars["--zw-card-text"] = text;
+    const contrast = bg && text ? contrastRatio(parseWidgetColor(bg), parseWidgetColor(text)) : 0;
+    return { vars, readable: true, contrast, refused: false };
+  }
+
   function parseDisabledIds(raw) {
     const out = new Set();
     if (!raw || typeof raw !== "string") return out;
@@ -387,7 +500,10 @@
    * The static presentation changes only when the minute or display options change;
    * on a steady 1 Hz tick, only the seconds text node is touched.
    */
-  function renderClockElements(elements, value, previousStaticKey = "") {
+  // `force` is the repaint path (OW-67): a card that is being shown again must be written even when the value looks
+  // unchanged, because the DOM may have been emptied while the sidebar was folded. Without it the "nothing changed"
+  // shortcut kept a blank clock blank forever — the owner's "sometimes it stays not rendered".
+  function renderClockElements(elements, value, previousStaticKey = "", force = false) {
     if (!elements || !value) return previousStaticKey;
     const minuteKey = value.minuteKey || value.key || "";
     const staticKey = [
@@ -399,7 +515,7 @@
       value.showSeconds ? "1" : "0",
       value.showZone ? "1" : "0",
     ].join("\\u001f");
-    if (staticKey !== previousStaticKey) {
+    if (force || staticKey !== previousStaticKey) {
       setClockTextIfChanged(elements.timeEl, value.time || "");
       setClockHiddenIfChanged(elements.secEl, !value.showSeconds);
       setClockTextIfChanged(elements.merEl, value.meridiem || "");
@@ -1539,10 +1655,31 @@
           clearEntryTimer(entry);
         }
       } else {
-        for (const entry of entries.values()) {
-          paintCached(entry, area);
-          refresh(entry.def.id, { force: false, area });
-        }
+        resumeAll(area);
+      }
+    }
+
+    // OW-67: coming back into view always paints what is known, whether or not the pause setting changed. The bug the
+    // owner reported ("sometimes it stays not rendered when its hidden in sidebar") was exactly this: with pausing
+    // turned OFF the paused flag never moves, so a widget whose card was blanked while the sidebar was folded was
+    // never painted again. A card the person cannot see must still be correct the moment it can be seen.
+    function resumeAll(area) {
+      for (const entry of entries.values()) {
+        const painted = paintCached(entry, area);
+        // A pure render-only widget has no fetched value to paint from, so it must be asked to draw itself: that is
+        // the case the owner hit (the Clock has no `fetch`). A widget WITH a cache keeps the "fresh cache is painted,
+        // not refetched" rule and only asks for a refresh when its value is actually stale.
+        refresh(entry.def.id, { force: !painted && typeof entry.instance?.fetch !== "function", area });
+      }
+    }
+
+    // OW-67, the other half: coming back into view when the widget was NEVER paused (the owner's setting). Nothing here
+    // may fetch — a fetch while the sidebar is folded is what the setting asked us not to do — so this only repaints
+    // what is already known, and asks a render-only widget to draw itself from its own state.
+    function repaintAll(area) {
+      for (const entry of entries.values()) {
+        const painted = paintCached(entry, area);
+        if (!painted && typeof entry.instance?.fetch !== "function") refresh(entry.def.id, { force: true, area });
       }
     }
 
@@ -1585,6 +1722,8 @@
       deactivate,
       updateInterval,
       setPaused,
+      resumeAll,
+      repaintAll,
       refresh,
       getCached,
       setCached,
@@ -1636,25 +1775,45 @@
     if (opts.showMemory !== false && !memorySupported) {
       out.push({ kind: "memory", text: "\u2014", title: widgetText(lang, "status.memoryUnavailable"), level: "muted", unavailable: true });
     }
-    // A battery that cannot be read is only worth a word when memory is not carrying the card.
+    // OW-70: a machine with no battery is a desktop, not a fault. The owner has one and saw a card that looked broken,
+    // so "there is no battery" is now a TITLE only — the line itself stays empty rather than printing a complaint
+    // nobody can act on. It still never draws 0%, and the fact is kept where it is useful (the tooltip).
     if (opts.showBattery !== false && !batterySupported && opts.showMemory === false) {
-      out.push({ kind: "battery", text: widgetText(lang, "status.noBattery"), title: widgetText(lang, "status.noBatteryTitle"), level: "muted", unavailable: true });
+      out.push({ kind: "battery", text: "", title: widgetText(lang, "status.noBatteryTitle"), level: "muted", unavailable: true });
     }
     return out;
   }
 
   // "used / limit" from the two byte counts Firefox reports; a missing limit prints only what is used.
+  // OW-70: the platform's memory counters do not all have one shape. `getMemoryUsage()` hands back
+  // `{ usedSize, totalSize }` on some builds, `{ memorySize }` on others, and some callers pass a pair. One reader, so
+  // the card cannot be broken by a shape it has not met — which is what the owner saw as "ram info doesnt work".
+  function readMemoryUsage(raw) {
+    if (!raw) return null;
+    let used = NaN;
+    let limit = NaN;
+    if (Array.isArray(raw)) {
+      used = Number(raw[0]);
+      limit = Number(raw[1]);
+    } else if (typeof raw === "object") {
+      used = Number(raw.usedSize ?? raw.used ?? raw.memorySize ?? raw.usage);
+      limit = Number(raw.totalSize ?? raw.total ?? raw.limit ?? raw.max);
+    }
+    if (!Number.isFinite(used) || used <= 0) return null;
+    return { used, total: Number.isFinite(limit) && limit > 0 ? limit : 0 };
+  }
   function memoryParts(usage, opts = {}) {
     if (!usage || typeof usage !== "object") return null;
-    const used = Number(usage.usedSize ?? usage.used);
-    const limit = Number(usage.totalSize ?? usage.total ?? usage.limit);
+    const used = Number(usage.usedSize ?? usage.used ?? usage.memorySize ?? usage.usage ?? (Array.isArray(usage) ? usage[0] : NaN));
+    const limit = Number(usage.totalSize ?? usage.total ?? usage.limit ?? usage.max ?? (Array.isArray(usage) ? usage[1] : NaN));
     if (!Number.isFinite(used) || used <= 0) return null;
     const gb = (bytes) => Math.round((bytes / (1024 ** 3)) * 10) / 10;
-    const text = Number.isFinite(limit) && limit > 0 ? gb(used) + " / " + gb(limit) + " GB" : gb(used) + " GB";
+    const hasLimit = Number.isFinite(limit) && limit > 0;
+    const text = hasLimit ? gb(used) + " / " + gb(limit) + " GB" : gb(used) + " GB";
     return {
       usedBytes: used,
-      limitBytes: Number.isFinite(limit) && limit > 0 ? limit : 0,
-      sharePercent: Number.isFinite(limit) && limit > 0 ? Math.round((used / limit) * 100) : 0,
+      limitBytes: hasLimit ? limit : 0,
+      sharePercent: hasLimit ? Math.round((used / limit) * 100) : 0,
       text,
       title: widgetText(resolveWidgetLanguage(opts.language, opts.notesRaw), "status.memoryTitle"),
     };
@@ -2351,6 +2510,11 @@
     geocodeUrl,
     TIMER_PRESETS_MS,
     batteryParts,
+    readMemoryUsage,
+    cleanWidgetOrder,
+    cleanWidgetColor, parseWidgetColor, contrastRatio, widgetAppearanceVars, CONTRAST_MIN,
+    orderedByIds,
+    moveInOrder,
     memoryParts,
     statusLineParts,
     composeStatusParts,
@@ -2462,6 +2626,8 @@
       let rootAttrObserver = null;
       let rafMeasure = null;
       let lastArea = computeWidgetArea({}, { enabled: false });
+      // OW-67: the previous "is the tray on screen" answer, so only a real transition repaints (never every measure).
+      let wasVisible = false;
 
       function readConfig() {
         return {
@@ -2712,6 +2878,18 @@
         body.className = "zw-card-body";
         if (instance?.element) body.appendChild(instance.element);
         card.appendChild(body);
+        // OW-71: the handle is part of every card, not of a widget's own drawing, so a widget cannot forget it. It is a
+        // real button: draggable by pointer, and Alt+Up / Alt+Down work from it for anyone who cannot drag.
+        const grip = document.createElement("button");
+        grip.type = "button";
+        grip.className = "zw-grip";
+        grip.setAttribute("draggable", "true");
+        grip.title = tw("tray.moveHint");
+        grip.setAttribute("aria-label", tw("tray.move") + " — " + tw("tray.moveHint"));
+        grip.textContent = "⋮⋮";
+        card.appendChild(grip);
+        card.setAttribute("data-zw-order-id", def.id);
+        installCardReordering(def, card, grip);
         if (typeof instance?.onMountCard === "function") {
           try {
             instance.onMountCard(card);
@@ -2720,6 +2898,99 @@
           }
         }
         return { card, body };
+      }
+
+      // OW-71: moving a card. Both doors (drag, and Alt+Arrow on the handle) write the SAME pref, through this one
+      // function, so the two can never disagree about what the order is.
+      let lastMovedId = "";
+      function currentOrderIds() {
+        return sortedDefinitions().map((d) => d.id);
+      }
+      function commitOrder(ids) {
+        const existing = [...registry.keys()];
+        const cleaned = ids.filter((id) => existing.includes(id));
+        try {
+          Services.prefs.setStringPref(WIDGET_PREFS.ORDER, cleaned.join(","));
+        } catch (_) {}
+        syncWidgetsAndLayout();
+        announceMove();
+      }
+      // Say where the focused card went, for a person who cannot see the tray move.
+      let liveRegion = null;
+      function ensureLiveRegion() {
+        if (liveRegion && liveRegion.isConnected !== false) return liveRegion;
+        liveRegion = document.createElement("div");
+        liveRegion.className = "zw-live";
+        liveRegion.setAttribute("role", "status");
+        liveRegion.setAttribute("aria-live", "polite");
+        document.body?.appendChild?.(liveRegion);
+        return liveRegion;
+      }
+      function announceMove() {
+        const id = lastMovedId;
+        if (!id) return;
+        const ids = currentOrderIds();
+        const at = ids.indexOf(id);
+        const def = registry.get(id);
+        const title = def?.title || id;
+        const region = ensureLiveRegion();
+        if (region) region.textContent = widgetText(widgetLang(), "tray.moved", { title, position: at + 1, total: ids.length });
+      }
+      function moveCard(id, dir) {
+        const ids = currentOrderIds();
+        const existing = [...registry.keys()];
+        const next = moveInOrder(ids, id, dir, existing);
+        if (next.join(",") === ids.join(",")) return false; // already at the edge: nothing moved, nothing written
+        lastMovedId = id;
+        commitOrder(next);
+        return true;
+      }
+      function installCardReordering(def, card, grip) {
+        let dragId = "";
+        grip.addEventListener("click", (e) => {
+          // A click on the handle must never reach the card's own click target (the Clock turns over on a click).
+          e?.stopPropagation?.();
+          e?.preventDefault?.();
+          grip.focus?.({ preventScroll: true });
+        });
+        grip.addEventListener("keydown", (e) => {
+          if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+          e.preventDefault();
+          e.stopPropagation();
+          moveCard(def.id, e.key === "ArrowUp" ? -1 : 1);
+        });
+        grip.addEventListener("dragstart", (e) => {
+          dragId = def.id;
+          card.setAttribute("data-zw-dragging", "true");
+          try {
+            e?.dataTransfer?.setData?.("text/plain", def.id);
+            if (e?.dataTransfer) e.dataTransfer.effectAllowed = "move";
+          } catch (_) {}
+        });
+        grip.addEventListener("dragend", () => {
+          dragId = "";
+          card.removeAttribute("data-zw-dragging");
+        });
+        // The drop target is the CARD, not the handle: a person drops on the card they want to land on.
+        card.addEventListener("dragover", (e) => {
+          if (!dragId || dragId === def.id) return;
+          e?.preventDefault?.();
+        });
+        card.addEventListener("drop", (e) => {
+          if (!dragId || dragId === def.id) return;
+          e?.preventDefault?.();
+          const ids = currentOrderIds();
+          const from = ids.indexOf(dragId);
+          const to = ids.indexOf(def.id);
+          if (from < 0 || to < 0) return;
+          const next = ids.slice();
+          next.splice(from, 1);
+          next.splice(to, 0, dragId);
+          lastMovedId = dragId;
+          dragId = "";
+          card.removeAttribute("data-zw-dragging");
+          commitOrder(next);
+        });
       }
 
       function unmountWidgetCard(id) {
@@ -2738,11 +3009,14 @@
       }
 
       function sortedDefinitions() {
-        return [...registry.values()].sort(
+        const byDefault = [...registry.values()].sort(
           (a, b) =>
             (Number(a.order) || 100) - (Number(b.order) || 100) ||
             a.id.localeCompare(b.id),
         );
+        // OW-71: the person's order wins where they have one; everything else keeps its default place.
+        const chosen = cleanWidgetOrder(getString(WIDGET_PREFS.ORDER, DEFAULTS.ORDER));
+        return chosen.length ? orderedByIds(byDefault, chosen) : byDefault;
       }
 
       function syncWidgetsAndLayout() {
@@ -2838,6 +3112,18 @@
           }
         }
 
+        // OW-72: the look is written on the TRAY, once, so every card (and every future card) inherits it. Nothing is
+        // written when both prefs are empty, which is what "follow the theme" means.
+        if (tray) {
+          const look = widgetAppearanceVars(
+            getString(WIDGET_PREFS.APPEARANCE_BG, DEFAULTS.APPEARANCE_BG),
+            getString(WIDGET_PREFS.APPEARANCE_TEXT, DEFAULTS.APPEARANCE_TEXT),
+          );
+          for (const name of ["--zw-card-bg", "--zw-card-text"]) tray.style.removeProperty(name);
+          for (const [name, value] of Object.entries(look.vars)) tray.style.setProperty(name, value);
+          tray.setAttribute("data-zw-look", look.refused ? "unreadable" : Object.keys(look.vars).length ? "custom" : "theme");
+        }
+
         // Apply layout budget & visibility without ever touching #zentral-video-preview.
         if (tray) {
           tray.hidden = !area.visible;
@@ -2860,12 +3146,17 @@
         scheduler.setPaused(area.paused, area);
 
         if (area.visible) {
+          // OW-67: a real hidden->visible transition repaints EVERY mounted card from its cache, whatever the pause
+          // setting says. `setPaused` only runs when its flag moves, and with pausing turned off it never moves — so
+          // this is the one place that can guarantee a card blanked while folded is whole again when it is shown.
+          if (!wasVisible && !area.paused) scheduler.repaintAll(area);
           for (const mounted of mountedCards.values()) {
             try {
               mounted.instance?.onAreaChange?.(area);
             } catch (_) {}
           }
         }
+        wasVisible = area.visible;
 
         return area;
       }
@@ -3017,6 +3308,9 @@
         WIDGET_PREFS.TABS_RESERVE_PX,
         WIDGET_PREFS.PAUSE_WHEN_HIDDEN,
         WIDGET_PREFS.DISABLED_IDS,
+        WIDGET_PREFS.ORDER,
+        WIDGET_PREFS.APPEARANCE_BG,
+        WIDGET_PREFS.APPEARANCE_TEXT,
       ]) {
         watchPref(pref, onShellPref);
       }
@@ -3113,6 +3407,7 @@
           WIDGET_PREFS.CLOCK_SHOW_SECONDS,
           WIDGET_PREFS.CLOCK_SHOW_ZONE,
           WIDGET_PREFS.CLOCK_MODE,
+          WIDGET_PREFS.CLOCK_QUICK_NOTE,
         ],
         resolveIntervalMs: () =>
           getBool(WIDGET_PREFS.CLOCK_SHOW_SECONDS, false) ? 1000 : 60000,
@@ -3491,12 +3786,17 @@
           };
           // The quick note is part of the Clock face, not a feature to switch on: it is there whenever Notes can take a
           // note, and it simply disappears when it cannot. No chip, no fold, nothing to configure.
+          // OW-69: one honest switch (the old chip-and-fold arrangement is gone for good). Off means the row is not in
+          // the layout at all — it reserves no space and is not merely invisible — and it is live, no restart.
           const syncClockNote = () => {
             const opener = resolveCalendarOpener(window);
-            const ok = Boolean(opener && typeof opener.openQuickNote === "function");
+            const wanted = getBool(WIDGET_PREFS.CLOCK_QUICK_NOTE, DEFAULTS.CLOCK_QUICK_NOTE);
+            const canNote = Boolean(opener && typeof opener.openQuickNote === "function");
+            const ok = wanted && canNote;
             clockNoteChip.hidden = true;
             clockNoteRow.hidden = !ok;
             clockNoteRow.setAttribute("data-zw-forced-off", ok ? "false" : "true");
+            clockNoteRow.style.display = ok ? "" : "none";
           };
           clockNoteRow.addEventListener("click", (e) => e?.stopPropagation?.());
           clockNoteBtn.addEventListener("click", (e) => { e?.stopPropagation?.(); saveClockNote(); });
@@ -3530,13 +3830,18 @@
             nextDelayMs(now) {
               return nextClockDelayMs(now, readClockOpts().showSeconds);
             },
-            render(value) {
+            render(value, info) {
               if (!value) return;
               staticRenderKey = renderClockElements(
                 { wrap, timeEl, secEl, merEl, zoneEl },
                 value,
                 staticRenderKey,
+                // A cached repaint is the "show this card again" case: write it, do not trust the previous key.
+                Boolean(info && info.cached),
               );
+              // OW-69: every draw re-answers "should the quick note be on this face?" — a pref change repaints the card
+              // but must also put the row away (or bring it back), and this is the one place every draw goes through.
+              syncClockNote();
               // OW-56: the face is drawn after the clock's own text, so the two never fight over the same elements.
               paintFace();
             },
@@ -4154,24 +4459,28 @@
       let batteryRef = null;
       let batterySeen = null;
       let batterySupport = null; // null = not known yet, true = a reading is possible, false = this machine/build cannot
+      // OW-70: the memory reading, from every source the platform might offer, with the one that answered kept so the
+      // card can say where its number came from. A build without `getMemoryUsage` is not a build without memory: the
+      // resident-size counter is a second door, and the end of that road is "no reading", never a wrong number.
+      let memorySource = "";
       const readMemory = () => {
         try {
           const usage = Services.appinfo?.getMemoryUsage?.();
-          if (!usage) return null;
-          return {
-            used: Number(usage.usedSize ?? usage.memorySize ?? usage.used) || 0,
-            total: Number(usage.totalSize ?? usage.total ?? usage.limit) || 0,
-          };
-        } catch (_) {
-          return null;
-        }
+          const fromUsage = readMemoryUsage(usage);
+          if (fromUsage) { memorySource = "appinfo"; return fromUsage; }
+        } catch (_) {}
+        try {
+          // Fallback: the process' own resident size, when the app reports one.
+          const resident = Number(Services.appinfo?.getMemoryUsage?.()?.residentFast ?? NaN);
+          if (Number.isFinite(resident) && resident > 0) { memorySource = "resident"; return { used: resident, total: 0 }; }
+        } catch (_) {}
+        return null;
       };
       let memorySupport = null;
       const memorySupported = () => {
         if (memorySupport !== null) return memorySupport;
         try {
-          memorySupport =
-            typeof Services.appinfo?.getMemoryUsage === "function" && Boolean(readMemory());
+          memorySupport = Boolean(readMemory());
         } catch (_) {
           memorySupport = false;
         }
@@ -4280,6 +4589,8 @@
               memoryEl.setAttribute("data-zw-level", m ? m.level : "");
               wrap.hidden = !parts.length;
               wrap.setAttribute("aria-label", parts.map((p) => p.title).join("; ") || "Status");
+              // OW-70: which source answered, in the DOM where the owner can look, not only in a console nobody opens.
+              wrap.setAttribute("data-zw-source", [m ? "memory:" + (memorySource || "none") : "", b ? "battery" : ""].filter(Boolean).join(" "));
             },
           };
         },
@@ -4350,6 +4661,8 @@
           return isWidgetEnabled(def);
         },
         setWidgetEnabled,
+        moveWidget: (id, dir) => moveCard(normalizeWidgetId(id), dir),
+        widgetOrder: () => currentOrderIds(),
         refreshWidget: (id, opts) =>
           scheduler.refresh(normalizeWidgetId(id), {
             force: true,

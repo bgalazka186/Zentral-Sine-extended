@@ -238,6 +238,9 @@
           "label": "Status"
         },
         {
+          "label": "Appearance"
+        },
+        {
           "label": "Layout & visibility"
         }
       ],
@@ -980,6 +983,7 @@
     "zen.workspace.zentral.widgets.clock.format",
     "zen.workspace.zentral.widgets.clock.show_seconds",
     "zen.workspace.zentral.widgets.clock.show_zone",
+    "zen.workspace.zentral.widgets.clock.quick_note",
     "zen.workspace.zentral.widgets.date.enabled",
     "zen.workspace.zentral.widgets.date.format",
     "zen.workspace.zentral.widgets.date.show_year",
@@ -1023,6 +1027,9 @@
     "zen.workspace.zentral.widgets.min_free_height",
     "zen.workspace.zentral.widgets.min_sidebar_width",
     "zen.workspace.zentral.widgets.tabs_reserve_px",
+    "zen.workspace.zentral.widgets.order",
+    "zen.workspace.zentral.widgets.appearance.background",
+    "zen.workspace.zentral.widgets.appearance.text",
     "zen.workspace.zentral.widgets.pause_when_hidden",
     {
       "type": "text",

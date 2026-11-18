@@ -60,6 +60,12 @@
     "defaultValue": false
   },
   {
+    "property": "zen.workspace.zentral.widgets.clock.quick_note",
+    "label": "Show the quick note under the Clock (needs Notes)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
     "property": "zen.workspace.zentral.widgets.date.enabled",
     "label": "Show Date widget",
     "type": "checkbox",
@@ -323,6 +329,24 @@
     "type": "string",
     "defaultValue": "24",
     "placeholder": "24"
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.order",
+    "label": "Widget order (ids, top to bottom; empty = each widget's own place)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.appearance.background",
+    "label": "Card background colour (#rrggbb or empty to follow the theme)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.appearance.text",
+    "label": "Card text colour (#rrggbb or empty to follow the theme)",
+    "type": "string",
+    "defaultValue": ""
   },
   {
     "property": "zen.workspace.zentral.widgets.pause_when_hidden",

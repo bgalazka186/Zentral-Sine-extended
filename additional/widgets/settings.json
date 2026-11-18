@@ -58,6 +58,24 @@
       }
     },
     {
+      "property": "zen.workspace.zentral.widgets.order",
+      "label": "Widget order (ids, top to bottom; empty = each widget's own place)",
+      "type": "input",
+      "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.appearance.background",
+      "label": "Card background colour (#rrggbb or empty to follow the theme)",
+      "type": "input",
+      "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.appearance.text",
+      "label": "Card text colour (#rrggbb or empty to follow the theme)",
+      "type": "input",
+      "defaultValue": ""
+    },
+    {
       "property": "zen.workspace.zentral.widgets.pause_when_hidden",
       "label": "Pause widget updates when window or sidebar is hidden",
       "type": "checkbox",
@@ -106,6 +124,12 @@
       "label": "Show time zone label on Clock widget",
       "type": "checkbox",
       "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.clock.quick_note",
+      "label": "Show the quick note under the Clock (needs Notes)",
+      "type": "checkbox",
+      "defaultValue": true
     },
     {
       "property": "zen.workspace.zentral.widgets.date.enabled",
@@ -462,6 +486,26 @@
     "zen.workspace.zentral.widgets.language": {
       "category": "widgets",
       "section": "Sidebar widgets",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.clock.quick_note": {
+      "category": "widgets",
+      "section": "Clock & Date",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.order": {
+      "category": "widgets",
+      "section": "Layout & visibility",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.appearance.background": {
+      "category": "widgets",
+      "section": "Appearance",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.appearance.text": {
+      "category": "widgets",
+      "section": "Appearance",
       "owner": "widgets"
     }
   }

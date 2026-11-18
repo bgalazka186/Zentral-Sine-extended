@@ -1404,6 +1404,36 @@ title, whenever there is nowhere to go. Found while testing and fixed: the pair'
 panes report scrolling to a once-per-frame repaint — without it the button kept offering a jump to a match that had
 just come into view. Tests: `tests/notes-find-offscreen.test.cjs` (13). Suite `237/237`.
 
+**`OW-67` DONE (3.3.303)** — widgets that stayed blank after the sidebar was revealed. Two causes: `setPaused` was the
+only resume path that repainted, and it returns early when its flag does not move (so with *pause when hidden* off
+nothing ever repainted); and `renderClockElements` skipped its writes when the value's key had not changed, so a blank
+clock could stay blank forever. A real hidden→visible transition now repaints from the cache (`resumeAll` when paused,
+`repaintAll` when not — which must not fetch), and a cached repaint forces the write. Reproduced in the harness first.
+
+**`OW-68` DONE (3.3.303)** — the clock's quick note is one line, with the Save button as the priority: the row never
+wraps, the button cannot shrink or break its label, the field is what gives ground. The narrow-width stacking rule is
+gone.
+
+**`OW-69` DONE (3.3.303)** — the quick note is optional again, through one `checkbox` in **Clock & Date** (schema,
+`preferences.json`, layout order, `standalone.json`), live without a restart. Off removes the row from the layout
+rather than hiding it. Needed a third fix: `syncClockNote` only ran at creation and on Notes availability, so a pref
+change repainted without re-asking; every draw now re-syncs it.
+
+**`OW-70` DONE (3.3.303)** — the status card. `readMemoryUsage`/`memoryParts` accept every documented shape
+(`usedSize`/`totalSize`, `memorySize`, `used`/`total`, `limit`, `usage`/`max`, a pair), fall back to the resident-size
+counter, and record the answering source in `data-zw-source`. A desktop's missing battery is quiet — the reason lives
+in the tooltip instead of "no battery" in the body, which the owner read as a broken widget. Never 0%.
+
+**`OW-71` DONE (3.3.303)** — widget ordering. `widgets.order` is a comma list; `cleanWidgetOrder`/`orderedByIds` keep the
+chosen ids first, drop unknown ones, and let everything else keep its default place (a new widget appears; a disabled
+one keeps its place). Every card carries a real handle button — draggable, and `Alt+Up`/`Alt+Down` — writing the same
+pref through one function, with the move announced in a polite live region.
+
+**`OW-72` DONE (3.3.303)** — widget colours. Background and text prefs (empty = follow the theme), normalised to
+`#rrggbb`; a pair under WCAG AA (4.5:1) is refused rather than written, so cards cannot become unreadable. Variables are
+set once on the tray so every card inherits them; `data-zw-look` reports `theme`/`custom`/`unreadable`; a reset applies
+nothing. `readMemoryUsage` before `memoryParts`. Tests: `tests/widgets-owner-reports.test.cjs` (13). Suite `238/238`.
+
 ## The Master Order rows that were finished (moved out of the TODO table, 2026-11-17)
 
 The owner asked for the finished rows to leave the TODO list: the working table now holds only what is still

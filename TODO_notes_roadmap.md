@@ -88,6 +88,12 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 |    90 | `OW-62`     | `DONE`    | High                | S-M    | 3.3.298           | An imported .ics reminder still cannot be deleted: recreate the missing note instead of refusing |
 |    91 | `OW-65`     | `DONE`    | High                | S      | 3.3.301           | Clock card: quick note under the clock by default, the stopwatch/countdown panel under it on a click, the clock no longer drawn above it, and "Wyzeruj" no longer clipped |
 |    92 | `OW-66`     | `OPEN`    | Med                 | S      | —                 | The live Zen check the owner still owes `OW-58`–`OW-65`: each shipped fix confirmed in the real sidebar (no code work) |
+|    93 | `OW-67`     | `DONE`    | High                | S      | —                 | Widgets stay blank after the sidebar is revealed when "pause when hidden" is off: nothing repaints an unpaused widget whose state changed while hidden |
+|    94 | `OW-68`     | `DONE`    | High                | S      | —                 | Clock quick note must stay ONE line, and the Save button wins the space (the field gives ground, never the button) |
+|    95 | `OW-69`     | `DONE`    | High                | S      | —                 | The quick note is optional again: one switch that hides it, remembering the choice |
+|    96 | `OW-70`     | `DONE`    | High                | M      | —                 | Status widget: no battery on a desktop and no memory reading on this build — find out why, and make "this machine has no battery" quiet rather than a broken card |
+|    97 | `OW-71`     | `DONE`    | Med                 | M      | —                 | Let the person order the widgets top to bottom (drag and keyboard), persisted, with the order surviving restarts |
+|    98 | `OW-72`     | `DONE`    | Med                 | M      | —                 | Let the person pick the widgets' appearance (colours/contrast) so the cards stay readable in every theme |
 
 ---
 
@@ -271,7 +277,48 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.302.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9`, `SB6.6`, `UI4.11`, `DOC-1`, `TM3.7`, `ST7.8`, `SB6.11`, `ST7.5`, `UI4.10`, `OW-53`, `F0.15`, `F0.16`, `OW-54`, `OW-55`, `OW-56`, `OW-57`, `OW-58`, `OW-59`, `OW-60`, `OW-61`, `T3.5`, `SB6.9`, `ST7.3`, `OW-63`, `OW-62`, `OW-64`, `OW-21`, `OW-65` and `OW-22` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`237/237` test files) passes in Node/fake-Zen at 3.3.302; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.303.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9`, `SB6.6`, `UI4.11`, `DOC-1`, `TM3.7`, `ST7.8`, `SB6.11`, `ST7.5`, `UI4.10`, `OW-53`, `F0.15`, `F0.16`, `OW-54`, `OW-55`, `OW-56`, `OW-57`, `OW-58`, `OW-59`, `OW-60`, `OW-61`, `T3.5`, `SB6.9`, `ST7.3`, `OW-63`, `OW-62`, `OW-64`, `OW-21`, `OW-65`, `OW-22` and `OW-67`–`OW-72` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`238/238` test files) passes in Node/fake-Zen at 3.3.303; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+
+`OW-67`–`OW-72` DONE (3.3.303) — the owner's six widget reports of 2026-11-17, each fixed and each pinned by a test.
+
+**`OW-67`, the card that stayed blank** ("sometimes it stays not rendered when its hidden in sidebar"). Two causes, both
+real. (a) `scheduler.setPaused` was the only thing that repainted cards on a resume, and it returns early when its flag
+did not move — with *pause when hidden* off the flag never moves, so a card blanked while folded was never painted
+again. A genuine hidden→visible transition now repaints every card from its cache (`resumeAll` when the scheduler had
+paused, `repaintAll` when it had not, which must not fetch), and a fresh cache is still painted rather than refetched.
+(b) `renderClockElements` skipped its writes when the value's key was unchanged — a fast path that could keep a blank
+clock blank forever. A cached repaint now forces the write. Reproduced in the fake harness before the fix, in both
+settings.
+
+**`OW-68`, one line for the quick note.** The row no longer wraps, the Save button is `flex: 0 0 auto` with its label on
+one line, and the field is the only thing that gives ground (`flex: 1 1 0` with a small floor). The narrow-width rule
+that stacked this row — the one that could push Save onto its own line — is gone.
+
+**`OW-69`, the quick note is optional.** One `checkbox` in **Clock & Date**, on by default, declared in the schema,
+`preferences.json`, the layout order and `standalone.json`. Off means the row is not in the layout and takes no space;
+on means it is drawn whenever Notes can take a note. Live, no restart — which needed a third fix: `syncClockNote` only
+ran at creation and when Notes appeared, so a pref change repainted the card without re-asking the question. Every draw
+now re-syncs it.
+
+**`OW-70`, the status card.** Memory: the reader assumed one shape from `getMemoryUsage()`. It now accepts
+`usedSize`/`totalSize`, `memorySize`, `used`/`total`, `limit`, `usage`/`max` and a `[used, total]` pair, falls back to
+the resident-size counter, and records which source answered in `data-zw-source` where the owner can look without a
+console. A desktop with no battery is now QUIET — the old card printed "no battery", which the owner read as a broken
+widget; the reason moved to the tooltip. Never 0%.
+
+**`OW-71`, ordering.** A stored `widgets.order` list, applied by `cleanWidgetOrder`/`orderedByIds`: chosen ids first,
+unknown ids ignored, and every widget not in the list keeps its default place — so a new widget appears rather than
+disappearing, and a widget switched off keeps its place for when it returns. A handle on every card (a real button,
+draggable, `Alt+Up`/`Alt+Down`) writes the same pref through the same function, and a move is announced in a polite
+live region.
+
+**`OW-72`, colours.** Background and text prefs, empty by default meaning follow the theme. Values are normalised to
+`#rrggbb`, and a pair below WCAG AA (4.5:1) is REFUSED rather than written and then complained about, so the cards can
+never end up invisible. The variables are written once on `#zentral-sidebar-widgets`, so every card — present and
+future — inherits them, `data-zw-look` says `theme`/`custom`/`unreadable`, and a reset applies nothing at all.
+
+Tests: `tests/widgets-owner-reports.test.cjs` (13), plus the existing widget suites re-pointed where they pinned the
+old behaviour. Suite `238/238`.
 
 `OW-22` DONE (3.3.302) — "next match not on screen". `Ctrl+F` grew a second pair of controls beside the ordinary
 next/previous: **Ctrl+Alt+Down / Ctrl+Alt+Up** (or the two ↩ / ↲ buttons in the bar) move to the next or previous
@@ -490,4 +537,4 @@ Known debts / owner requirements: LIMITS of `OW-04`: the pointer is held to the 
 
 Planning only, no code (2026-11-17, version 3.3.244): the owner's holiday list added as `OW-43` (holiday sets split from the interface language, any language picks any set, first sets `PL` + `US`), `OW-44` (any number of sets at once), `OW-45` (one-place year table for movable/one-off dates such as the Polish election day and `niedziela handlowa`), `OW-46` (one master off switch) and `T2.13a` (how holidays behave when the `T2.13` ICS/Google groundwork is built: local sets are never imported or synced). They sit at the top of the Master Order; `T3.3` follows them.
 
-Next action: `T2.13` — ICS export/import and the Google-sync groundwork, the last Track 2 item. Then `ST7.4`, then the `T4.3a`→`b`→`c` extraction chain. `OW-66` is the owner's live check of `OW-58`–`OW-65` in the real sidebar and needs no code from a session. Finished in this run of sessions: `OW-21` (find and replace, 3.3.300), `OW-65` (the Clock card's shape, 3.3.301) and `OW-22` (next match not on screen, 3.3.302); before them `OW-58`–`OW-64` (3.3.285–3.3.299). `ST7.3` stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.
+Next action: `T2.13` — ICS export/import and the Google-sync groundwork, the last Track 2 item. Then `ST7.4`, then the `T4.3a`→`b`→`c` extraction chain. `OW-66` is the owner's live check of `OW-58`–`OW-72` in the real sidebar and needs no code from a session. Finished lately: `OW-21` (find and replace, 3.3.300), `OW-65` (the Clock card's shape, 3.3.301), `OW-22` (next match not on screen, 3.3.302) and `OW-67`–`OW-72` (the owner's six widget reports, 3.3.303: the blank-on-reveal bug, the one-line quick note, its switch, the status card's memory reader and quiet desktop, widget ordering, and widget colours). `ST7.3` stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices.

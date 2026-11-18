@@ -37,6 +37,50 @@
   display: none !important;
 }
 
+/* ---- OW-71 / OW-72: reordering and appearance -------------------------------------
+   The tray gains a small handle per card and a set of colour variables that every card (and every future card)
+   inherits. The variables are written on the tray by the shell, never on a card, so one place decides the look. */
+#zentral-sidebar-widgets .zw-card {
+  background: var(--zw-card-bg, color-mix(in srgb, var(--zen-colors-tertiary, var(--toolbar-field-background-color, rgba(127, 127, 127, 0.14))) 78%, transparent)) !important;
+  color: var(--zw-card-text, inherit) !important;
+  border-color: var(--zw-card-line, color-mix(in srgb, currentColor 11%, transparent)) !important;
+}
+
+/* The handle is quiet until the card is hovered or it is focused: it is a tool, not decoration. */
+#zentral-sidebar-widgets .zw-grip {
+  position: absolute !important;
+  top: 2px !important;
+  inset-inline-end: 4px !important;
+  padding: 0 3px !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: inherit !important;
+  font: inherit !important;
+  font-size: 10px !important;
+  line-height: 1 !important;
+  letter-spacing: -1px !important;
+  opacity: 0 !important;
+  cursor: grab !important;
+  border-radius: 4px !important;
+}
+#zentral-sidebar-widgets .zw-card { position: relative !important; }
+#zentral-sidebar-widgets .zw-card:hover .zw-grip,
+#zentral-sidebar-widgets .zw-grip:focus-visible { opacity: 0.55 !important; }
+#zentral-sidebar-widgets .zw-grip:focus-visible { outline: 2px solid var(--zw-accent, currentColor) !important; outline-offset: 1px !important; }
+#zentral-sidebar-widgets .zw-grip:active { cursor: grabbing !important; }
+#zentral-sidebar-widgets .zw-card[data-zw-dragging="true"] { opacity: 0.55 !important; }
+
+/* The spoken line for a move: invisible, but present for a screen reader. */
+#zentral-sidebar-widgets .zw-live,
+.zw-live {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+}
+
 /* New-tab-page-style translucent widget card */
 #zentral-sidebar-widgets .zw-card {
   box-sizing: border-box !important;
@@ -299,8 +343,8 @@
 }
 /* OW-65: below a sensible width the field and the button stop sharing a line at all, so neither can be pushed out. */
 @media (max-width: 240px) {
-  #zentral-sidebar-widgets .zw-timer-field-row,
-  #zentral-sidebar-widgets .zw-clock-note-row {
+  /* OW-63's field row may stack; the clock's note row never does (OW-68: one line, Save keeps its size). */
+  #zentral-sidebar-widgets .zw-timer-field-row {
     flex-direction: column !important;
     align-items: stretch !important;
   }
@@ -595,9 +639,11 @@
    always one click away, and it is gone entirely when Notes is not installed. */
 #zentral-sidebar-widgets .zw-clock-note-row {
   display: flex !important;
-  /* OW-63's rule, on this row too: a narrow sidebar must never push a button out of the card. The field gives ground
-     first, and the button wraps to its own line rather than being clipped. */
-  flex-wrap: wrap !important;
+  /* OW-68, the owner's rule: the quick note is ONE line, and the Save button is the priority. So the row never wraps,
+     the BUTTON never shrinks (`flex: 0 0 auto` + `white-space: nowrap`), and the field is the only thing that gives
+     ground (`flex: 1 1 auto` with a small floor). An earlier version wrapped, which put the button on its own line and
+     could squeeze the field to nothing. */
+  flex-wrap: nowrap !important;
   gap: 4px !important;
   align-items: center !important;
   align-self: stretch !important;
@@ -605,9 +651,16 @@
   margin-top: 4px !important;
   min-width: 0 !important;
 }
+#zentral-sidebar-widgets .zw-clock-note-row .zw-clock-note {
+  flex: 1 1 0 !important;
+  min-width: 28px !important;
+  max-width: none !important;
+  text-overflow: ellipsis !important;
+}
 #zentral-sidebar-widgets .zw-clock-note-row .zw-clock-note-btn {
   flex: 0 0 auto !important;
   white-space: nowrap !important;
+  max-width: none !important;
 }
 #zentral-sidebar-widgets .zw-clock-note-row[hidden] {
   display: none !important;

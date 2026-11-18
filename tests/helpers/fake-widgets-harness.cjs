@@ -240,6 +240,11 @@ function createFakeSidebarHarness(initialPrefs = {}, { fetch: fetchImpl = null, 
   };
 
   const Services = {
+    // `appinfo` is what the Status widget reads (memory counters, and the process' own numbers). It is plain data the
+    // tests may replace: a shape the platform really returns is a fixture, not a mock of our own code.
+    appinfo: {
+      getMemoryUsage: typeof globalThis.__zwMemoryUsage === "function" ? globalThis.__zwMemoryUsage : () => null,
+    },
     prefs: {
       getPrefType: (k) =>
         prefs.has(k)
@@ -430,7 +435,10 @@ function createFakeSidebarHarness(initialPrefs = {}, { fetch: fetchImpl = null, 
     for (const [t, fn] of [...tabListeners]) if (t === type) fn({ type });
   }
 
+  const Ev = require("./fake-dom.cjs")().Ev;
+
   return {
+    Ev,
     FakeElement,
     window,
     document,

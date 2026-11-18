@@ -126,7 +126,12 @@ test("the status card's own words are translated through its options, so the pur
   assert.equal(memory.title, c.WIDGET_STRINGS.pl["status.memoryUnavailable"], "the memory note is Polish");
   const batteryOnly = c.composeStatusParts({ showBattery: true, showMemory: false, ...pl }, null, null, { battery: false, memory: false });
   const battery = batteryOnly.find((p) => p.kind === "battery");
-  assert.equal(battery.text, c.WIDGET_STRINGS.pl["status.noBattery"], "and so is the battery word");
+  // OW-70: a desktop's missing battery is quiet in BODY text, and the explanation lives in the title — translated like
+  // every other word, in both languages.
+  assert.equal(battery.text, "", "no complaint in the body");
+  assert.equal(battery.title, c.WIDGET_STRINGS.pl["status.noBatteryTitle"], "but the reason is Polish too");
+  assert.equal(c.composeStatusParts({ showBattery: true, showMemory: false }, null, null, { battery: false, memory: false })[0].title,
+    c.WIDGET_STRINGS.en["status.noBatteryTitle"], "and English for a caller that says nothing");
   // English is unchanged for a caller that says nothing (every test written before this one).
   const plainParts = c.composeStatusParts({ showBattery: true, showMemory: true }, null, null, { battery: false, memory: false });
   assert.equal(plainParts.find((p) => p.kind === "memory").title, "Memory usage is not available in this build");
