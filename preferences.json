@@ -1895,10 +1895,10 @@
   },
   {
     "property": "zen.workspace.zentral.widgets.weather.place",
-    "label": "Weather place — a name you type is only a label",
+    "label": "Weather place name (used for lookup and display)",
     "type": "string",
     "defaultValue": "",
-    "description": "The forecast uses the latitude and longitude below. Typing a city name looks it up once and fills those two numbers; the name itself never reaches the weather service."
+    "description": "When Weather is enabled, a place name is sent once to Open-Meteo's geocoding endpoint (up to 80 characters) to resolve coordinates. Forecast requests send latitude and longitude to Open-Meteo's forecast endpoint; they do not include the display name. No browser or device geolocation is read."
   },
   {
     "property": "zen.workspace.zentral.widgets.weather.latitude",

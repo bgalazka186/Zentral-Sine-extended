@@ -4498,7 +4498,15 @@ function nativeSidebarSide() {
         if (registry.has(id)) unmountWidgetCard(id);
         registry.set(id, cleanDef);
         if (cleanDef.pref) {
-          watchPref(cleanDef.pref, () => syncWidgetsAndLayout());
+          watchPref(cleanDef.pref, () => {
+            const weatherEnabled = cleanDef.id === "weather"
+              && getBool(WIDGET_PREFS.WEATHER_ENABLED, DEFAULTS.WEATHER_ENABLED);
+            // Invalidate before syncWidgetsAndLayout unmounts the Weather card. Enabling it
+            // resolves a saved name-only place after the layout has been reconciled.
+            if (cleanDef.id === "weather" && !weatherEnabled) placeLookupToken++;
+            syncWidgetsAndLayout();
+            if (weatherEnabled) lookupMissingWeatherPlaces();
+          });
         }
         if (cleanDef.refreshPref) {
           watchPref(cleanDef.refreshPref, () => {
@@ -5718,10 +5726,10 @@ function nativeSidebarSide() {
         },
       });
 
-      // A place name is looked up once, when the person types it (a setting change, never a poll) and on load if an
-      // entry is stored without numbers. The answer fills that entry in the places list: a name is a label, the
-      // numbers are the truth. The first entry also mirrors into the three single prefs, so someone who edits those
-      // by hand still sees what they edited.
+      // A place name is sent to Open-Meteo's geocoding endpoint only while Weather is enabled, when a setting
+      // changes or an enabled feature starts with an unresolved saved entry. Merely saving a name while Weather is
+      // off stays local. The answer fills that entry in the places list; forecast requests then use its coordinates.
+      // The first entry also mirrors into the three legacy single prefs for owners who still edit those by hand.
       let placeLookupToken = 0;
       // OW-56: the face is a setting, so it is written the one way this file writes settings.
       function writeStringPref(pref, value) {
@@ -5762,13 +5770,15 @@ function nativeSidebarSide() {
       }
       // One name -> one place. `placeId` empty means "the legacy single place", which becomes entry one.
       function geocodeWeatherName(name, placeId) {
+        // Defence in depth: preference observers may fire while the widget is disabled.
+        if (!getBool(WIDGET_PREFS.WEATHER_ENABLED, DEFAULTS.WEATHER_ENABLED)) return Promise.resolve(false);
         const url = geocodeUrl(name);
         if (!url || typeof fetch !== "function") return Promise.resolve(false);
         const token = ++placeLookupToken;
         return fetch(url, { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" })
           .then((res) => (res && res.ok ? res.json() : null))
           .then((payload) => {
-            if (disposed || token !== placeLookupToken) return false;
+            if (disposed || token !== placeLookupToken || !getBool(WIDGET_PREFS.WEATHER_ENABLED, DEFAULTS.WEATHER_ENABLED)) return false;
             const hit = readGeocodePayload(payload);
             if (!hit) return false;
             if (placeId) return applyGeocodeHit(hit, placeId);
@@ -5780,6 +5790,7 @@ function nativeSidebarSide() {
           .catch(() => false);
       }
       function lookupMissingWeatherPlaces() {
+        if (!getBool(WIDGET_PREFS.WEATHER_ENABLED, DEFAULTS.WEATHER_ENABLED)) return Promise.resolve(false);
         const places = readWeatherPlaces();
         if (places.length) {
           const missing = places.find((p) => !cleanWeatherPlace(p.latitude, p.longitude));
