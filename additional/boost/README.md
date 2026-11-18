@@ -111,7 +111,7 @@ window while it is on runs the same off-path, so nothing is left deactivated.
 ```js
 ZentralBoost.memoryMB();          // total MB, or null when this build cannot answer
 ZentralBoost.runLevel1();         // Promise<{beforeMB, afterMB, freedMB, by}>
-ZentralBoost.runLevel2();         // Promise<{...same, unloaded:{tabs,panels}, skipped, undoSize}>
+ZentralBoost.runLevel2();         // Promise<{...same, unloaded:{tabs,panels}, skipped, skippedCounts, undoSize}>
 ZentralBoost.restore();           // {panels, tabs} — panels wake now, tabs when clicked
 ZentralBoost.undoSize();          // how many things the last deep run put to sleep
 ZentralBoost.setBackgroundMode(appId, "live" | "throttled" | "asleep-allowed");
@@ -124,12 +124,14 @@ ZentralBoost.decideGameMode({targets});  // pure: which may be deactivated, and 
 ZentralBoost.onChange(cb);        // one callback for results and samples; returns an unsubscribe
 ZentralBoost.startSampling();     // balanced with stopSampling(); two callers at most (popup, limiter)
 ZentralBoost.lastMB();            // last sampled value
-ZentralBoost.state();             // what the trim has decided, for a live check
+ZentralBoost.state();             // what the trim has decided, plus lastSkipped/loadedTabs (OW-115)
 ZentralBoost.destroy();
 ```
 
 `by` says which path answered: `minimize` (the reporter manager ran), `gc-cc-only` (the manager was missing or threw,
-so only GC/CC ran).
+so only GC/CC ran). `skipped` remains a bounded sample for diagnostics; OW-115 adds `skippedCounts` (every named
+reason), `state().lastSkipped` (the last run's counts) and `state().loadedTabs` (`{pinned, unpinned}` — loaded rows
+only), which the Boost popup uses to explain a pass that kept tabs.
 
 ## Rules this module keeps
 

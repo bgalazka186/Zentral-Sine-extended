@@ -1274,6 +1274,8 @@ function nativeSidebarSide() {
       "boost.deep": "Free memory (deep)",
       "boost.deepSoon": "Needs the shared tab policy",
       "boost.deepDone": "Put {tabs} tab(s) and {panels} panel(s) to sleep, freed {mb} MB",
+      "boost.skipped": "Last deep pass kept: {reasons}",
+      "boost.loaded": "Loaded tabs: {pinned} pinned, {unpinned} unpinned",
       "boost.restoreCount": "Restore ({count})",
       "boost.restored": "Woke {count} panel(s)",
       "boost.restoredTabs": "{count} sleeping tab(s) ready to reload on click",
@@ -1340,6 +1342,8 @@ function nativeSidebarSide() {
       "boost.deep": "Zwolnij pami\u0119\u0107 (g\u0142\u0119boko)",
       "boost.deepSoon": "Wymaga wsp\u00f3lnej polityki kart",
       "boost.deepDone": "U\u015bpiono {tabs} kart i {panels} paneli, zwolniono {mb} MB",
+      "boost.skipped": "Ostatnie g\u0142\u0119bokie czyszczenie zostawi\u0142o: {reasons}",
+      "boost.loaded": "Wczytane karty: {pinned} przypi\u0119tych, {unpinned} nieprzypi\u0119tych",
       "boost.restoreCount": "Przywr\u00f3\u0107 ({count})",
       "boost.restored": "Obudzono {count} paneli",
       "boost.restoredTabs": "{count} u\u015bpionych kart wczyta si\u0119 po klikni\u0119ciu",
@@ -2968,6 +2972,17 @@ function nativeSidebarSide() {
     return { mb: Math.round(value), text, level: value >= 4096 ? "low" : "ok" };
   }
 
+  // OW-115: the deep pass already names every reason it skipped a tab for. Group the counts (not the bounded
+  // five-entry sample) into one deterministic line, biggest reason first. Pure: no DOM, no prefs, no timers.
+  function boostSkippedLine(reasons) {
+    if (!reasons || typeof reasons !== "object") return "";
+    const entries = Object.entries(reasons)
+      .map(([reason, count]) => [String(reason), Number(count) || 0])
+      .filter(([, count]) => Number.isFinite(count) && count > 0)
+      .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+    return entries.map(([reason, count]) => `${reason}: ${count}`).join(" \u00b7 ");
+  }
+
   // What a plain click means. Pure, so the rule is testable without a sidebar: a click while the module works does
   // nothing (a second GC while the first settles is exactly the kind of pile-up the plan forbids), a click otherwise
   // runs the light pass.
@@ -2987,6 +3002,10 @@ function nativeSidebarSide() {
     // `restore` only when something was actually put to sleep, so a greyed entry now means a fact, not "not yet".
     const canDeep = opts.canDeep !== false;
     const undoSize = Number(opts.undoSize) || 0;
+    // OW-115: after a deep pass, show WHY it kept tabs, plus how many loaded tabs are pinned vs not.
+    // With no skipped data the menu stays exactly the four entries every older test expects.
+    const skippedLine = boostSkippedLine(opts.skipped);
+    const loadedTabs = opts.loadedTabs && typeof opts.loadedTabs === "object" ? opts.loadedTabs : {};
     const items = [
       {
         id: "free-light",
@@ -3018,6 +3037,17 @@ function nativeSidebarSide() {
         hint: undoSize ? "" : widgetText(lang, "boost.restoreSoon"),
       },
     ];
+    if (skippedLine) {
+      items.push({
+        id: "deep-skipped",
+        label: widgetText(lang, "boost.skipped", { reasons: skippedLine }),
+        available: false,
+        hint: widgetText(lang, "boost.loaded", {
+          pinned: Number(loadedTabs.pinned) || 0,
+          unpinned: Number(loadedTabs.unpinned) || 0,
+        }),
+      });
+    }
     return items;
   }
 
@@ -3860,6 +3890,7 @@ function nativeSidebarSide() {
     TIMER_PRESETS_MS,
     boostParts,
     resolveBoostClick,
+    boostSkippedLine,
     boostMenuItems,
     boostResultText,
     cleanWidgetOrder,
@@ -6208,6 +6239,9 @@ function nativeSidebarSide() {
               canGameMode: typeof api()?.setGameMode === "function",
               gameMode: Boolean(gameMode?.on),
               undoSize: Number(state.undoSize) || 0,
+              // OW-115: the module owns the last run's grouped reasons and the live loaded-tab counts.
+              skipped: state.lastSkipped,
+              loadedTabs: state.loadedTabs,
               language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE),
               notesRaw: getString(NOTES_LANGUAGE_PREF, "en"),
             });

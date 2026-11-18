@@ -77,7 +77,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
-|    35 | `OW-115`    | `OPEN`    | Low                 | S      | OW-111..OW-114    | Boost F5 (optional): show the deep pass's skipped reasons in the popup and pinned/unpinned counts in `state()` |
 |    36 | `T2.13`     | `DONE`    | Med                 | M      | all other Track 2 | ICS export/import and Google-sync groundwork (always last in Track 2)                                    |
 |    41 | `T4.3a`     | `OPEN`    | Med                 | M      | none              | Extract calendar UI from `ZentralNotes.uc.js`                                                            |
 |    42 | `T4.3b`     | `OPEN`    | Med                 | M      | T4.3a             | Extract parser/wiki graph and import/export                                                              |
@@ -803,21 +802,6 @@ own wording; the tests are written first, run against the current code, and the 
 still has the defect. Version stays `3.4.0`, build chain uses `--keep-version`, `docs/perf-results.md` gets one
 line per shipped row. All five are `OW-*` code tasks, so rule 1 puts them ahead of `T4.3a`.
 
-#### `OW-115` (F5) — Explain a deep pass that did nothing (optional)
-
-**Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Depends on:** OW-111..OW-114 · **Source:** owner audit F5
-
-**Problem:** "nothing happened" after a deep pass is not explainable; `runLevel2` already collects `skipped` reasons
-but nothing shows them.
-
-**Plan (in this order):** surface the collected `skipped` reasons in the Boost popup (e.g. `pinned-kept: 12`), and
-add `boost.state()` counts of pinned vs unpinned loaded tabs so the owner sees how many Level 2 can touch. Optional:
-the owner may skip it; it is gated after F1–F4.
-
-**Tests / done when:** a test asserts the grouped reason line and the two counts, in both widget languages, with no
-new pref. Red on the current code, green after.
-
----
 
 ## Track 2 design rules (owner decisions, still binding)
 
@@ -881,14 +865,14 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and version here in place. Keep the project version at 3.4.0 until the owner explicitly says otherwise.**
 
-State: **3.4.0 on beta**. Prerequisites `OW-108`–`OW-110` (through `0090091`, merged here as `c86d4b6`) are included. The owner's Boost-audit findings F1–F5 were added as `OW-111`–`OW-115`; F1 (`OW-111`), F2 (`OW-112`), F3 (`OW-113`) and F4 (`OW-114`) are DONE (see `docs/LEGACY_done_rows.md`). F5 (`OW-115`) is the only Boost-audit task left and is optional/ungated now that F1–F4 shipped. After it: `T4.3a`..`T4.3c`, `ST7.4`; `OW-66` is the owner's live-Zen check with no code work (skip).
+State: **3.4.0 on beta**. Prerequisites `OW-108`–`OW-110` (through `0090091`, merged here as `c86d4b6`) are included. All five owner Boost-audit findings F1–F5 (`OW-111`–`OW-115`) are DONE (see `docs/LEGACY_done_rows.md`). Next roadmap items: `T4.3a` → `T4.3b` → `T4.3c` → `ST7.4`; `OW-66` is the owner's live-Zen check with no code work (skip).
 
-Completed this session: added F1–F5 to the roadmap, then shipped `OW-111`..`OW-114`, each with tests RED on the previous HEAD and GREEN after the fix, the `--keep-version` chain, full suite (`271/271` after the fourth new suite) and `git diff --check`. F1: record tabs now obey `backgroundMode` in Level 2/limiter/Game Mode. F2: `keep_pinned` → `unload_pinned` with one-time migration and a one-release fallback, no default change. F3: the video preview publishes a live `__zentralVideoSourceTab` getter over `deps.current`, removed on destroy. F4: `tools/audit-pending-placeholder-css.cjs` + `tests/ow-114-pending-placeholder-css.test.cjs` + `docs/ow-114-pending-css-audit.md` are the screenshot-free audit; eight narrow Notes/Agenda overrides at `additional/tabs/ZentralTabDensity.css:937` restore opacity/filter/layout. `docs/perf-results.md` has one line per task.
+Completed this session: added F1–F5 to the roadmap, then shipped `OW-111`..`OW-115`, each with tests RED on the previous HEAD and GREEN after the fix, the `--keep-version` chain, full suite (`272/272` after the fifth new suite) and `git diff --check`. F1: record tabs now obey `backgroundMode` in Level 2/limiter/Game Mode. F2: `keep_pinned` → `unload_pinned` with one-time migration and a one-release fallback, no default change. F3: the video preview publishes a live `__zentralVideoSourceTab` getter over `deps.current`, removed on destroy. F4: `tools/audit-pending-placeholder-css.cjs` + `tests/ow-114-pending-placeholder-css.test.cjs` + `docs/ow-114-pending-css-audit.md` are the screenshot-free audit; eight narrow Notes/Agenda overrides at `additional/tabs/ZentralTabDensity.css:937` restore opacity/filter/layout. F5: `runLevel2()` now returns `skippedCounts` for every named reason while keeping the bounded `skipped` sample; `boost.state()` publishes `lastSkipped` and `{pinned, unpinned}` loaded-tab counts; the Boost popup adds one disabled, localized explanation row after a deep pass with skips, with the counts in its tooltip. `tests/ow-115-boost-skipped.test.cjs` covers both widget languages, the real deep-pass result and no new pref. `docs/perf-results.md` has one line per task.
 
 **OW-114 CSS audit report (screenshot-free; full table in `docs/ow-114-pending-css-audit.md`):** 17 candidate rules in `additional` + `extension` CSS mention `[pending]` / `[pending="true"]`. Four OUR compact-density rules MATCH a pinned parked placeholder and hide/collapse it or its folder: `additional/tabs/ZentralTabDensity.css:357` (collapsed child tab: height/opacity/pointer-events/overflow), `additional/tabs/ZentralTabDensity.css:371` (its `.tab-content`), `additional/tabs/ZentralTabDensity.css:388` (nested folder with no "loaded" pinned tab), `additional/tabs/ZentralTabDensity.css:488` (folder whose header Zen zeroed and no "loaded" pinned tab). Five `extension/appearance/ZentralAppearance.css` candidates at `:300`, `:307`, `:316`, `:323`, `:323` do NOT match: they require a LOADED Essential-panel tile/launcher inside the pending tab, which a Notes/Agenda placeholder never has. Eight narrow override selectors at `additional/tabs/ZentralTabDensity.css:937` (scoped to `zen-folder[bgalazka-notes-folder]` and `tab[bgalazka-notes-item][pending]` / `tab[bgalazka-notes-agenda-item][pending]`, plus their `.tab-content`, folder and label container) restore `opacity: 1`, `filter: none`, `pointer-events: auto`, row height/gap/padding and `overflow: visible` with `!important`. `zentral/groups/styles/ZentralGroupsInjected.css` already resets `filter: none` for a pending folder tab, but it is outside the audited trees and covers only the filter.
 
 **Third-party / OWNER GATE:** `arc-grayscale-unloaded-tabs = true` and `browser.tabs.fadeOutUnloadedTabs = true` are Arc 2.0 / Zen mod styles, not rules in this repository; third-party Arc/Zen `[pending]` styles cannot be fixed here and may still gray or fade a parked row. No live Zen/Sine runtime is available, so this audit is static, not a screenshot. OWNER GATE: compare Notes/Agenda sidebar rows before/after with compact mode, a collapsed folder and the space indicator — labels, icons, opacity, grayscale and spacing. `docs/ow-114-pending-css-audit.md` carries the same caveat; do not present the visual result as verified until the owner checks it.
 
-Known debts: no live Zen/Sine runtime is available in this session; repository tests and CI must be used where possible, and live-only claims must not be presented as verified. `OW-115` (F5) is optional; F1–F4 are now shipped so its gate is open.
+Known debts: no live Zen/Sine runtime is available in this session; repository tests and CI must be used where possible, and live-only claims must not be presented as verified. The OW-114 visual OWNER GATE (Notes/Agenda sidebar labels, icons, opacity, grayscale and spacing with compact mode, a collapsed folder and the space indicator) remains open; third-party Arc/Zen `[pending]` styles may still gray or fade a parked row.
 
-Next action: `OW-115` (F5, optional) — surface `runLevel2`'s grouped `skipped` reasons in the Boost popup and add pinned/unpinned loaded-tab counts to `boost.state()`, with tests in both widget languages and no new pref; then `T4.3a` → `T4.3b` → `T4.3c` → `ST7.4`. Keep the version at 3.4.0; never `--bump`.
+Next action: `T4.3a` → `T4.3b` → `T4.3c` → `ST7.4`; skip owner live-Zen `OW-66` and every `PARKED` item. Keep the version at 3.4.0; never `--bump`.

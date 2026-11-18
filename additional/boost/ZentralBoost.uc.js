@@ -388,6 +388,9 @@
       let sampleTimer = 0;
       let samplerUsers = 0; // the popup and the limiter (OW-92) are the only two callers
       let lastSampleMB = null;
+      // OW-115: the last deep pass's named skip counts, read by the popup. A plain object, never a live count
+      // of every tab: this is a one-line explanation, not another sampler or listener.
+      let lastSkipped = {};
 
       // One door for "the total changed": a sample and a run both report here, so a card cannot tell them apart by
       // accident. A listener that throws is one listener's problem, never the module's.
@@ -634,6 +637,23 @@
         });
       };
 
+      // OW-115: how many tabs are currently loaded, split by pinned/Essential vs ordinary. The policy's own
+      // "already unloaded" test is the one definition, so a discarded/pending/dormant row is never counted as
+      // loaded. Called from state() on demand only — no scan in a timer, listener or hot path.
+      const loadedTabCounts = () => {
+        const counts = { pinned: 0, unpinned: 0 };
+        const alreadyUnloaded = policy()?.isUnloadable_AlreadyUnloaded;
+        if (!alreadyUnloaded) return counts;
+        const tabs = window.gBrowser?.tabs;
+        if (!tabs || !Array.isArray(tabs)) return counts;
+        for (const tab of tabs) {
+          if (!tab || alreadyUnloaded(tab)) continue;
+          if (tab.pinned || tab.hasAttribute?.("zen-essential")) counts.pinned += 1;
+          else counts.unpinned += 1;
+        }
+        return counts;
+      };
+
       // A deep run, in three steps that can each say no: tabs by the policy (oldest first), then panel records whose
       // mode allows sleep, then the wake-up list for Restore. The counts and the freed number are the result.
       let level2Busy = false;
@@ -681,6 +701,13 @@
           };
           const unloaded = { tabs: 0, panels: 0 };
           const skipped = [];
+          // OW-115: the old five/eight-entry sample stays bounded, but the popup needs ALL reasons grouped.
+          const skippedCounts = {};
+          const recordSkip = (reason, cap = 5) => {
+            const key = String(reason || "unknown");
+            skippedCounts[key] = (skippedCounts[key] || 0) + 1;
+            if (skipped.length < cap) skipped.push(key);
+          };
           // OW-111: the tabs behind Essential-panel records are read ONCE, before either loop. A record tab belongs
           // to its record's `backgroundMode`: the TAB loop must never decide for it (that was how a `live` WhatsApp
           // could be unloaded just because `unload_pinned` was on), and the PANEL loop may sleep it only with the
@@ -700,7 +727,7 @@
               // so a live record stays loaded whatever the `unload_pinned` pref says.
               const verdict = canUnload(tab, ctx, { panelRecord: recordTabs.has(tab) });
               if (!verdict.allowed) {
-                if (verdict.reason !== "selected" && verdict.reason !== "panel-record" && skipped.length < 5) skipped.push(verdict.reason);
+                if (verdict.reason !== "selected" && verdict.reason !== "panel-record") recordSkip(verdict.reason, 5);
                 continue;
               }
               try {
@@ -718,7 +745,7 @@
                   when: Date.now(),
                 });
               } catch (_) {
-                skipped.push("unload-failed");
+                recordSkip("unload-failed", 5);
               }
             }
           }
@@ -736,7 +763,7 @@
               // `unload_pinned`. It waives only the pinned/Essential rule; audible/selected/PiP/etc. still win.
               const verdict = canUnload(record.tab, ctx, { panelRecord: true, panelConsent: true });
               if (!verdict.allowed) {
-                if (skipped.length < 8) skipped.push("panel:" + verdict.reason);
+                recordSkip("panel:" + verdict.reason, 8);
                 continue;
               }
               try {
@@ -746,7 +773,7 @@
                 unloaded.panels += 1;
                 rememberUndone("panels", { appId: record.app?.id || record.appId, title: String(record.app?.name || ""), when: Date.now() });
               } catch (_) {
-                skipped.push("panel-unload-failed");
+                recordSkip("panel-unload-failed", 8);
               }
             }
           }
@@ -784,7 +811,8 @@
             lastSampleMB = afterMB;
             emit(afterMB);
           }
-          return { beforeMB, afterMB, freedMB, by: "level2", unloaded, skipped, undoSize: undoSize() };
+          lastSkipped = { ...skippedCounts };
+          return { beforeMB, afterMB, freedMB, by: "level2", unloaded, skipped, skippedCounts: { ...skippedCounts }, undoSize: undoSize() };
         } finally {
           cancelLevel2Wait = null;
           level2Busy = false;
@@ -1414,6 +1442,9 @@
           shortcut: shortcutSpec ? "set" : "",
           policy: Boolean(policy()),
           panels: essentialRecords().length,
+          // OW-115: explain a deep pass that kept tabs, and show the live pinned/unpinned loaded counts.
+          lastSkipped: { ...lastSkipped },
+          loadedTabs: loadedTabCounts(),
         }),
         destroy,
       };
