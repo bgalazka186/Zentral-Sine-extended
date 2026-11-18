@@ -344,3 +344,10 @@ panel#zentral-group-color-picker,
   background: color-mix(in srgb, currentColor 45%, transparent) !important;
   width: 40px !important;
 }
+/* Keep favicons in Zentral's Notes, Agenda and live folders colourful when their
+ * placeholder tabs are parked. Arc applies grayscale to the tab element itself,
+ * so a child favicon cannot opt out independently. Clear only that filter on
+ * folder rows; leave the pending state and the host mod's opacity untouched. */
+:root zen-folder tab[pending="true"] {
+  filter: none !important;
+}
