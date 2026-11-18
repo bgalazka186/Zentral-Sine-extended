@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral RSS Display
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.323
+// @version 3.3.324
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.323, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.324, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.323";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.324";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -961,8 +961,48 @@ function nativeSidebarSide() {
     }
   }
   const features = (window.__zentralStandalone ||= {});
+  // OW-94 (plan B7.1): the pause switch. The full pack publishes the same contract under `ZentralRuntime.performance`;
+  // a standalone module asks for it here. With no full pack there is nothing else to pause, so the switch is honest
+  // about being alone: `listenerCount()` is 0 and setting it simply notifies whoever subscribed.
+  const performanceSwitch = (() => {
+    let paused = false;
+    const listeners = new Set();
+    const snapshot = () => ({ paused, changes: 0, lastChangeAt: 0 });
+    const setPaused = (next) => {
+      const target = Boolean(next);
+      if (target === paused) return snapshot();
+      paused = target;
+      for (const fn of [...listeners]) {
+        try {
+          fn(paused, snapshot());
+        } catch (error) {
+          try {
+            console.warn("[Zentral standalone] pause listener failed", error);
+          } catch (_) {}
+        }
+      }
+      return snapshot();
+    };
+    const subscribe = (fn) => {
+      if (typeof fn !== "function") return () => {};
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    };
+    return {
+      isPaused: () => paused,
+      setPaused,
+      toggle: () => setPaused(!paused),
+      subscribe,
+      onChange: subscribe,
+      snapshot,
+      listenerCount: () => listeners.size,
+      reset() {},
+    };
+  })();
+
   const shim = {
     standalone: true,
+    performance: performanceSwitch,
     getPref,
     readStartupPanel() {
       try {
@@ -1258,6 +1298,10 @@ function nativeSidebarSide() {
       });
       const rssMarkedFolders = new Set();
       let rssScanTimer = null;
+      // OW-94 (plan B7.1): the shared pause switch. Absent in a standalone build with no full pack around it, and a
+      // missing switch means "not paused", which is exactly the behaviour from before.
+      const rssPerformance = window.ZentralRuntime?.performance || null;
+      const performancePaused = () => Boolean(rssPerformance?.isPaused?.());
       let rssObserver = null,
         rssObservedContainer = null,
         nativeBinding = null;
@@ -1802,6 +1846,13 @@ function nativeSidebarSide() {
           if (rssScanTimer !== null) clearTimeout(rssScanTimer);
           rssScanTimer = null;
         }
+        // OW-94: a paused pass does not scan. Folders change while a person is not gaming too, so the observer stays
+        // attached and the scan that follows the resume picks up everything it missed — this only skips the work.
+        if (performancePaused()) {
+          if (rssScanTimer !== null) clearTimeout(rssScanTimer);
+          rssScanTimer = null;
+          return;
+        }
         safeScanRssFolders();
         if (!rssObserver && container) {
           rssObservedContainer = container;
@@ -1809,6 +1860,7 @@ function nativeSidebarSide() {
             if (disposed || !rssEnabled() || rssScanTimer !== null) return;
             rssScanTimer = setTimeout(() => {
               rssScanTimer = null;
+              if (performancePaused()) return;
               safeScanRssFolders();
             }, 100);
           });
@@ -1919,6 +1971,15 @@ function nativeSidebarSide() {
         );
       });
       syncRssFolderDisplay();
+
+      // OW-94: resume runs the scan the paused window skipped. Registered with the module's own cleanups, and a
+      // switch that is missing entirely simply has no listener to add.
+      if (rssPerformance?.subscribe) {
+        const unsubscribe = rssPerformance.subscribe((paused) => {
+          if (!paused && !disposed) syncRssFolderDisplay();
+        });
+        if (unsubscribe) cleanups.push(() => unsubscribe());
+      }
 
       const api = {
         refresh: syncRssFolderDisplay,

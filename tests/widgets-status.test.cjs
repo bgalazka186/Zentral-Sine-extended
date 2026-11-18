@@ -67,7 +67,8 @@ test("a click means one light pass, and nothing while one is running", () => {
 test("the menu greys only what the build cannot do, and explains why", () => {
   // OW-91 made the deep pass real, so `deep` is offered when the module has the shared tab policy ...
   const items = c.boostMenuItems({ running: false, canDeep: true });
-  assert.deepEqual(json(items.map((i) => i.id)), ["free-light", "free-deep", "restore"]);
+  // OW-94 added the Level 3 switch, which sits before Restore because it is a state, not an undo.
+  assert.deepEqual(json(items.map((i) => i.id)), ["free-light", "free-deep", "game-mode", "restore"]);
   assert.equal(items[0].available, true, "the light pass always works");
   assert.equal(items[1].available, true, "the deep pass works when the policy is there");
   assert.equal(items[1].hint, "", "and needs no excuse");
@@ -76,15 +77,25 @@ test("the menu greys only what the build cannot do, and explains why", () => {
   assert.equal(noPolicy[1].available, false, "no policy, no deep pass");
   assert.ok(noPolicy[1].hint, "and the entry says why it is grey");
   // Restore is offered exactly when something is asleep.
-  assert.equal(items[2].available, false, "nothing to restore before a deep pass");
+  assert.equal(items[3].available, false, "nothing to restore before a deep pass");
   const withUndo = c.boostMenuItems({ running: false, canDeep: true, undoSize: 4 });
-  assert.equal(withUndo[2].available, true, "four things asleep is four to wake");
-  assert.equal(withUndo[2].label, "Restore (4)", "and the count is in the entry");
+  assert.equal(withUndo[3].available, true, "four things asleep is four to wake");
+  assert.equal(withUndo[3].label, "Restore (4)", "and the count is in the entry");
   const busy = c.boostMenuItems({ running: true, canDeep: true, undoSize: 4 });
   assert.equal(busy[0].available, false, "while a pass runs the entry is disabled");
   assert.equal(busy[0].label, "Freeing memory\u2026", "and it says what is happening");
   assert.equal(busy[1].available, false, "a second pass cannot start either");
-  assert.equal(busy[2].available, false, "and neither can a restore mid-pass");
+  assert.equal(busy[3].available, false, "and neither can a restore mid-pass");
+  // OW-94: the Game Mode entry is greyed only when the module cannot run it, and it reports its own state.
+  const noGameMode = c.boostMenuItems({ running: false, canDeep: true, canGameMode: false });
+  assert.equal(noGameMode[2].available, false, "a module without Game Mode does not offer it");
+  const on = c.boostMenuItems({ running: false, canDeep: true, canGameMode: true, gameMode: true });
+  assert.equal(on[2].available, true, "and a running module does");
+  assert.equal(on[2].checked, true, "the row carries the state, not only a label");
+  assert.ok(on[2].hint, "and says what being on means");
+  const off = c.boostMenuItems({ running: false, canDeep: true, canGameMode: true, gameMode: false });
+  assert.equal(off[2].checked, false);
+  assert.equal(off[2].hint, "", "nothing to explain while it is off");
 });
 
 test("a deep pass says what it put to sleep as well as what it freed", () => {

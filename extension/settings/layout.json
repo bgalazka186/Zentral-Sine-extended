@@ -355,6 +355,9 @@
         },
         {
           "label": "Limiter"
+        },
+        {
+          "label": "Game Mode"
         }
       ]
     },
@@ -1169,6 +1172,13 @@
     "zen.workspace.zentral.boost.limit_mode",
     "zen.workspace.zentral.boost.limit_cooldown_s",
     "zen.workspace.zentral.boost.limit_target_pct",
+    {
+      "type": "text",
+      "label": "**Memory Boost · Game Mode**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.boost.game_mode",
+    "zen.workspace.zentral.boost.stronger_saver",
     {
       "type": "text",
       "label": "**Panels**",

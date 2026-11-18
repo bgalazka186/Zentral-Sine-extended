@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Zentral Core and Settings
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.323
+// @version 3.3.324
 // ==/UserScript==
 /*
  * ZENTRAL FILE GUIDE - loader/ZentralRuntime.js
@@ -38,7 +38,7 @@
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
-  const VERSION = "3.3.323";
+  const VERSION = "3.3.324";
   // Sine installs this package under theme.json's id. Resolve from the
   // executing script so local folders and installed copies use their own files.
   // Keep this universal: never hard-code a mod id, folder name, or profile path.
@@ -1035,6 +1035,56 @@
   }
   // END CORE LIFECYCLE CONTRACT
   const featureScopes = new Map();
+  // The switch module publishes `window.ZentralPerformanceSwitch` at load time (far above in this file); this factory
+  // fails softly if an old copy of the module ever loads without it, because a window that refuses to boot over a
+  // pause switch would be a worse bug than not having one.
+  // The switch module publishes `window.ZentralPerformanceSwitch` when it loads. It is loaded here, before the runtime
+  // object that publishes the result; if a stub loader or an old copy leaves it out, the tiny fallback below keeps the
+  // same contract so a window never refuses to boot over a pause switch.
+  function createPerformanceSwitch() {
+    try {
+      moduleLoader.load("loader/ZentralPerformanceSwitch.js");
+    } catch (error) {
+      console.warn("[Zentral] loader/ZentralPerformanceSwitch.js did not load", error);
+    }
+    const factory = window.ZentralPerformanceSwitch?.create;
+    if (typeof factory === "function") return factory();
+    let paused = false;
+    const listeners = new Set();
+    const snapshot = () => ({ paused });
+    const setPaused = (next) => {
+      const target = Boolean(next);
+      if (target === paused) return snapshot();
+      paused = target;
+      for (const fn of [...listeners]) {
+        try {
+          fn(paused, snapshot());
+        } catch (_) {}
+      }
+      return snapshot();
+    };
+    const subscribe = (fn) => {
+      if (typeof fn !== "function") return () => {};
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    };
+    return {
+      isPaused: () => paused,
+      setPaused,
+      toggle: () => setPaused(!paused),
+      subscribe,
+      onChange: subscribe,
+      snapshot,
+      listenerCount: () => listeners.size,
+      reset() {},
+    };
+  }
+
+  // OW-94 (plan B7.1): the pause switch, created before the runtime object because that object publishes it eagerly.
+  // The module is loaded further down (with the other shared components); this only keeps the binding in scope above
+  // its first use, which is the runtime literal immediately below.
+  const performanceSwitch = createPerformanceSwitch();
+
   const runtime = (window.ZentralRuntime = {
     version: VERSION,
     rootURI: ROOT,
@@ -1042,6 +1092,9 @@
     registerHostUnload,
     createSidebarHoverCard,
     services: { platform: Services },
+    // B7/OW-94 (plan B7.1): `{ isPaused, setPaused, toggle, subscribe, onChange, snapshot }`. A repeating feature calls
+    // `subscribe` and skips its work while `isPaused()`; nothing here knows what a game is.
+    performance: performanceSwitch,
     shared: null,
     panelContext: null,
     setAvailable(id, value) {
@@ -2875,6 +2928,9 @@
   // OW-91: one tab policy for every module that unloads a tab (TabUnload and Boost). It is a plain component, so a
   // feature that needs it reads `window.ZentralTabPolicy` (standalone builds embed the same file verbatim).
   moduleLoader.load("loader/ZentralTabPolicy.js");
+  // OW-94: the pause switch every repeating feature subscribes to. Loaded here so the object exists before any feature
+  // registers, and published on the runtime below under the plan's own name (`ZentralRuntime.performance`).
+
   const {
     Constants,
     Core,
@@ -2918,6 +2974,14 @@
   };
   disposers.push(() => Settings.destroy());
   window.Zentral = { Core, Settings };
+  // B7/OW-94: the panel layer, for a module that is not a part whose context it is (Boost reads it to put panel
+  // records to sleep and to set their background mode). It is populated when the `panels` feature activates, so a
+  // getter is the only honest shape: a value copied here would be `null` forever, which is what a reader saw before.
+  Object.defineProperty(window.Zentral, "Panels", {
+    configurable: true,
+    enumerable: true,
+    get: () => runtime.panelContext || null,
+  });
   window.ZentralSettingsInstance = Settings;
   runtime.shared = {
     Constants,

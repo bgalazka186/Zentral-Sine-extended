@@ -55,6 +55,17 @@ function makeBoostModule({ freedMB = 240, beforeMB = 900 } = {}) {
     memoryMB: () => module.lastValue,
     startSampling() { calls.startSampling += 1; },
     stopSampling() { calls.stopSampling += 1; },
+    // OW-94: the Game Mode switch. The card offers the entry only when the module can act on it, so the fake has to
+    // answer the same three questions the real one does.
+    gameModeOn: false,
+    setGameMode(on) {
+      calls.setGameMode = (calls.setGameMode || 0) + 1;
+      module.gameModeOn = Boolean(on);
+      return { on: module.gameModeOn };
+    },
+    gameModeState() {
+      return { on: module.gameModeOn, paused: module.gameModeOn, stronger: false };
+    },
   };
   return module;
 }
@@ -128,10 +139,12 @@ test("the menu offers what the build can really do, and greys the rest", async (
   assert.equal(popup.hidden, false, "the arrow opens it");
   assert.equal(arrow.getAttribute("aria-expanded"), "true", "and says so");
   const items = popup.querySelectorAll(".zw-boost-menu-item");
-  assert.equal(items.length, 3, "light, deep and restore");
+  assert.equal(items.length, 4, "light, deep, the Game Mode switch and restore");
   assert.equal(items[0].disabled, false, "the light pass works");
   assert.equal(items[1].disabled, false, "OW-91 made the deep pass real");
-  assert.equal(items[2].disabled, true, "nothing is asleep yet, so there is nothing to restore");
+  assert.equal(items[2].getAttribute("data-zw-boost-action"), "game-mode", "OW-94's Level 3 toggle sits before Restore");
+  assert.equal(items[2].disabled, false, "and is offered whenever the module can run it");
+  assert.equal(items[3].disabled, true, "nothing is asleep yet, so there is nothing to restore");
   // The deep entry runs the deep pass, and the toast says what went to sleep.
   fire(items[1], "click");
   assert.equal(popup.hidden, true, "choosing a command closes the menu");
@@ -143,9 +156,9 @@ test("the menu offers what the build can really do, and greys the rest", async (
   boost.state = () => ({ policy: true, undoSize: 3 });
   fire(arrow, "click");
   const after = popup.querySelectorAll(".zw-boost-menu-item");
-  assert.equal(after[2].disabled, false, "three things asleep is three to wake");
-  assert.equal(after[2].textContent, "Restore (3)");
-  fire(after[2], "click");
+  assert.equal(after[3].disabled, false, "three things asleep is three to wake");
+  assert.equal(after[3].textContent, "Restore (3)");
+  fire(after[3], "click");
   await tick(20);
   api.destroy();
 });
@@ -227,6 +240,39 @@ test("the retired Status card is never mounted", async () => {
   await tick(50);
   const ids = api.getTray().children.map((el) => el.getAttribute("data-zw-widget"));
   assert.deepEqual(ids, ["boost"], "only Boost, even with the old pref switched on");
+  api.destroy();
+});
+
+test("the Game Mode switch toggles through the module and says so", async () => {
+  const h = createFakeSidebarHarness({ ...BASE });
+  const boost = makeBoostModule();
+  h.window.ZentralBoost = boost;
+  const { api } = h.start();
+  await tick(50);
+  const card = api.getTray().children.find((el) => el.getAttribute("data-zw-widget") === "boost");
+  const body = card.querySelector(".zw-boost");
+  const popup = body.querySelector(".zw-boost-popup");
+  const arrow = body.querySelector(".zw-boost-menu-btn");
+  fire(arrow, "click");
+  const row = () => popup.querySelectorAll(".zw-boost-menu-item")[2];
+  assert.equal(row().getAttribute("data-zw-boost-action"), "game-mode");
+  assert.equal(row().getAttribute("aria-checked"), "false", "off, and the row says so");
+  fire(row(), "click");
+  await tick(20);
+  assert.equal(boost.calls.setGameMode, 1, "the card asked the module to turn it on");
+  assert.equal(boost.gameModeOn, true, "the module is the one holding the state");
+  assert.equal(popup.hidden, true, "choosing it closes the menu");
+  const toast = api.getTray().querySelector(".zw-toast");
+  assert.equal(toast.textContent, "Game Mode on \u2014 timers paused, background tabs idle");
+  // Back on again: the row now reports the state it will toggle out of.
+  fire(arrow, "click");
+  assert.equal(row().getAttribute("aria-checked"), "true");
+  fire(row(), "click");
+  await tick(20);
+  assert.equal(boost.calls.setGameMode, 2);
+  assert.equal(boost.gameModeOn, false, "the second click turns it off");
+  assert.equal(api.getTray().querySelector(".zw-toast").textContent,
+    "Game Mode off \u2014 everything back to normal");
   api.destroy();
 });
 

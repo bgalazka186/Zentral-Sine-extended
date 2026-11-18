@@ -2406,6 +2406,10 @@
         const active =
           ctx.periodicFallbackPollingEnabled() &&
           !extensionDisposed &&
+          // OW-94 (plan B7.1): no fallback poll while Game Mode holds every timer. `syncPanelFallbackPolling` is also
+          // called from the pause subscription below, so ending a game re-arms it immediately rather than at the next
+          // panel event.
+          !window.ZentralRuntime?.performance?.isPaused?.() &&
           panelMaintenanceVisible();
         if (active && panelStatusTimer && panelStatusTimer.delay === delay)
           return;
@@ -2415,7 +2419,12 @@
           : null;
       }
       syncPanelFallbackPolling();
+      // OW-94: pause/re-arm with the shared switch.
+      const unsubscribePerformance = window.ZentralRuntime?.performance?.subscribe?.(() => syncPanelFallbackPolling()) || null;
       registerCleanup(() => {
+        try {
+          unsubscribePerformance?.();
+        } catch (_) {}
         if (panelStatusTimer) clearInterval(panelStatusTimer.id);
         panelStatusTimer = null;
         for (const controller of panelMediaListeners.values())

@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Widgets
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.323
+// @version 3.3.324
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.323, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.324, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.323";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.324";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -961,8 +961,48 @@ function nativeSidebarSide() {
     }
   }
   const features = (window.__zentralStandalone ||= {});
+  // OW-94 (plan B7.1): the pause switch. The full pack publishes the same contract under `ZentralRuntime.performance`;
+  // a standalone module asks for it here. With no full pack there is nothing else to pause, so the switch is honest
+  // about being alone: `listenerCount()` is 0 and setting it simply notifies whoever subscribed.
+  const performanceSwitch = (() => {
+    let paused = false;
+    const listeners = new Set();
+    const snapshot = () => ({ paused, changes: 0, lastChangeAt: 0 });
+    const setPaused = (next) => {
+      const target = Boolean(next);
+      if (target === paused) return snapshot();
+      paused = target;
+      for (const fn of [...listeners]) {
+        try {
+          fn(paused, snapshot());
+        } catch (error) {
+          try {
+            console.warn("[Zentral standalone] pause listener failed", error);
+          } catch (_) {}
+        }
+      }
+      return snapshot();
+    };
+    const subscribe = (fn) => {
+      if (typeof fn !== "function") return () => {};
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    };
+    return {
+      isPaused: () => paused,
+      setPaused,
+      toggle: () => setPaused(!paused),
+      subscribe,
+      onChange: subscribe,
+      snapshot,
+      listenerCount: () => listeners.size,
+      reset() {},
+    };
+  })();
+
   const shim = {
     standalone: true,
+    performance: performanceSwitch,
     getPref,
     readStartupPanel() {
       try {
@@ -1238,6 +1278,9 @@ function nativeSidebarSide() {
       "boost.limitNothing": "Memory is high, but nothing else may be unloaded",
       "boost.restore": "Restore",
       "boost.restoreSoon": "Nothing to restore yet",
+      "boost.gameMode": "Game Mode",
+      "boost.gameModeOn": "Game Mode on \u2014 timers paused, background tabs idle",
+      "boost.gameModeOff": "Game Mode off \u2014 everything back to normal",
       "boost.later": "More Boost actions arrive in later updates",
       "tray.label": "Sidebar widgets",
       "tray.move": "Move this widget",
@@ -1298,6 +1341,9 @@ function nativeSidebarSide() {
       "boost.limitNothing": "Pami\u0119\u0107 jest wysoka, ale nie ma ju\u017c czego zwalnia\u0107",
       "boost.restore": "Przywr\u00f3\u0107",
       "boost.restoreSoon": "Nie ma jeszcze czego przywraca\u0107",
+      "boost.gameMode": "Tryb gry",
+      "boost.gameModeOn": "Tryb gry w\u0142\u0105czony \u2014 liczniki wstrzymane, karty w tle bezczynne",
+      "boost.gameModeOff": "Tryb gry wy\u0142\u0105czony \u2014 wszystko wraca do normy",
       "boost.later": "Kolejne dzia\u0142ania Boost pojawi\u0105 si\u0119 w nast\u0119pnych wersjach",
       "tray.label": "Widgety panelu bocznego",
       "tray.move": "Przenieś ten widget",
@@ -2550,7 +2596,12 @@ function nativeSidebarSide() {
     const entries = new Map(); // id -> { def, instance, timer, token, inflight, intervalMs }
     const cache = new Map(); // cacheKey -> { value, updatedAt }
     let paused = true;
+    // OW-94: the Game Mode hold, deliberately a SECOND flag. `paused` belongs to the sidebar-folded setting (OW-67); if
+    // Game Mode reused it, ending a game would resume a folded sidebar and starting a game would have to know whether the
+    // fold wanted pausing. Two owners, two flags, one predicate: `idle()`.
+    let held = false;
     let disposed = false;
+    const idle = () => paused || held;
 
     function cacheKeyOf(def) {
       if (typeof def.cacheKey === "function") {
@@ -2571,7 +2622,7 @@ function nativeSidebarSide() {
 
     function scheduleNext(entry, { isError = false, lastValue } = {}) {
       clearEntryTimer(entry);
-      if (disposed || paused || !entries.has(entry.def.id)) return;
+      if (disposed || idle() || !entries.has(entry.def.id)) return;
       const intervalMs = entry.intervalMs;
       if (!intervalMs || intervalMs <= 0) return;
       let delay = intervalMs;
@@ -2590,7 +2641,7 @@ function nativeSidebarSide() {
       }
       entry.timer = setTimer(() => {
         entry.timer = null;
-        if (!disposed && !paused && entries.has(entry.def.id)) {
+        if (!disposed && !idle() && entries.has(entry.def.id)) {
           refresh(entry.def.id, { force: true });
         }
       }, delay);
@@ -2615,7 +2666,7 @@ function nativeSidebarSide() {
     function refresh(id, { force = false, area = null } = {}) {
       const entry = entries.get(id);
       if (!entry || disposed) return Promise.resolve(false);
-      if (paused && !force) return Promise.resolve(false);
+      if (idle() && !force) return Promise.resolve(false);
       const cached = cache.get(cacheKeyOf(entry.def));
       if (!force && cached && entry.intervalMs > 0) {
         const customStale =
@@ -2639,7 +2690,7 @@ function nativeSidebarSide() {
             } catch (_) {}
           }
           clearEntryTimer(entry);
-          if (!paused) {
+          if (!idle()) {
             entry.timer = setTimer(() => {
               entry.timer = null;
               if (!disposed && !paused && entries.has(id))
@@ -2690,7 +2741,7 @@ function nativeSidebarSide() {
             area,
           });
         } catch (_) {}
-        if (!paused) scheduleNext(entry, { isError: true, lastValue: cached?.value });
+        if (!idle()) scheduleNext(entry, { isError: true, lastValue: cached?.value });
         return Promise.resolve(false);
       }
 
@@ -2715,7 +2766,7 @@ function nativeSidebarSide() {
         } catch (err) {
           onError(id, err);
         }
-        if (!paused) scheduleNext(current, { lastValue: stored?.value });
+        if (!idle()) scheduleNext(current, { lastValue: stored?.value });
         return true;
       };
 
@@ -2735,7 +2786,7 @@ function nativeSidebarSide() {
             area,
           });
         } catch (_) {}
-        if (!paused) scheduleNext(current, { isError: true, lastValue: prev?.value });
+        if (!idle()) scheduleNext(current, { isError: true, lastValue: prev?.value });
         return false;
       };
 
@@ -2789,6 +2840,19 @@ function nativeSidebarSide() {
           clearEntryTimer(entry);
         }
       } else {
+        resumeAll(area);
+      }
+    }
+
+    // OW-94: the Game Mode hold. Entering clears every timer, leaving resumes through `resumeAll` only when the sidebar
+    // is not itself asking for a pause — the fold's setting is not ours to override.
+    function setHeld(nextHeld, area) {
+      const target = Boolean(nextHeld);
+      if (target === held) return;
+      held = target;
+      if (held) {
+        for (const entry of entries.values()) clearEntryTimer(entry);
+      } else if (!paused) {
         resumeAll(area);
       }
     }
@@ -2856,6 +2920,8 @@ function nativeSidebarSide() {
       deactivate,
       updateInterval,
       setPaused,
+      setHeld,
+      isHeld: () => held,
       resumeAll,
       repaintAll,
       refresh,
@@ -2918,6 +2984,15 @@ function nativeSidebarSide() {
         label: widgetText(lang, "boost.deep"),
         available: !running && canDeep,
         hint: canDeep ? "" : widgetText(lang, "boost.deepSoon"),
+      },
+      {
+        // B7/OW-94: the Level 3 toggle. It is a switch, not a one-shot action, so its label says which way it will
+        // move — a menu entry that reads "Game Mode" and does the opposite of what a person expects is worse than none.
+        id: "game-mode",
+        label: widgetText(lang, "boost.gameMode"),
+        available: opts.canGameMode !== false,
+        checked: Boolean(opts.gameMode),
+        hint: Boolean(opts.gameMode) ? widgetText(lang, "boost.gameModeOn") : "",
       },
       {
         id: "restore",
@@ -3717,6 +3792,12 @@ function nativeSidebarSide() {
       const mountedCards = new Map(); // id -> { card, body, instance }
       const watchedPrefs = new Map(); // pref -> observerFn
       const scheduler = createWidgetScheduler();
+      // OW-94 (plan B7.1): the shared pause switch. The subscription is idempotent with respect to the sidebar setting
+      // because the scheduler keeps the two flags apart (see `setHeld`).
+      const performanceSwitch = window.ZentralRuntime?.performance || null;
+      const unsubscribePerformance = performanceSwitch?.subscribe?.((paused) =>
+        scheduler.setHeld(paused, lastArea),
+      ) || null;
 
       let tray = null;
       let observedHost = null;
@@ -5638,9 +5719,12 @@ function nativeSidebarSide() {
           const paintMenu = () => {
             while (popup.children.length) popup.children[0].remove();
             const state = typeof api()?.state === "function" ? api().state() : {};
+            const gameMode = typeof api()?.gameModeState === "function" ? api().gameModeState() : null;
             const items = boostMenuItems({
               running: boostRunning,
               canDeep: state.policy !== false,
+              canGameMode: typeof api()?.setGameMode === "function",
+              gameMode: Boolean(gameMode?.on),
               undoSize: Number(state.undoSize) || 0,
               language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE),
               notesRaw: getString(NOTES_LANGUAGE_PREF, "en"),
@@ -5655,6 +5739,8 @@ function nativeSidebarSide() {
               if (item.hint) row.title = item.hint;
               row.disabled = !item.available;
               row.setAttribute("aria-disabled", item.available ? "false" : "true");
+              // A switch, not an action: the state is on the row so a screen reader and a test can both read it.
+              if (item.checked !== undefined) row.setAttribute("aria-checked", item.checked ? "true" : "false");
               if (item.available) {
                 row.addEventListener("click", (event) => {
                   event?.preventDefault?.();
@@ -5691,7 +5777,26 @@ function nativeSidebarSide() {
             if (id === "free-light") return runLight();
             if (id === "free-deep") return runDeep();
             if (id === "restore") return runRestore();
+            if (id === "game-mode") return runGameMode();
             return Promise.resolve(null);
+          }
+
+          // OW-94: Game Mode is a toggle with its own toast. It is written through the module's own pref, so Settings
+          // and the card never disagree, and the card repaints from the module's state rather than from a local flag.
+          function runGameMode() {
+            const boost = api();
+            if (!boost || typeof boost.setGameMode !== "function") return Promise.resolve(null);
+            const next = !Boolean(boost.gameModeState?.().on);
+            let result = null;
+            try {
+              result = boost.setGameMode(next);
+            } catch (_) {
+              result = null;
+            }
+            paintMenu();
+            const t = (key) => widgetText(resolveWidgetLanguage(getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), getString(NOTES_LANGUAGE_PREF, "en")), key);
+            showWidgetToast(t(next ? "boost.gameModeOn" : "boost.gameModeOff"));
+            return Promise.resolve(result);
           }
 
           // OW-91: one deep pass, with the same "one at a time" rule as the light one. The result carries how many tabs
@@ -5956,6 +6061,8 @@ function nativeSidebarSide() {
         getArea: () => ({ ...lastArea }),
         getTray: () => tray,
         isPaused: () => scheduler.isPaused(),
+        // OW-94: whether Game Mode is holding this scheduler, for a live check and for the Boost card's own label.
+        isHeld: () => scheduler.isHeld(),
         activeTimerCount: () => scheduler.activeTimerCount(),
         remeasure: () => syncWidgetsAndLayout(),
         resolveWeatherPlace: () => resolveWeatherPlaceFromName(),
@@ -5967,6 +6074,9 @@ function nativeSidebarSide() {
           detachSidebarObservers();
           for (const id of [...mountedCards.keys()]) unmountWidgetCard(id);
           registry.clear();
+          try {
+            unsubscribePerformance?.();
+          } catch (_) {}
           scheduler.destroy();
           if (tray) {
             try {

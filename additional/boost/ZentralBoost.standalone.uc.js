@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Boost
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.323
+// @version 3.3.324
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.323, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.324, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.323";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.324";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -961,8 +961,48 @@ function nativeSidebarSide() {
     }
   }
   const features = (window.__zentralStandalone ||= {});
+  // OW-94 (plan B7.1): the pause switch. The full pack publishes the same contract under `ZentralRuntime.performance`;
+  // a standalone module asks for it here. With no full pack there is nothing else to pause, so the switch is honest
+  // about being alone: `listenerCount()` is 0 and setting it simply notifies whoever subscribed.
+  const performanceSwitch = (() => {
+    let paused = false;
+    const listeners = new Set();
+    const snapshot = () => ({ paused, changes: 0, lastChangeAt: 0 });
+    const setPaused = (next) => {
+      const target = Boolean(next);
+      if (target === paused) return snapshot();
+      paused = target;
+      for (const fn of [...listeners]) {
+        try {
+          fn(paused, snapshot());
+        } catch (error) {
+          try {
+            console.warn("[Zentral standalone] pause listener failed", error);
+          } catch (_) {}
+        }
+      }
+      return snapshot();
+    };
+    const subscribe = (fn) => {
+      if (typeof fn !== "function") return () => {};
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    };
+    return {
+      isPaused: () => paused,
+      setPaused,
+      toggle: () => setPaused(!paused),
+      subscribe,
+      onChange: subscribe,
+      snapshot,
+      listenerCount: () => listeners.size,
+      reset() {},
+    };
+  })();
+
   const shim = {
     standalone: true,
+    performance: performanceSwitch,
     getPref,
     readStartupPanel() {
       try {
@@ -1324,6 +1364,12 @@ function nativeSidebarSide() {
     LIMIT_MODE: "zen.workspace.zentral.boost.limit_mode",
     LIMIT_COOLDOWN_S: "zen.workspace.zentral.boost.limit_cooldown_s",
     LIMIT_TARGET_PCT: "zen.workspace.zentral.boost.limit_target_pct",
+    // B7 (OW-94): Game Mode, the Level 3 TOGGLE. Off by default and not remembered across a restart: a browser that
+    // comes back from a restart still paused would look broken to anyone who forgot they turned it on.
+    GAME_MODE: "zen.workspace.zentral.boost.game_mode",
+    // B7.2: "Stronger saver" also sleeps the records marked `live` (WhatsApp, Messenger). A separate switch, OFF by
+    // default, because sleeping a notification app is the one thing the mode may not decide on its own.
+    STRONGER_SAVER: "zen.workspace.zentral.boost.stronger_saver",
   });
   // B2.1: sample only on demand. These are the two situations the plan allows a 2 s sampler.
   const SAMPLE_INTERVAL_MS = 2000;
@@ -1348,6 +1394,9 @@ function nativeSidebarSide() {
   const LIMIT_HOT_SHARE = 0.7; // "above 70 % of the limit" is the plan's own line
   const LIMIT_BATCH = 3;       // tabs per batch in a hard run, re-sampled after each
   const LIMIT_NAG_MS = 10 * 60000; // nothing eligible: at most one toast per ten minutes
+  // B7/OW-94: the two tab attributes that decide whether a browser may be deactivated in Game Mode. An audible tab
+  // keeps playing a podcast; the video preview's own source tab keeps its picture. Everything else may go inactive.
+  const GAME_MODE_EXEMPT = Object.freeze(["audible", "video-source"]);
   const DEFAULT_LIMIT = Object.freeze({
     mb: 4096,
     mode: "soft",
@@ -1894,8 +1943,12 @@ function nativeSidebarSide() {
           // Panels: only records the person marked `asleep-allowed`. `live` and `throttled` stay exactly as they are —
           // the mode is theirs, and this pass does not read it as advice.
           if (options.allowPanels !== false) {
+            // A manual deep pass and the limiter sleep only `asleep-allowed` records — the mode is the person's advice
+            // and this pass does not read it as consent. A Stronger-saver Game Mode pass passes `allowModes` with every
+            // mode, because that switch IS the consent (plan B7.2).
+            const modes = Array.isArray(options.allowModes) ? options.allowModes : ["asleep-allowed"];
             for (const record of essentialRecords()) {
-              if (modeOf(record) !== "asleep-allowed") continue;
+              if (!modes.includes(modeOf(record))) continue;
               const verdict = canUnload(record.tab, ctx);
               if (!verdict.allowed) {
                 if (skipped.length < 8) skipped.push("panel:" + verdict.reason);
@@ -2228,6 +2281,242 @@ function nativeSidebarSide() {
         });
       }
 
+      /* ---------------- B7/OW-94: Game Mode, the Level 3 toggle ---------------- */
+
+      // The plan's shape: Level 2 + pause every timer + deactivate every kept browser except the exempt ones. The
+      // decision is a pure function so the rule can be read and tested on its own; the acting part can then only do
+      // what that function said.
+      const performanceSwitch = () => window.ZentralRuntime?.performance || null;
+
+      // Which of these may be deactivated. `exempt` is the podcast (an audible tab) and the video preview's source tab:
+      // the plan's own exception list, and the owner gate is exactly that a podcast keeps playing.
+      //
+      // A target is `{ id, exempt, kind }`. `kept` carries the reason, so a live check can say why a tab survived.
+      function decideGameMode({ targets = [] } = {}) {
+        const act = [];
+        const kept = [];
+        for (const target of targets) {
+          if (!target || target.id == null) continue;
+          if (target.exempt) kept.push({ id: target.id, reason: target.why || "exempt" });
+          else act.push({ id: target.id, kind: target.kind || "tab" });
+        }
+        return { act, kept };
+      }
+
+      // Is this tab exempt from Game Mode? Two facts, both from the shared policy so there is one definition of
+      // "audible" in the whole project.
+      function gameModeExemptReason(tab, videoSource) {
+        const table = policy();
+        if (table?.isAudible?.(tab)) return "audible";
+        if (videoSource && tab === videoSource) return "video-source";
+        if (tab === window.gBrowser?.selectedTab) return "selected";
+        return "";
+      }
+
+      // Everything Game Mode may touch: the browsers of open tabs (never the selected one) and every loaded panel
+      // browser. Records are matched to their browser through the panel module, because a record stores its `tab`,
+      // not a browser: `getOrCreateAppBrowser` is the documented way back from an app to its browser.
+      function gameModeTargets() {
+        const bodies = [];
+        const videoSource = videoSourceTab();
+        const gBrowser = window.gBrowser;
+        try {
+          for (const tab of gBrowser?.tabs || []) {
+            const browser = tab?.linkedBrowser;
+            if (!browser || !tab.isConnected) continue;
+            const why = gameModeExemptReason(tab, videoSource);
+            bodies.push({ id: browser, kind: "tab", exempt: Boolean(why), why });
+          }
+        } catch (_) {}
+        try {
+          const apps = window.Zentral?.Apps;
+          for (const record of essentialRecords()) {
+            const browser = apps?.getOrCreateAppBrowser
+              ? (() => {
+                  try {
+                    return apps.getOrCreateAppBrowser(record.app)?.browser || null;
+                  } catch (_) {
+                    return null;
+                  }
+                })()
+              : null;
+            if (!browser?.isConnected) continue;
+            const why = gameModeExemptReason(record.tab, videoSource);
+            bodies.push({ id: browser, kind: "panel", exempt: Boolean(why), why: why || "panel" });
+          }
+        } catch (_) {}
+        return bodies;
+      }
+
+      // The state Game Mode owns. `saved` is everything it changed, so switching it off puts the session back instead of
+      // guessing; `woke` is what a Stronger-saver pass put to sleep, so Restore can bring it back.
+      const gameMode = { on: false, saved: new Map(), woke: [], pausedBy: false, run: 0, lastActed: 0, lastResult: null };
+
+      function rememberBrowser(browser) {
+        if (!browser || gameMode.saved.has(browser)) return;
+        try {
+          gameMode.saved.set(browser, {
+            docShellIsActive: browser.docShellIsActive,
+            renderLayers: browser.renderLayers,
+          });
+        } catch (_) {}
+      }
+
+      // One pass over the live session. Returns what it did, for `gameModeState()` and for a test.
+      function deactivateForGameMode(targets) {
+        const decision = decideGameMode({ targets });
+        let acted = 0;
+        for (const entry of decision.act) {
+          const browser = entry.id;
+          try {
+            rememberBrowser(browser);
+            if (browser.docShellIsActive !== false) browser.docShellIsActive = false;
+            if (browser.isRemoteBrowser && browser.renderLayers !== false) browser.renderLayers = false;
+            acted += 1;
+          } catch (_) {}
+        }
+        gameMode.lastActed = acted;
+        return { acted, kept: decision.kept };
+      }
+
+      // B7.2's "Stronger saver": sleep every panel record, whatever its mode, by running the deep pass with the modes
+      // opened up. It goes through `runLevel2` rather than a second unload path, so the policy still decides what may go
+      // (audible, selected, pending, video source...) and `undoState` is filled by the same code Restore reads.
+      async function strongerSaverSleep() {
+        const result = await runLevel2({ allowTabs: false, allowModes: [...BACKGROUND_MODES] });
+        const slept = Number(result?.unloaded?.panels) || 0;
+        for (let i = 0; i < slept; i++) gameMode.woke.push("panel");
+        return slept;
+      }
+
+      function restoreGameModeActivity() {
+        let restored = 0;
+        for (const [browser, state] of gameMode.saved) {
+          try {
+            if (!browser?.isConnected) continue;
+            if (browser.docShellIsActive !== state.docShellIsActive) browser.docShellIsActive = state.docShellIsActive;
+            if (browser.isRemoteBrowser && browser.renderLayers !== state.renderLayers)
+              browser.renderLayers = state.renderLayers;
+            restored += 1;
+          } catch (_) {}
+        }
+        gameMode.saved.clear();
+        return restored;
+      }
+
+      // B7.3: switching off unpauses, restores the SELECTED tab, and lets everything else reload lazily. Reactivating
+      // every browser on the way out of a game would cost exactly the memory the mode was saving.
+      function restoreSelectedTabActivity() {
+        const gBrowser = window.gBrowser;
+        const browser = gBrowser?.selectedTab?.linkedBrowser || gBrowser?.selectedBrowser;
+        if (!browser) return 0;
+        try {
+          if (browser.docShellIsActive !== true) browser.docShellIsActive = true;
+          if (browser.isRemoteBrowser && browser.renderLayers !== true) browser.renderLayers = true;
+          return 1;
+        } catch (_) {
+          return 0;
+        }
+      }
+
+      function syncPanelActivity() {
+        try {
+          panels()?.syncAppPanelBrowserActivity?.();
+        } catch (_) {}
+      }
+
+      // One writer. `setGameMode` sets the pref, and the pref observer is what actually runs the change, so a switch in
+      // the widget and a checkbox in Settings do the identical thing and neither can drift from the other.
+      function setGameMode(on) {
+        const target = Boolean(on);
+        if (prefBool(PREF.GAME_MODE, false) !== target) {
+          try {
+            Services.prefs.setBoolPref(PREF.GAME_MODE, target);
+          } catch (_) {}
+        }
+        return applyGameMode(target);
+      }
+
+      function applyGameMode(on) {
+        const target = Boolean(on);
+        // Already in that state: a second switch, the pref observer having just done the work, or a restart with the
+        // pref set. The caller still wants to know what the last real pass did, so that is what it gets.
+        if (target === gameMode.on) return gameMode.lastResult || gameModeState();
+        if (target) {
+          gameMode.on = true;
+          gameMode.run += 1;
+          const switchApi = performanceSwitch();
+          if (switchApi && !switchApi.isPaused()) {
+            switchApi.setPaused(true);
+            gameMode.pausedBy = true;
+          }
+          // Level 2 first (the plan's "Level 2 +"), then the activity pass. Level 2 is async and must not block the
+          // switch: the activity pass is what the person feels, and it is synchronous by design.
+          const level2 = runLevel2({ allowPanels: false });
+          if (level2 && typeof level2.catch === "function") level2.catch(() => {});
+          const activity = deactivateForGameMode(gameModeTargets());
+          if (prefBool(PREF.STRONGER_SAVER, false)) {
+            const sleep = strongerSaverSleep();
+            if (sleep && typeof sleep.catch === "function") sleep.catch(() => {});
+          }
+          syncPanelActivity();
+          gameMode.lastResult = { ...gameModeState(), acted: activity.acted, kept: activity.kept.length };
+          return gameMode.lastResult;
+        }
+        gameMode.on = false;
+        const restored = restoreGameModeActivity();
+        const selected = restoreSelectedTabActivity();
+        gameMode.woke.length = 0;
+        const switchApi = performanceSwitch();
+        if (gameMode.pausedBy && switchApi) {
+          switchApi.setPaused(false);
+          gameMode.pausedBy = false;
+        }
+        syncPanelActivity();
+        gameMode.lastResult = { ...gameModeState(), restored, selected };
+        return gameMode.lastResult;
+      }
+
+      function gameModeState() {
+        return {
+          on: gameMode.on,
+          paused: Boolean(performanceSwitch()?.isPaused?.()),
+          stronger: prefBool(PREF.STRONGER_SAVER, false),
+          saved: gameMode.saved.size,
+          woke: gameMode.woke.length,
+          acted: gameMode.lastActed,
+          run: gameMode.run,
+        };
+      }
+
+      // The pref is the switch, so Settings and the widget write the same thing and only one path acts on it.
+      function installGameMode() {
+        let last = prefBool(PREF.GAME_MODE, false);
+        if (last) applyGameMode(true);
+        const observer = {
+          observe(_subject, _topic, data) {
+            if (data && data !== PREF.GAME_MODE) return;
+            const next = prefBool(PREF.GAME_MODE, false);
+            if (next === last) return;
+            last = next;
+            applyGameMode(next);
+          },
+        };
+        try {
+          Services.prefs.addObserver(PREF.GAME_MODE, observer);
+          onCleanup(() => {
+            try {
+              Services.prefs.removeObserver(PREF.GAME_MODE, observer);
+            } catch (_) {}
+          });
+        } catch (_) {}
+        // Leaving a window that is in Game Mode must not leave the browser deactivated: turning it off on teardown is
+        // the same path the person's own switch takes, so there is nothing special about it.
+        onCleanup(() => {
+          if (gameMode.on) applyGameMode(false);
+        });
+      }
+
       /* ---------------- public API ---------------- */
 
       let disposed = false;
@@ -2242,6 +2531,13 @@ function nativeSidebarSide() {
         setBackgroundMode,
         backgroundModeOf: (record) => modeOf(record),
         BACKGROUND_MODES,
+        // B7/OW-94: Game Mode. `setGameMode(true/false)` is what the widget's switch and the pref both call; the pref
+        // observer is the only other entry point.
+        setGameMode,
+        applyGameMode,
+        gameModeState,
+        decideGameMode,
+        gameModeTargets,
         // B5/OW-92: the limiter's decisions and its live state, for a caller (the widget, a live check) that wants to
         // show them. The deciding itself is pure and tested on its own.
         decideLimiter,
@@ -2295,6 +2591,7 @@ function nativeSidebarSide() {
       window.addEventListener("unload", () => api.destroy(), { once: true });
       installShortcut();
       installLimiter();
+      installGameMode();
 
       // A build without requestProcInfo has a memory meter that can never answer: say so once and stay out of the way
       // (the plan's B2.1). Level 1 is still useful on its own, so the module keeps running rather than disabling

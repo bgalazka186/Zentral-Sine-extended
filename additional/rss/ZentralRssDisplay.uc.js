@@ -162,6 +162,10 @@
       });
       const rssMarkedFolders = new Set();
       let rssScanTimer = null;
+      // OW-94 (plan B7.1): the shared pause switch. Absent in a standalone build with no full pack around it, and a
+      // missing switch means "not paused", which is exactly the behaviour from before.
+      const rssPerformance = window.ZentralRuntime?.performance || null;
+      const performancePaused = () => Boolean(rssPerformance?.isPaused?.());
       let rssObserver = null,
         rssObservedContainer = null,
         nativeBinding = null;
@@ -706,6 +710,13 @@
           if (rssScanTimer !== null) clearTimeout(rssScanTimer);
           rssScanTimer = null;
         }
+        // OW-94: a paused pass does not scan. Folders change while a person is not gaming too, so the observer stays
+        // attached and the scan that follows the resume picks up everything it missed — this only skips the work.
+        if (performancePaused()) {
+          if (rssScanTimer !== null) clearTimeout(rssScanTimer);
+          rssScanTimer = null;
+          return;
+        }
         safeScanRssFolders();
         if (!rssObserver && container) {
           rssObservedContainer = container;
@@ -713,6 +724,7 @@
             if (disposed || !rssEnabled() || rssScanTimer !== null) return;
             rssScanTimer = setTimeout(() => {
               rssScanTimer = null;
+              if (performancePaused()) return;
               safeScanRssFolders();
             }, 100);
           });
@@ -823,6 +835,15 @@
         );
       });
       syncRssFolderDisplay();
+
+      // OW-94: resume runs the scan the paused window skipped. Registered with the module's own cleanups, and a
+      // switch that is missing entirely simply has no listener to add.
+      if (rssPerformance?.subscribe) {
+        const unsubscribe = rssPerformance.subscribe((paused) => {
+          if (!paused && !disposed) syncRssFolderDisplay();
+        });
+        if (unsubscribe) cleanups.push(() => unsubscribe());
+      }
 
       const api = {
         refresh: syncRssFolderDisplay,

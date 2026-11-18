@@ -41,6 +41,8 @@ const PROVIDED = new Set([
   "standalone",
   "sidebarLayoutRepair",
   "compactHoverStatus",
+  // OW-94: the pause switch (plan B7.1), provided by the standalone shim with the full pack's contract.
+  "performance",
 ]);
 
 function walk(dir) {

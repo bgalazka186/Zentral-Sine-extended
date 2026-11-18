@@ -6992,15 +6992,21 @@
     // One native timer drives all calendar deadlines and a low-cost clock
     // check. Deadlines are absolute wall-clock instants; monotonic elapsed
     // time distinguishes ordinary timer delay from manual clock jumps.
+    // `paused` (OW-94): while Game Mode is on, the minute wake is not re-armed — the whole point of pausing is that a
+    // gaming session stops paying for a timer that can only ring at the end. Resuming re-arms immediately and the next
+    // `check()` catches up on everything that came due in between, because deadlines are absolute instants, not ticks.
     function createTimeTickService({ now = () => Date.now(), monotonic = () => window.performance?.now?.() ?? Date.now(),
       zone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (_) { return ""; } },
-      setTimer = (fn, ms) => window.setTimeout(fn, ms), clearTimer = (id) => window.clearTimeout(id), warn = () => {} } = {}) {
+      setTimer = (fn, ms) => window.setTimeout(fn, ms), clearTimer = (id) => window.clearTimeout(id), warn = () => {},
+      paused = () => false } = {}) {
       const queue = new Map(), listeners = new Set(), pollMs = 60000, driftLimit = 120000;
       let native = null, nextId = 0, dead = false, running = false;
       let lastWall = now(), lastMono = monotonic(), lastZone = zone(), lastDay = remindDateText(lastWall), nextPoll = lastWall + pollMs;
       function arm() {
         if (dead || running) return;
         if (native !== null) clearTimer(native);
+        // Paused: clear whatever was armed and leave nothing behind. `check("wake")` on resume arms again.
+        if (paused()) { native = null; return; }
         let due = nextPoll;
         for (const entry of queue.values()) due = Math.min(due, entry.at);
         native = setTimer(() => { native = null; check("timer"); }, Math.max(0, Math.min(MAX_TIMER_MS, due - now())));
@@ -7037,6 +7043,10 @@
         on(fn) { if (dead) return () => {}; listeners.add(fn); return () => listeners.delete(fn); },
         check,
         wake() { check("wake"); },
+        // OW-94: the pause switch changed. Pausing clears the armed timer on the spot; resuming checks immediately,
+        // which both fires anything overdue and re-arms for the next deadline.
+        onPausedChange(isPaused) { if (isPaused) arm(); else check("wake"); },
+        isArmed: () => native !== null,
         destroy() { if (dead) return; dead = true; if (native !== null) clearTimer(native); native = null; queue.clear(); listeners.clear(); },
       };
       arm();
@@ -31881,8 +31891,19 @@
         assetUrls.set(key, url);
         return { url };
       }
-      const tick = createTimeTickService({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), warn });
-      onCleanup(() => tick.destroy());
+      // OW-94: the tick service skips its minute wake while Game Mode is on, and catches up when it ends.
+      const performanceSwitch = ZentralRuntime?.performance || null;
+      const tick = createTimeTickService({
+        setTimer: (fn, ms) => window.setTimeout(fn, ms),
+        clearTimer: (id) => window.clearTimeout(id),
+        warn,
+        paused: () => Boolean(performanceSwitch?.isPaused?.()),
+      });
+      const unsubscribeTickPause = performanceSwitch?.subscribe?.((paused) => tick.onPausedChange(paused)) || null;
+      onCleanup(() => {
+        try { unsubscribeTickPause?.(); } catch (_) {}
+        tick.destroy();
+      });
       const env = { openLink, copyText, exportNote, exportAll, exportZip, exportBackupZip, exportObsidianVault, pickObsidianVault, importObsidianVault, pickBackupZip, restoreBackupZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, exportReminderHistory, pickIcs, saveIcs, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now(),
         // Visibility rules live in meta.json, which raises no store event: the sheet asks for the Zen Agenda refresh.
         refreshAgenda: () => { if (!disposed && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); } },

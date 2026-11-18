@@ -88,6 +88,20 @@
         "min": 0,
         "max": 100
       }
+    },
+    {
+      "property": "zen.workspace.zentral.boost.game_mode",
+      "label": "Game Mode: pause everything else while I play",
+      "description": "Level 3 of Memory Boost. Runs a deep pass, stops every repeating timer (widgets, video discovery, RSS, Notes), and stops painting tabs you are not looking at. Tabs that are playing sound and the video preview keep running, so a podcast or a video keeps playing. Off when the browser restarts.",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.boost.stronger_saver",
+      "label": "Stronger saver: also sleep apps marked 'keep running'",
+      "description": "Off by default. When on, Game Mode also puts to sleep the Essential apps whose background mode is 'keep running' (WhatsApp, Messenger). Restore, or leaving Game Mode, brings them back.",
+      "type": "checkbox",
+      "defaultValue": false
     }
   ],
   "settings": {
@@ -134,6 +148,16 @@
     "zen.workspace.zentral.boost.limit_target_pct": {
       "category": "boost",
       "section": "Limiter",
+      "owner": "boost"
+    },
+    "zen.workspace.zentral.boost.game_mode": {
+      "category": "boost",
+      "section": "Game Mode",
+      "owner": "boost"
+    },
+    "zen.workspace.zentral.boost.stronger_saver": {
+      "category": "boost",
+      "section": "Game Mode",
       "owner": "boost"
     }
   },

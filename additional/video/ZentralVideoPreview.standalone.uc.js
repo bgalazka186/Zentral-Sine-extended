@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Video Preview
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.323
+// @version 3.3.324
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.323, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.324, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.323";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.324";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -962,8 +962,48 @@ function nativeSidebarSide() {
     }
   }
   const features = (window.__zentralStandalone ||= {});
+  // OW-94 (plan B7.1): the pause switch. The full pack publishes the same contract under `ZentralRuntime.performance`;
+  // a standalone module asks for it here. With no full pack there is nothing else to pause, so the switch is honest
+  // about being alone: `listenerCount()` is 0 and setting it simply notifies whoever subscribed.
+  const performanceSwitch = (() => {
+    let paused = false;
+    const listeners = new Set();
+    const snapshot = () => ({ paused, changes: 0, lastChangeAt: 0 });
+    const setPaused = (next) => {
+      const target = Boolean(next);
+      if (target === paused) return snapshot();
+      paused = target;
+      for (const fn of [...listeners]) {
+        try {
+          fn(paused, snapshot());
+        } catch (error) {
+          try {
+            console.warn("[Zentral standalone] pause listener failed", error);
+          } catch (_) {}
+        }
+      }
+      return snapshot();
+    };
+    const subscribe = (fn) => {
+      if (typeof fn !== "function") return () => {};
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    };
+    return {
+      isPaused: () => paused,
+      setPaused,
+      toggle: () => setPaused(!paused),
+      subscribe,
+      onChange: subscribe,
+      snapshot,
+      listenerCount: () => listeners.size,
+      reset() {},
+    };
+  })();
+
   const shim = {
     standalone: true,
+    performance: performanceSwitch,
     getPref,
     readStartupPanel() {
       try {
@@ -10189,7 +10229,13 @@ __zentralShim.register = function (def) {
           "zen.workspace.zentral.video_preview.canvas_stream_fps";
         const SCAN_INTERVALS = [0, 5000, 15000, 30000, 60000, 120000];
         const CAPTION_INTERVALS = [250, 500, 750, 1500, 3000];
+        // OW-94 (plan B7.1): while Game Mode holds the timers, discovery has no interval. `restartDiscoveryTimer`
+        // already reads 0 as "no interval" and -1 as "event/manual-only session", so the whole session lifecycle keeps
+        // working: the preview still paints its current frame, it just stops scanning for new ones.
+        // This must NOT stop the video playing: nothing here pauses media, tears down a receiver, or detaches a
+        // rendering surface (plan B7's owner gate is exactly that a podcast keeps playing).
         function scanIntervalMs() {
+          if (videoPerformancePaused()) return 0;
           const value = readInt(SCAN_INTERVAL_PREF, 5000);
           return SCAN_INTERVALS.includes(value) ? value : 5000;
         }
@@ -10470,6 +10516,8 @@ __zentralShim.register = function (def) {
         let sourceList = null;
         let sourceCapabilities = null;
         let controlBar = null;
+        const videoPerformance = window.ZentralRuntime?.performance || null;
+        const videoPerformancePaused = () => Boolean(videoPerformance?.isPaused?.());
         let scanTimer = null;
         let frameTimer = null;
         let paintTimerMs = 0;
@@ -11065,6 +11113,9 @@ __zentralShim.register = function (def) {
         window.addEventListener("scroll", onVisibilityWake, true);
         function destroy() {
           if (disposed) return;
+          try {
+            unsubscribePerformance?.();
+          } catch (_) {}
           cancelResize(true);
           disposed = true;
           if (visibilityWakeFrame !== null)
@@ -11205,6 +11256,15 @@ __zentralShim.register = function (def) {
         };
         hookSettings();
         syncCompactVisibility();
+        // OW-94: the shared pause switch drives the discovery/caption/visibility intervals through `scanIntervalMs`.
+        // Restarting all three on a change is the same path a pref change takes, so there is nothing new to get wrong.
+        const unsubscribePerformance = videoPerformance?.subscribe?.(() => {
+          try {
+            restartVisibilityTimer();
+            restartCaptionTimer();
+            restartDiscoveryTimer();
+          } catch (_) {}
+        }) || null;
         window.addEventListener("unload", destroy, { once: true });
         if (typeof ZentralRuntime?.registerHostUnload === "function")
           ZentralRuntime.registerHostUnload(destroy);

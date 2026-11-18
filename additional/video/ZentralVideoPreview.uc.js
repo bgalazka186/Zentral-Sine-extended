@@ -2964,7 +2964,13 @@
           "zen.workspace.zentral.video_preview.canvas_stream_fps";
         const SCAN_INTERVALS = [0, 5000, 15000, 30000, 60000, 120000];
         const CAPTION_INTERVALS = [250, 500, 750, 1500, 3000];
+        // OW-94 (plan B7.1): while Game Mode holds the timers, discovery has no interval. `restartDiscoveryTimer`
+        // already reads 0 as "no interval" and -1 as "event/manual-only session", so the whole session lifecycle keeps
+        // working: the preview still paints its current frame, it just stops scanning for new ones.
+        // This must NOT stop the video playing: nothing here pauses media, tears down a receiver, or detaches a
+        // rendering surface (plan B7's owner gate is exactly that a podcast keeps playing).
         function scanIntervalMs() {
+          if (videoPerformancePaused()) return 0;
           const value = readInt(SCAN_INTERVAL_PREF, 5000);
           return SCAN_INTERVALS.includes(value) ? value : 5000;
         }
@@ -3245,6 +3251,8 @@
         let sourceList = null;
         let sourceCapabilities = null;
         let controlBar = null;
+        const videoPerformance = window.ZentralRuntime?.performance || null;
+        const videoPerformancePaused = () => Boolean(videoPerformance?.isPaused?.());
         let scanTimer = null;
         let frameTimer = null;
         let paintTimerMs = 0;
@@ -3840,6 +3848,9 @@
         window.addEventListener("scroll", onVisibilityWake, true);
         function destroy() {
           if (disposed) return;
+          try {
+            unsubscribePerformance?.();
+          } catch (_) {}
           cancelResize(true);
           disposed = true;
           if (visibilityWakeFrame !== null)
@@ -3980,6 +3991,15 @@
         };
         hookSettings();
         syncCompactVisibility();
+        // OW-94: the shared pause switch drives the discovery/caption/visibility intervals through `scanIntervalMs`.
+        // Restarting all three on a change is the same path a pref change takes, so there is nothing new to get wrong.
+        const unsubscribePerformance = videoPerformance?.subscribe?.(() => {
+          try {
+            restartVisibilityTimer();
+            restartCaptionTimer();
+            restartDiscoveryTimer();
+          } catch (_) {}
+        }) || null;
         window.addEventListener("unload", destroy, { once: true });
         if (typeof ZentralRuntime?.registerHostUnload === "function")
           ZentralRuntime.registerHostUnload(destroy);
