@@ -6492,6 +6492,10 @@
     "calendarSnap", "calendarDaysForward", "calendarFilterKind", "calendarFilterCategory",
     "calendarBigPictureFilterKind", "calendarBigPictureFilterCategory", "calendarHours",
     "calendarDisplayZone", "calendarRecentZones",
+    // OW-103: which sheet view the person was looking at — an editor note or All notes / the calendar — and which
+    // list filter. Switching the Zentral web panel tears the sheet down and opens it again, and without these the
+    // sheet always came back on the last note, throwing the person out of the calendar they were working in.
+    "sheetView", "sheetFilter",
   ]);
   const isUiStateKey = (key) => UI_STATE_KEYS.includes(key);
   // -> { ui: what belongs in the view file, meta: what is left for meta.json }. A key that is not in the list never

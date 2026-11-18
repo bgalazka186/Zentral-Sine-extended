@@ -60,15 +60,42 @@
   line-height: 1 !important;
   letter-spacing: -1px !important;
   opacity: 0 !important;
-  cursor: grab !important;
+  /* OW-100: the handle is a button that opens a menu — a grab cursor promised a drag that never happened. */
+  cursor: pointer !important;
   border-radius: 4px !important;
 }
 #zentral-sidebar-widgets .zw-card { position: relative !important; }
 #zentral-sidebar-widgets .zw-card:hover .zw-grip,
 #zentral-sidebar-widgets .zw-grip:focus-visible { opacity: 0.55 !important; }
 #zentral-sidebar-widgets .zw-grip:focus-visible { outline: 2px solid var(--zw-accent, currentColor) !important; outline-offset: 1px !important; }
-#zentral-sidebar-widgets .zw-grip:active { cursor: grabbing !important; }
-#zentral-sidebar-widgets .zw-card[data-zw-dragging="true"] { opacity: 0.55 !important; }
+#zentral-sidebar-widgets .zw-grip:disabled { opacity: 0.25 !important; cursor: default !important; }
+/* OW-100: the handle's menu — two real moves, each disabled when it cannot be made. */
+#zentral-sidebar-widgets .zw-grip-menu {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  min-width: 11em !important;
+  padding: 4px !important;
+  border: 1px solid var(--zl-button-border-color, currentColor) !important;
+  border-radius: 8px !important;
+  background: var(--zl-popup, var(--arrowpanel-background, #23252b)) !important;
+  color: var(--zl-popup-text, var(--arrowpanel-color, inherit)) !important;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28) !important;
+}
+#zentral-sidebar-widgets .zw-grip-row {
+  appearance: none !important;
+  border: 0 !important;
+  border-radius: 5px !important;
+  background: transparent !important;
+  color: inherit !important;
+  font: inherit !important;
+  font-size: 12px !important;
+  text-align: start !important;
+  padding: 5px 8px !important;
+  cursor: pointer !important;
+}
+#zentral-sidebar-widgets .zw-grip-row:hover:not(:disabled) { background: color-mix(in srgb, currentColor 14%, transparent) !important; }
+#zentral-sidebar-widgets .zw-grip-row:disabled { opacity: 0.45 !important; cursor: default !important; }
 
 /* The spoken line for a move: invisible, but present for a screen reader. */
 #zentral-sidebar-widgets .zw-live,

@@ -216,6 +216,22 @@
   overflow-y: hidden;
   scrollbar-width: none;
 }
+/* OW-101: the sheet is a column flexbox, and every chrome row in it (this one, the tools, the strip, the find bar, the
+   wiki bar, the footer) declared no `flex` at all — so each defaulted to `flex: 0 1 auto`, i.e. it was the one thing
+   that could shrink. When the editor's own content pushed back, these rows lost height; `align-items: center` then
+   centred a 26px button inside a 12px box, the row's content sank, and the bar underneath painted over the overflow.
+   That is the "top bar sits at the bottom of its space and is half hidden behind the tool strip" report. A chrome row
+   is exactly `flex: 0 0 auto`: it is as tall as its content and never gives a pixel of that away. Only the body grows. */
+.zentral-notes-sheet .zn-head,
+.zentral-notes-sheet .zn-tools,
+.zentral-notes-sheet .zn-strip,
+.zentral-notes-sheet .zn-findbar,
+.zentral-notes-sheet .zn-wikibar,
+.zentral-notes-sheet .zn-foot {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+.zentral-notes-sheet .zn-head { align-content: center; }
 .zentral-notes-sheet .zn-head::-webkit-scrollbar { height: 0; }
 /* While the calendar workspace is on screen only these three layout buttons are useful; in the editor they are hidden
    in JS. Keep them from being pushed out by the title. */

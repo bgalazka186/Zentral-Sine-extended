@@ -150,7 +150,7 @@
       "tray.moveUp": "Move this widget up",
       "tray.moveDown": "Move this widget down",
       "tray.moved": "{title} moved to position {position} of {total}",
-      "tray.moveHint": "Drag, or press Alt+Up / Alt+Down",
+      "tray.moveHint": "Move this widget: click, or press Alt+Up / Alt+Down",
       "clock.aria": "Clock. Click for the timer.",
       "clock.ariaAlert": "Countdown finished. ",
       "timer.aria": "Timer {value}{kind}. Click for the clock.",
@@ -208,7 +208,7 @@
       "tray.moveUp": "Przenieś ten widget wyżej",
       "tray.moveDown": "Przenieś ten widget niżej",
       "tray.moved": "{title} przeniesiono na pozycję {position} z {total}",
-      "tray.moveHint": "Przeciągnij albo użyj Alt+góra / Alt+dół",
+      "tray.moveHint": "Przenieś ten widget: kliknij albo użyj Alt+góra / Alt+dół",
       "clock.aria": "Zegar. Kliknij, aby otworzyć minutnik.",
       "clock.ariaAlert": "Minutnik zakończony. ",
       "timer.aria": "Minutnik {value}{kind}. Kliknij, aby wrócić do zegara.",
@@ -2983,12 +2983,14 @@
         body.className = "zw-card-body";
         if (instance?.element) body.appendChild(instance.element);
         card.appendChild(body);
-        // OW-71: the handle is part of every card, not of a widget's own drawing, so a widget cannot forget it. It is a
-        // real button: draggable by pointer, and Alt+Up / Alt+Down work from it for anyone who cannot drag.
+        // OW-71: the handle is part of every card, not of a widget's own drawing, so a widget cannot forget it.
+        // OW-100: it no longer claims to be draggable. HTML5 drag on a button inside Zen's sidebar did nothing for the
+        // owner — the cursor said "drag me" and the card never moved, which is worse than no handle at all. The handle
+        // is now a plain button with a menu (Move up / Move down) plus Alt+Up / Alt+Down for the keyboard, so every
+        // affordance it shows does something.
         const grip = document.createElement("button");
         grip.type = "button";
         grip.className = "zw-grip";
-        grip.setAttribute("draggable", "true");
         grip.title = tw("tray.moveHint");
         grip.setAttribute("aria-label", tw("tray.move") + " — " + tw("tray.moveHint"));
         grip.textContent = "⋮⋮";
@@ -3018,6 +3020,12 @@
           Services.prefs.setStringPref(WIDGET_PREFS.ORDER, cleaned.join(","));
         } catch (_) {}
         syncWidgetsAndLayout();
+        // Every card's handle re-reads whether it can still move; a card at an end must not offer a dead row.
+        try {
+          for (const card of document.querySelectorAll("#zentral-sidebar-widgets .zw-card")) {
+            card.dispatchEvent(new Event("zw-order-changed", { bubbles: true }));
+          }
+        } catch (_) {}
         announceMove();
       }
       // Say where the focused card went, for a person who cannot see the tray move.
@@ -3051,12 +3059,14 @@
         return true;
       }
       function installCardReordering(def, card, grip) {
-        let dragId = "";
+        // OW-100: the handle's one and only click opens its menu. Before, the click only focused the handle, which is
+        // exactly the "control that does nothing" the owner reported.
         grip.addEventListener("click", (e) => {
           // A click on the handle must never reach the card's own click target (the Clock turns over on a click).
           e?.stopPropagation?.();
           e?.preventDefault?.();
           grip.focus?.({ preventScroll: true });
+          openGripMenu(def, card, grip);
         });
         grip.addEventListener("keydown", (e) => {
           if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
@@ -3064,38 +3074,82 @@
           e.stopPropagation();
           moveCard(def.id, e.key === "ArrowUp" ? -1 : 1);
         });
-        grip.addEventListener("dragstart", (e) => {
-          dragId = def.id;
-          card.setAttribute("data-zw-dragging", "true");
-          try {
-            e?.dataTransfer?.setData?.("text/plain", def.id);
-            if (e?.dataTransfer) e.dataTransfer.effectAllowed = "move";
-          } catch (_) {}
-        });
-        grip.addEventListener("dragend", () => {
-          dragId = "";
-          card.removeAttribute("data-zw-dragging");
-        });
-        // The drop target is the CARD, not the handle: a person drops on the card they want to land on.
-        card.addEventListener("dragover", (e) => {
-          if (!dragId || dragId === def.id) return;
-          e?.preventDefault?.();
-        });
-        card.addEventListener("drop", (e) => {
-          if (!dragId || dragId === def.id) return;
-          e?.preventDefault?.();
+        // A card that is alone in the tray does not offer a move it cannot make.
+        const syncGrip = () => {
           const ids = currentOrderIds();
-          const from = ids.indexOf(dragId);
-          const to = ids.indexOf(def.id);
-          if (from < 0 || to < 0) return;
-          const next = ids.slice();
-          next.splice(from, 1);
-          next.splice(to, 0, dragId);
-          lastMovedId = dragId;
-          dragId = "";
-          card.removeAttribute("data-zw-dragging");
-          commitOrder(next);
-        });
+          const at = ids.indexOf(def.id);
+          // The ORDER counts every registered widget (a widget switched off keeps its place for when it comes back),
+          // but a move the person can actually make needs a second CARD on screen. One card means nothing to move.
+          const home = card.parentNode;
+          const visible = home ? [...(home.children || [])].filter((el) => (el?.getAttribute?.("data-zw-widget") || "") !== "").length : 0;
+          // `dataset` is not on every DOM this runs against (the widget host is also driven by a bare test double), so the
+          // state is written as attributes: the same thing in a browser, and readable everywhere.
+          grip.setAttribute("data-position", at >= 0 ? String(at + 1) : "0");
+          grip.setAttribute("data-can-move", visible > 1 ? "true" : "false");
+          grip.disabled = visible <= 1;
+          if (grip.disabled) grip.setAttribute("disabled", "true");
+          else grip.removeAttribute("disabled");
+        };
+        syncGrip();
+        card.addEventListener("zw-order-changed", syncGrip);
+        // The card is built before it is put in the tray, so the first count is zero. Every render pass re-reads it once
+        // the cards are in place (see `syncWidgetsAndLayout`), which is when the number is real.
+        try { queueMicrotask(syncGrip); } catch (_) { syncGrip(); }
+        card._syncGrip = syncGrip;
+      }
+      // OW-100: the handle's menu. Two rows, each one a real move, disabled at the ends of the list rather than
+      // silently doing nothing. The tray's own order lives in one pref, and this writes it the same way drag did.
+      function openGripMenu(def, card, anchor) {
+        // The rows describe the moves a person can make on the tray they can see, so they read the cards on screen, not
+        // the stored order (which also holds widgets that are switched off and keeping their place).
+        const home = card.parentNode;
+        const onScreen = home ? [...(home.children || [])].map((el) => el?.getAttribute?.("data-zw-widget") || "").filter(Boolean) : [];
+        const ids = onScreen.length ? onScreen : currentOrderIds();
+        const at = ids.indexOf(def.id);
+        const total = ids.length;
+        const menu = document.createElement("div");
+        menu.className = "zw-grip-menu";
+        menu.setAttribute("role", "menu");
+        menu.setAttribute("aria-label", tw("tray.move"));
+        const row = (label, dir, disabled) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "zw-grip-row";
+          button.setAttribute("role", "menuitem");
+          button.textContent = label;
+          if (disabled) {
+            button.disabled = true;
+            button.setAttribute("disabled", "true");
+            button.setAttribute("aria-disabled", "true");
+          } else {
+            button.addEventListener("click", (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              moveCard(def.id, dir);
+              closeGripMenu();
+            });
+          }
+          menu.appendChild(button);
+        };
+        row(tw("tray.moveUp"), -1, at <= 0 || total <= 1);
+        row(tw("tray.moveDown"), 1, at < 0 || at >= total - 1 || total <= 1);
+        const box = anchor.getBoundingClientRect?.() || { left: 0, top: 0, width: 0, height: 0 };
+        menu.style.position = "fixed";
+        menu.style.left = Math.max(0, Math.round(box.left)) + "px";
+        menu.style.top = Math.max(0, Math.round(box.top - 4)) + "px";
+        menu.style.transform = "translateY(-100%)";
+        card.appendChild(menu);
+        openGripMenu.current = menu;
+        const away = (e) => { if (!menu.contains(e.target)) { closeGripMenu(); document.removeEventListener("mousedown", away, true); } };
+        document.addEventListener("mousedown", away, true);
+        menu._away = away;
+      }
+      function closeGripMenu() {
+        const menu = openGripMenu.current;
+        if (!menu) return;
+        openGripMenu.current = null;
+        if (menu._away) document.removeEventListener("mousedown", menu._away, true);
+        menu.remove();
       }
 
       function unmountWidgetCard(id) {
@@ -3201,6 +3255,11 @@
                 tray.appendChild(mounted.card);
               }
             }
+          }
+          // OW-100: the cards are in place now, so each handle re-reads whether it has anywhere to move. This runs after
+          // the mount and the reorder, so the count it sees is the one a person sees.
+          for (const mounted of mountedCards.values()) {
+            try { mounted.card?._syncGrip?.(); } catch (_) {}
           }
           // Reconcile DOM order among mounted cards only if out of order.
           let expectedIdx = 0;

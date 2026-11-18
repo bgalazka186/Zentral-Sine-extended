@@ -31,7 +31,7 @@ for (const anchor of [{ left: 2, right: 3, top: 2, bottom: 3 }, { left: 997, rig
   const root = sheet.root; root.ownerDocument = document; Object.defineProperty(root, "offsetParent", { get: () => host });
   root.getBoundingClientRect = () => ({ left: 750, top: 150, right: 950, bottom: 650, width: 200, height: 500 });
   const pane = root.querySelector(".zn-calendar-pane"); pane.getBoundingClientRect = () => ({ left: 750, top: 150, right: 1350, bottom: 650, width: 600, height: 500 });
-  await sheet.open(); await flush(); root.all().find(el => el.title === "All notes").click(); await flush();
+  await sheet.open(); await flush(); root.querySelector(".zn-title").click(); await flush();
   const cell = root.querySelector(".zn-cal-month-cell"); assert.ok(cell);
   cell.getBoundingClientRect = () => ({ left: 800, top: 420, right: 940, bottom: 500, width: 140, height: 80 });
   cell.dispatchEvent(new Ev("contextmenu", { bubbles: true, clientX: 820, clientY: 440, button: 2 }));
@@ -69,7 +69,7 @@ for (const anchor of [{ left: 2, right: 3, top: 2, bottom: 3 }, { left: 997, rig
   const standalone = win.__zentralNotesTestSeam.core.createSheet({ store, adapter: { ...adapter, position: "fixed", host: standaloneHost, attach: el => standaloneHost.append(el) }, env, ensureStore: () => store.open() });
   standalone.root.ownerDocument = document;
   standalone.root.querySelector(".zn-calendar-pane").getBoundingClientRect = pane.getBoundingClientRect;
-  await standalone.open(); await flush(); standalone.root.all().find(el => el.title === "All notes").click(); await flush();
+  await standalone.open(); await flush(); standalone.root.querySelector(".zn-title").click(); await flush();
   const scell = standalone.root.querySelector(".zn-cal-month-cell"); assert.ok(scell);
   scell.dispatchEvent(new Ev("contextmenu", { bubbles: true, clientX: 100, clientY: 120, button: 2 }));
   const smenu = standalone.root.querySelector(".zn-menu"); assert.ok(smenu?._pop, "standalone context menus use the same readable viewport layer");

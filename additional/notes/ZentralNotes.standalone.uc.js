@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.330
+// @version 3.3.331
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.330, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.331, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.330";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.331";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2230,6 +2230,7 @@ const __zentralEmbeddedLoader = (function () {
       "compose.intro": "The title is independent from the linked note. Calendar notes stay with this item; a full-day reminder has no end time.",
       "compose.storageUnavailable": "Calendar item storage is unavailable",
       "compose.itemUnavailable": "That calendar item is no longer available",
+      "compose.alreadyOpen": "Another item is already being created \u2014 finish or cancel it first",
       "compose.defaultEvent": "Event",
       "compose.defaultReminder": "Reminder",
       "compose.field.title": "Title",
@@ -2305,6 +2306,7 @@ const __zentralEmbeddedLoader = (function () {
       "compose.alerts.inherit": "Stage defaults (from {source}): Tier 1 {pre} · Tier 2 {due} · Tier 3 {followup}",
       "compose.btn.save": "Save calendar item",
       "compose.btn.createEvent": "Create event",
+      "compose.btn.createAnother": "Create another",
       "compose.btn.createReminder": "Create reminder",
       "compose.preview.chooseDate": "Choose a date",
       "compose.preview.allDay": "all day",
@@ -3278,6 +3280,7 @@ const __zentralEmbeddedLoader = (function () {
       "compose.intro": "Tytu\u0142 jest niezale\u017cny od powi\u0105zanej notatki. Notatka kalendarza zostaje przy tym elemencie; przypomnienie ca\u0142odniowe nie ma godziny zako\u0144czenia.",
       "compose.storageUnavailable": "Pami\u0119\u0107 element\u00f3w kalendarza jest niedost\u0119pna",
       "compose.itemUnavailable": "Ten element kalendarza nie jest ju\u017c dost\u0119pny",
+      "compose.alreadyOpen": "Inny element jest ju\u017c tworzony \u2014 doko\u0144cz go albo anuluj",
       "compose.defaultEvent": "Wydarzenie",
       "compose.defaultReminder": "Przypomnienie",
       "compose.field.title": "Tytu\u0142",
@@ -3353,6 +3356,7 @@ const __zentralEmbeddedLoader = (function () {
       "compose.alerts.inherit": "Domy\u015blne poziomy (z: {source}): Poziom 1 {pre} \u00b7 Poziom 2 {due} \u00b7 Poziom 3 {followup}",
       "compose.btn.save": "Zapisz element kalendarza",
       "compose.btn.createEvent": "Utw\u00f3rz wydarzenie",
+      "compose.btn.createAnother": "Utw\u00f3rz kolejne",
       "compose.btn.createReminder": "Utw\u00f3rz przypomnienie",
       "compose.preview.chooseDate": "Wybierz dat\u0119",
       "compose.preview.allDay": "ca\u0142y dzie\u0144",
@@ -10326,6 +10330,10 @@ const __zentralEmbeddedLoader = (function () {
     "calendarSnap", "calendarDaysForward", "calendarFilterKind", "calendarFilterCategory",
     "calendarBigPictureFilterKind", "calendarBigPictureFilterCategory", "calendarHours",
     "calendarDisplayZone", "calendarRecentZones",
+    // OW-103: which sheet view the person was looking at — an editor note or All notes / the calendar — and which
+    // list filter. Switching the Zentral web panel tears the sheet down and opens it again, and without these the
+    // sheet always came back on the last note, throwing the person out of the calendar they were working in.
+    "sheetView", "sheetFilter",
   ]);
   const isUiStateKey = (key) => UI_STATE_KEYS.includes(key);
   // -> { ui: what belongs in the view file, meta: what is left for meta.json }. A key that is not in the list never
@@ -14673,7 +14681,7 @@ __zentralShim.register = function (def) {
       "calendarScale", "calendarPicker", "calendarWeekStart", "calendarWeekNumbers", "calendarWeekSpan",
       "calendarSnap", "calendarDaysForward", "calendarFilterKind", "calendarFilterCategory",
       "calendarBigPictureFilterKind", "calendarBigPictureFilterCategory", "calendarHours",
-      "calendarDisplayZone", "calendarRecentZones"]);
+      "calendarDisplayZone", "calendarRecentZones", "sheetView", "sheetFilter"]);
     const uiKeys = () => (CALENDAR_PART && Array.isArray(CALENDAR_PART.UI_STATE_KEYS) ? CALENDAR_PART.UI_STATE_KEYS : UI_KEYS_FALLBACK);
     // -> the part of `source` that is view state. Kept here (not in the calendar part) so the store can split a patch
     // even when the calendar is not loaded; a test keeps `UI_KEYS_FALLBACK` equal to the calendar's own list.
@@ -31056,12 +31064,29 @@ __zentralShim.register = function (def) {
         btnNew.setAttribute("aria-label", label);
         btnNew.dataset.choice = choice;
       }
+      // OW-103: the sheet view and list filter are view state (see UI_KEYS_FALLBACK), written only when they change.
+      // Nothing is written until `finishOpen` has decided where this open lands: a new sheet starts on the editor, and
+      // that first `applyState` would otherwise overwrite the stored view with the editor before it could be restored.
+      let rememberedView = "";
+      let sheetViewRestored = false;
+      function rememberSheetView() {
+        if (!sheetViewRestored) return;
+        const next = view === "list" ? "list:" + filter : "editor";
+        if (next === rememberedView) return;
+        rememberedView = next;
+        store.setMeta(view === "list" ? { sheetView: "list", sheetFilter: filter } : { sheetView: "editor" });
+      }
       function applyState() {
         syncSheetSurfaceTokens();
         syncAllNewButton();
         const n = note();
         root.dataset.view = view;
         root.dataset.mode = mode;
+        // OW-103: keep the view the person is looking at in the view state, so a teardown and rebuild of the sheet —
+        // switching the Zentral web panel is the one that showed it — comes back to the calendar instead of the last
+        // note. `applyState` is the single place `view` and `filter` reach the DOM, so this cannot drift from what is
+        // on screen. Nothing is written when the sheet is merely being built for the first time.
+        if (isOpen && !destroyed) rememberSheetView();
         root.dataset.size = store.meta.size;
         labelEl.hidden = !n?.label || view === "list";
         labelEl.textContent = n?.label || "";
@@ -31480,7 +31505,7 @@ __zentralShim.register = function (def) {
           if (mode !== "read") ta.setSelectionRange(ta.value.length, ta.value.length);
         } catch (_) {}
       }
-      function openNote(id, { focus = true, keepBigPicture = false } = {}) {
+      function openNote(id, { focus = true, keepBigPicture = false, keepView = false } = {}) {
         // OW-80: the Notes tree now lives inside the Big Picture card. Opening a note from there must not close the
         // view the person is working in; every other caller still gets the old behaviour (the card goes away).
         if (keepBigPicture && bigPicture) {
@@ -31491,7 +31516,8 @@ __zentralShim.register = function (def) {
         closeMenu();
         if (currentId && currentId !== id) store.discardIfEmpty(currentId);
         store.setMeta({ lastNoteId: id, recent: pushRecent(store.meta.recent, id) });
-        view = "editor";
+        // OW-103: restoring All notes opens the last note behind the list; that must not flip the view back to the editor.
+        if (!keepView) view = "editor";
         const n = store.get(id);
         mode = n?.trashed ? "read" : store.meta.mode;
         showNote(id);
@@ -34448,6 +34474,17 @@ __zentralShim.register = function (def) {
       function askCalendarComposer(options = {}) {
         const C = CALENDAR_PART;
         if (!C || !store.items) return flash(t("compose.storageUnavailable"));
+        // OW-102: "creating more than one event at once does not work". The dialog area holds ONE card: `openCard` calls
+        // `closeDialog()` before it builds anything, so a second creation started while a composer is open threw the
+        // first one — and its unsaved draft — away without a word. Creating two in a row always worked; creating two
+        // at once silently lost one. A second composer is now refused and says why, and the one that is open keeps
+        // its draft. (Creating several in a row is unhindered: the card is gone by the time the second starts.)
+        const openComposer = dialog?.querySelector?.(".zn-cal-compose-card");
+        if (openComposer && options.item == null && !options.replaceOpen) {
+          flash(t("compose.alreadyOpen"));
+          try { openComposer.querySelector("input, textarea, button")?.focus?.(); } catch (_) {}
+          return null;
+        }
         const original = options.item && store.items.get(options.item.id) || null;
         if (options.item && !original) return flash(t("compose.itemUnavailable"));
         const now = nowMs();
@@ -34734,8 +34771,13 @@ __zentralShim.register = function (def) {
         const preview = h("p", { class: "zn-empty zn-cal-compose-preview", "aria-live": "polite" });
         const status = h("p", { class: "zn-empty zn-cal-compose-status", role: "status", "aria-live": "polite" });
         const save = chip(t(original ? "compose.btn.save" : initialKind === "event" ? "compose.btn.createEvent" : "compose.btn.createReminder"), true);
+        // OW-102: creating several at once is what the owner was trying to do. A second composer is refused rather than
+        // throwing an unsaved draft away, so the way to make a run of them is this button: it saves exactly as Save does
+        // and then opens a fresh, empty composer with the same date, time, kind and note — the parts that rarely change
+        // between two entries — instead of closing everything.
+        const saveAnother = original ? null : chip(t("compose.btn.createAnother"));
         const cancel = chip(t("common.cancel"));
-        const actions = h("div", { class: "zn-dialog-actions" }, cancel, save);
+        const actions = h("div", { class: "zn-dialog-actions" }, cancel, ...(saveAnother ? [saveAnother] : []), save);
         const intro = h("p", { class: "zn-empty" }, t("compose.intro"));
         const card = openCalendarCard(t(original ? "compose.title.edit" : "compose.title.create"), intro, title.row, kindRow, allDayRow,
           startDateHost, endDateHost, startTimeHost, endTimeHost, scheduleBoard,
@@ -34831,7 +34873,9 @@ __zentralShim.register = function (def) {
         for (const select of Object.values(notifySelects)) select.addEventListener("change", () => { select.dataset.userChanged = "true"; });
         noteSelect.addEventListener("change", () => { syncCalOnlyNewNoteRow(); paintColor(); });
 
-        const submit = () => {
+        // OW-102 `keepOpen` is the "Create another" path: save this one, then start a fresh composer carrying over the
+        // date, time, kind and note — but not the title or description, which describe the item just created.
+        const submit = (keepOpen = false) => {
           // OW-24: the fields that count are read as they stand (Enter in the title leaves no field). A text that
           // is no time or no date stops here: its field is put back, marked, and named in the status line.
           const timed = !allDay.checked, isEvent = kind.value === "event";
@@ -34912,6 +34956,12 @@ __zentralShim.register = function (def) {
             itemToSave = { ...item, x: { ...item.x, noteId: createdNote.id } };
           }
           const saved = store.items.upsert(itemToSave);
+          // Read before the store write below touches the cursor: what the next composer should start from.
+          const nextDraft = keepOpen ? {
+            date: String(startDate.input.value || ""), startTime: String(startTime.input.value || ""),
+            endDate: String(endDate.input.value || ""), endTime: String(endTime.input.value || ""),
+            kind: kind.value, allDay: allDay.checked, tz: zoneValue, noteId: selectedExistingNoteId(),
+          } : null;
           if (!saved) { status.textContent = "Could not save the calendar item. Check calendar storage."; return; }
           if (zoneValue !== zone) rememberCalendarZone(zoneValue);
           if (!original && !saved.x?.noteId) { try { store.mirrorItemToAgendaNote(saved.id, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
@@ -34920,11 +34970,17 @@ __zentralShim.register = function (def) {
           const cursor = item.start.date ? item.start.date : C.zonedDateKey(startMs, calendarDisplayZone() || item.x?.tz || "");
           store.setMeta({ calendarCursor: cursor, calendarView: store.meta.calendarView || "month" });
           closeDialog(); renderCalendar();
+          if (nextDraft) {
+            // A fresh composer for the next item. `noteId` is passed but the title is left empty, so the person names
+            // the next one rather than inheriting the first one's name.
+            queueMicrotask(() => { if (isOpen && !destroyed) askCalendarComposer({ ...nextDraft, linkCurrent: false, replaceOpen: true }); });
+          }
           flash(original ? "Calendar item saved" : (item.x.kind === "reminder" ? "Reminder created" : "Event created"));
         };
         kind.addEventListener("change", updateKindRows);
         updateKindRows();
-        save.addEventListener("click", submit);
+        save.addEventListener("click", () => submit(false));
+        if (saveAnother) saveAnother.addEventListener("click", () => submit(true));
         cancel.addEventListener("click", () => { closeDialog(); focusEditor(); });
         title.input.addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } });
         title.input.focus({ preventScroll: true });
@@ -39957,6 +40013,8 @@ __zentralShim.register = function (def) {
       }
       // ---- date notes: today / tomorrow / next work day --------------------------------------------------------
       const dateMode = () => cleanDateMode(getPref(PREF.DATE_MODE, "separate"));
+      // OW-103: the list filter restored with All notes, limited to the three the sheet actually offers.
+      const cleanListFilter = (value) => (value === "recent" || value === "trash" ? value : "all");
       function openAgendaDay(key) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(String(key || ""))) return false;
         filter = "all"; view = "list";
@@ -41318,6 +41376,14 @@ __zentralShim.register = function (def) {
       const moreItems = () => {
         const n = note();
         if (!n) return [];
+        // OW-104: in All notes / the calendar the three-dot menu still acted on the last note that had been open, and
+        // nothing on screen said so. The note's own actions stay — they are useful, and they are what the menu is —
+        // but the menu now opens by saying which note that is, so a click cannot come as a surprise, and the note
+        // itself is one click away. In the editor the header already names the note, so nothing is added there.
+        const noteHeader = view === "list" && !n.trashed
+          ? [{ icon: "note", label: "Actions for \u201c" + (titleOf(n.body) || "Untitled note") + "\u201d", disabled: true },
+             { icon: "chevronRight", label: "Open that note", action: () => openNote(n.id) }, { sep: true }]
+          : [];
         // Grouped by what a person is trying to do: files, labels, links, window, settings. Everything that has its own
         // button (table of contents, quick settings, search, split view) stays out of here, or sits one step down.
         const items = [
@@ -41401,7 +41467,7 @@ __zentralShim.register = function (def) {
             items.push({ icon: "trash", label: "Move to trash", danger: true, action: () => askNoteTrash(n.id, () => { currentId = ""; showEditor(); }) });
           }
         }
-        return items;
+        return noteHeader.length ? [...noteHeader, ...items] : items;
       };
       listen(btnMore, "click", () => showMenu(btnMore, moreItems()));
       listen(btnColor, "click", () => {
@@ -43444,9 +43510,25 @@ __zentralShim.register = function (def) {
         if (mode !== store.meta.mode) store.setMeta({ mode });
         if (adapter.kind) store.setMeta({ openIn: adapter.kind });
         store.refresh().catch(() => {});
+        // OW-103: switching the Zentral web panel destroys and rebuilds the sheet, and this used to finish every open by
+        // opening a note — so anyone working in All notes or the calendar was thrown back into the editor, half-typed
+        // drafts lost with the panel. The view they left is view state now; come back to it. The last note still opens
+        // behind the list (the tabs and the editor need it), so leaving All notes lands on the same note as before.
+        const wasList = store.meta.sheetView === "list" && !!CALENDAR_PART;
+        sheetViewRestored = true;
+        rememberedView = "";
         const id = store.latestId();
-        if (id) openNote(id, { focus: openFocus });
-        else newNote("", { focus: openFocus });
+        if (id) openNote(id, { focus: openFocus && !wasList, keepView: wasList });
+        else newNote("", { focus: openFocus && !wasList });
+        if (wasList && CALENDAR_PART) {
+          filter = cleanListFilter(store.meta.sheetFilter);
+          view = "list";
+          applyState();
+          renderList();
+          updateAllLayout(true);
+          if (calendarPane && !calendarPane.hidden) renderCalendar();
+          root.dataset.allNotesRestored = "true";
+        }
         // Apply persisted meta (slot height, dock mode, standalone card height) now that meta.json is loaded.
         applyState();
         syncParentPanelHidden();

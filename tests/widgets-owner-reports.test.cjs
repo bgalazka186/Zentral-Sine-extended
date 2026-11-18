@@ -167,7 +167,9 @@ const BASE = {
     assert.deepEqual(ids(), ["clock", "date"], "the default order first");
     const grips = cards().map((c) => c.querySelector(".zw-grip"));
     assert.equal(grips.filter(Boolean).length, 2, "every card has a handle");
-    assert.equal(grips[0].getAttribute("draggable"), "true", "and it is draggable");
+    // OW-100: the handle no longer advertises a drag. HTML5 drag on a button inside the sidebar did nothing, so the
+    // handle is a plain button whose click opens a real Move menu; Alt+Arrow still works from it.
+    assert.equal(grips[0].getAttribute("draggable"), null, "the handle no longer claims to be draggable");
     assert.equal(grips[0].tagName.toLowerCase(), "button", "and it is a real control, not a div");
     // Alt+Down on the clock's handle moves the clock below the date. (No `if`: a skipped assertion is not a test.)
     // The fake element records its listeners rather than dispatching: call them exactly as the engine would.
