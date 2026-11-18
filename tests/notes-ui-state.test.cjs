@@ -93,6 +93,22 @@ async function boot(meta) {
       const keys = new Set([...src.matchAll(/setUiState\(\{\s*([A-Za-z]+):/g)].map((m) => m[1]));
       for (const key of keys) assert.ok(UI_STATE_KEYS.includes(key), "setUiState writes " + key + ", which must be in UI_STATE_KEYS");
     });
+
+    // The notes module keeps its own copy of the list, because the store must still split a patch while the calendar
+    // part is unloaded. Two lists are two chances to drift, and they had: `calendarBigPictureTreeCollapsed` was in the
+    // fallback but not in the calendar's list, so collapsing the Big Picture tree wrote the whole meta.json — exactly
+    // the rewrite the split exists to prevent.
+    await test("the store's fallback list equals the calendar's own list", async () => {
+      const fs = require("node:fs");
+      const src = fs.readFileSync("additional/notes/ZentralNotes.uc.js", "utf8");
+      const block = /const UI_KEYS_FALLBACK = Object\.freeze\(\[([\s\S]*?)\]\);/.exec(src);
+      assert.ok(block, "the fallback list is declared");
+      const fallback = [...block[1].matchAll(/"([A-Za-z]+)"/g)].map((m) => m[1]);
+      assert.deepEqual(fallback.slice().sort(), [...UI_STATE_KEYS].sort(),
+        "the two lists are the same keys, in whatever order each file reads best");
+      // And every one of them is view state, or `splitUiState` is filing a content field into the view file.
+      for (const key of fallback) assert.ok(UI_STATE_KEYS.includes(key));
+    });
   }
 
   // =====================================================================================================================

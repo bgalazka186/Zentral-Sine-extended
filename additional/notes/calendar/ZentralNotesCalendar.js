@@ -6359,7 +6359,8 @@
   const UI_STATE_KEYS = Object.freeze([
     "calendarView", "calendarCursor", "calendarTab", "calendarLayout",
     "calendarSplitLR", "calendarSplitTB", "calendarTreeCollapsed", "calendarPaneCollapsed",
-    "calendarFiltersCollapsed", "calendarBigPictureFiltersCollapsed", "calendarBigPictureSize",
+    "calendarFiltersCollapsed", "calendarBigPictureFiltersCollapsed", "calendarBigPictureTreeCollapsed",
+    "calendarBigPictureSize",
     "calendarScale", "calendarPicker", "calendarWeekStart", "calendarWeekNumbers", "calendarWeekSpan",
     "calendarSnap", "calendarDaysForward", "calendarFilterKind", "calendarFilterCategory",
     "calendarBigPictureFilterKind", "calendarBigPictureFilterCategory", "calendarHours",

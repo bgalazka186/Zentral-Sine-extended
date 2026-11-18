@@ -150,7 +150,8 @@ test("live: the sidebar still refuses to let our tabs be dragged out by Zen", ()
   // from being taken out of the managed tree by the browser.
   assert.ok(SRC.includes("const onZenDrag = (ev) =>"), "the drag guard is still there");
   assert.ok(SRC.includes("ev.preventDefault();") && SRC.includes("dropEffect = \"none\""), "a managed drop is still cancelled");
-  assert.ok(SRC.includes("const noteTabDropPlan") || SRC.includes("noteTabDropPlan(") === false || true);
+  // The reorder model has its own test above ("noteTabDropPlan turns a Zen tab drop into one store change"); the
+  // line that used to sit here ended in `|| true` and could never fail, so it proved nothing while looking like it did.
 });
 
 console.log(`\nPASS notes-note-tab-order (${passed} tests)`);

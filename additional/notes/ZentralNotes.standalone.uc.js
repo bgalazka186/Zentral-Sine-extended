@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.324
+// @version 3.3.325
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.324, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.325, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.324";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.325";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -10193,7 +10193,8 @@ const __zentralEmbeddedLoader = (function () {
   const UI_STATE_KEYS = Object.freeze([
     "calendarView", "calendarCursor", "calendarTab", "calendarLayout",
     "calendarSplitLR", "calendarSplitTB", "calendarTreeCollapsed", "calendarPaneCollapsed",
-    "calendarFiltersCollapsed", "calendarBigPictureFiltersCollapsed", "calendarBigPictureSize",
+    "calendarFiltersCollapsed", "calendarBigPictureFiltersCollapsed", "calendarBigPictureTreeCollapsed",
+    "calendarBigPictureSize",
     "calendarScale", "calendarPicker", "calendarWeekStart", "calendarWeekNumbers", "calendarWeekSpan",
     "calendarSnap", "calendarDaysForward", "calendarFilterKind", "calendarFilterCategory",
     "calendarBigPictureFilterKind", "calendarBigPictureFilterCategory", "calendarHours",

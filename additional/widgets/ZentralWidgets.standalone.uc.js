@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Widgets
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.324
+// @version 3.3.325
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.324, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.325, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.324";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.325";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1259,7 +1259,6 @@ function nativeSidebarSide() {
       "clock.title": "Clock",
       "date.title": "Date",
       "weather.title": "Weather",
-      "status.title": "Status",
       "boost.title": "Boost",
       "boost.aria": "{value} of browser memory in use. Click to free memory.",
       "boost.ariaUnknown": "Browser memory reading unavailable. Click to free memory.",
@@ -1313,16 +1312,11 @@ function nativeSidebarSide() {
       "timer.stopTitle": "Stop the countdown",
       "timer.stopStopwatchTitle": "Stop the stopwatch",
       "timer.startStopwatchTitle": "Start the stopwatch",
-      "status.noBattery": "no battery",
-      "status.noBatteryTitle": "This machine has no battery the browser can read",
-      "status.memoryUnavailable": "Memory usage is not available in this build",
-      "status.memoryTitle": "Memory used by the browser",
     }),
     pl: Object.freeze({
       "clock.title": "Zegar",
       "date.title": "Data",
       "weather.title": "Pogoda",
-      "status.title": "Stan",
       "boost.title": "Boost",
       "boost.aria": "Pami\u0119\u0107 przegl\u0105darki: {value}. Kliknij, aby j\u0105 zwolni\u0107.",
       "boost.ariaUnknown": "Odczyt pami\u0119ci niedost\u0119pny. Kliknij, aby zwolni\u0107 pami\u0119\u0107.",
@@ -1376,10 +1370,6 @@ function nativeSidebarSide() {
       "timer.stopTitle": "Zatrzymaj odliczanie",
       "timer.stopStopwatchTitle": "Zatrzymaj stoper",
       "timer.startStopwatchTitle": "Uruchom stoper",
-      "status.noBattery": "brak baterii",
-      "status.noBatteryTitle": "Ten komputer nie ma baterii, którą przeglądarka potrafi odczytać",
-      "status.memoryUnavailable": "Zużycie pamięci nie jest dostępne w tej wersji",
-      "status.memoryTitle": "Pamięć zużywana przez przeglądarkę",
     }),
   });
   // What the widgets are really set to right now. `notesRaw` is the Notes language as read from its pref; the caller
@@ -2934,10 +2924,7 @@ function nativeSidebarSide() {
     };
   }
 
-  // ---- T3.9e: battery and memory ------------------------------------------------------------------------------
-  // Nothing here reads the machine: every helper takes the numbers the caller collected, so the card is a painter
-  // and the reading can be tested without a battery.
-  // ---- OW-90: the Boost card ---------------------------------------------------------------------------------
+  // ---- OW-90: the Boost card -- ---------------------------------------------------------------------------------
   // Boost is a number and one action. The number comes from `additional/boost/` (the only place that knows how to ask
   // the browser for its real total), so this card owns no reading of its own and no timer: the module's sampler runs
   // only while the popup is open, and `onChange` is how the card hears about it.
