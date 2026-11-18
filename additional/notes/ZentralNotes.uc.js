@@ -22409,6 +22409,13 @@
         if (rafCalendarFit) return;
         rafCalendarFit = window.requestAnimationFrame(() => { rafCalendarFit = 0; refitCalendar(); });
       }
+      // The widget owns refresh and cache; this only asks the visible Week calendar to repaint after a cache update.
+      // requestCalendarBackground defers the paint during a drag/dialog rather than replacing the grid under the pointer.
+      listen(window, "zentral-weather-updated", () => {
+        if (!CALENDAR_PART || !isOpen || destroyed || view !== "list" || filter !== "all" || calendarPane.hidden) return;
+        if ((store.meta.calendarView || "month") !== "week") return;
+        requestCalendarBackground();
+      });
       function changeCalendarCursor(delta, shiftKey = false) {
         const C = CALENDAR_PART, stored = C.parseYmd(store.meta.calendarCursor), base = stored ? stored.getTime() : C.dayStart(nowMs());
         const view = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";

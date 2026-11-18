@@ -1620,6 +1620,16 @@
         } catch (err) {
           onError(id, err);
         }
+        // Calendar reads the weather cache rather than owning a request. Notify an already-open Week
+        // calendar after the cache has changed so its next render sees the new forecast (or cleared error).
+        if (id === "weather" && value !== undefined) {
+          try {
+            const event = typeof window.CustomEvent === "function"
+              ? new window.CustomEvent("zentral-weather-updated")
+              : new Event("zentral-weather-updated");
+            window.dispatchEvent?.(event);
+          } catch (_) {}
+        }
         if (!idle()) scheduleNext(current, { lastValue: stored?.value });
         return true;
       };

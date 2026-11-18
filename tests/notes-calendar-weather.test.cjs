@@ -99,6 +99,22 @@ test("the calendar asks the widget for its cache and never for a request", () =>
   assert.match(fn, /catch \(_\)/, "and a missing or broken widget is an absent line, never a broken calendar");
 });
 
+test("an updated weather cache repaints an already-open Week calendar without a new fetch", () => {
+  const finishAt = WIDGETS_SRC.indexOf("const finish = (value) =>");
+  const failAt = WIDGETS_SRC.indexOf("const fail = (err) =>", finishAt);
+  assert.ok(finishAt >= 0 && failAt > finishAt, "the scheduler's successful cache path is present");
+  const finish = WIDGETS_SRC.slice(finishAt, failAt);
+  assert.match(finish, /id === "weather" && value !== undefined/, "only a changed Weather reading notifies Calendar");
+  assert.match(finish, /dispatchEvent[\s\S]*zentral-weather-updated/, "the cache change is published after the cache is updated");
+  const listenerAt = NOTES_SRC.indexOf('listen(window, "zentral-weather-updated"');
+  assert.ok(listenerAt >= 0, "Notes subscribes while the sheet is alive");
+  const listener = NOTES_SRC.slice(listenerAt, listenerAt + 1000);
+  assert.match(listener, /view !== "list"[\s\S]*?calendarPane\.hidden/, "hidden or non-list calendars are left alone");
+  assert.match(listener, /store\.meta\.calendarView[\s\S]*?week/, "only the Week calendar needs weather repainting");
+  assert.match(listener, /requestCalendarBackground\(\)/, "updates defer during interactions instead of replacing a live grid");
+  assert.match(listener, /zentral-weather-updated/);
+});
+
 test("the symbol sits above the weekday name, as the owner asked", () => {
   const start = NOTES_SRC.indexOf('const wx = calWeather');
   assert.ok(start > 0, "the day head reads the forecast");
