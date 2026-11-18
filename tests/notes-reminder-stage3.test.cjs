@@ -346,11 +346,20 @@ async function test(name, fn) {
     const qa = (sel) => root.querySelectorAll(sel);
 
     // Open Calendar Tools -> Reminder sounds & quiet hours.
+    // OW-75: the sound/quiet-hours row sits in the Tools menu's "Calendar settings" group.
     const toolsBtn = q(".zn-calendar-tools");
     assert.ok(toolsBtn, "Calendar Tools button exists");
     toolsBtn.click();
     await flush();
-    const alertMenuItem = qa(".zn-menu button, .zn-menu-item").find((b) => /Reminder sounds\s*(?:&|and)\s*quiet hours/i.test(b.textContent));
+    const findAlertItem = () => qa(".zn-menu button, .zn-menu-item").find((b) => /Reminder sounds\s*(?:&|and)\s*quiet hours/i.test(b.textContent));
+    let alertMenuItem = findAlertItem();
+    if (!alertMenuItem) {
+      const settingsGroup = qa(".zn-menu .zn-menu-group").find((b) => /Calendar settings/i.test(b.textContent));
+      assert.ok(settingsGroup, "the Tools menu has its Calendar settings group");
+      settingsGroup.click();
+      await flush();
+      alertMenuItem = findAlertItem();
+    }
     assert.ok(alertMenuItem, "Reminder sounds & quiet hours menu item exists");
     alertMenuItem.click();
     await flush();

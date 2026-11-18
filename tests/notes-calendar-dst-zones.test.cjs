@@ -20,6 +20,27 @@ async function test(name, fn) {
   console.log("ok - " + name);
 }
 
+// OW-75: the calendar's Tools menu is grouped by job (Create / Calendar settings / Show and find / This week as text).
+// This opens `trigger`, walks into the group that holds `label` and returns the row, so a test names the row it wants
+// and not the menu's shape.
+const openCalendarRow = (root, trigger, label, match = (text, want) => text === want || text.startsWith(want) || want.test?.(text)) => {
+  root.querySelector(trigger).click();
+  const items = () => [...root.querySelectorAll(".zn-menu-item")];
+  const hit = (want) => items().find((el) => (typeof want === "string" ? el.textContent.trim() === want || el.textContent.trim().startsWith(want) : want.test(el.textContent.trim())));
+  let row = hit(label);
+  const groups = items().filter((el) => el.classList.contains("zn-menu-group"));
+  if (!row) {
+    for (const group of groups) {
+      group.click();
+      row = hit(label);
+      if (row) break;
+      const back = root.querySelector(".zn-menu-back");
+      if (back) back.click();
+    }
+  }
+  return row;
+};
+
 (async () => {
   await test("DST offset, abbreviation, and civil day-bound switches across Northern, Southern, 30-min, midnight, and fixed zones", () => {
     const winterEU = Date.parse("2026-01-15T12:00:00.000Z");
@@ -294,9 +315,7 @@ async function test(name, fn) {
   await flush();
 
   const openTools = async (label) => {
-    root.querySelector(".zn-calendar-tools").click();
-    await flush();
-    const entry = root.querySelectorAll(".zn-menu-item").find((node) => node.textContent.trim().startsWith(label));
+    const entry = openCalendarRow(root, ".zn-calendar-tools", label);
     assert.ok(entry, "Calendar Tools offers " + label);
     entry.click();
     await flush();

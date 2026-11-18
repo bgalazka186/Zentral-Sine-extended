@@ -63,11 +63,28 @@ const weekExports = [], weekPrints = [], copiedText = [];
 const env = { getPref: (k, d) => prefs.has(k) ? prefs.get(k) : d, setPref: (k, v) => prefs.set(k, v), openLink() {}, copyText(text) { copiedText.push(text); }, exportNote() {}, exportAll() {}, exportCalendarWeek: async (text, week) => { weekExports.push({ text, week }); return true; }, printCalendarWeek: async (text, week) => { weekPrints.push({ text, week }); return true; }, revealFolder() {} };
 const q = (root, selector) => root.querySelector(selector);
 const chooseMenu = async (root, triggerSelector, label) => {
-  q(root, triggerSelector).click();
-  const entry = root.querySelectorAll(".zn-menu-item").find((el) => el.textContent.trim() === label);
+  // OW-75: the calendar's Tools menu is grouped now, so a row may live one level in.
+  const entry = openCalendarRow(root, triggerSelector, label);
   assert.ok(entry, `menu option exists: ${label}`);
   entry.click();
   await flushRaf();
+};
+// Opens `trigger`, walking into the named group when the row is not at the top level.
+const openCalendarRow = (root, triggerSelector, label) => {
+  const items = () => [...root.querySelectorAll(".zn-menu-item")];
+  const hit = (want) => items().find((el) => el.textContent.trim() === want);
+  q(root, triggerSelector).click();
+  let row = hit(label);
+  if (!row) {
+    for (const group of items().filter((el) => el.classList.contains("zn-menu-group"))) {
+      group.click();
+      row = hit(label);
+      if (row) break;
+      const back = root.querySelector(".zn-menu-back");
+      if (back) back.click();
+    }
+  }
+  return row;
 };
 // The store lives in another realm (vm): its objects are compared as plain data.
 const plain = (value) => JSON.parse(JSON.stringify(value));

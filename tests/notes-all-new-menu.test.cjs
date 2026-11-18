@@ -173,7 +173,20 @@ async function makeSheet({ agendaEnabled = false, cursor = "2026-11-24" } = {}) 
       btnMenu.click();
       await h.flush();
       const labelsOff = h.qa(".zn-menu .zn-menu-item").map((b) => b.textContent.trim());
-      assert.deepEqual(labelsOff, ["New note", "New folder", "New reminder", "New event", "Date note"]);
+      // OW-75: the calendar's four creation modes now live under this menu, in one group, as the owner asked
+      // ("create xyz from calendar ... into Notes + drop-down"). The primary list is unchanged.
+      assert.deepEqual(labelsOff, ["New note", "New folder", "New reminder", "New event", "Date note", "Create"]);
+      const createGroup = h.qa(".zn-menu .zn-menu-group").find((b) => b.textContent.trim() === "Create");
+      assert.ok(createGroup, "the calendar creation modes are one group in the + menu");
+      createGroup.click();
+      await h.flush();
+      assert.deepEqual(
+        h.qa(".zn-menu .zn-menu-item").map((b) => b.textContent.trim()),
+        ["Back", "Create timed event…", "Create all-day event…", "Create timed reminder…", "Create all-day reminder…"],
+        "all four creation modes are there, none lost",
+      );
+      h.q(".zn-menu .zn-menu-back").click();
+      await h.flush();
 
       // Pick "New reminder": opens composer defaulted to selected calendar day (2026-11-24) and remembers choice.
       h.qa(".zn-menu .zn-menu-item").find((b) => b.textContent.trim() === "New reminder").click();
@@ -249,7 +262,7 @@ async function makeSheet({ agendaEnabled = false, cursor = "2026-11-24" } = {}) 
       btnMenu.click();
       await h.flush();
       const labelsOn = h.qa(".zn-menu .zn-menu-item").map((b) => b.textContent.trim());
-      assert.deepEqual(labelsOn, ["New note", "New folder", "New reminder", "New event"]);
+      assert.deepEqual(labelsOn, ["New note", "New folder", "New reminder", "New event", "Create"], "Date note is hidden; the calendar group stays");
       // Close menu and trigger one-click '+' -> creates a blank note instead of Date note.
       btnMenu.click();
       await h.flush();

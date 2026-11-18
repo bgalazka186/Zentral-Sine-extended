@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.303
+// @version 3.3.304
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.303, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.304, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.303";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.304";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1822,6 +1822,9 @@ const __zentralEmbeddedLoader = (function () {
       "cal.view.agenda": "Agenda",
       "cal.view.week": "Week",
       "cal.view.day": "Day",
+      "cal.view.toggleAria": "Switch between Month and Week",
+      "cal.view.toggleTitle": "Month or Week",
+      "cal.headNav.aria": "Calendar controls",
       "cal.nav.prevPeriod": "Previous period",
       "cal.nav.nextPeriod": "Next period",
       "cal.nav.prevMonth": "Previous month",
@@ -1971,6 +1974,9 @@ const __zentralEmbeddedLoader = (function () {
       "cal.toolsMenu.displayZone": "Display time zone: {zone}",
       "cal.toolsMenu.zoneLocal": "Local",
       "cal.toolsMenu.freeSlots": "When am I free?…",
+      "cal.toolsMenu.settingsGroup": "Calendar settings",
+      "cal.toolsMenu.moreGroup": "Show and find",
+      "cal.toolsMenu.weekTextGroup": "This week as text",
       "cal.toolsMenu.copyWeekMd": "Copy this week as Markdown",
       "cal.toolsMenu.saveWeekMd": "Save this week as Markdown…",
       "cal.toolsMenu.printWeek": "Print this week…",
@@ -2842,6 +2848,9 @@ const __zentralEmbeddedLoader = (function () {
       "cal.view.agenda": "Agenda",
       "cal.view.week": "Tydzie\u0144",
       "cal.view.day": "Dzie\u0144",
+      "cal.view.toggleAria": "Prze\u0142\u0105cz mi\u0119dzy miesi\u0105cem a tygodniem",
+      "cal.view.toggleTitle": "Miesi\u0105c albo tydzie\u0144",
+      "cal.headNav.aria": "Sterowanie kalendarzem",
       "cal.nav.prevPeriod": "Poprzedni okres",
       "cal.nav.nextPeriod": "Nast\u0119pny okres",
       "cal.nav.prevMonth": "Poprzedni miesi\u0105c",
@@ -2991,6 +3000,9 @@ const __zentralEmbeddedLoader = (function () {
       "cal.toolsMenu.displayZone": "Strefa czasowa wy\u015bwietlania: {zone}",
       "cal.toolsMenu.zoneLocal": "Lokalna",
       "cal.toolsMenu.freeSlots": "Kiedy mam wolny czas?\u2026",
+      "cal.toolsMenu.settingsGroup": "Ustawienia kalendarza",
+      "cal.toolsMenu.moreGroup": "Poka\u017c i znajd\u017a",
+      "cal.toolsMenu.weekTextGroup": "Ten tydzie\u0144 jako tekst",
       "cal.toolsMenu.copyWeekMd": "Kopiuj ten tydzie\u0144 jako Markdown",
       "cal.toolsMenu.saveWeekMd": "Zapisz ten tydzie\u0144 jako Markdown\u2026",
       "cal.toolsMenu.printWeek": "Drukuj ten tydzie\u0144\u2026",
@@ -28241,6 +28253,7 @@ __zentralShim.register = function (def) {
       Object.freeze({ id: "sheet.openWindowPointer", file: "ZentralNotes.uc.js", kind: "window.addEventListener", scope: "sheet:open", owner: "sheet.close() & sheet.destroy()" }),
       Object.freeze({ id: "sheet.popupGuard", file: "ZentralNotes.uc.js", kind: "window.addEventListener", scope: "sheet", owner: "sheet.destroy()" }),
       Object.freeze({ id: "sheet.splitAndFitRO", file: "ZentralNotes.uc.js", kind: "ResizeObserver", scope: "sheet", owner: "sheet.destroy()" }),
+      Object.freeze({ id: "sheet.themeObserver", file: "ZentralNotes.uc.js", kind: "MutationObserver+listener", scope: "sheet", owner: "sheet close cleanups (OW-76)" }),
       Object.freeze({ id: "sheet.dialogCardRO", file: "ZentralNotes.uc.js", kind: "ResizeObserver", scope: "sheet:dialog", owner: "closeDialog() & sheet.close() & sheet.destroy()" }),
       Object.freeze({ id: "sheet.parentPanelMO", file: "ZentralNotes.uc.js", kind: "MutationObserver", scope: "sheet:open", owner: "unwatchParentPanelHidden() & sheet.close() & sheet.destroy()" }),
       Object.freeze({ id: "sheet.debouncedTimersAndRafs", file: "ZentralNotes.uc.js", kind: "setTimeout+rAF", scope: "sheet:open", owner: "cancelAllAsync() in sheet.close() & sheet.destroy()" }),
@@ -29474,8 +29487,13 @@ __zentralShim.register = function (def) {
             hostText = pick("--zl-popup-text", "--arrowpanel-color");
             hostLine = pick("--zl-button-border-color", "--arrowpanel-border-color");
           } else if (theme === "zentral") {
-            hostSurface = pick("--bgalazka-look-toolbar-surface", "--bgalazka-look-surface");
-            hostText = pick("--bgalazka-look-text");
+            // OW-76: "zentral" means the Zentral appearance theme, so it reads Zen's own palette — the base surface,
+            // its text and border colours, and the primary accent. It used to read --bgalazka-look-*, which is the RSS
+            // card's own set of variables (another module's look), so the sheet only looked like a Zentral theme by
+            // accident. Those stay as the last fallback for a host that paints that way and nothing else.
+            hostSurface = pick("--zen-colors-base", "--zen-main-browser-background-toolbar", "--bgalazka-look-toolbar-surface", "--bgalazka-look-surface");
+            hostText = pick("--zen-colors-text", "--bgalazka-look-text");
+            hostLine = pick("--zen-colors-border", "--zen-colors-tertiary");
             hostAccent = pick("--zen-primary-color");
           }
         } catch (_) {}
@@ -29580,6 +29598,20 @@ __zentralShim.register = function (def) {
         }
       }
       listen(window, "zentral-notes-theme-changed", refreshSheetThemeColors);
+      // OW-76: the sheet's own event only fires when the person changes the NOTES theme. Zentral's appearance theme
+      // changes through a different door (a Zen theme switch, the theme service re-resolving, look-and-feel-changed),
+      // and nothing told the sheet, so it kept the colours of the theme it was opened under. With "zentral" the default
+      // this has to be live.
+      listen(window, "zentral-appearance-theme-changed", refreshSheetThemeColors);
+      listen(window, "look-and-feel-changed", refreshSheetThemeColors);
+      try {
+        // The tokens themselves can change without any event reaching this window (a theme re-applied by stylesheet or
+        // by the parent process). Watching the root's attributes catches the attribute-driven path the theme service
+        // uses (zentral-effective-theme, lwtheme, lwtheme-brighttext).
+        const themeObserver = new MutationObserver(() => refreshSheetThemeColors());
+        themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["zentral-effective-theme", "zentral-contrast-policy", "lwtheme", "lwtheme-brighttext", "lwt-default-theme-in-dark-mode", "style"] });
+        cleanups.push(() => themeObserver.disconnect());
+      } catch (_) {}
       try {
         const mq = window.matchMedia?.("(prefers-color-scheme: light)");
         if (mq?.addEventListener) {
@@ -29694,7 +29726,12 @@ __zentralShim.register = function (def) {
       const btnCalendarBigPicture = iconButton("maximize", t("cal.bigPicture.open"), "zn-calendar-bigpicture-btn");
       btnCalendarBigPicture.setAttribute("aria-pressed", "false");
       const calendarHeadRight = h("div", { class: "zn-calendar-pane-head-right" }, calendarPeriod, btnCalendarControlsToggle, btnCalendarBigPicture);
-      const calendarHeader = h("div", { class: "zn-calendar-pane-head" }, calendarHeadingEl, calendarHeadRight);
+      // OW-74: the basic controls live in the header, between the calendar name and the long period name, so hiding the
+      // control strip can never take away the means to move between months or come back to today. They are MOVED into
+      // this slot (not copied): the strip keeps the same three nodes, so there is one button, one id and one listener.
+      const btnCalendarViewToggle = h("button", { type: "button", class: "zn-chip zn-calendar-view-toggle", "aria-label": t("cal.view.toggleAria") }, t("cal.view.month"));
+      const calendarHeadNav = h("div", { class: "zn-calendar-head-nav", role: "group", "aria-label": t("cal.headNav.aria") });
+      const calendarHeader = h("div", { class: "zn-calendar-pane-head" }, calendarHeadingEl, calendarHeadNav, calendarHeadRight);
       // Zen can close a panel when a native <select> opens its platform popup. Calendar controls therefore use
       // the same accessible in-sheet menu as the rest of Notes; the selectors remain buttons, never native selects.
       const calendarViewSelect = h("button", { type: "button", class: "zn-chip zn-calendar-view-select", "aria-label": t("cal.view.aria"), "aria-haspopup": "menu" }, t("cal.view.month"));
@@ -29712,7 +29749,10 @@ __zentralShim.register = function (def) {
       const calendarCategorySelect = h("button", { type: "button", class: "zn-chip zn-calendar-category-filter", "aria-label": t("cal.filter.categoryAria"), "aria-haspopup": "menu" }, t("cal.filter.allCategories"));
       const calendarUndoMove = h("button", { type: "button", class: "zn-chip zn-calendar-undo-move", "aria-label": t("cal.undoChange.aria"), hidden: "true" }, t("cal.undoChange"));
       const calendarToolsSelect = h("button", { type: "button", class: "zn-chip zn-calendar-tools", "aria-label": t("cal.tools.aria"), "aria-haspopup": "menu" }, t("cal.tools"));
-      const calendarControls = h("div", { class: "zn-calendar-controls" }, calendarPrev, calendarToday, calendarNext, calendarViewSelect, calendarSizeSelect, calendarSnapSelect, calendarHoursToggle, calendarDaysSelect, calendarKindSelect, calendarCategorySelect, calendarUndoMove, calendarToolsSelect);
+      // OW-74: prev / today / next and the month-week toggle are the header's; the strip carries the rest. The strip is
+      // therefore built without them — appending them here as well would put the same node in two places.
+      const calendarControls = h("div", { class: "zn-calendar-controls" }, calendarViewSelect, calendarSizeSelect, calendarSnapSelect, calendarHoursToggle, calendarDaysSelect, calendarKindSelect, calendarCategorySelect, calendarUndoMove, calendarToolsSelect);
+      calendarHeadNav.append(calendarPrev, calendarToday, calendarNext, btnCalendarViewToggle);
       const calendarContent = h("div", { class: "zn-calendar-pane-content zn-calendar-view", role: "region", "aria-label": t("cal.itemsRegion.aria") });
       const calendarPane = h("section", { class: "zn-calendar-pane", "aria-label": t("cal.heading") }, calendarHeader, calendarControls, calendarContent);
       const allSplitter = h("div", { class: "zn-calendar-splitter", role: "separator", tabindex: "0", "aria-label": t("tree.layout.splitterAria"), "aria-orientation": "vertical", "aria-valuemin": "20", "aria-valuemax": "80", "aria-valuenow": "36" });
@@ -30088,6 +30128,18 @@ __zentralShim.register = function (def) {
         if (bigPicture) closeCalendarBigPicture({ restoreFocus: true });
         else openCalendarBigPicture();
       });
+      // OW-74: the header's month/week toggle shows the view it leads to and is pressed while Week is the view.
+      function syncCalendarViewToggle() {
+        const view = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
+        const isWeek = view === "week";
+        // The label names where the press will take you, so a person in Month reads "Week" and vice versa.
+        btnCalendarViewToggle.dataset.value = isWeek ? "week" : "month";
+        btnCalendarViewToggle.textContent = t(isWeek ? "cal.view.month" : "cal.view.week");
+        btnCalendarViewToggle.setAttribute("aria-pressed", isWeek ? "true" : "false");
+        btnCalendarViewToggle.setAttribute("aria-label", t("cal.view.toggleAria"));
+        btnCalendarViewToggle.title = t("cal.view.toggleTitle");
+        btnCalendarViewToggle.classList.toggle("is-on", isWeek);
+      }
       function syncCalendarControlsToggle() {
         const filters = activeCalendarFilters();
         const collapsed = filters.collapsed;
@@ -30186,6 +30238,7 @@ __zentralShim.register = function (def) {
         const calendarViewName = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
         calendarViewSelect.dataset.value = calendarViewName;
         calendarViewSelect.textContent = t("cal.view." + calendarViewName);
+        syncCalendarViewToggle();
         calendarHeadingEl.textContent = t("cal.heading");
         calendarPane.setAttribute("aria-label", t("cal.heading"));
         calendarContent.setAttribute("aria-label", t("cal.itemsRegion.aria"));
@@ -31729,6 +31782,7 @@ __zentralShim.register = function (def) {
         syncCalendarBigPictureButton();
         calendarViewSelect.dataset.value = view;
         calendarViewSelect.textContent = t("cal.view." + view);
+        syncCalendarViewToggle();
         syncCalendarDaysControl(view);
         calendarKindSelect.dataset.value = kind;
         calendarKindSelect.textContent = t(kind === "event" ? "cal.filter.events" : kind === "reminder" ? "cal.filter.reminders" : "cal.filter.allItems");
@@ -34419,6 +34473,14 @@ __zentralShim.register = function (def) {
         store.setMeta({ calendarCursor: C.ymd(new Date(next)) });
         renderCalendar();
       }
+      // OW-74: the header's month/week toggle writes the same `calendarView` meta and redraws, exactly like the view menu.
+      listen(btnCalendarViewToggle, "click", () => {
+        const now = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
+        const nextView = now === "week" ? "month" : "week";
+        store.setMeta({ calendarView: nextView });
+        renderCalendar();
+        syncCalendarViewToggle();
+      });
       listen(calendarViewSelect, "click", () => calendarChoiceMenu(calendarViewSelect,
         [
           { value: "month", label: t("cal.view.month") },
@@ -34876,32 +34938,45 @@ __zentralShim.register = function (def) {
           h("div", { class: "zn-dialog-actions" }, close),
         );
       }
+      // OW-75: the owner's "they are unreadable" was measured, not guessed. These 18 rows were all in one menu: the
+      // creation entries, three settings groups, momentary actions and the week export, ~568 px at 13 px text and 619 px
+      // (with a scrollbar) at 20 px. Creation has moved to the Notes "+" menu, "Open in Big Picture" lives on the
+      // header button that already does exactly that, and the rest is grouped by job so the menu a person opens has
+      // three named groups and one action instead of a wall. Nothing was removed: every entry still runs its action.
       listen(calendarToolsSelect, "click", () => {
         const holPrefs = calendarHolidayPrefs();
-        return showMenu(calendarToolsSelect, [
-        { heading: true, label: t("cal.toolsMenu.create") },
-        { icon: "calendar", label: t("cal.toolsMenu.createTimedEvent"), action: () => queueMicrotask(() => askCreateCalendarItem("event", false)) },
-        { icon: "calendar", label: t("cal.toolsMenu.createAllDayEvent"), action: () => queueMicrotask(() => askCreateCalendarItem("event", true)) },
-        { icon: "bell", label: t("cal.toolsMenu.createTimedReminder"), action: () => queueMicrotask(() => askCreateCalendarItem("reminder", false)) },
-        { icon: "bell", label: t("cal.toolsMenu.createAllDayReminder"), action: () => queueMicrotask(() => askCreateCalendarItem("reminder", true)) },
-        { sep: true },
-        { id: "reminder-history", label: t("cal.toolsMenu.reminderHistory"), icon: "history", run: openReminderHistoryCard },
-        // OW-53: a calendar file from another app, next to the tools that read and write the calendar.
-        { id: "calendar-import-ics", label: t("cal.toolsMenu.importIcs"), icon: "download", run: () => queueMicrotask(askCalendarIcsImport) },
-        { id: "reminder-alert-settings", label: t("cal.toolsMenu.alertSettings"), icon: "volume-2", run: askCalendarAlertSettings },
-        { id: "agenda-visibility-defaults", label: t("cal.toolsMenu.agendaVisibility"), icon: "calendar-check", run: askAgendaVisibilityDefaults },
-        { sep: true },
+        const settingsRows = [
+        { id: "reminder-alert-settings", label: t("cal.toolsMenu.alertSettings"), icon: "bell", run: askCalendarAlertSettings },
+        { id: "agenda-visibility-defaults", label: t("cal.toolsMenu.agendaVisibility"), icon: "calendar", run: askAgendaVisibilityDefaults },
         { id: "calendar-week-settings", icon: "calendar", label: t("cal.toolsMenu.weekSettings", { day: t(calendarWeekStartDay() === 0 ? "common.sunday" : "common.monday"), weeks: calendarShowWeekNumbers() ? ", " + t("cal.weekNumber.short") : "" }), run: askCalendarWeekSettings },
         { id: "calendar-holidays", icon: "calendar", label: holPrefs.locales.length ? t("cal.toolsMenu.holidaysRegion", { region: holPrefs.locales.map((code) => t("cal.holidays.region." + code)).join(", ") }) : t("cal.toolsMenu.holidaysSetup"), run: () => queueMicrotask(askCalendarHolidaysDialog) },
-        { icon: "clock", label: t("cal.toolsMenu.visibleHours", { hours: CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours).on ? calendarHoursText(store.meta.calendarHours).long : t("cal.toolsMenu.all24") }), action: () => queueMicrotask(askCalendarHours) },
+        { icon: "calendar", label: t("cal.toolsMenu.visibleHours", { hours: CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours).on ? calendarHoursText(store.meta.calendarHours).long : t("cal.toolsMenu.all24") }), action: () => queueMicrotask(askCalendarHours) },
         { icon: "globe", label: t("cal.toolsMenu.displayZone", { zone: calendarDisplayZone() || t("cal.toolsMenu.zoneLocal") }), action: () => queueMicrotask(askCalendarDisplayZone) },
-        { icon: "clock", label: t("cal.toolsMenu.freeSlots"), action: () => queueMicrotask(askCalendarFreeSlots) },
-        { id: "calendar-big-picture", icon: bigPicture ? "minimize" : "maximize", label: t(bigPicture ? "cal.toolsMenu.bigPictureClose" : "cal.toolsMenu.bigPictureOpen"), run: () => { if (bigPicture) closeCalendarBigPicture({ restoreFocus: true }); else openCalendarBigPicture(); } },
+        ];
+        const moreRows = [
+        { id: "reminder-history", label: t("cal.toolsMenu.reminderHistory"), icon: "list", run: openReminderHistoryCard },
+        { id: "cal.toolsMenu.freeSlots", label: t("cal.toolsMenu.freeSlots"), icon: "search", action: () => queueMicrotask(askCalendarFreeSlots) },
+        ];
+        if (bigPicture) moreRows.push({ id: "calendar-big-picture", icon: "minimize", label: t("cal.toolsMenu.bigPictureClose"), run: () => closeCalendarBigPicture({ restoreFocus: true }) });
+        return showMenu(calendarToolsSelect, [
+        // Creating a calendar item is the most frequent job of this corner, so it keeps its own button rather than a
+        // group: one press, one composer. The four variants are the second level.
+        { id: "cal-tools-create", icon: "calendar", label: t("cal.toolsMenu.create"), group: [
+          { icon: "calendar", label: t("cal.toolsMenu.createTimedEvent"), action: () => queueMicrotask(() => askCreateCalendarItem("event", false)) },
+          { icon: "calendar", label: t("cal.toolsMenu.createAllDayEvent"), action: () => queueMicrotask(() => askCreateCalendarItem("event", true)) },
+          { icon: "bell", label: t("cal.toolsMenu.createTimedReminder"), action: () => queueMicrotask(() => askCreateCalendarItem("reminder", false)) },
+          { icon: "bell", label: t("cal.toolsMenu.createAllDayReminder"), action: () => queueMicrotask(() => askCreateCalendarItem("reminder", true)) },
+        ] },
+        { id: "cal-tools-settings", icon: "sliders", label: t("cal.toolsMenu.settingsGroup"), group: settingsRows },
+        { id: "cal-tools-more", icon: "more", label: t("cal.toolsMenu.moreGroup"), group: moreRows },
         { sep: true },
-        { icon: "copy", label: t("cal.toolsMenu.copyWeekMd"), action: () => { const out = calendarWeekMarkdown(); env.copyText?.(out.text); flash(t("cal.toolsMenu.weekCopied")); } },
-        { icon: "download", label: t("cal.toolsMenu.saveWeekMd"), action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.exportCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((saved) => { if (saved) flash(t("cal.toolsMenu.weekExported")); }).catch((error) => flash(t("cal.toolsMenu.weekExportFailed", { error: String(error?.message || error) }))); } },
-        { icon: "printer", label: t("cal.toolsMenu.printWeek"), action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.printCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((printed) => { if (printed) flash(t("cal.toolsMenu.weekPrinted")); }).catch((error) => flash(t("cal.toolsMenu.weekPrintFailed", { error: String(error?.message || error) }))); } },
-      ]);
+        { id: "calendar-import-ics", label: t("cal.toolsMenu.importIcs"), icon: "outside", run: () => queueMicrotask(askCalendarIcsImport) },
+        { id: "cal-tools-week-text", icon: "note", label: t("cal.toolsMenu.weekTextGroup"), group: [
+          { icon: "copy", label: t("cal.toolsMenu.copyWeekMd"), action: () => { const out = calendarWeekMarkdown(); env.copyText?.(out.text); flash(t("cal.toolsMenu.weekCopied")); } },
+          { icon: "save", label: t("cal.toolsMenu.saveWeekMd"), action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.exportCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((saved) => { if (saved) flash(t("cal.toolsMenu.weekExported")); }).catch((error) => flash(t("cal.toolsMenu.weekExportFailed", { error: String(error?.message || error) }))); } },
+          { icon: "outside", label: t("cal.toolsMenu.printWeek"), action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.printCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((printed) => { if (printed) flash(t("cal.toolsMenu.weekPrinted")); }).catch((error) => flash(t("cal.toolsMenu.weekPrintFailed", { error: String(error?.message || error) }))); } },
+        ] },
+        ]);
       });
       // OW-10: shared Clock with analog face (draggable/clickable hour then minute hand, locale 12h/24h, fixed 5-min
       // resolution delinked from Week/Day calendarSnap, wheel & keyboard role=slider), digital hour/minute selectors,
@@ -37535,7 +37610,14 @@ __zentralShim.register = function (def) {
         };
         // One entry list per level: an item with `group` opens its entries in place (with a Back row) so a long
         // menu stays short; closing the menu from any level runs the chosen action once.
+        // OW-75: rebuilding a level removes the focused row, and a real browser answers that with a `focusout` whose
+        // relatedTarget is null — which the "do not strand an open menu" handler below read as "focus left the menu"
+        // and closed it. Every group menu (Settings, Labels, Colour, this calendar's More menu) therefore shut itself
+        // as it opened, and only a fake DOM that does not move focus could miss it. While a level is being filled the
+        // focusout is ours, not the person's.
+        let fillingMenu = false;
         const fill = (list, parent) => {
+          fillingMenu = true;
           m.replaceChildren();
           if (parent) {
             const back = h("button", { type: "button", class: "zn-menu-item zn-menu-back", role: "menuitem" });
@@ -37665,6 +37747,7 @@ __zentralShim.register = function (def) {
               m.append(b);
             }
           }
+          fillingMenu = false;
         };
         fill(menuItems, null);
         // Arrow navigation skips disabled actions; Enter activates exactly the focused enabled row.
@@ -37731,6 +37814,7 @@ __zentralShim.register = function (def) {
         // must not strand an open menu. Escape is handled by the sheet key controller below.
         listenMenu(m, "focusout", (e) => {
           if (menu !== activeMenu) return;
+          if (fillingMenu) return; // a level is being rebuilt: the focused row went away on purpose (OW-75)
           const next = e.relatedTarget;
           const focusRemainsWithMenu = activeMenu.el.contains(next);
           // Keep the menu alive while focus moves back to its trigger: pointer activation fires
@@ -40678,13 +40762,26 @@ __zentralShim.register = function (def) {
           { id: "note", icon: "plus", label: t("menu.new.note"), active: true, enabled: true, reason: "" },
           { id: "folder", icon: "folder", label: t("menu.new.folder"), active: false, enabled: true, reason: "" },
         ];
-        showMenu(newSplit, entries.map((entry) => ({
+        const rows = entries.map((entry) => ({
           icon: entry.active ? "check" : entry.icon,
           label: entry.label,
           enabled: entry.enabled,
           reason: entry.reason || undefined,
           action: () => runAllNewChoice(entry.id, { remember: true }),
-        })));
+        }));
+        // OW-75, the owner's rule: "create xyz from calendar … into Notes + drop-down". The four creation modes used to
+        // sit at the top of the calendar's Tools menu; here they are under the Notes "+" they belong to, as one group so
+        // the primary list stays short. The composer opens on the calendar's selected day, as it did from Tools.
+        if (opts.calendarAvailable) {
+          rows.push({ sep: true });
+          rows.push({ id: "cal-tools-create", icon: "calendar", label: t("cal.toolsMenu.create"), group: [
+            { icon: "calendar", label: t("cal.toolsMenu.createTimedEvent"), action: () => queueMicrotask(() => askCreateCalendarItem("event", false, selectedCalendarDayKey())) },
+            { icon: "calendar", label: t("cal.toolsMenu.createAllDayEvent"), action: () => queueMicrotask(() => askCreateCalendarItem("event", true, selectedCalendarDayKey())) },
+            { icon: "bell", label: t("cal.toolsMenu.createTimedReminder"), action: () => queueMicrotask(() => askCreateCalendarItem("reminder", false, selectedCalendarDayKey())) },
+            { icon: "bell", label: t("cal.toolsMenu.createAllDayReminder"), action: () => queueMicrotask(() => askCreateCalendarItem("reminder", true, selectedCalendarDayKey())) },
+          ] });
+        }
+        showMenu(newSplit, rows);
       }
       // Cycle F #7: with pref new_note_chooser the + button asks first (Blank is focused, so Enter = blank note).
       // Ctrl+N and the menu entries stay instant. Esc only closes the menu.

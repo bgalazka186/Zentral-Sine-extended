@@ -23,6 +23,27 @@ const test = async (name, fn) => {
   catch (error) { console.error("not ok - " + name); throw error; }
 };
 
+// OW-75: the calendar's Tools menu is grouped by job (Create / Calendar settings / Show and find / This week as text).
+// This opens `trigger`, walks into the group that holds `label` and returns the row, so a test names the row it wants
+// and not the menu's shape.
+const openCalendarRow = (root, trigger, label, match = (text, want) => text === want || text.startsWith(want) || want.test?.(text)) => {
+  root.querySelector(trigger).click();
+  const items = () => [...root.querySelectorAll(".zn-menu-item")];
+  const hit = (want) => items().find((el) => (typeof want === "string" ? el.textContent.trim() === want || el.textContent.trim().startsWith(want) : want.test(el.textContent.trim())));
+  let row = hit(label);
+  const groups = items().filter((el) => el.classList.contains("zn-menu-group"));
+  if (!row) {
+    for (const group of groups) {
+      group.click();
+      row = hit(label);
+      if (row) break;
+      const back = root.querySelector(".zn-menu-back");
+      if (back) back.click();
+    }
+  }
+  return row;
+};
+
 (async () => {
   // ---------------------------------------------------------------- 1. times
   await test("a typed time: the table of what is read", () => {
@@ -204,8 +225,7 @@ const test = async (name, fn) => {
   root.all().find((node) => node.title === "All notes").click(); await flush(); // the calendar is beside the list of notes
   const menuItem = (label) => root.querySelectorAll(".zn-menu-item").find((node) => node.textContent.trim().startsWith(label));
   const openTools = async (label) => {
-    root.querySelector(".zn-calendar-tools").click(); await flush();
-    const item = menuItem(label);
+    const item = openCalendarRow(root, ".zn-calendar-tools", label);
     assert.ok(item, "Calendar Tools offers " + label);
     item.click(); await flush();
   };

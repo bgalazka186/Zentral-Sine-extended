@@ -168,6 +168,27 @@ async function test(name, fn) {
   console.log("ok -", name);
 }
 
+// OW-75: the calendar's Tools menu is grouped by job (Create / Calendar settings / Show and find / This week as text).
+// This opens `trigger`, walks into the group that holds `label` and returns the row, so a test names the row it wants
+// and not the menu's shape.
+const openCalendarRow = (root, trigger, label, match = (text, want) => text === want || text.startsWith(want) || want.test?.(text)) => {
+  root.querySelector(trigger).click();
+  const items = () => [...root.querySelectorAll(".zn-menu-item")];
+  const hit = (want) => items().find((el) => (typeof want === "string" ? el.textContent.trim() === want || el.textContent.trim().startsWith(want) : want.test(el.textContent.trim())));
+  let row = hit(label);
+  const groups = items().filter((el) => el.classList.contains("zn-menu-group"));
+  if (!row) {
+    for (const group of groups) {
+      group.click();
+      row = hit(label);
+      if (row) break;
+      const back = root.querySelector(".zn-menu-back");
+      if (back) back.click();
+    }
+  }
+  return row;
+};
+
 (async () => {
   await test("pure: Big Picture size presets (70/80/90/95%) and viewport geometry box", () => {
     assert.deepEqual([...C.CALENDAR_BIG_PICTURE_SIZES], [70, 80, 90, 95]);
@@ -440,11 +461,11 @@ async function test(name, fn) {
     assert.equal(h.sheet.isCalendarBigPictureOpen(), true);
 
     // 2. Tools menu shows "Exit Big Picture" while open and toggles it off cleanly.
-    livePane.querySelector(".zn-calendar-tools").click();
-    await flush();
+    // OW-75: while Big Picture is open its exit row sits in the Tools menu's "Show and find" group (the header
+    // maximise button has no room in the popup), so the row must be reachable through the group.
+    const exitItem = openCalendarRow(h.sheet.root, ".zn-calendar-tools", /Exit Big Picture/);
     const toolsMenu = h.sheet.root.querySelector(".zn-menu");
-    assert.ok(toolsMenu && toolsMenu.matches(":popover-open"));
-    const exitItem = [...toolsMenu.querySelectorAll(".zn-menu-item")].find((b) => b.textContent.includes("Exit Big Picture"));
+    assert.ok(toolsMenu && toolsMenu.matches(":popover-open"), "the Tools menu stays open at the group level");
     assert.ok(exitItem, "Tools menu offers Exit Big Picture");
     exitItem.click();
     await flush();

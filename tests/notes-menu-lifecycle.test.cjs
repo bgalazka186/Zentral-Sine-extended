@@ -175,6 +175,41 @@ const test = async (name, fn) => { await fn(); console.log("ok -", name); };
     assert.equal(menuOpen(sheet.root), false, "the same anchor cancels its menu");
   });
 
+  await test("OW-75: opening a group keeps the menu open even though rebuilding it removes the focused row", async () => {
+    // A real browser blurs the focused row when `fill()` replaces the level and reports that as a focusout whose
+    // relatedTarget is null; the "do not strand an open menu" handler read it as the person leaving and closed the
+    // menu, so every group menu (Settings > Labels, Colour, the calendar's grouped Tools menu) shut itself as it
+    // opened. Measured in headless Chromium: without the guard the groups never appear, with it all four open.
+    // Honest limitation: this fake DOM focuses but does not move focus, so it cannot reproduce the blur itself. What
+    // this test can do is prove the *shape* of the browser's report (a focusout with no relatedTarget, delivered after
+    // the rebuild) leaves the menu standing — which is the condition that used to close it.
+    more.click();
+    // The More menu's first entry is already a submenu ("Save as Markdown" opens a format list).
+    const group = query(sheet.root, ".zn-menu .zn-menu-group");
+    assert.ok(group, "the menu has a group row");
+    group.focus?.();
+    const first = group;
+    // The rebuild does two things in order: the level is replaced, then the browser says focus went nowhere.
+    group.click();
+    // The fake DOM now reports the blur the way a browser does — after the task — so wait for that report and assert
+    // against it rather than only against the synthetic one. Without the guard this moment is when the menu vanishes.
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+    assert.equal(menuOpen(sheet.root), true, "a group level survives the focusout its own rebuild causes");
+    assert.ok(query(sheet.root, ".zn-menu-back"), "the group opened, so there is a Back row");
+    assert.ok(query(sheet.root, ".zn-menu .zn-menu-item"), "the group has its entries");
+  });
+
+  await test("a focusout that really leaves the menu still closes it", () => {
+    dispatchWindow("pointerdown", sheet.root); // start from no menu, whatever the test above left open
+    more.click();
+    const first = query(sheet.root, ".zn-menu button");
+    assert.ok(first, "the menu is open before the focusout");
+    const outside = query(sheet.root, ".zn-head button") || more;
+    first.dispatchEvent(new Ev("focusout", { bubbles: true, relatedTarget: outside }));
+    assert.equal(menuOpen(sheet.root), false, "the guard is only for a rebuild, not for a person tabbing away");
+  });
+
   await test("Escape closes the menu and leaves Notes open", () => {
     more.click();
     const first = query(sheet.root, ".zn-menu button");

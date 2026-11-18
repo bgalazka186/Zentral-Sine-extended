@@ -178,7 +178,7 @@
     "defaultValue": "zentral",
     "options": [
       {
-        "label": "Zentral – follows the Zen look",
+        "label": "Zentral – follows the browser's appearance theme (default)",
         "value": "zentral"
       },
       {

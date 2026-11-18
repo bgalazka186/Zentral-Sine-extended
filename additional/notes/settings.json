@@ -319,7 +319,7 @@
       "defaultValue": "zentral",
       "options": [
         {
-          "label": "Zentral – follows the Zen look",
+          "label": "Zentral \u2013 follows the browser's appearance theme (default)",
           "value": "zentral"
         },
         {

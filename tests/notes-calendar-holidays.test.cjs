@@ -156,6 +156,27 @@ async function test(name, fn) {
   console.log(`ok - ${name}`);
 }
 
+// OW-75: the calendar's Tools menu is grouped by job (Create / Calendar settings / Show and find / This week as text).
+// This opens `trigger`, walks into the group that holds `label` and returns the row, so a test names the row it wants
+// and not the menu's shape.
+const openCalendarRow = (root, trigger, label, match = (text, want) => text === want || text.startsWith(want) || want.test?.(text)) => {
+  root.querySelector(trigger).click();
+  const items = () => [...root.querySelectorAll(".zn-menu-item")];
+  const hit = (want) => items().find((el) => (typeof want === "string" ? el.textContent.trim() === want || el.textContent.trim().startsWith(want) : want.test(el.textContent.trim())));
+  let row = hit(label);
+  const groups = items().filter((el) => el.classList.contains("zn-menu-group"));
+  if (!row) {
+    for (const group of groups) {
+      group.click();
+      row = hit(label);
+      if (row) break;
+      const back = root.querySelector(".zn-menu-back");
+      if (back) back.click();
+    }
+  }
+  return row;
+};
+
 (async () => {
   await test("OW-43 pure: holiday sets are chosen apart from the interface language (PL + US, any language)", async () => {
     // A set list is the source of truth; a fresh profile still follows the app locale.
@@ -450,9 +471,7 @@ async function test(name, fn) {
     assert.match(pickerMay1.title, /Labour Day/, "compact picker appends holiday name to title");
 
     // 7. Tools -> Holidays & days off dialog updates region & adds personal day off + persists across reload!
-    const toolsBtn = h.sheet.root.querySelector(".zn-calendar-tools");
-    toolsBtn.click();
-    const holMenuItem = [...h.sheet.root.querySelectorAll(".zn-menu-item")].find((b) => /Holidays & days off/i.test(b.textContent));
+    const holMenuItem = openCalendarRow(h.sheet.root, ".zn-calendar-tools", /Holidays & days off/i);
     assert.ok(holMenuItem, "Tools menu includes Holidays & days off");
     holMenuItem.click();
     await h.flush();

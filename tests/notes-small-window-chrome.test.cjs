@@ -54,12 +54,22 @@ const flushRaf = async () => {
 
   // 2. CSS overflow safety & wrapping contract for all non-calendar All-notes chrome bars
   assert.match(css, /\.zentral-notes-sheet\[data-view="list"\]\s+\.zn-head\s*\{[^}]*flex-wrap:\s*wrap/, "list-view sheet header wraps safely instead of clipping buttons");
-  assert.match(css, /\.zentral-notes-sheet\s+\.zn-all-toolbar\s*\{[^}]*flex-wrap:\s*wrap/, "all-notes toolbar wraps safely");
+  // OW-73: the owner reported that the toolbar and the filter chips fit on one line but wrapped onto two. Wrapping is
+  // no longer the safety mechanism for these two rows — one line is. Safety is now a readable minimum plus a horizontal
+  // scroll, so an item can never be squeezed into a sliver and nothing is ever clipped without a way to reach it.
+  assert.match(css, /\.zentral-notes-sheet\s+\.zn-all-toolbar\s*\{[^}]*flex-wrap:\s*nowrap/, "all-notes toolbar is one line, never two (OW-73)");
+  assert.match(css, /\.zentral-notes-sheet\s+\.zn-all-toolbar\s*\{[^}]*overflow-x:\s*auto/, "all-notes toolbar can be scrolled rather than wrapped");
+  assert.match(css, /\.zentral-notes-sheet\s+\.zn-all-toolbar\s+\.zn-btn\s*\{[^}]*min-width:\s*22px/, "toolbar buttons keep a tappable width");
   assert.match(css, /\.zentral-notes-sheet\s+\.zn-list-head\s*\{[^}]*flex-wrap:\s*wrap/, "search & create row wraps safely");
-  assert.match(css, /\.zentral-notes-sheet\s+\.zn-chips\s*\{[^}]*flex-wrap:\s*wrap/, "filter chips row wraps safely instead of clipping Trash/Tags");
-  assert.match(css, /\.zentral-notes-sheet\s+\.zn-chips\s+\.zn-chip\s*\{[^}]*flex:\s*0\s+0\s+auto/, "filter chips never shrink to unreadable slivers");
+  assert.match(css, /\.zentral-notes-sheet\s+\.zn-chips\s*\{[^}]*flex-wrap:\s*nowrap/, "filter chips row is one line (OW-73)");
+  assert.match(css, /\.zentral-notes-sheet\s+\.zn-chips\s*\{[^}]*overflow-x:\s*auto/, "filter chips row scrolls rather than clipping Trash/Tags");
+  assert.match(css, /\.zentral-notes-sheet\s+\.zn-chips\s+\.zn-chip\s*\{[^}]*min-width:\s*4\.5em/, "filter chips never shrink to unreadable slivers");
   assert.match(css, /\.zentral-notes-sheet\s+\.zn-batch-bar\s*\{[^}]*flex-wrap:\s*wrap/, "batch toolbar wraps safely");
-  assert.match(css, /\.zentral-notes-sheet\s+\.zn-calendar-pane-head\s*\{[^}]*flex-wrap:\s*wrap/, "calendar pane head wraps safely");
+  // OW-74: the calendar head now carries the prev / today / next controls, so it must not wrap — a wrapped head would
+  // move them out from between the name and the period. The name is the item that gives ground instead.
+  assert.match(css, /\.zentral-notes-sheet\s+\.zn-calendar-pane-head\s*\{[^}]*flex-wrap:\s*nowrap/, "calendar pane head is one line so the controls stay between the name and the period (OW-74)");
+  assert.match(css, /\.zentral-notes-sheet\s+\.zn-calendar-pane-head\s*>\s*strong\s*\{[^}]*text-overflow:\s*ellipsis/, "the calendar name ellipsises before the controls do (OW-74)");
+  assert.match(css, /\.zentral-notes-sheet\s+\.zn-calendar-head-nav\s*\{[^}]*flex:\s*0\s+0\s+auto/, "the header controls never shrink away (OW-74)");
 
   // 3. Live sheet integration across normal, narrow, tight, and short windows
   const files = new Map();

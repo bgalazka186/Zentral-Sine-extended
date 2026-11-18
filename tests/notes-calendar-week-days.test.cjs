@@ -76,6 +76,21 @@ function loadSeam() {
   return { seam: win.__zentralNotesTestSeam, dom, win, winListeners };
 }
 
+// OW-75: the calendar's Tools menu is grouped by job; this opens the group that holds `label` and returns the row.
+const openCalendarRow = (root, trigger, label) => {
+  root.querySelector(trigger).click();
+  const items = () => [...root.querySelectorAll(".zn-menu-item")];
+  const hit = (want) => items().find((el) => (typeof want === "string" ? el.textContent.trim() === want || el.textContent.trim().startsWith(want) : want.test(el.textContent.trim())));
+  if (!hit(label)) {
+    for (const group of items().filter((el) => el.classList.contains("zn-menu-group"))) {
+      group.click();
+      if (hit(label)) break;
+      root.querySelector(".zn-menu-back")?.click();
+    }
+  }
+  return hit(label);
+};
+
 (async () => {
   await test("pure visibleDays(start, count), cleanWeekSpan, fitWeekDayCount and resolveWeekVisibleDays across DST and month/year borders", () => {
     assert.equal(cal.WEEK_DAYS_LIMITS.min, 1);
@@ -332,9 +347,7 @@ function loadSeam() {
     assert.ok(root.querySelectorAll(".zn-cal-busy-range").length >= 1, "busy-range shading rendered on Wednesday's event");
 
     // 5. Free-slot finder & Week export use the 3 shown days (2026-11-18..2026-11-20), NOT 7 days!
-    root.querySelector(".zn-calendar-tools").click();
-    await flush();
-    root.querySelectorAll(".zn-menu-item").find((el) => /When am I free/i.test(el.textContent)).click();
+    openCalendarRow(root, ".zn-calendar-tools", /When am I free/i).click();
     await flush();
     const freeCard = root.querySelector('[aria-label="When am I free?"]');
     assert.ok(freeCard, "When am I free? dialog opened");
@@ -344,9 +357,7 @@ function loadSeam() {
     freeCard.querySelectorAll("button").find((b) => b.textContent.trim() === "Close").click();
     await flush();
 
-    root.querySelector(".zn-calendar-tools").click();
-    await flush();
-    root.querySelectorAll(".zn-menu-item").find((el) => /Copy this week as Markdown/i.test(el.textContent)).click();
+    openCalendarRow(root, ".zn-calendar-tools", /Copy this week as Markdown/i).click();
     await flush();
     const mdHeadings = copied.split("\n").filter((line) => line.startsWith("## "));
     assert.deepEqual(mdHeadings, [

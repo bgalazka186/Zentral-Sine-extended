@@ -307,9 +307,16 @@
 }
 .zentral-notes-sheet .zn-all-layout { display: flex; flex-direction: column; }
 .zentral-notes-sheet .zn-all-layout[hidden] { display: none !important; }
-.zentral-notes-sheet .zn-all-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 4px; flex: 0 0 auto; min-width: 0; padding: 3px 6px; border-bottom: 1px solid var(--zn-line); }
-.zentral-notes-sheet .zn-all-toolbar .zn-btn,
-.zentral-notes-sheet .zn-all-toolbar .zn-chip { flex: 0 0 auto; }
+/* OW-73: one line, always. The owner reported that "Recent" and the three layout buttons fit but wrapped onto a
+   second row. Two things caused it: the toolbar itself wrapped, and every child was `flex: 0 0 auto`, so no item
+   could ever give ground to avoid the break. The toolbar therefore never wraps, and the chips — the only flexible
+   labels in the row — shrink and ellipsise (they already carry overflow/text-overflow/nowrap) when the pane is
+   genuinely narrow. The layout buttons keep their hit area: they shrink last and never below their icon width. */
+.zentral-notes-sheet .zn-all-toolbar { display: flex; align-items: center; flex-wrap: nowrap; gap: 3px 4px; flex: 0 0 auto; min-width: 0; padding: 3px 6px; border-bottom: 1px solid var(--zn-line); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.zentral-notes-sheet .zn-all-toolbar::-webkit-scrollbar { height: 0; }
+.zentral-notes-sheet .zn-all-toolbar .zn-btn { flex: 0 1 auto; min-width: 22px; }
+.zentral-notes-sheet .zn-all-toolbar .zn-chip { flex: 0 1 auto; }
+.zentral-notes-sheet .zn-all-toolbar .zn-grow { flex: 1 1 auto; min-width: 0; }
 .zentral-notes-sheet .zn-all-toolbar .zn-calendar-tab { display: none; }
 .zentral-notes-sheet .zn-all-layout[data-layout="tabs"] .zn-all-toolbar .zn-calendar-tab { display: inline-flex; }
 .zentral-notes-sheet[data-all-notes-active="true"] .zn-all-toolbar .zn-calendar-tab[hidden] { display: none !important; }
@@ -327,6 +334,15 @@
 .zentral-notes-sheet .zn-all-panels[data-orientation="tb"] .zn-calendar-splitter { cursor: row-resize; }
 .zentral-notes-sheet .zn-calendar-pane { background: color-mix(in srgb, var(--zn-hover) 22%, transparent); }
 .zentral-notes-sheet .zn-calendar-pane-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--zn-line); }
+/* OW-74: the header holds the calendar name, then the basic controls, then the long period name. The controls are the
+   ones that must never be squeezed out: the name is the only item that gives ground and ellipsises, so hiding the
+   control strip cannot cost the person their way between months or back to today. */
+.zentral-notes-sheet .zn-calendar-pane-head > strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zentral-notes-sheet .zn-calendar-head-nav { display: flex; align-items: center; flex: 0 0 auto; min-width: 0; gap: 3px; }
+.zentral-notes-sheet .zn-calendar-head-nav > .zn-chip { flex: 0 0 auto; }
+.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-nav { min-width: 22px; padding: 0 6px; }
+.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-view-toggle { min-width: 0; white-space: nowrap; }
+.zentral-notes-sheet .zn-calendar-pane-head-right { display: flex; align-items: center; flex: 0 0 auto; min-width: 0; gap: 6px; }
 .zentral-notes-sheet .zn-calendar-pane-hint { color: var(--zn-muted); font-size: 0.82em; }
 .zentral-notes-sheet .zn-calendar-pane-content { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 0; padding: 20px; text-align: center; color: var(--zn-muted); }
 .zentral-notes-sheet .zn-calendar-pane-content strong { color: var(--zn-text); }
@@ -533,8 +549,11 @@
   border-bottom-left-radius: 0;
 }
 .zentral-notes-sheet .zn-new-menu:hover { opacity: 1; }
-.zentral-notes-sheet .zn-chips { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 4px; min-width: 0; padding: 0 6px 4px; }
-.zentral-notes-sheet .zn-chips .zn-chip { flex: 0 0 auto; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zentral-notes-sheet .zn-chips { display: flex; align-items: center; flex-wrap: nowrap; gap: 3px 4px; min-width: 0; padding: 0 6px 4px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.zentral-notes-sheet .zn-chips::-webkit-scrollbar { height: 0; }
+/* The chips shrink before anything may move to a second row, but never into an unreadable sliver: the 4.5em floor keeps
+   a tappable label, the label ellipsises, and the row scrolls on the rare pane narrow enough to beat the floor. */
+.zentral-notes-sheet .zn-chips .zn-chip { flex: 0 1 auto; min-width: 4.5em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* UI4.10: a chip is a control, so it follows the text size with its label instead of staying at 12px (at 28px text the
    label was large and the On / Off chips beside it small). The em sizes keep the old look at the default 13px and grow
    with it; the padding and the line height are shares of the same text, so the pill never becomes tighter than its text. */
@@ -1389,14 +1408,17 @@
 .zentral-notes-sheet[data-view="list"] .zn-head { flex-wrap: wrap; row-gap: 2px; min-width: 0; }
 .zentral-notes-sheet[data-view="list"] .zn-head > .zn-btn { flex: 0 0 auto; }
 .zentral-notes-sheet[data-view="list"] .zn-head .zn-title { min-width: 48px; }
-.zentral-notes-sheet .zn-calendar-pane-head { flex-wrap: wrap; row-gap: 2px; min-width: 0; }
+/* OW-33 asked for wrapping so nothing overflowed; OW-74 makes that the wrong answer here, because the header now carries
+   the controls and a wrapped header would move them out from between the name and the period. The name ellipsises
+   instead, which is what the owner asked for (the controls outrank the name). */
+.zentral-notes-sheet .zn-calendar-pane-head { flex-wrap: nowrap; row-gap: 2px; min-width: 0; }
 .zentral-notes-sheet .zn-calendar-pane-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .zentral-notes-sheet[data-all-chrome="compact"] .zn-head,
 .zentral-notes-sheet[data-all-chrome="tight"] .zn-head { padding: 2px 4px; gap: 1px; }
 .zentral-notes-sheet[data-all-chrome="compact"] .zn-head > .zn-btn { width: 24px; height: 24px; }
 .zentral-notes-sheet[data-all-chrome="tight"] .zn-head > .zn-btn { width: 22px; height: 22px; }
 .zentral-notes-sheet[data-all-chrome="compact"] .zn-all-toolbar,
-.zentral-notes-sheet[data-all-chrome="tight"] .zn-all-toolbar { padding: 2px 4px; gap: 2px 3px; }
+.zentral-notes-sheet[data-all-chrome="tight"] .zn-all-toolbar { padding: 2px 4px; gap: 2px 3px; flex-wrap: nowrap; }
 .zentral-notes-sheet[data-all-chrome="compact"] .zn-all-toolbar .zn-btn,
 .zentral-notes-sheet[data-all-chrome="tight"] .zn-all-toolbar .zn-btn { width: 22px; height: 22px; }
 .zentral-notes-sheet[data-all-chrome="compact"] .zn-all-toolbar .zn-chip,
@@ -3161,13 +3183,8 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
   box-shadow: inset 2px 0 0 var(--zn-accent);
 }
 
-/* T2.6: Calendar Big Picture viewport popup. */
-.zentral-notes-sheet .zn-calendar-pane-head-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
+/* T2.6: Calendar Big Picture viewport popup. (The header-right container itself is styled once, at the head rules near
+   the top of the sheet, where OW-74 gives it flex: 0 0 auto so the period name never pushes the controls out.) */
 .zentral-notes-sheet .zn-calendar-bigpicture-btn {
   flex: 0 0 auto;
   width: 24px;
