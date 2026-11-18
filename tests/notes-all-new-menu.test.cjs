@@ -173,7 +173,27 @@ async function makeSheet({ agendaEnabled = false, cursor = "2026-11-24" } = {}) 
       btnMenu.click();
       await h.flush();
       const labelsOff = h.qa(".zn-menu .zn-menu-item").map((b) => b.textContent.trim());
-      assert.deepEqual(labelsOff, ["New note", "New folder", "New reminder", "New event", "Date note"]);
+      // OW-75: the calendar's four creation modes now live under this menu, in one group, as the owner asked
+      // ("create xyz from calendar ... into Notes + drop-down"). The primary list is unchanged.
+      // OW-84: a kind is offered once. "New reminder" and "Create timed reminder…" opened the same composer, so the
+      // group now holds only the all-day variants, which are a different thing rather than a second name for the same.
+      assert.deepEqual(labelsOff, ["New note", "New folder", "New reminder", "New event", "Date note", "All-day"]);
+      const createGroup = h.qa(".zn-menu .zn-menu-group").find((b) => b.textContent.trim() === "All-day");
+      assert.ok(createGroup, "the all-day creation modes are one group in the + menu");
+      createGroup.click();
+      await h.flush();
+      assert.deepEqual(
+        h.qa(".zn-menu .zn-menu-item").map((b) => b.textContent.trim()),
+        ["Back", "Create all-day event…", "Create all-day reminder…"],
+        "the all-day modes are there, and no timed mode appears twice",
+      );
+      h.q(".zn-menu .zn-menu-back").click();
+      await h.flush();
+      // OW-84: no label may appear twice, and the timed modes are the plain rows (they open the same composer).
+      // A group row carries both classes, so collect elements, not two lists.
+      const allLabels = [...new Set([...h.qa(".zn-menu .zn-menu-item"), ...h.qa(".zn-menu .zn-menu-group")])].map((b) => b.textContent.trim());
+      assert.equal(new Set(allLabels).size, allLabels.length, "no row is offered twice in the + menu: " + JSON.stringify(allLabels));
+      assert.ok(!allLabels.some((l) => /^Create timed/.test(l)), "a timed mode is not offered beside the plain row that does the same thing");
 
       // Pick "New reminder": opens composer defaulted to selected calendar day (2026-11-24) and remembers choice.
       h.qa(".zn-menu .zn-menu-item").find((b) => b.textContent.trim() === "New reminder").click();
@@ -249,7 +269,7 @@ async function makeSheet({ agendaEnabled = false, cursor = "2026-11-24" } = {}) 
       btnMenu.click();
       await h.flush();
       const labelsOn = h.qa(".zn-menu .zn-menu-item").map((b) => b.textContent.trim());
-      assert.deepEqual(labelsOn, ["New note", "New folder", "New reminder", "New event"]);
+      assert.deepEqual(labelsOn, ["New note", "New folder", "New reminder", "New event", "All-day"], "Date note is hidden; the all-day group stays");
       // Close menu and trigger one-click '+' -> creates a blank note instead of Date note.
       btnMenu.click();
       await h.flush();

@@ -469,6 +469,13 @@
     "def": 250
   },
   {
+    "key": "zen.workspace.zentral.widgets.weather.refresh_minutes",
+    "text": "zen.workspace.zentral.widgets.weather.refresh_minutes_text",
+    "min": 15,
+    "max": 180,
+    "def": 30
+  },
+  {
     "key": "zen.workspace.zentral.widgets.max_height_share",
     "text": "zen.workspace.zentral.widgets.max_height_share_text",
     "min": 15,
@@ -565,6 +572,27 @@
     "min": 0,
     "max": 3600000,
     "def": 0
+  },
+  {
+    "key": "zen.workspace.zentral.boost.limit_mb",
+    "text": "zen.workspace.zentral.boost.limit_mb_text",
+    "min": 0,
+    "max": 65536,
+    "def": 4096
+  },
+  {
+    "key": "zen.workspace.zentral.boost.limit_cooldown_s",
+    "text": "zen.workspace.zentral.boost.limit_cooldown_s_text",
+    "min": 0,
+    "max": 3600,
+    "def": 60
+  },
+  {
+    "key": "zen.workspace.zentral.boost.limit_target_pct",
+    "text": "zen.workspace.zentral.boost.limit_target_pct_text",
+    "min": 0,
+    "max": 100,
+    "def": 85
   },
   {
     "key": "zen.workspace.zentral.notes.autosave_seconds",
@@ -718,6 +746,27 @@
     "text": "zen.workspace.zentral.notes.look_btn_radius_text",
     "min": -1,
     "max": 50,
+    "def": -1
+  },
+  {
+    "key": "zen.workspace.zentral.notes.look_weekend_strength",
+    "text": "zen.workspace.zentral.notes.look_weekend_strength_text",
+    "min": -1,
+    "max": 60,
+    "def": -1
+  },
+  {
+    "key": "zen.workspace.zentral.notes.look_holiday_strength",
+    "text": "zen.workspace.zentral.notes.look_holiday_strength_text",
+    "min": -1,
+    "max": 60,
+    "def": -1
+  },
+  {
+    "key": "zen.workspace.zentral.notes.look_free_strength",
+    "text": "zen.workspace.zentral.notes.look_free_strength_text",
+    "min": -1,
+    "max": 60,
     "def": -1
   },
   {

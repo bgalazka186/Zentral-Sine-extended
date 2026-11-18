@@ -51,9 +51,17 @@
   };
   const FLAVORS_PART = loadPart("additional/notes/flavors/ZentralNotesFlavors.js", "notes-flavors");
   const SHORTCUTS_PART = loadPart("additional/notes/flavors/ZentralNotesShortcuts.js", "notes-shortcuts");
-  // AU-B4: language tables must load before the calendar core compiles built-in languages.
-  loadOptional("additional/notes/i18n/en.js");
-  loadOptional("additional/notes/i18n/pl.js");
+  // AU-B4 / OW-79: language tables must load before the calendar core compiles built-in languages, and WHICH tables
+  // there are is data, not code. `i18n/registry.js` is generated from the directory (tools/build-languages.cjs), so a
+  // new `i18n/xx.js` is picked up by existing: no line is added here, and no list in the calendar core is edited.
+  loadOptional("additional/notes/i18n/registry.js");
+  const NOTES_LANG_CODES = (() => {
+    const listed = window.__zentralNotesLangRegistry?.languages;
+    // The fallback pair is the floor: a checkout whose registry module failed to load still speaks both languages it
+    // has always shipped, rather than silently losing one.
+    return Array.isArray(listed) && listed.length ? listed.slice() : ["en", "pl"];
+  })();
+  for (const code of NOTES_LANG_CODES) loadOptional("additional/notes/i18n/" + code + ".js");
   // The calendar core (items, parsing, overlap lanes, month grid; roadmap T2.1). Pure logic; a missing file means no calendar.
   const CALENDAR_PART = loadPart("additional/notes/calendar/ZentralNotesCalendar.js", "notes-calendar");
   // Pasted web / AI-chat HTML becomes clean Markdown (roadmap T1.4). Pure logic; a missing file keeps the plain-text paste.
@@ -155,6 +163,13 @@
       LOOK_TEXT: "zen.workspace.zentral.notes.look_text",
       LOOK_ACCENT: "zen.workspace.zentral.notes.look_accent",
       LOOK_LINE: "zen.workspace.zentral.notes.look_line",
+      // OW-55: what a day off looks like (colour + strength each; -1 strength = the shipped tint)
+      LOOK_WEEKEND_TINT: "zen.workspace.zentral.notes.look_weekend_tint",
+      LOOK_WEEKEND_STRENGTH: "zen.workspace.zentral.notes.look_weekend_strength",
+      LOOK_HOLIDAY_TINT: "zen.workspace.zentral.notes.look_holiday_tint",
+      LOOK_HOLIDAY_STRENGTH: "zen.workspace.zentral.notes.look_holiday_strength",
+      LOOK_FREE_TINT: "zen.workspace.zentral.notes.look_free_tint",
+      LOOK_FREE_STRENGTH: "zen.workspace.zentral.notes.look_free_strength",
       // Capture: selection / page -> note
       CAPTURE_TARGET: "zen.workspace.zentral.notes.capture_target",
       CAPTURE_MENU: "zen.workspace.zentral.notes.capture_menu",
@@ -186,6 +201,10 @@
       HIDDEN_MENU: "zen.workspace.zentral.notes.hidden_tools_menu",
       DATE_MODE: "zen.workspace.zentral.notes.date_notes_mode",
       DATE_DISPLAY: "zen.workspace.zentral.notes.date_display_format",
+      // OW-96: weather symbols in the calendar. Week view on (the owner's default), month view off — a month cell has
+      // no room for a symbol that must stay readable, so it is an option and never the default.
+      CAL_WEATHER_WEEK: "zen.workspace.zentral.notes.calendar_weather_week",
+      CAL_WEATHER_MONTH: "zen.workspace.zentral.notes.calendar_weather_month",
       DATE_ARCHIVE: "zen.workspace.zentral.notes.archive_daily_notes",
       NOTES_LANGUAGE: "zen.workspace.zentral.notes.language",
       NOTES_LANGUAGE_ACCEPT_ALL: "zen.workspace.zentral.notes.language_accept_all",
@@ -218,11 +237,18 @@
       AGENDA_OVERDUE_CAP: "zen.workspace.zentral.notes.agenda_overdue_cap",
       AGENDA_HIDE_TRASHED: "zen.workspace.zentral.notes.agenda_hide_trashed",
       AGENDA_MAX_ITEMS: "zen.workspace.zentral.notes.agenda_max_items",
+      AGENDA_CLOSE_ACTION: "zen.workspace.zentral.notes.agenda_close_action",
+      AGENDA_FOLD_QUIET: "zen.workspace.zentral.notes.agenda_fold_quiet",
+      AGENDA_FOLD_QUIET_START: "zen.workspace.zentral.notes.agenda_fold_quiet_start",
+      AGENDA_FOLD_QUIET_END: "zen.workspace.zentral.notes.agenda_fold_quiet_end",
+      AGENDA_FOLD_DUE_HOURS: "zen.workspace.zentral.notes.agenda_fold_due_hours",
       SPACE_MODE: "zen.workspace.zentral.notes.space_mode",
       MISSED_DAYS: "zen.workspace.zentral.notes.missed_reminder_days",
       REMINDER_HISTORY_DAYS: "zen.workspace.zentral.notes.reminder_history_days",
       CAPTURE_FORMAT: "zen.workspace.zentral.notes.quick_capture_format",
       DEBUG_PERF: "zen.workspace.zentral.notes.debug_perf",
+      // OW-88: keep sidebar placeholders unloaded so each one stops holding a whole content process (~50 MB each).
+      PARK_PSEUDO: "zen.workspace.zentral.notes.park_pseudo_tabs",
     });
     // AU-B4b: active interface language and translation helpers backed by CALENDAR_PART or directly by window.__zentralNotesLangTables.
     function notesLang() {
@@ -286,7 +312,7 @@
     }
     const LOOK_PREFS = Object.freeze(Object.keys(PREF).filter((k) => k.startsWith("LOOK_")).map((k) => PREF[k]));
     // Integer look prefs: -1 (or anything out of range) keeps the theme's own value.
-    const LOOK_NUM_PREFS = new Set([PREF.LOOK_RADIUS, PREF.LOOK_BORDER, PREF.LOOK_PADDING, PREF.LOOK_OPACITY, PREF.LOOK_SHADOW_BLUR, PREF.LOOK_SHADOW_Y, PREF.LOOK_SHADOW_ALPHA, PREF.LOOK_BTN_SIZE, PREF.LOOK_BTN_RADIUS]);
+    const LOOK_NUM_PREFS = new Set([PREF.LOOK_RADIUS, PREF.LOOK_BORDER, PREF.LOOK_PADDING, PREF.LOOK_OPACITY, PREF.LOOK_SHADOW_BLUR, PREF.LOOK_SHADOW_Y, PREF.LOOK_SHADOW_ALPHA, PREF.LOOK_BTN_SIZE, PREF.LOOK_BTN_RADIUS, PREF.LOOK_WEEKEND_STRENGTH, PREF.LOOK_HOLIDAY_STRENGTH, PREF.LOOK_FREE_STRENGTH]);
     const VIEW_PREFS = new Set([PREF.WRAP, PREF.FONT_SIZE, PREF.LINE_HEIGHT, PREF.READ_COPY, PREF.THEME, ...LOOK_PREFS]);
     const WINDOW_PREFS = new Set([PREF.HOVER_REVEAL, PREF.PUSH_PAGE, PREF.CARD_AUTOHIDE, PREF.CARD_ENTRY_REVEAL, PREF.CARD_SIDEBAR_GUARD, PREF.CARD_PILL_BORDER, PREF.PUSH_PANEL_PERCENT, PREF.WIDE_PERCENT, PREF.REVEAL_HEIGHT, PREF.REVEAL_DELAY, PREF.AVOID_SIDEBAR]);
     const READ_PREFS = new Set([PREF.TOC_PILL, PREF.BLANK_LINES, PREF.LINE_BREAKS, PREF.SETEXT, PREF.HUB_DESC, PREF.BACKLINKS_PANEL]);
@@ -333,6 +359,8 @@
       "flavor",
       "trashed",
       "folder",
+      // T3.3: the place a note was dragged to inside its folder (absent = last-change order).
+      "order",
       "calendar_only",
       "remind",
       "reminded",
@@ -565,6 +593,8 @@
         color: cleanNoteColor(meta.color),
         label: cleanLabel(meta.label),
         folder: cleanFolder(meta.folder),
+        // T3.3: where the user dragged the note inside its folder (absent = the usual last-change order).
+        order: cleanNoteOrder(meta.order),
         pinned: meta.pinned === "true",
         calendarOnly: meta.calendar_only === "true",
         flavor: meta.flavor && FLAVORS_PART && FLAVORS_PART.MODES.includes(meta.flavor) ? meta.flavor : "",
@@ -587,6 +617,7 @@
       if (n.color && n.color !== "none") lines.push("color: " + (cleanHex(n.color) ? '"' + cleanHex(n.color) + '"' : n.color));
       if (cleanLabel(n.label)) lines.push("label: " + cleanLabel(n.label));
       if (cleanFolder(n.folder)) lines.push("folder: " + cleanFolder(n.folder));
+      if (cleanNoteOrder(n.order)) lines.push("order: " + cleanNoteOrder(n.order));
       if (n.pinned) lines.push("pinned: true");
       if (n.calendarOnly) lines.push("calendar_only: true");
       if (n.flavor && FLAVORS_PART && FLAVORS_PART.MODES.includes(n.flavor)) lines.push("flavor: " + n.flavor);
@@ -1196,8 +1227,38 @@
       segs.pop();
       return segs.join("/");
     }
-    function sortNotes(a, b) {
+    // T3.3: a note's own place in its folder. 0 = not placed by hand (it follows the last-change order), a
+    // positive number = the place the user dragged it to. Fractional values let a drop land between two notes
+    // without renumbering the rest of the folder.
+    const NOTE_ORDER_MAX = 1e9;
+    function cleanNoteOrder(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n) || n <= 0 || n > NOTE_ORDER_MAX) return 0;
+      return Math.round(n * 1e6) / 1e6;
+    }
+    // The place between `before` (the row above the drop) and `after` (the row below it), in the order the two
+    // already have. A placed note keeps its number; an unplaced one takes the start or the end of the placed run.
+    function noteOrderBetween(before, after) {
+      const lo = cleanNoteOrder(before);
+      const hi = cleanNoteOrder(after);
+      if (lo && hi) return lo < hi ? (lo + hi) / 2 : 0; // an impossible pair (never produced here) is not guessed
+      if (lo) return lo + 1;
+      if (hi) return hi > 1 ? hi / 2 : 0.5;
+      return 1;
+    }
+    // Hand-placed notes come first in their own order; the rest keep the existing last-change order.
+    function compareNotes(a, b) {
+      const oa = cleanNoteOrder(a && a.order), ob = cleanNoteOrder(b && b.order);
+      if (oa || ob) {
+        // A note the user placed comes before the notes that still follow the last-change order.
+        if (oa && !ob) return -1;
+        if (!oa && ob) return 1;
+        if (oa !== ob) return oa - ob;
+      }
       return Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || (b.updated || 0) - (a.updated || 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    }
+    function sortNotes(a, b) {
+      return compareNotes(a, b);
     }
     function buildTree(notes, folders) {
       const root = { id: "", label: "", collapsed: false, children: [], notes: [] };
@@ -1322,8 +1383,75 @@
       for (const n of notes || []) if (n && !n.trashed) add(n.folder);
       return [...ids];
     }
-    function moveNote(note, folderId) {
-      return { ...note, folder: cleanFolder(folderId) };
+    // ---- T3.8: two notes side by side (equal halves, one reference and one being written) -------------------------
+    // The pane is vertical when the sheet is wider than it is tall, horizontal otherwise; both halves share the
+    // space equally, and the share of the reference may be moved from 25% to 75% (a fixed 50% is the default).
+    const SPLIT_COMPANION_SHARES = Object.freeze([25, 33, 50, 67, 75]);
+    const DEFAULT_SPLIT_COMPANION = Object.freeze({ id: "", share: 50, side: "auto" });
+    function cleanSplitCompanion(raw) {
+      const src = raw && typeof raw === "object" ? raw : {};
+      const wanted = typeof src.id === "string" ? src.id.trim() : "";
+      const id = wanted && wanted.length <= 64 && !/[\s\u0000-\u001f]/.test(wanted) ? wanted : "";
+      const share = SPLIT_COMPANION_SHARES.includes(Math.round(Number(src.share))) ? Math.round(Number(src.share)) : 50;
+      const side = ["auto", "side", "stack"].includes(src.side) ? src.side : "auto";
+      return { id, share, side };
+    }
+    // The divider snaps to the allowed shares, never thinner than a quarter and never past three quarters.
+    function nearestSplitShare(percent) {
+      const pct = Number(percent);
+      if (!Number.isFinite(pct)) return 50;
+      let best = 50;
+      for (const share of SPLIT_COMPANION_SHARES) if (Math.abs(share - pct) < Math.abs(best - pct)) best = share;
+      return best;
+    }
+    // Which way the two panes sit: never guessed from a stored value that no longer fits the sheet.
+    function splitCompanionAxis(companion, width, height) {
+      const mode = cleanSplitCompanion(companion).side;
+      if (mode === "side") return "side";
+      if (mode === "stack") return "stack";
+      return Number(width) >= Number(height) ? "side" : "stack";
+    }
+    // True when the companion is usable: another note, in the store, not in the Trash, and not the note being edited.
+    function splitCompanionReady(companion, notes, activeId) {
+      const id = cleanSplitCompanion(companion).id;
+      if (!id || id === activeId) return false;
+      const note = (notes || []).find((n) => n && n.id === id);
+      return Boolean(note && !note.trashed);
+    }
+    function moveNote(note, folderId, order) {
+      const next = { ...note, folder: cleanFolder(folderId) };
+      if (order !== undefined) {
+        const placed = cleanNoteOrder(order);
+        if (placed) next.order = placed;
+        else delete next.order;
+      }
+      return next;
+    }
+    // T3.3: the tree a drag-and-drop needs. `rows` is what the tree draws right now (type/note/node/depth); a drop
+    // names the row it landed on and whether that row's folder is open. Returns null for a drop that must do nothing.
+    function noteDropTarget(rows, sourceId, targetKey, position = "before", folded = false) {
+      const list = Array.isArray(rows) ? rows : [];
+      const src = list.find((row) => row?.type === "note" && row.note?.id === sourceId);
+      if (!src) return null;
+      if (targetKey === "root") return src.note.folder ? { kind: "folder", folder: "", order: undefined } : null;
+      const target = list.find((row) => row?.key === targetKey || (row?.type === "note" && row.note?.id === targetKey));
+      if (!target) return null;
+      if (target.type === "folder") return src.note.folder === target.node?.id ? null : { kind: "into", folder: target.node?.id || "", order: 1 };
+      if (target.type !== "note") return null;
+      const targetNote = target.note;
+      if (!targetNote || targetNote.id === sourceId) return null;
+      const folder = cleanFolder(targetNote.folder);
+      const siblings = list.filter((row) => row?.type === "note" && cleanFolder(row.note?.folder) === folder);
+      const at = siblings.findIndex((row) => row.note.id === targetNote.id);
+      const before = position === "after" ? targetNote : siblings[at - 1]?.note;
+      const after = position === "after" ? siblings[at + 1]?.note : targetNote;
+      return {
+        kind: "order",
+        folder,
+        order: noteOrderBetween(before?.order, after?.order),
+        // A folded folder hides its notes: a drop between two of its closed rows is still a place in that folder.
+        folded: Boolean(folded),
+      };
     }
     // New folder under `parentId`. Returns {folders, id} or null (invalid parent, too deep, or MAX_FOLDERS).
     function addFolderMeta(folders, notes, parentId, label, rand = Math.random) {
@@ -1460,6 +1588,48 @@
     // Folders and the alert / Agenda rules are the same in every window: a window takes them over (`taken`). All other
     // settings (layout, view, the note opened last) are each window's own, and the file gets a value from the window
     // that changed it last; a window that did not change a value never writes its older copy over the file's.
+    // ST7.3: the calendar view is not notes metadata. It goes to its own small file, next to meta.json and note files.
+    // Note: the file name is spelled out at every use site instead of through a constant. `build-standalone` reads
+    // every string that looks like a pref ("ui." is a real pref prefix), and a constant holding "ui.json" makes the
+    // ownership check believe the package reads a pref called `ui.json`. A file name is not a setting.
+    const UI_FILE_VERSION = 1;
+    // The calendar part is a separate module; when it is not loaded (a bare test of the store, or a build without the
+    // calendar) the view keys still have to be known, or `setMeta` would put them back into meta.json. This list is a
+    // mirror of `CALENDAR_PART.UI_STATE_KEYS` and a test keeps the two equal.
+    const UI_KEYS_FALLBACK = Object.freeze(["calendarView", "calendarCursor", "calendarTab", "calendarLayout",
+      "calendarSplitLR", "calendarSplitTB", "calendarTreeWidth", "calendarTreeCollapsed", "calendarPaneCollapsed",
+      "calendarFiltersCollapsed", "calendarBigPictureFiltersCollapsed", "calendarBigPictureTreeCollapsed", "calendarBigPictureSize",
+      "calendarScale", "calendarPicker", "calendarWeekStart", "calendarWeekNumbers", "calendarWeekSpan",
+      "calendarSnap", "calendarDaysForward", "calendarFilterKind", "calendarFilterCategory",
+      "calendarBigPictureFilterKind", "calendarBigPictureFilterCategory", "calendarHours",
+      "calendarDisplayZone", "calendarRecentZones", "sheetView", "sheetFilter"]);
+    const uiKeys = () => (CALENDAR_PART && Array.isArray(CALENDAR_PART.UI_STATE_KEYS) ? CALENDAR_PART.UI_STATE_KEYS : UI_KEYS_FALLBACK);
+    // -> the part of `source` that is view state. Kept here (not in the calendar part) so the store can split a patch
+    // even when the calendar is not loaded; a test keeps `UI_KEYS_FALLBACK` equal to the calendar's own list.
+    function splitUiKeys(source) {
+      const ui = {}, rest = {};
+      for (const key of Object.keys(source || {})) (isUiKey(key) ? ui : rest)[key] = source[key];
+      return { ui, rest };
+    }
+    const isUiKey = (key) => uiKeys().includes(key);
+    // -> what to write to ui.json. `ui` is always a bare object of the moved keys, so a damaged file can never make the
+    // writer put anything else in it.
+    function uiFileText(ui, base) {
+      const state = ui && typeof ui === "object" ? ui : {};
+      const out = { v: UI_FILE_VERSION, ui: {} };
+      for (const key of Object.keys(state)) if (isUiKey(key)) out.ui[key] = state[key];
+      if (base && typeof base === "object") out.base = {};
+      return JSON.stringify(out);
+    }
+    // A view file that is not ours (another version, hand-edited) still gives its own keys, and nothing else.
+    function uiStateFromFile(raw) {
+      if (!raw || typeof raw !== "object") return null;
+      const source = raw.ui && typeof raw.ui === "object" ? raw.ui : raw;
+      const out = {};
+      let any = false;
+      for (const key of Object.keys(source)) if (isUiKey(key)) { out[key] = source[key]; any = true; }
+      return any ? out : null;
+    }
     const META_SHARED_KEYS = Object.freeze(["folders", "calendarAlertSettings", "calendarNoteAlertOverrides", "calendarAgendaDefaults", "calendarNoteAgendaOverrides"]);
     const META_PER_NOTE_KEYS = Object.freeze(["calendarNoteAlertOverrides", "calendarNoteAgendaOverrides"]);
     function mergeMetaMap(base, mine, theirs) {
@@ -4343,6 +4513,36 @@
       const span = b[from] - a[from];
       return span > 0 ? a[to] + ((value - a[from]) / span) * (b[to] - a[to]) : a[to];
     }
+    // ---- OW-47: linked scrolling that cannot drift -----------------------------------------------------------
+    // Two panes never scroll the same distance (the preview is rendered markdown, the editor is source text), so a
+    // plain copy of `scrollTop` drifts after a few moves. The plan below maps the position as a fraction of the
+    // scrollable range and carries the sub-pixel remainder of every move, so a hundred small moves land exactly where
+    // one big move would; `samePane` marks a scroll that is our own echo and must not be answered.
+    const SYNC_SCROLL_EPS = 1; // a difference this small is not worth a write
+    function syncScrollPlan(opts = {}) {
+      const fromTop = Number(opts.fromTop) || 0;
+      const fromMax = Math.max(0, Number(opts.fromMax) || 0);
+      const toMax = Math.max(0, Number(opts.toMax) || 0);
+      const carried = Number(opts.carried) || 0;
+      const current = Number(opts.toTop) || 0;
+      if (opts.echo) return { top: null, carried, reason: "echo" };
+      if (!(fromMax > 0) || !(toMax > 0)) return { top: null, carried, reason: "no-range" };
+      const share = Math.min(1, Math.max(0, fromTop / fromMax));
+      const wanted = share * toMax + carried;
+      const top = Math.min(toMax, Math.max(0, wanted));
+      const rest = wanted - top; // kept for the next move: nothing is lost to rounding
+      return { top: Math.abs(top - current) < SYNC_SCROLL_EPS ? null : top, carried: rest, reason: "fraction" };
+    }
+    // A reveal (find, caret, a link) sets the shared place: both panes agree on where they are again.
+    function syncScrollAnchorPlan(opts = {}) {
+      const lines = Math.max(1, Number(opts.lines) || 1);
+      const line = Math.min(lines, Math.max(0, Number(opts.line) || 0));
+      const toMax = Math.max(0, Number(opts.toMax) || 0);
+      if (!(toMax > 0)) return { top: null, line, share: 0 };
+      const share = line / lines;
+      return { top: share * toMax, line, share };
+    }
+
     // Anchors for the rendered pane: one per top-level block (or list item) with its source line and
     // the offset of its first node; `ends` closes the list at the total line count / scroll height.
     function mergeAnchors(list, endLine, endY) {
@@ -4378,7 +4578,15 @@
     // ======================================================================
     // Pure core: export (HTML and plain text are built from the parsed blocks, never from raw input)
     // ======================================================================
+    // OW-53: a Google export is a text file of a few hundred kilobytes; a ceiling keeps a wrong pick (a video, an
+    // archive) from being read into memory. 8 MB is a calendar of tens of thousands of events.
+    const MAX_ICS_BYTES = 8 * 1024 * 1024;
     const EXPORT_FORMATS = Object.freeze({
+      ics: {
+        label: "Calendar file (.ics)",
+        ext: "ics",
+        loses: "",
+      },
       md: {
         label: "Markdown",
         ext: "md",
@@ -5026,15 +5234,30 @@
     ]);
     // Callouts (> [!NOTE]): kind -> label. The selected lines (or the current line) become the body;
     // on a block that already starts with a callout line only the kind changes.
+    // T3.5: every kind the parser reads is offered here. `bingo` and `poll` were in the flavors table (F26/F27) and
+    // could be typed by hand, but the toolbar never listed them, so the menu and the parser disagreed.
     const CALLOUT_KINDS = Object.freeze([
       ["note", "Note"], ["tip", "Tip"], ["important", "Important"], ["warning", "Warning"], ["caution", "Caution"], ["info", "Info"],
       ["abstract", "Abstract"], ["todo", "Todo"], ["success", "Success"], ["question", "Question"], ["failure", "Failure"],
       ["danger", "Danger"], ["bug", "Bug"], ["example", "Example"], ["quote", "Quote"],
+      ["bingo", "Bingo"], ["poll", "Poll"],
     ]);
+    // The kinds whose header can carry a fold marker (`[!FAQ]-`). Obsidian folds any callout; this keeps the list to
+    // the ones the old spec named, so a person is not offered a fold on a kind that does not read one.
+    // `faq` is a foldable spelling of `question` in the flavors table, so the picker offers "Question" with a fold
+    // rather than a second kind that would parse back as something else.
+    const CALLOUT_FOLDABLE = Object.freeze(["note", "tip", "important", "warning", "caution", "info", "question"]);
+    // T3.5: the kind a primary click uses. In memory per window (a habit, not a setting); restored from the note text
+    // when a callout is already under the caret. `faq` is the foldable question kind the old spec asked for.
+    const calloutMemory = { kind: "note", fold: "" };
+    const calloutLabel = (kind) => (CALLOUT_KINDS.find(([k]) => k === kind) || [kind, kind])[1];
     const calloutId = (kind) => "callout" + kind[0].toUpperCase() + kind.slice(1);
     function insertCallout(value, s, e, kind, fold = "") {
       kind = CALLOUT_KINDS.some((k) => k[0] === kind) ? kind : "note";
       fold = fold === "-" || fold === "+" ? fold : ""; // F22: "-" starts closed, "+" starts open
+      // T3.5: what a person picked last is what a plain click picks next time. Memory only — nothing is stored.
+      calloutMemory.kind = kind;
+      calloutMemory.fold = fold;
       const head = "> [!" + kind.toUpperCase() + "]" + fold;
       const ls = value.lastIndexOf("\n", s - 1) + 1;
       let le = value.indexOf("\n", e > s ? e - 1 : e);
@@ -5232,7 +5455,7 @@
       { id: "setext", label: "Text over === or --- is a heading", pref: PREF.SETEXT, kind: "bool", def: false },
       { id: "theme", label: "Theme", pref: PREF.THEME, kind: "choice", def: "zentral", choices: NOTE_THEMES.map(([k, t]) => [k, t]) },
     ]);
-    const QUICK_IDS = Object.freeze(["font", "lineHeight", "wrap", "blank", "breaks", "sync", "copy", "mdFlavor", "theme"]);
+    const QUICK_IDS = Object.freeze(["font", "lineHeight", "wrap", "blank", "breaks", "sync", "copy", "mdFlavor", "theme", "noteDropKind"]);
     // QUICK_OPTIONS is built after SETTINGS_TABS (below): the Markdown mode lives in a settings tab, not in WRITING_OPTIONS.
     const stepOption = (opt, current, dir) => clampInt((Number(current) || opt.def) + dir * opt.step, opt.min, opt.max);
 
@@ -5275,12 +5498,20 @@
     // A plain number slider: always has a value (no "Theme" reset), def is its default.
     const S = (id, label, pref, min, max, unit, def) => ({ id, label, pref, kind: "slider", min, max, unit, seed: def, def, plain: true });
     const C = (id, label, pref, seed) => ({ id, label, pref, kind: "color", seed, theme: true });
+    // OW-79: what the language menu offers, read from what actually registered. English first, then by code; a file
+    // that is not finished yet says so in its own row instead of pretending, and a new `i18n/xx.js` needs no edit here.
+    function notesLanguageChoices() {
+      let list = [];
+      try { list = CALENDAR_PART?.notesLanguages?.() || []; } catch (_) { list = []; }
+      if (!list.length) return [["en", "English"], ["pl", "Polski (Polish)"]]; // registry unavailable: the shipped pair
+      return list.map((entry) => [entry.code, entry.complete ? entry.name : entry.name + " \u2014 " + entry.missing + " missing"]);
+    }
     const SETTINGS_TABS = Object.freeze([
       { id: "writing", label: "Writing", items: WRITING_OPTIONS },
       {
         id: "markdown", label: "Markdown", items: [
           { kind: "heading", i18nKey: "settings.heading.markdownSyntax", label: "Which syntax is read (a note can choose its own in its More menu)" },
-          { id: "mdFlavor", label: "Markdown mode (a note can set its own in its menu)", pref: PREF.MD_FLAVOR, kind: "choice", def: "mixed", choices: FLAVORS_PART ? FLAVORS_PART.MODES.map((m) => [m, FLAVORS_PART.MODE_LABELS[m]]) : [["mixed", "Mixed"]] },
+          { id: "mdFlavor", label: "Markdown mode for every note (a single note sets its own in its More menu)", pref: PREF.MD_FLAVOR, kind: "choice", def: "mixed", choices: FLAVORS_PART ? FLAVORS_PART.MODES.map((m) => [m, FLAVORS_PART.MODE_LABELS[m]]) : [["mixed", "Mixed"]] },
           { id: "singleTilde", label: "One tilde, ~a~, in the mixed modes", pref: PREF.TILDE, kind: "choice", def: "sub", choices: [["sub", "Subscript (H~2~O)"], ["strike", "Strikethrough (as on GitHub)"]] },
           { id: "ignoreSyntax", label: "Show as plain text (spaces between): >[!info] <mark> == or a rule id such as A10", pref: PREF.IGNORE_SYNTAX, kind: "text", def: "" },
           { id: "textShortcuts", label: "Typing shortcuts: {{date}}  @today  /tomorrow  @+3d  @monday", pref: PREF.TEXT_SHORTCUTS, kind: "choice", def: "all", choices: [["all", "All: {{ }}, @ and /"], ["braces", "Only {{date}} style"], ["off", "Off"]] },
@@ -5302,6 +5533,13 @@
           { id: "hover", label: "Hide on an outside click instead of closing; bring back from the top edge", pref: PREF.HOVER_REVEAL, kind: "bool", def: false },
           { kind: "heading", i18nKey: "settings.heading.splitView", label: "Split view" },
           S("widePct", "Width of the sheet in split view (100% = normal)", PREF.WIDE_PERCENT, 130, 300, "%", 200),
+        ],
+      },
+      {
+        id: "calendar", label: "Calendar", items: [
+          // OW-81: the owner's "add settings in quick setting so default it creates events/reminders". "Ask" keeps the
+          // composer's own default, so nothing changes for anyone who does not touch this.
+          { id: "noteDropKind", label: "A note dragged onto the calendar becomes", meta: "calendarNoteDropKind", kind: "choice", def: "ask", choices: [["ask", "Ask each time"], ["event", "An event"], ["reminder", "A reminder"]] },
         ],
       },
       {
@@ -5332,6 +5570,13 @@
           C("btnIcon", "Icon color", PREF.LOOK_BTN_ICON, "text"),
           C("btnFill", "Fill color", PREF.LOOK_BTN_FILL, "accent"),
           C("btnBorder", "Border color", PREF.LOOK_BTN_BORDER, "text"),
+          { kind: "heading", i18nKey: "settings.heading.dayLook", label: "Days off" },
+          C("weekendTint", "Weekend tint", PREF.LOOK_WEEKEND_TINT, "accent"),
+          L("weekendStrength", "Weekend visibility", PREF.LOOK_WEEKEND_STRENGTH, 0, 60, "%", 10),
+          C("holidayTint", "Holiday tint", PREF.LOOK_HOLIDAY_TINT, "accent"),
+          L("holidayStrength", "Holiday visibility", PREF.LOOK_HOLIDAY_STRENGTH, 0, 60, "%", 13),
+          C("freeTint", "Other free days tint", PREF.LOOK_FREE_TINT, "accent"),
+          L("freeStrength", "Other free days visibility", PREF.LOOK_FREE_STRENGTH, 0, 60, "%", 4),
         ],
       },
       {
@@ -5352,7 +5597,7 @@
       },
       {
         id: "links", label: "Links & history", items: [
-          { id: "notesLanguage", label: "Notes language (interface and date parsing)", pref: PREF.NOTES_LANGUAGE, kind: "choice", def: "en", choices: [["en", "English"], ["pl", "Polski (Polish)"]] },
+          { id: "notesLanguage", label: "Notes language (interface and date parsing)", pref: PREF.NOTES_LANGUAGE, kind: "choice", def: "en", choices: notesLanguageChoices() },
           { id: "notesLanguageAcceptAll", label: "Accept dates written in any built-in language", pref: PREF.NOTES_LANGUAGE_ACCEPT_ALL, kind: "bool", def: true },
           { id: "newChooser", label: "The + button asks: blank note, today, tomorrow or a date", pref: PREF.NEW_CHOOSER, kind: "bool", def: false },
           { id: "pinStrip", label: "Pinned notes strip and Recent menu under the title", pref: PREF.PIN_STRIP, kind: "bool", def: false },
@@ -5405,6 +5650,17 @@
           S("agendaOverdueCap", "Overdue items shown before More", PREF.AGENDA_OVERDUE_CAP, 1, 100, "items", 10),
           { id: "agendaHideTrashed", label: "Hide Agenda items whose source note is in Trash", pref: PREF.AGENDA_HIDE_TRASHED, kind: "bool", def: true },
           S("agendaMaxItems", "Max items in sidebar", PREF.AGENDA_MAX_ITEMS, 1, 200, "items", 40),
+          { id: "agendaCloseAction", label: "Closing an Agenda tab", pref: PREF.AGENDA_CLOSE_ACTION, kind: "choice", def: "hide-today",
+            choices: [["hide-today", "Hide that item for today"], ["dismiss", "Dismiss the reminder (or hide it for today)"], ["reappear", "Let it come back right away"]] },
+          // SB6.9: the Agenda folder folds itself away when there is nothing to look at. Both reasons are optional and
+          // independent; a folder with something due inside the window stays open, because a fold that hides work is a bug.
+          { id: "agendaFoldQuiet", label: "Fold the Agenda folder during quiet hours", pref: PREF.AGENDA_FOLD_QUIET, kind: "bool", def: false },
+          { id: "agendaFoldQuietStart", label: "Quiet hours start", pref: PREF.AGENDA_FOLD_QUIET_START, kind: "text", def: "22:00" },
+          { id: "agendaFoldQuietEnd", label: "Quiet hours end", pref: PREF.AGENDA_FOLD_QUIET_END, kind: "text", def: "07:00" },
+          S("agendaFoldDueHours", "Fold when nothing is due within (hours; 0 = only when nothing is left)", PREF.AGENDA_FOLD_DUE_HOURS, 0, 168, "hours", 0),
+          { kind: "heading", i18nKey: "settings.heading.memory", label: "Memory" },
+          // OW-88: the one switch the plan asks for. Off = the old behaviour exactly (placeholders stay loaded).
+          { id: "parkPseudo", label: "Keep sidebar note/agenda placeholders unloaded (saves memory)", pref: PREF.PARK_PSEUDO, kind: "bool", def: true },
           { kind: "heading", i18nKey: "settings.heading.diagnostics", label: "Diagnostics" },
           { id: "perf", label: "Sample layout / drag timings (read __zentralNotesPerf.report())", pref: PREF.DEBUG_PERF, kind: "bool", def: false },
         ],
@@ -5430,6 +5686,7 @@
     const LOOK_VARS = Object.freeze([
       "radius", "border", "shadow", "opacity", "padding", "font", "editor-font", "heading", "btn-size",
       "btn-radius", "btn-icon", "btn-fill", "btn-border", "bg", "text", "accent", "line",
+      "weekend-tint", "holiday-tint", "free-tint",
     ].map((n) => "--zentral-notes-ov-" + n));
     // get(prefName) -> stored text. Returns { vars: {name: value}, flags: [..] }; invalid values are ignored.
     function lookOverrides(get) {
@@ -5473,6 +5730,21 @@
       if ((c = hex(PREF.LOOK_TEXT))) put("text", "text", c);
       if ((c = hex(PREF.LOOK_ACCENT))) put("accent", "accent", c);
       if ((c = hex(PREF.LOOK_LINE))) put("line", "line", c);
+      // OW-55: only a tint that differs from the shipped one sets a variable; otherwise the stylesheet's own
+      // fallback applies and the rule stays exactly as it was. Without the calendar part there are no day cells at
+      // all, so there is nothing to tint (every other calendar call is guarded the same way).
+      for (const [kind, tintPref, strengthPref] of (CALENDAR_PART?.DEFAULT_DAY_LOOK ? [
+        ["weekend", PREF.LOOK_WEEKEND_TINT, PREF.LOOK_WEEKEND_STRENGTH],
+        ["holiday", PREF.LOOK_HOLIDAY_TINT, PREF.LOOK_HOLIDAY_STRENGTH],
+        ["free", PREF.LOOK_FREE_TINT, PREF.LOOK_FREE_STRENGTH],
+      ] : [])) {
+        const def = CALENDAR_PART.DEFAULT_DAY_LOOK[kind];
+        const tone = hex(tintPref) || def.color;
+        const raw = String(get(strengthPref) ?? "").trim();
+        const strength = /^\d{1,3}$/.test(raw) ? Number(raw) : def.strength;
+        if (tone === def.color && strength === def.strength) continue;
+        put(kind + "-tint", kind + "-tint", CALENDAR_PART.dayLookTint({ [kind]: { color: tone, strength } }, kind));
+      }
       return { vars, flags };
     }
 
@@ -5632,11 +5904,114 @@
       const i = matches.findIndex((m) => m.end > caret);
       return matches.length ? (i < 0 ? 0 : i) : -1;
     }
+    // OW-22: finding the next match that is NOT already on screen. The whole point is that a person can read every
+    // match in view at once instead of pressing Enter through the ones they can see, so "visible" is asked of the
+    // matches themselves, not guessed from the scroll position.
+    //   - a band is `{ top, height }` in the pane's own scroll coordinates;
+    //   - a match is visible only when its WHOLE line is inside the band. A match half under the edge of the pane is
+    //     one the person cannot read, so it does not count as seen — and the same choice makes the plain jump land on
+    //     it afterwards rather than skipping it forever.
+    const VISIBLE_EDGE = 1; // a line exactly on the edge counts as inside; rounding must not hide a readable match
+    // True when the line of `match` is entirely inside the band. Vertical only: a match scrolled off sideways is still
+    // readable, and horizontal scrolling is not what this feature is about.
+    function matchIsVisible(match, line, band) {
+      if (!match || !line) return false;
+      const top = Number(band?.top) || 0;
+      const height = Number(band?.height) || 0;
+      if (!(height > 0)) return false; // nothing is on screen, so nothing has been seen
+      const y0 = Number(line.y) || 0;
+      const y1 = y0 + (Number(line.h) || 0);
+      return y0 >= top - VISIBLE_EDGE && y1 <= top + height + VISIBLE_EDGE;
+    }
+    // Which indices are visible, in one pass (the caller has already measured the lines).
+    function visibleMatchIndices(matches, band, lineOf) {
+      const out = [];
+      if (!Array.isArray(matches)) return out;
+      matches.forEach((m, i) => { if (matchIsVisible(m, lineOf(m), band)) out.push(i); });
+      return out;
+    }
+    // The next match OUTSIDE the band, searching from `from` in `dir`, wrapped once around the whole list.
+    //   -> { index, wrapped, any }: `index` is -1 when there is nothing outside the band at all;
+    //      `wrapped` says the search passed the end of the list (or the start, for dir < 0) before finding it;
+    //      `any` says there ARE matches, so the caller can tell "all of them are on screen" from "no matches".
+    // A match that is already the current one is skipped: pressing again must move, never sit still.
+    function stepOutsideViewport(matches, from, dir, isVisible) {
+      const total = Array.isArray(matches) ? matches.length : 0;
+      const any = total > 0;
+      if (!any) return { index: -1, wrapped: false, any: false };
+      const step = dir < 0 ? -1 : 1;
+      const start = Number.isInteger(from) && from >= 0 && from < total ? from : step > 0 ? -1 : 0;
+      for (let k = 1; k <= total; k++) {
+        const i = ((start + step * k) % total + total) % total;
+        if (i === from) continue; // never "find" the match we are already on
+        if (!isVisible(i)) {
+          const raw = start + step * k;
+          return { index: i, wrapped: raw < 0 || raw >= total, any: true };
+        }
+      }
+      return { index: -1, wrapped: false, any: true };
+    }
+
     const lineOfOffset = (text, offset) => {
       let n = 0;
       for (let i = text.indexOf("\n"); i !== -1 && i < offset; i = text.indexOf("\n", i + 1)) n++;
       return n;
     };
+    // OW-21: replacing is a PLAN, never a side effect of typing. One function decides what would change, so the sheet
+    // can show "3 of 12" before anything moves, and so the same rules are tested once.
+    //   - matching is the find's matching (`findMatches`): folded case and accents, literal text, never overlapping;
+    //   - a range is `{ start, end }` in the note's text, the same coordinates the matches use;
+    //   - anything outside `range` is untouched, which is what makes "this note only" true by construction;
+    //   - a replacement is literal text: `$1` in it is a dollar sign and a one, because nothing here is a regex.
+    const REPLACE_MAX = 500;
+    const cleanReplaceText = (raw) => String(raw ?? "").replace(/[\r\n]+/g, " ").slice(0, FIND_MAX_QUERY);
+    // -> { matches, next, total }: the matches inside the range (a whole-note or a selection replace) and which one
+    // "replace this one" would take — the first that starts at or after the selection start.
+    function replacePlan(text, query, { from = 0, to = null, limit = REPLACE_MAX } = {}) {
+      const body = String(text ?? "");
+      const start = Math.max(0, Math.min(body.length, Math.round(Number(from) || 0)));
+      const end = to === null || to === undefined ? body.length : Math.max(start, Math.min(body.length, Math.round(Number(to) || 0)));
+      const capped = findMatches(body.slice(start, end), query, limit);
+      const all = capped.map((m) => ({ start: m.start + start, end: m.end + start }));
+      // `more` is asked for one past the cap so a plan that stopped early can say so instead of claiming the lot.
+      const more = capped.length >= limit && findMatches(body.slice(start, end), query, limit + 1).length > capped.length;
+      return { matches: all, total: all.length, more, next: all.length ? all[all.length - 1].end : null };
+    }
+    // Replace ONE match (the one `match` names) and say what happened. A stale range — the text changed since the plan
+    // was made — is refused rather than written: replacing the wrong words is worse than asking again.
+    function replaceOne(text, match, replacement, query) {
+      const body = String(text ?? "");
+      const m = match && typeof match === "object" ? match : null;
+      if (!m || !(m.end > m.start) || m.start < 0 || m.end > body.length) return { ok: false, reason: "stale", text: body, replaced: 0 };
+      const was = body.slice(m.start, m.end);
+      const expected = findMatches(was, query, 1)[0];
+      if (!expected || expected.start !== 0 || expected.end !== was.length || was.length !== m.end - m.start) {
+        return { ok: false, reason: "stale", text: body, replaced: 0 };
+      }
+      const piece = cleanReplaceText(replacement);
+      return { ok: true, reason: "", text: body.slice(0, m.start) + piece + body.slice(m.end), replaced: 1, at: m.start, inserted: piece.length };
+    }
+    // Replace EVERY match inside the range, in one pass. Building the result from the pieces means overlapping or
+    // colliding edits cannot happen by construction, and the replacement text is never re-scanned (so replacing "a"
+    // with "aa" does not loop forever — the classic way this feature goes wrong).
+    function replaceAll(text, query, replacement, { from = 0, to = null, limit = REPLACE_MAX } = {}) {
+      const plan = replacePlan(text, query, { from, to, limit });
+      const body = String(text ?? "");
+      if (!plan.matches.length) return { ok: false, reason: "none", text: body, replaced: 0, truncated: false };
+      const piece = cleanReplaceText(replacement);
+      let out = "", at = 0;
+      for (const m of plan.matches) { out += body.slice(at, m.start) + piece; at = m.end; }
+      out += body.slice(at);
+      // `truncated` says the plan stopped at the cap: the caller must not report "everything was replaced".
+      const stopped = plan.more;
+      return { ok: true, reason: "", text: out, replaced: plan.matches.length, truncated: stopped };
+    }
+    // "3 of 12" and the words for a button that cannot be pressed. Pure, so the sheet and the tests agree.
+    function replaceSummary(plan, { lang = "en" } = {}) {
+      const total = Math.max(0, Number(plan?.total) || 0);
+      if (!total) return lang === "pl" ? "Brak trafień" : "No matches";
+      return lang === "pl" ? total + (total === 1 ? " trafienie" : " trafień") : total + (total === 1 ? " match" : " matches");
+    }
     // New scrollTop that reveals an item, or null when it is already comfortably inside the view.
     function revealScroll({ y = 0, h = 0, top = 0, height = 0, margin = 24 } = {}) {
       if (!(height > 0)) return null;
@@ -6570,7 +6945,7 @@
       }
       const catName = String(item?.x?.category || "").trim();
       const catColor = catName
-        ? String(item?.x?.categoryColor || store?.items?.category?.(catName)?.color || item?.x?.color || "").trim()
+        ? String(item?.x?.categoryColor || store?.items?.category?.(catName)?.color || "").trim()
         : "";
       const category = catName ? { name: catName, color: catColor } : null;
       const noteId = String(item?.x?.noteId || identity?.noteId || tab?.getAttribute?.("bgalazka-notes-agenda-note-id") || "").trim();
@@ -6621,15 +6996,21 @@
     // One native timer drives all calendar deadlines and a low-cost clock
     // check. Deadlines are absolute wall-clock instants; monotonic elapsed
     // time distinguishes ordinary timer delay from manual clock jumps.
+    // `paused` (OW-94): while Game Mode is on, the minute wake is not re-armed — the whole point of pausing is that a
+    // gaming session stops paying for a timer that can only ring at the end. Resuming re-arms immediately and the next
+    // `check()` catches up on everything that came due in between, because deadlines are absolute instants, not ticks.
     function createTimeTickService({ now = () => Date.now(), monotonic = () => window.performance?.now?.() ?? Date.now(),
       zone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (_) { return ""; } },
-      setTimer = (fn, ms) => window.setTimeout(fn, ms), clearTimer = (id) => window.clearTimeout(id), warn = () => {} } = {}) {
+      setTimer = (fn, ms) => window.setTimeout(fn, ms), clearTimer = (id) => window.clearTimeout(id), warn = () => {},
+      paused = () => false } = {}) {
       const queue = new Map(), listeners = new Set(), pollMs = 60000, driftLimit = 120000;
       let native = null, nextId = 0, dead = false, running = false;
       let lastWall = now(), lastMono = monotonic(), lastZone = zone(), lastDay = remindDateText(lastWall), nextPoll = lastWall + pollMs;
       function arm() {
         if (dead || running) return;
         if (native !== null) clearTimer(native);
+        // Paused: clear whatever was armed and leave nothing behind. `check("wake")` on resume arms again.
+        if (paused()) { native = null; return; }
         let due = nextPoll;
         for (const entry of queue.values()) due = Math.min(due, entry.at);
         native = setTimer(() => { native = null; check("timer"); }, Math.max(0, Math.min(MAX_TIMER_MS, due - now())));
@@ -6666,6 +7047,10 @@
         on(fn) { if (dead) return () => {}; listeners.add(fn); return () => listeners.delete(fn); },
         check,
         wake() { check("wake"); },
+        // OW-94: the pause switch changed. Pausing clears the armed timer on the spot; resuming checks immediately,
+        // which both fires anything overdue and re-arms for the next deadline.
+        onPausedChange(isPaused) { if (isPaused) arm(); else check("wake"); },
+        isArmed: () => native !== null,
         destroy() { if (dead) return; dead = true; if (native !== null) clearTimer(native); native = null; queue.clear(); listeners.clear(); },
       };
       arm();
@@ -7384,14 +7769,18 @@
       const dirty = new Set();
       const listeners = new Set();
       const backedUp = new Set();
+      // True when a stored holiday choice predates OW-43 and it was an explicit "none": keep it, never re-enable.
+      const legacyHolidayOptOut = (raw) => Boolean(raw && typeof raw === "object" && raw.region === "none" && raw.regionExplicit === true && !Array.isArray(raw.locales));
       const calendarHolidayLocale = (() => {
         try { const locale = Services.locale?.appLocaleAsBCP47; if (locale) return String(locale); } catch (_) {}
         try { const locale = window.navigator?.language; if (locale) return String(locale); } catch (_) {}
         return "";
       })();
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, dockPx: 0, gapPx: 0, cardDock: "", cardW: 0, cardH: 0, cardHShare: 0,
+        // T3.8: the note shown beside the edited one ("" = no second pane).
+        splitCompanion: { id: "", share: 50, side: "auto" },
         allNewChoice: "note", calendarClockMode: "both", spellLanguages: [],
-        calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarFiltersCollapsed: false, calendarBigPictureFiltersCollapsed: false, calendarTab: "tree",
+        calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarTreeWidth: 0, calendarFiltersCollapsed: false, calendarBigPictureFiltersCollapsed: false, calendarBigPictureTreeCollapsed: false, calendarTab: "tree",
         calendarBigPictureSize: CALENDAR_PART ? CALENDAR_PART.DEFAULT_CALENDAR_BIG_PICTURE_SIZE : 90,
         calendarView: "month", calendarWeekStart: 1, calendarWeekNumbers: false, calendarWeekSpan: { days: 7, anchor: "weekStart" }, calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarBigPictureFilterKind: "all", calendarBigPictureFilterCategory: "", calendarCursor: "", calendarDisplayZone: "", calendarRecentZones: [],
         // The hours Week and Day show ({ on, startMin, endMin }; off = the whole day). Replaced as a whole, never changed in place.
@@ -7399,9 +7788,11 @@
         // The size of each calendar view ("auto" = fitted to the pane, or px; OW-03). Replaced as a whole, never changed in place.
         calendarScale: CALENDAR_PART ? CALENDAR_PART.cleanCalendarScale(null) : { month: "auto", week: "auto", day: "auto", upcoming: "auto", agenda: "auto" },
         calendarPicker: CALENDAR_PART ? CALENDAR_PART.cleanCalendarPicker(null) : { mode: "auto", minWidth: 470, minHeight: 360, colorMode: "count" },
-        calendarHolidays: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHolidays(null, calendarHolidayLocale) : { enabled: true, region: "none", weekend: "auto", personalDays: [] },
+        calendarHolidays: CALENDAR_PART ? CALENDAR_PART.cleanCalendarHolidays(null, calendarHolidayLocale) : { enabled: true, region: "none", locales: [], weekend: "auto", personalDays: [] },
         calendarAlertSettings: CALENDAR_PART ? CALENDAR_PART.cleanAlertSettings(null) : {}, calendarNoteAlertOverrides: {},
-        calendarAgendaDefaults: {}, calendarNoteAgendaOverrides: {} };
+        calendarAgendaDefaults: {}, calendarNoteAgendaOverrides: {},
+        // OW-81: what a note dragged onto the calendar becomes. "ask" = the composer's own default, as before.
+        calendarNoteDropKind: "ask" };
       let meta = { ...DEFAULT_META };
       let baseDir = null;
       let dir = null;
@@ -7426,6 +7817,18 @@
       let metaBase = null; // this window's settings at its last look at the file; a value that differs is its own change (mergeMeta)
       let metaRetry = 0; // saves of the settings that failed in a row
       let keptDamagedMeta = ""; // the damaged text already copied to meta.json.corrupt
+      // ST7.3: the calendar view (cursor, mode, size, filters, the split) lives in ui.json, not meta.json. meta.json
+      // also holds every folder and every per-note override and is written whole; a press of "Next" used to rewrite
+      // all of it. `uiDirty` is separate on purpose: the two files are saved by the same timer but only the one that
+      // changed is written, so moving around the calendar never touches meta.json.
+      let uiState = {}; // only the view keys (`uiKeys()`); the rest of meta is untouched by it
+      let uiBase = null; // this window's view at its last look at ui.json
+      let uiDirty = false;
+      let uiReady = false; // true once ui.json has been read (or is known to be absent)
+      let uiMigrated = false; // the one-time read of an old meta.json that still held the view
+      let uiTimer = null;
+      let uiRetry = 0;
+      let keptDamagedUi = "";
       let missedMeta = false; // another window saved the settings while this one was reading the folder
       let missedUnloadRecovery = false; // another window closed with staged unload writes while this one was opening
       let closed = false;
@@ -8003,6 +8406,7 @@
       async function readNote(file) {
         const name = io.filename(file);
         const id = name.slice(0, -3);
+        if (/^meta\.json|^calendar\.json/.test(name) && !/\.md$/.test(name)) return null;
         let text = null;
         for (const candidate of [file, file + ".bak"]) {
           try {
@@ -8093,9 +8497,104 @@
         if (read.state === "unreadable")
           throw new Error("The Notes settings file (meta.json) is there but could not be read: " + String(read.error?.message || read.error));
         if (read.state === "ok") meta = read.value;
+        // Only a meta.json that IS there can be carrying the view. With no file (a new folder) the view keys are
+        // defaults, and "migrating" them would write two files on first start for nothing.
+        await loadUiState({ fromFile: read.state === "ok" });
+        // `metaBase` is taken AFTER the view has moved out: it is what this window last saw in meta.json, and meta.json
+        // no longer has the view. Taken before, the split would look like this window's own change and be written back.
         metaBase = cloneJson(meta);
         metaRetry = 0;
         metaReady = true;
+      }
+      // The calendar view file (ST7.3). A missing file is normal: the view then comes out of meta.json once
+      // (`uiMigrated`), after which that copy is never read again.
+      async function loadUiState({ fromFile = false } = {}) {
+        uiReady = false;
+        keptDamagedUi = "";
+        uiState = {};
+        uiDirty = false;
+        uiMigrated = false;
+        const read = await readUiFile();
+        if (read.state === "unreadable") {
+          // Do not overwrite a view file that could not be read: the person may have been looking at something.
+          uiReady = false;
+          warn(new Error("The calendar view file (ui.json) could not be read, so it was not written over: " + String(read.error?.message || read.error)));
+          return;
+        }
+        // The file is `{ v, ui: {…} }`; `uiStateFromFile` is what knows that, and also accepts a bare object (a file
+        // written by hand, or by an older build that stored the view without the wrapper).
+        const stored = read.state === "ok" ? uiStateFromFile(read.value) : null;
+        const split = fromFile ? splitMetaForUi(meta) : { ui: {}, rest: meta };
+        const migrated = CALENDAR_PART && CALENDAR_PART.migrateUiState ? CALENDAR_PART.migrateUiState(stored, split.ui) : { ui: { ...split.ui, ...(stored || {}) }, migrated: false, seen: !!(stored) };
+        uiState = migrated.ui;
+        if (migrated.migrated) {
+          // First run after the split: the view that is in meta.json wins once, and meta.json is rewritten without it.
+          uiMigrated = true;
+          uiDirty = true;
+        }
+        // The view NEVER stays in `meta`, whether it was migrated or the view file already existed. Leaving it there is
+        // how a second window would later save its own default view back into meta.json (the ST7.3 regression): `meta`
+        // is what gets written, so anything still in it is a claim about meta.json.
+        // Nothing to do when the metadata never held the view: no write, and `meta` matches the file as it is.
+        if (!Object.keys(split.ui).length) {
+          uiBase = read.state === "ok" ? cloneJson(uiState) : null;
+          uiRetry = 0;
+          uiReady = true;
+          return;
+        }
+        {
+          // A view file that exists is the authority: whatever meta.json still says is a leftover from before the split
+          // (another window has already moved it), so it is dropped — it must not win over what is really being looked
+          // at. With no view file at all this is the one migration, and then meta.json's copy is the only copy.
+          if (read.state === "ok") uiState = { ...migrated.ui };
+          deleteMany(split.ui);
+          // meta.json still carries the view, so what this window holds no longer matches it: one write takes it out,
+          // and `writeMetaNow` refuses to write before the file has been read (a real change, never a race).
+          metaDirty = true;
+        }
+        // `uiBase` is what the FILE holds, not what this window holds. After a migration the file holds nothing yet, so
+        // a base of the migrated state would look like "already saved" and ui.json would never be written (the view
+        // would then only survive in memory until the next start).
+        uiBase = read.state === "ok" ? cloneJson(uiState) : null;
+        uiRetry = 0;
+        uiReady = true;
+        if (uiDirty && uiTimer === null) uiTimer = setTimer(writeUiNow, 600);
+      }
+      // The view keys as they sit in `meta` right now (whatever metaFromRaw made of them).
+      function splitMetaForUi(source) {
+        const ui = {}, rest = {};
+        for (const key of Object.keys(source)) (isUiKey(key) ? ui : rest)[key] = source[key];
+        return { ui, rest };
+      }
+      function deleteMany(keys) {
+        for (const key of Object.keys(keys)) delete meta[key];
+      }
+      async function readUiFile() {
+        const file = io.join(dir, "ui.json");
+        let absent = 0, failure = null;
+        for (let attempt = 0; attempt < META_READ_TRIES; attempt++) {
+          // The read and the parse are separate on purpose: doing both in one `try` makes a missing file and a damaged
+          // file look the same, and then a whole view file is thrown away as if it had never been there.
+          let text = null;
+          try {
+            text = await io.readUTF8(file);
+          } catch (error) {
+            failure = error;
+            let exists = false;
+            if (typeof io.exists === "function") {
+              try { exists = !!(await io.exists(file)); } catch (_) { exists = true; }
+            }
+            // Asked twice: a file being replaced can be absent for an instant.
+            if (!exists && ++absent >= 2) return { state: "missing" };
+            continue;
+          }
+          try {
+            return { state: "ok", value: JSON.parse(text) };
+          } catch (error) {
+            return { state: "unreadable", error }; // there IS a file, and it is damaged: never write over it
+          }
+        }
+        return absent ? { state: "missing" } : { state: "unreadable", error: failure };
       }
       // A complete settings object: the defaults, with every valid value of `raw` (what a file holds).
       function metaFromRaw(raw) {
@@ -8107,6 +8606,7 @@
           if (raw.mode === "read" || raw.mode === "edit" || raw.mode === "split") meta.mode = raw.mode;
           if (cleanHighlightColor(raw.highlight)) meta.highlight = cleanHighlightColor(raw.highlight);
           if (typeof raw.syncScroll === "boolean") meta.syncScroll = raw.syncScroll;
+          if (raw.splitCompanion !== undefined) meta.splitCompanion = cleanSplitCompanion(raw.splitCompanion);
           if (typeof raw.pinned === "boolean") meta.pinned = raw.pinned;
           if (DOCK_MODES.includes(raw.dock)) meta.dock = raw.dock;
           if (raw.hideTrigger === "click" || raw.hideTrigger === "leave") meta.hideTrigger = raw.hideTrigger;
@@ -8136,6 +8636,7 @@
             meta.allNewChoice = CALENDAR_PART.cleanAllNotesNewChoice(raw.allNewChoice);
             meta.calendarClockMode = CALENDAR_PART.cleanClockMode(raw.calendarClockMode);
             meta.calendarLayout = CALENDAR_PART.cleanCalendarLayout(raw.calendarLayout);
+            if (typeof raw.calendarNoteDropKind === "string") meta.calendarNoteDropKind = CALENDAR_PART.cleanNoteDropKind(raw.calendarNoteDropKind);
             meta.calendarSplitLR = CALENDAR_PART.cleanCalendarShare(raw.calendarSplitLR, DEFAULT_META.calendarSplitLR);
             meta.calendarSplitTB = CALENDAR_PART.cleanCalendarShare(raw.calendarSplitTB, DEFAULT_META.calendarSplitTB);
             meta.calendarTreeCollapsed = raw.calendarTreeCollapsed === true;
@@ -8143,6 +8644,7 @@
             if (meta.calendarTreeCollapsed && meta.calendarPaneCollapsed) meta.calendarTreeCollapsed = meta.calendarPaneCollapsed = false;
             meta.calendarFiltersCollapsed = raw.calendarFiltersCollapsed === true;
             meta.calendarBigPictureFiltersCollapsed = raw.calendarBigPictureFiltersCollapsed === true;
+            meta.calendarBigPictureTreeCollapsed = raw.calendarBigPictureTreeCollapsed === true;
             meta.calendarTab = raw.calendarTab === "calendar" ? "calendar" : "tree";
             meta.calendarBigPictureSize = CALENDAR_PART.cleanCalendarBigPictureSize(raw.calendarBigPictureSize);
             meta.calendarView = ["month", "upcoming", "agenda", "week", "day"].includes(raw.calendarView) ? raw.calendarView : "month";
@@ -8153,6 +8655,7 @@
             meta.calendarScale = CALENDAR_PART.cleanCalendarScale(raw.calendarScale, raw.calendarDensity);
             meta.calendarPicker = CALENDAR_PART.cleanCalendarPicker(raw.calendarPicker);
             meta.calendarHolidays = CALENDAR_PART.cleanCalendarHolidays(raw.calendarHolidays, calendarHolidayLocale);
+            if (legacyHolidayOptOut(raw.calendarHolidays)) meta.calendarHolidays = CALENDAR_PART.cleanCalendarHolidays({ ...meta.calendarHolidays, locales: [] }, calendarHolidayLocale);
             meta.calendarSnap = CALENDAR_PART.cleanCalendarSnap(raw.calendarSnap);
             meta.calendarHours = CALENDAR_PART.cleanCalendarHours(raw.calendarHours);
             const daysForward = Number(raw.calendarDaysForward);
@@ -8198,9 +8701,27 @@
           const read = await readMeta("this window's settings are written");
           if (read.state === "unreadable")
             throw new Error("The Notes settings file (meta.json) could not be read, so it was not written over; the change is saved later: " + String(read.error?.message || read.error));
+          // ST7.3: `meta` never holds the view once it has been migrated to ui.json. Dropping the keys here is how
+          // meta.json stops carrying them: the values are already in the view file, so nothing is lost, and the file
+          // gets smaller by the view it no longer repeats on every folder change.
           const mine = cloneJson(meta);
           const { file, taken } = mergeMeta(metaBase, mine, read.state === "ok" ? read.value : null);
           takeMeta(taken);
+          // "there and back again" in one breath is not a change: comparing with what was just read keeps a window from
+          // writing a file it agrees with (this is what ST7.3 first broke, because the migration had already rewritten
+          // the file once and `metaBase` still described the old one).
+          if (read.state === "ok" && sameJson(file, read.value)) {
+            metaBase = { ...mine, ...cloneJson(taken) };
+            metaRetry = 0;
+            return;
+          }
+          // Another window has already taken the view out of meta.json (its migration landed before this window's
+          // first save). This window's `metaBase` still describes the file WITH the view, so every later change would
+          // look like "the view appeared" and be written back. Once the file is read, the truth is the file.
+          if (read.state === "ok" && metaBase && uiKeys().some((key) => Object.hasOwn(metaBase, key) && !Object.hasOwn(read.value, key))) {
+            for (const key of uiKeys()) if (Object.hasOwn(read.value, key)) metaBase[key] = cloneJson(read.value[key]);
+            for (const key of uiKeys()) if (!Object.hasOwn(read.value, key)) delete metaBase[key];
+          }
           if (read.state !== "ok" || !sameJson(file, read.value)) {
             await io.writeUTF8(io.join(dir, "meta.json"), JSON.stringify(file), { tmpPath: io.join(dir, "meta.json.tmp") });
             // The other windows look at the file only when something they share changed (not for every note opened here).
@@ -8236,8 +8757,13 @@
         });
       }
       function setMeta(patch) {
+        // ST7.3: a change to the calendar view is a change to the view file, never to meta.json. The split happens
+        // here, at the one door every caller uses, so no call site has to know which file its value lands in.
+        const uiPatch = {}, rest = {};
+        for (const [k, v] of Object.entries(patch)) (isUiKey(k) ? uiPatch : rest)[k] = v;
+        if (Object.keys(uiPatch).length) setUiState(uiPatch);
         let changed = false;
-        for (const [k, v] of Object.entries(patch))
+        for (const [k, v] of Object.entries(rest))
           if (v && typeof v === "object" ? JSON.stringify(meta[k]) !== JSON.stringify(v) : meta[k] !== v) {
             meta[k] = v;
             changed = true;
@@ -8246,6 +8772,41 @@
         metaDirty = true;
         if (metaTimer !== null) clearTimer(metaTimer);
         metaTimer = setTimer(writeMetaNow, 600);
+      }
+      // The view file's own change door. Same 600 ms coalescing as meta.json, but its own timer and its own dirty flag,
+      // so a press of "Next" that changes nothing else writes ui.json once and never touches meta.json.
+      function setUiState(patch) {
+        let changed = false;
+        for (const [k, v] of Object.entries(patch))
+          if (v && typeof v === "object" ? JSON.stringify(uiState[k]) !== JSON.stringify(v) : uiState[k] !== v) {
+            uiState[k] = v;
+            changed = true;
+          }
+        if (!changed) return;
+        uiDirty = true;
+        if (uiTimer !== null) clearTimer(uiTimer);
+        uiTimer = setTimer(writeUiNow, 600);
+      }
+      async function saveUiState() {
+        try {
+          const text = uiFileText(uiState, uiBase);
+          if (uiBase && sameJson(JSON.parse(text).ui, uiBase)) { uiRetry = 0; return; }
+          await io.writeUTF8(io.join(dir, "ui.json"), text, { tmpPath: io.join(dir, "ui.json.tmp") });
+          uiBase = cloneJson(uiState);
+          uiRetry = 0;
+        } catch (error) {
+          uiDirty = true;
+          if (!uiRetry) warn(error);
+          if (!closed && uiTimer === null) uiTimer = setTimer(writeUiNow, META_RETRY_MS[Math.min(uiRetry, META_RETRY_MS.length - 1)]);
+          uiRetry++;
+        }
+      }
+      function writeUiNow() {
+        if (uiTimer !== null) clearTimer(uiTimer);
+        uiTimer = null;
+        if (!uiDirty || !dir || !uiReady) return Promise.resolve();
+        uiDirty = false;
+        return queue(() => saveUiState());
       }
 
       async function writeNoteFile(note, text) {
@@ -8486,10 +9047,11 @@
       }
       // ---- unload recovery (H1.6): synchronous write staging on window close + safe reconciliation on next open / live sibling ----
       const unloadRoot = () => io.join(dir, BACKUP_DIR, UNLOAD_RECOVERY_DIR);
-      const UNLOAD_KIND_ORDER = { note: 0, calendar: 1, history: 2, meta: 3 };
+      const UNLOAD_KIND_ORDER = { note: 0, calendar: 1, history: 2, meta: 3, ui: 4 };
       function flushOnUnload() {
         autosaver.cancel();
         if (metaTimer !== null) { clearTimer(metaTimer); metaTimer = null; }
+        if (uiTimer !== null) { clearTimer(uiTimer); uiTimer = null; }
         if (retryTimer !== null) { clearTimer(retryTimer); retryTimer = null; }
         items?.cancelTimers?.();
         if (!dir) return false;
@@ -8510,6 +9072,7 @@
         const dirtyCalendar = items?.unloadSnapshot ? items.unloadSnapshot() : null;
         const dirtyHistory = items?.history?.unloadSnapshot ? items.history.unloadSnapshot() : null;
         const dirtyMeta = metaDirty && metaReady ? { base: cloneJson(metaBase), mine: cloneJson(meta) } : null;
+        const dirtyUi = uiDirty && uiReady ? { mine: cloneJson(uiState) } : null;
         const dirsToStage = new Set([dir, ...notesByDir.keys()]);
         let stagedAny = false;
         for (const targetDir of dirsToStage) {
@@ -8521,6 +9084,7 @@
             calendar: isLocal ? dirtyCalendar : ownerEntry?.store?.unloadSnapshot?.() || null,
             history: isLocal ? dirtyHistory : ownerEntry?.store?.history?.unloadSnapshot?.() || null,
             meta: isLocal ? dirtyMeta : null,
+            ui: isLocal ? dirtyUi : null,
             nowMs: now(),
             windowId,
             join: (...parts) => io.join(...parts),
@@ -8545,6 +9109,7 @@
         if (!stagedAny) return false;
         dirty.clear();
         metaDirty = false;
+        uiDirty = false;
         closed = true;
         return true;
       }
@@ -8669,6 +9234,23 @@
                   }
                   await cleanPair(parsed, name);
                 });
+              } catch (error) {
+                warn(error);
+              }
+            } else if (parsed.kind === "ui") {
+              // ST7.3: the view file staged by a window that closed before it could save. It is the whole view, so it
+              // is written as it is — nothing to merge, and a file that cannot be read is left alone (not overwritten).
+              try {
+                const mine = uiStateFromFile({ ui: entry.ui });
+                if (!mine) { await cleanPair(parsed, name); continue; }
+                const read = await readUiFile();
+                if (read.state === "unreadable") continue; // keep the staging file rather than write over a view
+                if (read.state !== "ok" || !sameJson(uiStateFromFile(read.value), mine)) {
+                  await io.writeUTF8(io.join(dir, "ui.json"), uiFileText(mine), { tmpPath: io.join(dir, "ui.json.tmp") });
+                  changedMeta = true;
+                  applied++;
+                }
+                await cleanPair(parsed, name);
               } catch (error) {
                 warn(error);
               }
@@ -8856,8 +9438,11 @@
 
       const api = {
         state,
+        // ST7.3: `meta` reads as one object, but the calendar view lives in its own file. The overlay is what keeps every
+        // `store.meta.calendarView` / `.calendarCursor` read in this file working without naming a second object; writes
+        // go through setMeta, which splits them back out. A fresh object each read — callers never hold this.
         get meta() {
-          return meta;
+          return Object.keys(uiState).length ? { ...meta, ...uiState } : meta;
         },
         get dir() {
           return dir;
@@ -9323,8 +9908,12 @@
               return null;
             }
           };
+          let hasUi = false;
           const metaBytes = await readJsonEntry("meta.json");
           if (metaBytes) { entries.push({ path: "meta.json", bytes: metaBytes, mtime: stamp }); hasMeta = true; }
+          // ST7.3: the calendar view lives in its own file, so the backup carries it too (a restore keeps the view).
+          const uiBytes = await readJsonEntry("ui.json");
+          if (uiBytes) { entries.push({ path: "ui.json", bytes: uiBytes, mtime: stamp }); hasUi = true; }
           const calFile = CALENDAR_PART?.ITEMS_FILE || "calendar.json";
           const calBytes = await readJsonEntry(calFile);
           if (calBytes) { entries.push({ path: calFile, bytes: calBytes, mtime: stamp }); hasCalendar = true; }
@@ -9404,6 +9993,9 @@
             if (liveNote.trashed) localItems?.hideNote?.(liveNote.id);
             else syncItems(liveNote.id, false, false);
           }
+          // ST7.3: the view from the backup, if it has one. Merge keeps what is here now (restoring notes is not a
+          // reason to jump the calendar elsewhere); overwrite takes the backup's view.
+          if (parsed.ui && plan.mode === "overwrite") setUiState(parsed.ui);
           if (plan.foldersChanged) {
             const withUids = ensureFolderUids(plan.mergedFolders, [...notes.values()]);
             setMeta({ folders: withUids.folders });
@@ -9907,7 +10499,11 @@
         // Only an owned deterministic mirror may remove text. Note update also
         // reconciles the item store, so a later note refresh cannot resurrect it.
         deleteCalendarItem(id) {
-          const item = items?.get?.(id);
+          // OW-62: `items.get` hides an item whose linked note is gone, and an imported `.ics` item often has a note id
+          // with no note behind it — so this used to refuse exactly the items the person was trying to delete. Read the
+          // raw list for the item itself, and decide by what it OWNS (a mirrored Agenda line owns words in a note), not
+          // by whether its note happens to be visible at this moment.
+          const item = (items?.list?.({ includeHidden: true }) || []).find((it) => it && it.id === id) || items?.get?.(id) || null;
           if (!item || items.storageState?.().writeBlocked) return false;
           const pruneItemShare = () => {
             if (activeSpaceMode === "space" && spaceShares.items[id] && !spaceShares.items[id].deleted && spaceShares.items[id].ownerSpaceId === activeSpaceId) {
@@ -9918,20 +10514,79 @@
               }).catch(warn);
             }
           };
-          if (item.x?.src === "manual") {
+          // OW-58: an item that owns no note text (hand-made, or imported from an .ics file) is simply removed from the
+          // store. Only a mirrored Agenda line owns text in a note, and only that case edits the note.
+          if (CALENDAR_PART.itemIsFreeStanding?.(item)) {
             const removed = items.remove(item.id);
             if (removed) pruneItemShare();
             return removed;
           }
           if (!CALENDAR_PART.isMirroredAgendaItem(item)) return false;
           const note = notes.get(item.x.noteId);
-          if (!note || note.trashed) return false;
+          // OW-62: the note this item says it lives in is not here (deleted, still loading, or never written by the
+          // import). The item is the thing the person asked to remove, so make the note it needs — a blank one at the
+          // id it already names — and then take the line out of it, which is the same path a present note takes.
+          if (!note || note.trashed) {
+            const restored = note && note.trashed ? null : api.createBlankNoteFor(item.x.noteId);
+            if (!restored) return false;
+            const result = CALENDAR_PART.removeMirroredAgendaLine(restored.body, item);
+            // A fresh note is blank, so there is no line to take out: the item and its note go together.
+            if (!result.changed) {
+              const removed = items.remove(item.id);
+              if (removed) pruneItemShare();
+              api.discardIfEmpty(restored.id);
+              return removed;
+            }
+            api.update(restored.id, result.body, "agenda-delete");
+            const gone = !items.get(item.id);
+            if (gone) pruneItemShare();
+            return gone;
+          }
           const result = CALENDAR_PART.removeMirroredAgendaLine(note.body, item);
           if (!result.changed) return false;
           api.update(note.id, result.body, "agenda-delete");
           const gone = !items.get(item.id);
           if (gone) pruneItemShare();
           return gone;
+        },
+        // OW-59: unlink an item from its note without deleting the words. The note text is the only truth, so this
+        // edits text (one store write) and lets the reconciler drop the item; nothing new is stored anywhere.
+        //   mirror line (src "list" with the generated key) -> the whole line goes, because the line IS the item
+        //   dated list line                                    -> the leading date/time goes, the words stay
+        //   `%%calendar%%` / inline schedule (src "note")      -> the line's own date/time goes only when it has one
+        // Returns { ok, noteId, kind } and never half-edits: an unreadable line is refused with a reason.
+        unlinkCalendarItem(id) {
+          // `items.get` hides an item whose note is not visible, which is exactly the item this has to answer about:
+          // "its note is gone" is a refusal with a reason, not "no such item". Read the raw list instead.
+          const item = (items?.list?.({ includeHidden: true }) || []).find((it) => it.id === id) || null;
+          if (!item || items.storageState?.().writeBlocked) return { ok: false, reason: "missing" };
+          const plan = CALENDAR_PART.unlinkPlan(item);
+          if (!plan.ok) return { ok: false, reason: plan.reason };
+          const note = notes.get(item.x?.noteId);
+          if (!note || note.trashed) return { ok: false, reason: "missing-note" };
+          let body = "", writeKind = "";
+          if (CALENDAR_PART.isMirroredAgendaItem(item)) {
+            const result = CALENDAR_PART.removeMirroredAgendaLine(note.body, item);
+            if (!result.changed) return { ok: false, reason: "unreadable" };
+            body = result.body;
+            writeKind = "agenda-unlink";
+          } else {
+            // One line, found by its own identity in the note, and edited only when this reader understands it.
+            const target = String(item.x?.key || "");
+            const lines = String(note.body || "").split("\n");
+            let at = -1;
+            if (target) {
+              at = lines.findIndex((line) => CALENDAR_PART.itemIdTokens(line).includes(target));
+            }
+            if (at < 0) return { ok: false, reason: "unreadable" };
+            const next = CALENDAR_PART.unlinkLineText(lines[at], now());
+            if (next === null || next === lines[at]) return { ok: false, reason: "unreadable" };
+            lines[at] = next;
+            body = lines.join("\n");
+            writeKind = "calendar-unlink";
+          }
+          api.update(note.id, body, writeKind);
+          return { ok: true, noteId: note.id, kind: item.x?.kind || "event" };
         },
         // After a reschedule of a note-derived item, rewrite ITS line's date/time so the text and the calendar agree
         // (otherwise a later note edit would silently pull the old time back). Only the leading date/time of the one
@@ -10283,6 +10938,31 @@
             };
           }
 
+          // ST7.8: one item's own colour. It is one store write, so this runs headless with an Undo, and the note's
+          // and the category's colours stay what shows when this item has none.
+          if (cmd.startsWith("color-") || cmd === "color-none") {
+            if (!currentItem) return { ok: false, command: cmd, reason: "That calendar item is no longer available" };
+            const next = cmd === "color-none" ? "" : C.cleanItemColor(cmd.slice("color-".length));
+            if (cmd !== "color-none" && !next) return { ok: false, command: cmd, reason: "That colour is not recognised" };
+            const before = C.cleanItemColor(currentItem.x?.color);
+            if (before === next) return { ok: false, command: cmd, reason: next ? "That is already its colour" : "It already uses the note or category colour" };
+            const saved = items.upsert({ ...currentItem, x: { ...currentItem.x, color: next } });
+            if (!saved) return { ok: false, command: cmd, reason: "The colour could not be saved" };
+            const afterRev = saved.rev, afterEtag = saved.etag;
+            const message = next ? t("toast.itemColorSet", { colour: next }, lang) : t("toast.itemColorCleared", null, lang);
+            return {
+              ok: true, command: cmd, message, undoLabel: t("common.undo", null, lang),
+              undo() {
+                const latest = items?.get?.(saved.id);
+                if (!latest || latest.rev !== afterRev || latest.etag !== afterEtag) {
+                  return { ok: false, message: "Cannot undo: the item changed" };
+                }
+                const restored = items.upsert({ ...latest, x: { ...latest.x, color: before } });
+                return { ok: !!restored, message: t(restored ? "toast.undone" : "toast.undoFailed", null, lang) };
+              },
+            };
+          }
+
           return { ok: false, command: cmd, reason: "Action unavailable" };
         },
         // Records that the reminder was announced. Re-reads the file first, so a second window that already
@@ -10461,6 +11141,19 @@
         tree() {
           const viewNotes = [...notes.values()].map((n) => (n._sharedFromOtherSpace ? { ...n, folder: "" } : n));
           return buildTree(viewNotes, meta.folders);
+        },
+        // T3.3: the place a note was dragged to inside its folder; 0 hands it back to the last-change order.
+        setNoteOrder(id, order) {
+          const note = notes.get(id);
+          if (!note) return false;
+          const next = cleanNoteOrder(order);
+          if (cleanNoteOrder(note.order) === next) return false;
+          if (next) note.order = next;
+          else delete note.order;
+          if (note.body.trim() || note._onDisk) markDirty(id);
+          emit("change", id, { meta: true });
+          emit("tree", id);
+          return true;
         },
         setFolder(id, folderId) {
           const note = notes.get(id);
@@ -10661,6 +11354,35 @@
           return n;
         },
         // An untouched new note leaves no file behind.
+        // OW-62: an item names the note it lives in, and that note is not there (an import wrote the item before the
+        // note, or the note was deleted out from under it). Make a blank note AT THAT ID, so the item's own link stays
+        // true and the caller can do what it was asked to do instead of refusing. Returns the note, or null if the id
+        // is not usable.
+        createBlankNoteFor(id) {
+          const wanted = String(id || "");
+          if (!wanted || !isAssetNoteId(wanted) || notes.has(wanted)) return null;
+          const t = now();
+          const note = decorateNoteOwnership({
+            id: wanted,
+            body: "",
+            created: t,
+            updated: t,
+            touched: false,
+            color: "none",
+            label: "",
+            folder: "",
+            pinned: false,
+            calendarOnly: false,
+            trashed: 0,
+            remind: 0,
+            reminded: 0,
+            _onDisk: false,
+            _mtime: t,
+          }, { ownerSpaceId: activeSpaceId, ownerDir: dir, foreign: false });
+          notes.set(wanted, note);
+          emit("change", wanted, { created: true });
+          return note;
+        },
         discardIfEmpty(id) {
           const note = notes.get(id);
           if (note && !note._onDisk && !note.body.trim()) {
@@ -10672,7 +11394,7 @@
         setMeta,
         flush() {
           autosaver.cancel();
-          return Promise.all([flushDirty(), writeMetaNow(), items ? items.flush() : null]);
+          return Promise.all([flushDirty(), writeMetaNow(), writeUiNow(), items ? items.flush() : null]);
         },
         flushOnUnload,
         reconcileUnloadRecovery,
@@ -10888,6 +11610,29 @@
       const x = Math.max(pad, Math.min(cx - width / 2, viewport.width - pad - width));
       const y = Math.max(pad, Math.min(cy - height / 2, viewport.height - pad - height));
       return { spill: true, left: Math.round(x - sheet.left), top: Math.round(y - sheet.top), width: Math.round(width), height: Math.round(height), scroll: size.width > maxW || size.height > maxH };
+    }
+
+    // ---- OW-48: a dialog fit that cannot oscillate ------------------------------------------------------
+    // Fitting changes the card's own size, which is what a ResizeObserver reports, which asks for another fit. At some
+    // sheet sizes the two fits disagree by a pixel or two (a scrollbar that appears and takes width, a rounded edge),
+    // so the card alternated between two sizes. The fit now remembers what it applied: a new measurement within
+    // the tolerance of the applied box keeps the applied box and writes nothing, and an unchanged key skips the whole
+    // measurement.
+    const FIT_STABLE_TOLERANCE = 2;
+    function dialogFitKey({ sheet, viewport, size, extra = "" } = {}) {
+      const r = (v) => Math.round(Number(v) || 0);
+      return [r(sheet?.width), r(sheet?.height), r(sheet?.left), r(sheet?.top), r(viewport?.width), r(viewport?.height), r(size?.width), r(size?.height), String(extra)].join("|");
+    }
+    function fitDialogStable(prev, next, tolerance = FIT_STABLE_TOLERANCE) {
+      if (!next) return prev || null;
+      if (!prev) return next;
+      const close = (a, b) => Math.abs((Number(a) || 0) - (Number(b) || 0)) <= tolerance;
+      const sameBox = Boolean(prev.spill) === Boolean(next.spill)
+        && close(prev.left, next.left) && close(prev.top, next.top)
+        && close(prev.width, next.width) && close(prev.height, next.height);
+      if (!sameBox) return next;
+      // Within the tolerance the box that is already on screen wins: nothing is written, so nothing can move.
+      return { ...prev, scroll: prev.scroll || next.scroll };
     }
 
     // ---- V4-R2: window modes + hover timing (pure) ------------------------------------------------------
@@ -11586,7 +12331,7 @@
     // does not hide ordinary Obsidian comments.
     function mapExportHidden(segment, options, convert) {
       return segment.replace(/%%[^%\n]+%%/g, (marker) => {
-        const calendar = /^%%\s*(?:calendar(?:\s*:[^%\n]*)?|zn-item-id:[\w-]+|zn-item-category:[^%\n]*|zn-date-ignore:[^%\n]*|not-date)\s*%%$/i.test(marker);
+        const calendar = /^%%\s*(?:calendar(?:\s*:[^%\n]*)?|zn-item-id:[\w-]+|zn-item-category:[^%\n]*|zn-date-ignore:[^%\n]*|(?<!zn-)order:[^%\n]*|not-date)\s*%%$/i.test(marker);
         return calendar || options.gate.on("A31") ? convert(marker, calendar) : marker;
       });
     }
@@ -11954,6 +12699,7 @@
       if (!clean) return null;
       if (clean === "manifest.json") return { kind: "manifest", path: clean };
       if (clean === "meta.json") return { kind: "meta", path: clean };
+      if (clean === "ui.json") return { kind: "ui", path: clean };
       if (clean === (CALENDAR_PART?.ITEMS_FILE || "calendar.json")) return { kind: "calendar", path: clean };
       if (clean === (CALENDAR_PART?.REMINDER_HISTORY_FILE || "reminder-history.json")) return { kind: "history", path: clean };
       if (clean === (CALENDAR_PART?.REMINDER_HISTORY_ARCHIVE_FILE || "reminder-history.archive.jsonl")) return { kind: "historyArchive", path: clean };
@@ -12001,7 +12747,7 @@
       const dec = new TextDecoder("utf-8", { fatal: false });
       const skipped = [];
       const seenPaths = new Set();
-      let totalBytes = 0, manifest = null, meta = null, calendar = null, history = null, historyArchive = null;
+      let totalBytes = 0, manifest = null, meta = null, ui = null, calendar = null, history = null, historyArchive = null;
       const notes = [], assets = [];
       for (const raw of rawEntries) {
         const bytes = raw?.bytes instanceof Uint8Array ? raw.bytes : null;
@@ -12013,7 +12759,7 @@
         if (!entry) { skipped.push({ path: rawPath, reason: "unsupported" }); continue; }
         if (seenPaths.has(entry.path)) { skipped.push({ path: rawPath, reason: "duplicate" }); continue; }
         seenPaths.add(entry.path);
-        if (entry.kind === "manifest" || entry.kind === "meta" || entry.kind === "calendar" || entry.kind === "history") {
+        if (entry.kind === "manifest" || entry.kind === "meta" || entry.kind === "ui" || entry.kind === "calendar" || entry.kind === "history") {
           if (bytes.length > BACKUP_MAX_JSON_BYTES) {
             if (entry.kind === "manifest") return { ok: false, error: "Backup manifest is too large." };
             skipped.push({ path: entry.path, reason: "too-big" });
@@ -12037,6 +12783,7 @@
             }
             manifest = parsedJson;
           } else if (entry.kind === "meta") meta = parsedJson;
+          else if (entry.kind === "ui") ui = uiStateFromFile(parsedJson);
           else if (entry.kind === "calendar") calendar = parsedJson;
           else if (entry.kind === "history") history = parsedJson;
           continue;
@@ -12062,7 +12809,7 @@
           assets.push({ rel: entry.rel, noteId: entry.noteId, file: entry.file, assetKind: entry.assetKind, bytes, path: entry.path });
         }
       }
-      if (!notes.length && !assets.length && !meta && !calendar && !history && !historyArchive) {
+      if (!notes.length && !assets.length && !meta && !ui && !calendar && !history && !historyArchive) {
         return { ok: false, error: "This ZIP does not contain any Zentral Notes backup data." };
       }
       let liveCount = 0, trashedCount = 0;
@@ -12074,6 +12821,7 @@
         notes,
         assets,
         meta,
+        ui,
         calendar,
         history,
         historyArchive,
@@ -13365,6 +14113,99 @@
       ].join("\n");
       return updateToc(raw).body;
     }
+    // T2.11b2: the DEMO set follows docs/NOTES_DISCOVERABILITY.md §8 — every section names the control it shows, and
+    // every surface (editor, All notes, every calendar view, Tools, holidays, the Agenda folder, Settings) has a note.
+    // T3.3: dragging a note tab in the Zen sidebar reorders the notes tree (a pure model, wired at the sidebar).
+    // `rows` is the tree as drawn now; a drop names a row and whether it lands before or after it.
+    function noteTabDropPlan(rows, sourceKey, targetKey, position = "before") {
+      const target = noteDropTarget(rows, typeof sourceKey === "string" && sourceKey.startsWith("n:") ? sourceKey.slice(2) : sourceKey, targetKey, position);
+      if (!target) return null;
+      const src = Array.isArray(rows) ? rows.find((row) => row?.type === "note" && `n:${row.note?.id}` === sourceKey) : null;
+      if (!src) return null;
+      const sameFolder = cleanFolder(src.note?.folder) === cleanFolder(target.folder || "");
+      if (!sameFolder) return { kind: "move", noteId: src.note.id, folder: target.folder || "", order: target.order === undefined ? 1 : target.order };
+      if (target.order === undefined) return null;
+      return { kind: "order", noteId: src.note.id, order: target.order };
+    }
+    const DEMO_CALENDAR_NOTE_ID = "zn-demo-calendar";
+    const DEMO_WHERE_NOTE_ID = "zn-demo-where";
+    function buildCalendarDemoBody() {
+      return [
+        "# Calendar and Agenda tour",
+        "",
+        "Every control below exists in the calendar pane of All notes. Open it with the calendar button in the toolbar or with the Calendar shortcut.",
+        "",
+        "## How this note is a calendar",
+        "",
+        "A section that starts with a `%%calendar%%` marker turns its list lines into real calendar items. A line begins with a date (the `14-11-2026` shape of Settings > Links & history), then an optional time or range, then the title. Everything below is live: click an item to open it, drag it to move it.",
+        "",
+        "%%calendar: Personal%%",
+        "- 18-11-2026 09:00-09:30 Morning plan",
+        "- 18-11-2026 18:00 Call the family",
+        "- 20-11-2026 Long weekend",
+        "",
+        "## Where each calendar control is",
+        "",
+        "| What | Where |",
+        "| --- | --- |",
+        "| Month, Next days, Agenda, Week, Day | the view button on the calendar toolbar |",
+        "| Prev / Next / Today | the arrows and the Today button on the toolbar |",
+        "| Size (Fit, or an hour's height by hand) | the `Size` button on the toolbar |",
+        "| Visible hours of Week and Day | the `08-20` button or Tools > Visible hours |",
+        "| Display time zone | Tools > Display time zone |",
+        "| Week start and week numbers | Tools > Week start & numbers |",
+        "| Filters (kind, category) | the filter row; hide it with the small toggle at its right |",
+        "| Create an event or a reminder | Tools, or the `+` menu in All notes, or right-click a day |",
+        "| Edit, move, snooze, done, dismiss | right-click the item |",
+        "| Day view, new item, personal day off | right-click a day |",
+        "| Free slots (When am I free?) | Tools |",
+        "| Big picture, week as Markdown, print | Tools |",
+        "| Reminder history, sounds and quiet hours | Tools |",
+        "| Holidays and days off | Tools > Holidays & days off |",
+        "",
+        "## Holidays",
+        "",
+        "Tools > Holidays & days off chooses any number of public holiday sets. The interface language names them; the set decides which days are free. Weekends, personal days off and the newest year of each set are on the same dialog. One switch turns the whole feature off. A trading Sunday is shown but is not a day off.",
+        "",
+        "## The Agenda folder in the Zen sidebar",
+        "",
+        "With Agenda turned on (Settings > Zen sidebar), the Zen sidebar shows a live Agenda folder: one row per item inside its display window. Hover a row for Open, Done, Snooze and Dismiss; right-click for the rest; the Agenda folder's own menu holds Open calendar, Refresh, Agenda settings and Hide Agenda.",
+        "",
+        "Back to [[Where is a function?]]",
+        "",
+      ].join("\n");
+    }
+    function buildWhereDemoBody() {
+      return [
+        "# Where is a function?",
+        "",
+        "This note is the discoverability list (T2.11b1). The longer version is in the repository: `docs/NOTES_DISCOVERABILITY.md`.",
+        "",
+        "## While writing a note",
+        "",
+        "- **Toolbar**: bold, italic, strike, highlight, code, headings, lists, checklist (hold it for task states), quote, callout, nest in and out, rule, link, image, table, table of contents.",
+        "- **Caret menu at the end of the toolbar**: pictures, callouts, more text styles, math, collapsible section, footnote, hub list, date and time.",
+        "- **More (three dots)**: import and export, labels, reminder, templates, version history, calendar-only, birthday entries, duplicate, move to folder, the Markdown mode of this note, window, settings and help.",
+        "- **Quick settings (sliders)**: text size, line height, wrapping, blank lines, line breaks, scroll sync, copy format, Markdown mode, theme.",
+        "",
+        "## All notes",
+        "",
+        "- The `+` control creates a note, a folder, a reminder, an event or a date note; right-click it for the full menu.",
+        "- A row: right-click for rename, move, colour, label, exclusion, calendar-only, trash and share; drag it onto a calendar day to add it to the calendar.",
+        "- Shift or Ctrl click rows for the batch bar: move, tag, label, category, export, trash.",
+        "",
+        "## Calendar",
+        "",
+        "See [[Calendar and Agenda tour]] for the full table.",
+        "",
+        "## Settings",
+        "",
+        "Seven tabs: **Writing**, **Markdown**, **Window**, **Appearance**, **Capture**, **Links & history**, **Zen sidebar**. Reminders, version history, the Trash lifetime, find-highlighting and spell-check are rows of **Links & history**. The Keyboard shortcuts dialog opens from the bottom of that tab.",
+        "",
+        "Back to [[Notes syntax tour]]",
+        "",
+      ].join("\n");
+    }
     const DEMO_NOTES = Object.freeze([
       { id: "zn-demo-tour", body: [
         "# Notes syntax tour", "",
@@ -13381,6 +14222,8 @@
         "A [web link](https://example.com), a link to another note: [[Linking notes demo]], and a footnote.[^1]", "",
         "[^1]: Footnotes are collected at the bottom of the read view.", "",
         "---", "", "Next: [[Callouts and reminders]], [[Markdown flavors showcase]], [[Typing shortcuts and where things are]]", ""].join("\n") },
+      { id: DEMO_WHERE_NOTE_ID, body: buildWhereDemoBody() },
+      { id: DEMO_CALENDAR_NOTE_ID, body: buildCalendarDemoBody() },
       { id: "zn-demo-links", body: [
         "# Linking notes demo", "",
         "Write `[[` and start typing a note's title to link to it. Links work in both directions:", "",
@@ -13399,7 +14242,7 @@
         "Open More > Remind me\u2026, pick a time (to the minute) and a bell chip appears beside the title when it is set.",
         "Try a time two minutes from now to see the notification.", ""].join("\n") },
       { id: "zn-demo-flavors", body: ["# Markdown flavors showcase", "", "Syntax from GitHub, Obsidian and Reddit in one note (Settings > Markdown: the mode decides which spelling wins where they differ). Every entry below has a button: open the caret menu at the end of the toolbar.", "", "## Text styles", "", "**bold**, *italic*, ***both***, ~~strike~~, ==highlight==, =={green}green==, `code`, <u>underline</u>, ||spoiler||, X^2^, H~2~O, <kbd>Ctrl</kbd>.", "", "A %%hidden comment%% sits between these words and shows only while editing.", "", "## Callouts", "", "> [!NOTE]", "> GitHub kinds: note, tip, important, warning, caution.", "", "> [!QUESTION] Obsidian kinds, with a title", "> abstract, info, todo, success, question, failure, danger, bug, example, quote.", "", "> [!FAQ]- Foldable, closed", "> Click the title to open. Use + instead of - to start open.", "", "## Tasks", "", "- [ ] to do", "- [x] done", "- [/] in progress", "- [-] cancelled", "- [?] question", "- [!] important", "- [>] forwarded", "- [*] star", "(hold the Checklist button to pick a state)", "", "## Math", "", "Inline: $E = mc^2$. Block:", "", "$$", "\\int_0^1 x^2 \\, dx = \\frac{1}{3}", "$$", "", "## Collapsible section", "", "<details>", "<summary>Click to open</summary>", "", "Hidden text with **formatting**.", "", "</details>", "", "## Code", "", "```diff", "- removed line", "+ added line", "```", "", "## Table with line breaks", "", "| Item | Note |", "| --- | --- |", "| one | first line<br>second line |", "", "## Dates and tags", "", "Today is {{date}}. Insert it from the caret menu: Date and time. Tags like #demo/flavors are recognised.", "", "## Footnote", "", "A claim with a footnote.[^1]", "", "[^1]: Insert > Blocks and notes > Footnote.", "", "Related: [[Typing shortcuts and where things are]], [[Notes syntax tour]]", ""].join("\n") },
-      { id: "zn-demo-shortcuts", body: ["# Typing shortcuts and where things are", "", "## Type a word, get a value", "", "Settings > Markdown switches these on or off and sets the date and time format.", "", "- `{{date}}`, `{{time}}`, `{{title}}`: replaced when you type the closing braces.", "- `@today`, `@tomorrow`, `@yesterday`, `@weekday`, `@now`: replaced on Space or Enter.", "- `@+3d`, `@-2d`, `@+1w`, `@monday`: a date that far away.", "- `/today`, `/time`, `/tomorrow`: the same with a slash.", "", "No typing needed: Insert caret menu > Date and time, or give it a key under Keyboard shortcuts.", "", "## Where is everything", "", "- **Toolbar**: bold, italic, strike, highlight, headings, lists, checklist (hold: task states), quote, nest in/out, rule, code, links, image, table, **Table of contents**.", "- **Caret menu at the end of the toolbar**: pictures, callouts (all kinds, foldable), more text styles (underline, spoiler, hidden comment, sup, sub, key, line break), math, collapsible section, footnote, hub list, date and time.", "- **Quick settings** (sliders button): text size, wrapping, Markdown mode, theme.", "- **Settings**: Writing, Markdown, Window, Appearance, Capture, Links & history.", "- **More (three dots)**: import and export, labels, reminder, templates, links and dates, version history, window, settings and help.", "", "Back to [[Notes syntax tour]].", ""].join("\n") },
+      { id: "zn-demo-shortcuts", body: ["# Typing shortcuts and where things are", "", "## Type a word, get a value", "", "Settings > Markdown switches these on or off and sets the date and time format.", "", "- `{{date}}`, `{{time}}`, `{{title}}`: replaced when you type the closing braces.", "- `@today`, `@tomorrow`, `@yesterday`, `@weekday`, `@now`: replaced on Space or Enter.", "- `@+3d`, `@-2d`, `@+1w`, `@monday`: a date that far away.", "- `/today`, `/time`, `/tomorrow`: the same with a slash.", "", "No typing needed: Insert caret menu > Date and time, or give it a key under Keyboard shortcuts.", "", "## Where is everything", "", "- **Toolbar**: bold, italic, strike, highlight, headings, lists, checklist (hold: task states), quote, nest in/out, rule, code, links, image, table, **Table of contents**.", "- **Caret menu at the end of the toolbar**: pictures, callouts (all kinds, foldable), more text styles (underline, spoiler, hidden comment, sup, sub, key, line break), math, collapsible section, footnote, hub list, date and time.", "- **Quick settings** (sliders button): text size, wrapping, Markdown mode, theme.", "- **Settings**: Writing, Markdown, Window, Appearance, Capture, Links & history.", "- **More (three dots)**: import and export, labels, reminder, templates, links and dates, version history, window, settings and help. It also holds `Where is a function?`, the list of every control.", "", "Back to [[Notes syntax tour]].", ""].join("\n") },
       { id: "zn-demo-torture", body: [
         "# Torture test (placeholder)", "",
         "These lines poke at edge cases. Each should render without breaking the layout; the owner's own torture test should replace or extend this note.", "",
@@ -13727,7 +14570,7 @@
     }
     // ---- unload recovery (H1.6): pure naming, planning and conflict decision helpers ----
     const UNLOAD_RECOVERY_DIR = "unload";
-    const UNLOAD_KINDS = Object.freeze(["note", "calendar", "history", "meta"]);
+    const UNLOAD_KINDS = Object.freeze(["note", "calendar", "history", "meta", "ui"]);
     function unloadEntryStem(ms, seq, windowId, kind, id) {
       if (!UNLOAD_KINDS.includes(kind)) return "";
       if (kind === "note" ? !isAssetNoteId(id) : id !== kind) return "";
@@ -13737,7 +14580,7 @@
       return `${stamp}-${order}-${win}-${kind}~${id}`;
     }
     function parseUnloadEntryName(name) {
-      const m = /^(\d{15})-(\d{4})-([A-Za-z0-9_-]{1,24})-(note|calendar|history|meta)~(.+?)\.(json|prev)$/.exec(String(name ?? ""));
+      const m = /^(\d{15})-(\d{4})-([A-Za-z0-9_-]{1,24})-(note|calendar|history|meta|ui)~(.+?)\.(json|prev)$/.exec(String(name ?? ""));
       if (!m) return null;
       const [, msStr, seqStr, windowId, kind, id, ext] = m;
       if (kind === "note" ? !isAssetNoteId(id) : id !== kind) return null;
@@ -13745,13 +14588,14 @@
       if (!Number.isFinite(ms) || !Number.isFinite(seq)) return null;
       return { ms, seq, windowId, kind, id, ext, stem: String(name).slice(0, -(ext.length + 1)) };
     }
-    function planUnloadWrites({ dir, notes = [], calendar = null, history = null, meta = null, nowMs = 0, windowId = "win", join = (...p) => p.join("/") } = {}) {
+    function planUnloadWrites({ dir, notes = [], calendar = null, history = null, meta = null, ui = null, nowMs = 0, windowId = "win", join = (...p) => p.join("/") } = {}) {
       if (!dir) return [];
       const validNotes = (notes || []).filter((n) => n && isAssetNoteId(n.id) && typeof n.text === "string");
       const hasCalendar = !!(calendar && calendar.local && Array.isArray(calendar.local.items));
       const hasHistory = !!(history && Array.isArray(history.records) && history.records.length);
       const hasMeta = !!(meta && meta.mine && typeof meta.mine === "object");
-      if (!validNotes.length && !hasCalendar && !hasHistory && !hasMeta) return [];
+      const hasUi = !!(ui && ui.mine && typeof ui.mine === "object");
+      if (!validNotes.length && !hasCalendar && !hasHistory && !hasMeta && !hasUi) return [];
       const unloadDir = join(dir, BACKUP_DIR, UNLOAD_RECOVERY_DIR);
       const ops = [{ op: "makeDir", path: unloadDir }];
       let seq = 1;
@@ -13830,6 +14674,19 @@
           opts: { mode: "create" },
           kind: "meta",
           id: "meta",
+        });
+      }
+      // 5. the calendar view (ST7.3): its own file, so it is staged on its own and never blocks meta.json.
+      if (hasUi) {
+        const stem = unloadEntryStem(nowMs, seq++, windowId, "ui", "ui");
+        ops.push({ op: "copy", from: join(dir, "ui.json"), to: join(unloadDir, stem + ".prev"), kind: "ui", id: "ui" });
+        ops.push({
+          op: "write",
+          path: join(unloadDir, stem + ".json"),
+          text: JSON.stringify({ v: 1, kind: "ui", id: "ui", ui: ui.mine, at: nowMs, windowId }),
+          opts: { mode: "create" },
+          kind: "ui",
+          id: "ui",
         });
       }
       return ops;
@@ -14433,7 +15290,7 @@
       const foreign = [...(folder.querySelectorAll?.("tab") || [])].length > 0 || descendants.some((child) => restoredPseudoFolderKind(child) !== kind);
       if (!foreign) { try { folder.delete?.(); return true; } catch (_) { return false; } }
       for (const el of [folder, ...descendants].filter((child) => restoredPseudoFolderKind(child) === kind)) {
-        for (const attr of ["bgalazka-notes-folder", "bgalazka-notes-subfolder", "bgalazka-notes-label", "bgalazka-notes-parent", "bgalazka-notes-color", "bgalazka-notes-icon", "bgalazka-notes-parts", "bgalazka-notes-parts-opacity", "bgalazka-notes-agenda-folder", "bgalazka-notes-agenda-day", "bgalazka-notes-agenda-key", "bgalazka-notes-agenda-count", "bgalazka-notes-agenda-label"]) el.removeAttribute(attr);
+        for (const attr of ["bgalazka-notes-folder", "bgalazka-notes-subfolder", "bgalazka-notes-label", "bgalazka-notes-parent", "bgalazka-notes-color", "bgalazka-notes-icon", "bgalazka-notes-parts", "bgalazka-notes-parts-opacity", "bgalazka-notes-agenda-folder", "bgalazka-notes-agenda-day", "bgalazka-notes-agenda-key", "bgalazka-notes-agenda-count", "bgalazka-notes-agenda-left", "bgalazka-notes-agenda-label"]) el.removeAttribute(attr);
         if (el.id) el.id = "zentral-released-" + el.id;
       }
       return true;
@@ -14941,6 +15798,7 @@
       Object.freeze({ id: "sheet.openWindowPointer", file: "ZentralNotes.uc.js", kind: "window.addEventListener", scope: "sheet:open", owner: "sheet.close() & sheet.destroy()" }),
       Object.freeze({ id: "sheet.popupGuard", file: "ZentralNotes.uc.js", kind: "window.addEventListener", scope: "sheet", owner: "sheet.destroy()" }),
       Object.freeze({ id: "sheet.splitAndFitRO", file: "ZentralNotes.uc.js", kind: "ResizeObserver", scope: "sheet", owner: "sheet.destroy()" }),
+      Object.freeze({ id: "sheet.themeObserver", file: "ZentralNotes.uc.js", kind: "MutationObserver+listener", scope: "sheet", owner: "sheet close cleanups (OW-76)" }),
       Object.freeze({ id: "sheet.dialogCardRO", file: "ZentralNotes.uc.js", kind: "ResizeObserver", scope: "sheet:dialog", owner: "closeDialog() & sheet.close() & sheet.destroy()" }),
       Object.freeze({ id: "sheet.parentPanelMO", file: "ZentralNotes.uc.js", kind: "MutationObserver", scope: "sheet:open", owner: "unwatchParentPanelHidden() & sheet.close() & sheet.destroy()" }),
       Object.freeze({ id: "sheet.debouncedTimersAndRafs", file: "ZentralNotes.uc.js", kind: "setTimeout+rAF", scope: "sheet:open", owner: "cancelAllAsync() in sheet.close() & sheet.destroy()" }),
@@ -15269,29 +16127,30 @@
         flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART, notesLang, notesLocale, t, tCount,
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS, SHARED_TURN_WAIT_MS, STARTUP_TURN_WAIT_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
-        wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, SHOWCASE_NOTE_ID, buildShowcaseNote, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, SPELL_MAX_SUGGESTIONS, wordRangeAtOffset, replaceWordRange, cleanSpellLanguages, toggleSpellLanguage, formatSpellLanguageLabel, collectSpellSuggestions, buildEditorSpellMenuModel, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
+        wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, DEMO_WHERE_NOTE_ID, DEMO_CALENDAR_NOTE_ID, buildCalendarDemoBody, buildWhereDemoBody, SHOWCASE_NOTE_ID, buildShowcaseNote, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, SPELL_MAX_SUGGESTIONS, wordRangeAtOffset, replaceWordRange, cleanSpellLanguages, toggleSpellLanguage, formatSpellLanguageLabel, collectSpellSuggestions, buildEditorSpellMenuModel, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
         makeFolderUid, ensureFolderUids, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_STYLE, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, SPACE_MODES, cleanSpaceMode, SPACES_DIR, SPACE_REGISTRY_FILE, SPACE_SHARES_FILE, cleanWorkspaceId, workspaceDirKey, readZenWorkspaces, resolveActiveWorkspaceIdentity, cleanSpaceRegistry, reconcileSpaceRegistry, cleanShareTargets, cleanShareRecord, cleanSpaceShares, mergeSpaceShares, isSharedWithSpace, planSpaceSharesForSpace, resolveSpaceStorageTarget, canShareCalendarItemWithoutNote, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, folderPathMatchesNote, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         FOLDER_ZEN_SIDEBAR_VALUES, cleanFolderZenSidebar, resolveFolderZenSidebar, folderZenSidebarMenuAction,
         BIRTHDAY_CATEGORY, BIRTHDAY_FOLDER_ID, resolveNoteZenSidebar, parseBirthdayDate, cleanBirthdayTime, formatBirthdayLine, buildBirthdayNoteBody, appendBirthdayEntry,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition, calendarMenuPosition, normalizeContextMenuItems,
-        highlightCode, codeLangKey, texNodes, mapPosition, mergeAnchors, insertCodeBlock, buildLink, insertLink,
+        highlightCode, codeLangKey, texNodes, mapPosition, syncScrollPlan, syncScrollAnchorPlan, mergeAnchors, insertCodeBlock, buildLink, insertLink,
         pastedLink, richPaste, repairPastedTable, PASTE_HTML_PART, fragmentLabel, insertImage, makeTable, insertTable, SHORTCUT_ACTIONS, formatCombo,
         normalizeCombo, comboFromEvent, parseShortcutMap, effectiveShortcuts, findShortcutConflict,
         matchShortcutAction, assignShortcut, QUICK_OPTIONS, stepOption, PREF,
-        alignDelim, buildImage, insertImageMd, pastedWebAddress, CODE_LANGS, CALLOUT_KINDS, calloutId, insertCallout,
+        alignDelim, buildImage, insertImageMd, pastedWebAddress, CODE_LANGS, CALLOUT_KINDS, CALLOUT_FOLDABLE, calloutMemory, calloutId, insertCallout,
         HIDEABLE_TOOLS, parseHidden, serializeHidden, applyTreeSelection, resolveTreeSelection, cleanBatchTag, appendTagToBody,
         normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, clearOfRect, sideOf, createHoldAction,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, cleanSlotPx, cleanCardPx, cleanCardShare, resolveSlotHeight, resolveCardHeight, hasStartupPanelPref, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, gapPageFloor, gapMaxPx, clampGapPx, GAP_PANEL_MIN_PX, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
-        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, BACKUP_FORMAT, BACKUP_VERSION, BACKUP_MAX_ENTRIES, BACKUP_MAX_TOTAL_BYTES, cleanBackupZipPath, classifyBackupEntry, validateBackupAssetBytes, buildBackupManifest, inspectBackupEntries, planBackupRestore, OBSIDIAN_VAULT_APP_CONFIG, safeObsidianSegment, cleanVaultRelPath, obsidianYamlScalar, splitYamlEntries, planObsidianVaultPaths, buildObsidianFrontMatter, collectObsidianAssetRefs, convertBodyToObsidian, buildObsidianVaultPlan, OBSIDIAN_IMPORT_MAX_FILES, OBSIDIAN_IMPORT_MAX_TOTAL_BYTES, OBSIDIAN_IMPORT_MAX_DEPTH, unquoteYamlScalar, extractObsidianPathFromForeign, parseObsidianFrontMatter, classifyObsidianVaultEntry, planObsidianVaultImport, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, mergeFolders, mergeMeta, META_SHARED_KEYS, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
+        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, BACKUP_FORMAT, BACKUP_VERSION, BACKUP_MAX_ENTRIES, BACKUP_MAX_TOTAL_BYTES, cleanBackupZipPath, classifyBackupEntry, validateBackupAssetBytes, buildBackupManifest, inspectBackupEntries, planBackupRestore, OBSIDIAN_VAULT_APP_CONFIG, safeObsidianSegment, cleanVaultRelPath, obsidianYamlScalar, splitYamlEntries, planObsidianVaultPaths, buildObsidianFrontMatter, collectObsidianAssetRefs, convertBodyToObsidian, buildObsidianVaultPlan, OBSIDIAN_IMPORT_MAX_FILES, OBSIDIAN_IMPORT_MAX_TOTAL_BYTES, OBSIDIAN_IMPORT_MAX_DEPTH, unquoteYamlScalar, extractObsidianPathFromForeign, parseObsidianFrontMatter, classifyObsidianVaultEntry, planObsidianVaultImport, itemMarkerLineRange, allFolderIds, moveNote, SPLIT_COMPANION_SHARES, DEFAULT_SPLIT_COMPANION, cleanSplitCompanion, nearestSplitShare, splitCompanionAxis, splitCompanionReady, noteDropTarget, noteTabDropPlan, cleanNoteOrder, noteOrderBetween, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, mergeFolders, mergeMeta, META_SHARED_KEYS, UI_FILE_VERSION, uiKeys, UI_KEYS_FALLBACK, splitUiKeys, uiFileText, uiStateFromFile, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog, FIT_STABLE_TOLERANCE, dialogFitKey, fitDialogStable,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,
-        FIND_MAX_MATCHES, FIND_MAX_QUERY, sniffImageMime, checkAssetBytes, assetFileName, parseAssetLink, buildAssetLink, buildAssetImage,
+        FIND_MAX_MATCHES, FIND_MAX_QUERY, REPLACE_MAX, cleanReplaceText, replacePlan, replaceOne, replaceAll, replaceSummary,
+        VISIBLE_EDGE, matchIsVisible, visibleMatchIndices, stepOutsideViewport, sniffImageMime, checkAssetBytes, assetFileName, parseAssetLink, buildAssetLink, buildAssetImage,
         insertAssetImage, assetImageAt, restyleAssetImage, assetRefs, assetIntegrityReport, isAssetNoteId, ASSET_MAX_BYTES, ASSET_VIDEO_MAX_BYTES, ASSET_FILE_MAX_BYTES, ASSET_MAX_PER_NOTE, ASSET_MIME, VIDEO_EXT_MIME, cleanAssetFileName, uniqueAssetFileName, parseFileAssetLink, droppedAssetMarkup, insertDroppedAssetLinks, droppedFiles,
         cleanRemind, ceilStep, dueReminders, nextReminderAt, reminderDelay, reminderPresets, parseRemindInput, remindPreview, remindDateText, remindTimeText,
         createTimeTickService, createReminderScheduler, createReminderAlertActions, createReminderAlertStack, createAgendaActionToast, notePreviewLines, buildNoteHoverModel, buildAgendaHoverModel, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
@@ -16098,7 +16957,11 @@
       calOnlyEl.hidden = true;
       const remindEl = h("button", { type: "button", class: "zn-remind", title: "Reminder" });
       remindEl.hidden = true;
-      const head = h("div", { class: "zn-head" }, btnList, titleEl, labelEl, calOnlyEl, btnCategory, remindEl, btnPin, btnColor, btnKeep, btnHover, btnDock, btnClick, btnSize, btnMore, btnClose);
+      // OW-85 (owner, 2026-11-18: "the correct element is just under All notes title element and above Search Notes
+      // element"): the split view / folder tree / hide calendar buttons live in this one bar, not on a row of their own
+      // that pushed the tree down. They are placed right after the title, before the note's own actions.
+      const head = h("div", { class: "zn-head" }, btnList, titleEl, labelEl, calOnlyEl,
+        btnCategory, remindEl, btnPin, btnColor, btnKeep, btnHover, btnDock, btnClick, btnSize, btnMore, btnClose);
 
       const tBold = iconButton("bold", "Bold (Ctrl+B)");
       const tItalic = iconButton("italic", "Italic (Ctrl+I)");
@@ -16173,8 +17036,13 @@
             hostText = pick("--zl-popup-text", "--arrowpanel-color");
             hostLine = pick("--zl-button-border-color", "--arrowpanel-border-color");
           } else if (theme === "zentral") {
-            hostSurface = pick("--bgalazka-look-toolbar-surface", "--bgalazka-look-surface");
-            hostText = pick("--bgalazka-look-text");
+            // OW-76: "zentral" means the Zentral appearance theme, so it reads Zen's own palette — the base surface,
+            // its text and border colours, and the primary accent. It used to read --bgalazka-look-*, which is the RSS
+            // card's own set of variables (another module's look), so the sheet only looked like a Zentral theme by
+            // accident. Those stay as the last fallback for a host that paints that way and nothing else.
+            hostSurface = pick("--zen-colors-base", "--zen-main-browser-background-toolbar", "--bgalazka-look-toolbar-surface", "--bgalazka-look-surface");
+            hostText = pick("--zen-colors-text", "--bgalazka-look-text");
+            hostLine = pick("--zen-colors-border", "--zen-colors-tertiary");
             hostAccent = pick("--zen-primary-color");
           }
         } catch (_) {}
@@ -16279,6 +17147,20 @@
         }
       }
       listen(window, "zentral-notes-theme-changed", refreshSheetThemeColors);
+      // OW-76: the sheet's own event only fires when the person changes the NOTES theme. Zentral's appearance theme
+      // changes through a different door (a Zen theme switch, the theme service re-resolving, look-and-feel-changed),
+      // and nothing told the sheet, so it kept the colours of the theme it was opened under. With "zentral" the default
+      // this has to be live.
+      listen(window, "zentral-appearance-theme-changed", refreshSheetThemeColors);
+      listen(window, "look-and-feel-changed", refreshSheetThemeColors);
+      try {
+        // The tokens themselves can change without any event reaching this window (a theme re-applied by stylesheet or
+        // by the parent process). Watching the root's attributes catches the attribute-driven path the theme service
+        // uses (zentral-effective-theme, lwtheme, lwtheme-brighttext).
+        const themeObserver = new MutationObserver(() => refreshSheetThemeColors());
+        themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["zentral-effective-theme", "zentral-contrast-policy", "lwtheme", "lwtheme-brighttext", "lwt-default-theme-in-dark-mode", "style"] });
+        cleanups.push(() => themeObserver.disconnect());
+      } catch (_) {}
       try {
         const mq = window.matchMedia?.("(prefers-color-scheme: light)");
         if (mq?.addEventListener) {
@@ -16321,6 +17203,22 @@
         "aria-label": "Note text",
       });
       const readEl = h("div", { class: "zn-read", tabindex: "0" });
+      // T3.8: the second note, side by side with the first (its own read view, so editing and reading stay apart).
+      const companionDivider = h("div", {
+        class: "zn-companion-divider", role: "separator", tabindex: "0", "aria-orientation": "vertical",
+        "aria-label": "Resize the reference pane", title: "Drag to resize, arrow keys to step",
+      });
+      const companionEl = h("section", { class: "zn-companion", hidden: true, "aria-label": "Reference note" },
+        companionDivider,
+        h("div", { class: "zn-companion-head" },
+          h("strong", { class: "zn-companion-title" }, ""),
+          h("span", { class: "zn-grow" }),
+          h("button", { type: "button", class: "zn-chip zn-companion-open", title: "Open this note in the main pane" }, "Open here"),
+          h("button", { type: "button", class: "zn-chip zn-companion-turn", title: "Side by side or stacked" }, "Turn"),
+          h("button", { type: "button", class: "zn-chip zn-companion-close", title: "Close the second pane" }, "\u00d7"),
+        ),
+        h("div", { class: "zn-companion-body" }),
+      );
       const search = h("input", {
         type: "text",
         class: "zn-search",
@@ -16361,7 +17259,14 @@
       const btnCalendarPane = iconButton("calendar", t("tree.layout.hideCalendar"), "zn-calendar-pane-toggle");
       const tabTree = h("button", { type: "button", class: "zn-chip zn-calendar-tab", role: "tab", "aria-selected": "true" }, t("tree.tab.tree"));
       const tabCalendar = h("button", { type: "button", class: "zn-chip zn-calendar-tab", role: "tab", "aria-selected": "false" }, t("tree.tab.calendar"));
-      const allToolbar = h("div", { class: "zn-all-toolbar" }, btnCalendarLayout, btnCalendarTree, btnCalendarPane, h("span", { class: "zn-grow" }), tabTree, tabCalendar);
+      // Only the tabs layout's switcher is left here; the three layout buttons moved up into the sheet bar (OW-85).
+      const allToolbar = h("div", { class: "zn-all-toolbar" }, h("span", { class: "zn-grow" }), tabTree, tabCalendar);
+      // OW-85: the three layout buttons belong in the sheet bar the owner pointed at — "just under All notes title
+      // element and above Search Notes element" — not on a row of their own above the tree. They are inserted here,
+      // after the title, because this is where they are built.
+      head.insertBefore(btnCalendarPane, btnCategory);
+      head.insertBefore(btnCalendarTree, btnCalendarPane);
+      head.insertBefore(btnCalendarLayout, btnCalendarTree);
       const treePane = h("section", { class: "zn-tree-pane", "aria-label": t("tree.pane.aria") }, listEl);
       const calendarPeriod = h("span", { class: "zn-calendar-pane-hint", "aria-live": "polite" }, "");
       const calendarHeadingEl = h("strong", {}, t("cal.heading"));
@@ -16377,7 +17282,15 @@
       const btnCalendarBigPicture = iconButton("maximize", t("cal.bigPicture.open"), "zn-calendar-bigpicture-btn");
       btnCalendarBigPicture.setAttribute("aria-pressed", "false");
       const calendarHeadRight = h("div", { class: "zn-calendar-pane-head-right" }, calendarPeriod, btnCalendarControlsToggle, btnCalendarBigPicture);
-      const calendarHeader = h("div", { class: "zn-calendar-pane-head" }, calendarHeadingEl, calendarHeadRight);
+      // OW-74: the basic controls live in the header, between the calendar name and the long period name, so hiding the
+      // control strip can never take away the means to move between months or come back to today. They are MOVED into
+      // this slot (not copied): the strip keeps the same three nodes, so there is one button, one id and one listener.
+      // OW-97: a chevron, for the same reason. It points the way the view will move — a down chevron when the next
+      // press shows the week, an up one when it goes back to the month — so the glyph alone says what the click does.
+      const btnCalendarViewToggle = h("button", { type: "button", class: "zn-chip zn-calendar-view-toggle", "aria-label": t("cal.view.toggleAria") },
+        icon("chevron", 14));
+      const calendarHeadNav = h("div", { class: "zn-calendar-head-nav", role: "group", "aria-label": t("cal.headNav.aria") });
+      const calendarHeader = h("div", { class: "zn-calendar-pane-head" }, calendarHeadingEl, calendarHeadNav, calendarHeadRight);
       // Zen can close a panel when a native <select> opens its platform popup. Calendar controls therefore use
       // the same accessible in-sheet menu as the rest of Notes; the selectors remain buttons, never native selects.
       const calendarViewSelect = h("button", { type: "button", class: "zn-chip zn-calendar-view-select", "aria-label": t("cal.view.aria"), "aria-haspopup": "menu" }, t("cal.view.month"));
@@ -16388,14 +17301,22 @@
       // Week and Day only: one press switches between the chosen hours and all 24 (the hours themselves: Tools).
       const calendarHoursToggle = h("button", { type: "button", class: "zn-chip zn-calendar-hours-toggle", "aria-pressed": "false", "aria-label": t("cal.hours.showOnlyAria", { hours: "08:00–20:00" }) }, "08–20");
       const calendarPrev = h("button", { type: "button", class: "zn-chip zn-calendar-nav", "aria-label": t("cal.nav.prevPeriod"), title: t("cal.nav.prevPeriod") }, "‹");
-      const calendarToday = h("button", { type: "button", class: "zn-chip zn-calendar-today", title: t("cal.todayBtn") }, t("cal.todayBtn"));
+      // OW-97: an icon, not the words "Go to today". The label is long in every language and the header has to give
+      // its room to the title and the dates first; the glyph is a calendar (the same one the pane's own heading uses)
+      // with a filled dot under it, which is how every calendar app draws "today". The words live on in the title and
+      // the accessible name, so nothing is lost to a screen reader or a tooltip.
+      const calendarToday = h("button", { type: "button", class: "zn-chip zn-calendar-today", title: t("cal.todayBtn"), "aria-label": t("cal.todayBtn") },
+        icon("calendar", 14), h("span", { class: "zn-calendar-today-dot", "aria-hidden": "true" }));
       const calendarNext = h("button", { type: "button", class: "zn-chip zn-calendar-nav", "aria-label": t("cal.nav.nextPeriod"), title: t("cal.nav.nextPeriod") }, "›");
       const calendarDaysSelect = h("button", { type: "button", class: "zn-chip zn-calendar-days-select", "aria-label": t("cal.days.forwardAria"), "aria-haspopup": "menu" }, tCount("cal.days", 7));
       const calendarKindSelect = h("button", { type: "button", class: "zn-chip zn-calendar-kind-filter", "aria-label": t("cal.filter.kindAria"), "aria-haspopup": "menu" }, t("cal.filter.allItems"));
       const calendarCategorySelect = h("button", { type: "button", class: "zn-chip zn-calendar-category-filter", "aria-label": t("cal.filter.categoryAria"), "aria-haspopup": "menu" }, t("cal.filter.allCategories"));
       const calendarUndoMove = h("button", { type: "button", class: "zn-chip zn-calendar-undo-move", "aria-label": t("cal.undoChange.aria"), hidden: "true" }, t("cal.undoChange"));
       const calendarToolsSelect = h("button", { type: "button", class: "zn-chip zn-calendar-tools", "aria-label": t("cal.tools.aria"), "aria-haspopup": "menu" }, t("cal.tools"));
-      const calendarControls = h("div", { class: "zn-calendar-controls" }, calendarPrev, calendarToday, calendarNext, calendarViewSelect, calendarSizeSelect, calendarSnapSelect, calendarHoursToggle, calendarDaysSelect, calendarKindSelect, calendarCategorySelect, calendarUndoMove, calendarToolsSelect);
+      // OW-74: prev / today / next and the month-week toggle are the header's; the strip carries the rest. The strip is
+      // therefore built without them — appending them here as well would put the same node in two places.
+      const calendarControls = h("div", { class: "zn-calendar-controls" }, calendarViewSelect, calendarSizeSelect, calendarSnapSelect, calendarHoursToggle, calendarDaysSelect, calendarKindSelect, calendarCategorySelect, calendarUndoMove, calendarToolsSelect);
+      calendarHeadNav.append(calendarPrev, calendarToday, calendarNext, btnCalendarViewToggle);
       const calendarContent = h("div", { class: "zn-calendar-pane-content zn-calendar-view", role: "region", "aria-label": t("cal.itemsRegion.aria") });
       const calendarPane = h("section", { class: "zn-calendar-pane", "aria-label": t("cal.heading") }, calendarHeader, calendarControls, calendarContent);
       const allSplitter = h("div", { class: "zn-calendar-splitter", role: "separator", tabindex: "0", "aria-label": t("tree.layout.splitterAria"), "aria-orientation": "vertical", "aria-valuemin": "20", "aria-valuemax": "80", "aria-valuenow": "36" });
@@ -16414,7 +17335,7 @@
         h("div", { class: "zn-outline-head" }, h("strong", {}, "Outline"), h("span", { class: "zn-grow" }), outlineClose),
         outlineNav
       );
-      const body = h("div", { class: "zn-body" }, hlEl, ta, readEl, allLayout, tocPill, outlinePanel);
+      const body = h("div", { class: "zn-body" }, hlEl, ta, readEl, companionEl, allLayout, tocPill, outlinePanel);
       const statusEl = h("span", { class: "zn-status", "aria-live": "polite" });
       const countEl = h("span", { class: "zn-count" });
       const foot = h("div", { class: "zn-foot" }, statusEl, h("span", { class: "zn-grow" }), countEl);
@@ -16423,8 +17344,24 @@
       const btnFindPrev = iconButton("caret", "Previous match (Shift+Enter)", "zn-find-prev");
       const btnFindNext = iconButton("caret", "Next match (Enter)", "zn-find-next");
       const findOthers = h("button", { type: "button", class: "zn-find-others", title: "Open another note that contains this text" });
+      // OW-22: the same jump, but it skips everything already readable on screen — so a person can look at all the
+      // matches in view at once instead of pressing Enter through them. Separate buttons, not a mode: the plain ones
+      // keep meaning exactly what they always did.
+      const btnFindNextOff = h("button", { type: "button", class: "zn-find-btn zn-find-off", title: "Next match not on screen (Ctrl+Alt+Down)", "aria-label": "Next match not on screen" }, "\u21b3");
+      const btnFindPrevOff = h("button", { type: "button", class: "zn-find-btn zn-find-off", title: "Previous match not on screen (Ctrl+Alt+Up)", "aria-label": "Previous match not on screen" }, "\u21b0");
       const btnFindClose = iconButton("x", "Close find (Esc)", "zn-find-close");
-      const findBar = h("div", { class: "zn-find", role: "search" }, icon("search", 13), findInput, findCount, btnFindPrev, btnFindNext, findOthers, btnFindClose);
+      // OW-21: replace lives on the find bar, one disclosure below it, so it is discoverable from where finding already
+      // is and cannot be pressed by someone who only meant to find. Both buttons are DISABLED until the words would
+      // change something, and the row says how many matches there are before either is used.
+      const btnFindReplace = h("button", { type: "button", class: "zn-find-replace-toggle", title: "Replace…", "aria-expanded": "false" }, "Replace");
+      const findBarToggle = h("div", { class: "zn-find-row" }, icon("search", 13), findInput, findCount, btnFindPrev, btnFindNext, btnFindPrevOff, btnFindNextOff, findOthers, btnFindReplace, btnFindClose);
+      const replaceInput = h("input", { type: "text", class: "zn-find-replace-input", placeholder: "Replace with", "aria-label": "Replace with", spellcheck: "false" });
+      const btnReplaceOne = h("button", { type: "button", class: "zn-find-btn zn-find-replace-one", title: "Replace this match", disabled: "" }, "Replace");
+      const btnReplaceAll = h("button", { type: "button", class: "zn-find-btn zn-find-replace-all", title: "Replace every match in this note", disabled: "" }, "All");
+      const replaceNote = h("span", { class: "zn-find-replace-note", "aria-live": "polite" });
+      const replaceRow = h("div", { class: "zn-find-row zn-find-replace-row" }, replaceInput, btnReplaceOne, btnReplaceAll, replaceNote);
+      replaceRow.hidden = true;
+      const findBar = h("div", { class: "zn-find", role: "search" }, findBarToggle, replaceRow);
       findBar.hidden = true;
       // "[[" completion: a short strip of matching notes under the toolbar while the caret is inside an open [[.
       const wikiBar = h("div", { class: "zn-wikibar", role: "listbox", "aria-label": "Notes to link" });
@@ -16488,6 +17425,18 @@
           width: Math.max(0, Number(docEl.clientWidth) || Number(window.innerWidth) || 0),
           height: Math.max(0, Number(docEl.clientHeight) || Number(window.innerHeight) || 0),
         };
+      }
+      // OW-80: the tree in the Big Picture card. `collapsed` puts it away and hands the width to the calendar; the
+      // choice is stored like the filters' own collapsed flag, so the card opens the way it was left.
+      function applyBigPictureTree(collapsed) {
+        const bp = bigPicture;
+        if (!bp) return;
+        const hide = collapsed === undefined ? store.meta.calendarBigPictureTreeCollapsed === true : collapsed;
+        bp.treeSlot.hidden = hide;
+        bp.btnTree?.setAttribute("aria-pressed", String(!hide));
+        bp.btnTree?.setAttribute("aria-label", t(hide ? "cal.bigPicture.treeShow" : "cal.bigPicture.treeHide"));
+        root.dataset.bigPictureTree = hide ? "hidden" : "shown";
+        if (store.meta.calendarBigPictureTreeCollapsed !== hide) store.setMeta({ calendarBigPictureTreeCollapsed: hide });
       }
       function applyCalendarBigPictureBox() {
         if (!bigPicture || !CALENDAR_PART) return null;
@@ -16581,6 +17530,16 @@
         } else {
           allPanels.append(calendarPane);
         }
+        // OW-80: put the tree back where it came from, before the calendar, so the sheet is whole again.
+        if (bp.treePlaceholder?.parentElement) {
+          bp.treePlaceholder.replaceWith(treePane);
+        } else if (bp.treeParent) {
+          const ref = bp.treeNext && bp.treeNext.parentElement === bp.treeParent ? bp.treeNext : null;
+          bp.treeParent.insertBefore(treePane, ref);
+        } else {
+          allPanels.insertBefore(treePane, allPanels.firstChild);
+        }
+        delete treePane.dataset.bigPicture;
         bp.backdrop.remove();
         delete calendarPane.dataset.bigPicture;
         delete root.dataset.bigPicture;
@@ -16645,6 +17604,15 @@
         const placeholderBtn = h("button", { type: "button", class: "zn-chip" }, t("cal.bigPicture.returnHere"));
         const placeholder = h("div", { class: "zn-calendar-pane zn-cal-bigpicture-placeholder" }, placeholderText, placeholderBtn);
         hostParent.insertBefore(placeholder, calendarPane);
+        // OW-80: the Notes tree comes too. "to big view calendar add on left edge notes tree, and all its functions like
+        // drag to create". It is MOVED, like the calendar: the same node keeps search, create, folder menus, rename,
+        // multi-select and the note-drag path, and its own placeholder holds the spot it must return to.
+        const treeParent = treePane.parentElement || allPanels;
+        const treeChildren = [...(treeParent.children || [])];
+        const treeIdx = treeChildren.indexOf(treePane);
+        const treeNext = treeIdx >= 0 ? (treeChildren[treeIdx + 1] || null) : null;
+        const treePlaceholder = h("div", { class: "zn-tree-pane zn-cal-bigpicture-placeholder", "aria-hidden": "true" });
+        treeParent.insertBefore(treePlaceholder, treePane);
         const titleEl = h("strong", { class: "zn-cal-bigpicture-title" }, t("cal.bigPicture.title"));
         const sizeButtons = new Map();
         const sizeGroup = h("div", { class: "zn-cal-bigpicture-sizes", role: "group", "aria-label": t("cal.bigPicture.sizeGroupAria") });
@@ -16656,13 +17624,28 @@
           sizeGroup.append(btn);
         }
         const btnClose = iconButton("x", t("cal.bigPicture.close"), "zn-cal-bigpicture-close");
-        const bar = h("div", { class: "zn-cal-bigpicture-bar" }, titleEl, h("span", { class: "zn-grow" }), sizeGroup, btnClose);
+        // OW-80: the tree can be put away, because "left edge" is a default and not always what a person wants on a
+        // small screen. The choice is remembered with the calendar's UI state.
+        const btnTree = iconButton("columns", t("cal.bigPicture.treeHide"), "zn-cal-bigpicture-tree");
+        btnTree.setAttribute("aria-pressed", "true");
+        const bar = h("div", { class: "zn-cal-bigpicture-bar" }, titleEl, h("span", { class: "zn-grow" }), btnTree, sizeGroup, btnClose);
         const stage = h("div", { class: "zn-cal-bigpicture-stage" });
+        const treeSlot = h("div", { class: "zn-cal-bigpicture-tree-slot" });
         const card = h("div", { class: "zn-cal-bigpicture-card", role: "dialog", "aria-modal": "true", "aria-label": t("cal.bigPicture.dialogAria"), tabindex: "-1" }, bar, stage);
         const backdrop = h("div", { class: "zn-cal-bigpicture-backdrop", role: "presentation" }, card);
         placeholderBtn.addEventListener("click", () => closeCalendarBigPicture({ restoreFocus: true }));
         btnClose.addEventListener("click", () => closeCalendarBigPicture({ restoreFocus: true }));
-        stage.append(calendarPane);
+        // OW-80: show or put away the tree; the calendar takes the whole card when it goes.
+        btnTree.addEventListener("click", () => {
+          if (bigPicture !== bp) return;
+          const next = bp.treeSlot.hidden !== true ? true : false;
+          applyBigPictureTree(next);
+          scheduleCalendarFit();
+        });
+        stage.append(treeSlot, calendarPane);
+        treeSlot.append(treePane);
+        treePane.hidden = false;
+        treePane.dataset.bigPicture = "true";
         calendarPane.hidden = false;
         calendarPane.dataset.bigPicture = "true";
         root.dataset.bigPicture = "true";
@@ -16681,8 +17664,9 @@
           delete backdrop.dataset.topLayer;
         }
         const bp = {
-          backdrop, card, bar, stage, titleEl, sizeGroup, sizeButtons, btnClose,
+          backdrop, card, bar, stage, titleEl, sizeGroup, sizeButtons, btnClose, btnTree, treeSlot,
           placeholder, placeholderText, placeholderBtn, hostParent, hostNext, openerFocus,
+          treePlaceholder, treeParent, treeNext,
           box: null, cleanups: [],
         };
         bigPicture = bp;
@@ -16734,6 +17718,7 @@
         const filtersChanged = beforeFilters.kind !== afterFilters.kind || beforeFilters.category !== afterFilters.category;
         syncCalendarBigPictureButton();
         syncCalendarControlsToggle();
+        applyBigPictureTree();
         applyCalendarBigPictureBox();
         restorePaneScrollSnapshot(enterState);
         if (filtersChanged) renderCalendar();
@@ -16755,6 +17740,20 @@
         if (bigPicture) closeCalendarBigPicture({ restoreFocus: true });
         else openCalendarBigPicture();
       });
+      // OW-74: the header's month/week toggle shows the view it leads to and is pressed while Week is the view.
+      function syncCalendarViewToggle() {
+        const view = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
+        const isWeek = view === "week";
+        // The label names where the press will take you, so a person in Month reads "Week" and vice versa.
+        btnCalendarViewToggle.dataset.value = isWeek ? "week" : "month";
+        // Never text: the button is a glyph, and writing a word here would put the crowding back.
+        btnCalendarViewToggle.dataset.next = isWeek ? "month" : "week";
+        btnCalendarViewToggle.replaceChildren(icon("chevron", 14));
+        btnCalendarViewToggle.setAttribute("aria-pressed", isWeek ? "true" : "false");
+        btnCalendarViewToggle.setAttribute("aria-label", t("cal.view.toggleAria"));
+        btnCalendarViewToggle.title = t("cal.view.toggleTitle");
+        btnCalendarViewToggle.classList.toggle("is-on", isWeek);
+      }
       function syncCalendarControlsToggle() {
         const filters = activeCalendarFilters();
         const collapsed = filters.collapsed;
@@ -16798,7 +17797,10 @@
         const picked = CALENDAR_PART?.calendarLayoutFor?.(mode, dims.width, dims.height) || { orientation: "lr", tabs: false };
         const treeCollapsed = active && store.meta.calendarTreeCollapsed === true;
         const calendarCollapsed = active && store.meta.calendarPaneCollapsed === true;
-        if (bigPicture && (!active || calendarCollapsed)) {
+        // OW-80: opening a note from the tree inside the card sets `view` to the editor, which made `active` false here
+        // and closed the card the moment it was used. The card only closes when the calendar itself is put away, or when
+        // the person leaves All notes from outside the card.
+        if (bigPicture && (calendarCollapsed || (!active && !bigPicture.keepOnOpenNote))) {
           closeCalendarBigPicture({ restoreFocus: false });
           return;
         }
@@ -16812,7 +17814,9 @@
         allPanels.dataset.tab = tab;
         allPanels.dataset.treeCollapsed = treeCollapsed ? "true" : "false";
         allPanels.dataset.calendarCollapsed = calendarCollapsed ? "true" : "false";
-        treePane.hidden = active && (treeCollapsed || (tabs && tab !== "tree"));
+        // OW-80: in the Big Picture card the tree is a column of the card with its own toggle, so the tabs layout's
+        // "one pane at a time" rule and the docked collapse flags do not apply to it there.
+        treePane.hidden = !bigPicture && active && (treeCollapsed || (tabs && tab !== "tree"));
         if (bigPicture) {
           calendarPane.hidden = false;
           if (bigPicture.placeholder) bigPicture.placeholder.hidden = !active || calendarCollapsed || (tabs && tab !== "calendar");
@@ -16824,8 +17828,41 @@
         const share = picked.orientation === "lr"
           ? CALENDAR_PART?.cleanCalendarShare?.(store.meta.calendarSplitLR, 0.36) ?? 0.36
           : CALENDAR_PART?.cleanCalendarShare?.(store.meta.calendarSplitTB, 0.42) ?? 0.42;
-        treePane.style.flexBasis = `${Math.round(share * 1000) / 10}%`;
-        applyTreePaneSqueeze(treePaneEffectiveWidth(dims, picked.orientation, share, active, tabs, calendarCollapsed));
+        // OW-97: the tree is a fixed width and the calendar takes what is left, so stretching the window widens only
+        // the calendar. The old percentage share is still read once, to seed the width for anyone who had set one, and
+        // it is still what a drag in the horizontal (top/bottom) layout means — there the split is a height, not a
+        // width, and a pixel width would be the wrong unit.
+        // A document written before this rule has a share and no width: the width is seeded from the share once, at
+        // the window it is being read in, and stored, so the next stretch of the window moves only the calendar.
+        const storedWidth = Number(store.meta.calendarTreeWidth) > 0
+          ? store.meta.calendarTreeWidth
+          : Math.round((Number(dims?.width) || 0) * share);
+        const treeWidth = picked.orientation === "lr"
+          ? CALENDAR_PART?.clampTreePaneWidth?.(storedWidth, Number(dims?.width) || 0)
+            ?? null
+          : null;
+        // A collapsed calendar or the tabs layout gives the tree the whole pane: a fixed width there would leave a
+        // permanent gap where the calendar used to be, which is the one thing a pixel width can get wrong and a share
+        // could not. The width only applies while both panes are actually side by side.
+        const widthApplies = !bigPicture && !calendarCollapsed && !tabs;
+        if (!bigPicture && widthApplies) {
+          if (treeWidth) {
+            treePane.style.flex = `0 0 ${treeWidth}px`;
+            treePane.style.removeProperty("flex-basis");
+          } else if (picked.orientation === "lr") {
+            treePane.style.removeProperty("flex");
+            treePane.style.flexBasis = `${Math.round(share * 1000) / 10}%`;
+          } else {
+            treePane.style.removeProperty("flex");
+            treePane.style.flexBasis = `${Math.round(share * 1000) / 10}%`;
+          }
+        } else {
+          treePane.style.removeProperty("flex-basis");
+          treePane.style.removeProperty("flex");
+        }
+        // The same condition as the style above: a width that does not apply must not squeeze the tree either, or the
+        // rows would compact themselves for a pane that is not beside them.
+        applyTreePaneSqueeze((widthApplies && treeWidth) || treePaneEffectiveWidth(dims, picked.orientation, share, active, tabs, calendarCollapsed));
         allSplitter.setAttribute("aria-orientation", picked.orientation === "lr" ? "vertical" : "horizontal");
         allSplitter.setAttribute("aria-valuenow", String(Math.round(share * 100)));
         allSplitter.setAttribute("aria-valuetext", t("tree.layout.splitterText", { percent: Math.round(share * 100) }));
@@ -16853,13 +17890,18 @@
         const calendarViewName = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
         calendarViewSelect.dataset.value = calendarViewName;
         calendarViewSelect.textContent = t("cal.view." + calendarViewName);
+        syncCalendarViewToggle();
         calendarHeadingEl.textContent = t("cal.heading");
         calendarPane.setAttribute("aria-label", t("cal.heading"));
         calendarContent.setAttribute("aria-label", t("cal.itemsRegion.aria"));
         calendarPrev.title = t("cal.nav.prevPeriod");
         calendarPrev.setAttribute("aria-label", t("cal.nav.prevPeriod"));
         calendarToday.title = t("cal.todayBtn");
-        calendarToday.textContent = t("cal.todayBtn");
+        calendarToday.setAttribute("aria-label", t("cal.todayBtn"));
+        // The glyph and its dot are built once, in the header; a re-translate must not turn the button back into words.
+        if (!calendarToday.querySelector("svg")) {
+          calendarToday.replaceChildren(icon("calendar", 14), h("span", { class: "zn-calendar-today-dot", "aria-hidden": "true" }));
+        }
         calendarNext.title = t("cal.nav.nextPeriod");
         calendarNext.setAttribute("aria-label", t("cal.nav.nextPeriod"));
         calendarViewSelect.setAttribute("aria-label", t("cal.view.aria"));
@@ -16903,11 +17945,21 @@
         if (!calendarSplitDrag) return;
         const clean = CALENDAR_PART.cleanCalendarShare(share, calendarSplitDrag.startShare);
         calendarSplitDrag.share = clean;
+        // OW-97: a left/right drag sets a width in pixels; only a top/bottom drag is still a share, because there the
+        // splitter moves a height. The width is taken from the drag itself, not read back from the DOM, so the pane
+        // follows the pointer exactly and hands the rest to the calendar.
+        if (calendarSplitDrag.orientation === "lr") {
+          const width = CALENDAR_PART.clampTreePaneWidth(Math.round(clean * calendarSplitDrag.width), calendarSplitDrag.width);
+          calendarSplitDrag.treeWidth = width;
+          treePane.style.removeProperty("flex-basis");
+          treePane.style.flex = `0 0 ${width}px`;
+          applyTreePaneSqueeze(width);
+          allSplitter.setAttribute("aria-valuenow", String(width));
+          allSplitter.setAttribute("aria-valuetext", `${width} pixels for the notes tree`);
+          return;
+        }
         treePane.style.flexBasis = `${Math.round(clean * 1000) / 10}%`;
-        const dragTreeW = calendarSplitDrag.orientation === "lr"
-          ? Math.max(0, Math.round(calendarSplitDrag.width * clean - 7))
-          : calendarSplitDrag.width;
-        applyTreePaneSqueeze(dragTreeW);
+        applyTreePaneSqueeze(calendarSplitDrag.width);
         allSplitter.setAttribute("aria-valuenow", String(Math.round(clean * 100)));
         allSplitter.setAttribute("aria-valuetext", `${Math.round(clean * 100)} percent for folder tree`);
       }
@@ -16915,10 +17967,16 @@
         if (!calendarSplitDrag) return;
         const drag = calendarSplitDrag;
         calendarSplitDrag = null;
-        const key = drag.orientation === "lr" ? "calendarSplitLR" : "calendarSplitTB";
-        store.setMeta({ [key]: drag.share });
+        // Both keys are written on a left/right drag: the width is what draws, and the share stays in step so a user
+        // who switches to the top/bottom layout — or has an older version restore this document — still lands where
+        // they were, instead of on a split they never chose.
+        if (drag.orientation === "lr") {
+          store.setMeta({ calendarTreeWidth: Number(drag.treeWidth) || CALENDAR_PART.cleanTreePaneWidth(store.meta.calendarTreeWidth), calendarSplitLR: drag.share });
+          return;
+        }
+        store.setMeta({ calendarSplitTB: drag.share });
       }
-      // Split view as two windows: only where the sheet floats over a host and the option is on.
+      // The "All notes" menu's new-item row: the label depends on what the store and the Agenda offer.
       function syncAllNewButton() {
         const opts = { agendaEnabled: !!getPref(PREF.AGENDA_ENABLED, false), calendarAvailable: !!store.items, lang: notesLang() };
         const choice = CALENDAR_PART ? CALENDAR_PART.cleanAllNotesNewChoice(store.meta.allNewChoice, opts) : "note";
@@ -16927,12 +17985,29 @@
         btnNew.setAttribute("aria-label", label);
         btnNew.dataset.choice = choice;
       }
+      // OW-103: the sheet view and list filter are view state (see UI_KEYS_FALLBACK), written only when they change.
+      // Nothing is written until `finishOpen` has decided where this open lands: a new sheet starts on the editor, and
+      // that first `applyState` would otherwise overwrite the stored view with the editor before it could be restored.
+      let rememberedView = "";
+      let sheetViewRestored = false;
+      function rememberSheetView() {
+        if (!sheetViewRestored) return;
+        const next = view === "list" ? "list:" + filter : "editor";
+        if (next === rememberedView) return;
+        rememberedView = next;
+        store.setMeta(view === "list" ? { sheetView: "list", sheetFilter: filter } : { sheetView: "editor" });
+      }
       function applyState() {
         syncSheetSurfaceTokens();
         syncAllNewButton();
         const n = note();
         root.dataset.view = view;
         root.dataset.mode = mode;
+        // OW-103: keep the view the person is looking at in the view state, so a teardown and rebuild of the sheet —
+        // switching the Zentral web panel is the one that showed it — comes back to the calendar instead of the last
+        // note. `applyState` is the single place `view` and `filter` reach the DOM, so this cannot drift from what is
+        // on screen. Nothing is written when the sheet is merely being built for the first time.
+        if (isOpen && !destroyed) rememberSheetView();
         root.dataset.size = store.meta.size;
         labelEl.hidden = !n?.label || view === "list";
         labelEl.textContent = n?.label || "";
@@ -17011,6 +18086,7 @@
         ta.readOnly = !!n?.trashed;
         ta.hidden = mode === "read";
         readEl.hidden = mode === "edit";
+        if (typeof renderCompanion === "function") renderCompanion();
         search.placeholder = t("tree.searchPlaceholder");
         search.setAttribute("aria-label", t("tree.searchAria"));
         btnNewMenu.title = t("tree.createMenuAria");
@@ -17184,6 +18260,111 @@
         readSigs = sigs;
         buildReadAnchors(blocks);
       }
+      // ---- T3.8: the reference pane -------------------------------------------------------------------------
+      const splitCompanion = () => cleanSplitCompanion(store.meta.splitCompanion);
+      const companionBodyEl = companionEl.querySelector(".zn-companion-body");
+      const companionTitleEl = companionEl.querySelector(".zn-companion-title");
+      function companionNote() {
+        const c = splitCompanion();
+        if (!c.id || c.id === currentId) return null;
+        const found = (store.list({ trashed: false }) || []).some((it) => it && it.id === c.id);
+        return found ? store.get(c.id) || null : null;
+      }
+      let companionSig = "";
+      function renderCompanion(force = false) {
+        const c = splitCompanion();
+        const other = view === "editor" ? companionNote() : null;
+        root.dataset.companion = other ? "on" : "off";
+        companionEl.hidden = !other;
+        if (!other) { companionBodyEl.replaceChildren(); companionSig = ""; return null; }
+        const sig = [other.id, other.body, other.flavor || "", c.share, view].join("\u0000");
+        const axis = splitCompanionAxis(c, root.clientWidth || 0, root.clientHeight || 0);
+        if (!force && sig === companionSig && root.dataset.companionAxis === axis) return other;
+        companionSig = sig;
+        root.dataset.companionShare = String(c.share);
+        root.style.setProperty("--zn-companion-share", String(c.share));
+        root.dataset.companionAxis = axis;
+        companionDivider.setAttribute("aria-orientation", root.dataset.companionAxis === "side" ? "vertical" : "horizontal");
+        companionDivider.setAttribute("aria-valuenow", String(c.share));
+        companionTitleEl.textContent = titleOf(other.body) || "Untitled note";
+        const wrap = h("div", { class: "zn-print" }, h("div", { class: "zn-read zn-companion-read", tabindex: "0" }));
+        const target = wrap.firstChild;
+        const readOpts = { ...(env.readOpts?.() || {}) };
+        if (other.flavor) readOpts.flavor = other.flavor; // the pane's own note decides its markdown mode
+        const blocks = parseBlocks(hideFrontMatter(other.body), false, readOpts);
+        const readEnv = Object.assign(Object.create(env), {
+          slugFor: (text) => headingSlug(text),
+          jumpFootnote: () => {},
+          onReadCleanup: () => {},
+        });
+        renderBlocks(target, blocks, readEnv, () => {});
+        companionBodyEl.replaceChildren(wrap);
+        return other;
+      }
+      function setCompanion(id) {
+        const next = cleanSplitCompanion({ ...splitCompanion(), id });
+        store.setMeta({ splitCompanion: next });
+        applyState();
+        renderCompanion();
+        scheduleLayout();
+      }
+      function setCompanionShare(percent) {
+        const next = cleanSplitCompanion({ ...splitCompanion(), share: nearestSplitShare(percent) });
+        if (next.share === splitCompanion().share) return;
+        store.setMeta({ splitCompanion: next });
+        root.dataset.companionShare = String(next.share);
+        root.style.setProperty("--zn-companion-share", String(next.share));
+      }
+      // Drag the divider: the share follows the pointer, snapped to the five allowed values and remembered.
+      let companionDrag = null;
+      function companionPercentFromEvent(e) {
+        const rect = body.getBoundingClientRect();
+        const side = root.dataset.companionAxis === "side";
+        const span = side ? rect.width : rect.height;
+        if (!span) return 50;
+        const pos = side ? e.clientX - rect.left : e.clientY - rect.top;
+        return Math.max(25, Math.min(75, (pos / span) * 100));
+      }
+      listen(companionDivider, "pointerdown", (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        companionDrag = { pointerId: e.pointerId };
+        try { companionDivider.setPointerCapture(e.pointerId); } catch (_) {}
+        root.dataset.companionDragging = "true";
+      });
+      listen(companionDivider, "pointermove", (e) => {
+        if (!companionDrag || e.pointerId !== companionDrag.pointerId) return;
+        const pct = Math.round(companionPercentFromEvent(e));
+        root.style.setProperty("--zn-companion-share", String(Math.max(25, Math.min(75, pct))));
+      });
+      const endCompanionDrag = (e) => {
+        if (!companionDrag) return;
+        if (e && e.pointerId !== companionDrag.pointerId) return;
+        companionDrag = null;
+        delete root.dataset.companionDragging;
+        try { companionDivider.releasePointerCapture?.(e?.pointerId); } catch (_) {}
+        const shown = Number(root.style.getPropertyValue("--zn-companion-share")) || splitCompanion().share;
+        setCompanionShare(shown);
+      };
+      listen(companionDivider, "pointerup", endCompanionDrag);
+      listen(companionDivider, "pointercancel", endCompanionDrag);
+      listen(companionDivider, "keydown", (e) => {
+        const step = splitCompanion().share;
+        if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); setCompanionShare(step - 1); }
+        else if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); setCompanionShare(step + 1); }
+        else if (e.key === "Home") { e.preventDefault(); setCompanionShare(25); }
+        else if (e.key === "End") { e.preventDefault(); setCompanionShare(75); }
+      });
+      // One idle render per burst of store events, so typing in the main pane cannot repaint the reference per key.
+      let companionTimer = 0;
+      function scheduleCompanion() {
+        window.clearTimeout(companionTimer);
+        companionTimer = window.setTimeout(() => {
+          companionTimer = 0;
+          if (!isOpen || destroyed || view !== "editor") return;
+          renderCompanion();
+        }, PREVIEW_IDLE_MS);
+      }
       function schedulePreview() {
         window.clearTimeout(previewTimer);
         previewTimer = window.setTimeout(() => {
@@ -17245,12 +18426,19 @@
           if (mode !== "read") ta.setSelectionRange(ta.value.length, ta.value.length);
         } catch (_) {}
       }
-      function openNote(id, { focus = true } = {}) {
-        closeCalendarBigPicture({ restoreFocus: false });
+      function openNote(id, { focus = true, keepBigPicture = false, keepView = false } = {}) {
+        // OW-80: the Notes tree now lives inside the Big Picture card. Opening a note from there must not close the
+        // view the person is working in; every other caller still gets the old behaviour (the card goes away).
+        if (keepBigPicture && bigPicture) {
+          // Hold the card open across this open; the next layout pass clears the flag.
+          bigPicture.keepOnOpenNote = true;
+          queueMicrotask(() => { if (bigPicture) bigPicture.keepOnOpenNote = false; });
+        } else closeCalendarBigPicture({ restoreFocus: false });
         closeMenu();
         if (currentId && currentId !== id) store.discardIfEmpty(currentId);
         store.setMeta({ lastNoteId: id, recent: pushRecent(store.meta.recent, id) });
-        view = "editor";
+        // OW-103: restoring All notes opens the last note behind the list; that must not flip the view back to the editor.
+        if (!keepView) view = "editor";
         const n = store.get(id);
         mode = n?.trashed ? "read" : store.meta.mode;
         showNote(id);
@@ -17439,6 +18627,15 @@
           if (off >= 0) revealSourceMatch({ start: off, end: off });
         }
       }
+      // A note opened from outside the sheet. The reminder path and the widget quick capture both land here, so
+      // the start view is decided once.
+      function openNoteFromOutside(noteId, heading = "", itemId = "") {
+        if (!isOpen || destroyed || !store.get(noteId)) return false;
+        outsideClaim = false;
+        const wanted = startMode(getPref(PREF.DEFAULT_VIEW, "last"), store.meta.mode);
+        if (wanted !== store.meta.mode) store.setMeta({ mode: wanted });
+        return openNoteByIdAndHeading(noteId, heading, itemId);
+      }
       function openNoteByIdAndHeading(noteId, heading = "", itemId = "") {
         const target = typeof noteId === "string" ? store.get(noteId) : null;
         if (!target || target.trashed) return false;
@@ -17500,6 +18697,7 @@
         if (!note()?.trashed) store.setMeta({ mode });
         if (mode !== "edit") renderRead();
         applyState();
+        renderCompanion();
         scheduleLayout();
         if (findOpen) refreshFind({ jump: true, keep: false });
         else focusEditor();
@@ -17627,7 +18825,89 @@
         findOthers.textContent = n ? `found in ${n} other ${n === 1 ? "note" : "notes"}` : "not found in other notes";
         findOthers.disabled = !n;
         btnFindPrev.disabled = btnFindNext.disabled = !findList.length;
+        paintOffscreenState();
+        paintReplaceState(q);
       }
+      // OW-22: the pair stays quiet while everything is already readable, and says why in its title, so a disabled
+      // button never looks broken. Cheap enough to run on every scroll frame: one pass over the matches.
+      function paintOffscreenState() {
+        const fwd = findList.length ? outsideViewport(1) : { any: false, index: -1 };
+        const back = findList.length ? outsideViewport(-1) : { any: false, index: -1 };
+        btnFindNextOff.disabled = fwd.index < 0;
+        btnFindPrevOff.disabled = back.index < 0;
+        const idle = !fwd.any;
+        btnFindNextOff.title = idle ? "Next match not on screen (Ctrl+Alt+Down)" : fwd.index < 0 ? "All matches are on screen" : "Next match not on screen (Ctrl+Alt+Down)";
+        btnFindPrevOff.title = idle ? "Previous match not on screen (Ctrl+Alt+Up)" : back.index < 0 ? "All matches are on screen" : "Previous match not on screen (Ctrl+Alt+Up)";
+      }
+      // OW-21: what the replace row says, and whether its buttons may be pressed at all. A read-only view, the Trash
+      // and a note being loaded all mean the same thing here: the text cannot be written, so nothing pretends it can.
+      function paintReplaceState(q) {
+        // A closed bar has nothing to act on, and a replace row folded away must not leave its buttons live.
+        btnReplaceOne.disabled = btnReplaceAll.disabled = true;
+        if (findBar.hidden || replaceRow.hidden !== false) return;
+        const n = q ? findList.length : 0;
+        const blocked = replaceBlockedReason();
+        btnReplaceOne.disabled = btnReplaceAll.disabled = !n || !!blocked;
+        btnReplaceOne.title = blocked || "Replace this match";
+        btnReplaceAll.title = blocked || "Replace every match in this note";
+        replaceNote.textContent = blocked || (q ? replaceSummary({ total: n }, { lang: notesLang() }) : "");
+      }
+      // Why a replacement would be refused, in the words the person needs. Empty = it may go ahead. A read-only view,
+      // the Trash and a note that is not loaded all mean the same thing: the text cannot be written here.
+      function replaceBlockedReason() {
+        if (view !== "editor" || mode === "read") return notesLang() === "pl" ? "Widok do czytania — przełącz na edycję" : "Reading view — switch to Edit";
+        const n = note();
+        if (!n) return notesLang() === "pl" ? "Brak notatki" : "No note";
+        if (n.trashed) return notesLang() === "pl" ? "Notatka jest w koszu" : "This note is in the Trash";
+        return "";
+      }
+      const canReplaceNow = () => replaceBlockedReason() === "";
+      // One replace. The match is re-checked against the live text first (`replaceOne` refuses a stale range), so a
+      // change made elsewhere between the plan and the click cannot make this write the wrong words. The write goes
+      // through `setBody`, the same door the editor's own edits use — one store write, one undo step, one repaint.
+      function doReplaceOne() {
+        const q = findQuery();
+        if (!q || !canReplaceNow()) return flash(replaceBlockedReason() || "Nothing to replace");
+        const match = findList[findIdx >= 0 ? findIdx : 0];
+        if (!note() || !match) return;
+        const plan = replaceOne(ta.value, match, replaceInput.value, q);
+        if (!plan.ok) return flash(notesLang() === "pl" ? "Tekst się zmienił — spróbuj ponownie" : "The text changed — try again");
+        setBody(plan.text);
+        try { ta.setSelectionRange(plan.at, plan.at + plan.inserted); } catch (_) {}
+        refreshFind();
+        flash(notesLang() === "pl" ? "Zastąpiono" : "Replaced");
+      }
+      // Replace every match in THIS note, in one write, so it is one undo step and never a series of half-done edits.
+      // It never crosses notes: the range is this note's text, by construction.
+      function doReplaceAll() {
+        const q = findQuery();
+        if (!q || !canReplaceNow()) return flash(replaceBlockedReason() || "Nothing to replace");
+        if (!note()) return;
+        const plan = replaceAll(ta.value, q, replaceInput.value, {});
+        if (!plan.ok) return flash(notesLang() === "pl" ? "Brak trafień" : "No matches");
+        setBody(plan.text);
+        refreshFind();
+        const n = plan.replaced;
+        const tail = plan.truncated ? (notesLang() === "pl" ? " (limit)" : " (limit)") : "";
+        flash(notesLang() === "pl" ? "Zastąpiono " + n + (n === 1 ? " trafienie" : " trafień") + tail : "Replaced " + n + (n === 1 ? " match" : " matches") + tail);
+      }
+      // OW-21: the row is disclosed, not always there — finding is common, replacing is deliberate.
+      btnFindReplace.addEventListener("click", () => {
+        const open = replaceRow.hidden;
+        replaceRow.hidden = !open;
+        btnFindReplace.setAttribute("aria-expanded", String(!!open));
+        if (open) { try { replaceInput.focus({ preventScroll: true }); } catch (_) {} }
+        paintFindState();
+      });
+      replaceInput.addEventListener("input", () => paintReplaceState(findQuery()));
+      btnReplaceOne.addEventListener("click", doReplaceOne);
+      btnReplaceAll.addEventListener("click", doReplaceAll);
+      // Enter in the replacement field replaces the current match; Tab order stays inside the row.
+      replaceInput.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        if (e.altKey) doReplaceAll(); else doReplaceOne();
+      });
       function measureCaretY(offset) {
         if (!measureEditor()) return null;
         const marker = h("span", {}, "\u200b");
@@ -17641,11 +18921,13 @@
         readAnchY = readAnchY || measureRead();
         const y = mapPosition(readAnchY, lineOfOffset(ta.value, m.start), "line", "y");
         const next = revealScroll({ y, top: readEl.scrollTop, height: readEl.clientHeight });
-        if (next !== null) readEl.scrollTop = next;
+        if (next !== null) { readEl.scrollTop = next; syncCarried = 0; }
       }
       function revealSourceMatch(m) {
         findAnchor = m.start;
         ta.setSelectionRange(m.start, m.end);
+        // OW-47: a reveal is a new shared place, so the remainder of the last gesture must not drag it off.
+        syncCarried = 0;
         let y = null;
         try { y = measureCaretY(m.start); } catch (_) {}
         if (y === null) y = (lineOfOffset(ta.value, m.start) / Math.max(1, ta.value.split("\n").length)) * (ta.scrollHeight || 0);
@@ -17692,6 +18974,19 @@
         if (jump) showFindMatch();
         paintFindState();
       }
+      // OW-22: repaint only what the scroll can change, once per frame.
+      let offscreenFrame = 0;
+      function scheduleOffscreenState() {
+        if (!findOpen || offscreenFrame) return;
+        const raf = typeof window.requestAnimationFrame === "function"
+          ? window.requestAnimationFrame
+          : (fn) => window.setTimeout(fn, 16);
+        offscreenFrame = raf(() => {
+          offscreenFrame = 0;
+          if (!findOpen || destroyed) return;
+          paintOffscreenState();
+        });
+      }
       function scheduleFindRefresh() {
         if (!findOpen) return;
         window.clearTimeout(findTimer);
@@ -17699,6 +18994,61 @@
           findTimer = 0;
           refreshFind();
         }, 120);
+      }
+      // OW-22: where each match sits vertically, in the coordinates of the pane that shows it.
+      // The editor is plain text, so every line is exactly one line high and the line a match starts on is the line
+      // that has to be readable; the read view wraps, so there the anchors are measured from the real nodes.
+      function matchLineInEditor(m) {
+        const lh = editorLineHeight();
+        if (!(lh > 0)) return null;
+        return { y: lineOfOffset(ta.value, m.start) * lh, h: lh };
+      }
+      function editorLineHeight() {
+        let lh = 18;
+        try { lh = parseFloat(window.getComputedStyle(ta).lineHeight) || 18; } catch (_) {}
+        return lh;
+      }
+      function matchLineInRead(m) {
+        if (!readAnch.length) return null;
+        readAnchY = readAnchY || measureRead();
+        const y = mapPosition(readAnchY, lineOfOffset(ta.value, m.start), "line", "y");
+        let h = editorLineHeight();
+        try {
+          const nd = findRuns?.[m.run];
+          if (nd && typeof nd.getBoundingClientRect === "function") {
+            const r = nd.getBoundingClientRect();
+            if (r?.height > 0) h = r.height;
+          }
+        } catch (_) {}
+        return { y, h };
+      }
+      // The band a person can actually read: the pane's own scroll window.
+      const editorBand = () => ({ top: ta.scrollTop || 0, height: ta.clientHeight || 0 });
+      const readBand = () => ({ top: readEl.scrollTop || 0, height: readEl.clientHeight || 0 });
+      // Is match `i` fully readable in the pane that is showing? Its line must be wholly inside the pane's window.
+      function paneMatchVisible(i) {
+        const m = findList[i];
+        if (!m) return false;
+        if (findRuns || mode === "read") {
+          const band = readBand();
+          return matchIsVisible(m, matchLineInRead(m), band);
+        }
+        return matchIsVisible(m, matchLineInEditor(m), editorBand());
+      }
+      // -> { index, wrapped, any } from the pure rule, with the pane's own geometry.
+      const outsideViewport = (dir) => stepOutsideViewport(findList, findIdx, dir, paneMatchVisible);
+      // OW-22: jump to the next/previous match that is NOT already on screen. When everything left is visible, the
+      // person needs to be told that instead of being silently moved nowhere or thrown back to the first match.
+      function goFindOutside(dir) {
+        if (!findList.length) return;
+        const res = outsideViewport(dir);
+        if (res.index < 0) {
+          if (res.any) flash(notesLang() === "pl" ? "Wszystkie trafienia są na ekranie" : "All matches are on screen");
+          return;
+        }
+        findIdx = res.index;
+        showFindMatch();
+        paintFindState();
       }
       function goFind(dir) {
         if (!findList.length) return;
@@ -17764,6 +19114,16 @@
       });
       listen(btnFindNext, "click", () => goFind(1));
       listen(btnFindPrev, "click", () => goFind(-1));
+      // OW-22: the off-screen pair. Enter and Shift+Enter keep their old meaning, so the new move gets its own keys:
+      // Ctrl+Alt+Down / Ctrl+Alt+Up inside the find field, and also from the editor while the bar is open.
+      listen(btnFindNextOff, "click", () => goFindOutside(1));
+      listen(btnFindPrevOff, "click", () => goFindOutside(-1));
+      listen(findInput, "keydown", (e) => {
+        if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+        if (!e.ctrlKey || !e.altKey) return;
+        e.preventDefault();
+        goFindOutside(e.key === "ArrowUp" ? -1 : 1);
+      });
       listen(btnFindClose, "click", () => closeFind());
       listen(findOthers, "click", () => {
         const items = findOtherIds.slice(0, 12).map((id) => {
@@ -18104,8 +19464,11 @@
         calendarContent.setAttribute("aria-label", t("cal.itemsRegion.aria"));
         calendarPrev.setAttribute("aria-label", t("cal.nav.prevPeriod"));
         calendarNext.setAttribute("aria-label", t("cal.nav.nextPeriod"));
-        calendarToday.textContent = t("cal.todayBtn");
         calendarToday.title = t("cal.todayBtn");
+        calendarToday.setAttribute("aria-label", t("cal.todayBtn"));
+        if (!calendarToday.querySelector("svg")) {
+          calendarToday.replaceChildren(icon("calendar", 14), h("span", { class: "zn-calendar-today-dot", "aria-hidden": "true" }));
+        }
         calendarViewSelect.setAttribute("aria-label", t("cal.view.aria"));
         calendarSizeSelect.setAttribute("aria-label", t("cal.size.aria"));
         calendarSnapSelect.setAttribute("aria-label", t("cal.snap.aria"));
@@ -18118,6 +19481,7 @@
         syncCalendarBigPictureButton();
         calendarViewSelect.dataset.value = view;
         calendarViewSelect.textContent = t("cal.view." + view);
+        syncCalendarViewToggle();
         syncCalendarDaysControl(view);
         calendarKindSelect.dataset.value = kind;
         calendarKindSelect.textContent = t(kind === "event" ? "cal.filter.events" : kind === "reminder" ? "cal.filter.reminders" : "cal.filter.allItems");
@@ -18147,7 +19511,8 @@
       function calendarItemColor(item) {
         const linked = item?.x?.noteId ? store.get(item.x.noteId) : null;
         const category = item?.x?.category ? store.items?.category?.(item.x.category)?.color || "" : "";
-        const resolved = CALENDAR_PART.resolveItemColor(linked?.color || "", category);
+        // ST7.8: the item's own colour wins, then its note's, then its category's.
+        const resolved = CALENDAR_PART.resolveItemColor(item?.x?.color || "", linked?.color || "", category);
         return colorHex(resolved) || resolved;
       }
       function calendarItemTime(item) {
@@ -18356,7 +19721,10 @@
       }
       function currentCalendarItem(item) {
         const id = String(item?.x?.series || item?.id || "");
-        return id ? store.items?.get(id) || null : null;
+        if (!id) return null;
+        // OW-62: `get` hides an item whose note is not visible, which is exactly the imported item the owner cannot
+        // delete. Ask for the raw list first so "its note is missing" does not read as "the item is gone".
+        return (store.items?.list?.({ includeHidden: true }) || []).find((it) => it && it.id === id) || store.items?.get(id) || null;
       }
       function currentCalendarOccurrence(item) {
         if (!item?.x?.series || !item.x.recurrenceId) return currentCalendarItem(item) || (item?.x?.src === "note" ? item : null);
@@ -18470,16 +19838,22 @@
         const current = currentCalendarItem(item);
         if (!current) return flash("That calendar item is no longer available");
         const mirrored = CALENDAR_PART.isMirroredAgendaItem(current);
-        if (current.x?.src !== "manual" && !mirrored) return flash("Remove this item from its source note instead");
+        // OW-58: an imported item has no note body to edit either, so it is deleted right here like a hand-made one.
+        const source = current.x?.src === "ics" ? "ics" : "manual";
+        if (!CALENDAR_PART.itemIsFreeStanding?.(current) && !mirrored) return flash("Remove this item from its source note instead");
         const kind = CALENDAR_PART.isReminder(current) ? "reminder" : "event";
         const cancel = chip("Cancel"), remove = chip("Delete " + kind, true);
-        const detail = mirrored ? "This removes the calendar " + kind + " and its Agenda line from the Daily Note." : "This removes the independent calendar " + kind + ".";
+        const detail = mirrored
+          ? "This removes the calendar " + kind + " and its Agenda line from the Daily Note."
+          : source === "ics"
+            ? "This removes the imported calendar " + kind + ". Importing the same file again would bring it back."
+            : "This removes the independent calendar " + kind + ".";
         openCalendarCard("Delete calendar item?", h("p", { class: "zn-empty" }, `Delete “${current.summary || "Untitled item"}”? ${detail} This cannot be undone.`), h("div", { class: "zn-dialog-actions" }, cancel, remove));
         remove.addEventListener("click", () => {
           const latest = currentCalendarItem(current);
           // A changed ownership identity while the confirmation was open is not
           // consent to remove a different kind of source content.
-          if (!latest || CALENDAR_PART.isMirroredAgendaItem(latest) !== mirrored || (!mirrored && latest.x?.src !== "manual")) { closeDialog(); return flash("That calendar item is no longer available"); }
+          if (!latest || CALENDAR_PART.isMirroredAgendaItem(latest) !== mirrored || (!mirrored && !CALENDAR_PART.itemIsFreeStanding?.(latest))) { closeDialog(); return flash("That calendar item is no longer available"); }
           if (latest.rev !== current.rev || latest.updated !== current.updated) return flash("The item changed; cancel and review it before deleting");
           if (!store.deleteCalendarItem(latest.id)) return flash("Could not safely delete the calendar item or its Agenda line");
           closeDialog();
@@ -18489,10 +19863,32 @@
         cancel.addEventListener("click", closeDialog);
       }
       // T2.10: Work-free day tint & holiday tooltips across Month, Week, Day, Upcoming, and Agenda views.
-      const calendarHolidayPrefs = () => CALENDAR_PART?.cleanCalendarHolidays?.(store.meta.calendarHolidays) || { enabled: true, region: "none", weekend: "auto", personalDays: [] };
-      const calendarWorkFreeInfo = (day) => CALENDAR_PART?.isWorkFree?.(day, calendarHolidayPrefs(), notesLang()) || { workFree: false, weekend: false, holiday: null, personal: null, reasons: [], tooltip: "" };
+      // The holiday names follow the Notes interface language (OW-43); the sets themselves are the user's choice.
+      const calendarHolidayPrefs = () => CALENDAR_PART?.cleanCalendarHolidays?.(store.meta.calendarHolidays) || { enabled: true, region: "none", locales: [], weekend: "auto", personalDays: [] };
+      const calendarWorkFreeInfo = (day) => CALENDAR_PART?.isWorkFree?.(day, calendarHolidayPrefs(), notesLang()) || { workFree: false, weekend: false, holiday: null, holidays: [], personal: null, reasons: [], tooltip: "" };
+
+      // OW-96: the forecast the calendar shows. It reads what the widget already holds and never asks the weather
+      // service for anything — a calendar repaint must not become a network event. `null` means "do not draw" (the
+      // option is off, or there is no widget, or its cache has no forecast), which is different from "no weather today".
+      const calendarWeatherByDay = (renderNowMs) => {
+        try {
+          // `getPref` is the module-wide reader (it delegates to the controller's typed getter), and a bool default is
+          // what selects the boolean path there — not `prefBool`, which only exists inside the controller scope.
+          // The established bool form in this module (`=== true`), so a stored "true" and a real true agree.
+          if (getPref(PREF.CAL_WEATHER_WEEK, true) === false) return null;
+          const api = window.ZentralWidgets;
+          if (!api || typeof api.weatherDays !== "function") return null;
+          const days = api.weatherDays();
+          if (!Array.isArray(days) || !days.length) return null;
+          const todayKey = C.zonedDateKey(renderNowMs, calendarDisplayZone());
+          return CALENDAR_PART.calendarWeatherIndex(days, { todayKey });
+        } catch (_) {
+          return null;
+        }
+      };
       function applyWorkFreeAttrs(el, wf, { appendTitle = false } = {}) {
-        if (!el || !wf || !wf.workFree) return;
+        // OW-46: with the master switch off nothing is drawn — not even a personal day off, never a holiday marker.
+        if (!el || !wf || !wf.workFree || calendarHolidayPrefs().enabled === false) return;
         el.classList.add("is-workfree");
         if (wf.weekend) el.classList.add("is-weekend");
         if (wf.holiday) el.classList.add("is-holiday");
@@ -18503,6 +19899,22 @@
           el.dataset.holiday = wf.holiday.name;
           el.setAttribute("data-holiday", wf.holiday.name);
         }
+        // OW-45: an entry that is no day off (a trading Sunday, an election day) is marked, never tinted as a holiday.
+        const entryKinds = (Array.isArray(wf.holidays) ? wf.holidays : []).map((entry) => entry.kind);
+        for (const kind of ["trading-sunday", "election"]) {
+          if (!entryKinds.includes(kind)) continue;
+          el.classList.add(kind === "election" ? "is-election-day" : "is-trading-sunday");
+          el.dataset.holidayKind = kind;
+          el.classList.add("is-holiday-mark");
+        }
+        // OW-44: every chosen set is named, and a day that belongs to several says which (data-holiday-sets).
+        const holidaySets = CALENDAR_PART?.holidaySetsOf?.(wf) || [];
+        if (holidaySets.length) {
+          const setsText = holidaySets.join(" ");
+          el.dataset.holidaySets = setsText;
+          el.setAttribute("data-holiday-sets", setsText);
+          if (holidaySets.length > 1) el.classList.add("is-multi-holiday");
+        }
         if (wf.personal) {
           const pl = wf.personal.label || "true";
           el.dataset.personalOff = pl;
@@ -18511,6 +19923,17 @@
         if (wf.tooltip) {
           el.title = appendTitle && el.title ? `${el.title}\n${wf.tooltip}` : wf.tooltip;
         }
+      }
+      // T2.13a: an imported holiday is shown as itself. It never becomes a local holiday and never makes a day
+      // work-free (`isWorkFree` reads prefs only — it has no access to the item store at all), so the only thing that
+      // happens here is a neutral mark on the day and on the item, saying where it came from.
+      function applyImportedHolidayAttrs(el, items) {
+        if (!el) return;
+        const marked = (Array.isArray(items) ? items : []).map((item) => CALENDAR_PART?.importedHolidayAttrs?.(item)).find(Boolean);
+        if (!marked) return;
+        el.classList.add(marked.class);
+        el.setAttribute("data-imported-holiday", marked["data-imported-holiday"]);
+        if (marked.title) el.title = el.title ? `${el.title}\n${marked.title}` : marked.title;
       }
       function toggleCalendarPersonalDayOff(dayKey) {
         const cur = calendarHolidayPrefs();
@@ -18547,6 +19970,22 @@
           if (event.target !== anchor || !(event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) return;
           event.preventDefault(); event.stopPropagation(); showCalendarDayMenu(null, day, anchor);
         });
+      }
+      // ST7.8: one item's own colour. The note's and the category's stay the fallback, so "" means "inherit".
+      function settableCalendarItem(item) {
+        const latest = currentCalendarItem(item);
+        return latest && typeof store.items?.upsert === "function" ? latest : null;
+      }
+      function setCalendarItemColor(item, value) {
+        const current = settableCalendarItem(item);
+        if (!current) return flash("That calendar item is no longer available");
+        const next = value ? CALENDAR_PART.cleanItemColor(value) : "";
+        if (value && !next) return flash("That colour is not recognised");
+        if ((CALENDAR_PART.cleanItemColor(current.x?.color) || "") === next) return;
+        const saved = store.items.upsert({ ...current, x: { ...current.x, color: next } });
+        if (!saved) return flash("The colour could not be saved");
+        renderCalendar();
+        flash(next ? t("toast.itemColorSet", { colour: next }) : t("toast.itemColorCleared"));
       }
       function calendarItemMenuRows(item) {
         const reminder = CALENDAR_PART.isReminder(item), history = reminderHistoryStore();
@@ -18586,6 +20025,11 @@
           "snooze-3d": () => snoozeReminderItem(item, 3),
           "snooze-monday": () => snoozeReminderItem(item, nextMonday),
           "snooze-custom": () => queueMicrotask(() => askCustomReminderSnooze(item)),
+          // ST7.8: the sheet applies the same colour writes as the headless path; only "Custom colour…" needs the
+          // dialog that lives here.
+          "color-custom": () => queueMicrotask(() => askCustomColor(t("menu.colorCustom"), cleanHex(settableCalendarItem(item)?.x?.color), (value) => setCalendarItemColor(item, value))),
+          ...Object.fromEntries(CALENDAR_PART.ITEM_COLOR_CHOICES.map((name) => ["color-" + name, () => setCalendarItemColor(item, name)])),
+          "color-none": () => setCalendarItemColor(item, ""),
         };
         const bind = (rows) => rows.map((row) => {
           if (!row || row.sep || row.heading) return row;
@@ -18640,6 +20084,12 @@
           "aria-label": `${reminder ? "Reminder" : "Event"}: ${item.summary}${reminder ? ". State: " + lifecycle : ""}${item.x?.calNote ? ". Calendar note: " + item.x.calNote : ""}`,
         });
         button._znCalendarItem = item;
+        // T2.13a: an imported holiday looks like an imported holiday wherever the item is drawn.
+        const holidayAttrs = CALENDAR_PART?.importedHolidayAttrs?.(item);
+        if (holidayAttrs) {
+          button.classList.add(holidayAttrs.class);
+          button.setAttribute("data-imported-holiday", holidayAttrs["data-imported-holiday"]);
+        }
         if (!reminder) button.setAttribute("data-item-key", JSON.stringify(["event", String(item.id), String(item.x?.recurrenceId || "")]));
         if (reminder) {
           const identity = reminderLifecycleIdentity(item);
@@ -18770,7 +20220,7 @@
               button.setAttribute("aria-selected", active ? "true" : "false");
               button.setAttribute("aria-pressed", active ? "true" : "false");
             }
-            const entries = CALENDAR_PART.itemsInRange(pickerExpanded, selectedDay, CALENDAR_PART.addDays(selectedDay, 1));
+            const entries = CALENDAR_PART.itemsInRange(pickerExpanded, selectedDay, CALENDAR_PART.nextDayStart(selectedDay));
             selection.replaceChildren(calendarDayGroup(selectedDay, entries, { selected: true }));
           };
           const buildPickerCells = () => {
@@ -18830,7 +20280,7 @@
               visibleYear = date.getFullYear();
               visibleMonth = date.getMonth();
               const weeks = CALENDAR_PART.monthGrid(visibleYear, visibleMonth, weekStart);
-              pickerExpanded = CALENDAR_PART.expandRange(items, weeks[0][0], CALENDAR_PART.addDays(weeks[5][6], 1));
+              pickerExpanded = CALENDAR_PART.expandRange(items, weeks[0][0], CALENDAR_PART.nextDayStart(weeks[5][6]));
               buildPickerCells();
             } else {
               for (const button of [...cells.querySelectorAll(".zn-cal-picker-day")]) {
@@ -18853,7 +20303,7 @@
               visibleYear = date.getFullYear();
               visibleMonth = date.getMonth();
               const weeks = CALENDAR_PART.monthGrid(visibleYear, visibleMonth, weekStart);
-              pickerExpanded = CALENDAR_PART.expandRange(items, weeks[0][0], CALENDAR_PART.addDays(weeks[5][6], 1));
+              pickerExpanded = CALENDAR_PART.expandRange(items, weeks[0][0], CALENDAR_PART.nextDayStart(weeks[5][6]));
               focusedDay = day;
               buildPickerCells();
             }
@@ -18896,7 +20346,7 @@
             c.setAttribute("aria-selected", active ? "true" : "false");
             c.querySelector(".zn-cal-month-date")?.setAttribute("aria-pressed", active ? "true" : "false");
           }
-          const entries = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.addDays(day, 1));
+          const entries = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.nextDayStart(day));
           selection.replaceChildren(calendarDayGroup(day, entries, { selected: true }));
         };
         for (const week of grid) {
@@ -18906,11 +20356,13 @@
           }
           for (const day of week) {
           const inMonth = new Date(day).getMonth() === month;
-          const dayItems = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.addDays(day, 1));
+          const dayItems = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.nextDayStart(day));
           const dayText = calendarDayLabel(day, { year: true });
           const wf = calendarWorkFreeInfo(day);
           const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", tabindex: "0", "aria-selected": day === selected ? "true" : "false", "aria-label": t("cal.month.dayAria", { day: dayText }) + (wf.tooltip ? ", " + wf.tooltip : ""), "data-day": CALENDAR_PART.ymd(new Date(day)) });
           applyWorkFreeAttrs(cell, wf);
+          // T2.13a: read from the day's own items — the imported holiday marks the day it falls on, nothing else.
+          applyImportedHolidayAttrs(cell, dayItems);
           const openDayView = () => { store.setMeta({ calendarCursor: CALENDAR_PART.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); };
           const dayButton = h("button", { type: "button", class: "zn-cal-month-date", "aria-label": t("cal.month.openDayAria", { day: dayText }), "aria-pressed": day === selected ? "true" : "false", title: wf.tooltip || null }, String(new Date(day).getDate()));
           dayButton.addEventListener("click", (event) => { event.stopPropagation(); openDayView(); });
@@ -18963,7 +20415,7 @@
         }
         monthWrap.append(dows, cells);
         calendarContent.append(monthWrap);
-        const selectedItems = CALENDAR_PART.itemsInRange(expanded, selected, CALENDAR_PART.addDays(selected, 1));
+        const selectedItems = CALENDAR_PART.itemsInRange(expanded, selected, CALENDAR_PART.nextDayStart(selected));
         selection.append(calendarDayGroup(selected, selectedItems, { selected: true }));
         calendarContent.append(selection);
         // Now that the grid is in the document, what it shows is fitted to the height of its weeks (OW-03).
@@ -19026,6 +20478,8 @@
       // Escape, pointer cancellation, panel close or teardown discards the preview.
       let calendarDrag = null, calendarMoveUndo = null, calendarDragClickTimer = 0, calendarSuppressedClick = null;
       let calendarNoteDrop = null, calendarDragNoteId = "", noteDragCanceled = false;
+      // OW-80: every note the current drag carries — one, or the whole tree selection.
+      let calendarDragNoteIds = [];
       // The Week / Day grid as it is drawn now (OW-04, OW-03): { startMin, endMin } the hours it shows, `hourPx` the
       // height of an hour, `fit` whether that height is fitted to the timeline, `openMin` the minute a timeline that
       // scrolls opens at. And per day what was laid out in it ({ startMin, endMin, item }), kept so that an update of
@@ -19112,6 +20566,7 @@
         calendarDrag = null;
         if (!g) return;
         g.preview?.remove();
+        g.dropHint?.remove(); // OW-82: the "drop to delete" hint never outlives the drag
         if (g.active) { g.button._znSuppressDragClick = true; calendarSuppressedClick = { button: g.button, pointerId: g.pointerId }; }
         g.button.classList.remove("is-dragging");
         try { if (g.button.hasPointerCapture?.(g.pointerId)) g.button.releasePointerCapture(g.pointerId); } catch (_) {}
@@ -19140,7 +20595,23 @@
         const targetCivilMin = !point || g.allDay ? 0 : CALENDAR_PART.timelineToCivilMinute(g.grid?.timeline, point.minute);
         const placement = point && (g.create ? { date: point.day, minute: point.minute } : g.allDay ? { date: point.day } : g.edge ? CALENDAR_PART.calendarResizePlacement(g.before, g.edge, g.originDay, originCivilMin, point.day, targetCivilMin, g.zone, g.snap) : CALENDAR_PART.calendarMovePlacement(g.occurrence || g.before, g.originDay, originCivilMin, point.day, targetCivilMin, g.zone, g.snap));
         g.placement = placement;
-        if (!placement) { g.preview?.remove(); g.preview = null; return; }
+        if (!placement) {
+          g.preview?.remove();
+          g.preview = null;
+          // OW-82: while an item is over empty space, say what a release would do, so the gesture is discoverable
+          // instead of a surprise. A create-drag or a resize has no throw-away meaning and says nothing.
+          if (g.active && !g.create && !g.edge && isCalendarEmptyDropPoint(event)) {
+            if (!g.dropHint) g.dropHint = h("div", { class: "zn-cal-drag-hint", "aria-hidden": "true" });
+            if (g.dropHint.parentElement !== root) root.append(g.dropHint);
+            g.dropHint.textContent = "Drop to delete\u2026";
+          } else {
+            g.dropHint?.remove();
+            g.dropHint = null;
+          }
+          return;
+        }
+        g.dropHint?.remove();
+        g.dropHint = null;
         if (!g.preview) g.preview = h("div", { class: "zn-cal-drag-preview", "aria-hidden": "true" });
         if (g.preview.parentElement !== point.track) point.track.append(g.preview);
         g.preview.style.top = g.allDay ? "0px" : Math.max(0, CALENDAR_PART.gridOffsetOf(point.minute, g.hourHeight, g.grid)) + "px";
@@ -19148,15 +20619,77 @@
         g.preview.textContent = g.allDay ? placement.date + " · all day" : placement.date + " " + String(Math.floor(shownMinute / 60)).padStart(2, "0") + ":" + String(shownMinute % 60).padStart(2, "0");
         event.preventDefault();
       }
+      // OW-82: "did this release land on empty space?" — the grid's own clips are the honest answer, not the event
+      // target (a pointer capture reports the button that started the drag). A release outside the calendar pane, or
+      // inside it but on no track and no month cell, counts as empty.
+      function isCalendarEmptyDropPoint(event) {
+        if (!Number.isFinite(event?.clientX) || !Number.isFinite(event?.clientY)) return false;
+        const inside = (node) => {
+          if (!node?.getBoundingClientRect) return false;
+          const r = node.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && event.clientX >= r.left && event.clientX < r.right && event.clientY >= r.top && event.clientY < r.bottom;
+        };
+        const inPane = inside(calendarPane) || inside(bigPicture?.stage);
+        // Outside the calendar altogether: not a throw-away gesture, just a drag that ended elsewhere.
+        if (!inPane) return false;
+        for (const el of calendarContent.querySelectorAll(".zn-cal-time-track, .zn-cal-time-allday-cell, .zn-cal-month-cell, .zn-cal-picker-day")) {
+          if (inside(el)) return false;
+        }
+        return true;
+      }
+      // OW-82: the five-minute "do not ask" window lives in the sheet, not in the store: it must not survive a restart.
+      let dragDeleteQuietUntil = 0;
+      function askDeleteByDrag(item) {
+        const current = currentCalendarItem(item);
+        if (!current) return;
+        const kind = CALENDAR_PART.isReminder(current) ? "reminder" : "event";
+        const name = String(current.summary || "Untitled item").trim() || "Untitled item";
+        const remove = () => {
+          const latest = currentCalendarItem(current);
+          if (!latest) return flash("That calendar item is no longer available");
+          // The same ownership rules as the menu's Delete: a linked line is removed from its note, never orphaned.
+          if (!CALENDAR_PART.itemIsFreeStanding?.(latest) && !CALENDAR_PART.isMirroredAgendaItem(latest)) {
+            flash("Remove this item from its source note instead");
+            return;
+          }
+          if (latest.rev !== current.rev || latest.updated !== current.updated) return flash("The item changed; nothing was deleted");
+          if (!store.deleteCalendarItem(latest.id)) return flash("Could not safely delete the calendar item or its Agenda line");
+          renderCalendar();
+          flash("Calendar item deleted");
+        };
+        if (Date.now() < dragDeleteQuietUntil) return remove();
+        const keep = chip(t("common.cancel"));
+        const quiet = chip("Delete and don't ask for 5 minutes");
+        const del = chip("Delete " + kind, true);
+        openCalendarCard("Delete this " + kind + "?",
+          h("p", { class: "zn-empty" }, `You dropped “${name}” on empty space. Deleting it cannot be undone.`),
+          h("div", { class: "zn-dialog-actions" }, quiet, keep, del));
+        keep.addEventListener("click", () => { closeDialog(); renderCalendar(); });
+        keep.focus({ preventScroll: true }); // the safe answer has the focus; Delete has to be chosen on purpose
+        del.addEventListener("click", () => { closeDialog(); remove(); });
+        quiet.addEventListener("click", () => {
+          dragDeleteQuietUntil = Date.now() + 5 * 60 * 1000;
+          closeDialog();
+          remove();
+          flash("Deleting without asking for 5 minutes");
+        });
+      }
       function commitCalendarDrag(event) {
         const g = calendarDrag;
         if (!g || (event.pointerId !== undefined && event.pointerId !== g.pointerId)) return;
         if (g.active) updateCalendarDrag(event);
         const placement = g.active ? g.placement : null;
+        // OW-82: a drag that really moved and came to rest on empty space is a throw-away gesture ("when user drags
+        // reminder to empty space it asks him if he wants to delete it"). A create-drag and a resize are not: the first
+        // is making something, the second is changing an edge. Decided before the state is cleared.
+        const throwAway = !placement && g.active && !g.create && !g.edge && !!g.before && isCalendarEmptyDropPoint(event);
         cancelCalendarDrag();
         // Native click follows pointerup in this task; clear suppression afterwards.
         releaseCalendarSuppressedClick(event);
-        if (!placement) return;
+        if (!placement) {
+          if (throwAway) askDeleteByDrag(g.before);
+          return;
+        }
         if (g.create) {
           const range = CALENDAR_PART.calendarDraftRange(g.originDay, CALENDAR_PART.timelineToCivilMinute(g.grid?.timeline, g.originMinute), placement.date, CALENDAR_PART.timelineToCivilMinute(g.grid?.timeline, placement.minute), g.zone, g.snap);
           if (!range) return flash("Select a valid non-empty calendar time range");
@@ -19322,6 +20855,34 @@
         const source = id ? store.get(id) : null;
         return source && !source.trashed ? source.id : "";
       }
+      // OW-80: several notes dropped on one calendar slot. "one note one item" is not the only useful answer, and the
+      // person is the only one who knows which they meant, so ask once and say what each choice will do.
+      function askMultiNoteDrop(noteIds, slot) {
+        const count = noteIds.length;
+        // C.parseYmd gives a civil date; calendarDayLabel wants milliseconds, and adds the weekday itself.
+        const parsed = CALENDAR_PART?.parseYmd?.(slot?.date || "") || null;
+        const dayText = parsed ? ` on ${calendarDayLabel(parsed.getTime(), { year: true })}` : "";
+        const names = noteIds.slice(0, 3).map((id) => titleOf(store.get(id)?.body) || "Untitled note");
+        const cancel = chip(t("common.cancel"));
+        const each = chip(`One item each (${count})`);
+        const one = chip("One item for all of them", true);
+        openCalendarCard("What should the drop make?",
+          h("p", {}, `${count} notes${dayText}: ${names.join(", ")}${count > 3 ? ` and ${count - 3} more` : ""}.`),
+          h("p", { class: "zn-empty" }, "One item for all of them links every note to a single item; one item each opens the composer for the first note, then the next, for a different day or time per note."),
+          h("div", { class: "zn-dialog-actions" }, cancel, each, one));
+        cancel.addEventListener("click", () => closeDialog());
+        cancel.focus({ preventScroll: true });
+        // One shared item: exactly what a single-note drop does, with the rest of the names in its description so nothing
+        // is silently dropped and the person can split them in the composer if that is what they meant.
+        one.addEventListener("click", () => {
+          closeDialog();
+          composeFromNote(noteIds[0], slot, { alsoNotes: noteIds.slice(1) });
+        });
+        each.addEventListener("click", () => {
+          closeDialog();
+          composeFromNote(noteIds[0], slot);
+        });
+      }
       function resolveCalendarNoteDrop(event) {
         const C = CALENDAR_PART;
         const el = event?.target?.closest ? event.target : event?.target?.parentElement;
@@ -19398,12 +20959,17 @@
         if (!hasNoteDragPayload(event)) return;
         const hit = resolveCalendarNoteDrop(event) || (calendarNoteDrop ? { slot: calendarNoteDrop.slot } : null);
         const id = readNoteDragId(event);
+        // OW-80: the notes this drag carries. A single note keeps today's one-step composer; several ask first, because
+        // one drop cannot mean five separate items without the person saying which shape they want.
+        const notes = (calendarDragNoteIds.length > 1 ? calendarDragNoteIds : []).filter((noteId) => !!store.get(noteId) && !store.get(noteId).trashed);
         dragNoteId = "";
         calendarDragNoteId = "";
+        calendarDragNoteIds = [];
         clearCalendarNoteDrop();
         if (!hit) return;
         event.preventDefault();
         event.stopPropagation();
+        if (notes.length > 1) { askMultiNoteDrop(notes, hit.slot); return; }
         if (id && isOpen && !destroyed) composeFromNote(id, hit.slot);
       }, true);
       listen(window, "keydown", (event) => {
@@ -19461,12 +21027,12 @@
         if (!patch && calendarFit && mode === "week") calendarFit.weekDays = days.length;
         const workDays = patch ? days.filter((day) => patch.days.has(C.localDateKey(day))) : days;
         const firstDay = workDays[0], firstBounds = C.zonedDayBounds(C.localDateKey(firstDay), zone) || [firstDay, C.addDays(firstDay, 1)];
-        const lastDay = workDays[workDays.length - 1], lastBounds = C.zonedDayBounds(C.localDateKey(lastDay), zone) || [lastDay, C.addDays(lastDay, 1)];
+        const lastDay = workDays[workDays.length - 1], lastBounds = C.zonedDayBounds(C.localDateKey(lastDay), zone) || [lastDay, C.nextDayStart(lastDay)];
         // Timed items belong to the days of the display zone, all-day items to the dates as written: the range holds
         // both. With the zone's days alone an all-day reminder of the first day shown was left out wherever the
         // display zone is behind the computer's (the reminder begins at the computer's midnight, hours before that
         // day begins in the zone); in Day view that is every all-day reminder.
-        const from = Math.min(firstBounds[0], firstDay), until = Math.max(lastBounds[1], C.addDays(lastDay, 1));
+        const from = Math.min(firstBounds[0], firstDay), until = Math.max(lastBounds[1], C.nextDayStart(lastDay));
         const expanded = C.expandRange(items, from, until);
         // OW-04, OW-03, T2.4c4. Build the real 23/24/25-hour DST timeline for the visible days first so
         // repeated fall-back hours get distinct rows and skipped spring-forward hours are represented honestly.
@@ -19498,37 +21064,78 @@
         const setEndGridMin = C.timelineCivilToGridMin(timeline, hoursSet.endMin);
         const fmt = (day) => calendarDayLabel(day, { weekday: mode === "week" ? "short" : "long", year: true });
         calendarPeriod.textContent = mode === "week" && days.length > 1 ? `${fmt(days[0])} – ${fmt(days[days.length - 1])}` : fmt(days[0]);
-        const cols = `42px repeat(${days.length}, minmax(0, 1fr))`;
+        // OW-96: 48 days do not fit 48 columns. `weekGridPlan` decides whether the days stack into two rows of 24 at
+        // this width and height; it is asked once here, before anything is built, because the header, the all-day row
+        // and the timeline all have to wrap the same way or their cells sit under the wrong days. With one row — the
+        // normal case — every branch below is the code that was always there.
         const todayKey = C.zonedDateKey(nowMs(), zone);
+        const weekRowPlan = mode === "week" && days.length > 1
+          ? C.weekGridPlan({ days: days.length, widthPx: calendarPaneWidth(), heightPx: calendarPaneHeight() })
+          : { count: days.length, rows: 1, perRow: days.length };
+        // The header wraps exactly as the timeline does (see the columns below). With one row this is the original
+        // `repeat(days.length, ...)`; with two it is `repeat(perRow, ...)` and the day heads wrap.
+        const headPerRow = Math.max(1, weekRowPlan.perRow);
+        const cols = weekRowPlan.rows === 2
+          ? `repeat(${headPerRow}, minmax(0, 1fr))`
+          : `42px repeat(${days.length}, minmax(0, 1fr))`;
         const root = h("div", { class: "zn-cal-time-view is-" + mode, "aria-label": t(mode === "week" ? "cal.weekCalendar.aria" : "cal.dayCalendar.aria") });
         root.dataset.hours = hoursSet.on ? "limited" : "all";
         root.style.setProperty("--zn-cal-hours", String(gridHours));
         const header = h("div", { class: "zn-cal-time-head" });
         header.style.gridTemplateColumns = cols;
         const cornerWeek = showWeeks ? C.weekNumber(days[0], weekStart) : 0;
-        header.append(
-          showWeeks
-            ? h("span", { class: "zn-cal-time-corner zn-cal-week-num", "aria-label": t("cal.week.aria", { num: cornerWeek }), title: t("cal.week.aria", { num: cornerWeek }) }, t("cal.week.short", { num: cornerWeek }))
-            : h("span", { class: "zn-cal-time-corner", "aria-hidden": "true" }),
-        );
+        // With two rows the week number would eat the first cell of the first row; the period line above the grid
+        // already names the span, so the corner is left out and the days start in column one.
+        if (weekRowPlan.rows !== 2) {
+          header.append(
+            showWeeks
+              ? h("span", { class: "zn-cal-time-corner zn-cal-week-num", "aria-label": t("cal.week.aria", { num: cornerWeek }), title: t("cal.week.aria", { num: cornerWeek }) }, t("cal.week.short", { num: cornerWeek }))
+              : h("span", { class: "zn-cal-time-corner", "aria-hidden": "true" }),
+          );
+        }
+        // OW-96: one read of the widget's forecast for the whole render, then a map lookup per day. The card owns the
+        // fetching; the calendar only asks what it already has, so a calendar render never starts a network request.
+        const calWeather = mode === "week" ? calendarWeatherByDay(nowMs()) : null;
+        // OW-99: the row-start test used to be `days.indexOf(day)` inside three loops — a quadratic scan, twice over,
+        // on the one path (48 days) where it matters, and computed twice on the 7-day path where the answer is never
+        // used. A counter and one `rows === 2` guard cost nothing and say the same thing.
+        let headIndex = 0;
         for (const day of days) {
           const isToday = C.localDateKey(day) === todayKey;
           const wf = calendarWorkFreeInfo(day);
-          const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", " + calendarTodayLabel() : "") + (wf.tooltip ? ", " + wf.tooltip : "") }, h("strong", {}, new Date(day).toLocaleDateString(notesLocale(), { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), ...(wf.tooltip ? [h("span", { class: "zn-cal-holiday-pill", title: wf.tooltip }, wf.tooltip)] : []));
+          const wx = calWeather ? calWeather.get(CALENDAR_PART.localDateKey(day)) : null;
+          const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", " + calendarTodayLabel() : "") + (wf.tooltip ? ", " + wf.tooltip : "") + (wx ? ", " + wx.text : "") },
+            // The symbol sits above the weekday name: it answers "what is this day going to be like" before the eye
+            // reaches the name that identifies the column, which is the order the owner asked for.
+            ...(wx ? [h("span", { class: "zn-cal-weather", "aria-hidden": "true", title: wx.text }, h("span", { class: "zn-cal-weather-icon" }, wx.icon), h("span", { class: "zn-cal-weather-temp" }, wx.temp))] : []),
+            h("strong", {}, new Date(day).toLocaleDateString(notesLocale(), { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), ...(wf.tooltip ? [h("span", { class: "zn-cal-holiday-pill", title: wf.tooltip }, wf.tooltip)] : []));
           applyWorkFreeAttrs(dayHead, wf);
           dayHead.addEventListener("click", () => { store.setMeta({ calendarCursor: C.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); });
           bindCalendarDayContext(dayHead, day);
+          // Each wrapped row starts on its own line under column one, never half a column off.
+          if (weekRowPlan.rows === 2 && headIndex % headPerRow === 0) dayHead.style.gridColumnStart = "1";
+          headIndex++;
           header.append(dayHead);
         }
         const allDayRow = h("div", { class: "zn-cal-time-allday-row", "aria-label": t("cal.allDayRow.aria") });
         allDayRow.style.gridTemplateColumns = cols;
         const dragAllDayRow = patch?.allDayRow || allDayRow;
+        // OW-96: two rows wrap here as well, or the all-day cells would sit under the wrong days. The label cell stays
+        // in the first column of the first row; the second row begins at column one.
+        if (weekRowPlan.rows === 2) {
+          allDayRow.style.gridTemplateColumns = `42px repeat(${headPerRow}, minmax(0, 1fr))`;
+          allDayRow.dataset.rows = "2";
+        }
         allDayRow.append(h("span", { class: "zn-cal-time-all-label" }, t("cal.allDay")));
+        // Its own counter: this loop walks `workDays`, which a patch narrows, so it cannot share the header's index.
+        let allDayIndex = 0;
         for (const day of workDays) {
           const isToday = C.localDateKey(day) === todayKey;
           const cell = h("div", { class: "zn-cal-time-allday-cell" + (isToday ? " is-today" : ""), tabindex: "0", "aria-label": t("cal.allDayFor.aria", { day: fmt(day) }), "data-day": C.ymd(new Date(day)) });
           applyWorkFreeAttrs(cell, calendarWorkFreeInfo(day));
           bindCalendarDayContext(cell, day);
+          if (weekRowPlan.rows === 2 && allDayIndex % headPerRow === 0) cell.style.gridColumnStart = "2";
+          allDayIndex++;
           for (const item of C.allDayOf(expanded, day)) {
             const button = calendarItemButton(item, true);
             // A drag in the all-day row moves a reminder by days and never reads the height of an hour (which is not
@@ -19621,10 +21228,23 @@
           hours.append(labelEl);
         }
         gridRow.append(hours);
+        // OW-96: 48 days do not fit 48 columns. When the plan asks for two rows the days are split across two column
+        // grids of the same width, stacked — hour gutter and timeline on the left of both, so the two rows line up and
+        // read as one grid rather than two calendars. Each row keeps the second row's own hour rules; only the days
+        // move. `weekRowPlan.perRow` is 24 for a full 48-day span.
+        // OW-96: with two rows the grid is laid out as `perRow` columns and the days simply wrap into the next row —
+        // CSS grid does the stacking, and every row keeps its own full-height tracks. The first day of a row is pinned
+        // to the second column so it never lands under the hour gutter, which exists only once. With one row (the
+        // normal case, and every patch) `perRow` is the day count and nothing about the view changes at all.
+        const perRow = weekRowPlan.rows === 2 ? Math.max(1, weekRowPlan.perRow) : days.length;
         const columns = h("div", { class: "zn-cal-time-columns" });
         const dragColumns = patch?.columns || columns, dragScroll = patch?.scroll || scroll;
-        columns.style.gridTemplateColumns = `repeat(${days.length}, minmax(0, 1fr))`;
+        columns.style.gridTemplateColumns = `repeat(${perRow}, minmax(0, 1fr))`;
+        if (weekRowPlan.rows === 2) columns.dataset.rows = "2";
+        // A patch cannot re-flow a grid whose shape changed: the caller draws the whole view instead.
+        if (patch && weekRowPlan.rows !== 1) return "refit";
         const work = C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK);
+        let columnIndex = 0;
         for (const day of workDays) {
           const dayKey = C.localDateKey(day);
           const { bounds, entries } = laidOut.get(dayKey);
@@ -19737,8 +21357,14 @@
           }
           const col = h("div", { class: "zn-cal-time-column" + (isToday ? " is-today" : "") }, track);
           applyWorkFreeAttrs(col, calendarWorkFreeInfo(day));
+          // The row comes from the day's place in `days`, not in `workDays`: a patch draws a subset, and the row a
+          // column belongs to must not move because its neighbours were skipped.
+          // Same counter rule as the two rows above: `workDays` is what is drawn, so it is what decides the row.
+          if (weekRowPlan.rows === 2 && columnIndex % perRow === 0) { col.style.gridColumnStart = "1"; col.classList.add("is-row-start"); }
+          columnIndex++;
           columns.append(col);
         }
+        gridRow.dataset.rows = String(weekRowPlan.rows);
         gridRow.append(columns);
         scroll.append(gridRow);
         if (patch) {
@@ -19769,6 +21395,17 @@
       function askCalendarComposer(options = {}) {
         const C = CALENDAR_PART;
         if (!C || !store.items) return flash(t("compose.storageUnavailable"));
+        // OW-102: "creating more than one event at once does not work". The dialog area holds ONE card: `openCard` calls
+        // `closeDialog()` before it builds anything, so a second creation started while a composer is open threw the
+        // first one — and its unsaved draft — away without a word. Creating two in a row always worked; creating two
+        // at once silently lost one. A second composer is now refused and says why, and the one that is open keeps
+        // its draft. (Creating several in a row is unhindered: the card is gone by the time the second starts.)
+        const openComposer = dialog?.querySelector?.(".zn-cal-compose-card");
+        if (openComposer && options.item == null && !options.replaceOpen) {
+          flash(t("compose.alreadyOpen"));
+          try { openComposer.querySelector("input, textarea, button")?.focus?.(); } catch (_) {}
+          return null;
+        }
         const original = options.item && store.items.get(options.item.id) || null;
         if (options.item && !original) return flash(t("compose.itemUnavailable"));
         const now = nowMs();
@@ -20055,8 +21692,13 @@
         const preview = h("p", { class: "zn-empty zn-cal-compose-preview", "aria-live": "polite" });
         const status = h("p", { class: "zn-empty zn-cal-compose-status", role: "status", "aria-live": "polite" });
         const save = chip(t(original ? "compose.btn.save" : initialKind === "event" ? "compose.btn.createEvent" : "compose.btn.createReminder"), true);
+        // OW-102: creating several at once is what the owner was trying to do. A second composer is refused rather than
+        // throwing an unsaved draft away, so the way to make a run of them is this button: it saves exactly as Save does
+        // and then opens a fresh, empty composer with the same date, time, kind and note — the parts that rarely change
+        // between two entries — instead of closing everything.
+        const saveAnother = original ? null : chip(t("compose.btn.createAnother"));
         const cancel = chip(t("common.cancel"));
-        const actions = h("div", { class: "zn-dialog-actions" }, cancel, save);
+        const actions = h("div", { class: "zn-dialog-actions" }, cancel, ...(saveAnother ? [saveAnother] : []), save);
         const intro = h("p", { class: "zn-empty" }, t("compose.intro"));
         const card = openCalendarCard(t(original ? "compose.title.edit" : "compose.title.create"), intro, title.row, kindRow, allDayRow,
           startDateHost, endDateHost, startTimeHost, endTimeHost, scheduleBoard,
@@ -20152,7 +21794,9 @@
         for (const select of Object.values(notifySelects)) select.addEventListener("change", () => { select.dataset.userChanged = "true"; });
         noteSelect.addEventListener("change", () => { syncCalOnlyNewNoteRow(); paintColor(); });
 
-        const submit = () => {
+        // OW-102 `keepOpen` is the "Create another" path: save this one, then start a fresh composer carrying over the
+        // date, time, kind and note — but not the title or description, which describe the item just created.
+        const submit = (keepOpen = false) => {
           // OW-24: the fields that count are read as they stand (Enter in the title leaves no field). A text that
           // is no time or no date stops here: its field is put back, marked, and named in the status line.
           const timed = !allDay.checked, isEvent = kind.value === "event";
@@ -20233,6 +21877,12 @@
             itemToSave = { ...item, x: { ...item.x, noteId: createdNote.id } };
           }
           const saved = store.items.upsert(itemToSave);
+          // Read before the store write below touches the cursor: what the next composer should start from.
+          const nextDraft = keepOpen ? {
+            date: String(startDate.input.value || ""), startTime: String(startTime.input.value || ""),
+            endDate: String(endDate.input.value || ""), endTime: String(endTime.input.value || ""),
+            kind: kind.value, allDay: allDay.checked, tz: zoneValue, noteId: selectedExistingNoteId(),
+          } : null;
           if (!saved) { status.textContent = "Could not save the calendar item. Check calendar storage."; return; }
           if (zoneValue !== zone) rememberCalendarZone(zoneValue);
           if (!original && !saved.x?.noteId) { try { store.mirrorItemToAgendaNote(saved.id, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
@@ -20241,11 +21891,17 @@
           const cursor = item.start.date ? item.start.date : C.zonedDateKey(startMs, calendarDisplayZone() || item.x?.tz || "");
           store.setMeta({ calendarCursor: cursor, calendarView: store.meta.calendarView || "month" });
           closeDialog(); renderCalendar();
+          if (nextDraft) {
+            // A fresh composer for the next item. `noteId` is passed but the title is left empty, so the person names
+            // the next one rather than inheriting the first one's name.
+            queueMicrotask(() => { if (isOpen && !destroyed) askCalendarComposer({ ...nextDraft, linkCurrent: false, replaceOpen: true }); });
+          }
           flash(original ? "Calendar item saved" : (item.x.kind === "reminder" ? "Reminder created" : "Event created"));
         };
         kind.addEventListener("change", updateKindRows);
         updateKindRows();
-        save.addEventListener("click", submit);
+        save.addEventListener("click", () => submit(false));
+        if (saveAnother) saveAnother.addEventListener("click", () => submit(true));
         cancel.addEventListener("click", () => { closeDialog(); focusEditor(); });
         title.input.addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } });
         title.input.focus({ preventScroll: true });
@@ -20253,7 +21909,7 @@
       }
       // OW-05 / OW-02 share one note-to-composer path. when may be a local date key or a target
       // { date, startTime, endDate, endTime, allDay, kind, tz } supplied by a calendar drop.
-      function composeFromNote(noteId, when = null) {
+      function composeFromNote(noteId, when = null, opts = {}) {
         const C = CALENDAR_PART;
         if (!C || !store.items) return flash("Calendar item storage is unavailable");
         const source = typeof noteId === "string" ? store.get(noteId) : null;
@@ -20274,6 +21930,13 @@
         const options = {
           date, noteId: source.id, summary: titleOf(source.body) || "Reminder", linkCurrent: false,
         };
+        // OW-80: a shared item for several notes names the others in its description, so nothing about the drop is
+        // hidden and the person can split them out in the composer if that is what they meant.
+        const also = Array.isArray(opts.alsoNotes) ? opts.alsoNotes.filter((id) => !!store.get(id) && !store.get(id).trashed) : [];
+        if (also.length) {
+          const titles = also.map((id) => titleOf(store.get(id).body) || "Untitled note");
+          options.description = `Also from: ${titles.join(", ")}`;
+        }
         if (target) {
           if (C.KINDS.includes(target.kind)) options.kind = target.kind;
           if (typeof target.allDay === "boolean") options.allDay = target.allDay;
@@ -20281,9 +21944,80 @@
             if (typeof target[key] === "string" && target[key].trim()) options[key] = target[key].trim();
           }
         }
+        // OW-81: the person's own answer wins over the slot's habit. A drop on a Month cell or the all-day strip is
+        // computed as an all-day *reminder*, and a drop on an hour track as an *event*; with the setting on Event or
+        // Reminder that prefill must follow the setting instead, or the option would do nothing on the surfaces it is
+        // meant for. "Ask" leaves the slot exactly as it was.
+        const dropKind = C.cleanNoteDropKind(store.meta.calendarNoteDropKind);
+        if (dropKind !== "ask") {
+          options.kind = dropKind;
+          if (!(target && typeof target.allDay === "boolean")) options.allDay = false;
+          // The composer's end date falls back to the start date on its own, and a reminder never shows the field,
+          // so nothing else has to be cleaned up here.
+        }
         return askCalendarComposer(options);
       }
 
+      // OW-59: everything a note has linked to the calendar, in one list, with the two actions that matter: unlink it
+      // (the words stay, the calendar stops seeing them) or open it. The same card answers "what is on this date?" when
+      // the caller passes a date, which is how the date's own menu reaches it.
+      function askLinkedCalendarItems({ noteId = "", date = "", onChanged = null } = {}) {
+        const C = CALENDAR_PART;
+        const linked = C?.noteLinkedItems ? C.noteLinkedItems(store.items?.list?.({ includeHidden: true }) || [], noteId, { date }) : [];
+        const card = h("div", { class: "zn-linked-items" });
+        const done = chip("Done", true);
+        const redraw = () => {
+          const rows = C.noteLinkedItems(store.items?.list?.({ includeHidden: true }) || [], noteId, { date });
+          card.replaceChildren();
+          if (!rows.length) {
+            card.append(h("p", { class: "zn-empty" }, date ? (noteId ? "Nothing of this note is on that date." : "Nothing is linked to this date.") : "Nothing is linked to this note."));
+            return [];
+          }
+          const list = h("ul", { class: "zn-linked-list", role: "list" });
+          for (const row of rows) {
+            const line = h("li", { class: "zn-linked-row" });
+            const text = h("div", { class: "zn-linked-text" });
+            text.append(h("strong", {}, row.title), h("span", { class: "zn-linked-meta" }, [row.kind === "reminder" ? "Reminder" : "Event", row.date ? displayDateKey(row.date) : "No date", row.mirrored ? "Agenda line" : row.source === "note" ? "In this note" : row.source === "list" ? "List line" : ""].filter(Boolean).join(" \u00b7 ")));
+            const actions = h("div", { class: "zn-linked-actions" });
+            const item = store.items?.list?.({ includeHidden: true })?.find?.((it) => it.id === row.id) || null;
+            const open = chip("Edit\u2026");
+            open.addEventListener("click", () => { closeDialog(); if (item) askCalendarComposer({ item }); else flash(unlinkRefusal("missing")); });
+            actions.append(open);
+            // Each action asks the one predicate that decides it: Unlink only where a link exists to sever, Delete only
+            // where the item owns no note text (otherwise its words would be silently destroyed). No per-source list.
+            if (CALENDAR_PART.unlinkPlan?.(item).ok) {
+              const unlink = chip("Unlink");
+              unlink.addEventListener("click", () => {
+                const result = store.unlinkCalendarItem?.(row.id) || { ok: false, reason: "missing" };
+                if (!result.ok) return flash(unlinkRefusal(result.reason));
+                redraw();
+                try { onChanged?.(); } catch (_) {}
+                renderCalendar?.();
+                flash(row.mirrored ? "Unlinked: the Agenda line is gone" : "Unlinked: the words stay, the date is gone");
+              });
+              actions.append(unlink);
+            }
+            if (CALENDAR_PART.itemIsFreeStanding?.(item)) {
+              const del = chip("Delete");
+              del.addEventListener("click", () => { closeDialog(); askDeleteCalendarItem(item); });
+              actions.append(del);
+            }
+            line.append(text, actions);
+            list.append(line);
+          }
+          card.append(list);
+          return rows;
+        };
+        redraw();
+        openCalendarCard(date ? "On this date" : "Linked to this note", card, h("div", { class: "zn-dialog-actions" }, done));
+        done.addEventListener("click", () => { closeDialog(); focusEditor?.(); });
+      }
+      function unlinkRefusal(reason) {
+        if (reason === "missing-note") return "That note is gone, so there is nothing to unlink";
+        if (reason === "unreadable") return "That line cannot be read safely; edit it in the note instead";
+        if (reason === "no-note-text") return "That item is not linked to a note";
+        return "That item is no longer available";
+      }
       function askNotesReminderShortcut() {
         const C = CALENDAR_PART;
         if (!C || !store.items) return flash("Calendar item storage is unavailable");
@@ -20319,10 +22053,13 @@
             choices.append(button);
           }
           const create = chip("Create another reminder on this date");
+          // OW-59: the date is also the way IN to what it already holds: unlink one, or open one, from here.
+          const listAll = chip("Everything on this date\u2026");
           const cancel = chip("Cancel");
           create.addEventListener("click", () => { closeDialog(); askCalendarComposer({ kind: "reminder", allDay: false, date: selectedDate, summary: usefulTitle, noteId, heading, linkCurrent: false }); });
+          listAll.addEventListener("click", () => { closeDialog(); askLinkedCalendarItems({ noteId, date: selectedDate, onChanged: () => scheduleList?.() }); });
           cancel.addEventListener("click", closeDialog);
-          return openCalendarCard("Choose the reminder to edit", h("p", { class: "zn-empty" }, `${matches.length} reminders already exist for ${displayDateKey(selectedDate)}. Choose one to edit, or deliberately create another.`), choices, h("div", { class: "zn-dialog-actions" }, cancel, create));
+          return openCalendarCard("Choose the reminder to edit", h("p", { class: "zn-empty" }, `${matches.length} reminders already exist for ${displayDateKey(selectedDate)}. Choose one to edit, or deliberately create another.`), choices, h("div", { class: "zn-dialog-actions" }, cancel, listAll, create));
         }
         askCalendarComposer({ kind: "reminder", allDay: false, date: selectedDate || undefined, summary: usefulTitle, noteId, heading, linkCurrent: false });
       }
@@ -20444,7 +22181,7 @@
           if (!Number.isInteger(min) || min < 15 || min > 1440) { duration.dataset.bad = "true"; duration.focus(); return; }
           const work = workOnly.checked ? C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK) : null;
           const zone = calendarDisplayZone();
-          const slots = C.freeSlots(calendarBaseItems(), fromDay, C.addDays(throughDay, 1), min, { work, hours: shownHours.on && hoursOnly.checked ? shownHours : null, blockAllDay: allDayBusy.checked, zone });
+          const slots = C.freeSlots(calendarBaseItems(), fromDay, C.nextDayStart(throughDay), min, { work, hours: shownHours.on && hoursOnly.checked ? shownHours : null, blockAllDay: allDayBusy.checked, zone });
           results.replaceChildren();
           if (!slots.length) { results.append(h("p", { class: "zn-empty" }, "No matching free time was found in this range.")); return; }
           results.append(h("p", { class: "zn-empty" }, `${slots.length} free slot${slots.length === 1 ? "" : "s"} found · showing up to 20`));
@@ -20696,6 +22433,14 @@
         store.setMeta({ calendarCursor: C.ymd(new Date(next)) });
         renderCalendar();
       }
+      // OW-74: the header's month/week toggle writes the same `calendarView` meta and redraws, exactly like the view menu.
+      listen(btnCalendarViewToggle, "click", () => {
+        const now = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
+        const nextView = now === "week" ? "month" : "week";
+        store.setMeta({ calendarView: nextView });
+        renderCalendar();
+        syncCalendarViewToggle();
+      });
       listen(calendarViewSelect, "click", () => calendarChoiceMenu(calendarViewSelect,
         [
           { value: "month", label: t("cal.view.month") },
@@ -20828,8 +22573,10 @@
             { icon: anchorNow === "selected" ? "check" : undefined, label: t("cal.days.selectedDay"), action: () => setWeekSpan({ anchor: "selected" }, true) },
           ]);
         }
+        // OW-96: the span goes up to the model's ceiling (48) now that the grid can stack two rows of 24. The short
+        // spans stay first, because they are what a person picks nine times out of ten.
         calendarChoiceMenu(calendarDaysSelect,
-          [3, 7, 14, 30].map((days) => ({ value: String(days), label: tCount("cal.days", days) })),
+          [3, 7, 14, 21, 30, 48].map((days) => ({ value: String(days), label: tCount("cal.days", days) })),
           String(store.meta.calendarDaysForward || 7), (value) => { store.setMeta({ calendarDaysForward: Number(value) }); renderCalendar(); });
       });
       listen(calendarKindSelect, "click", () => calendarChoiceMenu(calendarKindSelect,
@@ -20880,60 +22627,167 @@
         openCalendarCard(t("cal.weekDialog.title"), startRow, numbersRow, note, h("div", { class: "zn-dialog-actions" }, cancel, save));
         startSelect.focus({ preventScroll: true });
       }
-      function openReminderHistory() {
+      // ST7.5: the reminder history, read, filtered, exported and trimmed. One list decides what the count, the copy and
+      // the save all see, so they can never disagree. Trimming always asks first and names real numbers; the trimmed
+      // records go to the JSONL archive (never the bin), exactly as the automatic compaction does.
+      function openReminderHistoryCard() {
         const history = reminderHistoryStore();
-        const rows = h("div", { class: "zn-noteset zn-reminder-history", role: "list" });
-        const pageSize = 500;
+        const pageSize = 300;
+        let filter = CALENDAR_PART.cleanHistoryFilter({});
         let offset = 0;
-        const labels = { alerted: "Notification shown", done: "Marked done", dismissed: "Dismissed", reopened: "Reopened", snoozed: "Snoozed", rescheduled: "Rescheduled" };
-        const status = h("p", { class: "zn-empty", role: "status" });
-        const more = chip("Load older entries");
-        const renderPage = () => {
-          const entries = history?.list({ limit: pageSize, offset }) || [];
-          if (!entries.length && offset === 0) rows.insertBefore(h("p", { class: "zn-empty" }, "No reminder history yet. Lifecycle changes are recorded here."), status);
-          for (const entry of entries) {
-            const row = h("div", { class: "zn-hist-row", role: "listitem" });
+        let busy = false;
+        const rows = h("div", { class: "zn-noteset zn-reminder-history", role: "list" });
+        const status = h("p", { class: "zn-empty", role: "status", "aria-live": "polite" });
+        const notice = h("p", { class: "zn-history-notice", role: "status", "aria-live": "polite", hidden: true });
+        const more = chip(t("history.loadOlder"));
+        const search = h("input", { type: "search", class: "zn-field", placeholder: t("history.search"), "aria-label": t("history.search") });
+        const dayPick = h("select", { class: "zn-select", "aria-label": t("history.window") });
+        for (const [value, label] of [["0", t("history.windowAll")], ["1", t("history.windowDay", { count: 1 })], ["7", t("history.windowDays", { count: 7 })], ["30", t("history.windowDays", { count: 30 })], ["365", t("history.windowDays", { count: 365 })]]) {
+          dayPick.append(h("option", { value }, label));
+        }
+        const actionChips = h("div", { class: "zn-set-chips" });
+        const records = () => (history?.list?.({}) || []);
+        const shown = () => CALENDAR_PART.filterHistoryRecords(records(), filter);
+        // A mirrored Agenda line can move to another Date Note after the record was written: follow the live item.
+        const sourceOf = (entry) => {
+          const liveItem = store.items?.list?.().find((it) => { const id = CALENDAR_PART.reminderIdentity(it); return id && id.occurrenceId === entry.occurrenceId && id.itemId === entry.itemId; });
+          const sourceId = (liveItem?.x?.noteId && store.get(liveItem.x.noteId) ? liveItem.x.noteId : entry.noteId) || "";
+          return { sourceId, source: sourceId ? store.get(sourceId) : null, heading: sourceId === liveItem?.x?.noteId ? (liveItem.x.heading || "") : "" };
+        };
+        function say(text) {
+          notice.textContent = text;
+          notice.hidden = !text;
+        }
+        const drawActions = () => {
+          actionChips.replaceChildren(...CALENDAR_PART.REMINDER_HISTORY_ACTIONS.map((action) => {
+            const on = filter.actions.includes(action);
+            const chipEl = h("button", { type: "button", class: "zn-chip" + (on ? " is-on" : ""), "aria-pressed": on ? "true" : "false" }, t("history.action." + action));
+            chipEl.addEventListener("click", () => {
+              filter = CALENDAR_PART.cleanHistoryFilter({ ...filter, actions: on ? filter.actions.filter((a) => a !== action) : [...filter.actions, action] });
+              offset = 0;
+              draw();
+            });
+            return chipEl;
+          }));
+          search.value = filter.text;
+          dayPick.value = String(filter.days);
+        };
+        const draw = () => {
+          drawActions();
+          const list = shown();
+          rows.replaceChildren();
+          const page = list.slice(0, offset + pageSize);
+          if (!list.length) {
+            rows.append(h("p", { class: "zn-empty" }, records().length ? t("history.noneMatch") : t("history.empty")));
+          }
+          for (const entry of page) {
+            const row = h("div", { class: "zn-hist-row", role: "listitem", "data-action": entry.action });
             const info = h("div", { class: "zn-reminder-history-info" });
-            info.append(h("strong", {}, entry.summary || "Untitled reminder"), h("span", { class: "zn-hist-when" }, (labels[entry.action] || entry.action) + " · " + new Date(entry.at).toLocaleString()));
+            info.append(h("strong", {}, entry.summary || t("history.untitled")),
+              h("span", { class: "zn-hist-when" }, t("history.action." + entry.action) + " \u00b7 " + historyWhen(entry.at)));
             if (entry.start) {
               const when = entry.start.date || entry.start.dateTime;
-              if (when) info.append(h("span", { class: "zn-reminder-history-when" }, "Scheduled: " + String(when).replace("T", " ").replace(/\.\d{3}Z$/, " UTC")));
+              if (when) info.append(h("span", { class: "zn-reminder-history-when" }, t("history.scheduled", { when: String(when).replace("T", " ").replace(/\.\d{3}Z$/, " UTC") })));
             }
             row.append(info);
-            // A mirrored Agenda line can move to another Date Note after the record was written: follow the live item.
-            const liveItem = store.items?.list?.().find((it) => { const id = CALENDAR_PART.reminderIdentity(it); return id && id.occurrenceId === entry.occurrenceId && id.itemId === entry.itemId; });
-            const sourceId = (liveItem?.x?.noteId && store.get(liveItem.x.noteId) ? liveItem.x.noteId : entry.noteId) || "";
-            const source = sourceId && store.get(sourceId);
+            const { sourceId, source, heading } = sourceOf(entry);
             if (source) {
-              const open = chip("Open note");
-              open.addEventListener("click", () => { closeDialog(); openNoteByIdAndHeading(sourceId, sourceId === liveItem?.x?.noteId ? (liveItem.x.heading || "") : "", entry.occurrenceId); });
+              const open = chip(t("history.openNote"));
+              open.addEventListener("click", () => { closeDialog(); openNoteByIdAndHeading(sourceId, heading, entry.occurrenceId); });
               row.append(open);
             }
-            rows.insertBefore(row, status);
+            rows.append(row);
           }
-          offset += entries.length;
-          const total = Number(history?.storageState?.().count) || 0;
-          status.textContent = `Showing ${offset} of ${total} entries`;
-          more.hidden = offset >= total || !entries.length;
+          const total = records().length;
+          status.textContent = CALENDAR_PART.historySummaryLine({ total: list.length, all: total }, filter, { lang: notesLang() }) +
+            (list.length ? " \u00b7 " + t("history.showing", { shown: page.length, total: list.length }) : "");
+          more.hidden = page.length >= list.length;
+          pruneBtn.disabled = busy || !total;
+          copyBtn.disabled = busy || !list.length;
+          exportBtn.disabled = busy || !list.length;
+          rows.append(status, more);
         };
-        more.addEventListener("click", renderPage);
-        rows.append(status, more);
-        renderPage();
-        const note = h("p", { class: "zn-hist-note" }, "History is append-only and stored separately from calendar.json. Entries are retained until the profile data is removed; snoozing and rescheduling do not mark a reminder complete.");
-        const close = chip("Close", true);
+        search.addEventListener("input", () => { filter = CALENDAR_PART.cleanHistoryFilter({ ...filter, text: search.value }); offset = 0; draw(); });
+        dayPick.addEventListener("change", () => { filter = CALENDAR_PART.cleanHistoryFilter({ ...filter, days: Number(dayPick.value) }); offset = 0; draw(); });
+        more.addEventListener("click", () => { offset += pageSize; draw(); });
+        const clearFilter = chip(t("history.clearFilter"));
+        const copyBtn = chip(t("history.copy"));
+        const exportBtn = chip(t("history.export"));
+        const pruneBtn = chip(t("history.prune"), true);
+        clearFilter.addEventListener("click", () => { filter = CALENDAR_PART.cleanHistoryFilter({}); offset = 0; say(""); draw(); });
+        copyBtn.addEventListener("click", () => {
+          env.copyText?.(CALENDAR_PART.exportHistoryLines(shown(), { lang: notesLang() }));
+          say(t("history.copied"));
+        });
+        exportBtn.addEventListener("click", () => {
+          exportHistoryFile(shown()).then((ok) => { if (ok) say(t("history.exported")); }).catch(warn);
+        });
+        pruneBtn.addEventListener("click", () => {
+          if (busy) return;
+          // The same retention the store itself uses, so the preview and the automatic trimming cannot disagree.
+          const policy = typeof env.historyRetentionDays === "function" ? env.historyRetentionDays() : CALENDAR_PART.REMINDER_HISTORY_RETENTION_DEFAULT;
+          const survey = CALENDAR_PART.historyPruneSurvey(records(), Date.now(), { retentionDays: policy });
+          if (!survey.archived) { say(t("history.pruneNothing", { days: survey.retentionDays })); return; }
+          askPruneHistory(survey, () => {
+            busy = true; draw();
+            Promise.resolve(history?.compact?.({ retentionDays: survey.retentionDays }))
+              .then((res) => {
+                busy = false;
+                say(res?.ok === false ? t("history.pruneFailed") : t("history.pruneDone", { count: Number(res?.archived) || survey.archived }));
+                offset = 0; draw();
+              })
+              .catch((error) => { busy = false; warn(error); say(t("history.pruneFailed")); draw(); });
+          });
+        });
+        const close = chip(t("common.close"), true);
         close.addEventListener("click", closeDialog);
-        openCalendarCard("Reminder history", rows, note, h("div", { class: "zn-dialog-actions" }, close));
+        const filters = h("div", { class: "zn-history-filters" }, search, dayPick);
+        draw();
+        const note = h("p", { class: "zn-hist-note" }, t("history.footnote"));
+        openCalendarCard(t("history.title"), filters, actionChips, notice, rows, note,
+          h("div", { class: "zn-dialog-actions" }, clearFilter, copyBtn, exportBtn, pruneBtn, close));
+        if (pruneBtn.disabled) close.focus({ preventScroll: true }); else pruneBtn.focus({ preventScroll: true });
+      }
+      function historyWhen(at) {
+        try { return new Date(at).toLocaleString(notesLocale(), { dateStyle: "medium", timeStyle: "short" }); } catch (_) { return new Date(at).toISOString(); }
+      }
+      // The trimmed records are appended to the JSONL archive before the main file shrinks, so this only has to say what
+      // will move and how far back the kept part goes.
+      function askPruneHistory(survey, onConfirm) {
+        const cancel = chip(t("common.cancel"));
+        const confirm = chip(t("history.pruneConfirm"), true);
+        const parts = [t("history.pruneAsk", { count: survey.archived, kept: survey.kept, days: survey.retentionDays })];
+        const actions = Object.entries(survey.byAction || {}).map(([action, count]) => t("history.action." + action) + " " + count);
+        if (actions.length) parts.push(actions.join(", "));
+        openCard(t("history.pruneTitle"), h("p", {}, parts.join(" ")), h("p", { class: "zn-empty" }, t("history.pruneArchive")), h("div", { class: "zn-dialog-actions" }, cancel, confirm));
+        cancel.addEventListener("click", closeDialog);
+        confirm.addEventListener("click", () => { closeDialog(); onConfirm(); });
+        cancel.focus({ preventScroll: true });
+      }
+      function exportHistoryFile(list) {
+        return Promise.resolve(env.exportReminderHistory?.(CALENDAR_PART.exportHistoryLines(list, { lang: notesLang() }))).then((saved) => !!saved);
       }
       function askCalendarHolidaysDialog() {
         const C = CALENDAR_PART;
         if (!C) return;
         let state = calendarHolidayPrefs();
         let regionStatus = null;
+        let coverageLine = null;
         const renderRegionStatus = () => {
           if (!regionStatus) return;
-          regionStatus.textContent = state.region === "none"
-            ? t("cal.holidays.regionPrompt")
-            : t("cal.holidays.regionActive", { region: t("cal.holidays.region." + state.region) });
+          regionStatus.textContent = !state.locales.length
+            ? t("cal.holidays.noneSelected")
+            : t("cal.holidays.setsActive", { sets: state.locales.map((code) => t("cal.holidays.region." + code)).join(", ") });
+          // OW-45: the newest year the set's own data reaches, so a person knows when to look at it again.
+          if (!coverageLine) return;
+          coverageLine.replaceChildren();
+          if (!state.locales.length) return;
+          for (const code of state.locales) {
+            const coverage = C.holidaySetCoverage(code);
+            const years = coverage.years.length ? coverage.years.join(", ") : t("cal.holidays.coverageRulesOnly");
+            coverageLine.append(h("p", { class: "zn-cal-holidays-coverage-row", "data-set": code },
+              t("cal.holidays.coverage", { region: t("cal.holidays.region." + code), years, newest: coverage.newestYear })));
+          }
         };
         const save = (next) => {
           state = C.cleanCalendarHolidays(next);
@@ -20944,17 +22798,29 @@
         const enableCheck = h("input", { type: "checkbox", class: "zn-cal-holidays-enable" });
         enableCheck.checked = state.enabled !== false;
         enableCheck.addEventListener("change", () => save({ ...state, enabled: enableCheck.checked }));
-        const enableRow = h("label", { class: "zn-check-row" }, enableCheck, h("span", {}, t("cal.holidays.enableTint")));
+        const enableRow = h("label", { class: "zn-check-row" },
+          enableCheck,
+          h("span", {}, t("cal.holidays.enableTint")),
+          h("small", { class: "zn-hint zn-cal-holidays-enable-note" }, t("cal.holidays.enableAllHint")));
+        // T2.13a: the owner's plan step 4 — one line saying holidays here are local and never synced.
+        const importedNote = h("p", { class: "zn-hint zn-cal-holidays-imported-note" }, t("cal.holidays.importedNote"));
 
-        const regionSelect = h("select", { class: "zn-field zn-cal-holidays-region", "aria-label": t("cal.holidays.regionLabel") });
-        for (const code of C.HOLIDAY_REGIONS) {
-          const opt = h("option", { value: code }, t("cal.holidays.region." + code));
-          if (code === state.region) opt.selected = true;
-          regionSelect.append(opt);
+        // OW-43: the holiday SET is chosen apart from the interface language, and any number of sets at once (OW-44).
+        const setsList = h("div", { class: "zn-cal-holidays-sets" });
+        for (const code of C.HOLIDAY_LOCALE_CODES) {
+          const box = h("input", { type: "checkbox", class: "zn-cal-holidays-set", "data-set": code });
+          box.checked = state.locales.includes(code);
+          box.addEventListener("change", () => {
+            const next = [...state.locales];
+            const at = next.indexOf(code);
+            if (box.checked && at < 0) next.push(code);
+            if (!box.checked && at >= 0) next.splice(at, 1);
+            save({ ...state, locales: next, localesExplicit: true, regionExplicit: true });
+          });
+          setsList.append(h("label", { class: "zn-check-row zn-cal-holidays-set-row", "data-set": code }, box, h("span", {}, t("cal.holidays.region." + code))));
         }
-        regionSelect.value = state.region;
-        regionSelect.addEventListener("change", () => save({ ...state, region: regionSelect.value, regionExplicit: true }));
         regionStatus = h("p", { class: "zn-cal-holidays-region-status", "aria-live": "polite" }, "");
+        coverageLine = h("div", { class: "zn-cal-holidays-coverage", "aria-live": "polite" });
         renderRegionStatus();
 
         const weekendSelect = h("select", { class: "zn-field zn-cal-holidays-weekend", "aria-label": t("cal.holidays.weekendLabel") });
@@ -21024,8 +22890,9 @@
         openCalendarCard(
           t("cal.holidays.title"),
           enableRow,
+          importedNote,
           regionStatus,
-          h("label", { class: "zn-dialog-label" }, t("cal.holidays.regionLabel"), regionSelect),
+          h("div", { class: "zn-dialog-label" }, h("strong", {}, t("cal.holidays.setsHeading")), setsList, h("p", { class: "zn-hint" }, t("cal.holidays.setsHint")), coverageLine),
           h("label", { class: "zn-dialog-label" }, t("cal.holidays.weekendLabel"), weekendSelect),
           h("div", { class: "zn-cal-holidays-section" },
             h("strong", { class: "zn-cal-holidays-heading" }, t("cal.holidays.personalHeading")),
@@ -21036,30 +22903,46 @@
           h("div", { class: "zn-dialog-actions" }, close),
         );
       }
+      // OW-75: the owner's "they are unreadable" was measured, not guessed. These 18 rows were all in one menu: the
+      // creation entries, three settings groups, momentary actions and the week export, ~568 px at 13 px text and 619 px
+      // (with a scrollbar) at 20 px. Creation has moved to the Notes "+" menu, "Open in Big Picture" lives on the
+      // header button that already does exactly that, and the rest is grouped by job so the menu a person opens has
+      // three named groups and one action instead of a wall. Nothing was removed: every entry still runs its action.
       listen(calendarToolsSelect, "click", () => {
         const holPrefs = calendarHolidayPrefs();
-        return showMenu(calendarToolsSelect, [
-        { heading: true, label: t("cal.toolsMenu.create") },
-        { icon: "calendar", label: t("cal.toolsMenu.createTimedEvent"), action: () => queueMicrotask(() => askCreateCalendarItem("event", false)) },
-        { icon: "calendar", label: t("cal.toolsMenu.createAllDayEvent"), action: () => queueMicrotask(() => askCreateCalendarItem("event", true)) },
-        { icon: "bell", label: t("cal.toolsMenu.createTimedReminder"), action: () => queueMicrotask(() => askCreateCalendarItem("reminder", false)) },
-        { icon: "bell", label: t("cal.toolsMenu.createAllDayReminder"), action: () => queueMicrotask(() => askCreateCalendarItem("reminder", true)) },
-        { sep: true },
-        { id: "reminder-history", label: t("cal.toolsMenu.reminderHistory"), icon: "history", run: openReminderHistory },
-        { id: "reminder-alert-settings", label: t("cal.toolsMenu.alertSettings"), icon: "volume-2", run: askCalendarAlertSettings },
-        { id: "agenda-visibility-defaults", label: t("cal.toolsMenu.agendaVisibility"), icon: "calendar-check", run: askAgendaVisibilityDefaults },
-        { sep: true },
+        const settingsRows = [
+        { id: "reminder-alert-settings", label: t("cal.toolsMenu.alertSettings"), icon: "bell", run: askCalendarAlertSettings },
+        { id: "agenda-visibility-defaults", label: t("cal.toolsMenu.agendaVisibility"), icon: "calendar", run: askAgendaVisibilityDefaults },
         { id: "calendar-week-settings", icon: "calendar", label: t("cal.toolsMenu.weekSettings", { day: t(calendarWeekStartDay() === 0 ? "common.sunday" : "common.monday"), weeks: calendarShowWeekNumbers() ? ", " + t("cal.weekNumber.short") : "" }), run: askCalendarWeekSettings },
-        { id: "calendar-holidays", icon: "calendar", label: holPrefs.region !== "none" ? t("cal.toolsMenu.holidaysRegion", { region: t("cal.holidays.region." + holPrefs.region) }) : t("cal.toolsMenu.holidaysSetup"), run: () => queueMicrotask(askCalendarHolidaysDialog) },
-        { icon: "clock", label: t("cal.toolsMenu.visibleHours", { hours: CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours).on ? calendarHoursText(store.meta.calendarHours).long : t("cal.toolsMenu.all24") }), action: () => queueMicrotask(askCalendarHours) },
+        { id: "calendar-holidays", icon: "calendar", label: holPrefs.locales.length ? t("cal.toolsMenu.holidaysRegion", { region: holPrefs.locales.map((code) => t("cal.holidays.region." + code)).join(", ") }) : t("cal.toolsMenu.holidaysSetup"), run: () => queueMicrotask(askCalendarHolidaysDialog) },
+        { icon: "calendar", label: t("cal.toolsMenu.visibleHours", { hours: CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours).on ? calendarHoursText(store.meta.calendarHours).long : t("cal.toolsMenu.all24") }), action: () => queueMicrotask(askCalendarHours) },
         { icon: "globe", label: t("cal.toolsMenu.displayZone", { zone: calendarDisplayZone() || t("cal.toolsMenu.zoneLocal") }), action: () => queueMicrotask(askCalendarDisplayZone) },
-        { icon: "clock", label: t("cal.toolsMenu.freeSlots"), action: () => queueMicrotask(askCalendarFreeSlots) },
-        { id: "calendar-big-picture", icon: bigPicture ? "minimize" : "maximize", label: t(bigPicture ? "cal.toolsMenu.bigPictureClose" : "cal.toolsMenu.bigPictureOpen"), run: () => { if (bigPicture) closeCalendarBigPicture({ restoreFocus: true }); else openCalendarBigPicture(); } },
+        ];
+        const moreRows = [
+        { id: "reminder-history", label: t("cal.toolsMenu.reminderHistory"), icon: "list", run: openReminderHistoryCard },
+        { id: "cal.toolsMenu.freeSlots", label: t("cal.toolsMenu.freeSlots"), icon: "search", action: () => queueMicrotask(askCalendarFreeSlots) },
+        ];
+        if (bigPicture) moreRows.push({ id: "calendar-big-picture", icon: "minimize", label: t("cal.toolsMenu.bigPictureClose"), run: () => closeCalendarBigPicture({ restoreFocus: true }) });
+        return showMenu(calendarToolsSelect, [
+        // Creating a calendar item is the most frequent job of this corner, so it keeps its own button rather than a
+        // group: one press, one composer. The four variants are the second level.
+        { id: "cal-tools-create", icon: "calendar", label: t("cal.toolsMenu.create"), group: [
+          { icon: "calendar", label: t("cal.toolsMenu.createTimedEvent"), action: () => queueMicrotask(() => askCreateCalendarItem("event", false)) },
+          { icon: "calendar", label: t("cal.toolsMenu.createAllDayEvent"), action: () => queueMicrotask(() => askCreateCalendarItem("event", true)) },
+          { icon: "bell", label: t("cal.toolsMenu.createTimedReminder"), action: () => queueMicrotask(() => askCreateCalendarItem("reminder", false)) },
+          { icon: "bell", label: t("cal.toolsMenu.createAllDayReminder"), action: () => queueMicrotask(() => askCreateCalendarItem("reminder", true)) },
+        ] },
+        { id: "cal-tools-settings", icon: "sliders", label: t("cal.toolsMenu.settingsGroup"), group: settingsRows },
+        { id: "cal-tools-more", icon: "more", label: t("cal.toolsMenu.moreGroup"), group: moreRows },
         { sep: true },
-        { icon: "copy", label: t("cal.toolsMenu.copyWeekMd"), action: () => { const out = calendarWeekMarkdown(); env.copyText?.(out.text); flash(t("cal.toolsMenu.weekCopied")); } },
-        { icon: "download", label: t("cal.toolsMenu.saveWeekMd"), action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.exportCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((saved) => { if (saved) flash(t("cal.toolsMenu.weekExported")); }).catch((error) => flash(t("cal.toolsMenu.weekExportFailed", { error: String(error?.message || error) }))); } },
-        { icon: "printer", label: t("cal.toolsMenu.printWeek"), action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.printCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((printed) => { if (printed) flash(t("cal.toolsMenu.weekPrinted")); }).catch((error) => flash(t("cal.toolsMenu.weekPrintFailed", { error: String(error?.message || error) }))); } },
-      ]);
+        { id: "calendar-import-ics", label: t("cal.toolsMenu.importIcs"), icon: "outside", run: () => queueMicrotask(askCalendarIcsImport) },
+        { id: "calendar-export-ics", label: t("cal.toolsMenu.exportIcs"), icon: "save", run: () => queueMicrotask(askCalendarIcsExport) },
+        { id: "cal-tools-week-text", icon: "note", label: t("cal.toolsMenu.weekTextGroup"), group: [
+          { icon: "copy", label: t("cal.toolsMenu.copyWeekMd"), action: () => { const out = calendarWeekMarkdown(); env.copyText?.(out.text); flash(t("cal.toolsMenu.weekCopied")); } },
+          { icon: "save", label: t("cal.toolsMenu.saveWeekMd"), action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.exportCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((saved) => { if (saved) flash(t("cal.toolsMenu.weekExported")); }).catch((error) => flash(t("cal.toolsMenu.weekExportFailed", { error: String(error?.message || error) }))); } },
+          { icon: "outside", label: t("cal.toolsMenu.printWeek"), action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.printCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((printed) => { if (printed) flash(t("cal.toolsMenu.weekPrinted")); }).catch((error) => flash(t("cal.toolsMenu.weekPrintFailed", { error: String(error?.message || error) }))); } },
+        ] },
+        ]);
       });
       // OW-10: shared Clock with analog face (draggable/clickable hour then minute hand, locale 12h/24h, fixed 5-min
       // resolution delinked from Week/Day calendarSnap, wheel & keyboard role=slider), digital hour/minute selectors,
@@ -21486,10 +23369,15 @@
             e.dataTransfer?.setData("text/plain", n.id);
             if (e.dataTransfer) e.dataTransfer.effectAllowed = "copyMove";
           } catch (_) {}
+          // OW-80: "when dragging whole bunch of them to calendar ask user what they want to do". A drag of a selected
+          // row carries the whole selection, so the drop can ask once for all of them instead of quietly making one item
+          // from whichever row the pointer happened to start on.
+          calendarDragNoteIds = selectedNoteIdsForDrag(n.id);
         });
         item.addEventListener("dragend", () => {
           dragNoteId = "";
           calendarDragNoteId = "";
+          calendarDragNoteIds = [];
           noteDragCanceled = false;
           clearCalendarNoteDrop();
         });
@@ -21578,13 +23466,20 @@
         act,
       );
       const open = () => {
-        openNote(n.id);
+        // OW-80: when the tree is standing in the Big Picture card, a row opens its note without closing the card the
+        // person is working in. In the docked sheet the old behaviour is unchanged.
+        openNote(n.id, { keepBigPicture: bigPicture && !!treePane.closest?.(".zn-cal-bigpicture-card") });
       };
       const rowKey = (opts.pinnedRow ? "p:" : "n:") + n.id;
       if (!trashed && treeSelection.selected.has(rowKey)) {
         item.classList.add("is-selected");
         item.setAttribute("aria-selected", "true");
       }
+      // OW-80: in the card a click selects, so opening the note is the double click (and Enter, below) — the usual
+      // "select first, then act" of a file list.
+      item.addEventListener("dblclick", (e) => {
+        if (!trashed && treeInBigPicture()) { e.preventDefault?.(); open(); }
+      });
       item.addEventListener("click", (e) => {
         if (!trashed && handleRowSelectionClick(e, rowKey)) return;
         if (!trashed) { treeSelection = applyTreeSelection(treeSelection, rowKey, selectableListKeys(), {}); paintTreeSelection(); }
@@ -21673,11 +23568,33 @@
         treeSelection = { selected: next, anchor: next.has(treeSelection.anchor) ? treeSelection.anchor : "" };
         paintTreeSelection();
       }
+      // OW-80: the tree can stand in the Big Picture card, where a plain click selects instead of leaving the view.
+      const treeInBigPicture = () => !!bigPicture && !!treePane.closest?.(".zn-cal-bigpicture-card");
+      // OW-80: the notes a drag from the tree carries. A pressed row outside the selection means "just this one"; a
+      // pressed row inside it means "all of them", which is what dragging a run of selected notes has to mean.
+      function selectedNoteIdsForDrag(pressedId) {
+        const key = "n:" + pressedId;
+        if (!treeSelection.selected.has(key)) return pressedId ? [pressedId] : [];
+        return [...treeSelection.selected]
+          .filter((k) => k.startsWith("n:"))
+          .map((k) => k.slice(2))
+          .filter((id) => !!store.get(id));
+      }
       function handleRowSelectionClick(e, key) {
         if (filter === "trash") return false;
         const shift = !!e.shiftKey;
         const toggle = !!(e.ctrlKey || e.metaKey);
-        if (!shift && !toggle) return false;
+        // In the docked sheet a plain click opens the note, as it always has. In the card it selects the row (one row,
+        // or the whole run with Shift / Ctrl, exactly as in the docked tree) and the note becomes current, so the
+        // person can pick several notes to drag onto the calendar without the card closing under them.
+        if (!shift && !toggle) {
+          if (!treeInBigPicture()) return false;
+          e.preventDefault?.();
+          e.stopPropagation?.();
+          treeSelection = applyTreeSelection(treeSelection, key, selectableListKeys(), { toggle: true });
+          paintTreeSelection();
+          return true;
+        }
         e.preventDefault?.();
         e.stopPropagation?.();
         treeSelection = applyTreeSelection(treeSelection, key, selectableListKeys(), { shift, toggle });
@@ -23165,13 +25082,19 @@
             shareRows.push({ icon: "x", label: "Remove from this space", enabled: !store.spaceStorageState().sharesWriteBlocked, action: () => { store.unshareNote(n.id).then((ok) => { if (ok) { if (n.id === currentId) currentId = ""; scheduleList(); flash("Removed from this space"); } }); } });
           }
         }
+        const companionHere = splitCompanion().id === n.id && n.id !== currentId;
         return [
           { icon: "note", label: "Open", action: () => openNote(n.id) },
+          // T3.8: the note can also open beside the one being edited (and hand its place back).
+          ...(n.id !== currentId
+            ? [{ icon: "split", label: companionHere ? "Close the second pane" : "Open beside this note", action: () => queueMicrotask(() => { if (companionHere) setCompanion(""); else setCompanionOpenBeside(n); }) }]
+            : []),
           { icon: "pin", label: n.pinned ? "Unpin" : "Pin", action: () => { store.setPinned(n.id, !n.pinned); scheduleList(); } },
           { icon: n.calendarOnly ? "note" : "calendar", label: t(n.calendarOnly ? "tree.note.zenShow" : "tree.note.zenHide"), action: () => toggleNoteCalendarOnly(n) },
           { icon: "plus", label: "Quick capture here\u2026", action: () => queueMicrotask(() => askQuickCapture(n.id)) },
           { icon: "plus", label: "Quick capture to today\u2019s note\u2026", action: () => queueMicrotask(() => askQuickCapture("")) },
           { icon: "calendar-plus", label: "Add to Calendar…", action: () => queueMicrotask(() => composeFromNote(n.id)) },
+          { icon: "calendar", label: "Linked to this note…", action: () => queueMicrotask(() => askLinkedCalendarItems({ noteId: n.id })) },
           { icon: "calendar-plus", label: t("birthday.menu.addEntry"), action: () => queueMicrotask(() => askAddBirthdayEntry(n.id)) },
           ...(shareRows.length ? [{ sep: true }, ...shareRows] : []),
           { sep: true },
@@ -23182,6 +25105,19 @@
           { icon: "link", label: "Copy link", action: () => { env.copyText?.("[[" + (titleOf(n.body) || "Untitled note") + "]]"); flash("Link copied"); } },
           ...(!shareInfo?.sharedFromOtherSpace ? [{ sep: true }, { icon: "trash", label: "Move to trash", danger: true, action: () => askNoteTrash(n.id, () => { if (n.id === currentId) currentId = ""; scheduleList(); }) }] : []),
         ];
+      }
+      // T3.8: put the picked note in the reference pane, keeping the edited note where it is.
+      function setCompanionOpenBeside(n) {
+        if (!n || n.id === currentId) return;
+        const was = currentId;
+        if (was && store.get(was) && !store.get(was).trashed) {
+          store.setMeta({ splitCompanion: cleanSplitCompanion({ ...splitCompanion(), id: n.id }) });
+          applyState();
+          renderCompanion();
+          scheduleLayout();
+        } else {
+          openNote(n.id);
+        }
       }
       function trashMenuItems() {
         const days = Number(getPref(PREF.TRASH_DAYS, TRASH_DAYS));
@@ -23372,6 +25308,30 @@
       };
       fmt.outline = () => showOutline(); // reachable from "Hidden tools" too
       for (const [kind] of CALLOUT_KINDS) fmt[calloutId(kind)] = () => applyEdit(insertCallout(ta.value, ...sel(), kind));
+      // T3.5: a plain click on the Quote button inserts the LAST-USED callout. A callout already under the caret wins,
+      // because the person is looking at it and "same kind again" is the only sensible reading of a click there.
+      const calloutAtCaret = () => {
+        const [s0, e0] = sel();
+        const value = ta.value;
+        const ls = value.lastIndexOf("\n", Math.max(0, s0 - 1)) + 1;
+        let le = value.indexOf("\n", e0 > s0 ? e0 - 1 : e0);
+        if (le === -1) le = value.length;
+        const first = value.slice(ls, le).split("\n")[0] || "";
+        const m = /^>\s*\[!([a-z][\w-]*)\]\s*([+-])?/i.exec(first);
+        if (!m) return null;
+        const kind = CALLOUT_KINDS.some(([k]) => k === m[1].toLowerCase()) ? m[1].toLowerCase() : "";
+        return { kind: kind || calloutMemory.kind, fold: m[2] === "-" || m[2] === "+" ? m[2] : "" };
+      };
+      const insertLastCallout = () => applyEdit(insertCallout(ta.value, ...sel(), calloutMemory.kind, calloutMemory.fold));
+      calloutMemory.insertLast = insertLastCallout;
+      calloutMemory.atCaret = calloutAtCaret;
+      // T3.5's one-click action: a callout already under the caret decides the kind (the person is looking at it),
+      // otherwise the remembered one. Its call sites wrap it in `needEdit`, so it never changes the mode itself.
+      const insertCalloutFromToolbar = () => {
+        const at = calloutAtCaret();
+        if (at) return applyEdit(insertCallout(ta.value, ...sel(), at.kind, at.fold || calloutMemory.fold));
+        return insertLastCallout();
+      };
       const needEdit = (fn) => () => {
         if (mode === "read") setMode("edit");
         if (note()?.trashed) return;
@@ -23385,7 +25345,8 @@
       // Hold-to-pick variants: a tap keeps the old action, a long press opens the choices (task states, heading levels).
       const calloutVariants = () => CALLOUT_KINDS.filter(([k]) => !hiddenTools().has(calloutId(k))).map(([k, label]) => ({ label, action: needEdit(fmt[calloutId(k)]) }));
       for (const [btn, tap, variants, noEdit] of [
-        // Quote and the "More" caret: a tap is what it always was, holding lists the callout kinds (a callout is a quote with a marker).
+        // A tap on Quote is a plain quote and always will be: the toolbar button and its shortcut must give the same
+        // text (the writing-UI invariant), so T3.5's one-click callout lives on its own menu entry instead.
         [tQuote, fmt.quote, calloutVariants],
         [tInsert, () => showInsertMenu(), calloutVariants, true],
         [tCheck, fmt.check, () => TASK_PICKER.map(([ch, name]) => ({ icon: "check", label: "[" + ch + "]  " + name, action: needEdit(() => applyEdit(setTaskStatus(ta.value, ...sel(), ch))) }))],
@@ -23435,36 +25396,74 @@
         );
       }
       const atEnd = (el) => el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
-      const linkScroll = (from, to) => () => {
-        if (mode !== "split" || !store.meta.syncScroll || syncLock) return;
-        const max = from.scrollHeight - from.clientHeight;
-        if (!(max > 0)) return;
-        syncLock = true;
-        let target = null;
-        try {
-          if (from.scrollTop > 0 && !atEnd(from) && readAnch.length) {
-            taAnchY = taAnchY || measureEditor();
-            readAnchY = readAnchY || measureRead();
-            if (taAnchY && readAnchY) {
-              const fromEditor = from === ta;
-              const line = mapPosition(fromEditor ? taAnchY : readAnchY, from.scrollTop, "y", "line");
-              target = mapPosition(fromEditor ? readAnchY : taAnchY, line, "line", "y");
-            }
-          }
-        } catch (_) {
-          target = null;
-        }
-        if (target === null) target = (from.scrollTop / max) * Math.max(0, to.scrollHeight - to.clientHeight);
-        to.scrollTop = target;
-        if (!rafSync)
-          rafSync = window.requestAnimationFrame(() => {
-            rafSync = 0;
+      // OW-47: one shared place for the two panes. `syncCarried` keeps the sub-pixel remainder of the last move (so
+      // a hundred small moves cannot shed position), `syncLock` marks the scroll we caused ourselves, and every
+      // reveal resets the carried remainder.
+      let syncCarried = 0;
+      function linkScroll(from, to) {
+        return () => {
+          if (mode !== "split" || !store.meta.syncScroll) return;
+          // Our own write comes back as a scroll event: it must never be answered.
+          if (syncLock) {
             syncLock = false;
-          });
-      };
+            return;
+          }
+          const fromMax = from.scrollHeight - from.clientHeight;
+          const toMax = to.scrollHeight - to.clientHeight;
+          let wanted = null;
+          let reason = "";
+          try {
+            if (readAnch.length && fromMax > 0 && toMax > 0) {
+              taAnchY = taAnchY || measureEditor();
+              readAnchY = readAnchY || measureRead();
+              if (taAnchY && readAnchY) {
+                const fromEditor = from === ta;
+                const line = mapPosition(fromEditor ? taAnchY : readAnchY, from.scrollTop, "y", "line");
+                const mapped = mapPosition(fromEditor ? readAnchY : taAnchY, line, "line", "y");
+                if (Number.isFinite(mapped)) { wanted = mapped; reason = "anchor"; }
+              }
+            }
+          } catch (_) {
+            wanted = null;
+          }
+          let plan;
+          if (wanted !== null) {
+            const top = Math.min(toMax, Math.max(0, wanted));
+            plan = {
+              top: Math.abs(top - to.scrollTop) < SYNC_SCROLL_EPS ? null : top,
+              carried: 0,
+            };
+          } else {
+            plan = syncScrollPlan({
+              fromTop: from.scrollTop,
+              fromMax,
+              toMax,
+              toTop: to.scrollTop,
+              carried: syncCarried,
+              echo: false,
+            });
+          }
+          if (plan.reason === "no-range") return;
+          syncCarried = plan.carried || 0;
+          if (plan.top === null) return;
+          syncLock = true;
+          to.scrollTop = plan.top;
+          // A pane that has no scrollable range, or refuses the value, leaves nothing to echo: free the flag now.
+          if (!rafSync)
+            rafSync = window.requestAnimationFrame(() => {
+              rafSync = 0;
+              syncLock = false;
+            });
+        };
+      }
       listen(ta, "scroll", linkScroll(ta, readEl));
       listen(ta, "scroll", syncBackdropScroll);
       listen(ta, "scroll", scheduleOutline);
+      // OW-22: which matches are readable changes with the scroll, so the off-screen pair must follow it — otherwise
+      // the button offers a jump to something that has just come into view, or stays greyed while nothing is visible.
+      // Throttled to one update per frame: scrolling must not paint the whole bar on every pixel.
+      listen(ta, "scroll", scheduleOffscreenState);
+      listen(readEl, "scroll", scheduleOffscreenState);
       listen(readEl, "scroll", linkScroll(readEl, ta));
       listen(readEl, "scroll", () => scheduleOutline(true));
       listen(tSync, "click", () => {
@@ -23472,6 +25471,26 @@
         applyState();
       });
       listen(tSplit, "click", () => setMode(mode === "split" ? "edit" : "split"));
+      // T3.8: Open here / Swap / Close of the reference pane.
+      // Open here: the reference takes the main pane and the note that held it becomes the reference.
+      listen(companionEl.querySelector(".zn-companion-open"), "click", () => {
+        const other = companionNote();
+        const was = currentId;
+        if (!other) return;
+        store.setMeta({ splitCompanion: cleanSplitCompanion({ ...splitCompanion(), id: was }) });
+        openNote(other.id);
+        renderCompanion();
+      });
+      // Turn: flip the two panes between side by side and stacked and remember the choice.
+      listen(companionEl.querySelector(".zn-companion-turn"), "click", () => {
+        const c = splitCompanion();
+        const axis = splitCompanionAxis(c, root.clientWidth || 0, root.clientHeight || 0);
+        const side = axis === "side" ? "stack" : "side";
+        store.setMeta({ splitCompanion: cleanSplitCompanion({ ...c, side }) });
+        renderCompanion();
+        scheduleLayout();
+      });
+      listen(companionEl.querySelector(".zn-companion-close"), "click", () => setCompanion(""));
       listen(tRule, "mousedown", (e) => e.preventDefault());
       listen(tRule, "click", needEdit(fmt.rule));
       // The "More" menu. Opened by a tap on the caret (see the hold list above: holding it lists the callouts instead).
@@ -23485,7 +25504,12 @@
           { icon: "image", label: "Paste picture from clipboard", action: needEdit(pastePictureFromClipboard) },
           { icon: "image", label: "Picture options\u2026 (size, alignment)", action: needEdit(askPictureOptions) },
           { sep: true },
-          ...(CALLOUT_KINDS.some(([k]) => !hiddenTools().has(calloutId(k))) ? [{ icon: "quote", label: "Callout\u2026", action: () => queueMicrotask(showCalloutMenu) }] : []),
+          // T3.5: the picker keeps its old name and place (other menus and the tests reach it by that name), and the
+          // one-click entry sits directly above it. The label names the kind, so the click is known before it happens.
+          ...(CALLOUT_KINDS.some(([k]) => !hiddenTools().has(calloutId(k)))
+            ? [{ icon: "quote", label: "Callout\u2026", action: () => queueMicrotask(showCalloutMenu) },
+               { icon: "quote", label: "Callout " + calloutLabel(calloutMemory.kind).toLowerCase() + (calloutMemory.fold ? ", folded" : "") + " (last used)", action: needEdit(insertCalloutFromToolbar) }]
+            : []),
           group("bold", "More text styles", [
             { label: "Underline  <u>", action: needEdit(fmt.underline), id: "underline" },
             { label: "Spoiler  ||text||", action: needEdit(fmt.spoiler), id: "spoiler" },
@@ -23514,8 +25538,15 @@
         showMenu(tInsert, [
           ...CALLOUT_KINDS.filter(([k]) => !hiddenTools().has(calloutId(k))).map(([k, label]) => ({ label, action: needEdit(fmt[calloutId(k)]) })),
           { sep: true },
-          { label: "Foldable, closed  [!note]-", action: needEdit(() => applyEdit(insertCallout(ta.value, ...sel(), "note", "-"))) },
-          { label: "Foldable, open  [!note]+", action: needEdit(() => applyEdit(insertCallout(ta.value, ...sel(), "note", "+"))) },
+          // T3.5: a fold on any kind that reads one, not only on `note`. The old spec's `[!FAQ]-` is the `question`
+          // kind with a fold marker, which is how the flavors table spells it (`faq` -> `question`).
+          ...CALLOUT_FOLDABLE.filter((k) => !hiddenTools().has(calloutId(k))).flatMap((k) => {
+            const label = (CALLOUT_KINDS.find(([x]) => x === k) || [k, k])[1];
+            return [
+              { label: "Foldable, closed  [!" + label.toLowerCase() + "]-", action: needEdit(() => applyEdit(insertCallout(ta.value, ...sel(), k, "-"))) },
+              { label: "Foldable, open  [!" + label.toLowerCase() + "]+", action: needEdit(() => applyEdit(insertCallout(ta.value, ...sel(), k, "+"))) },
+            ];
+          }),
         ]);
       }
       listen(tSettings, "click", () => askSettings());
@@ -23526,10 +25557,15 @@
       listen(tocPill, "click", () => showOutline(tocPill));
 
       // ---- menus -----------------------------------------------------------------
-      function closeMenu() {
+      // UI4.11: a menu that goes away must give the keyboard back to what opened it. `restoreFocus: "keyboard"` is the
+      // Escape and Enter path (the person is navigating without a pointer); "action" also returns the focus after a
+      // row ran, because the row is gone with the menu. A pointer press elsewhere, a blur, a scroll or a toggle-close
+      // must not steal the focus the person just moved by hand.
+      function closeMenu({ restoreFocus = "", action = false } = {}) {
         if (!menu) return;
         const closing = menu;
         menu = null;
+        const wantsFocus = restoreFocus === "keyboard" || action;
         for (const stop of (closing.cleanups || []).splice(0).reverse()) {
           try {
             stop();
@@ -23538,6 +25574,14 @@
         try { if (closing.el.hasAttribute("popover")) closing.el.hidePopover?.(); } catch (_) {}
         closing.el.removeAttribute("popover");
         closing.el.remove();
+        if (wantsFocus) {
+          // Only a real element can take the focus: pointer-activated menus are anchored to plain geometry objects,
+          // and focus() on a detached element is a no-op by itself, so the opener needs no liveness test here.
+          const opener = closing.anchor;
+          if (opener && typeof opener.focus === "function") {
+            try { opener.focus({ preventScroll: true }); } catch (_) {}
+          }
+        }
         if (closing.calendar) queueCalendarBackgroundFlush();
       }
       // Keeps a menu fully inside both the sheet and the window: it is right-aligned to its anchor,
@@ -23566,7 +25610,14 @@
         };
         // One entry list per level: an item with `group` opens its entries in place (with a Back row) so a long
         // menu stays short; closing the menu from any level runs the chosen action once.
+        // OW-75: rebuilding a level removes the focused row, and a real browser answers that with a `focusout` whose
+        // relatedTarget is null — which the "do not strand an open menu" handler below read as "focus left the menu"
+        // and closed it. Every group menu (Settings, Labels, Colour, this calendar's More menu) therefore shut itself
+        // as it opened, and only a fake DOM that does not move focus could miss it. While a level is being filled the
+        // focusout is ours, not the person's.
+        let fillingMenu = false;
         const fill = (list, parent) => {
+          fillingMenu = true;
           m.replaceChildren();
           if (parent) {
             const back = h("button", { type: "button", class: "zn-menu-item zn-menu-back", role: "menuitem" });
@@ -23689,13 +25740,14 @@
                 if (it.reason && !it.quietDisabled) b.append(h("small", { class: "zn-menu-reason" }, it.reason));
               } else {
                 b.addEventListener("click", () => {
-                  closeMenu();
+                  closeMenu({ action: true });
                   it.run();
                 });
               }
               m.append(b);
             }
           }
+          fillingMenu = false;
         };
         fill(menuItems, null);
         // Arrow navigation skips disabled actions; Enter activates exactly the focused enabled row.
@@ -23704,7 +25756,7 @@
           if (ev.key === "Escape") {
             ev.preventDefault();
             ev.stopPropagation();
-            closeMenu();
+            closeMenu({ restoreFocus: "keyboard" });
             return;
           }
           if (ev.key === "Enter") {
@@ -23762,6 +25814,7 @@
         // must not strand an open menu. Escape is handled by the sheet key controller below.
         listenMenu(m, "focusout", (e) => {
           if (menu !== activeMenu) return;
+          if (fillingMenu) return; // a level is being rebuilt: the focused row went away on purpose (OW-75)
           const next = e.relatedTarget;
           const focusRemainsWithMenu = activeMenu.el.contains(next);
           // Keep the menu alive while focus moves back to its trigger: pointer activation fires
@@ -23784,6 +25837,8 @@
         } catch (_) {}
         cardROOff = null;
         cardRO = null;
+        appliedFitKey = "";
+        appliedFitBox = null;
         window.cancelAnimationFrame(rafFit);
         rafFit = 0;
         window.cancelAnimationFrame(rafFitReset);
@@ -23801,6 +25856,8 @@
       let cardROOff = null;
       let rafFit = 0;
       let fitting = false;
+      let appliedFitKey = "";
+      let appliedFitBox = null;
       const FIT_PROPS = ["position", "left", "top", "width", "height", "minWidth", "maxWidth", "maxHeight"];
       // The size a card would have with nothing holding it back. scrollWidth / scrollHeight leave out the card's
       // border, so a card set to exactly that size was two pixels short and scrolled.
@@ -23845,7 +25902,18 @@
         const sheet = { left: sr.left, top: sr.top, width: sr.width, height: sr.height };
         // If the platform cannot raise the dialog, keep it within the panel
         // rather than allowing an invisible spill behind a browser surface.
-        const fit = viewport.width > 0 && dialog.dataset.calendarConstrained !== "true" ? fitDialog({ sheet, viewport, size }) : { spill: false };
+        const measured = viewport.width > 0 && dialog.dataset.calendarConstrained !== "true" ? fitDialog({ sheet, viewport, size }) : { spill: false };
+        // OW-48: the fit that is already on screen wins while the new one stays within two pixels of it. Writing the
+        // nearly identical box is what made a ResizeObserver ask for the next fit, over and over.
+        const cardEl = card;
+        const key = dialogFitKey({ sheet, viewport, size, extra: cardEl.className + "|" + Math.round(root.clientHeight || 0) });
+        if (key === appliedFitKey && appliedFitBox) {
+          card.style.maxWidth = "";
+          return appliedFitBox;
+        }
+        const fit = fitDialogStable(appliedFitBox, measured, FIT_STABLE_TOLERANCE);
+        appliedFitKey = key;
+        appliedFitBox = fit;
         card.style.maxWidth = "";
         if (fit.spill) {
           dialog.dataset.spill = "true";
@@ -23912,6 +25980,49 @@
         const c = store.create(n.body, folder);
         flash("Saved as a template: " + (titleOf(c.body) || "Untitled"));
         if (view === "list") scheduleList();
+      }
+      // T2.11b1: one read-only help note that says where every function is (full list: docs/NOTES_DISCOVERABILITY.md).
+      const DISCOVERABILITY_NOTE_ID = "zn-help-where-is-a-function";
+      const DISCOVERABILITY_LINES = [
+        "# Where is a function?",
+        "",
+        "One place per function. The complete list of every control is in the repository (docs/NOTES_DISCOVERABILITY.md).",
+        "",
+        "## While writing a note",
+        "- **Toolbar**: bold, italic, strike, highlight, code, headings, lists, checklist (hold: task states), quote, callout, nest in/out, rule, link, image, table, table of contents.",
+        "- **Caret menu at the end of the toolbar**: pictures, callouts, more text styles, math, collapsible section, footnote, hub list, date and time.",
+        "- **More (three dots)**: import and export, labels, reminder, templates, version history, calendar-only, birthday entries, duplicate, move to folder, Markdown mode of this note, window, settings and help.",
+        "- **Quick settings (sliders)**: text size, line height, wrapping, blank lines, line breaks, scroll sync, copy format, Markdown mode, theme.",
+        "",
+        "## Settings (All settings)",
+        "Writing, Markdown, Window, Appearance, Capture, Links & history, Zen sidebar. Reminders, version history, the Trash lifetime, find-highlighting and spell-check are rows of Links & history; the Keyboard shortcuts dialog opens from the bottom of that tab.",
+        "",
+        "## All notes",
+        "- The `+` control creates a note, folder, reminder, event or date note; right-click it for the full menu.",
+        "- A row: right-click for rename, move, colour, label, exclusion, calendar-only, trash and share; drag it onto a calendar day to add it to the calendar.",
+        "- Shift or Ctrl click rows for the batch bar (move, tag, label, category, export, trash).",
+        "",
+        "## Calendar",
+        "- **Toolbar**: view, Prev/Next/Today, size, visible hours, display zone, filters.",
+        "- **Tools**: create, reminder history, sounds and quiet hours, Agenda visibility, week settings, holidays and days off, free slots, big picture, week as Markdown, print.",
+        "- **A day**: click selects it; right-click for Day view, create, and a personal day off.",
+        "- **An item**: click opens it; right-click for edit, move, snooze, done, dismiss, colour, calendar note and delete.",
+        "",
+        "## Zen sidebar",
+        "The Notes folder mirrors the tree (hover a tab for a preview); the Agenda folder lists items inside their display window with hover actions and headless Done, Dismiss, Snooze and Open. The Agenda root menu has Open calendar, Refresh, Agenda settings and Hide Agenda.",
+        "",
+        "## Holidays",
+        "Tools > Holidays & days off: choose any number of public holiday sets (independent of the interface language), weekends, personal days off, and see the newest year each set covers. A trading Sunday is shown but is not a day off. One switch turns every holiday feature off.",
+        "",
+      ];
+      function openDiscoverabilityNote() {
+        const body = DISCOVERABILITY_LINES.join("\n");
+        const existing = store.get(DISCOVERABILITY_NOTE_ID);
+        const id = existing ? existing.id : store.create(body).id;
+        // The help note follows the shipped text (a stale copy would be worse than none); it stays a normal note
+        // so a person may edit or trash it, and a later visit recreates it.
+        if (existing && existing.body !== body && !existing.trashed) store.update(existing.id, body, null);
+        openNote(id);
       }
       function installDemoNotes() {
         let made = 0;
@@ -24263,6 +26374,8 @@
       function openCard(label, ...kids) {
         closeMenu();
         closeDialog();
+        appliedFitKey = "";
+        appliedFitBox = null;
         const folderStyleCard = kids.some((kid) => kid?.classList?.contains?.("zn-fstyle"));
         const card = h("div", { class: "zn-dialog-card" + (folderStyleCard ? " zn-folder-style-card" : ""), role: "dialog", "aria-label": label }, h("strong", {}, label), ...kids);
         dialog = h("div", { class: "zn-dialog" }, card);
@@ -24275,7 +26388,13 @@
           const RO = window.ResizeObserver;
           if (RO) {
             cardRO = new RO(() => {
-              if (!fitting) scheduleFit();
+              // OW-48: our own fit is not a reason to fit again, and neither is a size the fit already applied.
+              if (fitting) return;
+              // Only a spilled box has a size the fit itself set; a card that simply fits must still be re-measured.
+              if (appliedFitBox?.spill
+                && Math.abs(card.offsetWidth - appliedFitBox.width) <= FIT_STABLE_TOLERANCE
+                && Math.abs(card.offsetHeight - appliedFitBox.height) <= FIT_STABLE_TOLERANCE) return;
+              scheduleFit();
             });
             cardRO.observe(card);
             cardROOff = resources.observer("sheet:dialogCardRO", "ResizeObserver", () => cardRO?.disconnect());
@@ -24309,17 +26428,23 @@
       // A choice row with more than three options, or with long option names, is a dropdown: a row of chips for those wraps
       // and overflows at larger text sizes. Short sets (On/Off, Plain/Filled/Outlined) stay chips.
       const choiceIsDropdown = (choices) => choices.length > 3 || choices.some(([, text]) => String(text).length > 16);
-      const settingsTabLabel = (tab) => t("settings.tab." + tab.id);
+      // OW-81/OW-79: a tab whose translation is missing shows its own label, never "settings.tab.calendar".
+      const settingsTabLabel = (tab) => {
+        const key = "settings.tab." + tab.id;
+        // OW-79: a missing key now answers with readable words, so ask whether the table HAS it rather than comparing.
+        return CALENDAR_PART?.hasTranslation?.(key) ? t(key) : tab.label;
+      };
       const settingsHeadingLabel = (o) => (o.i18nKey ? t(o.i18nKey) : o.label);
+      // OW-79: `t()` never returns a raw key any more, so "is there a translation?" is asked explicitly. Without this
+      // every option would show the readable form of its own key instead of the label the group carries.
+      const hasT = (key) => CALENDAR_PART?.hasTranslation?.(key) ?? false;
       const settingsOptLabel = (o) => {
         const key = "settings.opt." + o.id;
-        const val = t(key);
-        return val !== key ? val : o.label;
+        return hasT(key) ? t(key) : o.label;
       };
       const settingsChoiceLabel = (o, v, fallback) => {
         const key = "settings.choice." + o.id + "." + v;
-        const val = t(key);
-        return val !== key ? val : fallback;
+        return hasT(key) ? t(key) : fallback;
       };
       const choiceDropdown = (o, value, onPick) => {
         const select = h("select", { class: "zn-select", "aria-label": settingsOptLabel(o) });
@@ -24809,6 +26934,8 @@
       }
       // ---- date notes: today / tomorrow / next work day --------------------------------------------------------
       const dateMode = () => cleanDateMode(getPref(PREF.DATE_MODE, "separate"));
+      // OW-103: the list filter restored with All notes, limited to the three the sheet actually offers.
+      const cleanListFilter = (value) => (value === "recent" || value === "trash" ? value : "all");
       function openAgendaDay(key) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(String(key || ""))) return false;
         filter = "all"; view = "list";
@@ -24885,6 +27012,8 @@
       function showDateMenu() {
         const now = Date.now();
         const items = DATE_KINDS.map(([k, label]) => ({ icon: "bell", label: label + "  " + displayDateKey(dateTarget(k, now).ymd), action: () => openDateNote(k) }));
+        // OW-59: what is already linked to today, reachable without knowing about a note's menu first.
+        items.push({ icon: "calendar", label: "Everything linked to today\u2026", action: () => queueMicrotask(() => askLinkedCalendarItems({ date: dateTarget("today", now).ymd })) });
         items.push({ icon: "bell", label: "Other date\u2026", action: () => queueMicrotask(askOtherDate) }, { sep: true });
         const fmt = dateDisplayFormat();
         const days = dateMode() === "single" ? (store.list().find(isJournal) ? journalDays(store.list().find(isJournal).body, fmt).slice(-15).reverse().map((ymd) => ({ ymd })) : []) : listDateNotes(store.list(), { dateFormat: fmt }).slice(0, 15);
@@ -25447,6 +27576,154 @@
         });
         ok.focus({ preventScroll: true });
       }
+      // OW-53: bring a Google Calendar (or any other calendar's) .ics file in. Nothing is written before the person
+      // sees what would happen: the card names the events, the reminders, the date range and everything it skips, and
+      // only the Import button writes. A second import of the same file updates what it brought in, by the file's UID.
+      // The picker and the read live in `env` beside every other file the module opens, so a host (and a test) can
+      // answer with a file without a real file dialog.
+      function pickIcsFile() {
+        if (typeof env.pickIcs !== "function") return Promise.resolve({ error: t("cal.ics.unavailable") });
+        return Promise.resolve(env.pickIcs()).then((picked) => {
+          if (!picked) return null;
+          if (picked.error) return picked;
+          if (picked.size > MAX_ICS_BYTES) return { error: t("cal.ics.tooBig", { mb: Math.ceil(MAX_ICS_BYTES / 1048576) }) };
+          return picked;
+        }).catch((error) => { warn(error); return { error: t("cal.ics.readFailed") }; });
+      }
+      function askCalendarIcsImport() {
+        const C = CALENDAR_PART;
+        if (!C?.parseIcs || !CALENDAR_PART?.planIcsImport) { flash(t("cal.ics.unavailable")); return; }
+        pickIcsFile().then((picked) => {
+          if (!picked || destroyed) return;
+          if (picked.error) { flash(picked.error); return; }
+          const parsed = C.parseIcs(picked.text);
+          if (!parsed.events.length) { flash(t("cal.ics.emptyFile", { name: picked.name })); return; }
+          // The file has no notion of "this one reminds me": the person says which kind the whole file becomes.
+          let kind = "event";
+          const existing = () => (store.items?.list?.({}) || []);
+          const build = () => C.planIcsImport(parsed, existing(), { kind, now: Date.now(), zone: calendarDisplayZone() || "" });
+          const body = h("div", { class: "zn-ics-body" });
+          const rangeText = (plan) => {
+            if (plan.from === null || plan.to === null) return "";
+            const a = C.localDateKey(plan.from), b = C.localDateKey(plan.to);
+            return a === b ? a : a + " \u2013 " + b;
+          };
+          const draw = () => {
+            const plan = build();
+            body.replaceChildren();
+            body.append(
+              h("p", { class: "zn-ics-file" }, t("cal.ics.file", { name: picked.name, calendar: parsed.events[0]?.calendar || "" })),
+              h("p", {}, t("cal.ics.summary", { events: plan.events, reminders: plan.reminders, range: rangeText(plan) || t("cal.ics.noRange") })),
+              h("p", { class: "zn-ics-counts" },
+                t("cal.ics.addCount", { n: plan.add.length }),
+                plan.update.length ? " \u00b7 " + t("cal.ics.updateCount", { n: plan.update.length }) : "",
+                plan.skipped.length ? " \u00b7 " + t("cal.ics.skipCount", { n: plan.skipped.length }) : "",
+              ),
+            );
+            if (plan.skipped.length) {
+              const list = h("ul", { class: "zn-ics-skipped" });
+              for (const skipped of plan.skipped.slice(0, 8)) {
+                list.append(h("li", {}, (skipped.summary || t("cal.ics.untitled")) + " \u2014 " + t("cal.ics.reason." + skipped.reason)));
+              }
+              if (plan.skipped.length > 8) list.append(h("li", {}, t("cal.ics.moreSkipped", { n: plan.skipped.length - 8 })));
+              body.append(h("p", {}, t("cal.ics.skippedHeading")), list);
+            }
+            if (plan.warnings.length) body.append(h("p", { class: "zn-hint" }, t("cal.ics.warnings", { n: plan.warnings.length })));
+            // T2.13a: say plainly what a holiday calendar is, before anyone presses Import.
+            if (plan.holidayFeed) body.append(h("p", { class: "zn-hint zn-ics-holiday-feed" }, t("cal.ics.holidayFeed", { calendar: plan.holidayFeed })));
+            return plan;
+          };
+          const pickKind = (next) => { kind = next; for (const b of kindChips) b.classList.toggle("is-on", b.dataset.kind === kind); draw(); };
+          const kindChips = [["event", t("cal.ics.asEvent")], ["reminder", t("cal.ics.asReminder")]].map(([value, label]) => {
+            const b = chip(label, value === kind);
+            b.dataset.kind = value;
+            b.addEventListener("click", () => pickKind(value));
+            return b;
+          });
+          const cancel = chip(t("common.cancel"));
+          const go = chip(t("cal.ics.importBtn"), true);
+          const plan = draw();
+          go.disabled = !plan.add.length && !plan.update.length;
+          openCard(t("cal.ics.title"), h("p", {}, t("cal.ics.kindHint")), h("div", { class: "zn-set-chips" }, ...kindChips), body,
+            h("p", { class: "zn-hint" }, t("cal.ics.footnote")),
+            h("div", { class: "zn-dialog-actions" }, cancel, go));
+          cancel.addEventListener("click", () => { closeDialog(); focusEditor(); });
+          go.addEventListener("click", () => {
+            const finalPlan = draw();
+            closeDialog();
+            importIcsPlan(finalPlan).catch((error) => { warn(error); flash(t("cal.ics.failed")); });
+          });
+        }).catch((error) => { warn(error); flash(t("cal.ics.failed")); });
+      }
+      async function importIcsPlan(plan) {
+        const items = store.items;
+        if (!items?.upsert) { flash(t("cal.ics.unavailable")); return; }
+        let added = 0, updated = 0;
+        // Updates keep what the person changed here: their own colour, the note it points at, and its category.
+        for (const entry of plan.update) {
+          const old = entry.existing;
+          const next = { ...entry.item, id: old.id, created: old.created, rev: old.rev };
+          if (old.x?.color) next.x = { ...next.x, color: old.x.color };
+          if (old.x?.noteId) next.x = { ...next.x, noteId: old.x.noteId };
+          if (old.x?.category) next.x = { ...next.x, category: old.x.category };
+          if (items.upsert(next)) updated++;
+        }
+        for (const item of plan.add) if (items.upsert(item)) added++;
+        await Promise.resolve(store.flush?.()).catch(() => {});
+        scheduleList();
+        // The calendar pane is drawn from the store, so a redraw is all an import needs (a closed pane takes nothing).
+        if (view === "list") requestCalendarBackground();
+        flash(t("cal.ics.done", { added, updated }));
+      }
+
+      // T2.13: the other direction. One card, the same shape as the import card, that says how much is going out and
+      // only writes when Export is pressed. The file is written by `env.saveIcs` beside every other save, so a host
+      // (and a test) can answer without a real save dialog.
+      function askCalendarIcsExport() {
+        const C = CALENDAR_PART;
+        const items = store.items;
+        if (!C?.icsFromItems) { flash(t("cal.ics.exportUnavailable")); return; }
+        if (!items?.list) { flash(t("cal.ics.exportUnavailable")); return; }
+        // A cancelled import is an exception, not an event: it is the one thing that never goes back out.
+        const all = (items.list() || []).filter((it) => it && !it.x?.icsCancelled);
+        if (!all.length) { flash(t("cal.ics.exportEmpty")); return; }
+        const year = new Date().getFullYear();
+        const inYear = all.filter((it) => {
+          const start = C.parseYmd(it.start?.date) || new Date(it.start?.dateTime || "");
+          return Number.isFinite(start?.getTime?.()) && start.getFullYear() === year;
+        });
+        let scope = "all";
+        const scopes = [["all", all.length], ["year", inYear.length]];
+        const scopeChips = scopes.map(([value, n]) => {
+          const b = chip(t(value === "all" ? "cal.ics.exportAll" : "cal.ics.exportThisYear", { n }), value === scope);
+          b.dataset.scope = value;
+          b.addEventListener("click", () => {
+            scope = value;
+            for (const other of scopeChips) other.classList.toggle("is-on", other.dataset.scope === scope);
+          });
+          return b;
+        });
+        const cancel = chip(t("common.cancel"));
+        const go = chip(t("cal.ics.exportBtn"), true);
+        openCard(t("cal.ics.exportTitle"), h("p", {}, t("cal.ics.exportHint")),
+          h("p", { class: "zn-hint" }, t("cal.ics.exportScope")),
+          h("div", { class: "zn-set-chips" }, ...scopeChips),
+          h("div", { class: "zn-dialog-actions" }, cancel, go));
+        cancel.addEventListener("click", () => { closeDialog(); });
+        go.addEventListener("click", () => {
+          if (typeof env.saveIcs !== "function") { closeDialog(); flash(t("cal.ics.exportUnavailable")); return; }
+          const chosen = scope === "year" ? inYear : all;
+          // The same writer, the same UIDs: a file that comes back in is an update, not a second copy.
+          const out = C.icsFromItems(chosen, { now: Date.now(), name: "Zentral Notes" });
+          if (!out.count) { closeDialog(); flash(t("cal.ics.exportEmpty")); return; }
+          closeDialog();
+          Promise.resolve(env.saveIcs(out.text, "zentral-notes-" + CALENDAR_PART.ymd(new Date()))).then((saved) => {
+            if (saved) flash(t("cal.ics.exportDone", { n: out.count }));
+            focusEditor();
+          }).catch((error) => { warn(error); flash(t("cal.ics.exportFailed")); });
+        });
+      }
+
       // Table creator: pick a size on the grid (or type it), choose left / centre / right per column,
       // then insert a ready table.
       function askTable() {
@@ -26020,6 +28297,14 @@
       const moreItems = () => {
         const n = note();
         if (!n) return [];
+        // OW-104: in All notes / the calendar the three-dot menu still acted on the last note that had been open, and
+        // nothing on screen said so. The note's own actions stay — they are useful, and they are what the menu is —
+        // but the menu now opens by saying which note that is, so a click cannot come as a surprise, and the note
+        // itself is one click away. In the editor the header already names the note, so nothing is added there.
+        const noteHeader = view === "list" && !n.trashed
+          ? [{ icon: "note", label: "Actions for \u201c" + (titleOf(n.body) || "Untitled note") + "\u201d", disabled: true },
+             { icon: "chevronRight", label: "Open that note", action: () => openNote(n.id) }, { sep: true }]
+          : [];
         // Grouped by what a person is trying to do: files, labels, links, window, settings. Everything that has its own
         // button (table of contents, quick settings, search, split view) stays out of here, or sits one step down.
         const items = [
@@ -26084,6 +28369,7 @@
             { icon: "sliders", label: "Quick settings\u2026", action: () => askSettings() },
             { icon: "sliders", label: "All settings\u2026", action: () => askAllSettings() },
             { icon: "note", label: "Install demo notes", action: () => installDemoNotes() },
+            { icon: "search", label: "Where is a function? (discoverability list)", action: () => openDiscoverabilityNote() },
           ] },
           { sep: true },
         ];
@@ -26102,7 +28388,7 @@
             items.push({ icon: "trash", label: "Move to trash", danger: true, action: () => askNoteTrash(n.id, () => { currentId = ""; showEditor(); }) });
           }
         }
-        return items;
+        return noteHeader.length ? [...noteHeader, ...items] : items;
       };
       listen(btnMore, "click", () => showMenu(btnMore, moreItems()));
       listen(btnColor, "click", () => {
@@ -26542,13 +28828,30 @@
           { id: "note", icon: "plus", label: t("menu.new.note"), active: true, enabled: true, reason: "" },
           { id: "folder", icon: "folder", label: t("menu.new.folder"), active: false, enabled: true, reason: "" },
         ];
-        showMenu(newSplit, entries.map((entry) => ({
+        // OW-84 (owner, 2026-11-18: "now create reminder create whole day reminder are doubled in one + menu"). "New
+        // reminder" and the Create group's "Create timed reminder…" opened the same composer, and so did "New event" and
+        // "Create timed event…". A kind is now offered once: the plain row makes the item on the calendar's selected
+        // day (what it always did), and the Create group keeps only the all-day variants, which are a different thing
+        // rather than a second name for the same one.
+        const rows = entries.map((entry) => ({
           icon: entry.active ? "check" : entry.icon,
           label: entry.label,
           enabled: entry.enabled,
           reason: entry.reason || undefined,
           action: () => runAllNewChoice(entry.id, { remember: true }),
-        })));
+        }));
+        // OW-75, the owner's rule: "create xyz from calendar … into Notes + drop-down". The four creation modes used to
+        // sit at the top of the calendar's Tools menu; here they are under the Notes "+" they belong to, as one group so
+        // the primary list stays short. The composer opens on the calendar's selected day, as it did from Tools.
+        if (opts.calendarAvailable) {
+          rows.push({ sep: true });
+          // The reminder row above asks the day first; these are its all-day siblings under one heading.
+          rows.push({ id: "cal-tools-create", icon: "calendar", label: t("menu.new.allDay"), group: [
+            { icon: "calendar", label: t("cal.toolsMenu.createAllDayEvent"), action: () => queueMicrotask(() => askCreateCalendarItem("event", true, selectedCalendarDayKey())) },
+            { icon: "bell", label: t("cal.toolsMenu.createAllDayReminder"), action: () => queueMicrotask(() => askCreateCalendarItem("reminder", true, selectedCalendarDayKey())) },
+          ] });
+        }
+        showMenu(newSplit, rows);
       }
       // Cycle F #7: with pref new_note_chooser the + button asks first (Blank is focused, so Enter = blank note).
       // Ctrl+N and the menu entries stay instant. Esc only closes the menu.
@@ -27188,7 +29491,7 @@
           if (calendarNoteDrop || calendarDragNoteId || dragNoteId) { cancelNoteDrag(); e.preventDefault(); return; }
           if (armed.length && !dialog && !menu) disarm();
           else if (dialog) closeDialog();
-          else if (menu) closeMenu();
+          else if (menu) closeMenu({ restoreFocus: "keyboard" });
           else if (bigPicture) { lastBigPictureEsc = e; closeCalendarBigPicture({ restoreFocus: true }); }
           else if (findOpen) closeFind();
           else if (view === "list" && treeSelection.selected.size) clearTreeSelection();
@@ -27229,6 +29532,11 @@
           if (view === "editor") showEditor();
           else scheduleList();
           return;
+        }
+        // T3.8: the reference pane follows the note it shows, whoever edits it.
+        if (ev.type === "change" || ev.type === "remove" || ev.type === "reset" || ev.type === "tree") {
+          const shown = splitCompanion().id;
+          if (shown && (ev.type !== "change" || ev.id === shown)) scheduleCompanion();
         }
         if ((ev.type === "remove" || ev.type === "tree" || (ev.type === "change" && ev.id !== currentId)) && view === "editor" && mode !== "edit" && readEl.querySelector?.(".zn-notelink")) refreshRead();
         if (ev.type === "tree") return view === "list" ? scheduleList() : undefined;
@@ -27376,7 +29684,15 @@
         placeReveal();
         applyPush(left, w);
         placePill(left, top, w, hgt);
-        if (dialog?.dataset.calendarLayer === "true") scheduleFit();
+        // UI4.10: a calendar card is fitted to the new box at once; any other card was measured against the old one, so
+        // it is fitted again in the same frame instead of keeping a size the sheet no longer has.
+        if (dialog?.dataset.calendarLayer === "true") {
+          scheduleFit();
+        } else if (dialog) {
+          appliedFitKey = "";
+          appliedFitBox = null;
+          fitCard();
+        }
         // Autohide just switched on (or the card was just docked): start counting down to folding away.
         if (adapter.cardMode && hoverMode() && !graceTimer) armGrace();
       }
@@ -28115,9 +30431,25 @@
         if (mode !== store.meta.mode) store.setMeta({ mode });
         if (adapter.kind) store.setMeta({ openIn: adapter.kind });
         store.refresh().catch(() => {});
+        // OW-103: switching the Zentral web panel destroys and rebuilds the sheet, and this used to finish every open by
+        // opening a note — so anyone working in All notes or the calendar was thrown back into the editor, half-typed
+        // drafts lost with the panel. The view they left is view state now; come back to it. The last note still opens
+        // behind the list (the tabs and the editor need it), so leaving All notes lands on the same note as before.
+        const wasList = store.meta.sheetView === "list" && !!CALENDAR_PART;
+        sheetViewRestored = true;
+        rememberedView = "";
         const id = store.latestId();
-        if (id) openNote(id, { focus: openFocus });
-        else newNote("", { focus: openFocus });
+        if (id) openNote(id, { focus: openFocus && !wasList, keepView: wasList });
+        else newNote("", { focus: openFocus && !wasList });
+        if (wasList && CALENDAR_PART) {
+          filter = cleanListFilter(store.meta.sheetFilter);
+          view = "list";
+          applyState();
+          renderList();
+          updateAllLayout(true);
+          if (calendarPane && !calendarPane.hidden) renderCalendar();
+          root.dataset.allNotesRestored = "true";
+        }
         // Apply persisted meta (slot height, dock mode, standalone card height) now that meta.json is loaded.
         applyState();
         syncParentPanelHidden();
@@ -28151,6 +30483,7 @@
       function cancelAllAsync() {
         window.clearTimeout(confirmTimer); confirmTimer = 0;
         window.clearTimeout(previewTimer); previewTimer = 0;
+        window.clearTimeout(companionTimer); companionTimer = 0;
         window.clearTimeout(flashTimer); flashTimer = 0;
         window.clearTimeout(findTimer); findTimer = 0;
         window.clearTimeout(graceTimer); graceTimer = 0;
@@ -28257,6 +30590,19 @@
         close,
         destroy,
         refreshRead,
+        // UI4.10: the text size (or the sheet) changed while a card is open, so the card is measured again: the old
+        // box was worked out around text of the old size, and holding it only made the body scroll. A settings card
+        // takes the sheet it lives in, so it is laid out again rather than fitted.
+        refitDialog() {
+          if (!isOpen || destroyed || !dialog) return false;
+          const card = dialog.querySelector(".zn-dialog-card");
+          if (!card) return false;
+          if (card.classList.contains("zn-settings")) { layout(); return true; }
+          appliedFitKey = "";
+          appliedFitBox = null;
+          fitCard();
+          return true;
+        },
         openCalendarBigPicture,
         closeCalendarBigPicture,
         isCalendarBigPictureOpen: () => !!bigPicture,
@@ -28343,12 +30689,13 @@
         quickCaptureToday: () => {
           if (isOpen && !destroyed) queueMicrotask(() => askQuickCapture(""));
         },
-        openNoteById: (id, heading = "", itemId = "") => {
-          if (!isOpen || destroyed || !store.get(id)) return false;
-          outsideClaim = false;
-          const wanted = startMode(getPref(PREF.DEFAULT_VIEW, "last"), store.meta.mode);
-          if (wanted !== store.meta.mode) store.setMeta({ mode: wanted });
-          return openNoteByIdAndHeading(id, heading, itemId);
+        openNoteById: (id, heading = "", itemId = "") => openNoteFromOutside(id, heading, itemId),
+        quickCapture: (text) => {
+          if (!isOpen || destroyed) return false;
+          const body = String(text ?? "").trim().slice(0, 4000);
+          if (!body) { newNote(""); return true; }
+          const made = store.create(body); // the widget never picks a folder for the person
+          return openNoteFromOutside(made.id);
         },
         runAgendaItemAction: (identity, command) => {
           if (!isOpen || destroyed || !CALENDAR_PART?.resolveAgendaOccurrence || !store.items) return false;
@@ -28380,6 +30727,21 @@
           if (!isOpen || destroyed) return false;
           outsideClaim = false;
           return openCalendarPane();
+        },
+        // ST7.5: the reminder history is a card of the calendar's Tools menu; the sheet exposes it so a host (and a
+        // test) can open it without imitating that menu.
+        openReminderHistory: () => {
+          if (!isOpen || destroyed || !CALENDAR_PART?.exportHistoryLines) return false;
+          outsideClaim = false;
+          openReminderHistoryCard();
+          return true;
+        },
+        // OW-53: the same door for the .ics import card.
+        openIcsImport: () => {
+          if (!isOpen || destroyed || !CALENDAR_PART?.parseIcs) return false;
+          outsideClaim = false;
+          askCalendarIcsImport();
+          return true;
         },
         openAgendaSettings: () => {
           if (!isOpen || destroyed) return false;
@@ -29439,6 +31801,35 @@
           return true;
         } catch (error) { warn(error); return false; }
       }
+      // OW-53: one calendar file, through the same open picker as every other import. The text and the name are
+      // all the card needs; the size is checked before the file is read.
+      async function pickIcs() {
+        const file = await pick(Ci.nsIFilePicker.modeOpen, t("cal.ics.pickTitle"), "", "ics");
+        if (!file) return null;
+        try {
+          const info = await IOUtils.stat(file.path);
+          if (info.size > MAX_ICS_BYTES) return { error: t("cal.ics.tooBig", { mb: Math.ceil(MAX_ICS_BYTES / 1048576) }) };
+          return { text: await IOUtils.readUTF8(file.path), name: String(file.path).split(/[\\/]/).pop() || "calendar.ics", size: info.size };
+        } catch (error) { warn(error); return { error: t("cal.ics.readFailed") }; }
+      }
+      // T2.13: the calendar written out as one .ics, through the same save picker as every other export.
+      async function saveIcs(text, baseName) {
+        const file = await pick(Ci.nsIFilePicker.modeSave, t("cal.ics.exportSaveTitle"), (baseName || "zentral-notes") + ".ics", "ics");
+        if (!file) return false;
+        try {
+          await IOUtils.writeUTF8(file.path, String(text || ""));
+          return true;
+        } catch (error) { warn(error); return false; }
+      }
+      // ST7.5: the reminder history as a plain .txt, through the same save picker as every other export.
+      async function exportReminderHistory(text) {
+        const file = await pick(Ci.nsIFilePicker.modeSave, t("history.export"), "reminder-history.txt", "");
+        if (!file) return false;
+        try {
+          await IOUtils.writeUTF8(file.path, String(text || ""));
+          return true;
+        } catch (error) { warn(error); return false; }
+      }
       async function printCalendarWeek(text, weekStart) {
         try {
           const dir = PathUtils.join(PathUtils.tempDir, "zentral-notes-print");
@@ -29724,14 +32115,27 @@
         assetUrls.set(key, url);
         return { url };
       }
-      const tick = createTimeTickService({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), warn });
-      onCleanup(() => tick.destroy());
-      const env = { openLink, copyText, exportNote, exportAll, exportZip, exportBackupZip, exportObsidianVault, pickObsidianVault, importObsidianVault, pickBackupZip, restoreBackupZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now(),
+      // OW-94: the tick service skips its minute wake while Game Mode is on, and catches up when it ends.
+      const performanceSwitch = ZentralRuntime?.performance || null;
+      const tick = createTimeTickService({
+        setTimer: (fn, ms) => window.setTimeout(fn, ms),
+        clearTimer: (id) => window.clearTimeout(id),
+        warn,
+        paused: () => Boolean(performanceSwitch?.isPaused?.()),
+      });
+      const unsubscribeTickPause = performanceSwitch?.subscribe?.((paused) => tick.onPausedChange(paused)) || null;
+      onCleanup(() => {
+        try { unsubscribeTickPause?.(); } catch (_) {}
+        tick.destroy();
+      });
+      const env = { openLink, copyText, exportNote, exportAll, exportZip, exportBackupZip, exportObsidianVault, pickObsidianVault, importObsidianVault, pickBackupZip, restoreBackupZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, exportReminderHistory, pickIcs, saveIcs, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now(),
         // Visibility rules live in meta.json, which raises no store event: the sheet asks for the Zen Agenda refresh.
         refreshAgenda: () => { if (!disposed && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); } },
         // SB6.5: Agenda Doctor diagnostics & safe one-click repair (wired to live host DOM + reminder history).
         inspectAgenda: () => inspectAgenda(),
         repairAgenda: () => repairAgenda(),
+        // ST7.5: the retention policy the history store itself uses, so a trim preview matches the automatic one.
+        historyRetentionDays: () => CALENDAR_PART?.cleanReminderHistoryRetentionDays?.(prefInt(PREF.REMINDER_HISTORY_DAYS, 30)) || 30,
         // For a sheet that was opened before the notes could be read: when they are there, and a write that must wait for them.
         storeWhenReady, withStore };
 
@@ -29799,9 +32203,17 @@
           window.dispatchEvent(ev);
         } catch (_) {}
       }
+      // T3.9d: a quick note from a sidebar widget. The text arrives only when the person used the widget that
+      // moment; the sheet creates the note itself, so nothing is typed into a field behind their back.
+      function openQuickNoteFromHost(text) {
+        const body = typeof text === "string" ? text.slice(0, 4000) : "";
+        return showNotes("").then((h) => sheetOf(h)?.quickCapture?.(body)).catch(warn);
+      }
       const calendarOpener = {
         isAvailable: () => !disposed && enabledNow() && Boolean(CALENDAR_PART),
         openCalendar: () => openCalendarFromHost(),
+        openQuickNote: (text) => openQuickNoteFromHost(text),
+        canQuickNote: () => !disposed && enabledNow(),
       };
       window[CALENDAR_OPENER_SYM] = calendarOpener;
       notifyCalendarAvailability();
@@ -30072,7 +32484,18 @@
       // True while our own code is changing tabs (and shortly after): the tab events it causes are not "someone else did it".
       let zenBusy = false;
       let zenQuietUntil = 0;
+      // OW-88: how many of OUR OWN quiet windows are open right now. Counting them (instead of writing an absolute
+      // deadline) means a nested/long operation cannot shorten a window another one still needs.
+      let zenQuietDepth = 0;
       const zenEventsIgnored = () => zenBusy || Date.now() < zenQuietUntil;
+      function zenQuiet(ms = 500) {
+        zenQuietDepth += 1;
+        try {
+          zenQuietUntil = Math.max(zenQuietUntil, Date.now() + Math.max(0, Number(ms) || 0));
+        } finally {
+          zenQuietDepth = Math.max(0, zenQuietDepth - 1);
+        }
+      }
       // A markerless restored Notes placeholder is recognized only from its
       // current/live pseudo URL (or the current SessionStore entry), never a
       // stale display label, historical entry, or cached positive result.
@@ -30089,6 +32512,95 @@
         return tab.closest?.("zen-folder") === parentEl;
       }
       let notesCtrlTabFilter = null;
+      // OW-88 (plan B1): a Notes/Agenda sidebar row is an about:blank placeholder, and every live about:blank loader
+      // costs a whole content process (the owner measured ~11 of them, 43-51 MB each, ~0.5 GB). Discarding the tab
+      // keeps the row exactly as it is: the element, its label, icon, attributes and the private URL all survive, a
+      // click still opens the note (the guards read the marker and `_zentralNotesUrl`, not the page), and Gecko
+      // reloads about:blank only if something focuses the tab. It never touches a real note tab.
+      const parkPseudoPref = () => {
+        try { return prefBool(PREF.PARK_PSEUDO, true); } catch (_) { return true; }
+      };
+      const isPseudoPlaceholderTab = (tab) => !!(tab && (zenManagedTab(tab) ||
+        tab.hasAttribute?.(AGENDA_ATTR) || /^about:blank#zn-agenda-/.test(String(tab._zentralNotesUrl || ""))));
+      // Why a tab was left alone, or "" when it was parked. Returned (not logged) so a test can read the reason and a
+      // later session does not have to guess what the guards were.
+      function parkPseudoTab(tab) {
+        if (!parkPseudoPref()) return "pref-off";
+        if (!tab || !tab.isConnected) return "disconnected";
+        if (disposed || zen.dead) return "off";
+        if (tab.hasAttribute?.("pending")) return "already-pending";
+        if (window.gBrowser?.selectedTab === tab) return "selected";
+        if (zenBusy) return "busy";
+        if (!isPseudoPlaceholderTab(tab)) return "not-a-placeholder";
+        if (typeof window.gBrowser?.discardBrowser !== "function") return "no-discard";
+        const wasQuiet = zenEventsIgnored();
+        try {
+          window.gBrowser.discardBrowser(tab, true);
+        } catch (_) {
+          return "failed";
+        } finally {
+          // The discard fires TabBrowserDiscarded, a tab event like any other: it must not start a projection repair run.
+          if (!wasQuiet) zenQuiet(500);
+        }
+        try { window.__zentralNotesTestSeam?.onPseudoTabParked?.(tab); } catch (_) {}
+        return "";
+      }
+      // Never synchronously inside addTab/TabOpen/SSTabRestored: the caller is still marking and pinning the tab, and
+      // discarding a tab a native handler is still looking at is how the old placeholder bugs started.
+      // One deferred task drains every placeholder asked for in the same turn (a projection run creates ten at once).
+      // A single "last tab wins" timer would leave nine of them holding a content process.
+      let zenParkTimer = 0;
+      let zenParkRetryTimer = 0;
+      const zenParkQueue = new Set();
+      const zenParkAttempts = new WeakMap();
+      // Not 0 ms: the activation/hand-back tasks the click path queues are 0 ms, and a parking task must never run
+      // ahead of them in the same turn (existing Notes tests fire exactly one 0 ms task and expect the hand-back).
+      // Chosen away from every delay the sheet already uses (0/16/50/60/300/500/1000/6000/6500/90000), so a parking
+      // task can never be mistaken for an interaction hand-back or a repair debounce by a test that fires one timer by
+      // its delay. Nothing a person can see waits on them.
+      const ZEN_PARK_DELAY_MS = 1200;
+      const ZEN_PARK_RETRY_MS = 2500;
+      const ZEN_PARK_RETRY_MAX = 3;
+      onCleanup(() => {
+        window.clearTimeout(zenParkTimer);
+        window.clearTimeout(zenParkRetryTimer);
+        zenParkQueue.clear();
+      });
+      // "busy" and "selected" are temporary by nature: the hand-back that answers a click is still running, or the
+      // selection is still on its way back. A bounded retry (3 tries, 800 ms apart) parks the row once that settles;
+      // no polling, and a tab that stays unloadable is simply left alone after the third attempt.
+      function drainPseudoTabParkQueue() {
+        zenParkTimer = 0;
+        const tabs = [...zenParkQueue];
+        zenParkQueue.clear();
+        let retry = false;
+        for (const tab of tabs) {
+          let reason = "failed";
+          try { reason = parkPseudoTab(tab); } catch (error) { warn(error); }
+          if (reason === "busy" || reason === "selected") {
+            const tries = (zenParkAttempts.get(tab) || 0) + 1;
+            zenParkAttempts.set(tab, tries);
+            if (tries <= ZEN_PARK_RETRY_MAX) {
+              zenParkQueue.add(tab);
+              retry = true;
+            }
+          } else {
+            zenParkAttempts.delete(tab);
+          }
+        }
+        if (retry && !zenParkRetryTimer) {
+          zenParkRetryTimer = window.setTimeout(() => {
+            zenParkRetryTimer = 0;
+            drainPseudoTabParkQueue();
+          }, ZEN_PARK_RETRY_MS);
+        }
+      }
+      function scheduleParkPseudoTab(tab) {
+        if (!tab) return;
+        zenParkQueue.add(tab);
+        if (zenParkTimer) return;
+        zenParkTimer = window.setTimeout(drainPseudoTabParkQueue, ZEN_PARK_DELAY_MS);
+      }
       function addManagedPseudoTab(url) {
         pseudoTabCreationDepth++;
         try {
@@ -30108,6 +32620,7 @@
         tab.setAttribute(NOTES_ATTR, key); // marked BEFORE pinning, like the add-on host tabs
         tab._zentralNotesUrl = url;
         window.gBrowser.pinTab(tab);
+        scheduleParkPseudoTab(tab); // OW-88
         return tab;
       }
       // #6a: the seed tab exists only because gZenFolders.createFolder needs a tab. Unless the user asked for the
@@ -30132,8 +32645,13 @@
         } catch (error) { warn(error); }
         return true;
       }
+      // Closing one of our own tabs fires the same TabClose the user's close does: SB6.6 must be able to tell them apart,
+      // or dropping a row from the projection would hide that item for the rest of the day.
+      let managedTabRemoval = 0;
       const zenRemoveTab = (tab) => {
+        managedTabRemoval++;
         try { window.gBrowser.removeTab(tab, { animate: false, skipPermitUnload: true, skipSessionStore: true }); } catch (error) { warn(error); }
+        finally { managedTabRemoval--; }
       };
       // Sub-folders must sit INSIDE their parent folder. createFolder's parentId option is not guaranteed in every Zen
       // build, so after creating, verify the real DOM parent and try the two known ways of adopting a folder.
@@ -30517,7 +33035,100 @@
       function agendaNewTab(key) {
         const url = agendaTabUrl(key), tab = addManagedPseudoTab(url);
         if (!tab) return null;
-        tab.setAttribute(AGENDA_ATTR, key); tab._zentralNotesUrl = url; window.gBrowser.pinTab(tab); return tab;
+        tab.setAttribute(AGENDA_ATTR, key); tab._zentralNotesUrl = url; window.gBrowser.pinTab(tab);
+        scheduleParkPseudoTab(tab); // OW-88
+        return tab;
+      }
+      // SB6.6: closing an Agenda tab. The preference says what happens; a closed projection key is remembered for the
+      // local day only, so an item hidden today is back tomorrow without a timer and without touching the item.
+      const agendaCloseAction = () => CALENDAR_PART?.cleanAgendaCloseAction?.(prefStr(PREF.AGENDA_CLOSE_ACTION, "hide-today")) || "hide-today";
+      // SB6.9 (the LEFT half): the preference that lets the Agenda folder fold itself away, and the one place that
+      // applies it. Nothing is stored on the folder beyond one attribute, so a person who unfolds it by hand is not
+      // fighting a saved state: the next evaluation simply happens again from the clock and the projection.
+      const agendaFoldOptions = () => CALENDAR_PART?.cleanAgendaFold?.({
+        quiet: prefBool(PREF.AGENDA_FOLD_QUIET, false),
+        quietStart: prefStr(PREF.AGENDA_FOLD_QUIET_START, "22:00"),
+        quietEnd: prefStr(PREF.AGENDA_FOLD_QUIET_END, "07:00"),
+        dueWithinHours: prefInt(PREF.AGENDA_FOLD_DUE_HOURS, 0),
+      }) || null;
+      // Last plan, for the tooltip and for the tests; recomputed on every projection update, never on a timer of its own.
+      let agendaFoldState = { fold: false, quiet: false, nothingSoon: false, reasons: [] };
+      // What we last asked the folder to do, and whether the person has since opened it themselves.
+      let agendaFoldAsked = false;
+      let foldUnfoldedByHand = false;
+      // A person who unfolds the folder by hand has decided for now: stop asking it to close until it is closed again.
+      // Captured once per folder element, on the capture phase so Zen's own handler cannot swallow it first.
+      function agendaWatchHandUnfold(root) {
+        if (!root || root.__znFoldWatch) return;
+        root.__znFoldWatch = true;
+        root.addEventListener?.("click", () => {
+          // The folder's own toggle runs on this click; read its state just after, never before.
+          Promise.resolve().then(() => {
+            try {
+              if (agendaFoldAsked && root.collapsed === false) foldUnfoldedByHand = true;
+            } catch (_) {}
+          });
+        }, true);
+      }
+      function agendaApplyFold(days) {
+        const opts = agendaFoldOptions();
+        const root = agendaEnabled() ? agendaRootEl() : null;
+        if (!root) return agendaFoldState;
+        agendaWatchHandUnfold(root);
+        const plan = opts ? CALENDAR_PART.agendaFoldPlan(Date.now(), days, opts) : { fold: false, quiet: false, nothingSoon: false, reasons: [] };
+        agendaFoldState = plan;
+        // The attribute is the only thing touched: CSS does the folding, so an unfolded folder is never a lie about
+        // what the person asked for, and Zen's own folder state stays Zen's.
+        // Zen's native collapsed setter is the only honest way to fold a real folder: the browser owns the child layout
+        // and the animation, so nothing here repaints, remeasures or rebuilds (the ZentralColorfulFolders rule, which
+        // says the same thing for the same reason). The attribute is only a marker so the state can be read and styled;
+        // it is never what does the folding.
+        const wantFolded = Boolean(plan.fold);
+        let changed = false;
+        try {
+          if (typeof root.collapsed === "boolean" && root.collapsed !== wantFolded) { root.collapsed = wantFolded; changed = true; }
+        } catch (_) {}
+        // A person can unfold the folder by hand at any moment. While they have it open, the fold stays out of the way:
+        // only a fresh evaluation that still says "fold" after they closed it again may close it, which is what the
+        // marker records.
+        if (wantFolded && !foldUnfoldedByHand) {
+          root.setAttribute("bgalazka-notes-agenda-folded", plan.quiet ? "quiet" : "nothing-soon");
+          root.setAttribute("title", plan.quiet ? t("sidebar.agenda.foldedQuiet") : t("sidebar.agenda.foldedNothingSoon"));
+        } else {
+          root.removeAttribute("bgalazka-notes-agenda-folded");
+          root.removeAttribute("title");
+        }
+        // Remember what we last asked for, so a hand-unfold can be told apart from our own write.
+        agendaFoldAsked = wantFolded;
+        if (!wantFolded) foldUnfoldedByHand = false;
+        return plan;
+      }
+      let agendaClosedDay = "", agendaClosedKeys = new Set();
+      const agendaTodayKey = () => CALENDAR_PART?.localDateKey?.(Date.now()) || "";
+      function agendaClosedSet() {
+        const today = agendaTodayKey();
+        if (agendaClosedDay !== today) { agendaClosedDay = today; agendaClosedKeys = new Set(); }
+        return agendaClosedKeys;
+      }
+      // The preference, applied to a tab the person closed (never to one we closed ourselves).
+      function agendaOnTabClosed(tab) {
+        if (disposed || !agendaEnabled() || managedTabRemoval || !tab) return false;
+        const key = String(tab.getAttribute?.(AGENDA_ATTR) || agendaTabKey(tab) || "");
+        if (!key || key.startsWith("seed:")) return false;
+        const action = agendaCloseAction();
+        if (action === "reappear") return false;
+        const kind = String(tab.getAttribute?.("bgalazka-notes-agenda-kind") || "");
+        const history = store.items?.history;
+        if (action === "dismiss" && kind === "reminder" && history && !history.storageState().writeBlocked) {
+          const result = runHeadlessAgendaAction(agendaTabIdentity(tab), "dismiss");
+          if (result?.ok) { agendaController.invalidate?.(); agendaController.schedule(0); return true; }
+        }
+        // Hide that one row for the rest of the local day: the key carries its date, so a multi-day event keeps its
+        // other days and a repeating reminder is back tomorrow without a timer.
+        agendaClosedSet().add(key);
+        agendaController.invalidate?.();
+        agendaController.schedule(0);
+        return true;
       }
       let agendaMutationCount = 0, agendaReordering = false;
       function agendaPlaceRoot(root, position) {
@@ -31340,6 +33951,17 @@
             const folder = agendaDayEl(entry.key); if (!folder) return false;
             folder.setAttribute("bgalazka-notes-agenda-label", entry.label);
             if (entry.count > 0) folder.setAttribute("bgalazka-notes-agenda-count", String(entry.count)); else folder.removeAttribute("bgalazka-notes-agenda-count");
+            // SB6.9: the day pill says what is still ahead ("2 of 5 left"), which is what a glance at the sidebar wants;
+            // the count itself stays the whole day, so nothing disappears from it.
+            if (Number.isFinite(entry.left) && entry.left !== entry.count) {
+              folder.setAttribute("bgalazka-notes-agenda-left", String(entry.left));
+              folder.setAttribute("bgalazka-notes-agenda-label", entry.label);
+              // The tooltip (a real title on a real folder) keeps the whole day, for a person who asks.
+              folder.setAttribute("title", t("sidebar.agenda.leftOfCount", { left: entry.left, count: entry.count }));
+            } else {
+              folder.removeAttribute("bgalazka-notes-agenda-left");
+              folder.removeAttribute("title");
+            }
             folder.setAttribute("label", entry.label);
             try { folder.label = entry.label; } catch (_) {}
             return true;
@@ -31353,6 +33975,9 @@
         },
         reorder(parentKey, keys) {
           const root = agendaRootEl(), parent = parentKey ? agendaDayEl(parentKey) : root;
+          // SB6.9: the last step of a projection pass, which is the only moment the whole day list is known. Deciding
+          // the fold here (rather than on a timer) means it can never disagree with what is on screen.
+          if (!parentKey) { try { agendaApplyFold(agendaDays()); } catch (_) {} }
           if (!parent) return true;
           const els = keys.map((key) => String(key).startsWith("day:") ? agendaDayEl(key) : agendaTabFor(key, parentKey)).filter(Boolean);
           if (els.length < 2) return true;
@@ -31408,7 +34033,8 @@
           if (hideTrashed && sourceTrashed) continue;
           const noteColor = note && !note.trashed ? note.color : "";
           const catColor = item.x?.category ? (store.items?.category?.(item.x.category)?.color || "") : "";
-          const resolvedColor = CALENDAR_PART?.resolveItemColor?.(noteColor, catColor) || noteColor || catColor || "";
+          // ST7.8: the item's own colour comes first, then its note's, then its category's.
+          const resolvedColor = CALENDAR_PART?.resolveItemColor?.(item.x?.color || "", noteColor, catColor) || noteColor || catColor || "";
           const color = colorHex(resolvedColor) || "";
           unique.set(item.id, {
             ...item,
@@ -31430,6 +34056,7 @@
         getItems: agendaItems,
         getDays: agendaDays,
         getMaxItems: () => Math.max(1, Math.min(200, prefInt(PREF.AGENDA_MAX_ITEMS, 40))),
+        getHiddenKeys: agendaClosedSet,
         getLanguage: () => { try { return CALENDAR_PART.cleanNotesLanguage(Services.prefs.getStringPref(PREF.NOTES_LANGUAGE, "en")); } catch (_) { return "en"; } },
         getOverdue: () => ({ enabled: prefBool(PREF.AGENDA_OVERDUE, true), days: Math.max(1, Math.min(31, prefInt(PREF.AGENDA_OVERDUE_DAYS, 7))), cap: Math.max(1, Math.min(100, prefInt(PREF.AGENDA_OVERDUE_CAP, 10))) }),
         getEnabled: agendaEnabled,
@@ -31776,6 +34403,39 @@
         if (event.target?.id === "zenFolderActions") document.documentElement.removeAttribute("zentral-agenda-folder-ctx");
         if (event.target?.id === "tabContextMenu") document.documentElement.removeAttribute("zentral-agenda-ctx");
       }
+      // SB6.11: one model for an Agenda row's menu, shared by Zen's tab menu and by our own panel menu so the two entry
+      // points can never disagree. Every row also carries a `run` that re-checks the tab, its key and its identity, and
+      // that runs a headless command without opening the sheet (SB6.3).
+      function agendaTabMenuModel(tab) {
+        const key = agendaTabKey(tab);
+        const projected = agendaEntryForKey(key);
+        const identity = agendaTabIdentity(tab);
+        const item = key.startsWith("item:") && CALENDAR_PART?.resolveAgendaOccurrence?.(agendaItems(), identity) || projected;
+        const history = store.items?.history, historyId = item && CALENDAR_PART.reminderIdentity(item);
+        const state = historyId ? history?.stateFor?.(historyId.itemId, historyId.occurrenceId) || "pending" : "pending";
+        const writable = !!history && !history.storageState().writeBlocked;
+        const model = item ? CALENDAR_PART.calendarItemMenuModel(item, { state, historyWritable: writable, agendaVisible: agendaWindowForItem(item, store).enabled, agendaWritable: item.x?.src !== "note", lang: notesLang() }) : [];
+        return { key, identity, model };
+      }
+      function agendaItemMenuRows(tab) {
+        const { key, identity, model } = agendaTabMenuModel(tab);
+        const stillLive = () => !disposed && agendaEnabled() && tab.isConnected !== false && agendaOwnTab(tab) &&
+          agendaTabKey(tab) === key && JSON.stringify(agendaTabIdentity(tab)) === JSON.stringify(identity);
+        const bind = (rows) => rows.map((row) => {
+          if (!row || row.sep || row.heading) return row;
+          if (Array.isArray(row.group)) return { ...row, group: bind(row.group) };
+          if (!row.enabled || !row.command) return row;
+          return { ...row, run: () => {
+            if (!stillLive()) return;
+            if (CALENDAR_PART.isHeadlessAgendaCommand?.(row.command)) { runHeadlessAgendaAction(identity, row.command); return; }
+            showNotes("").then((handle) => {
+              if (!stillLive()) return;
+              sheetOf(handle)?.runAgendaItemAction?.(identity, row.command);
+            }).catch(warn);
+          } };
+        });
+        return bind(model);
+      }
       function onAgendaTabMenuShowing(event) {
         const menu = event.target;
         if (menu?.id !== "tabContextMenu") return;
@@ -31784,15 +34444,7 @@
         const tab = window.TabContextMenu?.contextTab;
         if (!agendaEnabled() || !tab || !agendaOwnTab(tab)) return;
         document.documentElement.setAttribute("zentral-agenda-ctx", "item");
-        const key = agendaTabKey(tab);
-        const projected = agendaEntryForKey(key);
-        const snapshot = () => agendaTabIdentity(tab);
-        const identity = snapshot();
-        const item = key.startsWith("item:") && CALENDAR_PART?.resolveAgendaOccurrence?.(agendaItems(), identity) || projected;
-        const history = store.items?.history, historyId = item && CALENDAR_PART.reminderIdentity(item);
-        const state = historyId ? history?.stateFor?.(historyId.itemId, historyId.occurrenceId) || "pending" : "pending";
-        const writable = !!history && !history.storageState().writeBlocked;
-        const model = item ? CALENDAR_PART.calendarItemMenuModel(item, { state, historyWritable: writable, agendaVisible: agendaWindowForItem(item, store).enabled, agendaWritable: item.x?.src !== "note", lang: notesLang() }) : [];
+        const model = agendaItemMenuRows(tab);
         const addRows = (parent, rows, top = false) => {
           for (const row of rows) {
             if (row.sep) { const separator = document.createXULElement("menuseparator"); if (top) separator.setAttribute("zentral-agenda-own", "separator"); parent.append(separator); continue; }
@@ -31806,17 +34458,7 @@
             if (top) action.setAttribute("zentral-agenda-own", row.id || "heading");
             if (row.heading || !row.enabled) action.setAttribute("disabled", "true");
             if (row.reason) action.setAttribute("tooltiptext", row.reason);
-            if (!row.heading && row.enabled) action.addEventListener("command", () => {
-              if (disposed || !agendaEnabled() || tab.isConnected === false || !agendaOwnTab(tab) || agendaTabKey(tab) !== key || JSON.stringify(snapshot()) !== JSON.stringify(identity)) return;
-              if (CALENDAR_PART.isHeadlessAgendaCommand?.(row.command)) {
-                runHeadlessAgendaAction(identity, row.command);
-                return;
-              }
-              showNotes("").then((handle) => {
-                if (disposed || !agendaEnabled() || tab.isConnected === false || !agendaOwnTab(tab) || agendaTabKey(tab) !== key || JSON.stringify(snapshot()) !== JSON.stringify(identity)) return;
-                sheetOf(handle)?.runAgendaItemAction?.(identity, row.command);
-              }).catch(warn);
-            });
+            if (!row.heading && row.enabled) action.addEventListener("command", () => { if (typeof row.run === "function") row.run(); });
             parent.append(action);
           }
         };
@@ -31851,6 +34493,7 @@
         if (!on) {
           agendaTitleCard.hide();
           agendaActionToast.hide();
+          agendaClosedDay = ""; agendaClosedKeys = new Set();
           clearAgendaPress();
           window.clearTimeout(agendaSelectTimer); agendaSelectTimer = 0; agendaLastContent.clear();
           for (const id of agendaIconTimers) window.clearTimeout(id);
@@ -32001,10 +34644,13 @@
         routedPseudoTabs.add(tab);
         // Close the transient about:blank tab before any async store or UI work, and put the user back on the site
         // they were on: closing the selected tab would otherwise let the browser pick a neighbour (or leave a blank page).
+        // This tab is one we routed, not one the person closed, so SB6.6 must not hide the item it points at.
         let wasSelected = false, owner = null;
         try { wasSelected = window.gBrowser.selectedTab === tab; owner = tab.owner || null; } catch (_) {}
+        managedTabRemoval++;
         try { window.gBrowser.removeTab(tab, { animate: false }); }
         catch (_) { try { tab.remove?.(); } catch (_) {} }
+        finally { managedTabRemoval--; }
         if (wasSelected) {
           const back = returnTabFor(owner);
           if (back) try { window.gBrowser.selectedTab = back; } catch (_) {}
@@ -32329,7 +34975,10 @@
         }, 0);
       }
       function onAgendaTabEvent(ev) {
-        if (ev.type === "TabClose") agendaTitleCard.removed(ev.target);
+        if (ev.type === "TabClose") {
+          agendaTitleCard.removed(ev.target);
+          agendaOnTabClosed(ev.target);
+        }
         if (disposed || !agendaEnabled() || agendaController.busy || agendaReordering) return;
         const tab = ev.target;
         const root = agendaRootEl();
@@ -32636,6 +35285,7 @@
         }
         cleanRestoredPseudoTabs([event.target]);
         if (folder && kind) cleanDisabledPseudoFolders(folder);
+        scheduleParkPseudoTab(event.target); // OW-88: a restored placeholder comes back live, park it again
       };
       if (lifecycle?.listen) {
         const offPseudoRestore = lifecycle.listen(window, "SSTabRestored", onPseudoTabRestored, true);
@@ -32755,6 +35405,7 @@
               const back = safe(prev) ? prev : [...window.gBrowser.tabs].find(safe);
               if (back) window.gBrowser.selectedTab = back;
               activateZenTab(tab);
+              scheduleParkPseudoTab(tab); // OW-88: the click was answered, so the row goes back to sleep
               zen.schedule(0);
             } catch (error) { warn(error); }
           }, 0);
@@ -32771,6 +35422,7 @@
             const back = safe(prev) ? prev : [...window.gBrowser.tabs].find(safe);
             if (back) window.gBrowser.selectedTab = back;
             activateZenTab(tab);
+            scheduleParkPseudoTab(tab); // OW-88: same hand-back, same parking
           } catch (error) { warn(error); }
         }, 0);
       };
@@ -32809,6 +35461,174 @@
         }
       };
       // Right-click menus: our own items are added once; for our targets every native item is hidden with CSS (never removed).
+      // SB6.11: our own menu for our own sidebar rows. Zen's tab menu is native, versioned and different for every
+      // Zen release; ours is built from the same rows the rest of Notes already uses, and the native actions stay one
+      // submenu away so nothing the person had before disappears.
+      const ZEN_NATIVE_MENU_COMMAND = "zentral-notes-native-tab-actions";
+      function zenNativeTabActions(tab) {
+        // The escape hatch: open Zen's own tab menu for this row, exactly as a plain right-click would.
+        try {
+          const menu = document.getElementById("tabContextMenu");
+          const context = window.TabContextMenu;
+          if (!menu || !context) return false;
+          if ("contextTab" in context) context.contextTab = tab;
+          if (typeof context.openPopup === "function") { context.openPopup(); return true; }
+          if (typeof menu.openPopup === "function") {
+            menu.openPopup(tab, "after_start", 0, 0, false, false);
+            return true;
+          }
+          return false;
+        } catch (_) { return false; }
+      }
+      function zenOwnMenuAnchor(event) {
+        const win = window;
+        const x = Number.isFinite(event?.clientX) ? Math.round(event.clientX) : 0;
+        const y = Number.isFinite(event?.clientY) ? Math.round(event.clientY) : 0;
+        try {
+          if (win.XULMenuAnchorElement) return new win.XULMenuAnchorElement(x, y);
+          if (win.AnchorElement) return new win.AnchorElement(x, y);
+        } catch (_) {}
+        return null;
+      }
+      // Rows that mean "this is ours": a Note projection tab or an Agenda projection tab.
+      function ownRowOf(event) {
+        const tab = pseudoEventClosest(event, "tab");
+        if (!tab) return null;
+        const noteId = zenNoteIdFromTab(tab);
+        if (noteId && zenManagedTab(tab)) return { kind: "note", tab, noteId };
+        if (agendaEnabled() && agendaOwnTab(tab)) return { kind: "agenda", tab, key: agendaTabKey(tab) };
+        return null;
+      }
+      // The menu rows are the same objects the Zen path uses: the Notes rows (open, out, hide, trash) or the Agenda
+      // model, so a click means the same thing in both places.
+      function ownRowMenuRows(own) {
+        if (own.kind === "note") {
+          return ZEN_MENU_ITEMS.map(([id, labelKey, fn]) => ({ id, label: t(labelKey), run: () => fn(own.tab) }));
+        }
+        const rows = agendaItemMenuRows(own.tab);
+        return rows.length ? rows : [{ id: "unavailable", label: t("sidebar.agenda.itemUnavailable"), enabled: false }];
+      }
+      let ownRowMenu = null;
+      // Closing is ours to decide: a hidden popup may also fire `popuphidden` on its own, and replacing one menu with
+      // the next must not leave two of them (or a stray focus hand-back) behind.
+      function closeOwnRowMenu({ refocus = false } = {}) {
+        const menu = ownRowMenu;
+        if (!menu) return;
+        ownRowMenu = null;
+        try { menu.hidePopup?.(); } catch (_) {}
+        menu.remove?.();
+        if (refocus) returnFocusToRow(menu._znOwnRowTab);
+      }
+      function openOwnRowMenu(event, own) {
+        if (!own) return false;
+        const anchor = zenOwnMenuAnchor(event);
+        if (!anchor) return false; // No anchor: let the native menu open, so a right-click never does nothing.
+        closeOwnRowMenu();
+        const menu = document.createXULElement("menupopup");
+        menu.id = "zentral-notes-row-menu";
+        menu.setAttribute("class", "zentral-notes-row-menu");
+        const rows = ownRowMenuRows(own);
+        const add = (parent, list) => {
+          for (const row of list) {
+            if (row.sep) { parent.append(document.createXULElement("menuseparator")); continue; }
+            if (row.heading) {
+              const heading = document.createXULElement("menuitem");
+              heading.setAttribute("label", row.label || ""); heading.setAttribute("disabled", "true");
+              parent.append(heading); continue;
+            }
+            if (Array.isArray(row.group)) {
+              const group = document.createXULElement("menu"), popup = document.createXULElement("menupopup");
+              group.setAttribute("label", row.label || "");
+              add(popup, row.group); group.append(popup); parent.append(group); continue;
+            }
+            const item = document.createXULElement("menuitem");
+            item.setAttribute("label", row.label || "");
+            if (row.enabled === false) item.setAttribute("disabled", "true");
+            if (row.reason) item.setAttribute("tooltiptext", row.reason);
+            if (row.enabled !== false) item.addEventListener("command", () => {
+              // Close first, then act: the row takes the focus back even when the action removes or moves it.
+              closeOwnRowMenu({ refocus: true });
+              if (typeof row.run === "function") row.run();
+            });
+            parent.append(item);
+          }
+        };
+        add(menu, rows);
+        // The native actions stay reachable; they are the one thing we cannot rebuild ourselves.
+        menu.append(document.createXULElement("menuseparator"));
+        const native = document.createXULElement("menuitem");
+        native.setAttribute("label", t("sidebar.row.zenActions"));
+        native.setAttribute("zentral-notes-row-native", "true");
+        native.addEventListener("command", () => {
+          closeOwnRowMenu();
+          zenNativeTabActions(own.tab);
+        });
+        menu.append(native);
+        menu.setAttribute("anchor", own.tab.id || "");
+        menu._znOwnRowTab = own.tab;
+        menu.addEventListener("popuphidden", () => {
+          // Escape or a click outside closes the menu; the row keeps the focus (UI4.11).
+          if (ownRowMenu !== menu) return;
+          ownRowMenu = null;
+          menu.remove?.();
+          returnFocusToRow(own.tab);
+        });
+        // A hidden popup is attached while it opens and lives in the popup set afterwards, which is where a real
+        // menupopup is (not in the page body). Attaching it this way also means a test can find it.
+        menu.setAttribute("hidden", "true");
+        document.documentElement.append(menu);
+        ownRowMenu = menu;
+        try {
+          menu.openPopupAtScreen(anchor.x, anchor.y, true);
+          menu.removeAttribute("hidden");
+        } catch (_) { closeOwnRowMenu(); return false; }
+        return true;
+      }
+      function returnFocusToRow(tab) {
+        const focus = () => { try { tab?.focus?.(); } catch (_) {} };
+        if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(focus);
+        else focus();
+      }
+      // One place decides whether a right-click gets our menu: only our own rows, and only when nothing else took it.
+      //
+      // OW-98: `event.defaultPrevented` used to be the first word, and that is what let Zen win. Zen opens its tab
+      // menu from its own handler, and whichever listener is older runs first — ours is added when Notes loads, Zen's
+      // when the window is built. On our own rows ours therefore ran *after* Zen had already cancelled the event, and
+      // the guard turned our menu off exactly where it was wanted. The guard is now only about events something else
+      // has already claimed *in a way that is not Zen's tab menu*: a click inside one of our own popups, a synthetic
+      // event with no target, and the popupshowing path. A cancelled contextmenu on one of our rows is precisely the
+      // case to take over, not to skip.
+      function onOwnRowContextMenu(event) {
+        if (disposed) return;
+        if (event?.__znOwnRowMenu) return;
+        // A click inside one of our own menus never arrives here, but a nested popup's own contextmenu can.
+        if (pseudoEventInside(event, ownRowMenu)) return;
+        const own = ownRowOf(event);
+        if (!own || (own.kind === "note" && zenMode() === "off")) return;
+        // Ctrl/Meta keep Zen's native menu reachable for one click without hunting a submenu.
+        if (event.ctrlKey || event.metaKey) return;
+        if (!openOwnRowMenu(event, own)) return;
+        event.preventDefault?.();
+        event.stopImmediatePropagation?.();
+      }
+
+      // OW-98, the other half: on a real Zen the native tab menu is not always opened from a `contextmenu` listener we
+      // can out-order — some tabs open it from the button press itself. This takes the press before anything above it
+      // can act on it, and only on our own rows: a plain tab keeps every millisecond of Zen's behaviour.
+      //
+      // It is deliberately a *silent* claim: the press is not cancelled (focus and selection still happen the way the
+      // sidebar does them), and no menu is opened here — `contextmenu` still comes and `onOwnRowContextMenu` opens ours.
+      // What the press does is remember that Zen must not answer this one, so `onTabMenuShowing` can keep our native
+      // rows out of a menu that opened before our contextmenu handler ran.
+      let ownRowPress = 0;
+      function onOwnRowPress(event) {
+        if (disposed || !event || event.button !== 2) return;
+        const own = ownRowOf(event);
+        if (!own || (own.kind === "note" && zenMode() === "off")) return;
+        if (event.ctrlKey || event.metaKey) return;
+        // The timestamp lets `onTabMenuShowing` tell "Zen opened its menu for this press" from a stale flag.
+        ownRowPress = Date.now();
+      }
       const ZEN_MENU_ITEMS = [
         ["open", "sidebar.note.open", (tab) => activateZenTab(tab)],
         ["out", "sidebar.note.removeFromFolder", (tab) => { const id = zenNoteIdFromTab(tab); if (id && zenMode() === "selected") withStore(() => { store.setFolder(id, ""); zen.schedule(0); }); }],
@@ -32833,6 +35653,15 @@
         const menu = ev.target;
         if (menu?.id !== "tabContextMenu") return;
         const tab = window.TabContextMenu?.contextTab;
+        // OW-98: our row, pressed just now → our own menu owns this click. Close the native one before it is drawn, so
+        // there is never a frame with two menus, and say so plainly rather than showing native items beside ours.
+        if (tab && Date.now() - ownRowPress < 1200 && ownRowOf({ target: tab })?.kind) {
+          ownRowPress = 0;
+          try { menu.hidePopup?.(); } catch (_) {}
+          zenCtxTab = null;
+          document.documentElement.removeAttribute("zentral-notes-ctx");
+          return;
+        }
         zenCtxTab = tab && zenNoteIdFromTab(tab) && zenManagedTab(tab) ? tab : null;
         // Our items exist only for our tabs: for any other tab they are hidden and the native menu is untouched.
         for (const own of menu.querySelectorAll("[zentral-notes-own]")) own.hidden = !zenCtxTab;
@@ -32993,6 +35822,9 @@
         window[act]("popupshowing", notesHoverCard.popup, true);
         window[act]("resize", notesHoverCard.position, true);
         for (const ty of ["mousedown", "click", "mouseup", "auxclick"]) window[act](ty, onZenMouse, true);
+        // OW-98: the press, so a native tab menu Zen opened from the button cannot keep our rows to itself. It lives
+        // with the rest of the sidebar binding, so turning the feature off removes it with everything else.
+        window[act]("pointerdown", onOwnRowPress, true);
         for (const ty of ZEN_TAB_EVENTS) window[act](ty, onZenTabEvent, true);
         for (const ty of ["FolderGrouped", "FolderUngrouped"]) window[act](ty, onZenFolderEvent, true);
         window[act]("TabAttrModified", onZenAttr, true);
@@ -33003,12 +35835,17 @@
         window[act]("popuphidden", onTabMenuHidden, true);
         if (!on) {
           notesHoverCard.hide();
+          closeOwnRowMenu();
           document.documentElement.removeAttribute("zentral-notes-ctx");
           document.documentElement.removeAttribute("zentral-notes-folder-ctx");
           document.querySelectorAll?.("[zentral-notes-own],[zentral-notes-folder-own]").forEach((n) => n.remove());
         }
       }
       onCleanup(() => bindZen(false));
+      // SB6.11: one listener serves both projections, so it cannot live in bindZen (the Notes folder and the Agenda
+      // folder can be switched on independently). It costs one early return while nobody right-clicks our rows.
+      window.addEventListener("contextmenu", onOwnRowContextMenu, true);
+      onCleanup(() => window.removeEventListener("contextmenu", onOwnRowContextMenu, true));
       // Turning the feature off unloads it completely: listeners, pending work, flags, menu leftovers, and every tab and
       // folder it made, even when the sync object was killed or never found its root. Safe to call repeatedly.
       function zenTeardown() {
@@ -33746,7 +36583,12 @@
           if (READ_PREFS.has(name)) {
             for (const b of [...bindings.values(), floating]) b?.sheet?.()?.refreshRead?.();
             floating?.sheet?.refreshRead?.();
-          } else if (VIEW_PREFS.has(name)) applyViewPrefs();
+          } else if (VIEW_PREFS.has(name)) {
+            applyViewPrefs();
+            // UI4.10: the text size is one of these; an open card was measured at the old size and its body would
+            // scroll instead of it growing. Every sheet re-fits its open dialog.
+            for (const b of [...bindings.values(), floating]) b?.sheet?.()?.refitDialog?.();
+          }
           else if (name === PREF.SHORTCUT) shortcut = parseShortcut(prefStr(PREF.SHORTCUT, "Alt+Shift+N"));
           else if (name === PREF.DEBUG_PERF) PERF_ON = prefBool(PREF.DEBUG_PERF, false);
           else if (name === PREF.ZEN_MODE) {
@@ -33975,10 +36817,19 @@
       // Opt-in test seam: the real per-window coordinator and native adapters,
       // without opening a Notes sheet or publishing privileged objects normally.
       if (window.__zentralNotesTestSeam) {
-        const sidebar = { store, ensureStore, storeWhenReady, withStore, zenApi, zen, agendaApi, agendaController, tick, reminders,
+        const sidebar = { store, ensureStore, storeWhenReady, withStore, zenApi, zen, agendaApi, agendaController, agendaCloseAction, agendaClosedSet, agendaOnTabClosed, tick, reminders,
           onAgendaMouse, onAgendaSelect, onAgendaTabEvent, onAgendaAttr, agendaEnsureVisuals, onAgendaFolderMenuShowing,
           onAgendaFolderMenuHidden, onAgendaTabMenuShowing, runAgendaAction: runHeadlessAgendaAction, agendaToast: agendaActionToast,
-          agendaHoverCard, notesHoverCard, nextAgendaItem, nextNotesItem, inspectAgenda, repairAgenda };
+          agendaHoverCard, notesHoverCard, nextAgendaItem, nextNotesItem, inspectAgenda, repairAgenda,
+          // ST7.5: the reminder-history card lives in a sheet, so a test needs the same door a person uses
+          // (showNotes → the sheet handle) and the card itself.
+          showNotes,
+          openReminderHistory: () => showNotes("").then((handle) => sheetOf(handle)?.openReminderHistory?.()),
+          openIcsImport: () => showNotes("").then((handle) => sheetOf(handle)?.openIcsImport?.()),
+          // OW-88: the parking guards are what proves placeholders do not hold a content process; a test drives them
+          // and reads the returned reason instead of guessing from the DOM.
+          parkPseudoTab, scheduleParkPseudoTab, drainPseudoTabParkQueue, isPseudoPlaceholderTab, zenManagedTab,
+          zenQuietDepth: () => zenQuietDepth, parkQueueSize: () => zenParkQueue.size };
         window.__zentralNotesTestSeam.sidebar = sidebar;
         onCleanup(() => {
           if (window.__zentralNotesTestSeam?.sidebar === sidebar) delete window.__zentralNotesTestSeam.sidebar;

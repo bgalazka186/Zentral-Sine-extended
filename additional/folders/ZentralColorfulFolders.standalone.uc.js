@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Colorful Folders
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.244
+// @version 3.3.332
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.244, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.332, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.244";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.332";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -961,8 +961,48 @@ function nativeSidebarSide() {
     }
   }
   const features = (window.__zentralStandalone ||= {});
+  // OW-94 (plan B7.1): the pause switch. The full pack publishes the same contract under `ZentralRuntime.performance`;
+  // a standalone module asks for it here. With no full pack there is nothing else to pause, so the switch is honest
+  // about being alone: `listenerCount()` is 0 and setting it simply notifies whoever subscribed.
+  const performanceSwitch = (() => {
+    let paused = false;
+    const listeners = new Set();
+    const snapshot = () => ({ paused, changes: 0, lastChangeAt: 0 });
+    const setPaused = (next) => {
+      const target = Boolean(next);
+      if (target === paused) return snapshot();
+      paused = target;
+      for (const fn of [...listeners]) {
+        try {
+          fn(paused, snapshot());
+        } catch (error) {
+          try {
+            console.warn("[Zentral standalone] pause listener failed", error);
+          } catch (_) {}
+        }
+      }
+      return snapshot();
+    };
+    const subscribe = (fn) => {
+      if (typeof fn !== "function") return () => {};
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    };
+    return {
+      isPaused: () => paused,
+      setPaused,
+      toggle: () => setPaused(!paused),
+      subscribe,
+      onChange: subscribe,
+      snapshot,
+      listenerCount: () => listeners.size,
+      reset() {},
+    };
+  })();
+
   const shim = {
     standalone: true,
+    performance: performanceSwitch,
     getPref,
     readStartupPanel() {
       try {

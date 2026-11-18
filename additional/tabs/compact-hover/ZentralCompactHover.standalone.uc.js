@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Compact Sidebar Hover
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.244
+// @version 3.3.332
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.244, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.332, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.244";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.332";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -961,8 +961,48 @@ function nativeSidebarSide() {
     }
   }
   const features = (window.__zentralStandalone ||= {});
+  // OW-94 (plan B7.1): the pause switch. The full pack publishes the same contract under `ZentralRuntime.performance`;
+  // a standalone module asks for it here. With no full pack there is nothing else to pause, so the switch is honest
+  // about being alone: `listenerCount()` is 0 and setting it simply notifies whoever subscribed.
+  const performanceSwitch = (() => {
+    let paused = false;
+    const listeners = new Set();
+    const snapshot = () => ({ paused, changes: 0, lastChangeAt: 0 });
+    const setPaused = (next) => {
+      const target = Boolean(next);
+      if (target === paused) return snapshot();
+      paused = target;
+      for (const fn of [...listeners]) {
+        try {
+          fn(paused, snapshot());
+        } catch (error) {
+          try {
+            console.warn("[Zentral standalone] pause listener failed", error);
+          } catch (_) {}
+        }
+      }
+      return snapshot();
+    };
+    const subscribe = (fn) => {
+      if (typeof fn !== "function") return () => {};
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    };
+    return {
+      isPaused: () => paused,
+      setPaused,
+      toggle: () => setPaused(!paused),
+      subscribe,
+      onChange: subscribe,
+      snapshot,
+      listenerCount: () => listeners.size,
+      reset() {},
+    };
+  })();
+
   const shim = {
     standalone: true,
+    performance: performanceSwitch,
     getPref,
     readStartupPanel() {
       try {
@@ -1110,6 +1150,67 @@ function nativeSidebarSide() {
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
+  // ---- the rules, as pure functions -------------------------------------------------
+  // A window-entry reveal is a hit-test against three rectangles and four tunables. Keeping those as plain functions
+  // means the suite can prove the numbers without a live sidebar, and the pointer path stays a single call.
+  const EDGE_REACH_PX = 10;
+  const TUNE_BOUNDS = {
+    edge_margin_px: [0, 64, 12],
+    exit_grace_ms: [0, 2000, 250],
+    keep_hover_ms: [0, 2000, 0],
+  };
+  const TUNE_NAMES = {
+    MARGIN_PREF: "edge_margin_px",
+    GRACE_PREF: "exit_grace_ms",
+  };
+  function clampTune(name, value) {
+    const bounds = TUNE_BOUNDS[name];
+    if (!bounds) return 0;
+    const n = Number(value);
+    const fallback = bounds[2];
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(bounds[0], Math.min(bounds[1], Math.round(n)));
+  }
+  function containsPoint(box, point, margin = 0) {
+    if (!box || !point) return false;
+    return (
+      point.clientX >= box.left - margin &&
+      point.clientX <= box.right + margin &&
+      point.clientY >= box.top - margin &&
+      point.clientY <= box.bottom + margin
+    );
+  }
+  function onSideEdge(point, windowBox, side, reach = EDGE_REACH_PX) {
+    if (!windowBox || !point) return false;
+    return Math.abs(point.clientX - windowBox[side]) <= reach;
+  }
+  // The pointer must come in at the window's left/right edge, away from the corners, and level with the sidebar's own
+  // vertical span. A recent exit on the same side explains a fast return whose first sample already landed deeper.
+  function revealFromBoundary({ point, windowBox, sidebarBox, side, recentExit, reach = EDGE_REACH_PX }) {
+    if (!containsPoint(windowBox, point)) return false;
+    const middle = (windowBox.left + windowBox.right) / 2;
+    const matchingHalf = side === "right" ? point.clientX >= middle : point.clientX <= middle;
+    if (!onSideEdge(point, windowBox, side, reach) && !(recentExit && matchingHalf))
+      return false;
+    if (
+      point.clientY <= windowBox.top + reach ||
+      point.clientY >= windowBox.bottom - reach
+    )
+      return false;
+    if (!sidebarBox) return false;
+    return point.clientY >= sidebarBox.top && point.clientY <= sidebarBox.bottom;
+  }
+  // Leaving through the window's side edge, level with the sidebar, is what may open a short welcome-back window.
+  function exitThroughSide({ point, windowBox, sidebarBox, side, reach = EDGE_REACH_PX }) {
+    if (!containsPoint(windowBox, point) || !sidebarBox) return false;
+    if (!onSideEdge(point, windowBox, side, reach)) return false;
+    if (
+      point.clientY <= windowBox.top + reach ||
+      point.clientY >= windowBox.bottom - reach
+    )
+      return false;
+    return point.clientY >= sidebarBox.top && point.clientY <= sidebarBox.bottom;
+  }
   function attachEntry() {
     const manager = window.gZenCompactModeManager;
     const root = document.documentElement;
@@ -1279,12 +1380,7 @@ function nativeSidebarSide() {
     let configuredSidebar = null,
       configuredRight = false;
     const enabled = () => active && configured && !manager._ignoreNextHover;
-    const contains = (box, event, m = 0) =>
-      box &&
-      event.clientX >= box.left - m &&
-      event.clientX <= box.right + m &&
-      event.clientY >= box.top - m &&
-      event.clientY <= box.bottom + m;
+    const contains = (box, event, m = 0) => containsPoint(box, event, m);
     function cancelTimer() {
       if (timer !== null) window.clearTimeout(timer);
       timer = null;
@@ -1369,15 +1465,14 @@ function nativeSidebarSide() {
         : root.getBoundingClientRect();
       const box = readBounds(manager.sidebar);
       const right = Boolean(manager.sidebarIsOnRight);
-      const crossedSide = right
-        ? event.clientX >= windowBox.right - 10
-        : event.clientX <= windowBox.left + 10;
+      const side = right ? "right" : "left";
       if (
-        !crossedSide ||
-        event.clientY <= windowBox.top + 10 ||
-        event.clientY >= windowBox.bottom - 10 ||
-        event.clientY < box.top ||
-        event.clientY > box.bottom
+        !exitThroughSide({
+          point: event,
+          windowBox,
+          sidebarBox: box,
+          side,
+        })
       )
         return;
       exitAt = Date.now();
@@ -1415,19 +1510,16 @@ function nativeSidebarSide() {
         exitOnRight === right;
       clearEntryExit(); // One return attempt, never an inside hover trigger.
       const side = right ? "right" : "left";
-      const matchingHalf = right
-        ? event.clientX >= (windowBox.left + windowBox.right) / 2
-        : event.clientX <= (windowBox.left + windowBox.right) / 2;
       // A recent side exit explains a fast return whose first sample lands
       // deeper inside. Otherwise retain the boundary-only trigger.
       if (
-        !contains(windowBox, event) ||
-        (Math.abs(event.clientX - windowBox[side]) > 10 &&
-          !(recentExit && matchingHalf)) ||
-        event.clientY <= windowBox.top + 10 ||
-        event.clientY >= windowBox.bottom - 10 ||
-        event.clientY < box.top ||
-        event.clientY > box.bottom
+        !revealFromBoundary({
+          point: event,
+          windowBox,
+          sidebarBox: box,
+          side,
+          recentExit,
+        })
       )
         return;
       // Zen 1.23.4b clears the flash timeout natively on a sidebar re-enter, but
@@ -1597,16 +1689,13 @@ function nativeSidebarSide() {
           return 250;
         }
       };
-      edgeMargin = Math.max(0, Math.min(64, readEdgeMargin()));
-      exitGrace = Math.max(0, Math.min(2000, readExitGrace()));
-      keepHoverDelay = Math.max(
-        0,
-        Math.min(
-          2000,
-          Services.prefs.getIntPref(
-            "zen.view.compact.sidebar-keep-hover.duration",
-            0,
-          ),
+      edgeMargin = clampTune(TUNE_NAMES.MARGIN_PREF, readEdgeMargin());
+      exitGrace = clampTune(TUNE_NAMES.GRACE_PREF, readExitGrace());
+      keepHoverDelay = clampTune(
+        "keep_hover_ms",
+        Services.prefs.getIntPref(
+          "zen.view.compact.sidebar-keep-hover.duration",
+          0,
         ),
       );
     }
@@ -2248,6 +2337,18 @@ function nativeSidebarSide() {
       throw error;
     }
     return destroy;
+  }
+  // A seam for the suites: the hit-tests and clamps above are the part a test can own without a live sidebar.
+  if (window.__zentralCompactHoverTestSeam) {
+    Object.assign(window.__zentralCompactHoverTestSeam, {
+      EDGE_REACH_PX,
+      TUNE_BOUNDS,
+      clampTune,
+      containsPoint,
+      onSideEdge,
+      revealFromBoundary,
+      exitThroughSide,
+    });
   }
   ZentralRuntime.register({ id: "compact-hover", init: start });
 })();

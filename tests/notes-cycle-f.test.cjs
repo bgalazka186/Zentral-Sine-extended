@@ -174,10 +174,10 @@ async function test(name, fn) {
   });
   await test("demo notes (#3, T4.1): valid fixed ids, every [[link]] points at another demo note, all render and export", () => {
     const demos = Array.from(c.DEMO_NOTES);
-    assert.equal(demos.length, 7);
-    assert.equal(new Set(demos.map((d) => d.id)).size, 7, "ids are unique");
+    assert.equal(demos.length, 9, "T2.11b2 added the two teaching notes");
+    assert.equal(new Set(demos.map((d) => d.id)).size, 9, "ids are unique");
     const titles = demos.map((d) => c.demoTitle(d));
-    assert.deepEqual(titles, ["Notes syntax tour", "Linking notes demo", "Callouts and reminders", "Markdown flavors showcase", "Typing shortcuts and where things are", "Torture test (placeholder)", "Markdown & Extended Syntax Feature Showcase"]);
+    assert.deepEqual(titles, ["Notes syntax tour", "Where is a function?", "Calendar and Agenda tour", "Linking notes demo", "Callouts and reminders", "Markdown flavors showcase", "Typing shortcuts and where things are", "Torture test (placeholder)", "Markdown & Extended Syntax Feature Showcase"]);
     const noteObjects = demos.map((d, i) => ({ id: d.id, body: d.body, folder: c.DEMO_FOLDER, updated: 1000 + i }));
     assert.deepEqual(JSON.parse(JSON.stringify(c.findBrokenLinks(noteObjects, [{ id: c.DEMO_FOLDER, label: "Help" }]))), [], "all demo wikilinks resolve");
     for (const d of demos) {

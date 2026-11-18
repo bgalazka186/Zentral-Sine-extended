@@ -33,6 +33,27 @@ const allDay = (dateKey, nextKey) => C.makeItem({ id: "a" + ++seq, summary: "All
 const ON = { on: true, startMin: 480, endMin: 1200 }; // 08:00-20:00
 const span = (r) => [r.startMin, r.endMin, r.extendedTop, r.extendedBottom];
 
+// OW-75: the calendar's Tools menu is grouped by job (Create / Calendar settings / Show and find / This week as text).
+// This opens `trigger`, walks into the group that holds `label` and returns the row, so a test names the row it wants
+// and not the menu's shape.
+const openCalendarRow = (root, trigger, label, match = (text, want) => text === want || text.startsWith(want) || want.test?.(text)) => {
+  root.querySelector(trigger).click();
+  const items = () => [...root.querySelectorAll(".zn-menu-item")];
+  const hit = (want) => items().find((el) => (typeof want === "string" ? el.textContent.trim() === want || el.textContent.trim().startsWith(want) : want.test(el.textContent.trim())));
+  let row = hit(label);
+  const groups = items().filter((el) => el.classList.contains("zn-menu-group"));
+  if (!row) {
+    for (const group of groups) {
+      group.click();
+      row = hit(label);
+      if (row) break;
+      const back = root.querySelector(".zn-menu-back");
+      if (back) back.click();
+    }
+  }
+  return row;
+};
+
 (async () => {
   // =====================================================================================================================
   // 1. The setting
@@ -349,8 +370,10 @@ const span = (r) => [r.startMin, r.endMin, r.extendedTop, r.extendedBottom];
   const PX = 54; // nothing can be measured in the fake DOM, so a fitted hour is 54 px high (OW-03)
   const menuItems = () => root.querySelectorAll(".zn-menu-item");
   const pick = async (trigger, label) => {
-    q(root, trigger).click();
-    const entry = menuItems().find((el) => (typeof label === "string" ? el.textContent.trim() === label : label.test(el.textContent.trim())));
+    // OW-75: rows of the calendar's Tools menu live in named groups now; the helper walks in for us.
+    const entry = trigger === ".zn-calendar-tools"
+      ? openCalendarRow(root, trigger, label)
+      : (q(root, trigger).click(), menuItems().find((el) => (typeof label === "string" ? el.textContent.trim() === label : label.test(el.textContent.trim()))));
     assert.ok(entry, "the menu offers " + label + "; it has: " + menuItems().map((el) => el.textContent.trim()).join(" | "));
     entry.click();
     await flushRaf();
@@ -878,8 +901,8 @@ const span = (r) => [r.startMin, r.endMin, r.extendedTop, r.extendedBottom];
 
   await test("Tools > Visible hours: other hours, the working hours as a starting point, input that makes no sense", async () => {
     const open = async () => { await pick(".zn-calendar-tools", /^Visible hours: /); return q(root, ".zn-dialog-card"); };
-    q(root, ".zn-calendar-tools").click();
-    assert.ok(menuItems().some((el) => el.textContent.trim() === "Visible hours: 08:00–20:00…"), "the menu names the hours in use; it has: " + menuItems().map((el) => el.textContent.trim()).join(" | "));
+    const hoursRow = openCalendarRow(root, ".zn-calendar-tools", "Visible hours: 08:00–20:00…");
+    assert.ok(hoursRow, "the menu names the hours in use; it has: " + menuItems().map((el) => el.textContent.trim()).join(" | "));
     root.dispatchEvent(new Ev("keydown", { key: "Escape", bubbles: true }));
     let card = await open();
     const limit = () => q(card, '[aria-label="Show only these hours in Week and Day"]');
@@ -917,8 +940,7 @@ const span = (r) => [r.startMin, r.endMin, r.extendedTop, r.extendedBottom];
     assert.equal(q(root, ".zn-dialog-card"), null, "Enter in a field applies");
     assert.deepEqual(JSON.parse(JSON.stringify(hours())), { on: false, startMin: 0, endMin: 1440 });
     assert.deepEqual(labels(), range(0, 24));
-    q(root, ".zn-calendar-tools").click();
-    assert.ok(menuItems().some((el) => el.textContent.trim() === "Visible hours: all 24…"));
+    assert.ok(openCalendarRow(root, ".zn-calendar-tools", "Visible hours: all 24…"), "with the limit off the menu says all 24");
     root.dispatchEvent(new Ev("keydown", { key: "Escape", bubbles: true }));
     card = await open();
     from().value = "8"; to().value = "20"; limit().checked = true;

@@ -366,6 +366,18 @@
         return { row, input };
       }
 
+      // UI4.9: every slider badge is "value unit". The formatter owns the space, so a caller may pass " px" or "px"
+      // and the row reads the same either way; a percentage and a pixel count stay tight, the way they are read.
+      const TIGHT_SLIDER_UNITS = Object.freeze(["%", "px"]);
+      function formatSliderValue(value, suffix) {
+        const text = String(value ?? "").trim();
+        if (!text) return "";
+        const unit = String(suffix ?? "").trim();
+        if (!unit) return text;
+        if (TIGHT_SLIDER_UNITS.includes(unit)) return text + unit;
+        return text + " " + unit;
+      }
+
       function createSliderRow(
         labelText,
         sublabelText,
@@ -431,10 +443,10 @@
         input.max = max;
         input.step = step;
         input.value = fromPreference(ctx.getPref(prefKey, defaultVal));
-        badge.textContent = input.value + suffix;
+        badge.textContent = formatSliderValue(input.value, suffix);
 
         input.addEventListener("input", () => {
-          badge.textContent = input.value + suffix;
+          badge.textContent = formatSliderValue(input.value, suffix);
           ctx.setPref(prefKey, toPreference(parseFloat(input.value)));
           if (
             !prefKey.startsWith("zen.workspace.bgalazka.look.") &&
@@ -466,7 +478,7 @@
             if (!Number.isFinite(v)) v = parseFloat(input.value);
             v = Math.max(wide.min, Math.min(wide.max, v));
             exact.value = String(v);
-            badge.textContent = v + suffix;
+            badge.textContent = formatSliderValue(v, suffix);
             input.value = String(Math.max(sliderMin, Math.min(sliderMax, v)));
             ctx.setPref(prefKey, v);
             if (
@@ -547,6 +559,7 @@
         createTextRow,
         createSliderRow,
         createColorRow,
+        formatSliderValue,
       };
     },
   );

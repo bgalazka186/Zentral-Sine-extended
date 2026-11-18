@@ -77,84 +77,433 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 
 | Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
 | ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
-|    34 | `T2.11b1`   | `OPEN`    | High                | M      | Track 1-2 UI done | Audit UI discoverability of all Notes functions                                                          |
-|    35 | `T2.11b2`   | `OPEN`    | Med                 | M      | T2.11b1           | Rebuild the Notes DEMO notes                                                                             |
-|    36 | `T2.13`     | `OPEN`    | Med                 | M      | all other Track 2 | ICS export/import and Google-sync groundwork (always last in Track 2)                                    |
-|    37 | `T3.3`      | `OPEN`    | Med                 | M      | —                 | Drag-and-drop note tabs within Zen sidebar                                                               |
-|    38 | `T3.8`      | `OPEN`    | Med                 | M      | —                 | Split View as an equal-sized companion window/pane                                                       |
-|    39 | `T3.9c`     | `OPEN`    | Med                 | M      | T3.9a             | Widgets: weather (cached, user refresh interval)                                                         |
-|    40 | `T3.9d`     | `OPEN`    | Med                 | M      | T3.9a             | Widgets: timer/stopwatch (incl. Clock-click quick stopwatch & alarm in X s/min) and quick note           |
-|    67 | `OW-38`     | `OPEN`    | Med                 | M-L    | none              | Automated test suites for all other Zentral features outside Notes                                       |
+|    36 | `T2.13`     | `DONE`    | Med                 | M      | all other Track 2 | ICS export/import and Google-sync groundwork (always last in Track 2)                                    |
 |    41 | `T4.3a`     | `OPEN`    | Med                 | M      | none              | Extract calendar UI from `ZentralNotes.uc.js`                                                            |
 |    42 | `T4.3b`     | `OPEN`    | Med                 | M      | T4.3a             | Extract parser/wiki graph and import/export                                                              |
 |    43 | `T4.3c`     | `OPEN`    | Med                 | M      | T4.3b             | Extract Zen sidebar UI; single build entry                                                               |
-|    44 | `OW-21`     | `OPEN`    | Med                 | M      | —                 | [new, lower priority] Find and replace within Notes                                                      |
-|    45 | `OW-22`     | `OPEN`    | Med                 | M      | —                 | [new, lower priority] Find next/previous match outside the visible viewport                              |
-|    46 | `SB6.6`     | `OPEN`    | Low-Med             | S      | SB6.3             | Setting: what the X (close) button does on an Agenda tab                                                 |
-|    47 | `ST7.3`     | `OPEN`    | Low-Med             | S      | none              | Move calendar UI state out of notes metadata                                                             |
-|    48 | `T3.5`      | `PARTIAL` | Low-Med             | S      | —                 | Callout toolbar button: last-used on click, more kinds                                                   |
-|    49 | `T3.9e`     | `OPEN`    | Low-Med             | S      | T3.9a             | Widgets: battery/system load + settings section                                                          |
-|    50 | `UI4.9`     | `OPEN`    | Low-Med             | S      | —                 | Space before the unit in slider values                                                                   |
-|    51 | `UI4.11`    | `OPEN`    | Low-Med             | S      | —                 | Escape returns the focus to the button that opened a menu                                                |
-|    52 | `ST7.5`     | `OPEN`    | Low-Med             | S-M    | none              | Reminder history export, prune and inspect UI                                                            |
-|    53 | `UI4.10`    | `OPEN`    | Low-Med             | S-M    | —                 | Settings dialog follows the text size                                                                    |
+
 |    54 | `ST7.4`     | `OPEN`    | Low-Med (long term) | L      | ST7.1             | Render Agenda rows without real tabs (research)                                                          |
-|    55 | `SB6.9`     | `OPEN`    | Low                 | S      | TM3.1             | Agenda sidebar quiet hours and 'left' counts                                                             |
-|    56 | `F0.15`     | `OPEN`    | Low                 | S      | —                 | Isolate the time-budget test of the Agenda projection                                                    |
-|    57 | `DOC-1`     | `OPEN`    | Low                 | S      | —                 | README documents a split view that does not exist                                                        |
-|    58 | `TM3.7`     | `OPEN`    | Low                 | S      | —                 | Day range keeps the wall clock on the day the clocks go forward at midnight                              |
-|    59 | `F0.16`     | `OPEN`    | Low                 | S-M    | —                 | Sweep tests that build fixtures around the real clock                                                    |
+|    88 | `OW-63`     | `DONE`    | High                | M      | 3.3.297           | Stopwatch face: clicking the running stopwatch does not go back to the clock, and on a narrow widget its text fields push the buttons out of view |
+|    89 | `OW-64`     | `DONE`    | Med                 | M      | 3.3.299           | One language selector for every widget, following the Notes language until the person overrides it |
+|    90 | `OW-62`     | `DONE`    | High                | S-M    | 3.3.298           | An imported .ics reminder still cannot be deleted: recreate the missing note instead of refusing |
+|    91 | `OW-65`     | `DONE`    | High                | S      | 3.3.301           | Clock card: quick note under the clock by default, the stopwatch/countdown panel under it on a click, the clock no longer drawn above it, and "Wyzeruj" no longer clipped |
+|    92 | `OW-66`     | `OPEN`    | Med                 | S      | —                 | The live Zen check the owner still owes `OW-58`–`OW-65`, `OW-73`–`OW-76` and `OW-80`–`OW-86`: each shipped fix confirmed in the real sidebar (no code work) |
+|    93 | `OW-67`     | `DONE`    | High                | S      | —                 | Widgets stay blank after the sidebar is revealed when "pause when hidden" is off: nothing repaints an unpaused widget whose state changed while hidden |
+|    94 | `OW-68`     | `DONE`    | High                | S      | —                 | Clock quick note must stay ONE line, and the Save button wins the space (the field gives ground, never the button) |
+|    95 | `OW-69`     | `DONE`    | High                | S      | —                 | The quick note is optional again: one switch that hides it, remembering the choice |
+|    96 | `OW-70`     | `DONE`    | High                | M      | —                 | Status widget: no battery on a desktop and no memory reading on this build — find out why, and make "this machine has no battery" quiet rather than a broken card |
+|    97 | `OW-71`     | `DONE`    | Med                 | M      | —                 | Let the person order the widgets top to bottom (drag and keyboard), persisted, with the order surviving restarts |
+|    98 | `OW-72`     | `DONE`    | Med                 | M      | —                 | Let the person pick the widgets' appearance (colours/contrast) so the cards stay readable in every theme |
+|    99 | `OW-73`     | `DONE`    | High                | S      | —                 | All-notes toolbar: "Recent" and the Split view / Folder tree / Hide calendar buttons fit on one line but wrap to two |
+|   100 | `OW-74`     | `DONE`    | High                | M      | —                 | With the calendar control strip hidden the basic controls must still be reachable, sitting right of the calendar name and left of the long month name, and outranking the name |
+|   101 | `OW-75`     | `DONE`    | Med                 | M      | —                 | Re-see every calendar menu — they are unreadable: regroup by how often each option is used, move the "create … from calendar" extras under Notes "+" |
+|   102 | `OW-76`     | `DONE`    | Med                 | M      | —                 | Calendar and notes must copy the style of Zentral's appearance themes by default, with extra customisation only if the person opts in |
+|   103 | `OW-77`     | `DONE`    | Med                 | M      | —                 | A visual audit of every calendar/notes menu in real Chromium (the fit-audit harness) so "unreadable" is measured, not argued, and stays measured |
+|   104 | `OW-78`     | `DONE`    | Med                 | S      | —                 | One theme-resolution path: the CSS `--zn-*` variables and the JS resolver must agree, so `zentral` cannot mean two different palettes |
+|   105 | `OW-79`     | `DONE`    | Low-Med             | M      | —                 | More languages without code: a language file must be droppable in, and a missing translation must never show a raw key like `cal.todayBtn` |
+|   106 | `OW-80`     | `DONE`    | High                | L      | —                 | Big Picture: the Notes tree must be there too, on the left edge, with all of its functions — including drag of a note into the calendar to create an item |
+|   107 | `OW-81`     | `DONE`    | Med                 | S      | —                 | Quick settings: choose whether dragging a note into the calendar creates an event or a reminder by default |
+|   108 | `OW-82`     | `DONE`    | High                | M      | —                 | Dragging a calendar item onto empty space asks before deleting it, with a "don't ask for 5 minutes" button — in All notes AND Big Picture |
+|   109 | `OW-83`     | `DONE`    | Med                 | S      | —                 | The calendar's `‹` / `›` chevrons are small bare glyphs, not bordered pills the size of the buttons beside them |
+|   110 | `OW-84`     | `DONE`    | Low                 | S      | —                 | The Notes `+` menu must not offer the same creation twice ("New reminder" and "Create timed reminder…" opened the same composer) |
+|   111 | `OW-85`     | `DONE`    | High                | M      | —                 | Correction to OW-73: revert it (it targeted the Notes rows) and put the split-view / folder-tree / hide-calendar buttons in the bar under the title, above the search, where they cannot be cut by the window edge |
+|   112 | `OW-86`     | `DONE`    | Med                 | M      | —                 | In the Big Picture tree a click selects (Shift/Ctrl as in the docked tree), a double click opens, and dropping several selected notes on one day asks what the drop should make |
+|   113 | `OW-87`     | `DONE`    | Low                 | S      | —                 | The logger's core category must default to off in the repository, so a fresh install does not turn on a debug stream the owner already switched off locally |
+|   114 | `OW-88`     | `DONE`    | High                | M      | —                 | Notes and Agenda sidebar placeholders each hold a whole content process (about 11 extra processes, half a gigabyte): keep them unloaded and every visible behaviour identical |
+|   115 | `OW-89`     | `DONE`    | High                | M      | OW-88             | Boost, part one: read total browser RAM on demand, free memory losslessly, trim once after startup |
+|   116 | `OW-90`     | `DONE`    | Med                 | M      | OW-89             | Boost, part two: the sidebar card and its menu (replaces the Status card) |
+|   117 | `OW-91`     | `DONE`    | Med                 | L      | OW-89             | Boost, part three: unload what is not in use (normal tabs and opt-in panels), with one Restore |
+|   118 | `OW-92`     | `DONE`    | Med                 | M      | OW-89             | Boost, part four: a RAM limiter with a soft and a hard mode, one-shot timers only |
+|   119 | `OW-93`     | `DONE`    | Med                 | M      | OW-91             | Background mode per essential panel (live / throttled / allow sleep), so a hidden arena.ai is throttled instead of burning a core |
+|   120 | `OW-94`     | `DONE`    | Med                 | L      | OW-91             | Game Mode: pause every feature's timers and keep only audible tabs and the video source active, with a stronger saver behind a second switch |
+|   121 | `OW-95`     | `DONE`    | High                | M      | —                 | Weather card: more than three places, and a click that cycles Today / Tomorrow / Week instead of swapping two halves. Long press goes to the next place, a hold (or Escape) comes back to Today and the first place |
+|   122 | `OW-96`     | `DONE`    | High                | L      | —                 | Calendar: a small weather symbol and temperature above the weekday name in Week view (Month view an option, off by default), a Week view that goes up to 48 days and stacks them in two rows of 24 when the pane allows, and a refresh trust that decays with how far a day is |
+|   123 | `OW-97`     | `DONE`    | High                | S      | —                 | All notes: the calendar's "Go to today" and month/week buttons must be GLYPHS (calendar + dot, chevron), never words, and the header must give up its room in this order — the title first, then the long date range, then nothing — so settings and Big Picture can never be pushed out of the window. The notes tree is a pixel WIDTH the user sets and the calendar takes what is left, so stretching the window moves only the calendar |
+|   124 | `OW-98`     | `DONE`    | High                | M      | —                 | Zen sidebar: a normal tab's right-click menu wins over ours on rows where a note or a reminder lives (a note inside a Zen folder is the reported case). Find out which path actually takes the event and make ours win only on our own rows, never on a plain tab |
+|   125 | `OW-99`     | `DONE`    | Med                 | M      | OW-98             | "Scan all performance improvements for bugs and issues": one pass over every perf claim in the tree (the widget scheduler, the calendar fit loop, the Notes store writes, the Boost/RAM paths, the sidebar listeners) looking for the same class of bug the OW-96 `prefBool` mistake was — a guard that cannot be true, a listener that is never removed, a timer that is never cleared |
+|   126 | `OW-100`    | `DONE`    | Med                 | S      | —                 | Widgets: dragging elements inside a card does nothing — either make it reorder something real or take the drag away, so the cursor and the affordance stop promising a move that never happens |
+|   127 | `OW-101`    | `DONE`    | High                | S      | —                 | Notes: while writing, the note's most top bar is glued to the bottom of the space it has and is partly hidden behind the tool strip. It must sit in the middle of the space available to it |
+|   128 | `OW-102`    | `DONE`    | High                | M      | —                 | Calendar: creating more than one event at once does not work — the second creation is lost, refused or overwrites the first. Find where the composer's state or the store write is shared between two creations |
+|   129 | `OW-103`    | `DONE`    | High                | M      | —                 | Switching the Zentral web panel throws the person out of All notes / the calendar view: the view is reset on switch instead of being kept (or restored) where it was |
+|   130 | `OW-104`    | `DONE`    | Med                 | S      | —                 | All notes / calendar: the three-dot menu on the top bar still acts on the last open note, which is confusing — it must either act on the calendar view that is showing, or say plainly which note it belongs to (and be disabled when none is open) |
 
 ---
 
 ## Task blocks (same order as the Master Order)
 
-#### `T3.9c`..`T3.9e` — Sidebar widgets (split of T3.9; `T3.9a` DONE at 3.3.223, `T3.9b` DONE at 3.3.224)
+### RAM plan (`OW-87`–`OW-94`) — source: `docs/PLAN_CODING_AGENT.md`
 
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S-M each · **Source:** owner 2026-11-10
+The owner measured his own browser (2026-11-18) and wrote the plan himself with an AI: the whole window including
+every Zentral script and DOM is about 49 MB, so **the code is not the problem and nothing here refactors for size**.
+What costs RAM is (a) about eleven Notes/Agenda placeholder tabs, each holding a content process of 43–51 MB, and
+(b) real heavy pages (Messenger ≈0.9 GB, arena.ai ≈0.9 GB, WhatsApp ≈0.75 GB, an idle YouTube ≈1.1 GB) which the mod
+can only unload or throttle on demand. The full task text, owner gates and the do-not list live in that file; these
+blocks are the roadmap-sized version of it. Order is fixed: `OW-87` → `OW-88` → `OW-89` → `OW-90` → `OW-91` → `OW-92`
+→ `OW-93` → `OW-94`. Every row keeps the plan's kill-switch rule (default ON = new behaviour, off = exactly today),
+adds `tests/<id>.test.cjs`, and writes one line into `docs/perf-results.md` with effect "not measured".
 
-Standalone module `additional/widgets` (also in the full pack). Rules for all: study how new-tab-page widgets work and mimic them; never interact with the sidebar video player (free area about 179x426, about 179x301 while a 16:9 player shows; no fixed ratio); always leave room for tabs, folders and Essentials (setting: max share of free height, hide below a minimum); no permanent polling, per-widget refresh interval, pause when window or sidebar is hidden, cache last value. `a` (`DONE` at 3.3.223): shell, free-area measurement, player avoidance, per-widget on/off. `b` (`DONE` at 3.3.224): clock, date. `c`: weather. `d`: timer/stopwatch and quick note — **owner requirement (2026-11-16): clicking the Clock widget can start a stopwatch or create a quick alarm/timer in X seconds / X minutes** (RSS headline widget dropped per owner 2026-11-16; Zen browser has built-in RSS). `e`: battery/system load and the settings section.
+#### `OW-87` — The core logger category is off in the repository too
 
-#### `OW-38` — Automated test suites for all other Zentral features outside Notes
+**Status:** `DONE` (3.3.315) · **Impact:** Low · **Effort:** S · **Source:** `docs/PLAN_CODING_AGENT.md` task B0
 
-**Status:** `OPEN` · **Impact:** Med · **Effort:** M-L · **Source:** owner live test 2026-11-16
+**Problem:** the owner already switched `zen.workspace.zentral.debug.core` off on his machine, but the repository shipped
+it as `true` in `additional/diagnostics/settings.json`, in the settings preset `extension/settings/recommended.json`
+and in `ZentralShared`'s fallback table, so every fresh install turned a debug stream back on — and the settings dialog
+hard-set it to `true` on save.
 
-**Problem:** Notes, Widgets, Colorful Folders, App Shortcuts, Tab Unload, and Standalone builds have automated test suites, while other Zentral core & additional features lack dedicated behavioral tests.
+**Done at 3.3.315** — the default is `false` in the schema, the preset and Core's fallback table (so `preferences.json`
+rebuilt to `false` as well); the logger's `isModuleEnabled` no longer short-circuits `core` to `true`, so the category
+follows its own pref like every other one — without that, the owner's local `false` and the new switch would both have
+been decorative; and the settings row is a real switch that loads from and saves to the pref instead of a checked,
+`disabled` control that re-forced `true` on every save. `zen.workspace.zentral.modules.logger.enabled` is untouched, by
+the plan's own instruction. `tests/ow-87-debug-core-default.test.cjs` (6 tests) pins all four places, and
+`tests/diagnostics-logger.test.cjs` grew the two cases that prove core is now switch-governed.
+
+#### `OW-88` — Notes/Agenda placeholders must not hold a content process
+
+**Status:** `DONE` (3.3.317) · **Impact:** High · **Effort:** M · **Source:** `docs/PLAN_CODING_AGENT.md` task B1
+
+**Done at 3.3.317** — implemented exactly as written below, plus the three defects the tests found on the way.
+
+`parkPseudoTab(tab)` discards a placeholder and returns the reason it did not (`pref-off`, `disconnected`, `off`,
+`already-pending`, `selected`, `busy`, `not-a-placeholder`, `no-discard`, `failed`), so the guard table is testable
+rather than implied. It is called from a deferred task for every tab `zenNewTab`/`agendaNewTab` finished marking and
+pinning, for every placeholder `onPseudoTabRestored` sees, and right after both deferred hand-backs in `onZenSelect`.
+The discard opens the existing `zenEventsIgnored()` quiet window, so the `TabBrowserDiscarded` it causes cannot start a
+projection repair run.
+
+Three things the first draft got wrong, each now pinned by a test: (a) one coalesced timer parked only the LAST of the
+tabs a projection run created — a queue drained by one task parks all of them (twenty placeholders → twenty discards);
+(b) a click answers with an activation that is still running, so the first parking attempt legitimately says `busy` and
+the row stayed loaded — there is now a bounded retry (three tries, 2.5 s apart, no polling); (c) parking at 0 ms/400 ms
+collided with the existing 0 ms interaction tasks and turned six passing Notes tests red — the parking delays are
+1200 ms and 2500 ms, deliberately away from every delay the sheet already uses (0/16/50/60/300/500/1000/6000/6500/
+90000), because a test that fires one timer by its delay must not hit ours.
+
+Pref `zen.workspace.zentral.notes.park_pseudo_tabs` (default on) is declared in `additional/notes/settings.json`, the
+layout order, the standalone list and the in-app list (a **Memory** heading, translated in `en` and `pl`), and it is
+read live. `tests/ow-88-park-pseudo-tabs.test.cjs` (8 tests) drives the guards, the kill switch, the click path, a
+restored placeholder, the quiet window, the bounded retry and an Agenda row. Full suite 247/247.
+
+**OWNER GATE (three checks, in the real sidebar):** (1) opening a note and an agenda item from the sidebar still works;
+(2) labels and icons stay; (3) About:Memory or D1 shows the number of `web` processes down from about 11 to 1–2. If
+anything breaks, the fix is to switch the kill-switch pref off (old behaviour exactly), not to patch around it.
+
+**Problem:** `about:blank#zn-note:<id>` and `about:blank#zn-agenda-<key>` are created as live tabs, so each one loads a
+content process (~50 MB) for a page that only exists to be a sidebar row.
+
+**Plan (symbols in `additional/notes/ZentralNotes.uc.js`):** `parkPseudoTab(tab)` = `discardBrowser(tab, true)` in
+`try/catch`, skipped when the tab is disconnected, selected, `zenBusy`, already `pending`, or not a placeholder; called
+from a scope `setTimeout(…, 0)` after `addManagedPseudoTab`'s callers finish marking/pinning, after
+`onPseudoTabRestored`, and right after the deferred hand-back in `onZenSelect`/`activateZenTab`; wrapped in the
+existing `zenEventsIgnored()` quiet window. Pref `zen.workspace.zentral.notes.park_pseudo_tabs` (default `true`) in the
+Notes settings Advanced section: "Keep sidebar note/agenda placeholders unloaded (saves memory)".
+Never touch a real note tab or a non-placeholder tab; never re-select inside Zen's own `TabSelect` dispatch.
+
+**Tests:** 20 placeholders → 20 discards after the creator returns; selected/busy/pending/disconnected skipped;
+kill-switch off → zero calls; a click still opens the note, hands selection back, then parks again; the existing
+Notes tests pass unchanged. **Owner gate:** a note and an agenda item still open from the sidebar, labels/icons stay,
+`about:memory` / D1 shows `web` processes down from ~11 to 1–2.
+
+#### `OW-89` — Boost core: memory meter, Level 1, post-startup trim — `DONE` (3.3.318)
+
+**Shipped:** `additional/boost/` (`ZentralBoost.uc.js`, `settings.json`, `standalone.json`, `README.md`, generated
+standalone set), catalog entry `boost` beside `tab-unload`, category `boost` · section `Memory` in the Sine settings
+page (after `startup`). `memoryMB()` = parent + every child `memory`, MB, `null` when the build cannot answer, one
+warning and the meter turns itself off while "free memory" keeps working; `runLevel1()` = reporter manager
+`minimizeMemoryUsage({run})` → `forceGC()` → `forceCC()` (each in `try/catch`, `by` reports `minimize` or
+`gc-cc-only`) → after reading 3 s later, `{beforeMB, afterMB, freedMB, by}`, one run at a time, nothing closed or
+unloaded; the post-startup trim = one Level 1 per browser start, after session restore, 90 s without input, nothing
+audible/playing, through `requestIdleCallback`, with a 6-minute hard ceiling and one one-shot timer that input
+re-arms. Sampling only while someone holds it (`startSampling`/`stopSampling`, 2 s, two users max), no `setInterval`
+anywhere. Prefs `zen.workspace.zentral.boost.enabled` and `...boost.startup_trim` (both `true`, read live).
+`destroy()` cancels every timer, listener and idle callback and removes `window.ZentralBoost`.
+**Tests:** `tests/ow-89-boost-core.test.cjs` (14) runs the real module in a fake chrome window. **Deviations:** the
+startup barrier is the session-restore promise plus the runtime's own native-ready ordering, because the standalone
+shim does not provide `whenNativeReady` (`build-standalone.cjs` rejects it by name). **Open for the owner:** one live
+check — RAM number matches about:memory, one trim at startup, `state()` shows `trimDone` (kill switch = pref off).
+
+**Plan:** new module `additional/boost/` (id `boost`), same file set as `additional/tabs/unloading/`, catalog entry
+beside `tab-unload`. `memoryMB()` sums `memory` over the parent and all `children` of
+`ChromeUtils.requestProcInfo()`, sampled only on demand (popup open: 2 s; limiter: per `OW-92`). Level 1 =
+`minimizeMemoryUsage()` on the reporter manager, then `forceGC()`, `forceCC()` in `try/catch`, returning
+`{beforeMB, afterMB, freedMB}` measured ~3 s later — nothing is closed, unloaded or reloaded. Post-startup trim runs
+Level 1 once per browser start, after session restore and the Startup module, 90 s without user input and no audible
+media, through one `setTimeout` chain plus `requestIdleCallback` — never polling. Pref
+`zen.workspace.zentral.boost.startup_trim` (default `true`). Public API `window.ZentralBoost` with `runLevel1()`,
+`memoryMB()`, `onChange(cb)`.
+
+**Tests:** Level 1 calls the manager once and returns the measured numbers; the trim runs once, never while media
+plays or input is recent; the kill-switch is respected; destroy cancels pending timers.
+
+#### `OW-90` — The Boost widget replaces the Status widget — `DONE` (3.3.320)
+
+**Shipped:** widget `boost` in `additional/widgets/ZentralWidgets.uc.js` beside the Clock and Date cards, and the
+`status` card **removed** (registration, prefs `status.enabled`/`show_battery`/`show_memory`, its pure helpers, its CSS
+and its settings section are all gone). The compact card shows the reading as `512 MB` / `1.4 GB` with a dash when the
+build cannot measure; a click runs `runLevel1()` and toasts `Freed X MB` (4 s, `role="status"`, theme-aware, the
+module's own `widgetToast` element), refusing a second run while one is in flight; the arrow opens a menu that expands
+the card inline (no `z-index`, keeping the shell's normal-flow rule) with **Free memory (light)** working and **deep** /
+**Restore** greyed with tooltips until OW-91. The card reads nothing from the platform itself — `additional/boost/` owns
+the reading — and hears values through `onChange`, so it has no cadence of its own (`refreshMs: 0`). Pref
+`zen.workspace.zentral.widgets.boost.enabled` (default `true`), section **Boost** (was **Status**), the tray's
+`pause_when_hidden` applies as for every card, a missing module leaves a dash and an inert card, and a legacy
+`status.enabled` owner is carried over to Boost once (`adoptLegacyStatusCard`, declared in `externalPrefs`).
+Destroy unsubscribes from the module. The shared toast moved 5 s → 4 s (the plan's number for this card).
+**Tests:** `tests/widgets-status.test.cjs` rewritten as the Boost card's rules (10), new
+`tests/widgets-boost-card.test.cjs` (7, live: click → `runLevel1` once, toast, menu, greyed entries, Escape/outside
+close, unsubscribe on destroy, missing module, no Status card), `tests/widgets-language.test.cjs` (Boost's words in
+both languages), `tests/widgets-owner-reports.test.cjs` (OW-70/OW-71 follow the card that now exists).
+**Owner gate:** the card is visible with a real number, a click frees memory and toasts it, and the old Status card is
+gone (kill switch = the pref above).
+
+**Plan:** register widget `boost` in `additional/widgets/ZentralWidgets.uc.js` and **remove the `status` widget**
+(the owner's words: it replaces it) — the memory reading moves into Boost, the battery reading is dropped with the
+card, since a desktop has none (`OW-70`). Compact tile "Boost" with the last RAM number (updates only while the
+popup is open), left click runs Level 1 and toasts "Freed X MB", right click/arrow opens "Free memory (light)" plus
+greyed entries for `OW-91`/`OW-92`. A self-contained toast (4 s, accessible, theme-aware, no cross-module
+dependency). Pref `zen.workspace.zentral.widgets.boost.enabled` (default `true`); honours the tray's
+`pause_when_hidden`; works with the tray absent (API + shortcut only, documented in the module README).
+
+**Tests:** `registerWidget` called once and never for `status`; a click calls `runLevel1`; popup open/close
+starts/stops the 2 s sampler; destruction stops it.
+
+#### `OW-91` — Unload what is not in use, with Restore — `DONE` (3.3.322)
+
+**Shipped:** the shared table is `loader/ZentralTabPolicy.js` (loaded by the runtime, embedded verbatim into the two
+standalone builds through the new `sharedSources` manifest key). It answers `isUnloadable(tab, ctx)` with a **named
+reason** for every never-rule — selected, addon host, Notes/Agenda placeholder, hidden panel host, audible, sharing,
+picture-in-picture, video-preview source, already pending/discarded/dormant, pinned and Essential unless
+`boost.keep_pinned` — plus `isSuccessorCandidate` and `byOldestFirst`. `TabUnload` now calls it (behaviour unchanged,
+its own tests untouched). `runLevel2()` = Level 1's free-memory work plus eligible tabs oldest-first plus the panel
+records whose own mode is `asleep-allowed`, through `explicitUnloadTabs` with the `discardBrowser` fallback, never
+closing anything and never moving the selection. `undoState` (cap 50) + `restore()`: panels wake immediately, tabs
+reload on click, the record dies with the session. Panel records carry `backgroundMode` (`live` default, `throttled`,
+`asleep-allowed`) saved through `saveEssentialSettings` and restored with the record; the tile's own context menu
+grows a **Background mode** submenu. The widget's deep and Restore entries are real now (Restore is greyed exactly
+when nothing is asleep, deep exactly when the policy is missing). The shortcut (`boost.shortcut`, empty by default,
+two keys minimum, read live) runs the light pass only. A standalone build declares `fullPackOnly: ["Zentral"]` for
+the guarded panel layer (tabs only, no panels).
+**Tests:** `tests/ow-91-boost-deep.test.cjs` (14): the policy table row by row, ordering, Level 2 against a fake
+browser, pinned opt-in, panel modes + Restore, missing policy, undo cap, shortcut parsing and firing.
+**Owner gate:** a deep run from the widget menu puts old tabs to sleep, Restore wakes the panels, the tile menu's
+three modes stick across a restart, and nothing audible or selected is ever touched.
+
+**Plan:** extract `isNormalTabAlreadyUnloaded` / `isSuccessorCandidate` / host-tab exclusion from
+`additional/tabs/unloading/ZentralTabUnload.uc.js` into a shared `ZentralTabPolicy.isUnloadable(tab, ctx)` used by
+both modules (TabUnload's behaviour unchanged). Never unload: the selected tab, a Zentral host tab, a playing tab
+(`soundPlaying`), a sharing tab (`_sharingState`), a picture-in-picture tab, the video preview's source tab, an
+already `pending` tab; pinned/essential only when `zen.workspace.zentral.boost.keep_pinned` (default `false`).
+Essential-panel records get `backgroundMode` (`live` default | `throttled` | `asleep-allowed`) saved with the app
+settings; Level 2 = Level 1 + eligible tabs oldest-`lastAccessed` first + sleeping only `asleep-allowed` records via
+`explicitUnloadTabs`, waking through `loadEssentialInBackground(record, true)`. `undoState` (cap 50) feeds a
+"Restore" entry and the toast after a deep run. Menu entries "Free memory (deep)" / "Restore"; shortcut pref
+`zen.workspace.zentral.boost.shortcut` (default empty) following `extension/panels/interaction/ZentralAppShortcuts.js`.
+
+**Tests:** the policy table for every never rule; Level 2 never touches selected/audible/PiP/video-source; the three
+background modes; Restore wakes exactly what was slept; TabUnload tests unchanged.
+
+#### `OW-92` — The RAM limiter — `DONE` (3.3.323)
+
+**Shipped:** `decideLimiter()` is a pure function of the numbers (hysteresis: slow 60 s cadence, 10 s above 70 % of
+the limit; cooldown; soft vs hard; no-reading; junk settings fall back to 4096 MB / soft / 60 s / 85 %). The live
+chain is one one-shot timer re-armed per tick, started and stopped by its pref, gone on `destroy`; a hard run calls
+the OW-91 deep pass in batches of three, re-samples after each, stops at `limit_mb × target_pct / 100` or when
+nothing eligible is left, and is bounded to 12 rounds so a page that refuses to sleep cannot spin it. Still above the
+limit with nothing eligible: at most one line per ten minutes. Prefs `limit_enabled` (false), `limit_mb` (4096),
+`limit_mode` (soft), `limit_cooldown_s` (60), `limit_target_pct` (85) in a new **Limiter** section; the widget toasts
+a soft notice, a finished hard run and the nag through `onLimiterEvent`. The README states plainly that a real
+per-process memory cap is impossible from browser-window JS — the limiter works by putting tabs and panels to sleep.
+**Tests:** `tests/ow-92-boost-limiter.test.cjs` (11: the state table, the live chain, soft vs hard, batching and the
+bound, re-arm, destroy, every pref declared, the README's honesty) + the widget's limiter toast in
+`tests/widgets-boost-card.test.cjs`.
+**Owner gate:** switch the limiter on with a low limit and watch a soft notice, then a hard run in batches, then the
+cooldown holding; nothing audible or selected is ever unloaded.
+
+**Plan:** prefs `zen.workspace.zentral.boost.limit_enabled` (`false`), `limit_mb` (4096), `limit_mode` (`soft` |
+`hard`), `limit_cooldown_s` (60), `limit_target_pct` (85). One-shot timers only: sample every 60 s, every 10 s above
+70 % of the limit; above the limit `soft` toasts with "Free now", `hard` runs Level 2 in batches of three tabs,
+re-samples, stops at `limit_mb * target_pct / 100` or when nothing is eligible, then one result toast; never inside
+the cooldown; still above with nothing eligible = one toast per 10 minutes. The README says plainly that a real
+per-process cap is impossible from JS.
+
+**Tests:** the state machine — hysteresis, cooldown, no repeat, soft vs hard, nothing eligible.
+
+#### `OW-93` — Background mode `throttled` for essential panels — `DONE` (3.3.323)
+
+**Shipped:** the `throttled` mode finally has behaviour. In `syncAppPanelBrowserActivity`
+(`extension/panels/browsers/ZentralBrowserIntegrations.uc.js`) a record whose `backgroundMode` is `throttled` is active
+only while it is visible: hidden it gets `docShellIsActive = false` and `renderLayers = false`, so Gecko throttles its
+timers and animations while the browser stays loaded (sockets, title/badge events still work). `live` records — and
+every record written before this setting, and `asleep-allowed` records — keep exactly today's `visible || notifications`
+rule. The preload path in `ZentralCornerPanels.uc.js` no longer forces such a record active, and the tile menu's mode
+switch calls `syncAppPanelBrowserActivity()` so a change applies on the spot rather than at the next panel open.
+**Tests:** `tests/ow-93-panel-throttle.test.cjs` (8): `syncAppPanelBrowserActivity` lifted from the shipped file and run
+against fake browsers — live unchanged (including a hidden preload), throttled inactive/active by visibility, hidden
+throttled preload throttled, `asleep-allowed` treated as live, records without a mode, the preload guard, immediate
+apply, and save/restore of the value.
+**OWNER GATE:** the owner sets arena.ai to `throttled` first; Messenger/WhatsApp stay `live` unless the owner tests and
+agrees.
+
+**Plan:** preloaded panel browsers are kept `docShellIsActive = true` in `syncAppPanelBrowserActivity`
+(`extension/panels/browsers/ZentralBrowserIntegrations.uc.js`) and the corner-tile equivalent, which is why a hidden
+arena.ai burns about 35 % of a core. For records with `backgroundMode === "throttled"`: while the panel is hidden,
+`docShellIsActive = false` and `renderLayers = false`; restored when shown. The browser stays loaded, so sockets and
+title/badge events keep working. `live` records keep exactly today's behaviour.
+
+**Tests:** `live` unchanged; `throttled` inactive while hidden and active while shown; a runtime mode switch applies
+immediately. **Owner gate:** the owner sets arena.ai to `throttled` first; Messenger and WhatsApp stay `live` until he
+tests and agrees.
+
+#### `OW-94` — Game Mode and the pause state — `DONE` (3.3.324)
+
+**Shipped:** `loader/ZentralPerformanceSwitch.js` is the pause switch, published as `ZentralRuntime.performance`
+(`isPaused`, `setPaused`, `toggle`, `subscribe`/`onChange`, `snapshot`), created before the runtime object that
+publishes it and also provided by the standalone shim. Five repeating features subscribe and skip work while paused:
+the video preview's discovery interval (`scanIntervalMs()` returns 0, which the file already read as "no interval"),
+the widget scheduler (a second `held` flag, kept apart from the sidebar-fold setting so ending a game cannot un-pause a
+folded sidebar), the RSS scan, Notes' minute wake (resumed with `check("wake")`, which fires what came due) and the
+panel fallback poll. Game Mode (`zen.workspace.zentral.boost.game_mode`) is a toggle that runs Level 2, pauses every
+subscriber, and sets `docShellIsActive = false` + `renderLayers = false` on every tab and panel browser except an
+audible tab, the video preview's source tab and the selected tab. "Stronger saver"
+(`zen.workspace.zentral.boost.stronger_saver`, OFF) runs the deep pass with every panel mode opened up, so `live`
+records (WhatsApp, Messenger) are slept and land in `undoState` for Restore. Turning it off puts back what it changed,
+reactivates the selected tab, and lets the rest reload lazily; destroying the window while on runs the same off-path.
+**Also fixed here:** `window.Zentral.Panels` was **never published** by the runtime, so every panel step in Boost
+(`runLevel2`'s panel half, `setBackgroundMode`, Restore's `loadEssentialInBackground`) had been silently doing
+nothing — a getter on `window.Zentral` now returns the live `panelContext`. Also: the switch creation first landed
+*after* the runtime literal that reads it, which is a temporal-dead-zone error at startup; the test that caught it is
+the one asserting creation order.
+**Tests:** `tests/ow-94-game-mode.test.cjs` (12) — the switch on its own, the runtime wiring, one row per subscribing
+feature, the video pause path proving it touches no playback call, Notes' resume, the exemptions, Stronger saver's
+single open-modes caller, restore-selected-only, and the two prefs; `tests/ow-94-game-mode-run.test.cjs` (7) — the
+module booted against a fake `gBrowser`, proving an idle tab goes inactive while a podcast does not, off restores it,
+the switch paused and resumed, the pref-at-start path, teardown, and the API.
+**OWNER GATE:** play a video in the sidebar preview, switch Game Mode on, confirm the video keeps playing and the
+podcast tab keeps playing; then switch it off and confirm the selected tab is active again.
 
 **Plan:**
-1. Audit every Zentral feature under `extension/`, `zentral/`, `loader/`, and `additional/` without dedicated tests (Panels lifecycle/floating/hover/corner/secondary views, Video Preview, Library Resize, Compact Hover, Tab Drag, Startup, RSS Display, Diagnostics Logger, Settings Shell).
-2. Build focused, fast Node/fake-Zen behavioral test suites for each feature covering init/pref-reactivity, core behavior, edge cases, and leak-free dispose.
-3. Verify all new suites run cleanly under `tests/run-all.cjs`.
 
-#### `T2.11b1` / `T2.11b2` — Discoverability audit, then demo rebuild
+**Plan:** `ZentralRuntime.performance = { paused, setPaused(bool), onChange(cb) }`; paused features skip work and
+re-arm on resume (video preview timers, widget refresh, RSS scan, Notes minute wake, panel fallback poll) through the
+scope helpers. Level 3 "Game Mode" = Level 2 + pause + `docShellIsActive = false` / `renderLayers = false` on every
+kept browser except audible tabs and the Big Picture video source. A separate "Stronger saver" toggle also sleeps
+`live`/`throttled` records (WhatsApp, Messenger) and is **off** by default; when on it fills `undoState` so Restore
+brings them back. Turning Game Mode off resumes and restores activity for the selected tab only; everything else
+reloads lazily. Kill-switch pref `zen.workspace.zentral.boost.game_mode` is the toggle itself.
 
-**Status:** `OPEN` · **Impact:** High / Med · **Effort:** M each · **Depends on:** Track 1-2 UI done / T2.11b1 · **Source:** split of T2.11b
+**Tests:** pause propagates to each subscribed feature; exempt tabs stay active; toggle off restores; Restore after
+Stronger saver wakes records. **Owner gate:** a video played in the sidebar preview still plays with Game Mode on.
 
-`T2.11b1`: list every implemented Notes function and where a person finds it; group related controls into menus; write the findings list. `T2.11b2`: rebuild the built-in DEMO notes to show every implemented function (after `T2.11b1`).
+#### `T2.13a` — Holidays and the future Google Calendar sync/import
+
+**Status:** `DONE` (3.3.310) · **Impact:** Med · **Effort:** S-M · **Depends on:** OW-44, T2.13 · **Source:** owner 2026-11-17
+
+**Problem:** the owner's question — Google Calendar shows its own holiday calendars and today we do not know what would happen if a review of `T2.13` (ICS/Google groundwork) starts importing them.
+
+**Plan (do this in order):**
+1. Decide and write down (in the archived row, not in code first): **holiday sets stay local and are never imported**. A Google holiday calendar arrives as an ordinary read-only calendar of events; imported holiday events keep their own `uid`/`etag` and are never merged into a local set, because a local set is rule-computed and a set's year can be edited in `HOLIDAY_TABLE` (`OW-45`).
+2. `toGoogle`/`fromGoogle` keep holiday entries out of the item store; no holiday data is written to a synced item's `extendedProperties` (`fromGoogle` already only reads `zentral_*` private fields).
+3. When `T2.13` is implemented, imported all-day events whose source calendar is a known holiday feed are shown with a neutral "imported holiday" look instead of tinting the day as a work-free day, so a synced holiday week never silently changes work-free shading.
+4. The settings dialog gets one line saying holidays are local and never synced.
+
+**Tests / done when:** an imported holiday-like all-day event does not become a local holiday, `isWorkFree` is unchanged by it, and the local holiday sets still work with the import off.
+
+**Done at 3.3.310** — the owner unblocked this row himself ("`T2.13a` is not blocked, go on work in loop"). All four
+plan steps, in the order the plan asked for:
+
+1. **Holiday sets stay local, and it is structural, not a promise.** `isWorkFree(day, prefs, lang)` takes prefs only —
+   it has no parameter through which an item could arrive, so an imported event cannot reach the work-free answer even
+   by accident. The test states this as the signature (`isWorkFree.length === 2`) so a future "just one more argument"
+   fails loudly instead of quietly.
+2. **A feed is recognised by the file, not by the event text.** `holidayFeedName` / `holidayFeedOf` read the file's
+   `X-WR-CALNAME` (Google names its feeds "Holidays in Poland"; the URL form `…#holiday@group…` is matched too). The
+   over-marking direction is deliberate: a calendar called "Holiday planning" is marked imported, which is quiet, while
+   under-marking would be a silent day off.
+3. **The look is imported, never work-free.** `markImportedHoliday` writes `x.icsHolidayFeed` + `x.icsHolidayName` on
+   **all-day, non-reminder `.ics` items only**; `importedHolidayAttrs` turns that into the `is-imported-holiday` class
+   and a `data-imported-holiday` naming the feed. The CSS paints it with a neutral `currentColor` edge and a dashed
+   item border — it is asserted **not** to appear in the work-free or holiday tint rules, so a subscribed holiday week
+   can never look like a day off this calendar decided on. Both the item button (Week/Day/Agenda) and the Month cell
+   carry it.
+4. **Two places say so in words.** The import card gains a line naming the feed and explaining that its days arrive as
+   ordinary events; the holidays settings dialog gains `cal.holidays.importedNote` — "these holidays are local to Notes
+   and are never synced". Both strings exist in en and pl, and the test fails if either key goes missing.
+
+**No etag churn:** the two marks are kept by `cleanItem` only when present and only on `src: "ics"` items, so a file
+that is not a holiday feed imports byte-identically to before, and a store that never saw one serialises and hashes
+exactly as it did.
+
+**Tests:** `tests/notes-calendar-imported-holidays.test.cjs` (14). The live one drives a real sheet (fake DOM, real
+store, real module) through the actual `planIcsImport` → `store.items.upsert` → render path and asserts the mark lands
+on `2026-11-01` and `2026-11-11` and on no other cell — verified by deliberately disabling the render call and watching
+the test fail (1 negative check, not a claim). The harness the holiday tests share was extracted to
+`tests/helpers/holiday-harness.cjs` so `notes-calendar-holidays.test.cjs` and this file cannot drift apart.
 
 #### `T2.13` — ICS export/import and Google-sync groundwork (always last in Track 2)
 
-**Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
+**Status:** `DONE` (3.3.309) · **Impact:** Med · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
 
 **Current state and what is LEFT:** **DO NOT BEGIN UNTIL EVERY OTHER TRACK 2 ROW IS `DONE`.** Local `.ics` export/import with stable `uid` / `etag` / `updated`, `syncState`, and RRULE serialization.
+
+**Progress:** the **import** half shipped ahead of this row as the owner's `OW-53` (3.3.280): `parseIcs` / `icsToItem` /
+`planIcsImport` in the calendar module, with stable `x.icsUid`, `EXDATE` and the `RRULE` subset, and a card in Calendar →
+Tools. **Finished at 3.3.309** — the three things that were LEFT, each verified rather than assumed:
+
+1. **The writer.** `icsFromItems(items, {now, name, uidFor, prodId})` in the calendar module emits a full `VCALENDAR`
+   (`VERSION`, `PRODID`, `CALSCALE`, `METHOD`, `X-WR-CALNAME`), one `VEVENT` per item with `UID`, `DTSTAMP`, `CREATED`,
+   `DTSTART`/`DTEND`, `SUMMARY`, `DESCRIPTION`, `LOCATION`, `STATUS`, `RRULE`/`EXDATE` verbatim from the reader's own
+   subset, and a `VALARM` for a reminder. Lines are CRLF and folded at **75 UTF-8 octets** — folding counts octets, not
+   characters, so a 4-octet emoji is never cut in half (pinned). `DTSTART;TZID=` is written in the item's own zone and
+   the wall clock is derived through `Intl`, so the instant round-trips: 09:00Z in `Europe/Warsaw` goes out as
+   `20261118T100000` and comes back as 09:00Z. All-day uses `DTEND;VALUE=DATE` one day **after** the last day, which is
+   what the reader expects. A timed event with no end gets the default duration. **Identity is the point:** an item's
+   own `x.icsUid` is reused, and an item that never came from a file gets `<id>@zentral-notes` — never the clock, so the
+   same item exported twice has the same UID and a re-import updates instead of duplicating. A cancelled import
+   (`x.icsCancelled`) is filtered out **in the writer**, not in the card, so no caller can resurrect a cancelled event.
+2. **`syncState` per item.** `x.syncedEtag` (the etag the other side holds) plus `x.syncedDeleted` give
+   `syncStateOf(item)` → `new` / `changed` / `clean` / `deleted`; `markSynced(item, remoteEtag)` and
+   `markSyncedDeleted(item)` write that bookkeeping; `syncPlan(items)` groups a whole calendar and counts what a pass has
+   to push. Both fields are kept by `cleanItem` **only when present**, by the same rule as item colour, so an item that
+   never synced serialises and hashes exactly as before — no etag churn (pinned). Nothing in this layer touches a
+   network: it is what a sync reads, not the sync.
+3. **The round-trip fixture.** `tests/notes-ics-export.test.cjs` (12 assertions) takes the **OW-53 import fixture** —
+   Google-shaped, folded, escaped, with a `TZID` event, an all-day event, a weekly `RRULE` + `EXDATE`, a `VALARM` and a
+   cancelled event — imports it, exports it, imports that back, and asserts the two calendars agree on every field that
+   carries meaning (start instant, end, summary, description, location, recurrence, reminder, calendar name). It also
+   asserts the strong form of "a second import updates": feeding the exported file back against the items it came from
+   yields **3 updates, 0 adds**. `tests/notes-ics-export-card.test.cjs` drives the card itself with the real sheet code
+   and the real calendar module (fake DOM, not a re-implementation): the row opens from Calendar → Tools, the card names
+   `Everything (3)` with a cancelled import left out of the count, opening it writes nothing, and pressing Export saves
+   one file through the host whose text imports back to those same three events. Well-formedness is checked over the whole file: no bare `LF`, no line over 76 octets,
+   `BEGIN:VEVENT`/`END:VEVENT` balanced.
+
+**The card and the seam:** Calendar → Tools → *Export calendar (.ics)…* opens the `zn-dialog-card` pattern with an
+"Everything (n) / This year (n)" chip pair, and only the Export button writes; the file goes through `env.saveIcs`, the
+same save picker as every other export, so a host (and a test) answers without a dialog. `cal.ics.export*` strings exist
+in **en and pl**, and the test fails if either key is missing — no raw key can reach a person.
+
+**Honest limits:** there is no network sync and no OAuth — the "Google-sync groundwork" is exactly the shape and the
+bookkeeping (`toGoogle`/`fromGoogle` already existed; `syncState` is new). `TZID` is resolved through `Intl`, so a zone
+whose rules differ between the platform's tzdata and Google's may disagree on a historical instant. `VALARM` is written
+for the first reminder only. `T2.13a` (holiday feeds, `OW-44`) follows this row and is DONE at 3.3.310.
 
 **Full specification (original row):** **OPEN — DO NOT BEGIN UNTIL EVERY OTHER T2 TASK IS COMPLETE.** Depends on all Track 2 item model, recurrence, reminder and calendar UI work. Export/import `.ics` locally (no network); stable `uid` / `etag` / `updated`, `syncState` per item, RRULE serialization and fixture coverage.
 
 #### `T3.3` — Drag-and-drop note tabs within Zen sidebar
 
-**Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
+**Status:** `PARTIAL` · **Impact:** Med · **Effort:** M · **Source:** carried over from the previous roadmap
 
-**Current state and what is LEFT:** Hook into Zen sidebar drag events so reordering or dropping a note tab into a folder updates the underlying Notes tree order/parent folder smoothly.
+**Current state and what is LEFT:** DONE (3.3.251): a note has its own place in its folder (`order` in the note's front
+matter, `cleanNoteOrder` / `noteOrderBetween` / `compareNotes`, `store.setNoteOrder`), the tree draws hand-placed notes
+first in that order and the rest by last change, `noteDropTarget` and `noteTabDropPlan` turn a drop onto a folder row,
+a note row or the root into exactly one store change, and the existing Zen drag guard still keeps a managed tab from
+being taken out of the tree. Verified in `tests/notes-note-tab-order.test.cjs` (198/198 suite).
 
-**Full specification (original row):** **OPEN.** Hook into Zen sidebar drag events so reordering or dropping a note tab into a folder updates the underlying Notes tree order/parent folder smoothly.
-
-#### `T3.8` — Split View as an equal-sized companion window/pane
-
-**Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
-
-**Current state and what is LEFT:** Allow opening a second note side-by-side in an equal-dimension split pane (or synchronized companion panel) for reference reading and cross-note editing. Audit 2026-11-16: nothing of this exists; `Split view` today is only editor + preview (`mode === "split"`). When this is built, also add the _open in split view_ action to the shared note/folder menu engine (moved here from the closed `T2.18`).
-
-**Full specification (original row):** **OPEN.** Allow opening a second note side-by-side in an equal-dimension split pane (or synchronized companion panel) for reference reading and cross-note editing.
+LEFT (only this): the gesture. Zen starts the tab drag itself, so the sidebar hook must read the drop position from
+the live tab elements (`dragstart` / `dragover` / `drop` on `zen-folder` and `tab`), map the DOM row to a tree key and
+call `store.setNoteOrder` / `store.setFolder` through `noteTabDropPlan`. Not written here because the exact DOM Zen
+uses while a tab is being dragged cannot be reproduced in the fake sidebar; it needs the real window.
 
 #### `T4.3a`..`T4.3c` — Modularize `ZentralNotes.uc.js` (split of T4.3)
 
@@ -162,39 +511,9 @@ Standalone module `additional/widgets` (also in the full pack). Rules for all: s
 
 `a`: calendar UI out of the monolith (module `api`, test seam unchanged). `b`: parser/wiki graph and import/export. `c`: Zen sidebar UI and one build entry. After each step all tests and the standalone build must pass unchanged.
 
-#### `OW-21` — Find and replace within Notes (lower priority)
-
-**Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Depends on:** none · **Source:** Owner request
-
-**Plan:** Add discoverable find-and-replace to Notes with explicit single/all replacement, preview/count and safe editable-note behavior; preserve undo, read-only/trash protections, literal matching semantics, selections and existing find behavior. Define behavior for case/accent options and zero/overlapping matches; never silently replace across unrelated notes.
-
-**Tests / done when:** Unit and real-sheet tests cover replace one/all, matching options, no matches, undo, read-only/trash and non-target notes; document keyboard/accessibility behavior.
-
-#### `OW-22` — Find next or previous match outside the visible viewport (lower priority)
-
-**Status:** `OPEN` · **Impact:** Med · **Effort:** M · **Depends on:** none · **Source:** Owner request
-
-**Plan:** Extend Ctrl+F with next/previous actions that skip all matches currently visible in the note viewport and move to the next not-displayed match, letting the user read all visible matches at once. Preserve existing single-match navigation, wrap behavior, selection and scroll; handle partially visible matches, no offscreen match, both directions, editable/read/split layouts and resizing.
-
-**Tests / done when:** Geometry and real-sheet tests include several visible matches, offscreen matches in both directions, wrap/no-offscreen cases and accessible controls; verify live layout where possible.
-
-_Not blocked by the calendar work._
-
-#### `SB6.6` — Setting: what the X (close) button does on an Agenda tab
-
-**Status:** `OPEN` · **Impact:** Low-Med · **Effort:** S · **Depends on:** SB6.3 · **Source:** Proposal D5
-
-**Problem:** Closing an Agenda tab makes it reappear (`TabClose` -> `schedule(400)`).
-
-**Plan (do in this order):**
-
-1. Options: hide this item today / dismiss / do nothing (default hide today).
-
-**Tests / done when:** Harness test for each option.
-
 #### `ST7.3` — Move calendar UI state out of notes metadata
 
-**Status:** `OPEN` · **Impact:** Low-Med · **Effort:** S · **Depends on:** none · **Source:** Audit R2 P5
+**Status:** `DONE` (3.3.295) · **Impact:** Low-Med · **Effort:** S · **Depends on:** none · **Source:** Audit R2 P5
 
 **Problem:** `setMeta` rewrites the whole meta file (folders, up to 5000 note agenda overrides) 600 ms after every view/cursor/size/filter change (one write 600 ms after the last change: a drag of the Size slider is one write).
 
@@ -204,54 +523,47 @@ _Not blocked by the calendar work._
 
 **Tests / done when:** Migration test; no meta write on Prev/Next.
 
-#### `T3.5` — Callout toolbar button: last-used on click, more kinds
+#### `OW-63` — Stopwatch face: click returns to the clock, and a narrow widget keeps its buttons
 
-**Status:** `PARTIAL` · **Impact:** Low-Med · **Effort:** S · **Source:** audit 2026-11-16
+**Status:** `DONE` (3.3.297) · **Impact:** High · **Effort:** M · **Depends on:** OW-60 · **Source:** Owner report (2026-11-17)
 
-**Current state and what is LEFT:** DONE: a `Callout…` entry in the More menu (`showCalloutMenu`), 15 kinds (`CALLOUT_KINDS`), and holding Quote or the More caret lists them. LEFT (only this): a primary click that inserts the last-used callout (remembered per window) and the extended kinds of the old spec (`[!faq]-` foldable, `[!bingo]`, `[!poll]`) in the picker.
+**Problem (owner's words):** "clicking on stopwatch doesnt revert it to clock and text field elements of it do not adjust for buttons to be visible in lower width scenarios". OW-60 made the two faces replace each other and put the timer controls on the timer face, but the timer face only leaves by an explicit control, and its number inputs have fixed widths that overflow before the buttons wrap.
 
-#### `UI4.9` — Space before the unit in slider values
+**Plan (in this order):**
 
-**Status:** `OPEN` · **Impact:** Low-Med · **Effort:** S · **Source:** handoff finding, accepted 2026-11-16
+1. A click on the timer face that is not on a button or a field goes back to the clock face (the same "click the face" gesture OW-60 gave the clock, in the other direction).
+2. The timer face becomes a grid that wraps: the fields take what is left and the buttons move to a second row instead of being pushed out. No fixed pixel widths on the fields; `min-width: 0` so they can shrink.
+3. Check the narrowest sidebar width and the text-size setting.
 
-**Problem:** A slider value has no space before its unit (`7days`, `100000chars`).
-**Plan:** One formatter for the value + unit of every settings slider; no space only for `%` and `px`.
+**Tests / done when:** A fake-DOM test clicks the timer face and asserts the clock is shown; a layout test asserts no control exceeds the card at 200 px; settings for text size do not overflow it.
 
-**Tests / done when:** The settings layout test asserts the text of every slider value.
+#### `OW-64` — One language selector for every widget, following Notes until overridden
 
-#### `UI4.11` — Escape returns the focus to the button that opened a menu
+**Status:** `DONE` (3.3.299) · **Impact:** Med · **Effort:** M · **Depends on:** — · **Source:** Owner request (2026-11-17)
 
-**Status:** `OPEN` · **Impact:** Low-Med · **Effort:** S · **Source:** handoff finding, accepted 2026-11-16
+**Problem (owner's words):** "build language selector for all widgets, it should sync with notes language untill user decides that it should not". Only Notes has a language today (`notesLang`), and each other widget is English/Polish by its own rule.
 
-**Problem:** Escape closes a menu of the sheet (`closeMenu`) without giving the focus back to the button that opened it. Every menu is affected; keyboard users lose their place.
-**Plan:** Remember the opener in `closeMenu` and focus it on Escape and on an action chosen by keyboard; do nothing when the opener is gone or the close came from an outside click.
+**Plan (in this order):**
 
-**Tests / done when:** One test over every menu opener; focus returns on Escape, not on outside click.
+1. One pref, `widget_language` (`auto` = follow Notes, else `en`/`pl`), through the whole chain (schema, settings meta, layout, standalone) so it appears in the dialog.
+2. Every widget's `t()` resolves through it: `auto` asks Notes, an explicit value wins and is remembered as the person's choice.
+3. The selector shows "follow Notes" as its own state, and changing the Notes language changes every widget that is still on `auto`.
 
-#### `ST7.5` — Reminder history export, prune and inspect UI
+**Tests / done when:** `auto` follows a Notes language change; an explicit choice survives a Notes change; the pref is in the dialog.
 
-**Status:** `OPEN` · **Impact:** Low-Med · **Effort:** S-M · **Depends on:** ST7.2 · **Source:** Audit R1 S6
+#### `OW-62` — An imported .ics reminder that cannot be deleted: recreate its note
 
-**Problem:** History is hard to inspect and trim.
+**Status:** `DONE` (3.3.298) · **Impact:** High · **Effort:** S-M · **Depends on:** OW-58 · **Source:** Owner report (2026-11-17)
 
-**Plan (do in this order):**
+**Problem (owner's words):** "i still can not delete reminder that was created by ics import, make safeguard for it that will at least try to create such note if it needs one and its not avalible". OW-58 made an item without a note deletable in principle; an imported item still refuses when its linked note is missing rather than making the note it says the person should edit.
 
-1. List/filter/export/prune in the Notes settings next to ICS groundwork.
+**Plan (in this order):**
 
-**Tests / done when:** UI test for prune with confirmation.
+1. Find the refusal path (the item menu says "delete it in its linked note" when `noteId` is set but the note is not in the store).
+2. When a note is needed and absent, create it (the same way the item's link would have) and then carry out the action — delete, unlink or edit — instead of stopping.
+3. If the note cannot be created, the fallback is the OW-58 path: delete the item itself, saying so.
 
-#### `UI4.10` — Settings dialog follows the text size
-
-**Status:** `OPEN` · **Impact:** Low-Med · **Effort:** S-M · **Source:** handoff finding, accepted 2026-11-16
-
-**Problem:** The Settings card takes its size once, when it opens (from the Writing tab); a later change of text size or sheet size does not resize it and its body scrolls instead. Chips, tabs and dialog buttons keep 12 px (`.zn-chip { font-size: 12px }`), so at 28 px text the labels are large and the On / Off chips small. The Table creator shows both scrollbars where the card must be wider than the sheet (classic scrollbars): its number fields do not shrink and its size grid grows with the width.
-**Plan (do in this order):**
-
-1. Size chips, tabs and buttons from the text size.
-2. Fit the card again when the text size or the sheet changes; in `fitCard` measure the height again once the natural width is known.
-3. Table creator: let the number fields shrink and cap the size grid.
-
-**Tests / done when:** `tests/notes-settings-layout.test.cjs` cases for a text-size change while open; run `tools/audit-notes-settings-layout.cjs` (0 findings).
+**Tests / done when:** An imported item whose note is missing can be deleted, and the note is created on the way; the menu never says "edit it in its note" about a note that does not exist.
 
 #### `ST7.4` — Render Agenda rows without real tabs (research)
 
@@ -265,50 +577,175 @@ _Not blocked by the calendar work._
 
 **Tests / done when:** Prototype report.
 
-#### `SB6.9` — Agenda sidebar quiet hours and 'left' counts
+#### `OW-77` — Measure every calendar and notes menu, in a real browser, and keep the numbers
 
-**Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Depends on:** TM3.1 · **Source:** Proposals S5/D3
+**Status:** `DONE` (3.3.314) · **Impact:** Med · **Effort:** M · **Depends on:** OW-75 · **Source:** Owner decision (2026-11-18), "go for it, going to be useful in the future, you can get all zentral elements there"
 
-**Problem:** Ideas from the audit.
+**Problem:** OW-75 was decided by measuring the menus by hand in the headless-Chromium harness of
+`tools/audit-notes-calendar-fit.cjs` (the Tools menu was 18 rows, 568 px at 13 px text and 619 px with a scrollbar at
+20 px). Those numbers are in this file's history, not in a check anyone can run tomorrow. The owner's complaint was
+"unreadable", which is measurable: rows too tall or too short for the text size, labels clipped, a menu taller than the
+window it opens into, a menu that covers its own trigger, or a submenu that loses the level you came from. None of that
+is in the suite, because a fake DOM has no layout.
 
-**Plan (do in this order):**
+**Plan (in this order):**
 
-1. Optional: collapse the Agenda folder outside work hours or when nothing is due within N hours.
-2. Day pill and label show items 'left' (excludes ended and done).
+1. Add `tools/audit-notes-menus.cjs`, modelled on the calendar-fit audit (same page, same real sheet, nothing mocked
+   but the disk): open every Notes and calendar menu — View, Size, Snap, Days, Kind, Category, Tools and all of its
+   groups, `+` and its calendar group, the item context menu, the note menu, the outline and find menus — at 2 text
+   sizes, 2 sheet sizes and 2 scrollbar kinds.
+2. Report, per menu: row height against the text size, label/row clipping, menu height against the window, whether a
+   submenu keeps a Back row and keeps the trigger reachable, and focus order. Fail on a real defect; print the numbers.
+3. Record the baseline in `docs/` so a regression is a diff, not a memory.
+4. Keep it out of the suite (it needs a browser) but list it next to the other audits in the README/housekeeping notes,
+   with the `NODE_PATH` recipe the other audits use.
 
-**Tests / done when:** Projection tests.
+**Tests / done when:** The tool runs at 0 findings on the current build, every calendar menu appears in its output with a
+row height and a verdict, and the recipe is documented so the next session can re-run it.
 
-#### `F0.15` — Isolate the time-budget test of the Agenda projection
+**Done at 3.3.314.** `tools/audit-notes-menus.cjs` opens the real sheet in a headless Chromium (nothing mocked but the
+disk) and opens **11 menus**: calendar View, Size, Snap, Days, Kind filter, Category filter, Tools, the month cell and the
+calendar item context menus; the notes `+` menu and a note row. It also opens every group row inside each of them and
+comes back through its Back row. Grid: 3 text sizes (13/20/28 px) × 2 sheet widths (1100/620) × 2 sheet heights
+(560/720) × both scrollbar kinds = **264 measurements, 0 findings**, 16 cells "not applicable" (a 620 px sheet draws
+Month as the date-only picker, so there are no cells or marks to right-click — counted apart, never as a defect).
 
-**Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Source:** handoff debt, accepted 2026-11-16
+**What it measures, per menu:** a row shorter than its own label (`row-tight`), a row over 2.6× the text size for one
+line (`row-tall`), a label wider than its box with no ellipsis (`label-clipped`), a menu taller than the window and not
+scrollable (`menu-too-tall`), a menu whose box leaves the window (`menu-off-window`), a group level with no Back row
+(`group-no-back`), a group that loses its parent level (`group-loses`), an empty menu, and a page error.
 
-**Problem:** `tests/notes-agenda-projection.test.cjs` measures a time budget inside the parallel batch (75.6 ms against a ceiling of 55.7 ms, once in five full runs) because its name has no `perf`, so `run-all.cjs` does not isolate it.
-**Plan:** Move the timing assertion to `tests/notes-agenda-projection-perf.test.cjs`; keep the behaviour assertions where they are.
+**The numbers are kept.** `docs/MENU_BASELINE.md` is generated with `--baseline` (one row per measurement: rows, menu
+height, verdict) and `--compare docs/MENU_BASELINE.md` fails when any menu height moves by more than `--tolerance` px.
+At 13 px text the calendar Tools menu is 196 px (6 rows, 29.5 px each) and the `+` menu 196 px (6 rows); the largest is
+the month cell menu at 10 rows, growing from 343.5 px at 13 px text to 591 px at 28 px.
 
-#### `DOC-1` — README documents a split view that does not exist
+**The tool was proved to catch defects, not just to pass.** Giving every menu row a 6 px height produced **67**
+`row-tight` findings across all 11 menus; raising the rows' padding from 5 px to 18 px moved **226 of 264** baseline rows
+and made `--compare` exit 1 with named menus (Tools 331 → 448 px, `+` 331 → 487 px). Both were reverted; the 0-finding
+run above is on the real stylesheet.
 
-**Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Source:** audit 2026-11-16, accepted
+**A real bug the tool found in itself, and one in the report:** the first version removed the open menu node by hand
+between measurements, which left the sheet's own menu variable pointing at a detached element, so the next `fill` threw
+"the node to be removed is no longer a child of this node" — it now closes menus the way a person does, with a
+pointerdown outside. And skipped cells were still averaged into their menu's height range with an uninitialised value,
+which made a 300 px menu look like it ran to 720 px; they are now excluded.
 
-**Problem:** `additional/notes/README.md` ("Split view as a second window (setting, off by default)") describes a setting with no code; only an orphan comment remains above `syncAllNewButton` in `ZentralNotes.uc.js` (~11129).
-**Plan:** Remove the README line and the comment (rebuild standalone, keep the README test green), or build it as part of `T3.8`.
+**Not in the suite**, deliberately: it needs a browser. The recipe is in the tool's header and in
+`additional/notes/README.md` beside the other audits (`mkdir /tmp/ch && npm i @sparticuz/chromium puppeteer-core`, then
+`AWS_EXECUTION_ENV=AWS_Lambda_nodejs22.x NODE_PATH=/tmp/ch/node_modules node tools/audit-notes-menus.cjs`).
 
-#### `TM3.7` — Day range on the day the clocks go forward at midnight
+**Honest limits:** measured in Blink; Zen draws with Gecko, which differs by a line's height and a glyph's width — the
+verdicts are written for that ("tight" only when a label is actually cut, not when it is near the edge). Quick settings
+opens a card, not a menu (`openCard` + `fitCard`), so it is measured by the settings-layout audit, not here.
 
-**Status:** `OPEN` · **Impact:** Low · **Effort:** S · **Source:** `F0.13` observation, accepted 2026-11-16
+#### `OW-78` — One palette: the CSS variables and the JS resolver must agree
 
-**Problem:** `addDays(dayStart, 1)` keeps the wall clock, so in a zone whose clocks go forward at midnight (Chile, Egypt, Lebanon, Cuba) the day of the change ends at 01:00 of the next day wherever a day range is built that way (views not checked). One day a year; only items between 00:00 and 00:59.
-**Plan:** Build day ranges with `zonedDayBounds`/`dayStart` of the next day instead of adding 24 h or keeping the clock; check Week, Day, Month and Agenda.
+**Status:** `DONE` (3.3.311) · **Impact:** Med · **Effort:** S · **Depends on:** OW-76 · **Source:** Owner decision (2026-11-18), "okey, plan it as to do after those few adjustments"
 
-**Tests / done when:** A golden case for such a zone in the time-zone matrix.
+**Problem:** After OW-76 the sheet has two ways to arrive at a surface. The JS resolver (`resolveThemeSurface`) reads
+`--zen-colors-base` / `--zen-colors-text` / `--zen-colors-border` / `--zen-primary-color`, applies contrast guarantees
+and writes `--zn-surface-resolved` / `--zn-text-resolved` / `--zn-accent-safe`. The stylesheet separately defines
+`--zn-surface: var(--bgalazka-look-toolbar-surface, var(--bgalazka-look-surface, #1e1e24))` and
+`--zn-text: var(--bgalazka-look-text, #e9e9f0)`. So a rule that reads `--zn-surface` can still show the RSS card's
+colour while a rule that reads `--zn-surface-resolved` shows Zen's — the same sheet in two palettes, which is exactly
+the "how do the themes interact" complaint. It works today only because the resolved tokens are set inline and win.
 
-#### `F0.16` — Sweep tests that build fixtures around the real clock
+**Plan (in this order):**
 
-**Status:** `OPEN` · **Impact:** Low · **Effort:** S-M · **Source:** handoff test noise, accepted 2026-11-16
+1. Make the stylesheet's own defaults read the resolved tokens first (`var(--zn-surface-resolved, ...zen tokens...)`)
+   and keep the RSS variables as the last fallback only.
+2. Delete any remaining hardcoded `#1e1e24` / `#e9e9f0` defaults that a theme should be able to move, or move them into
+   the resolver's documented fallback so there is one source.
+3. Add a check that the two paths cannot disagree again: a test that sets host tokens and asserts both the computed
+   `--zn-surface` and the JS `surface` are the same colour.
+4. Document the chain in one place (the CSS header comment) so the next person does not re-add an RSS token first.
 
-**Problem:** `F0.14` fixed one test that failed at some hours of the day because it used the real "now". Others may fail at hours nobody has run them at.
-**Plan:** List every test that reads `Date.now()` or `new Date()` for fixtures, fix the clock in each (pattern of `tests/notes-calendar-views.test.cjs`), then run the suite under the four-zone matrix at three different hours.
+**Tests / done when:** With `--zen-colors-base` set, the computed `--zn-surface`, `--zn-panel` and `--zn-surface-resolved`
+are all that colour; with the tokens removed the documented fallback appears in all three; a test fails if the stylesheet
+starts reading a non-resolved source first.
 
-**Tests / done when:** A check that fails on a test using the real clock without fixing it.
+**Done at 3.3.311** — and the row earned its keep by finding a real bug, not just a reordering.
+
+**The chain, now read from one end in every rule that sets it:** `--zn-surface: var(--zn-surface-resolved, var(--zen-colors-base, var(--bgalazka-look-…, #1e1e24)))`
+and the same shape for `--zn-text`. All four theme rules (`recommended`, `light`, `dark`, `paper`) gained the resolved
+token as their first rung; the fixed themes' own hexes stay as the second rung, so a sheet whose JS never ran still
+paints exactly as before. The RSS card's `--bgalazka-look-*` set is now the **last** rung and is documented as such —
+in the CSS header comment beside the tokens, which names this row and points at `resolveThemeSurface`.
+
+**The bug it found:** `resolveThemeSurface` ended its text chain with `isLight ? "#1c1c22" : "#e9e9f0"` — a hardcoded
+pair that only matched two of the four themes. `paper`'s stylesheet text is `#3b3226` and `light`'s is `#1d1d22`, so the
+moment the resolved token started winning (step 1 of this plan), **the paper theme's text would have jumped from warm
+brown to near-black and the light theme's by one step**, silently. The resolver now reads `base.text` — the theme's own
+entry, already resolved for the scheme. Every theme now agrees with its stylesheet hex: light `#fbfbfd`/`#1d1d22`,
+dark `#17171c`/`#e9e9f0`, paper `#f4ecd8`/`#3b3226`, zentral `#1e1e24`/`#e9e9f0`, recommended `#1f1f24`/`#eeeeee`.
+
+**The one deliberate exception, written down:** an explicit override the person chose (`--zentral-notes-ov-bg` /
+`-ov-text`) still opens its chain directly. A colour the owner picked is the last word and must not be mediated by the
+resolver; the test allows exactly those two names and asserts there is no third.
+
+**Tests:** `tests/notes-one-palette.test.cjs` (10). Static: the order of every `--zn-surface`/`--zn-text` chain in the
+whole file, and that no rule opens with a foreign palette. Agreement: the resolver's per-theme fallback equals the
+stylesheet's hex for every theme. Live: a real sheet, read back from its inline custom properties, with the theme it
+says it is on resolved by the same function. Verified by negative check — restoring the hardcoded pair fails 1 of 10.
+
+#### `OW-79` — More languages, and never a raw key on screen
+
+**Status:** `DONE` (3.3.313) · **Impact:** Low-Med · **Effort:** M · **Depends on:** — · **Source:** Owner decision (2026-11-18), "you can prepare us for more languages"
+
+**Problem:** Adding a language is meant to be a data file (`additional/notes/i18n/en.js`, `pl.js`), but a real browser
+run of the harness showed the sheet drawing literal keys — `cal.todayBtn` appeared as the Today button's text — when no
+language table was registered for the active language. In production that means any build or host that misses a table,
+or a new language file that is not complete yet, shows a person `cal.todayBtn` instead of "Go to today". The i18n test
+suite passes because it always registers both tables.
+
+**Plan (in this order):**
+
+1. Make `t()` fall back per key, not per table: a missing key in the chosen language falls through to English, and a key
+   missing everywhere shows the English default (never the raw dotted key). Log the gap once so a developer sees it.
+2. A test that builds the sheet with only one language registered, and with a deliberately incomplete table, asserting
+   no rendered text matches `/^[a-z]+(\.[a-zA-Z]+)+$/` (a dotted key) anywhere in the sheet.
+3. A test that a fully-formed language file discovered in `i18n/` is picked up by the language menu without touching JS.
+4. Document "how to add a language" in `docs/`: the file shape, the plural categories, the date words, and how to check
+   it with the audit tool.
+
+**Tests / done when:** An incomplete language shows English for the missing keys and never a key name; a new file needs
+only to exist to appear in the menu; the suite covers both.
+
+**Done at 3.3.313** — and the third item on the list turned out to be the real work; the first two were half-done already.
+
+1. **Per-key fallback was already there; the raw key was the hole.** `translate` fell through to English per key, but its
+   last resort was `k` — the dotted key itself, which is exactly what a person saw. It now: falls through per key to
+   English (an **empty string** in a table counts as missing too, so a blank line in a translation file cannot blank a
+   label), and when no table has the key at all it draws **readable words** from the key's last segment
+   (`cal.todayBtn` → `Today btn`), never the dotted form. The gap is reported **once per key and language** through
+   `reportTranslationGap` — a `console.warn`, a `translationGaps()` list and an `onTranslationGap` subscription — because
+   the sheet draws constantly and a warning per draw would be noise nobody reads.
+   **Found and fixed while doing this:** two places in the sheet asked "is there a translation?" by comparing
+   `t(key) === key`. Once `t()` stopped returning keys, that test became always-true and every settings option would have
+   shown the readable form of its own key. Both now ask `hasTranslation(key)`, which is the question they meant.
+2. **A new language is now genuinely a data file.** Before, it took three edits in two JS files: one `loadOptional` line
+   per language, `NOTES_LANGUAGES = ["en","pl"]` in the core, and a hardcoded `[["en","English"],["pl","Polski"]]` in the
+   settings menu — and the menu was the one nobody remembered. `tools/build-languages.cjs` now generates
+   `i18n/registry.js` from the **directory**; the sheet loads the registry then each language it names; the menu is
+   built by `notesLanguageChoices()` from `notesLanguages()`, i.e. from what actually registered. The core's
+   `NOTES_LANGUAGES` survives as a floor, not a gate. `build-languages.cjs --check` runs in the suite (beside the z-map
+   check), so a forgotten step fails in CI rather than in a user's browser.
+   **Proven, not asserted:** `i18n/de.js` was added — a real German table (weekdays, months, relative words, counted
+   offsets, ordinals) with only a handful of interface strings translated. It appeared in the registry, in the menu
+   (`Deutsch (German) — 879 missing`), and its date words parse (`heute`, `übermorgen`, `25. dezember`, `in 3 tagen`,
+   `vor 2 wochen`). The menu is honest about an incomplete language instead of pretending.
+   **A shape change fell out of it:** three options make `choiceIsDropdown` true, so the language row is now a dropdown
+   rather than a chip pair. `notes-i18n-ui` accepts either shape.
+3. **The docs.** `docs/ADDING_A_LANGUAGE.md` — the file shape, the tables a language needs beyond `strings` (with the
+   German example for each), the plural categories, the registry tool, how to check it, and what to do about keys no
+   table has. `i18n/en.js`'s own header points at it, because that is the file a translator actually opens.
+
+**Tests:** `tests/notes-more-languages.test.cjs` (11): per-key fallback, readable words for an unknown key, a blank
+counting as missing, the gap listener, registry currency, "nothing in the JS names `de`", the menu's honesty, German
+date parsing, and two live-sheet runs — one with the incomplete table registered, one with **no** table at all —
+asserting no rendered text matches `/^[a-z][A-Za-z0-9]*(\.[A-Za-z0-9_]+)+$/`. Verified by negative check: restoring
+`template = k` fails 2 of 11.
 
 ---
 
@@ -374,7 +811,133 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.244.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-39` and `OW-42` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`196/196` test files) passes in Node/fake-Zen at 3.3.244; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+State: **3.3.325.** `F0.1`–`F0.14`, `H1.1`–`H1.6`, `PF2.1`–`PF2.6`, `TM3.1`–`TM3.6`, `UI4.7`, `UI4.8`, `AU-B1`, `AU-B2`, `AU-B4a`, `AU-B4b`, `AU-B5`, `SB6.1`, `SB6.2`, `SB6.3`, `SB6.4`, `SB6.5`, `SB6.7`, `SB6.8`, `SB6.10`, `ST7.2`, `B3.3.50-6`, `T1.18`, `T1.19a`, `T1.19b`, `T1.19c`, `T2.4c4`, `T2.5`, `T2.6`, `T2.8b`, `T2.10`, `T2.11`, `T2.11a`, `T2.19`, `T3.1`, `T3.2`, `T3.3`, `T3.8`, `T3.9c`, `T3.9d`, `T3.9e`, `T3.4`, `T3.4a`, `T3.6a`, `T3.9a`, `T3.9b`, `T3.10`, `T4.1`, `T4.2`, `T4.5`, `OW-18`, `OW-26`, `OW-04`, `OW-04a`, `OW-28`, `OW-03`, `OW-23`, `OW-24`, `OW-09`, `OW-05`, `OW-02`, `OW-07`, `OW-10`, `OW-11`, `OW-08a`, `OW-08b`, `OW-08c`, `OW-25`, `OW-29`, `OW-30`, `OW-31`, `OW-32`, `OW-33`, `OW-34`, `OW-35`, `OW-36`, `OW-37`, `OW-40`, `OW-41`, `OW-27`, `T2.4c1`, `B3.3.32-7`, `T2.18`, `T2.9`, `OW-38`, `OW-39`, `OW-42`, `OW-47`, `OW-48`, `OW-49`, `OW-50`, `OW-51`, `OW-52`, `UI4.9`, `SB6.6`, `UI4.11`, `DOC-1`, `TM3.7`, `ST7.8`, `SB6.11`, `ST7.5`, `UI4.10`, `OW-53`, `F0.15`, `F0.16`, `OW-54`, `OW-55`, `OW-56`, `OW-57`, `OW-58`, `OW-59`, `OW-60`, `OW-61`, `T3.5`, `SB6.9`, `ST7.3`, `OW-63`, `OW-62`, `OW-64`, `OW-21`, `OW-65`, `OW-22` and `OW-67`–`OW-72`, `OW-73`–`OW-76` and `OW-80`–`OW-86`, `OW-88`–`OW-94` are DONE and archived. The main mod and every standalone module are on one version (`node tools/sync-version.cjs --check`). The full suite (`254/254` test files) passes in Node/fake-Zen at 3.3.325; the four-zone calendar/Agenda/reminder time-zone matrix passes (`284/284`). Live Zen cold-restart fix verified by owner at 3.3.202, and live Zen `1.24.1b` sidebar widgets fix verified by owner at 3.3.237. The settings dialogs are also measured in a headless Chromium (`tools/audit-notes-settings-layout.cjs`, not part of the suite: 240 cells, 0 findings, run again at 3.3.177), and so is the size of the calendar (`tools/audit-notes-calendar-fit.cjs`, not part of the suite: 160 full-Month cells, 0 findings at 3.3.177; the OW-09 date-picker audit measured 12 cells across 2 text sizes, 3 pane heights and 2 scrollbar kinds at 3.3.179, 0 findings).
+
+`OW-67`–`OW-72` DONE (3.3.303) — the owner's six widget reports of 2026-11-17, each fixed and each pinned by a test.
+
+`OW-73`–`OW-76` DONE (3.3.304) — the owner's four calendar reports of 2026-11-18, each measured in headless Chromium and
+each pinned by a test. `OW-73`: the All-notes toolbar and its chips row are one line (3 wrapping cases before, 0 after).
+`OW-74`: `‹` / Today / `›` and a month-week toggle live in the calendar head between the name and the period; the name
+ellipsises, the controls never do, and they still work with the control strip hidden. `OW-75`: the 18-row Tools menu
+became a 5-row grouped menu (568→167 px), creation moved under Notes `+`, nothing deleted — and a real bug fell out of
+it: every group menu in Notes and Calendar closed itself as it opened, because rebuilding a level detaches the focused
+row and the `focusout` guard read the browser's report as "the person left". `OW-76`: the `zentral` theme now reads
+Zen's `--zen-colors-*` palette instead of the RSS card's variables, and the sheet repaints when Zentral's appearance
+theme changes (event + root-attribute observer, registered in the resource inventory).
+
+**`OW-67`, the card that stayed blank** ("sometimes it stays not rendered when its hidden in sidebar"). Two causes, both
+real. (a) `scheduler.setPaused` was the only thing that repainted cards on a resume, and it returns early when its flag
+did not move — with *pause when hidden* off the flag never moves, so a card blanked while folded was never painted
+again. A genuine hidden→visible transition now repaints every card from its cache (`resumeAll` when the scheduler had
+paused, `repaintAll` when it had not, which must not fetch), and a fresh cache is still painted rather than refetched.
+(b) `renderClockElements` skipped its writes when the value's key was unchanged — a fast path that could keep a blank
+clock blank forever. A cached repaint now forces the write. Reproduced in the fake harness before the fix, in both
+settings.
+
+**`OW-68`, one line for the quick note.** The row no longer wraps, the Save button is `flex: 0 0 auto` with its label on
+one line, and the field is the only thing that gives ground (`flex: 1 1 0` with a small floor). The narrow-width rule
+that stacked this row — the one that could push Save onto its own line — is gone.
+
+**`OW-69`, the quick note is optional.** One `checkbox` in **Clock & Date**, on by default, declared in the schema,
+`preferences.json`, the layout order and `standalone.json`. Off means the row is not in the layout and takes no space;
+on means it is drawn whenever Notes can take a note. Live, no restart — which needed a third fix: `syncClockNote` only
+ran at creation and when Notes appeared, so a pref change repainted the card without re-asking the question. Every draw
+now re-syncs it.
+
+**`OW-70`, the status card.** Memory: the reader assumed one shape from `getMemoryUsage()`. It now accepts
+`usedSize`/`totalSize`, `memorySize`, `used`/`total`, `limit`, `usage`/`max` and a `[used, total]` pair, falls back to
+the resident-size counter, and records which source answered in `data-zw-source` where the owner can look without a
+console. A desktop with no battery is now QUIET — the old card printed "no battery", which the owner read as a broken
+widget; the reason moved to the tooltip. Never 0%.
+
+**`OW-71`, ordering.** A stored `widgets.order` list, applied by `cleanWidgetOrder`/`orderedByIds`: chosen ids first,
+unknown ids ignored, and every widget not in the list keeps its default place — so a new widget appears rather than
+disappearing, and a widget switched off keeps its place for when it returns. A handle on every card (a real button,
+draggable, `Alt+Up`/`Alt+Down`) writes the same pref through the same function, and a move is announced in a polite
+live region.
+
+**`OW-72`, colours.** Background and text prefs, empty by default meaning follow the theme. Values are normalised to
+`#rrggbb`, and a pair below WCAG AA (4.5:1) is REFUSED rather than written and then complained about, so the cards can
+never end up invisible. The variables are written once on `#zentral-sidebar-widgets`, so every card — present and
+future — inherits them, `data-zw-look` says `theme`/`custom`/`unreadable`, and a reset applies nothing at all.
+
+Tests: `tests/widgets-owner-reports.test.cjs` (13), plus the existing widget suites re-pointed where they pinned the
+old behaviour. Suite `238/238`.
+
+`OW-22` DONE (3.3.302) — "next match not on screen". `Ctrl+F` grew a second pair of controls beside the ordinary
+next/previous: **Ctrl+Alt+Down / Ctrl+Alt+Up** (or the two ↩ / ↲ buttons in the bar) move to the next or previous
+match that is **not already readable**, so a person can look at every match in view at once instead of pressing Enter
+through the ones in front of them. The ordinary keys keep their old meaning exactly — this is a second door, not a
+mode. What counts as "readable" is decided by one pure rule (`matchIsVisible`): a match is seen only when its **whole
+line** is inside the pane's own window. A match half under the bottom edge is one the person cannot read, so it is not
+counted as seen — and because of that the same jump lands on it rather than skipping it forever. `stepOutsideViewport`
+walks the list from the current match in either direction, wraps **once**, never returns the match it started on (so
+pressing again always moves), and distinguishes **"no matches"** from **"all matches are on screen"** — two different
+sentences, and `any` is what lets the bar say the right one instead of going silently nowhere. The editor measures
+lines arithmetically (plain text, one line height each, `lineOfOffset`); the read view goes through the existing
+anchors so its wrapping is measured rather than guessed. The pair is disabled, with the reason in its title, whenever
+there is nowhere to go. FOUND AND FIXED while testing it: the pair's state depends on the scroll position, so both
+panes now report scrolling to a throttled (one-per-frame) repaint — otherwise the button kept offering a jump to a
+match that had just scrolled into view. Tests: `tests/notes-find-offscreen.test.cjs` (13) — the rule (whole line, empty
+pane, no measurement), visible indices, both directions, wrap, the current match never returned, the buttons and their
+`aria-label`s, several visible matches skipped, the "all on screen" answer with the plain jump still working, the
+half-visible bottom edge, the read view, Ctrl+Alt+Down/Up, the scroll repaint, and the old controls still present
+exactly once. Suite `237/237`.
+
+`OW-65` DONE (3.3.301) — the Clock card took the shape the owner described. He said the clock was coming out as a
+secondary element drawn *above* the stopwatch, that a button like "Wyzeruj" could be cut off by the edge of the
+sidebar, and that the quick note was still a separate feature in Settings. All three had real causes. **The clock above
+the stopwatch** was a CSS cascade bug, not a drawing bug: `paintFace` has always set `main.hidden = true` on the timer
+face, but `.zw-clock-main { display: flex !important }` outranks the user agent's own `[hidden] { display: none }`, so
+the clock stayed on screen no matter what the JS said. Every element this card hides by the `hidden` property now has
+its own `[hidden] { display: none !important }` rule, and a test reads the stylesheet to prove it — the JS flag was
+correct all along, which is exactly why no behavioural test had ever caught it. **The clipped "Wyzeruj"** came from the
+same family: the card is `overflow: hidden` at `width: 100%`, and the time column was sized by `align-items: flex-start`
+to its tallest *content*, so a wide control row pushed past the card and was silently cut. The column now stretches to
+the card, the control rows wrap, and a button longer than the whole card breaks its own label instead of vanishing (the
+old `white-space: nowrap` on every button is gone for exactly that reason). **The shape itself:** the card is now a
+time column plus the quick note under it, and both faces live *inside* the time column, so one click on the hour swaps
+the clock for the stopwatch/countdown panel in place and the note never moves — it is under whichever face is up. The
+quick note is no longer a separate feature: the `quick_note.enabled` pref is gone from the schema, `preferences.json`,
+the layout order and the code, the reveal chip is gone, and the row is simply drawn whenever Notes can take a note. The
+**Timer settings section is gone too** — a `timer.click_stopwatch` checkbox in a group of its own was the last place a
+retired second card still appeared — so the timer's prefs now sit in **Clock & Date** with the clock's. Tests:
+`widgets-clock-timer` (+1 live test that drives the owner's exact sequence on the real card with Notes present),
+`widgets-status` and `widgets-timer` updated to the shape the owner asked for rather than the one he rejected; the
+harness gained a `notes: true` option that publishes the real opener symbol.
+
+`OW-21` DONE (3.3.300) — the find bar replaces. `Ctrl+F` opens the same one-line bar it always did; a new toggle at
+its right unfolds a second row (`zn-find-replace-row`) holding the replacement text, **Replace** and **Replace all**,
+and a live count that says "3 matches" / "No matches" (or, in Polish, "3 trafienia" / "Brak trafień"). The row is folded
+away until asked for, so finding stays one line and replacing is a deliberate step; the toggle carries
+`aria-expanded` and the row stays out of the tab order while it is hidden. Matching is exactly find's: literal (a dot is
+a dot), case- and accent-folded, non-overlapping, never spanning two rendered runs, and a newline in the replacement
+becomes a space. **Replace** writes the match under the cursor and re-checks it against the live text first
+(`replaceOne` refuses a stale range with `reason:"stale"`) so a change made elsewhere cannot make it write the wrong
+words; **Replace all** builds the note from pieces in one pass, so the replacement text is never re-scanned (`a`→`aa`
+terminates), and it stops at `REPLACE_MAX = 500` matches and reports `truncated` rather than claiming the lot. Both go
+through `setBody`, the same door the editor's own typing uses: one store write, one undo step, one repaint. They act on
+the open note only — other notes and the Trash are never touched, and the whole thing is refused in words (not
+silently) in the read view, on a trashed note, or with no note loaded. `Enter` in the replacement field replaces one,
+`Alt+Enter` replaces all, `Escape` closes as before. Tests: `tests/notes-find-replace.test.cjs`, 11 tests (pure plan /
+one / all / summary, and the real sheet: disclosure and its aria state, replace one, replace all, the read-view refusal,
+Enter and Alt+Enter, non-target notes untouched). Suite 236/236 at 3.3.300.
+
+`OW-59` DONE (3.3.287) — a note's reminders and events can now be unlinked from it: one card, reachable from the note's
+menu ("Linked to this note…"), from the date menu ("Everything linked to today…") and from the per-date reminder
+chooser ("Everything on this date…"), lists what is linked and unlinks one item per row. The note text stays the only
+truth — an unlink is a single text edit that keeps the words and drops the date (and the `%%zn-item-id%%` mark, so the
+item is not re-created) or removes a generated Agenda line. Free-standing (imported/hand-made) items keep Delete and
+refuse Unlink; note-backed items offer Unlink and refuse Delete. Suite `230/230`.
+
+`OW-60` DONE (3.3.290, dead `transientCards`/`clockClickState` removed at 3.3.291) and `OW-61` DONE (3.3.288) — the owner's three widget reports. The Clock and the stopwatch are
+one card for real: the timer face carries Start/Stop, Lap, Reset, the five preset chips, the typed duration and the
+laps list (every one of them an existing pure helper), a preset starts the countdown so the stopwatch keeps that
+function, and the quick note now lives on the clock face behind its own chip. The standalone Timer card is deleted from
+the registry and from every settings surface; `timer.enabled` is read once (declared `externalPrefs`, with a reason) to
+put an owner who had it on the Clock's timer face. The four settings that never appeared in Zentral Settings now do: the
+`settings` map was missing entries for them, which no test checked because the test checked `schema` instead — and
+`check-settings-consistency` is now part of the documented chain. Suite `230/230`.
 
 Completed this session (3.3.163–3.3.244), every finished item archived in `docs/LEGACY_done_rows.md`:
 
@@ -500,6 +1063,34 @@ Completed this session (3.3.163–3.3.244), every finished item archived in `doc
 
 Standing owner rules for chunks: commit to Git, no ZIPs; no conversational filler; production-ready code and test suites; tasks strictly in order (implementation, edge cases, unit tests). Owner 2026-11-14: no live-check items (owner tests in the app and reports); do NOT add low-priority polish that changes nothing noticeable; only fix what a person would notice. Owner 2026-11-15: Month does not use the visible hours of Week / Day ("there is barely space for visible items anyway there"); do not build it. One version everywhere: `node tools/sync-version.cjs` after `build-standalone.cjs --bump` (see "How to add a feature").
 
-Known debts / owner requirements: LIMITS of `OW-04`: the pointer is held to the hours shown, so a new range or an edge cannot be dragged beyond them (show all 24 hours, or type the time); the layout was measured in Chromium, not in Gecko. LIMITS of `OW-03`: where the hours fit was measured in Chromium, not in Gecko (the fit itself is arithmetic on the measured height of the timeline; what differs between the engines is the height of a line of text, which moves the border between "fits" and "scrolls" by a px or two). At the default text size and with the panes side by side, 24 hours fit from a sheet about 710 px high; in a lower one they scroll at 18 px an hour (fewer hours fit earlier: `08–20` from about 500 px). In a pane too low for two and a half of the smallest hours the timeline scrolls inside a pane content that scrolls too. FOUND with it, not changed: Escape closes a menu of the sheet without giving the focus back to the button that opened it (`closeMenu`; every menu, not only `Size`). On the day the clocks go back an event that begins in the first pass of the repeated hour and ends in the second at an earlier clock time is drawn 20 px high (a clock grid has one place for 02:30). `OW-26` is shown in a fake layout only: remote browsers, native hit testing, pointer capture and real timing are not covered, and the owner's pair and settings are not known, so the owner checks the edge drag in Zen. `OW-28` likewise (fake layout only). Test noise: other test files that build fixtures around the real "now" may fail at hours nobody has run them at (`F0.14` fixed the one that did; the whole matrix passed at 23:10 UTC with that one exception). Not changed: `tests/notes-agenda-projection.test.cjs` measures a time budget inside the parallel batch (its name has no `perf`, so `run-all.cjs` does not isolate it); it failed once in five full runs of this session (75.6 ms against a ceiling of 55.7 ms, two cores and four workers) and passed alone three times. Accepted limits of `UI4.7` (not tasks): a foreign program writing between our compare and our write cannot be locked out; note file and `calendar.json` are ordered and repaired on start, not one transaction (details of a reminder that never reached `calendar.json` are lost if the browser dies between the two writes; date, time and title survive in the note line). FOUND while testing, needs an owner decision (nothing changed): once a calendar line has its hidden `%%zn-item-id%%`, retyping its date or time in the note text does not move the stored item (`syncNote` always keeps `old.start`); only the calendar UI moves it. Safe fix idea: remember the schedule parsed from each line and let the text win only when that parsed schedule changed in an edit. FOUND, not changed: for a skipped hour (clocks forward) an item with its own zone moves to 03:00, an item in the system zone to 03:30; both are pinned in the golden table. LIMITS of `OW-23`: the picker was looked at in Chromium, not in Gecko, and with a throwaway script (no audit tool was added for it). Its labels are English; the language of the browser is used for the names of countries in the search only. Abbreviations exist for the zones whose English long name is in `ZONE_ABBREVIATIONS` (Europe, Africa, North America, Australia, much of Asia); the others show their offset alone. Zone names without an area (`EST5EDT`, the zone `CET`) are not offered and cannot be typed: `cet` typed is the abbreviation and fits several zones (a stored one is kept as it is). An id with an area that the engine knows (`Etc/GMT-3`, `US/Pacific`) is not offered but is taken when typed in full. The zones chosen lately are kept per window. `UTC+3` is a fixed offset: an item in it does not follow a clock change (the list says so beside every offset). LIMITS of `OW-24`: a day and a month without a year are the next such day from today on, as in a note (`14.11` typed on 16 November is next year's; the line under the field shows the year); a day alone is a day of the month the field shows and may be past. The date parser supports English and Polish language tables; future interface-string translation remains `AU-B4b`. `24:00` and seconds are no times; quiet hours (the browser's own time fields) and Visible hours (whole hours) are as they were. Looked at in Chromium, not in Gecko: that a click leaves the text of a field selected rests on `focus`, `mousedown` and `mouseup` coming as the specification says. FOUND with it in Chromium only, nothing changed: the menu of a calendar item closes when its `Snooze` group is opened. The menu is filled anew, the button that had the focus is removed, and Chromium reports that as focus leaving the menu (`focusout`, then `closeMenu`). Gecko does not report a removed element that way and neither does the fake DOM, so Zen should not be affected; if the Snooze choices ever vanish in Zen, this is the place. FOUND while answering the review, nothing changed, ONE check in Zen asked of the owner (it cannot be reasoned out here): the Firefox source says a closed window runs no further promise step, and the save on closing a window first reads the note file (to notice a foreign change) before it writes, so the text typed since the last automatic save (0.8 s after the last key, at most the autosave interval while typing) is probably not written when the window is closed. Check: type a word in a note and close the window within half a second (not the last window: quitting may differ), open Notes in another window; if the word is missing, the fix is a row of its own: on `unload` copy the file to the recovery area and write the unsaved text in calls issued at once, which the I/O thread finishes without the window. The same applies to a calendar change made in the last 0.6 s (the note line then restores date, time and title, not the details). Since 3.3.170 the same applies to the settings file (it is read before it is written): a folder made in the last 0.6 s before a window is closed. OBSERVED with the `F0.13` fix, not changed: `addDays(dayStart, 1)` keeps the wall clock, so on a computer in a zone whose clocks go forward at midnight the day of the change ends at 01:00 of the next day wherever a day range is built that way (views not checked); one day a year, items between 00:00 and 00:59 only. LIMIT of the `T3.1` measurement of the settings dialogs: it ran in Chromium (Blink); Zen draws with Gecko, and no Gecko build can be fetched in the sandbox. The causes that were fixed (grid rows with a `min-height` in a grid that must scroll, a later rule with the same selector, loose items of a wrapping row) are behaviour both engines share by specification; the widths of text and form controls differ a little, which moves where a line wraps. If a settings row still looks wrong in Zen, the text size, the sheet width and the tab are enough to reproduce it. FOUND while measuring, nothing changed, each needs an owner decision before it becomes a row: (1) Chips, tabs and dialog buttons keep 12 px at every text size (`.zn-chip { font-size: 12px }`), so at 28 px the labels are large and the On / Off chips small. (2) The Settings card takes its size once, when it opens (from the Writing tab); it does not follow a later change of the text size or of the sheet, its body scrolls instead. (3) A slider value has no space before its unit (`7days`, `100000chars`). (4) Table creator: its two number fields do not shrink and its size grid grows with the width, so where the card has to be wider than the sheet it shows both scrollbars on systems with classic scrollbars (82 of the 120 measured cells with classic scrollbars; none with scrollbars that take no room; before 3.3.171, 171 of 240 cells). Fix idea: in `fitCard` measure the height again once the natural width is known.
+Known debts / owner requirements: LIMITS of `OW-04`: the pointer is held to the hours shown, so a new range or an edge cannot be dragged beyond them (show all 24 hours, or type the time); the layout was measured in Chromium, not in Gecko. LIMITS of `OW-03`: where the hours fit was measured in Chromium, not in Gecko (the fit itself is arithmetic on the measured height of the timeline; what differs between the engines is the height of a line of text, which moves the border between "fits" and "scrolls" by a px or two). At the default text size and with the panes side by side, 24 hours fit from a sheet about 710 px high; in a lower one they scroll at 18 px an hour (fewer hours fit earlier: `08–20` from about 500 px). In a pane too low for two and a half of the smallest hours the timeline scrolls inside a pane content that scrolls too. FOUND with it, not changed: Escape closes a menu of the sheet without giving the focus back to the button that opened it (`closeMenu`; every menu, not only `Size`). On the day the clocks go back an event that begins in the first pass of the repeated hour and ends in the second at an earlier clock time is drawn 20 px high (a clock grid has one place for 02:30). `OW-26` is shown in a fake layout only: remote browsers, native hit testing, pointer capture and real timing are not covered, and the owner's pair and settings are not known, so the owner checks the edge drag in Zen. `OW-28` likewise (fake layout only). Test noise: other test files that build fixtures around the real "now" may fail at hours nobody has run them at (`F0.14` fixed the one that did; the whole matrix passed at 23:10 UTC with that one exception). Not changed: `tests/notes-agenda-projection.test.cjs` measures a time budget inside the parallel batch (its name has no `perf`, so `run-all.cjs` does not isolate it); it failed once in five full runs of this session (75.6 ms against a ceiling of 55.7 ms, two cores and four workers) and passed alone three times. Accepted limits of `UI4.7` (not tasks): a foreign program writing between our compare and our write cannot be locked out; note file and `calendar.json` are ordered and repaired on start, not one transaction (details of a reminder that never reached `calendar.json` are lost if the browser dies between the two writes; date, time and title survive in the note line). FOUND while testing, needs an owner decision (nothing changed): once a calendar line has its hidden `%%zn-item-id%%`, retyping its date or time in the note text does not move the stored item (`syncNote` always keeps `old.start`); only the calendar UI moves it. Safe fix idea: remember the schedule parsed from each line and let the text win only when that parsed schedule changed in an edit. FOUND, not changed: for a skipped hour (clocks forward) an item with its own zone moves to 03:00, an item in the system zone to 03:30; both are pinned in the golden table. LIMITS of `OW-23`: the picker was looked at in Chromium, not in Gecko, and with a throwaway script (no audit tool was added for it). Its labels are English; the language of the browser is used for the names of countries in the search only. Abbreviations exist for the zones whose English long name is in `ZONE_ABBREVIATIONS` (Europe, Africa, North America, Australia, much of Asia); the others show their offset alone. Zone names without an area (`EST5EDT`, the zone `CET`) are not offered and cannot be typed: `cet` typed is the abbreviation and fits several zones (a stored one is kept as it is). An id with an area that the engine knows (`Etc/GMT-3`, `US/Pacific`) is not offered but is taken when typed in full. The zones chosen lately are kept per window. `UTC+3` is a fixed offset: an item in it does not follow a clock change (the list says so beside every offset). LIMITS of `OW-24`: a day and a month without a year are the next such day from today on, as in a note (`14.11` typed on 16 November is next year's; the line under the field shows the year); a day alone is a day of the month the field shows and may be past. The date parser supports English and Polish language tables; future interface-string translation remains `AU-B4b`. `24:00` and seconds are no times; quiet hours (the browser's own time fields) and Visible hours (whole hours) are as they were. Looked at in Chromium, not in Gecko: that a click leaves the text of a field selected rests on `focus`, `mousedown` and `mouseup` coming as the specification says. FOUND with it in Chromium only, nothing changed: the menu of a calendar item closes when its `Snooze` group is opened. The menu is filled anew, the button that had the focus is removed, and Chromium reports that as focus leaving the menu (`focusout`, then `closeMenu`). Gecko does not report a removed element that way and neither does the fake DOM, so Zen should not be affected; if the Snooze choices ever vanish in Zen, this is the place. FOUND while answering the review, nothing changed, ONE check in Zen asked of the owner (it cannot be reasoned out here): the Firefox source says a closed window runs no further promise step, and the save on closing a window first reads the note file (to notice a foreign change) before it writes, so the text typed since the last automatic save (0.8 s after the last key, at most the autosave interval while typing) is probably not written when the window is closed. Check: type a word in a note and close the window within half a second (not the last window: quitting may differ), open Notes in another window; if the word is missing, the fix is a row of its own: on `unload` copy the file to the recovery area and write the unsaved text in calls issued at once, which the I/O thread finishes without the window. The same applies to a calendar change made in the last 0.6 s (the note line then restores date, time and title, not the details). Since 3.3.170 the same applies to the settings file (it is read before it is written): a folder made in the last 0.6 s before a window is closed. OBSERVED with the `F0.13` fix, not changed: `addDays(dayStart, 1)` keeps the wall clock, so on a computer in a zone whose clocks go forward at midnight the day of the change ends at 01:00 of the next day wherever a day range is built that way (views not checked); one day a year, items between 00:00 and 00:59 only. LIMIT of the `T3.1` measurement of the settings dialogs: it ran in Chromium (Blink); Zen draws with Gecko, and no Gecko build can be fetched in the sandbox. The causes that were fixed (grid rows with a `min-height` in a grid that must scroll, a later rule with the same selector, loose items of a wrapping row) are behaviour both engines share by specification; the widths of text and form controls differ a little, which moves where a line wraps. If a settings row still looks wrong in Zen, the text size, the sheet width and the tab are enough to reproduce it. FOUND while measuring, nothing changed, each needs an owner decision before it becomes a row: (1) Chips, tabs and dialog buttons keep 12 px at every text size (`.zn-chip { font-size: 12px }`), so at 28 px the labels are large and the On / Off chips small. (2) The Settings card takes its size once, when it opens (from the Writing tab); it does not follow a later change of the text size or of the sheet, its body scrolls instead. (3) A slider value has no space before its unit (`7days`, `100000chars`). (4) Table creator: its two number fields do not shrink and its size grid grows with the width, so where the card has to be wider than the sheet it shows both scrollbars on systems with classic scrollbars (82 of the 120 measured cells with classic scrollbars; none with scrollbars that take no room; before 3.3.171, 171 of 240 cells). Fix idea: in `fitCard` measure the height again once the natural width is known. The group-menu close bug fixed in `OW-75` is proved in Chromium but only *shaped* in the fake DOM, which does not move focus: `tests/notes-menu-lifecycle.test.cjs` asserts the browser's report leaves the menu standing, not that the blur happens. A future harness that moves focus would close that gap. `--bgalazka-look-*` is still the RSS module's private palette and `OW-78` exists because the stylesheet's own `--zn-surface` / `--zn-text` defaults still name it.
 
-Next action: continue the Master Order with `T3.3` — drag-and-drop note tabs within the Zen sidebar.
+- `T3.3` PARTIAL (3.3.251) — the whole model behind dragging a note tab is in: a note's own place in its folder (`order` front-matter field, `cleanNoteOrder`/`noteOrderBetween`/`compareNotes`, `store.setNoteOrder`), a tree that draws hand-placed notes first, `noteDropTarget`/`noteTabDropPlan` for folder, note and root drops, and `tests/notes-note-tab-order.test.cjs`. LEFT: reading the drop position from Zen's live tab drag in the sidebar (needs the real window).
+- `T3.8` DONE (3.3.252) — Split View as an equal-sized companion pane: a second note opened beside the one being edited (`splitCompanion` in `meta.json`, `cleanSplitCompanion`/`nearestSplitShare`/`splitCompanionAxis`/`splitCompanionReady`, `store.setMeta` only), read-only and live (it repaints on the note's own store events, not on our typing), side by side or stacked, a divider snapped to 25/33/50/67/75% that is also keyboard-reachable, Open here / Turn / Close in its head, `Open beside this note` / `Close the second pane` in the shared note menu, and `tests/notes-split-companion.test.cjs`. Also repaired in this task: `.gitignore` had been hiding `docs/NOTES_DISCOVERABILITY.md` (now whitelisted) so the T2.11b1 audit ships with the repository.
+- `T3.9c` DONE (3.3.253) — Weather sidebar widget: `weatherCodeInfo`/`cleanWeatherPlace`/`weatherRequestUrl`/`readWeatherPayload`/`formatWeatherParts`/`isWeatherCacheFresh`/`nextWeatherDelayMs`/`readGeocodePayload` in `additional/widgets/ZentralWidgets.uc.js`, Open-Meteo over one host with no key and no account (`credentials: omit`, `no-referrer`), place resolved once from a name into stored numbers (never behind the person's back per refresh), units `auto` settled by the place's country, refresh 15-180 min through the existing scheduler (no timer of its own), cached value drawn dimmer while it is the cached one, six new settings in a **Weather** section, plain glyph icons, `tests/widgets-weather.test.cjs` (9 tests; 200/200 suite).
+- `T3.9d` DONE (3.3.257) — Timer widget + Clock click + quick note: `parseTimerDuration`/`formatDuration`, wall-clock stopwatch with laps (`stopwatchElapsed`/`Start`/`Stop`/`Lap`), countdown that rings once across a sleep (`timerTick`), `resolveClockClick` (plain click = stopwatch start/stop, long press or right click = "in X", click while a quick timer runs = stop), five presets, a free field, `tests/widgets-timer.test.cjs` (9 tests); Notes gained `quickCapture` behind the existing opener symbol, sharing one `openNoteFromOutside` body with the reminder path; three settings in a **Timer** section (201/201 suite).
+- `T3.9e` DONE (3.3.258) — Status widget (battery and memory) and the widgets settings section: `batteryParts`/`memoryParts`/`statusLineParts`/`nextStatusDelayMs` are pure readings (clamped percentages, no limit printed when Firefox reports none, low/critical levels never silently green), battery changes ride the platform's own `levelchange`/`chargingchange` events, memory rides the scheduler on a five-minute cadence, no interval of its own; three settings in a **Status** section next to **Weather** and **Timer**, completing the widgets settings surface (`tests/widgets-status.test.cjs`, 6 tests; 202/202 suite).
+- `OW-47` DONE (3.3.260) — linked scrolling no longer drifts: `syncScrollPlan` maps a position as a share of the scrollable range and carries the sub-pixel remainder between moves (a hundred small moves land exactly where one big move would), reports `no-range` instead of guessing when a pane cannot scroll, and refuses to answer its own echo; the live `linkScroll` reads the echo flag synchronously (a second event of our own is dropped, not answered a frame later), keeps the anchor interpolation for the fine-grained part, and every reveal clears the carried remainder. `tests/notes-split-scroll.test.cjs` (7 tests).
+- `OW-48` DONE (3.3.260) — the calendar dialog can no longer resize in a loop: `fitDialogStable` keeps the box already on screen while a new measurement stays within `FIT_STABLE_TOLERANCE` (2 px), `dialogFitKey` skips the measurement entirely when nothing that matters changed, `fitCard()` remembers the applied box, and the card's ResizeObserver ignores the fit's own write and any size the fit already applied. `tests/notes-calendar-dialog-fit.test.cjs` (7 tests); `tests/notes-settings-layout.test.cjs` still green.
+- `T2.11b2` DONE (3.3.250) — DEMO set rebuilt to 9 notes: `Where is a function?` (the whole discoverability list, Settings tabs correct), `Calendar and Agenda tour` (a live `%%calendar%%` section with an event range, a reminder and an all-day line, plus the control table, holidays, the Agenda folder), links both ways, and the shortcuts note now points at the list. Tests assert the live demo lines parse into real items (`tests/notes-showcase.test.cjs`), and the count/title expectations were updated in `notes-cycle-f`/`notes-p4-ui` (197/197 suite).
+- `T2.11b1` DONE (3.3.249) — `docs/NOTES_DISCOVERABILITY.md` (one place per function across the editor, All notes, every calendar view, `Tools`, the Zen sidebar and Settings, with the four findings the audit accepted and the input list for `T2.11b2`), the same list reachable in the app (`More → Where is a function?`, stable note id, follows the shipped text), the two Markdown-mode labels made distinguishable, and `tests/notes-discoverability.test.cjs` checking the document against the code (197/197 suite).
+- `OW-46` DONE (3.3.248) — one master switch: `isWorkFree` returns the shared `NO_WORK_FREE` before any lookup (no weekend, set, year or table work), `applyWorkFreeAttrs` draws nothing while off, the dialog explains what off hides and that sets/personal days are kept, and the chosen sets survive a restart. Verified in `tests/notes-calendar-holidays.test.cjs` (196/196 suite).
+- `OW-45` DONE (3.3.247) — `HOLIDAY_TABLE` (per set, per year: date, name in both languages, kind `holiday` / `trading-sunday` / `election`) laid over the rules by `overlayHolidayTable`; 2026 and 2027 Polish `niedziela handlowa` entries, `holidayTableEntries` / `holidayTableYears` / `holidaySetCoverage`, a trading Sunday is shown but never tints or claims work-free, `is-trading-sunday` / `is-election-day` styles, and the dialog's newest-covered-year line. Verified in `tests/notes-calendar-holidays.test.cjs` (196/196 suite).
+- `OW-44` DONE (3.3.246) — every chosen set is read at once: `holidayEntriesFor` keeps one entry per holiday (the same name in two sets becomes one entry of both), `holidaySetsOf`, `isWorkFree().holidays`, per-set names in tooltips (`Name (PL)`), `data-holiday-sets` / `is-multi-holiday` on every calendar cell, a merged-list cache and `.is-multi-holiday` styling. Verified in `tests/notes-calendar-holidays.test.cjs` (196/196 suite).
+- `OW-43` DONE (3.3.245) — holiday sets are now a choice of their own (`HOLIDAY_LOCALES`, `cleanHolidayLocales`, `defaultHolidayLocales`, `holidayEntriesFor`), separate from the Notes interface language; the dialog lists the sets as checkboxes and stores `calendarHolidays.locales`, with a one-time migration of the legacy single `region` (an explicit `none` opt-out survives). Verified in `tests/notes-calendar-holidays.test.cjs` (196/196 suite).
+
+Planning only, no code (2026-11-17, version 3.3.244): the owner's holiday list added as `OW-43` (holiday sets split from the interface language, any language picks any set, first sets `PL` + `US`), `OW-44` (any number of sets at once), `OW-45` (one-place year table for movable/one-off dates such as the Polish election day and `niedziela handlowa`), `OW-46` (one master off switch) and `T2.13a` (how holidays behave when the `T2.13` ICS/Google groundwork is built: local sets are never imported or synced). They sit at the top of the Master Order; `T3.3` follows them.
+
+Next action: the RAM plan (`OW-87`→`OW-94`, from `docs/PLAN_CODING_AGENT.md`) is **finished** — `OW-87` the logger
+default, `OW-88` the Notes/Agenda placeholder parking, `OW-89`–`OW-92` Boost in four parts, `OW-93` the `throttled`
+panel mode's behaviour and `OW-94` Game Mode with its pause switch are all DONE, and what is left from it is the
+owner's live gates (each block states its own). `ST7.4` (render Agenda rows without real tabs — research) and the
+`T4.3a`→`b`→`c` extraction chain are next, both large. `OW-66` is the owner's live check of `OW-58`–`OW-65`, `OW-73`–`OW-76` and `OW-80`–`OW-86` in the real sidebar and needs no code from a session. Finished lately: `OW-21` (find and replace, 3.3.300), `OW-65` (the Clock card's shape, 3.3.301), `OW-22` (next match not on screen, 3.3.302), `OW-67`–`OW-72` (the six widget reports, 3.3.303) and `OW-73`–`OW-76` (the four calendar reports, 3.3.304). Then 3.3.307: `OW-80`/`OW-86` (the tree in Big Picture — moved, not copied; a click selects there, a double click opens, and a multi-note drop asks), `OW-81` (the quick-settings default for a dropped note), `OW-82` (drop on empty space asks, with a five-minute silent window), and the owner's three corrections `OW-83` (small bare chevrons), `OW-84` (no creation offered twice in the `+` menu) and `OW-85` (`OW-73` reverted — the layout buttons now sit in the bar under the title, where nothing is cut at 420, 340 or 300px). 3.3.309: `T2.13` (the `.ics` writer, `syncState`, and the round trip that proves `import → export → import` is the same calendar). 3.3.310: `T2.13a` (an imported holiday calendar is never a local holiday — `isWorkFree` cannot see the item store, the mark is a neutral imported look, and both the import card and the holidays settings say so). 3.3.311: `OW-78` (one palette — the CSS chain reads the resolved token first and the resolver was found hardcoding two themes' text colours). 3.3.313: `OW-79` (a language is a data file, and a key no table has draws readable words, never a dotted key). 3.3.314: `OW-77` (`tools/audit-notes-menus.cjs` — 11 menus, 264 measurements, 0 findings, baseline in `docs/MENU_BASELINE.md`). 3.3.315: `OW-87` (the core logger category is off by default everywhere and is a real switch). 3.3.317: `OW-88` (Notes/Agenda placeholders are discarded, so they stop holding a content process each — kill switch `zen.workspace.zentral.notes.park_pseudo_tabs`, owner gate in its block). 3.3.318: `OW-89` (Boost part one: a RAM reading that is the real sum of the browser's processes, Level 1 freeing memory without closing anything, and one quiet trim per start — `additional/boost/`, owner live check in its block). 3.3.320: `OW-90` (Boost part two: the sidebar card replaced the Status card — the RAM number and the button that lowers it in one place, a 4 s "Freed X MB" toast, and a menu whose later entries are drawn greyed; owner gate in its block). 3.3.322: `OW-91` (Boost part three: one shared tab policy for both unloaders, a deep pass that sleeps old tabs and opt-in panels oldest-first with an in-memory Restore, per-panel background modes in the tile menu, and one keyboard shortcut for the light pass; owner gate in its block). 3.3.323: `OW-92` (Boost part four: a RAM limiter whose every decision is a pure function — soft notice or a batched hard run with a cooldown and a bounded number of rounds — and whose README says plainly that a real per-process cap is impossible from browser-window JS; owner gate in its block). Also repaired in that commit: `docs/ADDING_A_LANGUAGE.md` and `docs/MENU_BASELINE.md` were never committed (`.gitignore` hides `docs/*`), so `tests/notes-more-languages.test.cjs` failed on a fresh clone — both are whitelisted now and `docs/perf-results.md` starts with `OW-87`. `ST7.3` stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices. 3.3.323: `OW-92` (Boost part four: a RAM limiter whose every decision is a pure function — soft notice or a batched hard run with a cooldown and a bounded number of rounds — and whose README says plainly that a real per-process cap is impossible from browser-window JS; owner gate in its block). Also repaired in that commit: `docs/ADDING_A_LANGUAGE.md` and `docs/MENU_BASELINE.md` were never committed (`.gitignore` hides `docs/*`), so `tests/notes-more-languages.test.cjs` failed on a fresh clone — both are whitelisted now and `docs/perf-results.md` starts with `OW-87`. `ST7.3` stays the larger structural slice; `T4.3a` (the 34k-line Notes calendar extraction) needs a dedicated session with the suite watched across slices. 3.3.323 also: `OW-93` (the `throttled` panel mode became real — a hidden throttled panel stops burning a third of a core while staying loaded; owner gate in its block). 3.3.324: `OW-94` (Game Mode — one pause switch every repeating feature honours, one toggle that idles every browser it may not idle audibly, and a "Stronger saver" that also sleeps the notification apps; owner gate in its block). That completes the RAM plan `OW-87`→`OW-94`. 3.3.325: the loose-ends sweep — a real bug in the calendar view split
+(`calendarBigPictureTreeCollapsed` was in the notes module's fallback list but not in the calendar's own
+`UI_STATE_KEYS`, so collapsing the Big Picture tree rewrote the whole `meta.json`, exactly what the split exists to
+prevent), the ten dead `status.*` strings the retired Status card left behind (en+pl), the dangling `T3.9e` heading
+above the Boost section, and the last two vestigial `|| true` assertions (one now checks that an open slot reserves
+space by the gap or the panel reserve; the other is gone, because the model it pretended to check has its own test).
+Verified as already resolved: `foldedQuiet` (used by the Agenda's folded title), `blocksOf`, `weatherView.mounted`,
+`DEFAULTS.WEATHER_PLACES`, the `notes-calendar-concurrency` preload and the `convertCalendarItem` item — no code left
+to change.

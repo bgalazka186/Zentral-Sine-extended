@@ -524,6 +524,11 @@
         userContextId: record.userContextId,
         width: record.app.width,
         zoom: record.app.zoom,
+        // OW-91 (plan B4.3): what this panel may do in the background. `live` for every record written before this
+        // existed, so the saved shape does not change for anybody who never touches the setting.
+        backgroundMode: ["live", "throttled", "asleep-allowed"].includes(record.backgroundMode)
+          ? record.backgroundMode
+          : "live",
       };
       essentialSettingsCache.set(record.tab, value);
       try {
@@ -555,9 +560,15 @@
         if (ctx.getActiveAppBrowser() !== browser) browser.style.display = "none";
         // This opt-in preload is meant to receive site notifications even
         // before the Essential tab itself is selected or restored.
+        //
+        // OW-93 (plan B6): not for a `throttled` record. A panel the person marked throttled gets its activity from
+        // `syncAppPanelBrowserActivity`, which keeps it inactive while it is hidden — activating it here would undo
+        // that on every preload and put the page back to burning a third of a core in the background.
         try {
-          browser.docShellIsActive = true;
-          if (browser.isRemoteBrowser) browser.renderLayers = false;
+          if (record.backgroundMode !== "throttled") {
+            browser.docShellIsActive = true;
+            if (browser.isRemoteBrowser) browser.renderLayers = false;
+          }
         } catch (_) {}
         const uri = Services.io.newURI(record.app.url);
         browser.fixupAndLoadURIString(record.app.url, {
@@ -837,6 +848,11 @@
               loadedSource: null,
               preloadAttempted: false,
               mobileUa: settings.mobileUa === true,
+              // OW-91: the mode a person set on the tile's menu comes back with the record; a record saved before the
+              // setting existed is live, which is exactly what those panels did before.
+              backgroundMode: ["live", "throttled", "asleep-allowed"].includes(settings.backgroundMode)
+                ? settings.backgroundMode
+                : "live",
               userContextId:
                 Number.isInteger(settings.userContextId) &&
                 settings.userContextId >= 0

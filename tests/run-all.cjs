@@ -9,7 +9,9 @@ const ROOT = path.resolve(__dirname, "..");
 const TEST_DIR = path.resolve(process.env.ZENTRAL_TEST_DIR || __dirname);
 const WORKERS = 4;
 const PERF_FILE = /(?:^|[-.])perf(?:[-.]|$)/i;
-const SERIAL_PERF_TESTS = new Set(["notes-agenda-projection.test.cjs"]);
+// F0.15: nothing is listed here any more. `notes-agenda-projection.test.cjs` held a timing assertion beside behaviour
+// assertions; the timing moved to `notes-agenda-projection-perf.test.cjs`, whose own name isolates it.
+const SERIAL_PERF_TESTS = new Set();
 const TIME_ZONES = Object.freeze(["UTC", "Europe/Warsaw", "America/Los_Angeles", "Pacific/Auckland"]);
 const TIMEZONE_TEST_FILE = /^notes-(?:agenda|calendar|reminder|recurrence|missed-digest|p2|cycle-[fg])(?:[-.]|$)/i;
 // A test file that never ends must fail the run, not stall it. The usual cause here is not a loop in the code under

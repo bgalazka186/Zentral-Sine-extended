@@ -90,5 +90,45 @@ function adapter() {
     await store.close();
     console.log(`ok - Quick Settings fit/spill at ${font}px`);
   }
+  // ---- OW-81: the owner's "add settings in quick setting so default it creates events/reminders".
+  // One meta-backed row, one press from the sliders button, and the drop honours it.
+  {
+    const store = c.createStore({ io, notify() {}, windowId: "qs-ow81", getDir: async () => "/notes-qs-ow81",
+      getMaxSaveMs: () => 1000, setTimer: setTimeout, clearTimer: clearTimeout });
+    const sheet = c.createSheet({ store, adapter: adapter(),
+      env: { getPref: (_key, fallback) => fallback, setPref() {}, openLink() {}, copyText() {}, exportNote() {}, exportAll() {}, revealFolder() {} },
+      ensureStore: () => store.open() });
+    await sheet.open();
+    await flush();
+    sheet.root.all().find((el) => el.title.startsWith("Quick settings")).click();
+    await flush();
+
+    const label = "A note dragged onto the calendar becomes";
+    const row = sheet.root.all().find((el) => el.classList?.contains("zn-quick-row") && el.textContent.includes(label));
+    assert.ok(row, "the drop-kind row is in Quick settings");
+    assert.equal(store.meta.calendarNoteDropKind, "ask", "the default keeps the old behaviour");
+
+    // Three short names: the row is chips, not a dropdown (choiceIsDropdown keeps short sets as chips).
+    const chips = row.all().filter((el) => el.classList?.contains("zn-chip"));
+    assert.deepEqual(chips.map((el) => el.textContent.trim()), ["Ask each time", "An event", "A reminder"], "the three answers, including Ask");
+    assert.equal(chips[0].classList.contains("is-on"), true, "Ask is on by default");
+
+    chips[2].click();
+    await flush();
+    assert.equal(store.meta.calendarNoteDropKind, "reminder", "the choice is stored in meta");
+    // draw() rebuilds the rows, so the answer has to be read back from the new chips.
+    const after = sheet.root.all().find((el) => el.classList?.contains("zn-quick-row") && el.textContent.includes(label))
+      .all().filter((el) => el.classList?.contains("zn-chip"));
+    assert.equal(after[2].classList.contains("is-on"), true, "the row redraws with the new answer");
+
+    // And the stored value is what the calendar reads: the cleaner keeps a real answer and drops nonsense.
+    const calPart = require("../additional/notes/calendar/ZentralNotesCalendar.js");
+    assert.equal(calPart.cleanNoteDropKind(store.meta.calendarNoteDropKind), "reminder");
+    assert.equal(calPart.cleanNoteDropKind("banana"), "ask", "an unknown value falls back to asking");
+
+    sheet.destroy();
+    await store.close();
+  }
+
   console.log("\n4 Quick Settings font-size cases passed");
 })().catch((error) => { console.error("FAIL", error); process.exit(1); });

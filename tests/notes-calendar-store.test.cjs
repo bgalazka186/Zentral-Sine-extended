@@ -601,9 +601,11 @@ const BODY = "# Plan\n\n## Shifts\n%%calendar: Work%%\n- 2026-11-12 06:00-14:00 
     assert.equal(pendingMenu.find((r) => r.command === "mark-done")?.label, "Mark as done");
     assert.equal(pendingMenu.find((r) => r.command === "dismiss")?.label, "Dismiss");
     assert.equal(doneMenu.find((r) => r.command === "reopen")?.label, "Reopen");
-    assert.match(source, /function\s+openReminderHistory\s*\([\s\S]*?history\?\.list\(\{\s*limit:\s*pageSize,\s*offset\s*\}\)/);
-    assert.ok(source.includes('Load older entries'));
-    assert.ok(source.includes('Showing ${offset} of ${total} entries'));
+    // ST7.5: the same card now reads every record so the filters, the copy and the trim all see one list, and it
+    // pages the filtered result instead of asking the store for a page.
+    assert.match(source, /function\s+openReminderHistoryCard\s*\([\s\S]*?history\?\.list\?\.\(\{\}\)[\s\S]*?filterHistoryRecords/);
+    assert.ok(source.includes("history.loadOlder"));
+    assert.ok(source.includes("history.showing"));
     assert.ok(source.includes('cal.toolsMenu.reminderHistory'));
   });
 

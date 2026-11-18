@@ -1712,6 +1712,27 @@
     "defaultValue": ""
   },
   {
+    "property": "zen.workspace.zentral.widgets.language",
+    "label": "Language of the widgets",
+    "description": "Follow the Notes language until you choose otherwise; a choice made here is kept.",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "options": [
+      {
+        "label": "Follow the Notes language",
+        "value": "auto"
+      },
+      {
+        "label": "English",
+        "value": "en"
+      },
+      {
+        "label": "Polski (Polish)",
+        "value": "pl"
+      }
+    ]
+  },
+  {
     "type": "text",
     "label": "**Sidebar Widgets · Clock & Date**",
     "size": "16px"
@@ -1755,6 +1776,12 @@
     "defaultValue": false
   },
   {
+    "property": "zen.workspace.zentral.widgets.clock.quick_note",
+    "label": "Show the quick note under the Clock (needs Notes)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
     "property": "zen.workspace.zentral.widgets.date.enabled",
     "label": "Show Date widget",
     "type": "checkbox",
@@ -1793,6 +1820,164 @@
     "defaultValue": false
   },
   {
+    "property": "zen.workspace.zentral.widgets.timer.click_stopwatch",
+    "label": "Clicking the Clock starts and stops the stopwatch (long press asks for a duration)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.clock.mode",
+    "label": "Clock card face — a click turns it over",
+    "type": "dropdown",
+    "defaultValue": "clock",
+    "options": [
+      {
+        "label": "Clock (click for the timer)",
+        "value": "clock"
+      },
+      {
+        "label": "Timer (click for the clock)",
+        "value": "timer"
+      }
+    ],
+    "description": "The Clock card has two faces. This is the one it rests on; a click on the card turns it over, and a finished countdown turns the numbers red until the card is clicked."
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.timer.end_sound",
+    "label": "When a countdown ends: sound",
+    "type": "dropdown",
+    "defaultValue": "beep",
+    "options": [
+      {
+        "label": "No sound",
+        "value": "none"
+      },
+      {
+        "label": "The system beep",
+        "value": "beep"
+      },
+      {
+        "label": "A short two-note tone",
+        "value": "chime"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.timer.end_notice",
+    "label": "When a countdown ends: notice",
+    "type": "dropdown",
+    "defaultValue": "none",
+    "options": [
+      {
+        "label": "No notice",
+        "value": "none"
+      },
+      {
+        "label": "A line in the sidebar",
+        "value": "toast"
+      },
+      {
+        "label": "A system notification",
+        "value": "system"
+      }
+    ]
+  },
+  {
+    "type": "text",
+    "label": "**Sidebar Widgets · Weather**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.weather.enabled",
+    "label": "Show Weather widget (Open-Meteo, no account)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.weather.place",
+    "label": "Weather place — a name you type is only a label",
+    "type": "string",
+    "defaultValue": "",
+    "description": "The forecast uses the latitude and longitude below. Typing a city name looks it up once and fills those two numbers; the name itself never reaches the weather service."
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.weather.latitude",
+    "label": "Weather latitude (filled by the name lookup — edit to override)",
+    "type": "string",
+    "defaultValue": "",
+    "description": "Used for the forecast. Clearing it turns the widget off until a place is found again."
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.weather.longitude",
+    "label": "Weather longitude (filled by the name lookup — edit to override)",
+    "type": "string",
+    "defaultValue": "",
+    "description": "Used together with the latitude; one without the other is never requested."
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.weather.units",
+    "label": "Weather units",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "options": [
+      {
+        "label": "Automatic (the place's country)",
+        "value": "auto"
+      },
+      {
+        "label": "Celsius and km/h",
+        "value": "metric"
+      },
+      {
+        "label": "Fahrenheit and mph",
+        "value": "imperial"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.weather.places",
+    "label": "Weather places — up to three, cycled by a click on the card",
+    "type": "string",
+    "defaultValue": "",
+    "description": "One JSON list: [{\"id\":\"home\",\"name\":\"Home\",\"latitude\":50.67,\"longitude\":17.92}, …]. A click on the weather card shows the next place; the name stays on the card. Max three. The place, latitude and longitude below are the first place of an older install and are copied in here once."
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.weather.refresh_minutes_text",
+    "label": "Weather refresh interval (minutes) [15 to 180 min]",
+    "type": "string",
+    "defaultValue": "30",
+    "placeholder": "30"
+  },
+  {
+    "type": "text",
+    "label": "**Sidebar Widgets · Boost**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.boost.enabled",
+    "label": "Show the Boost widget (memory and Free memory)",
+    "description": "Boost replaces the old Status card: it shows browser RAM and frees memory without closing anything.",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "type": "text",
+    "label": "**Sidebar Widgets · Appearance**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.appearance.background",
+    "label": "Card background colour (#rrggbb or empty to follow the theme)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.appearance.text",
+    "label": "Card text colour (#rrggbb or empty to follow the theme)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
     "type": "text",
     "label": "**Sidebar Widgets · Layout & visibility**",
     "size": "16px"
@@ -1824,6 +2009,12 @@
     "type": "string",
     "defaultValue": "24",
     "placeholder": "24"
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.order",
+    "label": "Widget order (ids, top to bottom; empty = each widget's own place)",
+    "type": "string",
+    "defaultValue": ""
   },
   {
     "property": "zen.workspace.zentral.widgets.pause_when_hidden",
@@ -2272,6 +2463,116 @@
   },
   {
     "type": "text",
+    "label": "**Performance**",
+    "size": "22px"
+  },
+  {
+    "type": "text",
+    "label": "**Memory Boost · Memory**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.boost.enabled",
+    "label": "Memory Boost",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.boost.startup_trim",
+    "label": "Free memory once after startup, when the browser has been quiet for 90 seconds",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.boost.keep_pinned",
+    "label": "Unloading may include pinned and Essential tabs",
+    "description": "Off by default: they restore on demand like any tab, but they are your shortlist. Turn this on to let a deep pass include them.",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.boost.shortcut",
+    "label": "Keyboard shortcut for Free memory (light)",
+    "description": "For example Accel+Shift+B. Empty means no shortcut.",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "type": "text",
+    "label": "**Memory Boost · Limiter**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.boost.limit_enabled",
+    "label": "Keep browser RAM under a limit",
+    "description": "Off by default. When on, Boost watches the total and acts only when it crosses the limit below.",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.boost.limit_mb_text",
+    "label": "RAM limit (MB, total for all browser processes) [0 to 65536]",
+    "type": "string",
+    "defaultValue": "4096",
+    "placeholder": "4096"
+  },
+  {
+    "property": "zen.workspace.zentral.boost.limit_mode",
+    "label": "What happens at the limit",
+    "description": "Soft only tells you; hard unloads tabs and panels the tab policy allows, three at a time, until the target is met.",
+    "type": "dropdown",
+    "defaultValue": "soft",
+    "options": [
+      {
+        "label": "Soft — tell me only",
+        "value": "soft"
+      },
+      {
+        "label": "Hard — unload what the policy allows",
+        "value": "hard"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.boost.limit_cooldown_s_text",
+    "label": "Wait between limiter actions (seconds) [0 to 3600]",
+    "type": "string",
+    "defaultValue": "60",
+    "placeholder": "60"
+  },
+  {
+    "property": "zen.workspace.zentral.boost.limit_target_pct_text",
+    "label": "Stop a hard run at this share of the limit (%) [0 to 100]",
+    "type": "string",
+    "defaultValue": "85",
+    "placeholder": "85"
+  },
+  {
+    "type": "text",
+    "label": "**Memory Boost · Game Mode**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.boost.game_mode",
+    "label": "Game Mode: pause everything else while I play",
+    "description": "Level 3 of Memory Boost. Runs a deep pass, stops every repeating timer (widgets, video discovery, RSS, Notes), and stops painting tabs you are not looking at. Tabs that are playing sound and the video preview keep running, so a podcast or a video keeps playing. Off when the browser restarts.",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.boost.stronger_saver",
+    "label": "Stronger saver: also sleep apps marked 'keep running'",
+    "description": "Off by default. When on, Game Mode also puts to sleep the Essential apps whose background mode is 'keep running' (WhatsApp, Messenger). Restore, or leaving Game Mode, brings them back.",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "type": "text",
+    "label": "**Panels**",
+    "size": "22px"
+  },
+  {
+    "type": "text",
     "label": "**Keyboard & Mouse · Insta Peek**",
     "size": "16px"
   },
@@ -2624,7 +2925,7 @@
     "defaultValue": "zentral",
     "options": [
       {
-        "label": "Zentral – follows the Zen look",
+        "label": "Zentral – follows the browser's appearance theme (default)",
         "value": "zentral"
       },
       {
@@ -2774,6 +3075,18 @@
         "value": "long"
       }
     ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.calendar_weather_week",
+    "label": "Calendar week view: weather symbol and temperature above the day name",
+    "type": "bool",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.calendar_weather_month",
+    "label": "Calendar month view: weather symbol in the day cell (off by default: a month cell has little room)",
+    "type": "bool",
+    "defaultValue": false
   },
   {
     "property": "zen.workspace.zentral.notes.language",
@@ -3213,6 +3526,12 @@
     "placeholder": "100000"
   },
   {
+    "property": "zen.workspace.zentral.notes.park_pseudo_tabs",
+    "label": "Keep sidebar note/agenda placeholders unloaded (saves memory)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
     "type": "text",
     "label": "**Notes · Experiments (off by default)**",
     "size": "16px"
@@ -3324,6 +3643,53 @@
     "min": 1,
     "max": 200,
     "unit": "items"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_close_action",
+    "label": "Closing an Agenda tab",
+    "type": "dropdown",
+    "defaultValue": "hide-today",
+    "options": [
+      {
+        "label": "Hide that item for today (default)",
+        "value": "hide-today"
+      },
+      {
+        "label": "Dismiss the reminder; hide an event for today",
+        "value": "dismiss"
+      },
+      {
+        "label": "Let it come back right away",
+        "value": "reappear"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_fold_quiet",
+    "label": "Fold the Agenda folder during quiet hours",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_fold_quiet_start",
+    "label": "Quiet hours start (HH:MM)",
+    "type": "string",
+    "defaultValue": "22:00"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_fold_quiet_end",
+    "label": "Quiet hours end (HH:MM)",
+    "type": "string",
+    "defaultValue": "07:00"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_fold_due_hours",
+    "label": "Fold when nothing is due within (hours; 0 = only when nothing is left)",
+    "type": "number",
+    "defaultValue": 0,
+    "min": 0,
+    "max": 168,
+    "unit": "hours"
   },
   {
     "type": "text",
@@ -3519,6 +3885,50 @@
     "label": "Lines and card border color (six-digit #RRGGBB, empty = theme)",
     "type": "string",
     "defaultValue": ""
+  },
+  {
+    "type": "text",
+    "label": "**Notes appearance · Days off**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_weekend_tint",
+    "label": "Notes calendar Weekend tint (six-digit #RRGGBB, empty = the shipped tint)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_weekend_strength_text",
+    "label": "Notes calendar Weekend tint visibility (percent, 0-60; -1 = the shipped tint) [-1 to 60 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_holiday_tint",
+    "label": "Notes calendar Holiday tint (six-digit #RRGGBB, empty = the shipped tint)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_holiday_strength_text",
+    "label": "Notes calendar Holiday tint visibility (percent, 0-60; -1 = the shipped tint) [-1 to 60 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_free_tint",
+    "label": "Notes calendar Other free days tint (six-digit #RRGGBB, empty = the shipped tint)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_free_strength_text",
+    "label": "Notes calendar Other free days tint visibility (percent, 0-60; -1 = the shipped tint) [-1 to 60 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
   },
   {
     "type": "text",
@@ -4704,9 +5114,9 @@
   },
   {
     "property": "zen.workspace.zentral.debug.core",
-    "label": "Core Engine & Gecko Errors (Always On)",
+    "label": "Core Engine & Gecko Errors",
     "type": "checkbox",
-    "defaultValue": true
+    "defaultValue": false
   },
   {
     "property": "zen.workspace.zentral.debug.tabs",

@@ -10,7 +10,7 @@ const find = (rows, id) => rows.flatMap((row) => row.group ? [row, ...row.group]
   const manualEvent = cal.makeItem({ id: "manual-event", summary: "Manual event", start: { dateTime: "2026-11-12T10:00:00Z" }, end: { dateTime: "2026-11-12T11:00:00Z" }, x: { kind: "event", src: "manual" } }, 0);
   const before = JSON.stringify(manualEvent);
   const eventMenu = cal.calendarItemMenuModel(manualEvent);
-  assert.deepEqual(menuLabels(eventMenu), ["Show details", "Edit details…", "Change time…", "Convert to reminder", "Duplicate as independent item", "Delete event…"]);
+  assert.deepEqual(menuLabels(eventMenu), ["Show details", "Edit details…", "Change time…", "Convert to reminder", "Colour", "Duplicate as independent item", "Delete event…"]);
   for (const id of ["edit", "change-time", "convert", "duplicate", "delete"]) assert.equal(find(eventMenu, id).enabled, true, id + " is available for a manual event");
   assert.equal(JSON.stringify(manualEvent), before, "building a menu never mutates the stored item");
 
@@ -113,6 +113,27 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   assert.equal(event.defaultPrevented, true, "native context menu and its keyboard equivalent are prevented");
   assert.ok(q(root, ".zn-menu"), "shared menu opens on the calendar item");
   return button;
+};
+
+// OW-75: the calendar's Tools menu is grouped by job (Create / Calendar settings / Show and find / This week as text).
+// This opens `trigger`, walks into the group that holds `label` and returns the row, so a test names the row it wants
+// and not the menu's shape.
+const openCalendarRow = (root, trigger, label, match = (text, want) => text === want || text.startsWith(want) || want.test?.(text)) => {
+  root.querySelector(trigger).click();
+  const items = () => [...root.querySelectorAll(".zn-menu-item")];
+  const hit = (want) => items().find((el) => (typeof want === "string" ? el.textContent.trim() === want || el.textContent.trim().startsWith(want) : want.test(el.textContent.trim())));
+  let row = hit(label);
+  const groups = items().filter((el) => el.classList.contains("zn-menu-group"));
+  if (!row) {
+    for (const group of groups) {
+      group.click();
+      row = hit(label);
+      if (row) break;
+      const back = root.querySelector(".zn-menu-back");
+      if (back) back.click();
+    }
+  }
+  return row;
 };
 
 (async () => {
@@ -320,9 +341,12 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   store.items.upsertCategory({ name: "Work", color: "#abcdef" });
   store.items.upsertCategory({ name: "Personal", color: "#decade" });
   const openCreate = async (label) => {
-    q(root, ".zn-calendar-tools").click(); await flush();
-    const entry = menuItem(root, label);
-    assert.ok(entry, `Calendar Tools offers ${label}`);
+    // OW-75: creation entries moved under the Notes "+" menu's Calendar group, where the owner asked them to be.
+    // OW-84: a kind is offered once, so the timed variants are the plain "New reminder" / "New event" rows (they open
+    // the same composer on the same selected day); only the all-day modes still live in their own group.
+    const rowLabel = label === "Create timed reminder…" ? "New reminder" : label === "Create timed event…" ? "New event" : label;
+    const entry = openCalendarRow(root, ".zn-new-menu", rowLabel);
+    assert.ok(entry, `Notes + menu offers ${label}`);
     entry.click(); await flush();
     const card = q(root, ".zn-cal-compose-card");
     assert.ok(card, `${label} opens the full calendar composer`);
@@ -641,8 +665,7 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   assert.equal(quickReminder.hidden, false, "clearing toolbar visibility settings restores the shortcut");
 
   // T2.7c: global sound profiles and overnight quiet hours are reachable from Calendar Tools.
-  q(root, ".zn-calendar-tools").click(); await flush();
-  const alertSettingsEntry = menuItem(root, "Reminder sounds & quiet hours");
+  const alertSettingsEntry = openCalendarRow(root, ".zn-calendar-tools", "Reminder sounds & quiet hours");
   assert.ok(alertSettingsEntry, "Calendar Tools exposes reminder sound and quiet-hour settings");
   alertSettingsEntry.click(); await flush();
   const alertDialog = q(root, '[aria-label="Reminder sounds and quiet hours"]');
@@ -705,8 +728,7 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   {
     let refreshes = 0;
     env.refreshAgenda = () => { refreshes++; };
-    q(root, ".zn-calendar-tools").click(); await flush();
-    menuItem(root, "Zen Agenda visibility defaults").click(); await flush();
+    openCalendarRow(root, ".zn-calendar-tools", "Zen Agenda visibility defaults").click(); await flush();
     const defaults = q(root, '[aria-label="Zen Agenda visibility defaults"]');
     assert.ok(defaults, "Calendar Tools opens the Agenda visibility defaults");
     defaults.querySelector('[aria-label="Days before item to show in Agenda"]').value = "2";
@@ -735,8 +757,7 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
     assert.equal(refreshes, 3, "removing a note rule asks for a refresh");
     delete env.refreshAgenda;
     // A host without that hook (an older embedder, a test) is tolerated.
-    q(root, ".zn-calendar-tools").click(); await flush();
-    menuItem(root, "Zen Agenda visibility defaults").click(); await flush();
+    openCalendarRow(root, ".zn-calendar-tools", "Zen Agenda visibility defaults").click(); await flush();
     q(root, '[aria-label="Zen Agenda visibility defaults"]').querySelectorAll("button").find((button) => button.textContent.trim() === "Save Agenda defaults").click(); await flush();
     assert.equal(q(root, '[aria-label="Zen Agenda visibility defaults"]'), null);
   }

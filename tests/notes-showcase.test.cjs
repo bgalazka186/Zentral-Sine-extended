@@ -251,3 +251,43 @@ test("T4.1: sections (10)-(12) standard & inline footnotes, <details> accordions
 });
 
 console.log(`\n${passed} notes showcase tests passed`);
+
+// T2.11b2: the DEMO set is rebuilt to teach every surface, not only the syntax.
+{
+  const where = c.DEMO_NOTES.find((d) => d.id === c.DEMO_WHERE_NOTE_ID);
+  const calNote = c.DEMO_NOTES.find((d) => d.id === c.DEMO_CALENDAR_NOTE_ID);
+  assert.ok(where && calNote, "the two teaching notes are in DEMO_NOTES");
+  assert.match(where.body, /^# Where is a function\?/);
+  assert.match(where.body, /Seven tabs: \*\*Writing\*\*, \*\*Markdown\*\*, \*\*Window\*\*, \*\*Appearance\*\*, \*\*Capture\*\*, \*\*Links & history\*\*, \*\*Zen sidebar\*\*/);
+  assert.ok(!/\*\*Reminders\*\*/.test(where.body), "the Settings list does not claim a Reminders tab");
+  assert.match(calNote.body, /%%calendar: Personal%%/, "the calendar demo carries a live calendar section");
+  assert.match(calNote.body, /Tools > Holidays & days off/, "the calendar demo teaches where holidays live");
+  assert.match(calNote.body, /Agenda folder/, "the calendar demo teaches the Agenda folder");
+  for (const surface of ["toolbar", "Caret menu", "More \\(three dots\\)", "Quick settings", "All notes", "Calendar", "Settings"]) {
+    assert.ok(where.body.includes(surface.replace("\\\\", "")) || new RegExp(surface).test(where.body), `the where-note names the ${surface} surface`);
+  }
+  // Every syntax demo links to the teaching note, and the teaching note links back.
+  const shortcutsNote = c.DEMO_NOTES.find((d) => d.id === "zn-demo-shortcuts");
+  assert.match(shortcutsNote.body, /Where is a function\?/);
+  assert.ok(where.body.includes("[[Notes syntax tour]]"), "the where-note links back to the tour");
+  assert.ok(calNote.body.includes("[[Where is a function?]]"), "the calendar note links to the function list");
+  // No demo note may promise a control that is documented nowhere.
+  assert.ok(c.DEMO_NOTES.length >= 9, "the demo set covers more than the old seven notes");
+}
+
+// T2.11b2: the calendar demo's live section parses into real items (a demo that does not turn into calendar items
+// would teach a wrong shape).
+{
+  const calendarPart = require(path.join(root, "additional/notes/calendar/ZentralNotesCalendar.js"));
+  calendarPart.registerLanguage("en", require(path.join(root, "additional/notes/i18n/en.js")));
+  const body = c.DEMO_NOTES.find((d) => d.id === c.DEMO_CALENDAR_NOTE_ID).body;
+  const lines = body.split("\n").filter((line) => /^- \d{2}-\d{2}-\d{4}/.test(line));
+  assert.equal(lines.length, 3, "three live items in the demo section");
+  const parsed = lines.map((line) => calendarPart.parseLine(line, Date.UTC(2026, 10, 17, 10, 0, 0), null, { lang: "en" }));
+  assert.ok(parsed.every(Boolean), "every demo line is a date-first calendar line");
+  assert.deepEqual(parsed.map((p) => p.summary), ["Morning plan", "Call the family", "Long weekend"]);
+  assert.equal(parsed[0].startMin, 540);
+  assert.equal(parsed[0].endMin, 570, "the demonstration keeps an explicit range");
+  assert.equal(parsed[1].endMin, -1, "a reminder has no end");
+  assert.equal(parsed[2].startMin, -1, "an all-day line has no time");
+}

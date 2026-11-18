@@ -178,7 +178,7 @@
     "defaultValue": "zentral",
     "options": [
       {
-        "label": "Zentral – follows the Zen look",
+        "label": "Zentral – follows the browser's appearance theme (default)",
         "value": "zentral"
       },
       {
@@ -378,6 +378,50 @@
     "label": "Lines and card border color (six-digit #RRGGBB, empty = theme)",
     "type": "string",
     "defaultValue": ""
+  },
+  {
+    "type": "text",
+    "label": "**Notes appearance · Days off**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_weekend_tint",
+    "label": "Notes calendar Weekend tint (six-digit #RRGGBB, empty = the shipped tint)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_weekend_strength_text",
+    "label": "Notes calendar Weekend tint visibility (percent, 0-60; -1 = the shipped tint) [-1 to 60 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_holiday_tint",
+    "label": "Notes calendar Holiday tint (six-digit #RRGGBB, empty = the shipped tint)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_holiday_strength_text",
+    "label": "Notes calendar Holiday tint visibility (percent, 0-60; -1 = the shipped tint) [-1 to 60 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_free_tint",
+    "label": "Notes calendar Other free days tint (six-digit #RRGGBB, empty = the shipped tint)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_free_strength_text",
+    "label": "Notes calendar Other free days tint visibility (percent, 0-60; -1 = the shipped tint) [-1 to 60 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
   },
   {
     "type": "text",
@@ -928,6 +972,18 @@
     ]
   },
   {
+    "property": "zen.workspace.zentral.notes.calendar_weather_week",
+    "label": "Calendar week view: weather symbol and temperature above the day name",
+    "type": "bool",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.calendar_weather_month",
+    "label": "Calendar month view: weather symbol in the day cell (off by default: a month cell has little room)",
+    "type": "bool",
+    "defaultValue": false
+  },
+  {
     "property": "zen.workspace.zentral.notes.archive_daily_notes",
     "label": "Keep compressed copies of past date notes; never auto-trash them",
     "type": "checkbox",
@@ -1144,6 +1200,59 @@
     "min": 1,
     "max": 200,
     "unit": "items"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_close_action",
+    "label": "Closing an Agenda tab",
+    "type": "dropdown",
+    "defaultValue": "hide-today",
+    "options": [
+      {
+        "label": "Hide that item for today (default)",
+        "value": "hide-today"
+      },
+      {
+        "label": "Dismiss the reminder; hide an event for today",
+        "value": "dismiss"
+      },
+      {
+        "label": "Let it come back right away",
+        "value": "reappear"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_fold_quiet",
+    "label": "Fold the Agenda folder during quiet hours",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_fold_quiet_start",
+    "label": "Quiet hours start (HH:MM)",
+    "type": "string",
+    "defaultValue": "22:00"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_fold_quiet_end",
+    "label": "Quiet hours end (HH:MM)",
+    "type": "string",
+    "defaultValue": "07:00"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_fold_due_hours",
+    "label": "Fold when nothing is due within (hours; 0 = only when nothing is left)",
+    "type": "number",
+    "defaultValue": 0,
+    "min": 0,
+    "max": 168,
+    "unit": "hours"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.park_pseudo_tabs",
+    "label": "Keep sidebar note/agenda placeholders unloaded (saves memory)",
+    "type": "checkbox",
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.notes.debug_perf",

@@ -381,6 +381,120 @@ const q = (root, selector) => root.querySelector(selector);
     assert.equal(q(root, ".zn-cal-compose-card"), null, "trashed note payload cannot open the composer");
   }
 
+  // ---- OW-80: several selected notes dragged onto one slot ask what the drop should make.
+  {
+    // This block runs after the OW-81 cases, which leave the calendar in another view: go back to the Month grid.
+    root.querySelectorAll(".zn-calendar-view-select").forEach((el) => el.click());
+    const monthEntry = root.querySelectorAll(".zn-menu-item").find((el) => el.textContent.trim() === "Month");
+    if (monthEntry) { monthEntry.click(); await flush(); }
+    // Two notes, both selected the way the card's tree selects them (Ctrl-click in this docked harness does the same).
+    const itemsBefore = store.items.list().length;
+    const second = store.create("# Second source note\n\nBody two");
+    await flush();
+    const rows = () => root.querySelectorAll(".zn-item");
+    const firstRow = rows().find((r) => r.getAttribute("data-id") === note.id);
+    const secondRow = rows().find((r) => r.getAttribute("data-id") === second.id);
+    assert.ok(firstRow && secondRow, "both note rows are on screen");
+    firstRow.dispatchEvent(new Ev("click", { bubbles: true, ctrlKey: true }));
+    secondRow.dispatchEvent(new Ev("click", { bubbles: true, ctrlKey: true }));
+    await flush();
+    assert.equal(root.querySelectorAll(".zn-item.is-selected").length, 2, "two rows are selected");
+
+    const day = [...new Set(root.querySelectorAll(".zn-cal-month-cell").map((n) => n.getAttribute("data-day")).filter(Boolean))].sort()[4];
+    const dt = makeDataTransfer();
+    // Dragging a selected row must carry the selection, not just the pressed row.
+    secondRow.dispatchEvent(new Ev("dragstart", { bubbles: true, dataTransfer: dt }));
+    const cell = root.querySelectorAll(".zn-cal-month-cell").find((n) => n.getAttribute("data-day") === day);
+    cell.dispatchEvent(new Ev("dragover", { bubbles: true, dataTransfer: dt }));
+    cell.dispatchEvent(new Ev("drop", { bubbles: true, dataTransfer: dt }));
+    secondRow.dispatchEvent(new Ev("dragend", { bubbles: true, dataTransfer: dt }));
+    await flush();
+
+    const card = q(root, ".zn-dialog-card");
+    assert.ok(card, "a multi-note drop asks before making anything");
+    assert.match(card.textContent, /2 notes/, "the card says how many notes it is about");
+    assert.match(card.textContent, /Second source note/, "and names them, so the person can see what they picked");
+    const buttons = [...card.querySelectorAll("button")].map((b) => b.textContent.trim());
+    assert.deepEqual(buttons, ["Cancel", "One item each (2)", "One item for all of them"], "the two shapes a drop onto one day can mean, plus Cancel");
+    assert.equal(store.items.list().length, itemsBefore, "nothing is written before the answer");
+
+    // One item for all of them: the composer opens for the first note, with the rest named in its description.
+    card.querySelectorAll("button").find((b) => b.textContent.trim() === "One item for all of them").click();
+    await flush();
+    const composer = q(root, ".zn-cal-compose-card");
+    assert.ok(composer, "the shared choice opens the composer");
+    assert.match(composer.querySelector('[aria-label="Description"]').value, /Second source note/, "the item says which other note it stands for");
+    composer.querySelectorAll("button").find((b) => b.textContent.trim() === "Cancel").click();
+    await flush();
+
+    // Cancel wrote nothing.
+    assert.equal(store.items.list().length, itemsBefore);
+    // Clearing the selection matters: the next block drags a single row, and a stale selection would turn that into a
+    // multi-note drop and change what it is testing.
+    const clear = q(root, ".zn-batch-clear");
+    assert.ok(clear, "the batch bar offers Clear");
+    clear.click();
+    await flush();
+    assert.equal(root.querySelectorAll(".zn-item.is-selected").length, 0, "the selection is empty again");
+    store.items.remove(second.id);
+    await flush();
+  }
+
+  // ---- OW-81: "add settings in quick setting so default it creates events/reminders".
+  // The setting is a default for the drop, so it must beat the surface's own habit (an all-day cell is computed as an
+  // all-day reminder) — otherwise the option would do nothing on the very surfaces it exists for.
+  {
+    // This block runs after several view changes: go back to the Month grid, then ask it which days it shows rather
+    // than assuming them.
+    root.querySelectorAll(".zn-calendar-view-select").forEach((el) => el.click());
+    const monthBtn = root.querySelectorAll(".zn-menu-item").find((el) => el.textContent.trim() === "Month");
+    if (monthBtn) { monthBtn.click(); await flush(); }
+    const days = () => [...new Set(root.querySelectorAll(".zn-cal-month-cell").map((node) => node.getAttribute("data-day")).filter(Boolean))].sort();
+    const shown = days();
+    assert.ok(shown.length >= 3, "the Month grid is on screen for the drop-kind cases");
+    const dropOn = async (day, value) => {
+      store.setMeta({ calendarNoteDropKind: value });
+      await flush();
+      const dt = makeDataTransfer();
+      treeRow.dispatchEvent(new Ev("dragstart", { bubbles: true, dataTransfer: dt }));
+      const cell = root.querySelectorAll(".zn-cal-month-cell").find((node) => node.getAttribute("data-day") === day);
+      cell.dispatchEvent(new Ev("dragover", { bubbles: true, dataTransfer: dt }));
+      cell.dispatchEvent(new Ev("drop", { bubbles: true, dataTransfer: dt }));
+      treeRow.dispatchEvent(new Ev("dragend", { bubbles: true, dataTransfer: dt }));
+      await flush();
+      const composer = q(root, ".zn-cal-compose-card");
+      assert.ok(composer, "the drop still opens the composer");
+      // Only what the person acts on: the kind, whether it is all-day, and (for an event) the exclusive end date the
+      // all-day slot prepared. A reminder's end-date field exists but is hidden, so it is not pinned here.
+      const got = {
+        kind: composer.querySelector('[aria-label="Item type"]').value,
+        allDay: composer.querySelector('[aria-label="All-day"]').checked,
+      };
+      if (got.kind === "event") got.endDate = composer.querySelector('[aria-label="End date (exclusive)"]').value;
+      composer.querySelectorAll("button").find((b) => b.textContent.trim() === "Cancel").click();
+      await flush();
+      return got;
+    };
+
+    // Ask keeps today's behaviour exactly: the Month cell's computed all-day reminder.
+    // Days the earlier blocks already proved are on screen in this month grid.
+    const itemsBefore = store.items.list().length;
+    const [d1, d2, d3] = shown;
+    const nextDay = (ymd) => cal.ymd(new Date(cal.parseYmd(ymd).getTime() + 86400000));
+    assert.deepEqual(await dropOn(d1, "ask"), { kind: "reminder", allDay: true }, "Ask leaves the slot's own prefill alone");
+
+    // Reminder: a reminder, with no event end date carried over.
+    // A reminder's end-date field is hidden rather than absent, so only what the person can act on is pinned here.
+    assert.deepEqual(await dropOn(d2, "reminder"), { kind: "reminder", allDay: true }, "Reminder wins over the all-day cell's own prefill");
+
+    // Event: an all-day event, keeping the exclusive end date the all-day slot prepared for exactly this case.
+    assert.deepEqual(await dropOn(d3, "event"), { kind: "event", allDay: true, endDate: nextDay(d3) }, "Event wins over the slot");
+
+    store.setMeta({ calendarNoteDropKind: "ask" });
+    await flush();
+    assert.equal(store.items.list().length, itemsBefore, "no drop wrote an item: the composer was cancelled each time");
+  }
+
   sheet.destroy();
   await store.close();
   console.log("calendar note-drop tests passed");

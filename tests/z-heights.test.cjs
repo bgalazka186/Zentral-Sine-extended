@@ -26,6 +26,10 @@ const test = (name, fn) => { fn(); passed++; console.log("ok -", name); };
 test("z-heights_map.md is up to date", () => {
   cp.execFileSync(process.execPath, [path.join(root, "tools/build-z-map.cjs"), "--check"], { stdio: "pipe" });
 });
+// OW-79: the generated language registry must match the i18n/ directory, or a new language silently misses the menu.
+test("the i18n registry is up to date", () => {
+  cp.execFileSync(process.execPath, [path.join(root, "tools/build-languages.cjs"), "--check"], { stdio: "pipe" });
+});
 test("normal layers: settings > RSS card > Notes card > Big Preview fallback > panel parts", () => {
   assert.ok(settings > rss, "settings window above RSS card");
   assert.ok(rss > notes && notes > big, "RSS card > Notes card > Big Preview");

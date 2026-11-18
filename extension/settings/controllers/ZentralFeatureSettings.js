@@ -85,6 +85,7 @@
           createTextRow,
           createSliderRow,
           createColorRow,
+          formatSliderValue,
         } = window.ZentralModuleLoader.create("settings-rows", {
           ctx,
           validPanelBackingSteps,
@@ -1380,7 +1381,7 @@
                 def,
                 isSelect: true,
                 onSync: (value) => {
-                  control.badge.textContent = value + unit;
+                  control.badge.textContent = formatSliderValue(value, unit);
                 },
               });
             }
@@ -1477,7 +1478,7 @@
                 def,
                 isSelect: true,
                 onSync: (value) => {
-                  control.badge.textContent = value + unit;
+                  control.badge.textContent = formatSliderValue(value, unit);
                 },
               });
             }

@@ -558,7 +558,15 @@ function cssTests() {
 
   await test("teardown: disposing Notes while a slot is open leaves no variable, marker or listener behind", async () => {
     primaryBtn.click(); await sleep(30); await flush();
-    assert.ok(vars.has("--zentral-notes-panel-reserve") || html.hasAttribute("bgalazka-quad-view") || true);
+    // A slot is open, so the page is reserved one way or the other: the gap and the panel reserve are the two
+    // mutually exclusive forms (a between-tabs slot sets the gap, a quad view sets the reserve), and the marker
+    // attribute says which. Before this was `|| true`, which proved nothing at all.
+    assert.ok(
+      vars.has("--zentral-notes-gap") || vars.has("--zentral-notes-panel-reserve"),
+      "an open slot reserves space, by the gap or by the panel reserve",
+    );
+    if (html.hasAttribute("bgalazka-quad-view"))
+      assert.ok(vars.has("--zentral-notes-panel-reserve"), "quad view reserves through the panel reserve");
     stop();
     await flush();
     for (const k of ["--zentral-notes-gap", "--zentral-notes-gap-up", "--zentral-notes-panel-reserve"]) assert.equal(vars.has(k), false, k);

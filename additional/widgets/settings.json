@@ -58,6 +58,24 @@
       }
     },
     {
+      "property": "zen.workspace.zentral.widgets.order",
+      "label": "Widget order (ids, top to bottom; empty = each widget's own place)",
+      "type": "input",
+      "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.appearance.background",
+      "label": "Card background colour (#rrggbb or empty to follow the theme)",
+      "type": "input",
+      "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.appearance.text",
+      "label": "Card text colour (#rrggbb or empty to follow the theme)",
+      "type": "input",
+      "defaultValue": ""
+    },
+    {
       "property": "zen.workspace.zentral.widgets.pause_when_hidden",
       "label": "Pause widget updates when window or sidebar is hidden",
       "type": "checkbox",
@@ -108,6 +126,12 @@
       "defaultValue": false
     },
     {
+      "property": "zen.workspace.zentral.widgets.clock.quick_note",
+      "label": "Show the quick note under the Clock (needs Notes)",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
       "property": "zen.workspace.zentral.widgets.date.enabled",
       "label": "Show Date widget",
       "type": "checkbox",
@@ -144,12 +168,193 @@
       "label": "Show ISO week number on Date widget",
       "type": "checkbox",
       "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.weather.enabled",
+      "label": "Show Weather widget (Open-Meteo, no account)",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.weather.place",
+      "label": "Weather place — a name you type is only a label",
+      "type": "input",
+      "defaultValue": "",
+      "description": "The forecast uses the latitude and longitude below. Typing a city name looks it up once and fills those two numbers; the name itself never reaches the weather service."
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.weather.latitude",
+      "label": "Weather latitude (filled by the name lookup — edit to override)",
+      "type": "input",
+      "defaultValue": "",
+      "description": "Used for the forecast. Clearing it turns the widget off until a place is found again."
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.weather.longitude",
+      "label": "Weather longitude (filled by the name lookup — edit to override)",
+      "type": "input",
+      "defaultValue": "",
+      "description": "Used together with the latitude; one without the other is never requested."
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.weather.units",
+      "label": "Weather units",
+      "type": "dropdown",
+      "defaultValue": "auto",
+      "options": [
+        {
+          "label": "Automatic (the place's country)",
+          "value": "auto"
+        },
+        {
+          "label": "Celsius and km/h",
+          "value": "metric"
+        },
+        {
+          "label": "Fahrenheit and mph",
+          "value": "imperial"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.weather.refresh_minutes",
+      "label": "Weather refresh interval (minutes)",
+      "type": "input",
+      "defaultValue": 30,
+      "numeric": {
+        "min": 15,
+        "max": 180,
+        "unit": "min"
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.weather.places",
+      "label": "Weather places — up to three, cycled by a click on the card",
+      "type": "input",
+      "defaultValue": "",
+      "description": "One JSON list: [{\"id\":\"home\",\"name\":\"Home\",\"latitude\":50.67,\"longitude\":17.92}, …]. A click on the weather card shows the next place; the name stays on the card. Max three. The place, latitude and longitude below are the first place of an older install and are copied in here once."
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.timer.click_stopwatch",
+      "label": "Clicking the Clock starts and stops the stopwatch (long press asks for a duration)",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.clock.mode",
+      "label": "Clock card face — a click turns it over",
+      "type": "dropdown",
+      "defaultValue": "clock",
+      "options": [
+        {
+          "label": "Clock (click for the timer)",
+          "value": "clock"
+        },
+        {
+          "label": "Timer (click for the clock)",
+          "value": "timer"
+        }
+      ],
+      "description": "The Clock card has two faces. This is the one it rests on; a click on the card turns it over, and a finished countdown turns the numbers red until the card is clicked."
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.timer.end_sound",
+      "label": "When a countdown ends: sound",
+      "type": "dropdown",
+      "defaultValue": "beep",
+      "options": [
+        {
+          "label": "No sound",
+          "value": "none"
+        },
+        {
+          "label": "The system beep",
+          "value": "beep"
+        },
+        {
+          "label": "A short two-note tone",
+          "value": "chime"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.timer.end_notice",
+      "label": "When a countdown ends: notice",
+      "type": "dropdown",
+      "defaultValue": "none",
+      "options": [
+        {
+          "label": "No notice",
+          "value": "none"
+        },
+        {
+          "label": "A line in the sidebar",
+          "value": "toast"
+        },
+        {
+          "label": "A system notification",
+          "value": "system"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.boost.enabled",
+      "label": "Show the Boost widget (memory and Free memory)",
+      "description": "Boost replaces the old Status card: it shows browser RAM and frees memory without closing anything.",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.language",
+      "label": "Language of the widgets",
+      "description": "Follow the Notes language until you choose otherwise; a choice made here is kept.",
+      "type": "dropdown",
+      "defaultValue": "auto",
+      "options": [
+        {
+          "label": "Follow the Notes language",
+          "value": "auto"
+        },
+        {
+          "label": "English",
+          "value": "en"
+        },
+        {
+          "label": "Polski (Polish)",
+          "value": "pl"
+        }
+      ]
     }
   ],
   "settings": {
     "zen.workspace.zentral.widgets.enabled": {
       "category": "widgets",
       "section": "Sidebar widgets",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.max_height_share": {
+      "category": "widgets",
+      "section": "Layout & visibility",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.min_free_height": {
+      "category": "widgets",
+      "section": "Layout & visibility",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.min_sidebar_width": {
+      "category": "widgets",
+      "section": "Layout & visibility",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.tabs_reserve_px": {
+      "category": "widgets",
+      "section": "Layout & visibility",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.pause_when_hidden": {
+      "category": "widgets",
+      "section": "Layout & visibility",
       "owner": "widgets"
     },
     "zen.workspace.zentral.widgets.disabled_ids": {
@@ -197,29 +402,89 @@
       "section": "Clock & Date",
       "owner": "widgets"
     },
-    "zen.workspace.zentral.widgets.max_height_share": {
+    "zen.workspace.zentral.widgets.weather.enabled": {
+      "category": "widgets",
+      "section": "Weather",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.weather.place": {
+      "category": "widgets",
+      "section": "Weather",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.weather.latitude": {
+      "category": "widgets",
+      "section": "Weather",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.weather.longitude": {
+      "category": "widgets",
+      "section": "Weather",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.weather.units": {
+      "category": "widgets",
+      "section": "Weather",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.weather.refresh_minutes": {
+      "category": "widgets",
+      "section": "Weather",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.weather.places": {
+      "category": "widgets",
+      "section": "Weather",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.timer.click_stopwatch": {
+      "category": "widgets",
+      "section": "Clock & Date",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.clock.mode": {
+      "category": "widgets",
+      "section": "Clock & Date",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.timer.end_sound": {
+      "category": "widgets",
+      "section": "Clock & Date",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.timer.end_notice": {
+      "category": "widgets",
+      "section": "Clock & Date",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.language": {
+      "category": "widgets",
+      "section": "Sidebar widgets",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.clock.quick_note": {
+      "category": "widgets",
+      "section": "Clock & Date",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.order": {
       "category": "widgets",
       "section": "Layout & visibility",
       "owner": "widgets"
     },
-    "zen.workspace.zentral.widgets.min_free_height": {
+    "zen.workspace.zentral.widgets.appearance.background": {
       "category": "widgets",
-      "section": "Layout & visibility",
+      "section": "Appearance",
       "owner": "widgets"
     },
-    "zen.workspace.zentral.widgets.min_sidebar_width": {
+    "zen.workspace.zentral.widgets.appearance.text": {
       "category": "widgets",
-      "section": "Layout & visibility",
+      "section": "Appearance",
       "owner": "widgets"
     },
-    "zen.workspace.zentral.widgets.tabs_reserve_px": {
+    "zen.workspace.zentral.widgets.boost.enabled": {
       "category": "widgets",
-      "section": "Layout & visibility",
-      "owner": "widgets"
-    },
-    "zen.workspace.zentral.widgets.pause_when_hidden": {
-      "category": "widgets",
-      "section": "Layout & visibility",
+      "section": "Boost",
       "owner": "widgets"
     }
   }

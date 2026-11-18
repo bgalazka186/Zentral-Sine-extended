@@ -60,10 +60,15 @@
 /* ---- sheet ------------------------------------------------------------- */
 .zentral-notes-sheet {
   color-scheme: light dark;
+  /* OW-78: ONE chain, read from one end. The resolved value the JS resolver computed wins; before it is computed (or in
+     a document where the sheet was never opened) Zen's own palette answers, and --bgalazka-look-* is the LAST fallback
+     only — it is the RSS card's private palette, another module's look. Never put an RSS token before --zen-colors-*:
+     that is how the same sheet came to have two palettes. The resolver reads exactly these three names (see
+     resolveThemeSurface in ZentralNotesCalendar.js), so both paths answer with the same colour. */
   --zn-accent: var(--zn-accent-safe, var(--zen-primary-color, #83a5ff));
-  --zn-surface: var(--bgalazka-look-toolbar-surface, var(--bgalazka-look-surface, #1e1e24));
+  --zn-surface: var(--zn-surface-resolved, var(--zen-colors-base, var(--bgalazka-look-toolbar-surface, var(--bgalazka-look-surface, #1e1e24))));
   --zn-panel: var(--zn-surface);
-  --zn-text: var(--bgalazka-look-text, #e9e9f0);
+  --zn-text: var(--zn-text-resolved, var(--zen-colors-text, var(--bgalazka-look-text, #e9e9f0)));
   --zn-muted: var(--zn-muted-resolved, color-mix(in srgb, var(--zn-text) 64%, transparent));
   --zn-line: color-mix(in srgb, var(--zn-text) 16%, transparent);
   --zn-hover: color-mix(in srgb, var(--zn-text) 10%, transparent);
@@ -202,7 +207,38 @@
   padding: 4px 6px;
   border-top: 3px solid var(--zn-note);
   border-bottom: 1px solid var(--zn-line);
+  /* OW-85: one row, and nothing may be cut by the window edge. The bar holds the title, the three layout buttons and
+     the note's own actions, so it is the title that gives ground (it already ellipsises) and then the buttons that are
+     least needed; the row wraps only if the sheet is genuinely too narrow, and it scrolls rather than clipping. */
+  flex-wrap: wrap;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
 }
+/* OW-101: the sheet is a column flexbox, and every chrome row in it (this one, the tools, the strip, the find bar, the
+   wiki bar, the footer) declared no `flex` at all — so each defaulted to `flex: 0 1 auto`, i.e. it was the one thing
+   that could shrink. When the editor's own content pushed back, these rows lost height; `align-items: center` then
+   centred a 26px button inside a 12px box, the row's content sank, and the bar underneath painted over the overflow.
+   That is the "top bar sits at the bottom of its space and is half hidden behind the tool strip" report. A chrome row
+   is exactly `flex: 0 0 auto`: it is as tall as its content and never gives a pixel of that away. Only the body grows. */
+.zentral-notes-sheet .zn-head,
+.zentral-notes-sheet .zn-tools,
+.zentral-notes-sheet .zn-strip,
+.zentral-notes-sheet .zn-findbar,
+.zentral-notes-sheet .zn-wikibar,
+.zentral-notes-sheet .zn-foot {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+.zentral-notes-sheet .zn-head { align-content: center; }
+.zentral-notes-sheet .zn-head::-webkit-scrollbar { height: 0; }
+/* While the calendar workspace is on screen only these three layout buttons are useful; in the editor they are hidden
+   in JS. Keep them from being pushed out by the title. */
+.zentral-notes-sheet .zn-head > .zn-btn { flex: 0 0 auto; }
+.zentral-notes-sheet .zn-head > .zn-calendar-layout-btn,
+.zentral-notes-sheet .zn-head > .zn-calendar-tree-toggle,
+.zentral-notes-sheet .zn-head > .zn-calendar-pane-toggle { flex: 0 0 auto; }
 .zentral-notes-sheet .zn-title {
   appearance: none;
   flex: 1 1 auto;
@@ -307,9 +343,11 @@
 }
 .zentral-notes-sheet .zn-all-layout { display: flex; flex-direction: column; }
 .zentral-notes-sheet .zn-all-layout[hidden] { display: none !important; }
+/* OW-73 was reverted at 3.3.306 (OW-85): it targeted the wrong row. See the sheet bar below. */
 .zentral-notes-sheet .zn-all-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 4px; flex: 0 0 auto; min-width: 0; padding: 3px 6px; border-bottom: 1px solid var(--zn-line); }
-.zentral-notes-sheet .zn-all-toolbar .zn-btn,
+.zentral-notes-sheet .zn-all-toolbar .zn-btn { flex: 0 0 auto; }
 .zentral-notes-sheet .zn-all-toolbar .zn-chip { flex: 0 0 auto; }
+.zentral-notes-sheet .zn-all-toolbar .zn-grow { flex: 1 1 auto; min-width: 0; }
 .zentral-notes-sheet .zn-all-toolbar .zn-calendar-tab { display: none; }
 .zentral-notes-sheet .zn-all-layout[data-layout="tabs"] .zn-all-toolbar .zn-calendar-tab { display: inline-flex; }
 .zentral-notes-sheet[data-all-notes-active="true"] .zn-all-toolbar .zn-calendar-tab[hidden] { display: none !important; }
@@ -327,6 +365,34 @@
 .zentral-notes-sheet .zn-all-panels[data-orientation="tb"] .zn-calendar-splitter { cursor: row-resize; }
 .zentral-notes-sheet .zn-calendar-pane { background: color-mix(in srgb, var(--zn-hover) 22%, transparent); }
 .zentral-notes-sheet .zn-calendar-pane-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--zn-line); }
+/* OW-74: the header holds the calendar name, then the basic controls, then the long period name. The controls are the
+   ones that must never be squeezed out: the name is the only item that gives ground and ellipsises, so hiding the
+   control strip cannot cost the person their way between months or back to today. */
+.zentral-notes-sheet .zn-calendar-pane-head > strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zentral-notes-sheet .zn-calendar-head-nav { display: flex; align-items: center; flex: 0 0 auto; min-width: 0; gap: 3px; }
+.zentral-notes-sheet .zn-calendar-head-nav > .zn-chip { flex: 0 0 auto; }
+/* OW-83 (owner, 2026-11-18: "the buttons you added to calendar control row are WAY too big, i asked specifically
+   for small < o > chevrons"). The chevrons keep the chip's click box but lose its pill: no border, no pill radius, no
+   side padding, a 20px square, and the glyph drawn at 1em rather than the chip's 0.92em. Measured before: 22x20 with a
+   999px radius and a 1px border, visually the same weight as "Go to today" beside them. */
+.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-nav {
+  min-width: 20px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 1em;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-nav:hover { background: var(--zn-hover); color: var(--zn-text); }
+.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-nav:focus-visible { outline: 2px solid var(--zn-accent); outline-offset: -1px; }
+.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-view-toggle { min-width: 0; }
+.zentral-notes-sheet .zn-calendar-pane-head-right { display: flex; align-items: center; flex: 0 0 auto; min-width: 0; gap: 6px; }
 .zentral-notes-sheet .zn-calendar-pane-hint { color: var(--zn-muted); font-size: 0.82em; }
 .zentral-notes-sheet .zn-calendar-pane-content { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 0; padding: 20px; text-align: center; color: var(--zn-muted); }
 .zentral-notes-sheet .zn-calendar-pane-content strong { color: var(--zn-text); }
@@ -534,17 +600,22 @@
 }
 .zentral-notes-sheet .zn-new-menu:hover { opacity: 1; }
 .zentral-notes-sheet .zn-chips { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 4px; min-width: 0; padding: 0 6px 4px; }
-.zentral-notes-sheet .zn-chips .zn-chip { flex: 0 0 auto; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The chips shrink before anything may move to a second row, but never into an unreadable sliver: the 4.5em floor keeps
+   a tappable label, the label ellipsises, and the row scrolls on the rare pane narrow enough to beat the floor. */
+.zentral-notes-sheet .zn-chips .zn-chip { flex: 0 0 auto; }
+/* UI4.10: a chip is a control, so it follows the text size with its label instead of staying at 12px (at 28px text the
+   label was large and the On / Off chips beside it small). The em sizes keep the old look at the default 13px and grow
+   with it; the padding and the line height are shares of the same text, so the pill never becomes tighter than its text. */
 .zentral-notes-sheet .zn-chip {
   appearance: none;
-  padding: 0 8px;
-  line-height: 18px;
+  padding: 0 0.62em;
+  line-height: 1.4;
   border: 1px solid var(--zn-line);
   border-radius: 999px;
   background: transparent;
   color: var(--zn-muted);
   font: inherit;
-  font-size: 12px;
+  font-size: 0.92em;
   cursor: pointer;
 }
 .zentral-notes-sheet .zn-chip[hidden] { display: none; }
@@ -720,6 +791,92 @@
 .zentral-notes-sheet[data-mode="split"][data-split="side"] .zn-read { border-left: 1px solid var(--zn-line); }
 .zentral-notes-sheet[data-mode="split"][data-split="stack"] .zn-read { border-top: 1px solid var(--zn-line); }
 
+/* T3.8: the reference note beside the one being edited. The main area keeps whatever it shows (editor, preview or
+   both) and the reference takes the other half; the divider moves its share between a quarter and three quarters. */
+.zentral-notes-sheet[data-companion="on"][data-view="editor"] .zn-body { display: flex; flex-direction: row; }
+.zentral-notes-sheet[data-companion="on"][data-view="editor"][data-companion-axis="stack"] .zn-body { flex-direction: column; }
+.zentral-notes-sheet[data-companion="on"][data-view="editor"] .zn-body > .zn-editor,
+.zentral-notes-sheet[data-companion="on"][data-view="editor"] .zn-body > .zn-read {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  width: auto;
+  height: auto;
+}
+/* Editor and preview stay inside the main half: a grid, so the two of them never become a third column beside
+   the reference. The reference always keeps its full share. */
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"] .zn-body {
+  display: grid;
+  grid-template-columns: calc(100% - var(--zn-companion-share, 50) * 1%) calc(var(--zn-companion-share, 50) * 1%);
+  grid-template-rows: 1fr 1fr;
+}
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"] > .zn-body > .zn-editor { grid-column: 1; grid-row: 1; }
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"] > .zn-body > .zn-read { grid-column: 1; grid-row: 2; }
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"] > .zn-body > .zn-companion { grid-column: 2; grid-row: 1 / span 2; flex: 1 1 auto; }
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"][data-companion-axis="stack"] .zn-body {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: calc(100% - var(--zn-companion-share, 50) * 1%) calc(var(--zn-companion-share, 50) * 1%);
+}
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"][data-companion-axis="stack"] > .zn-body > .zn-editor { grid-column: 1; grid-row: 1; }
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"][data-companion-axis="stack"] > .zn-body > .zn-read { grid-column: 2; grid-row: 1; }
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"][data-companion-axis="stack"] > .zn-body > .zn-companion { grid-column: 1 / span 2; grid-row: 2; }
+.zentral-notes-sheet .zn-companion {
+  --zn-companion-share: 50;
+  position: relative;
+  display: flex;
+  flex: 0 0 calc(var(--zn-companion-share, 50) * 1%);
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--zn-line);
+  overflow: hidden;
+}
+.zentral-notes-sheet .zn-companion[hidden] { display: none !important; }
+.zentral-notes-sheet[data-companion-axis="stack"] .zn-companion,
+.zentral-notes-sheet[data-companion="on"][data-companion-axis="stack"] > .zn-body > .zn-companion {
+  border-left: 0;
+  border-top: 1px solid var(--zn-line);
+}
+/* The divider is a thin grip on the shared edge: it takes the keyboard and grows under the pointer. */
+.zentral-notes-sheet .zn-companion-divider {
+  position: absolute;
+  z-index: 2;
+  touch-action: none;
+  cursor: col-resize;
+}
+.zentral-notes-sheet[data-companion-axis="side"] .zn-companion-divider { top: 0; bottom: 0; left: -3px; width: 7px; }
+.zentral-notes-sheet[data-companion-axis="stack"] .zn-companion-divider { left: 0; right: 0; top: -3px; height: 7px; cursor: row-resize; }
+.zentral-notes-sheet .zn-companion-divider:hover,
+.zentral-notes-sheet .zn-companion-divider:focus-visible,
+.zentral-notes-sheet[data-companion-dragging="true"] .zn-companion-divider {
+  background: color-mix(in srgb, var(--zn-accent, currentColor) 35%, transparent);
+  outline: none;
+}
+.zentral-notes-sheet[data-companion-dragging="true"] { user-select: none; }
+.zentral-notes-sheet .zn-companion-head {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--zn-line);
+  font-size: 0.92em;
+}
+.zentral-notes-sheet .zn-companion-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zentral-notes-sheet .zn-companion-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding: 4px 8px;
+}
+
 /* ---- export notice ------------------------------------------------------------- */
 .zentral-notes-sheet .zn-dialog {
   position: absolute;
@@ -772,7 +929,7 @@
 .zentral-notes-sheet .zn-dialog-card.zn-folder-style-card .zn-dialog-actions { flex-wrap: wrap; }
 .zentral-notes-sheet .zn-dialog-card p { margin: 6px 0 10px; color: var(--zn-muted); line-height: 1.45; overflow-wrap: anywhere; }
 .zentral-notes-sheet .zn-dialog-card > strong { overflow-wrap: anywhere; }
-.zentral-notes-sheet .zn-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.zentral-notes-sheet .zn-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 0.6em; }
 .zentral-notes-sheet .zn-share-list { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 12px; max-height: 220px; overflow-y: auto; }
 .zentral-notes-sheet .zn-share-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
 .zentral-notes-sheet .zn-share-row:hover { background: color-mix(in srgb, currentColor 7%, transparent); }
@@ -954,13 +1111,18 @@
 .zentral-notes-sheet[data-dialog-spill="true"],
 .zentral-notes-sheet[popover][data-dialog-spill="true"] { overflow: visible; }
 .zentral-notes-sheet .zn-dialog[data-spill="true"] .zn-dialog-card { position: absolute; }
-.zentral-notes-sheet .zn-field-row { display: grid; gap: 3px; margin: 8px 0; color: var(--zn-muted); font-size: 0.9em; }
+/* UI4.10: the field inside its label follows the column it was given. A grid item's default `min-width: auto` is its
+   content, so a text field held its width and took the card past the sheet; `minmax(0, 1fr)` lets it shrink instead. */
+.zentral-notes-sheet .zn-field-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; margin: 8px 0; color: var(--zn-muted); font-size: 0.9em; }
 .zentral-notes-sheet .zn-field {
   padding: 5px 8px; border: 1px solid var(--zn-line); border-radius: 6px; background: transparent; color: var(--zn-text); font: inherit; outline: none;
+  min-width: 0; max-width: 100%; box-sizing: border-box;
 }
 .zentral-notes-sheet .zn-field:focus { border-color: var(--zn-accent); }
 .zentral-notes-sheet .zn-field[data-bad="true"] { border-color: #ff6b6b; }
-.zentral-notes-sheet .zn-field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+/* UI4.10: two number fields side by side shrink with a narrow card instead of holding their width and taking the card
+   past the sheet (which a classic scrollbar then showed). `minmax(0, 1fr)` lets the fields go below their content. */
+.zentral-notes-sheet .zn-field-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .zentral-notes-sheet .zn-calendar-note-field { display: block; width: 100%; min-height: 7em; box-sizing: border-box; resize: vertical; }
 .zentral-notes-sheet .zn-recurrence-editor { display: grid; gap: 4px; margin: 12px 0; padding-top: 8px; border-top: 1px solid var(--zn-line); }
 .zentral-notes-sheet .zn-recurrence-interval { grid-template-columns: auto minmax(4em, 7em) auto; align-items: center; justify-content: start; }
@@ -1002,8 +1164,10 @@
 .zentral-notes-sheet .zn-zone-detail { color: var(--zn-muted); font-size: 0.85em; }
 .zentral-notes-sheet .zn-zone-none { padding: 6px 8px; color: var(--zn-muted); font-size: 0.9em; }
 
-.zentral-notes-sheet .zn-grid { display: grid; grid-template-columns: repeat(var(--cols, 8), 1fr); gap: 3px; margin: 6px 0; }
-.zentral-notes-sheet .zn-gcell { aspect-ratio: 1; min-width: 18px; padding: 0; border: 1px solid var(--zn-line); border-radius: 3px; background: transparent; cursor: pointer; }
+/* UI4.10: the grid was as wide as the card, so on a wide card its cells grew with it (and the card grew taller with
+   every pixel of width). The cells are now limited to a comfortable square: the grid stops growing past them. */
+.zentral-notes-sheet .zn-grid { display: grid; grid-template-columns: repeat(var(--cols, 8), minmax(0, 26px)); justify-content: start; gap: 3px; margin: 6px 0; }
+.zentral-notes-sheet .zn-gcell { aspect-ratio: 1; min-width: 0; padding: 0; border: 1px solid var(--zn-line); border-radius: 3px; background: transparent; cursor: pointer; }
 .zentral-notes-sheet .zn-gcell.is-on { background: color-mix(in srgb, var(--zn-accent) 40%, transparent); border-color: var(--zn-accent); }
 /* A list of setting rows: one row a line, never wider than the card. Loose items (the quick colours, the code
    languages) carry zn-flow and run on like words. Both were `.zn-quick` once and the later rule won for the lists too:
@@ -1097,8 +1261,8 @@
 :root[zentral-notes-theme="recommended"] .zentral-notes-sheet {
   /* The popup's light/dark palette, rather than Zen's sometimes-black primary color, chooses the accent. */
   color-scheme: var(--zl-input-scheme, light dark);
-  --zn-surface: var(--zl-popup, var(--arrowpanel-background, light-dark(#ffffff, #1f1f24)));
-  --zn-text: var(--zl-popup-text, var(--arrowpanel-color, light-dark(#18181b, #eeeeee)));
+  --zn-surface: var(--zn-surface-resolved, var(--zl-popup, var(--arrowpanel-background, light-dark(#ffffff, #1f1f24))));
+  --zn-text: var(--zn-text-resolved, var(--zl-popup-text, var(--arrowpanel-color, light-dark(#18181b, #eeeeee))));
   --zn-muted: var(--zn-muted-resolved, color-mix(in srgb, var(--zn-text) 66%, transparent));
   --zn-hover: color-mix(in srgb, var(--zn-text) 10%, transparent);
   --zn-accent: light-dark(#2459b4, #9bbdff);
@@ -1109,15 +1273,15 @@
 }
 :root[zentral-notes-theme="light"] .zentral-notes-sheet {
   color-scheme: light;
-  --zn-surface: #fbfbfd; --zn-text: #1d1d22; --zn-accent: #3b6df0; --zn-tint: #fbfbfd;
+  --zn-surface: var(--zn-surface-resolved, #fbfbfd); --zn-text: var(--zn-text-resolved, #1d1d22); --zn-accent: #3b6df0; --zn-tint: #fbfbfd;
 }
 :root[zentral-notes-theme="dark"] .zentral-notes-sheet {
   color-scheme: dark;
-  --zn-surface: #17171c; --zn-text: #e9e9f0; --zn-accent: #83a5ff; --zn-tint: #17171c;
+  --zn-surface: var(--zn-surface-resolved, #17171c); --zn-text: var(--zn-text-resolved, #e9e9f0); --zn-accent: #83a5ff; --zn-tint: #17171c;
 }
 :root[zentral-notes-theme="paper"] .zentral-notes-sheet {
   color-scheme: light;
-  --zn-surface: #f4ecd8; --zn-text: #3b3226; --zn-accent: #9a6b2f; --zn-tint: #f4ecd8;
+  --zn-surface: var(--zn-surface-resolved, #f4ecd8); --zn-text: var(--zn-text-resolved, #3b3226); --zn-accent: #9a6b2f; --zn-tint: #f4ecd8;
 }
 
 /* ---- Notes appearance menu: one rule per flag in :root[zentral-notes-ov] ------------------------------
@@ -1168,13 +1332,15 @@
 
 /* ---- Settings view: wide card with tabs, sliders and the in-card colour picker -------------------------- */
 .zentral-notes-sheet .zn-dialog-card.zn-settings { width: 100%; max-width: none; height: 100%; max-height: none; display: flex; flex-direction: column; box-sizing: border-box; }
-.zentral-notes-sheet .zn-set-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+.zentral-notes-sheet .zn-set-tabs { display: flex; flex-wrap: wrap; gap: 4px 0.5em; margin: 8px 0; }
 /* Rows of max-content: with `auto` rows, a body that has to scroll gave every row only its 28px min-height (for an item
    with a min-height that is all an `auto` row must give), and whatever was taller lay over the next row. One column
    that never grows past the card. */
 .zentral-notes-sheet .zn-set-body { flex: 1 1 0; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; align-content: start; gap: 6px; padding-right: 4px; }
 .zentral-notes-sheet .zn-set-heading { margin-top: 8px; color: var(--zn-muted); font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; overflow-wrap: anywhere; }
-.zentral-notes-sheet .zn-set-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 28px; }
+/* UI4.10: the floor is a share of the text (a comfortable target) rather than 28px, which at a large text size was
+   smaller than one line of the row and let a wrapped control spill over its neighbour. */
+.zentral-notes-sheet .zn-set-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 2em; }
 /* The label keeps at least 9em (about 18 letters a line). A control that does not fit beside that goes below the label. */
 .zentral-notes-sheet .zn-set-row .zn-quick-label { flex: 1 1 9em; min-width: min(100%, 9em); }
 /* Dropdown choice rows (settings window and quick settings): label on its own line, the select below it at full width. */
@@ -1291,7 +1457,40 @@
 .zentral-notes-sheet[data-view="list"] .zn-head { flex-wrap: wrap; row-gap: 2px; min-width: 0; }
 .zentral-notes-sheet[data-view="list"] .zn-head > .zn-btn { flex: 0 0 auto; }
 .zentral-notes-sheet[data-view="list"] .zn-head .zn-title { min-width: 48px; }
-.zentral-notes-sheet .zn-calendar-pane-head { flex-wrap: wrap; row-gap: 2px; min-width: 0; }
+/* OW-33 asked for wrapping so nothing overflowed; OW-74 makes that the wrong answer here, because the header now carries
+   the controls and a wrapped header would move them out from between the name and the period. The name ellipsises
+   instead, which is what the owner asked for (the controls outrank the name). */
+.zentral-notes-sheet .zn-calendar-pane-head { flex-wrap: nowrap; row-gap: 2px; min-width: 0; }
+/* OW-97: when the header runs out of room, it gives up its pieces in the owner's order and never pushes anything out of
+   the window. Three rules, in order of what goes first:
+     1. the calendar's name ("Calendar"), which is the least informative thing in the row;
+     2. the long period ("17 Nov 2026 – 4 Jan 2027"), which is useful but is repeated by the grid below it;
+     3. only then does the row stop shrinking, and the buttons keep every pixel they had.
+   The controls (prev/today/next/the view toggle, then settings and Big Picture) are `flex: 0 0 auto` and never shrink;
+   the name starts from a tiny `flex-basis` so it is the first to lose width, and the period comes next. */
+.zentral-notes-sheet .zn-calendar-pane-head > strong { flex: 0 1 auto; min-width: 0; }
+.zentral-notes-sheet .zn-calendar-head-nav { flex: 0 0 auto; }
+.zentral-notes-sheet .zn-calendar-head-nav > .zn-chip { flex: 0 0 auto; }
+.zentral-notes-sheet .zn-calendar-pane-head-right { flex: 0 1 auto; min-width: 0; }
+.zentral-notes-sheet .zn-calendar-pane-head-right > .zn-btn { flex: 0 0 auto; }
+/* The name goes first: it may shrink to nothing before the period loses a character. */
+.zentral-notes-sheet .zn-calendar-pane-head > strong { flex-shrink: 999; }
+/* Then the period, which keeps its text but ellipsises. */
+.zentral-notes-sheet .zn-calendar-pane-hint { flex: 0 1 auto; flex-shrink: 1; }
+/* The two icon buttons are chips like prev/next: a fixed square, so a word in a translation can never widen them again. */
+.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-today,
+.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-view-toggle { width: 26px; height: 24px; padding: 0; justify-content: center; }
+.zentral-notes-sheet .zn-calendar-today { position: relative; }
+/* "Today" is a calendar with a dot in the last row: the glyph alone in a row of arrows reads as "go to a date". */
+.zentral-notes-sheet .zn-calendar-today-dot { position: absolute; right: 5px; bottom: 4px; width: 3px; height: 3px; border-radius: 50%; background: currentColor; }
+/* The view toggle points where the next press goes: down to the week, up back to the month. The icon set's `chevron`
+   points RIGHT (`m9 6 6 6-6 6`), so the two states are 90° and 270° — not 0° and 180°, which would have pointed it
+   sideways at nothing. */
+.zentral-notes-sheet .zn-calendar-view-toggle[data-next="week"] svg { transform: rotate(90deg); }
+.zentral-notes-sheet .zn-calendar-view-toggle[data-next="month"] svg { transform: rotate(270deg); }
+.zentral-notes-sheet .zn-calendar-view-toggle svg { transition: transform .12s ease; }
+@media (prefers-reduced-motion: reduce) { .zentral-notes-sheet .zn-calendar-view-toggle svg { transition: none; } }
+
 .zentral-notes-sheet .zn-calendar-pane-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .zentral-notes-sheet[data-all-chrome="compact"] .zn-head,
 .zentral-notes-sheet[data-all-chrome="tight"] .zn-head { padding: 2px 4px; gap: 1px; }
@@ -1357,6 +1556,22 @@
 }
 .zentral-notes-sheet .zn-find-input:focus { outline: none; border-color: var(--zn-accent); }
 .zentral-notes-sheet .zn-find-count { font-size: 0.9em; white-space: nowrap; }
+/* OW-22: the off-screen pair sits beside the ordinary next/previous and reads as the same family of control, one step
+   quieter — a toggle-like `zn-find-btn` rather than an icon button, so it is clear these are not the same key. */
+.zentral-notes-sheet .zn-find-off {
+  padding: 1px 5px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.1;
+  cursor: pointer;
+}
+.zentral-notes-sheet .zn-find-off:not(:disabled):hover { background: var(--zn-hover); border-color: var(--zn-line); }
+.zentral-notes-sheet .zn-find-off:disabled { opacity: 0.35; cursor: default; }
+.zentral-notes-sheet .zn-find-off:focus-visible { outline: 2px solid var(--zn-accent); outline-offset: 1px; }
 .zentral-notes-sheet .zn-find-prev svg { transform: rotate(180deg); }
 .zentral-notes-sheet .zn-find .zn-btn:disabled { opacity: 0.35; cursor: default; }
 .zentral-notes-sheet .zn-find-others {
@@ -1373,6 +1588,59 @@
 .zentral-notes-sheet .zn-find-others:disabled { text-decoration: none; cursor: default; }
 .zentral-notes-sheet .zn-find-others:not(:disabled):hover { background: var(--zn-hover); color: var(--zn-text); }
 .zentral-notes-sheet .zn-find-others[hidden] { display: none; }
+/* ---- replace (OW-21): a folded second row, so finding stays one line and replacing is a deliberate step ---- */
+.zentral-notes-sheet .zn-find-row {
+  display: flex;
+  align-items: center;
+  gap: 4px 6px;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+}
+.zentral-notes-sheet .zn-find-replace-row {
+  display: flex;
+  align-items: center;
+  gap: 4px 6px;
+  flex: 1 1 100%;
+  padding-top: 2px;
+}
+.zentral-notes-sheet .zn-find-replace-row[hidden] { display: none; }
+.zentral-notes-sheet .zn-find-replace-input {
+  flex: 1 1 110px;
+  min-width: 80px;
+  padding: 3px 6px;
+  border: 1px solid var(--zn-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--zn-text);
+  font: inherit;
+}
+.zentral-notes-sheet .zn-find-replace-input:focus { outline: none; border-color: var(--zn-accent); }
+/* The toggle reads as part of the bar, not as a loud button: it is a door, not a commit. */
+.zentral-notes-sheet .zn-find-replace-toggle { opacity: 0.75; }
+.zentral-notes-sheet .zn-find-replace-toggle[aria-expanded="true"] { opacity: 1; background: var(--zn-hover); color: var(--zn-text); }
+.zentral-notes-sheet .zn-find-replace-one,
+.zentral-notes-sheet .zn-find-replace-all {
+  padding: 2px 8px;
+  border: 1px solid var(--zn-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--zn-text);
+  font: inherit;
+  font-size: 0.9em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.zentral-notes-sheet .zn-find-replace-one:not(:disabled):hover,
+.zentral-notes-sheet .zn-find-replace-all:not(:disabled):hover { background: var(--zn-hover); }
+.zentral-notes-sheet .zn-find-replace-one:disabled,
+.zentral-notes-sheet .zn-find-replace-all:disabled { opacity: 0.35; cursor: default; }
+.zentral-notes-sheet .zn-find-replace-note {
+  font-size: 0.9em;
+  color: var(--zn-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ---- pasted pictures (P2) ------------------------------------------------------ */
 .zentral-notes-sheet .zn-read .zn-pic { display: inline-block; max-width: 100%; }
@@ -2059,6 +2327,14 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet[data-all-notes-active="false"] .zn-calendar-splitter { display: none !important; }
 .zentral-notes-sheet[data-all-notes-active="false"] .zn-tree-pane { flex: 1 1 auto !important; }
 
+/* OW-59: what a note or a date has linked. One row per item, the words on the left, the two actions on the right. */
+.zentral-notes-sheet .zn-linked-items { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.zentral-notes-sheet .zn-linked-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 320px; overflow: auto; }
+.zentral-notes-sheet .zn-linked-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px; border-bottom: 1px solid var(--zn-line); min-width: 0; }
+.zentral-notes-sheet .zn-linked-text { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.zentral-notes-sheet .zn-linked-meta { font-size: 11px; opacity: 0.7; }
+.zentral-notes-sheet .zn-linked-actions { display: flex; flex: 0 0 auto; gap: 4px; }
+
 /* T2.4b: month, forward-days and agenda calendar views. */
 .zentral-notes-sheet .zn-calendar-pane-head { flex: 0 0 auto; }
 .zentral-notes-sheet .zn-calendar-controls { display: flex; flex: 0 0 auto; align-items: center; flex-wrap: wrap; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--zn-line); }
@@ -2066,14 +2342,17 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-calendar-controls-toggle { position: relative; flex: 0 0 auto; }
 .zentral-notes-sheet .zn-calendar-controls-dot { position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 999px; background: var(--zn-accent); pointer-events: none; }
 .zentral-notes-sheet .zn-calendar-controls-dot[hidden] { display: none !important; }
-/* OW-39: Keep work-free days distinct without washing out events, text, or selection. */
+/* OW-39: Keep work-free days distinct without washing out events, text, or selection.
+   OW-55: the colour and strength of each are the owner's (--zentral-notes-ov-*-tint); the fallback here is the
+   tint this rule shipped with, so a sheet that never opened the setting looks exactly as before. These are resting
+   tints only: selection, hover and the holiday edge keep their own tokens. */
 .zentral-notes-sheet .zn-cal-month-cell.is-workfree,
 .zentral-notes-sheet .zn-cal-time-day-head.is-workfree,
 .zentral-notes-sheet .zn-cal-time-allday-cell.is-workfree,
 .zentral-notes-sheet .zn-cal-time-column.is-workfree,
 .zentral-notes-sheet .zn-cal-day-group.is-workfree,
 .zentral-notes-sheet .zn-cal-agenda-row.is-workfree {
-  background: color-mix(in srgb, #78a9c8 4%, transparent);
+  background: var(--zentral-notes-ov-free-tint, color-mix(in srgb, #78a9c8 4%, transparent));
 }
 .zentral-notes-sheet .zn-cal-month-cell.is-weekend,
 .zentral-notes-sheet .zn-cal-time-day-head.is-weekend,
@@ -2081,7 +2360,7 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-time-column.is-weekend,
 .zentral-notes-sheet .zn-cal-day-group.is-weekend,
 .zentral-notes-sheet .zn-cal-agenda-row.is-weekend {
-  background: color-mix(in srgb, #6ca8ff 10%, transparent);
+  background: var(--zentral-notes-ov-weekend-tint, color-mix(in srgb, #6ca8ff 10%, transparent));
 }
 .zentral-notes-sheet .zn-cal-month-cell.is-holiday,
 .zentral-notes-sheet .zn-cal-time-day-head.is-holiday,
@@ -2089,7 +2368,35 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-time-column.is-holiday,
 .zentral-notes-sheet .zn-cal-day-group.is-holiday,
 .zentral-notes-sheet .zn-cal-agenda-row.is-holiday {
-  background: color-mix(in srgb, #f0b85b 13%, transparent);
+  background: var(--zentral-notes-ov-holiday-tint, color-mix(in srgb, #f0b85b 13%, transparent));
+}
+/* OW-45: a trading Sunday or an election day is marked, but it is a working day: no work-free tint. */
+.zentral-notes-sheet .zn-cal-month-cell.is-trading-sunday,
+.zentral-notes-sheet .zn-cal-picker-day.is-trading-sunday,
+.zentral-notes-sheet .zn-cal-time-day-head.is-trading-sunday,
+.zentral-notes-sheet .zn-cal-day-group.is-trading-sunday,
+.zentral-notes-sheet .zn-cal-agenda-row.is-trading-sunday,
+.zentral-notes-sheet .zn-cal-month-cell.is-election-day,
+.zentral-notes-sheet .zn-cal-picker-day.is-election-day,
+.zentral-notes-sheet .zn-cal-time-day-head.is-election-day,
+.zentral-notes-sheet .zn-cal-day-group.is-election-day,
+.zentral-notes-sheet .zn-cal-agenda-row.is-election-day {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--zn-accent, #6ca8ff) 35%, transparent);
+}
+.zentral-notes-sheet .zn-cal-holidays-coverage-row {
+  margin: 2px 0 0;
+  font-size: 0.92em;
+  opacity: 0.8;
+}
+/* OW-44: the same day is a holiday in more than one chosen set — a second accent edge, still one tint. */
+.zentral-notes-sheet .zn-cal-month-cell.is-multi-holiday,
+.zentral-notes-sheet .zn-cal-picker-day.is-multi-holiday {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #f0b85b 55%, transparent);
+}
+.zentral-notes-sheet .zn-cal-holiday-pill.is-multi-holiday,
+.zentral-notes-sheet .zn-cal-month-holiday.is-multi-holiday {
+  color: color-mix(in srgb, #f0b85b 70%, currentColor);
 }
 .zentral-notes-sheet .zn-cal-month-cell.is-personal-off,
 .zentral-notes-sheet .zn-cal-time-day-head.is-personal-off,
@@ -2098,6 +2405,22 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-day-group.is-personal-off,
 .zentral-notes-sheet .zn-cal-agenda-row.is-personal-off {
   background: color-mix(in srgb, #b48bea 12%, transparent);
+}
+/* T2.13a: a holiday that came from a subscribed calendar file. It is NOT a local holiday: a neutral, cool grey edge and
+   no tint, so a synced holiday week can never look like a day off this calendar decided on. Deliberately quiet — an
+   imported holiday is information, not a rule. */
+.zentral-notes-sheet .zn-cal-month-cell.is-imported-holiday,
+.zentral-notes-sheet .zn-cal-time-day-head.is-imported-holiday,
+.zentral-notes-sheet .zn-cal-time-allday-cell.is-imported-holiday,
+.zentral-notes-sheet .zn-cal-time-column.is-imported-holiday,
+.zentral-notes-sheet .zn-cal-day-group.is-imported-holiday,
+.zentral-notes-sheet .zn-cal-agenda-row.is-imported-holiday {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 18%, transparent);
+}
+.zentral-notes-sheet .zn-cal-month-mark.is-imported-holiday,
+.zentral-notes-sheet .zn-cal-item.is-imported-holiday {
+  opacity: 0.82;
+  border-left-style: dashed;
 }
 .zentral-notes-sheet .zn-cal-picker-day.is-workfree {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, #78a9c8 36%, transparent);
@@ -2235,6 +2558,16 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-time-day-head.is-today { border-bottom: 2px solid var(--zn-accent); background: color-mix(in srgb, var(--zn-accent) 12%, transparent); }
 .zentral-notes-sheet .zn-cal-time-day-head.is-today strong { color: var(--zn-accent); }
 .zentral-notes-sheet .zn-cal-time-day-head strong { font-size: .78em; }
+/* OW-96: the weather line above the weekday. Small but readable: the glyph is text-sized rather than a 10px speck, and
+   the temperature beside it is tabular so the columns line up when a row of seven days is compared at a glance. */
+.zentral-notes-sheet .zn-cal-weather { display: inline-flex; min-width: 0; align-items: baseline; gap: 3px; line-height: 1; color: var(--zn-muted); font-size: .68em; }
+.zentral-notes-sheet .zn-cal-weather-icon { font-size: 1.15em; line-height: 1; opacity: .9; }
+.zentral-notes-sheet .zn-cal-weather-temp { font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* In a narrow column (48 days stacked, a small pane) the temperature is what goes: the glyph still says the weather,
+   and a clipped "-3°C" would read as a wrong number rather than a missing one. */
+.zentral-notes-sheet .zn-cal-time-day-head.is-narrow .zn-cal-weather-temp { display: none; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-weather { font-size: .62em; gap: 2px; }
+
 .zentral-notes-sheet .zn-cal-time-day-head > span { color: var(--zn-muted); font-size: .7em; }
 .zentral-notes-sheet .zn-cal-time-allday-row { flex: 0 0 auto; align-items: stretch; max-height: 112px; overflow: auto; scrollbar-gutter: stable; scrollbar-width: thin; border-bottom: 1px solid var(--zn-line); }
 .zentral-notes-sheet .zn-cal-time-all-label { align-self: start; padding: 5px 2px 2px 0; color: var(--zn-muted); font-size: .63em; }
@@ -2255,6 +2588,17 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-hour-label:first-child { transform: none; }
 .zentral-notes-sheet .zn-cal-time-columns { grid-column: 2 / -1; display: grid; min-width: 0; width: 100%; }
 .zentral-notes-sheet .zn-cal-time-column { min-width: 0; border-left: 1px solid var(--zn-line); }
+/* OW-96: a span too long for one row of columns wraps into a second. The grid gets one more row, the hour gutter
+   spans both (it is a single column of hours, and repeating it would draw the day twice), and a wrapped row starts on
+   a fresh line with a rule above it so the two halves read as two rows of one calendar, not as one broken grid.
+   With one row nothing here applies. */
+.zentral-notes-sheet .zn-cal-time-columns[data-rows="2"] { grid-auto-rows: min-content; row-gap: 6px; }
+.zentral-notes-sheet .zn-cal-time-grid-row[data-rows="2"] { grid-template-rows: 1fr; }
+.zentral-notes-sheet .zn-cal-time-grid-row[data-rows="2"] > .zn-cal-hour-gutter { grid-row: 1 / -1; grid-column: 1; }
+/* The first column of a wrapped line has nothing to its left to separate it from: the hour gutter already did. */
+.zentral-notes-sheet .zn-cal-time-column.is-row-start { border-left: 0; }
+.zentral-notes-sheet .zn-cal-time-head[data-rows="2"], .zentral-notes-sheet .zn-cal-time-allday-row[data-rows="2"] { grid-auto-flow: row; }
+
 .zentral-notes-sheet .zn-cal-time-column.is-today { background: color-mix(in srgb, var(--zn-accent) 5%, transparent); }
 .zentral-notes-sheet .zn-cal-time-track { position: relative; min-width: 0; background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--zn-cal-hour-height, 54px) - 1px), var(--zn-line) calc(var(--zn-cal-hour-height, 54px) - 1px), var(--zn-line) var(--zn-cal-hour-height, 54px)); }
 .zentral-notes-sheet .zn-cal-time-hour-line { position: absolute; right: 0; left: 0; height: 1px; border-top: 1px solid color-mix(in srgb, var(--zn-line) 55%, transparent); pointer-events: none; }
@@ -2458,6 +2802,8 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-note-alert-row { display: flex; justify-content: flex-end; margin: -4px 0 6px; }
 
 /* Virtual Zen Agenda folder and occurrence tabs. */
+/* SB6.9: a day with items already behind it shows what is left of it ("2/5"); a day where nothing ended yet keeps the
+   plain count, which is the same number either way. */
 zen-folder[bgalazka-notes-agenda-day]::after {
   content: attr(bgalazka-notes-agenda-count);
   display: inline-flex;
@@ -2470,6 +2816,22 @@ zen-folder[bgalazka-notes-agenda-day]::after {
   font-size: .78em;
   line-height: 1.5;
   background: color-mix(in srgb, currentColor 14%, transparent);
+}
+/* SB6.9: the folder is folded by Zen's own `collapsed` setter (the browser owns the animation); this only dims the
+   label a little so a folded Agenda reads as deliberately quiet rather than as an empty one. */
+zen-folder[bgalazka-notes-agenda-folder][bgalazka-notes-agenda-folded] > .zen-folder-label,
+zen-folder[bgalazka-notes-agenda-folder][bgalazka-notes-agenda-folded] {
+  font-style: italic;
+}
+zen-folder[bgalazka-notes-agenda-folder][bgalazka-notes-agenda-folded="quiet"]::after {
+  content: "\1F319";
+  margin-inline-start: .35em;
+  opacity: .7;
+}
+
+zen-folder[bgalazka-notes-agenda-day][bgalazka-notes-agenda-left]::after {
+  content: attr(bgalazka-notes-agenda-left) "/" attr(bgalazka-notes-agenda-count);
+  background: color-mix(in srgb, currentColor 22%, transparent);
 }
 tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
 
@@ -2684,6 +3046,23 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
 .zentral-notes-sheet :is(.zn-cal-time-event, .zn-cal-time-reminder, .zn-cal-time-allday-cell .zn-cal-item).is-dragging { cursor: grabbing; opacity: .55; }
 .zentral-notes-sheet .zn-cal-drag-preview { position: absolute; z-index: 6; left: 0; right: 0; padding: 2px 4px; border-top: 2px solid var(--zn-accent); background: var(--zn-surface); color: var(--zn-text); font-size: .7em; pointer-events: none; }
 .zentral-notes-sheet .zn-cal-drag-preview.is-note-drop { border-radius: 4px; box-shadow: 0 2px 6px rgba(0, 0, 0, .18); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* OW-82: a drag over empty space says what releasing will do. It sits over the sheet, follows nothing (the pointer
+   already says where you are), and never eats a pointer event. */
+.zentral-notes-sheet .zn-cal-drag-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 8;
+  padding: 4px 10px;
+  border: 1px dashed color-mix(in srgb, #ff6b6b 70%, transparent);
+  border-radius: 999px;
+  background: var(--zn-surface);
+  color: var(--zn-text);
+  font-size: .78em;
+  pointer-events: none;
+  white-space: nowrap;
+}
 .zentral-notes-sheet :is(.zn-cal-month-cell, .zn-cal-picker-day, .zn-cal-time-allday-cell, .zn-cal-time-track).is-note-drop { outline: 2px dashed var(--zn-accent); outline-offset: -2px; background: color-mix(in srgb, var(--zn-accent) 16%, transparent); }
 .zentral-notes-sheet .zn-cal-time-allday-cell { position: relative; }
 
@@ -2937,13 +3316,8 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
   box-shadow: inset 2px 0 0 var(--zn-accent);
 }
 
-/* T2.6: Calendar Big Picture viewport popup. */
-.zentral-notes-sheet .zn-calendar-pane-head-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
+/* T2.6: Calendar Big Picture viewport popup. (The header-right container itself is styled once, at the head rules near
+   the top of the sheet, where OW-74 gives it flex: 0 0 auto so the period name never pushes the controls out.) */
 .zentral-notes-sheet .zn-calendar-bigpicture-btn {
   flex: 0 0 auto;
   width: 24px;
@@ -2958,6 +3332,13 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
   padding: 20px 14px;
   text-align: center;
   color: var(--zn-muted);
+}
+/* The tree's placeholder is an empty box holding the column's width, not the calendar's "return here" card. */
+.zentral-notes-sheet .zn-tree-pane.zn-cal-bigpicture-placeholder {
+  min-height: 40px;
+  border: 1px dashed var(--zn-line);
+  border-radius: var(--zn-radius, 8px);
+  background: color-mix(in srgb, var(--zn-hover) 14%, transparent);
 }
 .zentral-notes-sheet .zn-cal-bigpicture-placeholder-text {
   font-size: 0.9em;
@@ -3061,6 +3442,30 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
   min-height: 0;
   background: transparent;
 }
+/* OW-80: the Notes tree on the left edge of the Big Picture card. It is the same node as the docked sheet's tree, so
+   it keeps every function; only the box around it is new. The share is the calendar's own tree share, so the splitter
+   value the person already set applies here too. */
+.zentral-notes-sheet .zn-cal-bigpicture-tree-slot {
+  display: flex;
+  flex: 0 0 var(--zn-calendar-tree-share, 36%);
+  min-width: 0;
+  min-height: 0;
+  max-width: 62%;
+  container-type: inline-size;
+  border-right: 1px solid var(--zn-line);
+  overflow: hidden;
+}
+.zentral-notes-sheet .zn-cal-bigpicture-tree-slot[hidden] { display: none; }
+.zentral-notes-sheet .zn-cal-bigpicture-tree-slot > .zn-tree-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  /* The docked pane's own share is the slot's job now; left as-is it would fight the slot. */
+  flex-basis: auto;
+}
+/* Under the tabs layout the docked tree is hidden by a rule that follows the tree node around. In the card the tree is
+   a real column with its own toggle, so that rule must not reach it (OW-80). */
+.zentral-notes-sheet[data-big-picture="true"] .zn-cal-bigpicture-tree-slot > .zn-tree-pane { display: flex !important; }
 /* Non-popover fallback: keep menus and calendar dialogs above the Big Picture card via DOM order at the same layer. */
 .zentral-notes-sheet[data-big-picture="true"] .zn-menu:not([popover]),
 .zentral-notes-sheet[data-big-picture="true"] .zn-dialog:not([popover]) {

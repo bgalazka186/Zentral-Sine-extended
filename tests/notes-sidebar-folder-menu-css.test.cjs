@@ -30,5 +30,11 @@ assert.match(css, /:root\[zentral-agenda-ctx="item"\] #tabContextMenu > :not\(\[
 assert.match(source, /window\[act\]\("popupshowing", onAgendaTabMenuShowing, true\)/);
 assert.match(source, /runAgendaItemAction\?\.\(identity, row\.command\)/);
 assert.match(source, /bgalazka-notes-agenda-record-id/, "stored record identity is separate from history identity");
-assert.match(source, /JSON\.stringify\(snapshot\(\)\) !== JSON\.stringify\(identity\)/, "callbacks revalidate sidebar identity");
+assert.match(source, /stillLive\s*=\s*\(\)\s*=>[\s\S]{0,400}?JSON\.stringify\(agendaTabIdentity\(tab\)\)\s*===\s*JSON\.stringify\(identity\)/, "callbacks revalidate sidebar identity");
+// SB6.11: our own row menu is built from the same bound rows, so both entry points run the same actions.
+assert.match(source, /function agendaItemMenuRows\(tab\)/, "one shared Agenda row binder for both menus");
+assert.match(source, /function onOwnRowContextMenu\(event\)/, "our sidebar rows get our own menu");
+assert.match(source, /window\.addEventListener\("contextmenu", onOwnRowContextMenu, true\)/, "the row menu is bound even when only the Agenda folder is on");
+assert.match(source, /zentral-notes-row-menu/, "the row menu has its own id, not Zen's");
+assert.match(source, /sidebar\.row\.zenActions/, "the native actions stay reachable from our menu");
 console.log("Notes and Agenda sidebar menu CSS tests passed");

@@ -1,25 +1,146 @@
-# ZentralNotes — Legacy: DONE roadmap rows (frozen)
 
-Moved out of `TODO_notes_roadmap.md` on 2026-11-14 so the active roadmap contains only work that is still to do. **Nothing here needs action.** Re-open an item only if a test fails; then add a new row to the roadmap instead of editing this file. The older, separate history file `docs/LEGACY_notes_roadmap.md` (if present in your checkout) is unaffected.
+- `OW-73` (3.3.304) — The All-notes toolbar stopped wrapping onto a second line. The owner said the "Recent" chip and the Split view / Folder tree / Hide calendar buttons "have enough space to fit in 1 line but they do take 2". Measured in headless Chromium with the real sheet, the chips row (`All / Recent / Trash / Tags / Empty`) wrapped at 13 px text in a calendar pane 294–323 px wide and at 20 px text in Polish where the labels are longer, while the toolbar itself kept `flex-wrap: wrap` and every child was `flex: 0 0 auto`, so nothing could give ground to avoid the break. Both rows are now `flex-wrap: nowrap`; the chips shrink first (a 4.5em floor keeps a tappable label, the label ellipsises) and the row scrolls rather than wrapping when the pane really is too narrow. Before: 3 wrapping cases in the sweep. After: 0. `notes-small-window-chrome` was rewritten from "wraps safely" to "one line, and never a sliver", which is what it was really protecting.
 
+- `OW-80`/`OW-86` (3.3.307) — The Notes tree stands in the Big Picture card, and a note click there selects. The owner asked for "on left edge notes tree, and all its functions like drag to create", then chose the click behaviour himself: "Only select it stay in the calendar ... just like in normal with shift+control ... when dragging whole bunch of them to calendar ask user what they want to do". The tree is MOVED, not copied (one set of listeners, one selection, one scroll position), with its own placeholder so closing puts it back at the exact index in `allPanels`; measured in headless Chromium at 900x800: tree x=76 w=484, calendar x=561 w=863, stage `display:flex`, tree `flex:1 1 36%`. Two real bugs fell out of the move and are fixed: `updateAllLayout` set `treePane.hidden` from the docked tabs rule and closed the card whenever `view !== "list"` (so opening a note from the tree killed the view), and `showNote`'s `applyState` restored the tree. Search, filter chips, folder root, rename and note drag all verified working inside the card in real Chromium; a row drag carries the note id and opens the composer with the note linked. A plain click in the card selects (Shift/Ctrl behave as in the docked tree), a double click opens the note, and a drag of a selected row carries the whole selection: dropping two or more notes on one day asks "What should the drop make?" with `One item each (N)` and `One item for all of them`, naming the notes and the day. A caveat worth recording: the initial attempt used a `keepBigPicture` flag on `openNote`, which was not enough on its own — the layout pass re-closed the card a frame later.
+- `OW-81` (3.3.307) — Quick settings chooses what a dropped note becomes: `calendarNoteDropKind` (`ask` | `event` | `reminder`), default `ask` so nothing changes until chosen. It is a tenth quick row in a new Calendar tab and the value beats the drop surface's own habit (a Month cell computes an all-day reminder), which was the point of the option. The quick menu's "stays short" bound was raised from 9 to 10 on measurement, not on taste: in Chromium at 900x800 the card is 380px tall at 13px text (378 client), 510px at 20px (508), 984px at 40px (984) — no overflow at any of them.
+- `OW-82` (3.3.307) — Dragging a calendar item onto empty space asks before deleting it, with a five-minute silent window. The gesture only counts when the drag really moved, the item has no resize edge and is not a create-drag, and the release is inside the calendar pane but on no track or cell. The card names the item, says it cannot be undone, and offers Delete / Keep / "Delete and don't ask for 5 minutes"; Keep holds the focus. The window lives in the sheet, not in the store, so a restart forgets it; it expires on its own (pinned at four minutes quiet and past five minutes asking again). Deletion goes through the same ownership rules as the menu's Delete, so a linked item is refused rather than orphaned.
+- `OW-83` (3.3.307) — The calendar's `‹` / `›` are small bare glyphs. The owner: "the buttons you added to calendar control row are WAY to big i asked specifically for small < o > chevrons". Measured before: 22x20 with a 999px radius and a 1px border, the same visual weight as "Go to today" beside them. Now a 20x20 square, no border, no side padding, 1em glyph (the chip's own 0.92em made the glyph smaller as the button shrank). Verified in a 3x crop.
+- `OW-84` (3.3.307) — The `+` menu no longer offers a creation twice. "New reminder" and "Create timed reminder…" opened the same composer, and so did "New event" and "Create timed event…". A kind is offered once: the plain row makes the item on the selected day, and the group — now titled "All-day" — keeps only the all-day variants, which are a different thing rather than a second name for the same one.
+- `OW-85` (3.3.307) — OW-73 reverted, and applied to the right row. The owner: "you targeted wrong thing ... you targeted Notes only buttons, now they getting cut by window edge. first revert this changes. second do this for correct element, the correct element is just under All notes title element and above Search Notes element". OW-73's `nowrap` + scroll on `zn-all-toolbar` and `zn-chips` (and its compact override) are gone, so those two Notes rows wrap again as before, and the three layout buttons now live in the sheet bar with the title and the note's own actions, placed right after the title. Measured in Chromium at sheet widths 420, 340 and 300: no child is cut at any of them (the narrowest drops the two least-needed buttons instead of clipping), and the sheet bar wraps and scrolls rather than hiding a button. The strip left above the tree holds only the tabs switcher.
+- `T2.13` (3.3.309) — The last Track 2 row: a calendar file out, and the bookkeeping for a sync. The import half had shipped early as the owner's `OW-53` (3.3.280); what was left was the other direction, so `icsFromItems(items, {now, name, uidFor, prodId})` now writes a `VCALENDAR` of `VEVENT`s (UID, DTSTAMP, CREATED, DTSTART/DTEND, SUMMARY, DESCRIPTION, LOCATION, STATUS, RRULE/EXDATE, VALARM), CRLF-terminated and folded at 75 **UTF-8 octets** so a 4-octet emoji is never cut in half. A `TZID` event keeps its zone and its instant (09:00Z in Europe/Warsaw goes out as `20261118T100000` and comes back as 09:00Z); an all-day event's `DTEND` is the day after the last day, which is what the reader expects; a timed event with no end gets the default duration. Identity is the whole point: an item reuses its own `x.icsUid`, and one that never came from a file gets `<id>@zentral-notes` — never the clock — so the same item exported twice has the same UID and a re-import updates instead of duplicating. A cancelled import is filtered **in the writer**, so no caller can resurrect an event somebody else took away. `syncStateOf` (`new` / `changed` / `clean` / `deleted`) reads `x.syncedEtag` and `x.syncedDeleted`, written by `markSynced` / `markSyncedDeleted`, and `syncPlan` groups a calendar and counts what a pass has to push; both fields are kept only when present, by the colour rule, so an item that never synced serialises and hashes exactly as before. No network, no OAuth — this is the shape and the bookkeeping, not the sync. The round-trip fixture is the OW-53 Google-shaped file itself: import → export → import agrees on every meaningful field, and feeding the exported file back against its own items yields 3 updates and 0 adds. Calendar → Tools → "Export calendar (.ics)…" is a `zn-dialog-card` with "Everything (n) / This year (n)", writes only on Export, and saves through `env.saveIcs`; every string exists in en and pl, and the test fails if one is missing. `tests/notes-ics-export.test.cjs` (12 assertions) pins the writer, and `tests/notes-ics-export-card.test.cjs` drives the card itself through the real sheet code and the real module — the row opens, the card counts `Everything (3)` with a cancelled import excluded, nothing is written until Export is pressed, and the file it saves imports back to those three events. Full suite 242/242.
+
+- `T2.13a` (3.3.310) — A holiday calendar that arrives as a file is not a local holiday. The owner's question was what happens when Google's own holiday feeds meet the `T2.13` work; the answer is now behaviour, not a promise. **It is structural:** `isWorkFree(day, prefs, lang)` takes prefs and nothing else — there is no parameter through which an item could arrive — and the test asserts that signature (`length === 2`) so a later "just one more argument" fails loudly. A feed is recognised by what the file says about itself (`X-WR-CALNAME`, e.g. "Holidays in Poland", plus the `…#holiday@group…` URL form), never by the event text; over-marking a calendar called "Holiday planning" is quiet, under-marking would be a silent day off, so the trade is made toward marking. `markImportedHoliday` writes `x.icsHolidayFeed` + `x.icsHolidayName` on all-day, non-reminder `.ics` items only, and `importedHolidayAttrs` turns that into the `is-imported-holiday` class — a neutral `currentColor` edge and a dashed item border, asserted **not** to appear in the work-free or holiday tint rules, so a subscribed week can never look like a day off this calendar decided on. The mark rides both the Month cell and the item button, so Week/Day/Agenda agree. Two places say it in words: the import card names the feed and explains its days arrive as ordinary events, and the holidays settings carry "these holidays are local to Notes and are never synced" (en and pl, with the test failing if a key goes missing). No etag churn: the marks are kept only when present and only on `src: "ics"` items, so a file that is not a holiday feed imports byte-identically and an untouched store hashes as before. `tests/notes-calendar-imported-holidays.test.cjs` (14) includes a live sheet run through the real `planIcsImport → upsert → render` path, verified by disabling the render call and watching it fail; the holiday tests' harness moved to `tests/helpers/holiday-harness.cjs` so the two files cannot drift. Full suite 243/243.
+
+- `OW-78` (3.3.311) — One palette: the stylesheet and the JS resolver now answer with the same colour. After `OW-76` the sheet had two roads to a surface — the resolver read Zen's tokens and wrote `--zn-surface-resolved`, while CSS separately said `--zn-surface: var(--bgalazka-look-toolbar-surface, … #1e1e24)`, the RSS card's private palette. Every rule that sets `--zn-surface`/`--zn-text` now reads resolved first, Zen's tokens next, and the RSS set **last**, with the fixed themes' own hexes as the second rung so a sheet whose JS never ran paints exactly as before; the CSS header comment beside the tokens names this row and points at `resolveThemeSurface`, so the next person cannot re-add an RSS token first by accident. The row earned its keep by finding a real bug: `resolveThemeSurface` ended its text chain with a hardcoded `isLight ? "#1c1c22" : "#e9e9f0"`, which matches only two of the four themes — so the moment the resolved token started winning, **paper's text would have jumped from warm brown `#3b3226` to near-black, and light's from `#1d1d22` by one step**, silently. It now reads the theme's own `base.text`. One deliberate exception, written down and asserted to be exactly two names wide: a colour the owner chose (`--zentral-notes-ov-bg` / `-ov-text`) is the last word and is not mediated by the resolver. `tests/notes-one-palette.test.cjs` (10) checks the order of every chain across the whole file, that each theme's resolver fallback is the stylesheet's own hex, and reads a live sheet's inline tokens back against the resolver — verified by negative check, where restoring the hardcoded pair fails 1 of 10. Full suite 244/244.
+
+- `OW-79` (3.3.313) — More languages, and never a raw key on screen. The report was concrete: a browser run drew `cal.todayBtn` as the Today button. `translate` already fell through to English per key, but its last resort was the key itself; it now draws readable words from the key's last segment (`Today btn`) and reports the gap **once per key and language** through `translationGaps()` / `onTranslationGap`, not on every draw. An empty string in a table counts as missing, so a blank line in a translation file cannot blank a label. Doing this exposed a real defect: two places asked "is there a translation?" by comparing `t(key) === key`, which became always-true the moment `t()` stopped returning keys — every settings option would have shown the readable form of its own key. Both now ask `hasTranslation(key)`. The larger half was discovery: a new language used to need three edits in two JS files (a `loadOptional` line, `NOTES_LANGUAGES`, and a hardcoded menu pair — the last the one nobody remembered). `tools/build-languages.cjs` now generates `i18n/registry.js` from the directory, the sheet loads what it names, the menu is built from what registered, and `--check` runs in the suite beside the z-map check. Proven by adding `i18n/de.js`, a real German table with only a handful of strings translated: it appeared in the registry and the menu by existing (`Deutsch (German) — 879 missing`), and its date words parse (`heute`, `übermorgen`, `25. dezember`, `in 3 tagen`, `vor 2 wochen`). Three options also make `choiceIsDropdown` true, so the language row is a dropdown now. `docs/ADDING_A_LANGUAGE.md` carries the file shape, the tables a language needs beyond `strings`, the plural categories and the missing-key workflow, and `i18n/en.js` points at it. `tests/notes-more-languages.test.cjs` (11), including two live-sheet runs (one with the incomplete table, one with no table at all) that assert no rendered text is a dotted key; verified by negative check, where restoring the old last resort fails 2 of 11. Full suite 245/245.
+
+- `OW-77` (3.3.314) — Every menu, measured in a real browser, with the numbers kept. OW-75 was decided by measuring the calendar's Tools menu by hand; those figures lived in the roadmap, so nothing could catch them moving. `tools/audit-notes-menus.cjs` opens the real sheet in a headless Chromium (nothing mocked but the disk) and opens **11 menus** — calendar View, Size, Snap, Days, Kind filter, Category filter, Tools, the month cell and the calendar item context menus, the notes `+` menu and a note row — walking into every group row and back through its Back row: text 13/20/28 px × sheet 1100/620 × 560/720 high × both scrollbar kinds = **264 measurements, 0 findings**, with 16 cells reported "not applicable" because a 620 px sheet draws Month as the date-only picker (counted apart, never as a defect). It checks a row shorter than its label, a row over 2.6× the text size for one line, a label cut horizontally without ellipsis, a menu taller than the window and not scrollable, a menu leaving the window, a group level with no Back row, a group that loses its parent, an empty menu and a page error. `docs/MENU_BASELINE.md` holds one row per measurement and `--compare` fails when a menu height moves by more than 4 px. The tool was proved to catch defects rather than merely pass: a 6 px row height produced 67 `row-tight` findings, and raising row padding from 5 to 18 px moved 226 of 264 baseline rows with `--compare` exiting 1 (Tools 331 → 448 px, `+` 331 → 487 px). It also caught two bugs in itself — removing the open menu by hand stranded the sheet's menu variable so the next fill threw, so menus are now closed with a pointerdown like a person; and skipped cells were averaged into their menu's height range with an uninitialised value, making a 300 px menu look like 720 px. Real numbers at 13 px text: Tools 196 px (6 rows of 29.5 px), `+` 196 px, month cell menu 343.5 px growing to 591 px at 28 px. Not in the suite (it needs a browser); the recipe is in the tool header and `additional/notes/README.md`. Measured in Blink while Zen draws with Gecko, so verdicts are written for a glyph-width difference. Full suite 245/245.
+
+- `OW-74` (3.3.304) — The calendar's basic controls survive hiding the control strip. The three buttons (`‹`, Today, `›`) are now MOVED — not copied — into a `zn-calendar-head-nav` slot between the calendar name and the long period name, with a month/week toggle beside them that writes the same `calendarView` meta as the view menu and keeps them in step both ways. The head is one line: the name is the only item that gives ground (`flex: 0 1 auto; min-width: 0; text-overflow: ellipsis`) and the controls are `flex: 0 0 auto`, so the controls outrank the name exactly as the owner asked. Verified in real Chromium: with the strip hidden, `‹` and Today still move the calendar and the month/week toggle flips the view while `calendarViewSelect` follows.
+
+- `OW-75` (3.3.304) — The calendar's Tools menu was measured, not guessed: 18 rows in five unrelated jobs, 568 px at 13 px text and 619 px with its own scrollbar at 20 px, inside an 800 px sheet. The inventory lives in the roadmap as a table. Creation's four modes moved under the Notes `+` menu as one Calendar group (the owner's own rule), and the rest became a grouped menu: Create, Calendar settings, Show and find, one standalone Import, and This week as text — 5 rows, 167 px, no scrollbar at either text size, with every action still reachable and none deleted. The other six menu buttons (View, Size, Snap, Days, Kind, Category) were 2–5 rows and read fine, so they were left alone. A real bug surfaced while testing this: `fill()` replaced a menu level, which detached the focused row, and the `focusout` handler read the browser's report of that as the person leaving and closed the menu — so EVERY group menu in Notes and Calendar (Settings›Labels, Colour, Import & export) closed as it opened. It is invisible to any fake DOM because the fakes do not move focus; it was reproduced and fixed in Chromium.
+
+- `OW-76` (3.3.304) — Calendar and notes now wear Zentral's appearance theme, by default and live. The `zentral` theme read `--bgalazka-look-toolbar-surface` / `--bgalazka-look-surface` / `--bgalazka-look-text` — the RSS card's own variables, another module's look — so "follows the Zen look" was true by coincidence; it now reads `--zen-colors-base`, `--zen-colors-text`, `--zen-colors-border` / `--zen-colors-tertiary` and `--zen-primary-color`, with the RSS set kept only as a last fallback. And nothing used to tell the sheet that the browser's theme had changed: it listened only for its own `zentral-notes-theme-changed`. It now also follows `zentral-appearance-theme-changed`, `look-and-feel-changed` and the root attributes the theme service sets (`zentral-effective-theme`, `lwtheme`, `lwtheme-brighttext`); the observer is registered in `ACTIVE_RESOURCE_INVENTORY` and released with the sheet, so the leak audit stays at zero. Opt-in is unchanged: the default is `zentral`, and every other look (`recommended`, `light`, `dark`, `paper`) is reached only by choosing it. Measured in Chromium: a light host palette resolved to surface #f7f4ef / text #20202a / accent #b5179e with scheme "light", and switching the tokens plus `zentral-effective-theme="dark"` repainted to #101018 / #e8e8f2 / #39d98a without a reload.
+
+- `T3.9c` (3.3.253) — Weather sidebar widget. Provider: Open-Meteo, one host, no key and no account, `credentials: omit` and `no-referrer`; nothing is synced and no account exists to leak. A place is typed once by name, geocoded once (`geocodeUrl`/`readGeocodePayload`), and stored as latitude/longitude (`cleanWeatherPlace` refuses half a place, out-of-range values and 0/0); the card never geocodes per refresh. Units are `auto` (the place's country, never the browser language), metric or imperial, with `weatherUnitLabels` choosing C/kmh or F/mph. The 28 WMO codes are reduced to one word and one plain glyph (`WMO_CODES`, `weatherCodeInfo`); an unknown code says Unknown instead of guessing. The scheduler owns the timer: no `setInterval` in the widget, a 15-180 minute `refresh_minutes` setting with a floor, pause-when-hidden inherited from the shell, and `nextWeatherDelayMs` giving a minute back-off after an error rather than a retry storm. The cached reading is drawn dimmer (data attribute `cached`) and the cache is only trusted for the refresh interval (`isWeatherCacheFresh`). Six prefs in a new **Weather** settings section (enabled, place, latitude, longitude, units, interval), all off by default, so the module asks the network only after a person opts in and names a place. `tests/widgets-weather.test.cjs` (9 tests). Full suite 200/200.# ZentralNotes — Legacy: DONE roadmap rows (frozen)
+
+- `T3.9d` (3.3.257) — Timer widget, Clock click and quick note. The pure layer decides everything: `parseTimerDuration` reads `5`, `90`, `5m`, `5 min`, `2 godz`, `1h30`, `1:30`, `1,5h`, `45 sek` and caps at a day; `formatDuration` hides the hour field until there is an hour. The stopwatch (`stopwatchElapsed`/`stopwatchStart`/`stopwatchStop`/`stopwatchLap`) measures the wall clock, so an hour of sleep is an hour measured, and laps record absolute times instead of the running total. The countdown (`timerStart`/`timerRemaining`/`timerTick`) carries a `rung` flag, so a window that slept through the end rings exactly once on the first look and never again; `nextTimerTickDelayMs` caps the wake-up at one second and returns zero when nothing moves, so the widget owns no interval of its own. `resolveClockClick` (pure) is the owner requirement of 2026-11-16: a plain Clock click starts or stops the stopwatch, a long press (550 ms, or a right click) offers "in X", and a click while a quick timer runs stops it; the same rule is exposed as a setting (`timer.click_stopwatch`). The card carries Start/Stop, Lap, Reset, five presets (1/5/10/30/60 min), a free duration field, a laps list and a quick-note row that hides itself when Notes is not installed. The quick note travels through the existing `zentral/notes-calendar-opener/v1` symbol into Notes' `quickCapture`, which creates the note with `store.create` (never by typing into a field) and opens it through the new `openNoteFromOutside` — the same body the reminder path uses, so the start view is decided once. Three settings in a new **Timer** section. `tests/widgets-timer.test.cjs` (9 tests). Full suite 201/201.
+
+- `T3.9e` (3.3.258) — Status widget (battery and memory) and the completion of the widgets settings surface. Every reading is pure and takes the numbers the caller collected: `batteryParts` clamps a level to 0-100 %, reports charging and grades ok/low (<=25 %)/critical (<=10 %); `memoryParts` prints `used / limit` only when Firefox reports a limit (`usedSize`/`total`, falling back to `usedSize`/`limit`), otherwise just what is used; `statusLineParts` keeps a stable battery-then-memory order and drops what the person switched off; `nextStatusDelayMs` gives a minute while charging and five minutes otherwise. The card never polls: battery changes arrive on the platform's own `levelchange`/`chargingchange` events (registered for cleanup), memory is a scheduler reading (`Services.appinfo.getMemoryUsage`), and no code path owns a `setInterval`. A hidden sidebar pauses both, inherited from the shell. Three settings in a new **Status** section — enabled (off by default), show battery, show memory — beside the **Weather** and **Timer** sections, so every widget the module ships now has its own settings group. `tests/widgets-status.test.cjs` (6 tests). Full suite 202/202.Moved out of `TODO_notes_roadmap.md` on 2026-11-14 so the active roadmap contains only work that is still to do. **Nothing here needs action.** Re-open an item only if a test fails; then add a new row to the roadmap instead of editing this file. The older, separate history file `docs/LEGACY_notes_roadmap.md` (if present in your checkout) is unaffected.
+
+- `OW-47` (3.3.260) — Split-view linked scrolling stopped drifting. The old link copied `scrollTop` (or an anchor interpolation) and every copy shed a fraction of a pixel, so after a few moves the editor and the preview disagreed and never came back. `syncScrollPlan` is the new shared rule: the position is a share of each pane's own scrollable range, the sub-pixel remainder (`carried`) survives between moves so a hundred small gestures land exactly where one big one would, a difference under one pixel writes nothing, an unscrollable pane reports `no-range` instead of inventing a position, and `echo: true` marks our own scroll so it is never answered. The live `linkScroll` now reads the echo flag synchronously — previously a second event within the same frame was answered by the other pane, which is what made the pair ping-pong — keeps `mapPosition` for the fine-grained anchor part, and every reveal clears the carried remainder so the next gesture starts from the revealed place. `tests/notes-split-scroll.test.cjs` (7 tests).
+
+- `OW-48` (3.3.260) — The calendar dialog no longer jitters between two sizes. Fitting the card changes the card's own size, the ResizeObserver reports that change and asks for another fit; where two fits disagreed by a pixel or two (a scrollbar appearing, a rounded edge) the card alternated forever. Now `fitDialogStable(prev, next, tolerance)` keeps the box already on screen while the new one stays within `FIT_STABLE_TOLERANCE` (2 px), `dialogFitKey` produces a key from everything that matters so an unchanged key skips the measurement entirely, `fitCard()` stores the applied box and returns it, and the card's ResizeObserver ignores both the fit's own write and any size the fit already applied. A card that simply fits is still re-measured, which `tests/notes-settings-layout.test.cjs` requires. `tests/notes-calendar-dialog-fit.test.cjs` (7 tests, including a real A→B→A oscillation that settles after one step).
+
+- `OW-38` (part, 3.3.260) — Three Zentral features outside Notes gained their first behavioural suites, all against fake windows rather than a live browser. Theme: `tests/theme-service.test.cjs` (6 tests) loads the pure policy through both its loaders, proves the six source cases and the unknown-value fallback, starts the service against a fake root and asserts the attributes it writes, the runtime state, the one-frame coalescing of pref changes, and that a teardown restores exactly what it found. Library Resize: `tests/library-resize.test.cjs` (6 tests) proves the background priority (an explicit colour beats Arc 2.0, Arc beats Zen's own paint), the opacity mixing, the invalid-colour fallbacks through the real `supportsColor` argument, and a full start/stop cycle that leaves the root, the custom property, the style sheet and every pref observer clean; the pure decision is now on `window.__zentralLibraryTestSeam`. RSS: `tests/rss-reader-behaviour.test.cjs` (6 tests) proves the one-strip reader binding, the clamped hover/hide delays, the side and gap bounds, the URL picker that refuses `javascript:` and `ftp:`, and that the module reads the Look custom properties without ever writing them.
 ## Completed-work notes from the old file header
 
+- `OW-38` (part, 3.3.261) — Two more features outside Notes gained behavioural suites. Video Preview: the module is the
+  largest in the tree and cannot start without a real `<video>`, so `tests/video-preview-rules.test.cjs` (7 tests) boots
+  the real module against a fake window and proves the decisions it makes before it touches a player — the capture rates
+  (tenths of a capture per second, 1…600) and the interval each implies, the human sentence every rate carries, the
+  fixed engineering renderer order with native cloning first and the still fallbacks last, that a blocked source drops
+  native cloning but keeps the still path, that an explicit renderer is honoured instead of a better one being tried
+  behind the person's back, the power-saving health/visibility cadence, and that every pref the module reads is declared
+  in its settings. Panels geometry: `tests/panels-geometry.test.cjs` (7 tests) resumes the real `geometry` part from
+  `extension/panels/geometry/ZentralPanelGeometry.uc.js` and drives it — the fresh-panel 12 px side gap versus a saved
+  offset, the right-anchored sign mirror, the clamp to the sidebar-safe area measured from `offsetLeft`/`offsetWidth`
+  so a hover translate cannot move the panel, the position offset moving the panel up while the height stays put, the
+  Notes sheet's reserve subtracted from a docked panel's bottom margin (and skipped in quad view, where CSS allocates a
+  slot), a pref write from outside moving the panel through the cache, cleanup restoring every margin, and a locked
+  geometry refusing the gesture instead of editing hidden saved values.
 > 3. **Recently Completed & Removed from Backlog:**
 >    - `S6 B5 / B2` (Card right-edge clipping & layout) — resolved and verified in commit `9c5f67c35a791fe08bebb6c7c8cae7376c571836`.
 >    - `Cycle G #5` (armed toolbar buttons), `Cycle H #6b` (stable folder uid), `S6 W2` (folder colour / emoji) and `S6 W1` (coloured note favicons) — done in the chunk after 3.2.0; details in the handoff. Not tried in a real Zen: see the handoff.
 
+- `OW-38` DONE (3.3.262) — The audit is finished: every Zentral feature outside Notes now has a behavioural suite that
+  runs in the plain Node suite. The five last parts:
+  * Compact sidebar hover (`tests/compact-hover.test.cjs`, 7 tests) — the window-entry reveal is now a set of plain
+    functions instead of inline comparisons: a pointer must arrive at the window's own side edge, away from the
+    corners, level with the sidebar, and a fast return is forgiven only after an exit on the same side; the three
+    tunables (edge margin 0–64, exit grace 0–2000, native keep-hover 0–2000) are clamped in one place, and a test
+    proves the live handlers call those rules rather than keeping a second copy.
+  * Background tab dragging (`tests/tab-drag-background.test.cjs`, 8 tests) — the real `attach()` is wired to a fake
+    tab strip: a press on a background tab is silent until it becomes a drag, a click still selects, the drag payload
+    is the pressed tab and not the active one, a multiselection keeps its members without dragging the active tab
+    along, a sleeping source tab is not captured but the caller still gets a resolving promise, control presses and
+    modified presses stay native, the pref switch returns native behaviour, and teardown restores every wrapped
+    member and removes the listeners.
+  * Load at Startup (`tests/startup-load.test.cjs`, 7 tests) — only chosen pinned/essential tabs are woken, an
+    ordinary tab marked at startup is ignored, empty and add-on-host tabs are never woken, a wake happens once per
+    tab, a running page is left alone, the context-menu choice is stored explicitly through SessionStore and applies
+    at the next startup, the off switch stops the scan, and teardown removes the menu item and the handle.
+  * Diagnostics Logger (`tests/diagnostics-logger.test.cjs`, 9 tests) — nothing is collected while logging is off; a
+    line keeps its level, tag and message with the redundant tag stripped; consecutive repeats are compressed into
+    one line with a count; a module switch silences only its module; tags classify into the modules an export
+    filters by; the 8 000-entry ring buffer drops the oldest line; and a shared export carries no account name,
+    address-bar query, e-mail, path user name or token, with `raw: true` the only way past redaction.
+  * Video Preview (`tests/video-preview-rules.test.cjs`, 7 tests) — the capture rates and their intervals, the human
+    sentence each rate carries, the fixed renderer order, blocked-source exclusion, an explicit renderer being
+    honoured, the power-saving cadence, and that every pref read is declared in settings.
+  Reaching these required two small production seams (`window.__zentralCompactHoverTestSeam`,
+  `window.__zentralLoggerTestSeam`) and one refactor that removed duplicated hit-tests from the hover module.
 - `T1.4` (safe HTML paste to Markdown), `T1.5` (foreign YAML front matter and tags / aliases pills), `T1.6` (interactive `[!bingo]` / `[!poll]`), and `T1.7` (aligned display-math environments) — done and covered by focused Notes tests.
 - `T1.8` (physical and floating Table of Contents), `T1.9` (docked live Outline panel, now an option in the ToC menu), `T1.10` (extended wiki-links), `T1.11` (reciprocal section links), `T1.12` (wiki autocomplete, backlinks and unlinked mentions), and `T1.3` (inline footnotes `^[text]`) — done and covered by focused Notes tests.
 - `T1.1` (lazy continuation and fenced code inside list items / quotes) and `T1.2` (minor Markdown fixes: double-backtick code, `~sub~` / `^sup^`, readable-text rule; the readable-text rule already holds: tags, armed buttons and highlights use text-colour mixes) — done in 3.3.0, see the handoff.
 - `T3.6` (custom colours with a colour picker and saved quick colours; per-note spell-check toggle already existed as the `spellcheck` pref) — done in 3.2.3, see the handoff.
 - 3.2.0 (2026-11-08): merge conflict markers in the 4 version/hash files fixed; `Outline` renamed **Table of contents** and given its own toolbar button; More menu regrouped (Labels, Templates, Links & dates, Window, Settings & help); Markdown mode in Quick settings and its own Settings tab; Insert caret menu gained underline, spoiler, hidden comment, line break, inline/block math, collapsible section, date/time, all 15 callout kinds, foldable callouts; checklist hold menu offers the Obsidian task states; code block language list has Diff; `docs/MARKDOWN_FLAVORS.md` has a _GUI in Notes_ column; demo notes rebuilt from it (6 notes).
 
+- `OW-49`…`OW-52` DONE (3.3.263) — Four owner reports of 2026-11-17, in the order they were filed.
+  * `OW-52` (the bug) — The Status widget rendered nothing at all. Two platform facts broke it: the browser window has no
+    `navigator.getBattery` (so the battery half never filled in), and `getMemoryUsage()` was guarded only by a name check
+    (so a build that answers with a different shape silently produced "no memory"). One missing half then removed the
+    whole card. Now both sources are tried (content navigator, then the power-manager service), both readings are
+    normalised by `readBatteryInfo`/`readMemory`, one missing half never removes the other, a memory reading that cannot
+    be taken prints one honest dash instead of vanishing, a desktop's absent battery stays quiet when memory carries the
+    card, and the support state is remembered so a failed read is not retried on every paint. `widgets-status` grew to 10
+    tests.
+  * `OW-50` — Weather now asks for a week (one request, same host) and names tomorrow plus the next day that looks wet.
+    "Wet" is conservative: the WMO code must say rain/snow/sleet/storm *and* the numbers must agree (precipitation hours,
+    snowfall, or a real probability); a rain code with nothing behind it and a dry code with 90% chance are both "no".
+    A dry week says "No rain this week" instead of leaving a line blank; rain tomorrow is said once, not twice. On a
+    narrow card one of the two lines is shown and a click swaps them — a glance, not a preference. The cached value stays
+    a small reduced week, never the raw payload. `widgets-weather` grew to 14 tests.
+  * `OW-51` — The place setting now says what a typed name does: it is only a label, the coordinates are what the forecast
+    uses, and the two coordinate rows say they are filled by the lookup and may be edited by hand. No behaviour change:
+    the lookup was already one-shot.
+  * `OW-49` — The Timer stopped being a permanent card of buttons and became the small panel the Clock reveals. One
+    primary button, a Lap button that exists only while a stopwatch runs, a Reset that is disabled when there is nothing
+    to reset, five short chips instead of five full-size presets, the duration field only when nothing is counting, the
+    note row behind its own chip, laps only while running. Escape and a click outside dismiss the panel; the panel can
+    appear without turning its own widget pref on (and leaves again). While closed, a running countdown or stopwatch shows
+    on the Clock line itself, so nothing that counts can be invisible. The pure rules (`resolveClockPanelState`,
+    `clockPanelControls`, `clockBadge`) are seam-tested; `widgets-timer` grew to 13 tests.
 ## Old recovery note
 
+- `UI4.9` DONE (3.3.264) — Slider badges read `7days` and `100000chars`; they now read `7 days` and `100000 chars`.
+  One rule owns the space: `formatSliderValue` in the native settings rows and `formatSchemaValue` in the runtime's
+  schema rows, with the same two tight exceptions typography actually keeps (`80%`, `12px`). A caller that passes
+  `" px"` and one that passes `"px"` now produce the same badge, an empty value never prints a bare unit, and the three
+  call sites that used to concatenate by hand all route through the shared helper. `tests/settings-slider-units.test.cjs`
+  (5 tests) parses the shipped functions out of the sources, checks them against every unit the settings actually
+  declare, and fails if a hand-rolled `value + unit` comes back.
 > **Recovery note (2026-11-12):** Earlier handoff text included Track 2 completion claims that must be checked against the actual source and tests before relying on them. The verified working tree is now version **3.3.113**; its release state is governed by the source, generated-build checks and test suites in this archive, not by older handoff claims.
 
+- `SB6.6` DONE (3.3.266) — Closing an Agenda tab no longer puts it straight back. A new Settings > Notes > Experiments
+  row, "Closing an Agenda tab", picks between hiding that item for the rest of the local day (the default), running
+  Dismiss for a reminder (events fall back to the day hide, they have no Dismiss), and the old "come back right away".
+  A closed projection key carries its date, so a multi-day event keeps its other days and a repeating reminder returns
+  tomorrow without a timer; a day that loses its last row loses its folder. A row the projection removes itself, and a
+  pseudo-tab the router closes on the way to a real page, are never mistaken for a person's close. `agendaClosedSet`/
+  `agendaOnTabClosed` and the pure `cleanAgendaCloseAction`/`applyAgendaClosedDays`/`AGENDA_CLOSE_ACTIONS` live in the
+  host and the calendar module; `tests/notes-agenda-close-action.test.cjs` (12 tests) covers each option, the multi-day
+  and per-day rules, the self-removal guard and the routing guard.
 ## Ordered Execution Backlog (DONE rows)
 
+- `UI4.11` DONE (3.3.267) — Escape now hands the keyboard back to whatever opened a sheet menu. `closeMenu` takes
+  `{ restoreFocus: "keyboard", action }`: both Escape paths (the menu's own keydown and the sheet-level controller that
+  runs when the focus is outside the menu) pass "keyboard", and a row that runs passes `action`, because that row leaves
+  with the menu. Outside pointer presses, blur, scroll and toggle-close deliberately do not take the focus, so a person
+  who moved it by hand keeps it. Menus anchored to plain geometry objects simply close: `closeMenu` only calls
+  `focus()` on an anchor that has one. `tests/notes-menu-lifecycle.test.cjs` gained four cases (opener focus on both
+  Escape paths, a chosen row, and the pointer press that must not steal focus) over the real menu controller.
 | Order | Global # | Track ID     | Status | Item                                                                                   | Dependencies & Remaining Scope                                                                                                                                               |
 | :---- | :------- | :----------- | :----- | :------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1     | Hotfix   | `B3.3.50-1`  | `DONE` | Hide/remove Agenda seed tabs and empty Agenda day folders                              | Empty days are omitted and retired; seed tabs are removed after creation or recreated with a labelled fallback when Zen deletes empty folders. Old seeds are swept.          |
@@ -33,8 +154,115 @@ Moved out of `TODO_notes_roadmap.md` on 2026-11-14 so the active roadmap contain
 | 10    | Hotfix   | `B3.3.50-10` | `DONE` | Unbind RSS reader card listeners when `reader_card` is toggled off                     | Disables all six listeners and pending card timers, rebinds once when enabled, and transfers ownership when the native tab strip changes.                                    |
 | 10a   | Hotfix   | `B3.3.64-1`  | `DONE` | Align week/day calendar headers and all-day cells with the hourly grid                 | Matching stable native scrollbar gutters and thin scrollbar widths across all three rows; live Zen geometry remains to be checked.                                           |
 
+- `DOC-1` DONE (3.3.268) — `additional/notes/README.md` promised a "Split view as a second window" setting that no code
+  ever implemented, and an orphan comment above `syncAllNewButton` still claimed "Split view as two windows". The line
+  and the comment are gone; the split view that exists is the in-sheet one, which the same README documents and `T3.8`
+  later extended with the companion pane. The standalone README test stays green and the bundles are rebuilt.
 ## Track 1 (DONE rows)
 
+- `TM3.7` DONE (3.3.269) — A day whose clocks go forward at midnight (Chile, Egypt, Lebanon, Cuba) is 23 hours long, and
+  the day arithmetic `addDays` uses on purpose (it keeps the wall clock, so a 09:00 reminder stays at 09:00) made
+  `addDays(dayStart(ms), 1)` land on 01:00 of the next day: everything between 00:00 and 01:00 belonged to no day, and
+  the day that begins at 01:00 kept that hour for every later day. New pure `nextDayStart`, `civilDayStart` and
+  `dayRange` in `ZentralNotesCalendar.js` now build every day range, day bucket, day-heat window, all-day strip,
+  work-hours walk, Agenda boundary and overdue look-back, and the host's month cells, date picker, week grid and free-slot
+  range. `tests/notes-calendar-midnight-dst.test.cjs` runs itself again under `TZ=America/Santiago` (as
+  `notes-calendar-hours.test.cjs` does) and checks the 23-hour day, its first hour in the Agenda projection and day heat,
+  and a full working week of free slots.
+
+- `ST7.8` DONE (3.3.271) — One reminder or event can carry its own colour. The colour was already read but never stored:
+  `cleanItem` rebuilt `x` without `color`, so every write dropped it. `cleanItem` now keeps it — only when the item has
+  one, so an item that was never colourised serialises and hashes exactly as before (no etag churn, and the recurrence
+  baseline fixtures stay byte-identical). `resolveItemColor` is three layers now — the item's own, else its source note's,
+  else its category's, an empty or `none` layer never masking a useful one below — and its old two-argument form still
+  means note-then-category, so nothing shifts meaning. New `cleanItemColor` stores a palette name or a `#rrggbb` (short
+  hex expanded) and drops anything else rather than painting a row invisible. Every reader follows the same order: the
+  Agenda projection, the sidebar rows, the calendar cells, the hover card's Inheritance line (which names the item's own
+  colour first) and the category chip, which no longer borrows the item's colour. `calendarItemMenuModel` gained a Colour
+  group — the twelve palette colours with the current one ticked, `Custom colour…` through the existing `askCustomColor`,
+  and `Use the note or category colour` to clear — so the calendar and the Agenda tab menu get it together; a palette pick
+  is a headless one-write action with Undo, and only the custom dialog needs the Notes sheet. `tests/notes-item-color.test.cjs`
+  (7 tests) and `tests/notes-agenda-item-color.test.cjs` (4 tests). Full suite 218/218.
+
+- `SB6.11` DONE (3.3.272) — Our own sidebar rows now open our own right-click menu instead of Zen's tab menu. A single
+  capture listener on the window decides: a Note projection tab or an Agenda projection tab gets
+  `#zentral-notes-row-menu`, built from exactly the rows the rest of Notes uses (`ZEN_MENU_ITEMS` for a note, the shared
+  `calendarItemMenuModel` for an Agenda item, both bound through the new `agendaItemMenuRows`), while a foreign tab is
+  left completely alone. Nothing is appended to Zen's `tabContextMenu` any more, so the versioned native wording cannot
+  drift from ours; the native actions stay one row away (`sidebar.row.zenActions`) and a Ctrl/Cmd right-click still
+  reaches Zen's own menu in one gesture. A palette pick runs headlessly, a sheet action opens the sheet, and the row
+  takes the focus back when the menu closes (Escape included) as in `UI4.11`. The listener is bound once at start-up
+  rather than inside `bindZen`, because the Notes folder and the Agenda folder can be switched on independently. The
+  test host grew three things a real browser has and it did not: window capture listeners now see fake-DOM events, a
+  popup has `state`/`openPopupAtScreen`/`hidePopup`, and the module's `globalThis` mirrors the page's global.
+  `tests/notes-sidebar-row-menu.test.cjs` (6 tests). Full suite 219/219.
+
+- `ST7.5` DONE (3.3.274) — The reminder history can now be read, filtered, exported and trimmed. The card that already
+  lived in Calendar → Tools → Reminder history was rebuilt rather than duplicated: it reads every record once
+  (`history.list({})`) and one filter decides what the list, the count, the copy and the save all see, so they cannot
+  disagree. `cleanHistoryFilter` bounds itself (a real action, a 0–3650-day window, a trimmed search), `filterHistoryRecords`
+  applies actions + window + a case-insensitive search over the summary and ids, `exportHistoryLines` writes one
+  tab-separated line per record newest-first with the scheduled instant and no embedded newlines, and `historySummaryLine`
+  explains an empty result instead of showing a blank card. Trimming is a preview first: `historyPruneSurvey` runs the very
+  rule the automatic compaction uses (`compactReminderHistory`) without writing, the confirmation names real numbers and
+  the action breakdown, and only then does `history.compact()` append the old records to
+  `reminder-history-archive.jsonl` before shrinking the main file — so nothing is ever deleted, and Cancel changes
+  nothing. Copy and Save as .txt reuse the existing clipboard and save picker; a plain .txt needs no format. The sheet
+  gained `openReminderHistory()` so a host (or a test) can open the card without imitating the Tools menu.
+  `tests/notes-reminder-history-ui.test.cjs` (5 pure tests) and `tests/notes-reminder-history-card.test.cjs` (3 harness
+  tests). Full suite 221/221.
+- `UI4.10` DONE (3.3.275) — The Settings card now follows the text size instead of taking its size once. A chip was
+  pinned at `font-size: 12px` on an 18px line, so at 28px text the labels were large and the On / Off chips beside them
+  small; it is `0.92em` on a `1.4` line with em padding, which keeps the old look at the default 13px and grows with it.
+  The settings row floor was a fixed 28px — smaller than one 28px line, so a wrapped control lay over its neighbour —
+  and is now `2em`. An open card is re-measured when the text size changes (the host observer calls a new
+  `refitDialog()` on every sheet) and when the sheet itself changes size (the layout pass fits any open non-calendar
+  card in the same frame), so it grows instead of letting its body scroll. The table creator's number fields can now
+  shrink (`zn-field-pair` is `repeat(2, minmax(0, 1fr))`, the field a shrinking grid item) and its size grid stops
+  growing past 26px a cell on a wide card, which is what showed both scrollbars. `tests/notes-settings-layout.test.cjs`
+  grew to 8 cases, including a text-size change and a sheet resize while a card is open. Full suite 221/221.
+- `SB6.9` (left counts) DONE (3.3.278) — The Agenda day pill now says what is still ahead. `agendaLeftCount` counts the
+  projected entries of a day that have not ended and are not done; an all-day entry is a day, not a moment, so it stays
+  left until the day is over. Both projection paths carry the same `left` — the stateless one and the incremental one —
+  and `tests/notes-agenda-incremental.test.cjs` (the randomized fuzz equality test) is what caught the first, wrong cut:
+  the stateless path had counted the raw items while the projector only ever sees the projected shape. There is now one
+  reader of one shape, and the two paths cannot drift. `left` is the only field a clock alone can change, so
+  `materializeDayBucket` takes the clock of the run doing the materializing rather than the previous run's `lastNow`.
+  The sidebar shows `left/count` only where something ended (a day that is all ahead keeps the plain count), and the
+  folder's title says it in words. The quiet-hours fold is **LEFT** in `SB6.9`: it needs a new preference in four files
+  and shares nothing with the count. `tests/notes-agenda-left-count.test.cjs` (8 cases: the pure rule, the two
+  projections agreeing, the real host's pill, and the CSS). Full suite 222/222.
+- `OW-53` DONE (3.3.280) — A Google Calendar (or any other calendar's) `.ics` file can be imported. The reader is pure
+  and lives in `ZentralNotesCalendar.js`: `parseIcs` unfolds continuation lines (the first thing a hand-written reader
+  gets wrong on a real export), splits `VEVENT` blocks, unescapes the text (`\n`, `\,`, `\;`, `\\`), reads `DTSTART`/
+  `DTEND` with `VALUE=DATE`, `TZID` (through `Intl`, so no zone table is shipped) and UTC `Z`, and takes the `RRULE`
+  subset the calendar's own recurrence reader accepts plus `EXDATE` with its own zone. `icsToItem` maps one event to a
+  calendar item (all-day to a date, timed to an instant, the file's `UID` to `x.icsUid`), and `planIcsImport` says what
+  an import would do without writing: new, already-imported (matched on the UID) and skipped, with the reason named.
+  The card in Calendar → Tools reads the file through the same picker the rest of the module uses, shows the events,
+  the reminders, the date range and every skip, lets the person choose whether the file becomes events or reminders,
+  and writes only on Import; a second import updates by UID and keeps the colour, category and note the person gave
+  those events. `src: "ics"` and the four `ics*` fields are first-class `x` members (kept only when present, so no
+  existing item's etag moves). `tests/notes-ics-import.test.cjs` (9 cases, a Google-shaped fixture with folds, `TZID`,
+  all-day, a weekly rule, an `EXDATE`, a cancelled event and a broken one). Full suite 223/223.
+- `F0.15` DONE (3.3.280) — The time budget of the Agenda projection now lives in its own file,
+  `tests/notes-agenda-projection-perf.test.cjs`, whose `-perf` name is what keeps `run-all.cjs` from running it beside
+  three other files. It measures the same 5,000-item shape the behaviour test uses (and warms the shapes and the
+  language table first, so the number is the projection and not the first-call setup), and it adds a repeated-run guard:
+  a projection run three times more must not creep. The behaviour test keeps what it is good at — the items land in the
+  right day and nothing spills — and `SERIAL_PERF_TESTS` in `run-all.cjs` is now empty, since nothing else there depends
+  on an isolated clock. Full suite 224/224.
+- `F0.16` DONE (3.3.280) — A sweep now answers the question this row asked. `tools/audit-test-clock.cjs` runs each
+  candidate test file at three awkward instants (23:55, 00:05 and 03:30 UTC) in the four zones the suite already uses,
+  with the global clock pinned by `tests/helpers/fake-clock-preload.cjs`, and reports the files whose result *differs
+  between instants* — which is what a fixture built around the real clock does. A file that fails at every instant is
+  reported as such and does not fail the sweep: it has a problem of its own, and the suite already sees it. A file that
+  pins its own clock (F0.14's pattern) is skipped, since overriding it would measure the tool. The preload is inert
+  unless `FAKE_NOW_ISO` is set, and it gives the fake browser's windows one shared clock base (two windows built a
+  millisecond apart otherwise disagreed about the time and a conflict test read that as one window being newer).
+  The sweep of every calendar/Agenda/reminder test file at twelve zone-and-instant pairs found **no** file whose result
+  depends on the hour. `tests/notes-test-clock-audit.test.cjs` (4 cases) holds the tool itself in place, including a
+  probe that is deliberately written against the hour and must be caught. Full suite 225/225.
 | #   | Track ID | Ref           | Item                                                         | Impact   | Effort | Implementation Plan & Dependencies                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | :-- | :------- | :------------ | :----------------------------------------------------------- | :------- | :----- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 20  | `T1.14`  | `Cycle G #37` | Inline `#tag` index & front-matter `tags:` unification       | Med      | M      | **DONE in 3.3.47.** Unified `inlineTags`, `noteTags` and `tagSummary` index YAML and inline tags case-insensitively; the Tags chip opens a counted menu, supports clearing/selection, and filters All and Recent views. Headings, code, URLs, HTML attributes/comments, hidden comments, inequalities and hex colours are excluded. Covered by `notes-audit-bugfixes.test.cjs` and existing list-view tests.                                                                                        |
@@ -886,3 +1114,382 @@ Resolved note/category colours (`resolveItemColor` + `colorHex`) flow from `agen
 - `OW-39` (3.3.243) — improved non-work-day visibility: separate cool-blue weekend, warm-amber public-holiday and violet personal-day hues in calendar views and picker; added locale-based holiday defaults, migration of old unconfigured no-region values, explicit opt-out persistence and localized setup/status messaging. Verified across the fake-Zen view harness and full time-zone matrix.
 
 - `OW-42` (3.3.244) — optimized the sidebar Clock seconds counter with a 24-entry LRU `Intl.DateTimeFormat` cache, static-field render gate (only seconds text updates on steady 1 Hz ticks), layout/paint containment and tabular numerals. Added 3,600-tick performance budget coverage plus minimized/hidden/low-space pause checks; measured 73.01 ms total, 0.0203 ms/tick, two formatter constructions, zero per-tick node creation and zero layout reads.
+
+- `OW-43` (3.3.245) — split the holiday set from the interface language: `HOLIDAY_LOCALES` metadata, `cleanHolidayLocale`/`cleanHolidayLocales`/`defaultHolidayLocales`, a merged `holidayEntriesFor` list and `isWorkFree().holidays`, `calendarHolidays.locales` with one-time migration of the legacy single `region` (explicit opt-outs preserved), and a checkbox list of sets in `Tools -> Holidays & days off` with the name language following the Notes language.
+
+- `OW-44` (3.3.246) — show any number of holiday sets at once: merged `holidayEntriesFor` (one entry per holiday, a name shared by two sets becomes one entry of both), `holidaySetsOf`, per-set names in tooltips, `data-holiday-sets`/`is-multi-holiday` on every view's cells, a bounded merge cache and a second-accent style for shared days.
+
+- `OW-45` (3.3.247) — one-place year table (`HOLIDAY_TABLE`) for dates no rule computes: bilingual entries with `kind` (`holiday`/`trading-sunday`/`election`), laid over the rule list by `overlayHolidayTable`, Polish trading Sundays for 2026-2027, coverage reporting in the dialog, and a marked-but-not-tinted style so a trading Sunday never reads as a day off.
+
+- `OW-46` (3.3.248) — one master off switch for every holiday feature: an early `NO_WORK_FREE` return before any lookup, a dialog hint that names what is hidden, and kept sets/personal days so switching back on restores the previous choice.
+
+- `T2.11b1` (3.3.249) — Notes discoverability audit: `docs/NOTES_DISCOVERABILITY.md` lists every function with its one place (editor toolbar/caret menu/More, All notes and its batch bar, calendar toolbar/Tools/day and item menus, Zen sidebar, Settings), records the findings it accepted without a change (holidays have no second door, calendar settings live in Tools, two menus share action names) and the deferred one (`Reminders` is a group inside `Links & history`, not a tab), and feeds `T2.11b2`. The same list is a read-only-in-practice help note from `More → Where is a function?`, and the audit's one safe fix — the default and per-note Markdown-mode labels — is in.
+
+- `T2.11b2` (3.3.250) — rebuilt the DEMO notes from the audit: nine notes, with `Where is a function?` and a `Calendar and Agenda tour` whose calendar section is proven to parse into real items (event range, reminder, all-day line), the control table, holidays and the Agenda folder; the syntax tour and the shortcuts note link into them.
+
+- `T3.8` (3.3.252) — Split View as an equal-sized companion pane. A note other than the one being edited can stand in a second pane: `splitCompanion {id, share, side}` in `meta.json` with `cleanSplitCompanion` refusing anything unknown, `nearestSplitShare` snapping to 25/33/50/67/75 %, `splitCompanionAxis` choosing side by side or stacked from the sheet's own shape (an explicit choice wins), `splitCompanionReady` allowing only a living, different note. The pane is rendered by one function, read-only, and repaints only when that note's own store event lands (idle-coalesced) — typing in the main pane never touches it. It offers Open here, Turn (flip the axis) and Close, and the shared note menu gained `Open beside this note` / `Close the second pane`. In split mode the main area becomes a grid so editor + preview never squeeze the reference out. `tests/notes-split-companion.test.cjs` (7 tests). Also: `.gitignore` whitelisted `docs/NOTES_DISCOVERABILITY.md`, which had been silently excluded from the repository.
+
+`OW-54` DONE (3.3.281) — Weather outlook wraps instead of being cut.
+`weatherOutlookParts` now returns `lines` (both halves as rows) alongside the
+legacy `faces` copy; `paintOutlook` draws one `.zw-weather-outlook-line` span
+per row with `replaceChildren()`, so a narrow card puts "rain tomorrow" on the
+next row instead of clipping it at the window edge. `.zw-weather-outlook`
+dropped `nowrap`/`ellipsis` for `white-space: normal` + `overflow-wrap: anywhere`
+and stopped looking clickable; the dotted-underline cue is gone with the swap.
+The card click is now free, which `OW-57` will use for cycling places.
+Tests: 2 cases in `tests/widgets-weather.test.cjs` (both halves drawn, styled to
+wrap) — the removal assertion is anchored to `setAttribute`, not a raw token,
+because the code legitimately still *clears* a stale attribute.
+
+`OW-55` DONE (3.3.282) — the owner decides what a day off looks like.
+Three kinds (weekend, holiday, other free days), each a tint colour and a
+strength in percent. The pure layer is `cleanDayLook` / `dayLookTint` /
+`DEFAULT_DAY_LOOK` in `ZentralNotesCalendar.js`, and the defaults are exactly
+the literals the stylesheet shipped with (`#6ca8ff 10%`, `#f0b85b 13%`,
+`#78a9c8 4%`), so a sheet that never opened the setting is unchanged and
+`dayLookTint` returns "" for a default pair — no variable, no flag. Six
+`LOOK_*` prefs feed the existing `--zentral-notes-ov-*` path, so the change
+applies live and Reset covers them without another list; each strength is in
+`LOOK_NUM_PREFS` and each tint variable in `LOOK_VARS` so disposal cleans up.
+The CSS keeps the old literal as the `var()` fallback and all six view places
+(month cell, time header, all-day cell, column, day group, agenda row) follow
+the one variable. Only the resting tint: selection and hover keep their tokens.
+The tint loop is guarded by `CALENDAR_PART?.DEFAULT_DAY_LOOK` like every other
+calendar call, so a build without the calendar file still reads its prefs.
+Tests: `tests/notes-day-look.test.cjs` (9 cases) — defaults, per-field junk
+fallback and clamping, no-variable-for-defaults, the CSS fallbacks, six places
+per kind, the six prefs in the schema/Sine page/settings card, and the guard.
+
+`OW-57` DONE (3.3.283) — two or three weather places, cycled by a click.
+One JSON pref (`weather.places`) holds up to three `{id, name, latitude,
+longitude}` entries; the old single place (name + latitude + longitude) is
+migrated as entry one on the first read, so a saved place is never lost. A
+typed name with no numbers yet is kept as an entry and skipped by
+`currentWeatherPlace`/`nextWeatherPlace` until the geocoding lookup fills it,
+so the card always shows something it can fetch. The card owns the click
+(OW-54 freed it): `cyclePlace` moves to `nextWeatherPlace`, sets per-window
+`weatherView.placeId` and forces a refresh; one place stays a label, with
+`role`/`tabindex`/pointer only when there is somewhere to go. The cache key is
+now `weather:<lat>,<lon>` from `cacheKey()` on both the widget definition and
+the card instance, and `cacheKeyOf` accepts a function key — without it the
+place just switched to would show the old place's numbers. The geocoder fills
+the entry it looked up (mirroring entry one into the three legacy prefs) and
+never overwrites a different place.
+Refactor: the fake sidebar moved out of `tests/widgets-shell.test.cjs` into
+`tests/helpers/fake-widgets-harness.cjs` (same 7 shell tests, now importable)
+and it takes an optional `fetch`, so the live case can count network calls.
+Tests: `tests/widgets-weather-places.test.cjs` (13 cases + 1 live) — the cap,
+junk positions, name-only entries, unique ids, the cycle and wrap, migration,
+JSON round-trip, the per-place cache key, the click ownership, the CSS
+affordance and the pref's schema/page entry; the live case mounts the real
+host, clicks the real card and asserts one fetch for the new place.
+
+`OW-56` DONE (3.3.284) — the clock and the stopwatch are one card.
+`WIDGET_MODES`/`cleanWidgetMode`/`nextWidgetMode` decide the face; a click on
+the Clock card turns it over and writes `CLOCK_MODE`, while a long press and a
+right click still reach the panel. A person who turned
+`TIMER_CLICK_STOPWATCH` off keeps the setting as the only way to change it.
+The second face is drawn on the clock card (`data-zw-clock-face`) off the same
+`timerState`, so nothing is duplicated.
+A countdown that ends now answers two independent settings through one pure
+`timerEndPlan`: `TIMER_END_SOUND` (none / beep / chime — chime is the WebAudio
+two-note path the reminder alert already uses, beep the fallback) and
+`TIMER_END_NOTICE` (none / toast on the tray / a system notification through
+`Services.alerts`). One end, one alert (`alreadyRung`), the same rule H1.5
+applies to reminders. A finished countdown also paints the clock numbers with
+`--zw-clock-alert` (fallback `#ff2d2d`) plus a glow, and the mark survives clock
+mode until the card is clicked — `clockAlertState` is the pure rule, the flag
+lives in the window and is never written to prefs. `tests/widgets-timer.test.cjs`
+slices now end at the widget's own bound (`id: "status"`), not at a fixed 9000
+or 12000 chars — the OW-54 lesson, caught here by a real failure.
+Tests: `tests/widgets-clock-timer.test.cjs` (9 cases + 1 live) — the two faces,
+the click-off rule, one alert per end, both choices, the red state and its
+token, the three settings in schema and Sine's page, "nothing stored", the
+toast, the chime fallback; the live case mounts the real host and flips the
+real card twice, asserting the pref and the face both follow.
+
+`OW-58` DONE (3.3.285) — an imported `.ics` item can be deleted.
+One predicate now answers "does this item own text in a note?": `itemOwnsNoteText` /
+`itemIsFreeStanding` in `ZentralNotesCalendar.js`. A `%%calendar%%` line, a dated list line and an Agenda mirror do;
+a hand-made item and an imported one do not. `calendarItemMenuModel` uses it for Delete and Convert (so only an item
+with a real note is told "delete it in its note"), `askDeleteCalendarItem` uses it for its confirmation (and says
+plainly that re-importing the file brings it back), and `deleteCalendarItem` uses it to choose between "remove the
+record" and "edit the note line" — that store branch is where the bug actually lived: `src === "manual"` meant an
+imported item fell through to the mirror path and was refused. The new `menu.deleteUnavailableReason` has an EN and a
+PL string, so a refusal never borrows the note wording. Tests: `tests/notes-calendar-ics-delete.test.cjs` (5 cases) —
+the predicate, the menu for every source, Convert, both translations, the real store delete of an imported and of a
+hand-made item, the refusal of a note-backed item with no note body, delete + re-import adding it back once, and a
+mirror still removing its own Agenda line.
+
+**`OW-59` DONE (3.3.287)** — Unlink a reminder or event from its note, and list what a note (or a date) has linked. The
+note text stays the only truth: unlinking is one text edit, so nothing new is stored and the note's own undo covers it.
+Pure layer in `ZentralNotesCalendar.js`: `noteLinkedItems(items, noteId, { date })` (a note scopes to that note, a date
+scopes across notes because the question asked from a date's menu is about the day, and both together narrow both; every
+row carries `kind`, `title`, `date`, `source`, `mirrored`, `ownsNoteText`), `unlinkPlan(item)` (a genuine mirror answers
+`remove-line`, a list line `drop-date`, a `%%calendar%%`/inline line `drop-schedule`, a free-standing item refuses with
+`no-note-text`, junk with `no-item`), and `unlinkLineText(line, now)` (strips the leading date and time **and the
+`%%zn-item-id%%`/category marks** — leaving the identity token behind would re-create the item on the next read, which is
+the opposite of unlinking — keeping the checkbox and the words). One trap worth keeping: `items.get()` hides an item
+whose note is not visible, so `unlinkCalendarItem` reads the raw list and answers `missing-note` rather than `missing`;
+and a bare time is never treated as a date, so `- 09:00 Dentist` is refused instead of losing the person's time. A short
+written date (`20.11`) is refused for the same reason: the extractor never scheduled it, so it is not an item to unlink.
+UI: "Linked to this note…" in the note menu, "Everything linked to today…" in the date menu, "Everything on this
+date…" in the per-date reminder chooser, all opening one card whose rows offer only the actions that can work — Unlink
+when `unlinkPlan(item).ok`, Delete when `itemIsFreeStanding(item)` (reusing the OW-58 predicate, no per-source list).
+Tests: `tests/notes-linked-items.test.cjs` (8 cases: the line edit and its three refusals, no item left behind and the
+neighbour untouched, `unlinkPlan` per source including a real `agendaMirrorLine`+`mirroredItem` mirror, `noteLinkedItems`
+across the three scopes, the real store unlink of a dated list line, refusal of a free-standing item and of an orphan,
+and a mirror unlinking its own Agenda line). Suite `230/230`; all `--check`s and `check-default-drift` green.
+
+**`OW-61` DONE (3.3.288)** — the clock/timer settings were generated but never shown. `additional/widgets/settings.json`
+had `schema` rows for `clock.mode`, `timer.end_sound`, `timer.end_notice` and `weather.places` and no `settings` entry
+for any of them; the dialog is built from `settings`, so four settings existed in `preferences.json` and nowhere a person
+could reach them. The same file also failed the layout check, and `additional/notes/settings.json` used a `Days off`
+section the `notes-appearance` category never declared — the checker called all 14 out and nobody ran it. Fixed by adding
+the four entries (section: Clock & Date / Timer / Weather) in schema order, declaring the `Days off` section on
+`notes-appearance`, and putting `node tools/check-settings-consistency.cjs` into the documented chain in `AGENTS.md` so a
+`schema` row without a `settings` entry fails the session instead of the owner. The test that should have caught it
+(`the three settings exist and reach Sine's own page`) checked `schema` and `layout.order` and never `settings`; it now
+asserts every widget `schema` property has a `settings` entry pointing at a category and section the layout really
+declares. Suite `230/230`.
+
+**`OW-60` DONE (3.3.290)** — the Clock and the stopwatch are one card, which is what OW-56 promised and did not deliver.
+OW-56 drew the numbers on a second face but left every control on the standalone Timer card, so the two did not replace
+each other and the owner had to enable the old card to do anything. The timer face is now the whole panel — Start/Stop,
+Lap, Reset, the five preset chips, the typed duration, the laps list — and each action calls the pure helper that
+already existed (`stopwatchStart/Stop/Lap/Reset`, `timerStart/Stop`, `quickTimerFromText`, `clockPanelControls`,
+`nextTimerTickDelayMs`), so there is no second state machine and no `setInterval`. A preset starts a countdown, so the
+stopwatch keeps its countdown function. The quick note moved to the CLOCK face behind its own chip, same
+`openQuickNote` channel, same `TIMER_QUICK_NOTE` gate, and no chip at all without Notes.
+The standalone `"timer"` card is gone from the registry, `settings.json`, `layout.json` and `standalone.json`; its pref
+is read exactly once, through `externalPrefs` with a reason, so an owner who had it on lands on the timer face instead of
+losing the feature. Two traps this slice caught in its own code: a module-level hook (`clockBadgeElement`) declared
+*below* the factory that assigns it (the OW-56 TDZ rule, in reverse), and a per-`create` window listener that leaked —
+`registerWidget` mounts the card before wiring is finished and a discarded instance never reaches `dispose`, so the
+availability listener is now one module-level registration with a `registerCleanup`, which is what the clock/date test's
+"availability listener must be removed on destroy" assertion exists to catch. `data-zw-widget="timer"` no longer exists;
+`tests/widgets-timer.test.cjs` keeps its state-machine coverage and now asserts that absence instead of the old card.
+Tests: `tests/widgets-clock-timer.test.cjs` (10 + 1 live) drives the real mounted card — the stopwatch starts, its
+numbers advance, it stops keeping its elapsed time, a preset starts a countdown, and the note chip on the clock face
+reveals its row — plus the migration assertions; suite `230/230`.
+
+**`T3.5` DONE (3.3.293)** — the callout toolbar button, finished. Two things were LEFT from the audit and both are now
+in: the picker offers every kind the parser reads (it gained `bingo` and `poll`, which the flavors table has carried as
+F26/F27 all along but the toolbar never listed, so the menu and the parser disagreed), and a plain click inserts the
+last-used callout. The one design trap this slice hit is worth keeping: the natural home for that click is the Quote
+button, and putting it there **broke a proven invariant** — `tests/notes-writing-ui.test.cjs` requires a toolbar button
+and its shortcut to produce identical text, and the shortcut still ran a plain quote. The click therefore lives on its
+own More-menu entry ("Callout warning (last used)") directly below the picker's "Callout…", which keeps the Quote
+button's promise and the invariant intact; Quote's long press still lists the kinds. The memory is a plain per-window
+object (`calloutMemory`), never a preference, and an existing callout under the caret wins over it. Fold markers are now
+offered on every kind that reads one (`CALLOUT_FOLDABLE`) instead of only `note`, which is also how the old spec's
+`[!faq]-` is spelled: `faq` parses as `question` keeping its own name, so it is offered as Question-with-a-fold rather
+than as a second kind that would round-trip as something else. Tests: `tests/notes-callout-toolbar.test.cjs` (6 cases —
+every offered kind round-trips through `calloutKind`, the fold set matches the kinds that read a fold, the memory moves
+with what was inserted and is never stored, the toolbar tap prefers the caret, the picker honours hidden tools, and the
+extended kinds are hideable), plus `notes-writing-ui` (10) and `notes-flavors` (34) unchanged. Suite `231/231`.
+
+**`SB6.9` DONE (3.3.294)** — the Agenda sidebar's quiet hours, the second half of the audit's S5/D3 idea (the 'left'
+counts shipped at 3.3.276). The Agenda folder can now fold itself away for two independent reasons, either of which is
+enough: quiet hours (a real overnight range, `22:00`-`07:00` by default when enabled) or nothing due within a chosen
+window. Pure in `ZentralNotesCalendar.js`: `cleanAgendaFold`, `inQuietHours`, `agendaFoldPlan`. Two decisions are worth
+keeping. First, the fold uses **Zen's own `collapsed` setter** and repaints nothing — the browser owns the folder's child
+layout and its animation, which is the same rule `ZentralColorfulFolders` already learned the hard way; faking a fold
+with styling or a `hidden` attribute was tried first and rejected. Second, "nothing soon" is measured from the next start
+**at or after now**, not the earliest start of the day: taking the minimum let a 09:00 item keep the folder open at 18:00.
+A window of 0 means "this reason is off" rather than "nothing at all is ahead", because the feature ships off and a
+setting that quietly hides a folder on day one is exactly what the owner keeps reporting. A person who unfolds the
+folder by hand is respected (`foldUnfoldedByHand` stands the feature down until it is closed again). Four new prefs
+(`agenda_fold_quiet`, `…_quiet_start`, `…_quiet_end`, `…_due_hours`) went through the full chain — schema, settings
+meta, layout order and `standalone.json` — so they appear in the dialog (the OW-61 lesson applied before shipping).
+Tests: `tests/notes-agenda-fold.test.cjs` (9 cases) — the empty projection, work in the window, the window question, the
+next-start rule, overnight and same-day quiet ranges with malformed input, the two reasons independently, cleaning, the
+four settings reaching the dialog, and the setter/repaint/hand-unfold contract. Suite `232/232`.
+**`ST7.3` DONE (3.3.296)** — the calendar's view state left notes metadata. `meta.json` holds every folder and up to
+five thousand per-note alert/Agenda overrides, and each save rewrote the whole file; because the view cursor lived in
+it, pressing "Next" in the calendar rewrote all of that 600 ms later. The view is now `ui.json` beside it: the twenty-five
+layout/view keys (`calendarView`, `calendarCursor`, the split, the scale, the filters, the hours, the picker, the zones)
+go there, and `meta.json` keeps everything that is content. The pure contract is in `ZentralNotesCalendar.js`
+(`UI_STATE_KEYS`, `splitUiState`, `migrateUiState`); the store splits at `setMeta`, the one door every caller uses, so
+no call site had to learn about a second file, and `store.meta` still reads as one object through an overlay — nothing
+else in a 34k-line file changed. Three things are worth remembering, all of them found by the new tests rather than by
+reading the code. First, a wrong `uiBase` (what this window last saw) made the migration invisible: the base was taken
+from the migrated state, so the save looked like "nothing changed" and `ui.json` was never written. Second, reading and
+parsing in one `try` made a missing file and a damaged file look alike, and a whole view file was thrown away; they are
+now separate, so a damaged `ui.json` is reported and never written over. Third, leaving the view in `meta` when
+`ui.json` already existed let a second window write its default view back into `meta.json` — the keys are now always
+taken out of `meta`, whether they were migrated or already superseded. A view changed in the last moment before a window
+closes is staged in the unload-recovery folder like the metadata is (`ui` is a fifth unload kind), a backup carries
+`ui.json` (a restore in overwrite mode takes its view), and the file is at version 1 with a wrapper that also accepts a
+bare object. Tests: `tests/notes-ui-state.test.cjs` (12) plus the reworked `notes-meta-windows` (16), `notes-startup`
+(23) and `notes-unload-save` (8), whose assertions had to change because they asserted the coupling this task removes —
+`calendarDaysForward` and friends no longer reach `meta.json`. The property the owner cares about is now a test:
+moving the calendar writes `ui.json` once and `meta.json` zero times.
+
+**`OW-63` DONE (3.3.297)** — the stopwatch face answers a click again, and a narrow widget keeps its buttons. The owner
+reported two things after OW-60: "clicking on stopwatch doesnt revert it to clock", and the timer face's text field
+pushing the buttons out of the card at small widths. The first had a single cause, and it was a good one to have written
+down: OW-60 gave the timer face a `stopPropagation()` on every click so that "a click inside the panel is not a click on
+the card" — which was true of the BUTTONS and false of the face, because the card's own handler, the one that flips it
+back, never saw those clicks. Only the actual controls (the action row, the presets, the field row) keep their clicks to
+themselves now; the numbers, the kind line, the lap list and the empty part of the face call the same `flipFace()` the
+clock face uses. A press on Start still starts the stopwatch and does not turn the card over, which is the distinction
+that had been lost. The layout half is one rule: the field row wraps, the field is `flex: 1 1 64px` with a 48 px floor
+so it gives ground first, and the button is `flex: 0 0 auto` with `white-space: nowrap` so its words never break — below
+a sensible width the button drops to a second line instead of being clipped. Tests: four new cases in
+`tests/widgets-clock-timer.test.cjs` (the face flips the card back, a control does not, the source rule that only
+controls may swallow a click, and the four CSS declarations), plus the card left in the state the OW-60 checks expect.
+Suite `233/233`.
+
+**`OW-62` DONE (3.3.298)** — the imported reminder the owner could not delete. He had reported it before (`OW-58`,
+3.3.285) and reported it again, which was the useful signal: the first fix made a free-standing item deletable, and it
+was true, and it was not enough. Two doors stood in the way and both asked the same question — `items.get(id)` — and
+`get` deliberately hides an item whose linked note is not visible. An imported `.ics` item frequently names a note that
+was never written, so the one item the person was pointing at was the one item that read as "no such item". The delete
+path and the pre-check the menu uses now read the raw list (`includeHidden: true`), and decide by what the item OWNS:
+a mirrored Agenda line owns words in a note, an imported or hand-made item owns none. Where a note really is needed and
+is not there — a mirrored line whose note was deleted, or an import that wrote the item before the note — the store now
+MAKES the note at the id the item already names (`createBlankNoteFor`), so the item's own link stays true, and then does
+what it was asked to do; a blank note has no line to remove, so the item and the note go together. The owner asked for
+exactly this ("at least try to create such note if it needs one and its not avalible"), and it is the right shape: the
+refusal was never about safety, it was about looking in the wrong list. Tests:
+`tests/notes-calendar-ics-delete-note.test.cjs` (6) — an imported item whose note is missing is deleted rather than
+refused, a hidden item is still found, a mirrored line creates the note at the named id, a bad id is refused, and the
+menu never sends the person to a note that does not exist. Suite `234/234`.
+
+**`OW-64` DONE (3.3.299)** — every widget speaks one language, and it follows Notes until the person says otherwise.
+The owner: "build language selector for all widgets, it should sync with notes language untill user decides that it
+should not". Notes had a language (`notesLang`) and the widgets had none — English literals, with the browser's locale
+used only for the clock's numbers. There is now one pref, `zentral.widgets.language`, with three states: `auto` follows
+the Notes pref **at the moment a string is drawn** (so changing Notes changes every widget that never chose, with no
+restart), `en` and `pl` are the person's own choice and ignore Notes from then on. The three states are a `dropdown` in
+the settings schema — not a free-text field — and they went through the whole chain (schema, settings meta, layout,
+`standalone.json`), so the selector is in the dialog; the widgets also declare the Notes language pref as
+`borrowedSettings`, because the ownership gate is right that reading another package's pref is a promise, and the build
+refuses to ship one it cannot explain. The vocabulary is 34 keys in English and Polish (`WIDGET_STRINGS`), plus the
+twenty-eight WMO weather descriptions, which gained a Polish column rather than a second table. Two rules are worth
+keeping: a missing key falls back to English and then to the key itself, so a half-finished translation can never draw
+an empty button; and an unreadable value in the pref means `auto`, because "I do not understand this" should be the
+state nobody has to fix. `cleanWidgetLanguage` lower-cases before it checks — a locale tag is a person's text, and `PL`
+is not a different language from `pl` (found by the test, not by reading). Tests: `tests/widgets-language.test.cjs`
+(8) — the pref reaches the dialog, `auto` and an explicit choice both behave, junk follows Notes, both languages have
+every key and every weather code, placeholders survive translation, and the status card's own words are translated
+through its options so its pure part stays pure. Verified live in the fake panel: `auto`+Notes-Polish draws "Zegar.
+Kliknij, aby otworzyć minutnik." and an explicit `en` keeps English. Suite `235/235`.
+
+
+**`OW-21` DONE (3.3.300)** — find and replace within a note. `Ctrl+F` still opens the one-line bar; a new toggle at its
+right unfolds a second row with the replacement text, **Replace**, **Replace all** and a live count ("2 matches", or
+"2 trafienia" in Polish). It is folded away until asked for, so finding stays one line and replacing is a deliberate
+step; the toggle carries `aria-expanded` and the hidden row is out of the tab order. Matching is find's own rule, not a
+second one: literal (`a.c` finds `a.c`, not `abc`), case- and accent-folded, non-overlapping, never spanning two
+rendered runs, and `$1` in a replacement is the two characters it looks like. Replace writes the match under the cursor
+and re-checks the matched slice against the live text first, so a change made in another window between the count and
+the click is refused (`reason:"stale"`) instead of writing the wrong words. Replace all builds the note from pieces in
+a single pass — the replacement is never re-scanned, so `a`→`aa` terminates, the classic way this feature goes wrong —
+and it stops at `REPLACE_MAX` (500) matches and says `truncated`, because "replaced 500" and "replaced everything" are
+different sentences. Both go through `setBody`, the door the editor's own typing uses: one store write, one undo step,
+one repaint. They act on the open note only; other notes and the Trash are never touched. The read view, a trashed note
+and a note that is not loaded are refused **in words**, with both buttons disabled, rather than silently doing nothing.
+`Enter` in the replacement field replaces one, `Alt+Enter` replaces all, `Escape` closes as it did. Tests:
+`tests/notes-find-replace.test.cjs` (11) — plan/one/all/summary, the cap and the truncation flag, the stale refusal,
+the literal `$`, then the real sheet: the disclosure and its aria state, replace one, replace all, the read-view
+refusal, Enter and Alt+Enter, and two non-target notes (one live, one in the Trash) unchanged throughout. Suite
+`236/236`.
+
+**`OW-65` DONE (3.3.301)** — the Clock card is the shape the owner drew: the clock, the quick note under it, and on a
+click of the hour the stopwatch/countdown panel in the clock's place with the same note still under it. Three defects
+sat behind his three complaints. The clock appearing *above* the stopwatch was a cascade bug: `paintFace` always set
+`main.hidden = true`, but `.zw-clock-main { display: flex !important }` outranks the user agent's
+`[hidden] { display: none }`, so the attribute was ignored — every element the card hides by property now has its own
+`[hidden] { display: none !important }` rule, and a test reads the stylesheet because no behavioural test could ever
+have seen this (the JS flag was right). "Wyzeruj" being cut off came from `align-items: flex-start` sizing the time
+column to its content while the card is `overflow: hidden`, so a wide control row left the card and was clipped: the
+column stretches, the rows wrap, and a too-long label wraps its own words instead of disappearing. And the quick note is
+no longer a feature: `quick_note.enabled` is gone from the schema, `preferences.json`, the layout and the code, the
+reveal chip is gone, and the row is drawn whenever Notes can take a note. The separate **Timer** settings section is
+gone as well — its four prefs moved into **Clock & Date**, because a group of its own was the last place the retired
+second card still showed. Tests: `widgets-clock-timer` +1 live (the owner's exact sequence, with Notes present via the
+harness's new `notes: true` opener), `widgets-status` and `widgets-timer` re-pointed at the accepted shape. Suite
+`236/236`.
+
+**`OW-22` DONE (3.3.302)** — next/previous match that is **not already on screen**. Beside the ordinary next/previous
+the find bar gained a second pair (`Ctrl+Alt+Down` / `Ctrl+Alt+Up`, or the two arrow buttons), which moves past every
+match the person can already read — so all the visible matches can be read at once instead of being pressed through.
+The ordinary Enter and Shift+Enter are untouched: a second door, not a mode. One pure rule decides what "readable"
+means (`matchIsVisible`): the match's **whole line** must be inside the pane's own scroll window. A match cut by the
+bottom edge is not seen — the person cannot read it — and the same rule then lands on it rather than skipping it
+forever. `stepOutsideViewport` searches from the current match in either direction, wraps exactly once, never returns
+the match it started on (pressing again always moves), and reports `any` separately from `index` so **"no matches"** and
+**"all matches are on screen"** are different answers — the second one is said, not silently ignored. The editor
+measures its lines arithmetically (plain text, `lineOfOffset` × the real line height); the read view goes through the
+existing anchors, so its wrapping is measured rather than assumed. The pair disables itself, with the reason in its
+title, whenever there is nowhere to go. Found while testing and fixed: the pair's state follows the scroll, so both
+panes report scrolling to a once-per-frame repaint — without it the button kept offering a jump to a match that had
+just come into view. Tests: `tests/notes-find-offscreen.test.cjs` (13). Suite `237/237`.
+
+**`OW-67` DONE (3.3.303)** — widgets that stayed blank after the sidebar was revealed. Two causes: `setPaused` was the
+only resume path that repainted, and it returns early when its flag does not move (so with *pause when hidden* off
+nothing ever repainted); and `renderClockElements` skipped its writes when the value's key had not changed, so a blank
+clock could stay blank forever. A real hidden→visible transition now repaints from the cache (`resumeAll` when paused,
+`repaintAll` when not — which must not fetch), and a cached repaint forces the write. Reproduced in the harness first.
+
+**`OW-68` DONE (3.3.303)** — the clock's quick note is one line, with the Save button as the priority: the row never
+wraps, the button cannot shrink or break its label, the field is what gives ground. The narrow-width stacking rule is
+gone.
+
+**`OW-69` DONE (3.3.303)** — the quick note is optional again, through one `checkbox` in **Clock & Date** (schema,
+`preferences.json`, layout order, `standalone.json`), live without a restart. Off removes the row from the layout
+rather than hiding it. Needed a third fix: `syncClockNote` only ran at creation and on Notes availability, so a pref
+change repainted without re-asking; every draw now re-syncs it.
+
+**`OW-70` DONE (3.3.303)** — the status card. `readMemoryUsage`/`memoryParts` accept every documented shape
+(`usedSize`/`totalSize`, `memorySize`, `used`/`total`, `limit`, `usage`/`max`, a pair), fall back to the resident-size
+counter, and record the answering source in `data-zw-source`. A desktop's missing battery is quiet — the reason lives
+in the tooltip instead of "no battery" in the body, which the owner read as a broken widget. Never 0%.
+
+**`OW-71` DONE (3.3.303)** — widget ordering. `widgets.order` is a comma list; `cleanWidgetOrder`/`orderedByIds` keep the
+chosen ids first, drop unknown ones, and let everything else keep its default place (a new widget appears; a disabled
+one keeps its place). Every card carries a real handle button — draggable, and `Alt+Up`/`Alt+Down` — writing the same
+pref through one function, with the move announced in a polite live region.
+
+**`OW-72` DONE (3.3.303)** — widget colours. Background and text prefs (empty = follow the theme), normalised to
+`#rrggbb`; a pair under WCAG AA (4.5:1) is refused rather than written, so cards cannot become unreadable. Variables are
+set once on the tray so every card inherits them; `data-zw-look` reports `theme`/`custom`/`unreadable`; a reset applies
+nothing. `readMemoryUsage` before `memoryParts`. Tests: `tests/widgets-owner-reports.test.cjs` (13). Suite `238/238`.
+
+## The Master Order rows that were finished (moved out of the TODO table, 2026-11-17)
+
+The owner asked for the finished rows to leave the TODO list: the working table now holds only what is still
+open, and these rows are kept here with their numbers so that a reference to "row 68" still resolves.
+
+| Order | ID          | Status    | Impact              | Effort | Version           | Task                                                                                                     |
+| ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
+|    67 | `OW-38`     | `DONE`    | Med                 | M-L    | 3.3.262           | Automated test suites for all other Zentral features outside Notes                                       |
+|    46 | `SB6.6`     | `DONE`    | Low-Med             | S      | 3.3.266           | Setting: what the X (close) button does on an Agenda tab                                                 |
+|    47 | `ST7.3`     | `DONE`    | Low-Med             | S      | 3.3.295           | Move calendar UI state out of notes metadata                                                             |
+|    48 | `T3.5`      | `DONE`    | Low-Med             | S      | 3.3.293           | Callout toolbar button: last-used on click, more kinds                                                   |
+|    50 | `UI4.9`     | `DONE`    | Low-Med             | S      | 3.3.264           | Space before the unit in slider values                                                                   |
+|    51 | `OW-49`     | `DONE`    | Low-Med             | S      | 3.3.263           | Clock click reveals one small stopwatch/countdown, not a full card of buttons                              |
+|    52 | `OW-50`     | `DONE`    | Med                 | S-M    | 3.3.263           | Weather: today, tomorrow and the next rain/snow day; the detail swaps on click                            |
+|    53 | `OW-51`     | `DONE`    | Low                 | S      | 3.3.263           | Weather place setting must say a typed name is only a label; the coordinates are what is used             |
+|    54 | `OW-52`     | `DONE`    | High                | S      | 3.3.263           | Status widget shows nothing: battery and memory are never filled in                                       |
+|    51 | `UI4.11`    | `DONE`    | Low-Med             | S      | 3.3.267           | Escape returns the focus to the button that opened a menu                                                |
+|    52 | `ST7.5`     | `DONE`    | Low-Med             | S-M    | 3.3.274           | Reminder history export, prune and inspect UI                                                            |
+|    53 | `UI4.10`    | `DONE`    | Low-Med             | S-M    | 3.3.275           | Settings dialog follows the text size                                                                    |
+|    55 | `SB6.9`     | `DONE`    | Low                 | S      | 3.3.294           | Agenda sidebar quiet hours and 'left' counts                                                             |
+|    56 | `F0.15`     | `DONE`    | Low                 | S      | 3.3.280           | Isolate the time-budget test of the Agenda projection                                                    |
+|    57 | `DOC-1`     | `DONE`    | Low                 | S      | 3.3.268           | README documents a split view that does not exist                                                        |
+|    58 | `TM3.7`     | `DONE`    | Low                 | S      | 3.3.269           | Day range keeps the wall clock on the day the clocks go forward at midnight                              |
+|    59 | `F0.16`     | `DONE`    | Low                 | S-M    | 3.3.280           | Sweep tests that build fixtures around the real clock                                                    |
+|    60 | `SB6.11`    | `DONE`    | Med                 | S      | 3.3.272           | Right-click a Notes or Agenda row in the sidebar for its own menu, not Zen's tab menu |
+|    61 | `ST7.8`     | `DONE`    | Med                 | S      | 3.3.271           | Give one reminder or event its own colour, not only through its note or category          |
+|    62 | `OW-53`     | `DONE`    | Med                 | M      | 3.3.280           | Import a Google Calendar `.ics` file into the calendar (import/export)                                    |
+|    63 | `OW-54`     | `DONE`    | Med                 | S      | 3.3.281           | Weather: "Rain tomorrow" is cut off on a narrow sidebar instead of moving to the next row                  |
+|    64 | `OW-55`     | `DONE`    | Med                 | S-M    | 3.3.282           | —                 | Settings: choose what free days, weekends and holidays look like (tint and how visible)                    |
+|    65 | `OW-56`     | `DONE`    | High                | M      | 3.3.284           | —                 | Clock and stopwatch as ONE widget: click switches mode, countdown alerts, a finished countdown turns the clock red |
+|    66 | `OW-57`     | `DONE`    | Med                 | S-M    | 3.3.283           | —                 | Weather: two or three saved places, cycled by a click                                                      |
+|    67 | `OW-58`     | `DONE`    | High                | S      | 3.3.285           | —                 | An imported `.ics` event or reminder cannot be deleted: the menu says "delete it in its linked note" and there is none |
+|    68 | `OW-59`     | `DONE`    | High                | S-M    | 3.3.287           | —                 | Reminders/events linked to a note cannot be unlinked there, and a date in a note has no way to list what is linked |
+|    69 | `OW-60`     | `DONE`    | High                | M      | 3.3.290           | OW-56 | Clock and stopwatch do not actually replace each other: the second face shows numbers but offers none of the stopwatch/countdown controls, the standalone Timer card still exists beside it, and the quick note is not reachable from the plain clock |
+|    70 | `OW-61`     | `DONE`    | High                | S      | 3.3.288           | OW-56 | The OW-56 clock/timer settings never appeared in Zentral Settings: the four new prefs are in `schema` but have no `settings` entry, so the dialog drops them |

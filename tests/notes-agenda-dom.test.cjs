@@ -192,8 +192,14 @@ async function test(name, fn) { await fn(); console.log("ok - " + name); }
     assert.equal(sheet.hidden, false);
     while (h.fireTimer(250)) await settle(); // nothing is left that would run the projection anyway
     assert.equal(projected(h).length, 1);
+    // OW-75: the row lives in the Tools menu's "Calendar settings" group, so open that group first.
+    const rows = () => [...sheet.querySelectorAll(".zn-menu-item")];
     sheet.querySelector(".zn-calendar-tools").click(); await settle();
-    sheet.querySelectorAll(".zn-menu-item").find((entry) => entry.textContent.trim().startsWith("Zen Agenda visibility defaults")).click(); await settle();
+    const agendaRow = () => rows().find((entry) => entry.textContent.trim().startsWith("Zen Agenda visibility defaults"));
+    if (!agendaRow()) { rows().find((entry) => entry.textContent.trim().startsWith("Calendar settings")).click(); await settle(); }
+    const agendaEntry = agendaRow();
+    assert.ok(agendaEntry, "Tools > Calendar settings offers the Agenda visibility defaults");
+    agendaEntry.click(); await settle();
     const dialog = sheet.querySelector('[aria-label="Zen Agenda visibility defaults"]');
     dialog.querySelector('[aria-label="Agenda inclusion"]').value = "off";
     dialog.querySelectorAll("button").find((button) => button.textContent.trim() === "Save Agenda defaults").click(); await settle();

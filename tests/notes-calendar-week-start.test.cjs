@@ -92,6 +92,27 @@ function loadSeam() {
   return { seam: win.__zentralNotesTestSeam, dom, win, disk };
 }
 
+// OW-75: the calendar's Tools menu is grouped by job (Create / Calendar settings / Show and find / This week as text).
+// This opens `trigger`, walks into the group that holds `label` and returns the row, so a test names the row it wants
+// and not the menu's shape.
+const openCalendarRow = (root, trigger, label, match = (text, want) => text === want || text.startsWith(want) || want.test?.(text)) => {
+  root.querySelector(trigger).click();
+  const items = () => [...root.querySelectorAll(".zn-menu-item")];
+  const hit = (want) => items().find((el) => (typeof want === "string" ? el.textContent.trim() === want || el.textContent.trim().startsWith(want) : want.test(el.textContent.trim())));
+  let row = hit(label);
+  const groups = items().filter((el) => el.classList.contains("zn-menu-group"));
+  if (!row) {
+    for (const group of groups) {
+      group.click();
+      row = hit(label);
+      if (row) break;
+      const back = root.querySelector(".zn-menu-back");
+      if (back) back.click();
+    }
+  }
+  return row;
+};
+
 (async () => {
   await test("pure week-start cleaners, weekday labels, monthGrid/weekDays/pickerKey for Monday and Sunday, and weekNumber", () => {
     assert.deepEqual([...cal.WEEK_START_DAYS], [1, 0]);
@@ -253,11 +274,7 @@ function loadSeam() {
     // Open Tools -> Week start & numbers… dialog and switch to Sunday + Show week numbers.
     const toolsBtn = root.querySelector(".zn-calendar-tools");
     assert.ok(toolsBtn, "Calendar Tools button exists");
-    toolsBtn.click();
-    await flush();
-    const menuItem = [...root.querySelectorAll(".zn-menu-item")].find((el) =>
-      /Week start & numbers/i.test(el.textContent),
-    );
+    const menuItem = openCalendarRow(root, ".zn-calendar-tools", /Week start & numbers/i);
     assert.ok(menuItem, "Tools menu lists 'Week start & numbers…'");
     menuItem.click();
     await flush();
@@ -318,11 +335,7 @@ function loadSeam() {
     assert.equal(corner?.textContent, "W47", "Week view corner displays W47 when week numbers are enabled");
 
     // 4. Week export: Copy this week as Markdown exports Sunday..Saturday with # Week 47.
-    root.querySelector(".zn-calendar-tools").click();
-    await flush();
-    const copyWeekItem = [...root.querySelectorAll(".zn-menu-item")].find((el) =>
-      /Copy this week as Markdown/i.test(el.textContent),
-    );
+    const copyWeekItem = openCalendarRow(root, ".zn-calendar-tools", /Copy this week as Markdown/i);
     assert.ok(copyWeekItem, "Copy this week as Markdown item exists");
     copyWeekItem.click();
     await flush();
@@ -330,11 +343,7 @@ function loadSeam() {
     assert.ok(copied.includes("## Saturday 2026-11-21"), "copied week markdown ends on Saturday 2026-11-21");
 
     // 5. Shared mini date picker in composer: also uses Sunday start + week numbers column.
-    root.querySelector(".zn-calendar-tools").click();
-    await flush();
-    const createEventItem = [...root.querySelectorAll(".zn-menu-item")].find((el) =>
-      /Create timed event/i.test(el.textContent),
-    );
+    const createEventItem = openCalendarRow(root, ".zn-calendar-tools", /Create timed event/i);
     createEventItem.click();
     await flush();
     const miniPicker = root.querySelector(".zn-cal.is-compact");

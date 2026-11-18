@@ -97,7 +97,7 @@ const flushRaf = async () => {
   panels.getBoundingClientRect = () => ({ left: 0, top: 0, right: 900, bottom: 600, width: 900, height: 600 });
 
   await sheet.open(); await flushRaf();
-  root.all().find((el) => el.title === "All notes").click(); await flushRaf();
+  root.querySelector(".zn-title").click(); await flushRaf();
 
   const toggle = root.querySelector(".zn-calendar-controls-toggle");
   const dot = root.querySelector(".zn-calendar-controls-dot");
@@ -165,7 +165,7 @@ const flushRaf = async () => {
   sheet2.root.querySelector(".zn-all-layout").getBoundingClientRect = () => ({ left: 0, top: 0, right: 900, bottom: 600, width: 900, height: 600 });
   sheet2.root.querySelector(".zn-all-panels").getBoundingClientRect = () => ({ left: 0, top: 0, right: 900, bottom: 600, width: 900, height: 600 });
   await sheet2.open(); await flushRaf();
-  sheet2.root.all().find((el) => el.title === "All notes").click(); await flushRaf();
+  sheet2.root.querySelector(".zn-title").click(); await flushRaf();
   assert.equal(sheet2.root.querySelector(".zn-calendar-controls").hidden, true, "reopened sheet restores collapsed calendar controls");
   assert.equal(sheet2.root.querySelector(".zn-calendar-controls-dot").hidden, false, "reopened sheet restores active-filter dot");
 

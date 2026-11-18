@@ -19,135 +19,8 @@ const pl = require("../additional/notes/i18n/pl.js");
 cal.registerLanguage("en", en);
 cal.registerLanguage("pl", pl);
 
-function makeHarness({ files = new Map(), lang = "en", sheetW = 920, sheetH = 640, paneW = 620, paneH = 540 } = {}) {
-  const dom = createFakeDom();
-  const { document, Ev: Event, raf } = dom;
-  document.documentElement.clientWidth = 1280;
-  document.documentElement.clientHeight = 820;
-
-  let curLang = lang;
-  const prefStore = new Map();
-  const Services = {
-    obs: { addObserver() {}, removeObserver() {} },
-    prefs: {
-      getStringPref: (k, d) => (k === "zen.workspace.zentral.notes.language" ? curLang : (prefStore.has(k) ? String(prefStore.get(k)) : d)),
-      getBoolPref: (k, d) => (prefStore.has(k) ? Boolean(prefStore.get(k)) : d),
-      getIntPref: (k, d) => (prefStore.has(k) ? Number(prefStore.get(k)) : d),
-    },
-  };
-  const win = {
-    __zentralNotesParts: { "notes-calendar": cal },
-    __zentralNotesLangTables: { en, pl },
-    ZentralRuntime: { register() {} },
-    __zentralNotesTestSeam: {},
-    document,
-    navigator: { platform: "Linux" },
-    Intl,
-    innerWidth: 1280,
-    innerHeight: 820,
-    requestAnimationFrame: (fn) => { raf.push(fn); return raf.length; },
-    cancelAnimationFrame: () => {},
-    getComputedStyle: () => ({ getPropertyValue: () => "", fontSize: "13px" }),
-    setTimeout,
-    clearTimeout,
-    addEventListener() {},
-    removeEventListener() {},
-  };
-  win.window = win;
-
-  vm.runInNewContext(SRC, {
-    window: win,
-    document,
-    Event,
-    Services,
-    globalThis: { Services },
-    ChromeUtils: {},
-    navigator: { platform: "Linux" },
-    Intl,
-    URL,
-    console,
-    setTimeout,
-    clearTimeout,
-    queueMicrotask,
-    Promise,
-    Map,
-    Set,
-    WeakMap,
-    RegExp,
-    JSON,
-    Math,
-    Date,
-    Number,
-    String,
-    Boolean,
-    Array,
-    Object,
-    Error,
-    TypeError,
-    Uint8Array,
-    TextEncoder,
-    TextDecoder,
-  });
-
-  const core = win.__zentralNotesTestSeam.core;
-  const io = {
-    join: (...p) => p.join("/"),
-    filename: (p) => p.split("/").pop(),
-    exists: async (p) => files.has(p),
-    readUTF8: async (p) => { if (!files.has(p)) throw Error("missing"); return files.get(p); },
-    writeUTF8: async (p, text) => { files.set(p, text); },
-    remove: async (p) => { files.delete(p); },
-    children: async (p) => [...files.keys()].filter((k) => k.startsWith(p + "/") && !k.slice(p.length + 1).includes("/")),
-    stat: async () => ({ lastModified: 0 }),
-    restrict: async () => {},
-  };
-  const store = core.createStore({
-    io,
-    notify() {},
-    windowId: "holidays-test",
-    getDir: async () => "/n",
-    getMaxSaveMs: () => 1000,
-    setTimer: setTimeout,
-    clearTimer: clearTimeout,
-  });
-  const host = document.createElement("div");
-  document.body.append(host);
-  const adapter = {
-    position: "fixed",
-    attach(el) { host.append(el); },
-    getArea() { return { left: 40, top: 40, width: sheetW, height: sheetH, right: 40 + sheetW, bottom: 40 + sheetH }; },
-    rect() { return { left: 40, top: 40, width: sheetW, height: sheetH, right: 40 + sheetW, bottom: 40 + sheetH }; },
-    watch() { return () => {}; },
-    setActive() {},
-    releaseSlot() {},
-    isSuspended() { return false; },
-  };
-  const env = {
-    getPref: (k, d) => (prefStore.has(k) ? prefStore.get(k) : d),
-    setPref: (k, v) => { prefStore.set(k, v); },
-    now: () => Date.UTC(2026, 4, 1, 10, 0, 0), // 2026-05-01
-    openUrl() {},
-    revealFolder() {},
-  };
-  const sheet = core.createSheet({ store, adapter, env, ensureStore: () => Promise.resolve() });
-  sheet.root.ownerDocument = document;
-  Object.defineProperty(sheet.root, "offsetParent", { get: () => host });
-  sheet.root.getBoundingClientRect = () => ({ left: 40, top: 40, width: sheetW, height: sheetH, right: 40 + sheetW, bottom: 40 + sheetH });
-  const allLayout = sheet.root.querySelector(".zn-all-layout");
-  allLayout.getBoundingClientRect = () => ({ left: 40, top: 80, width: sheetW, height: sheetH - 40, right: 40 + sheetW, bottom: 40 + sheetH });
-  const calPane = sheet.root.querySelector(".zn-calendar-pane");
-  calPane.getBoundingClientRect = () => ({ left: 40, top: 80, width: paneW, height: paneH, right: 40 + paneW, bottom: 80 + paneH });
-  calPane.clientWidth = paneW;
-  calPane.clientHeight = paneH;
-
-  const flush = async () => {
-    for (let i = 0; i < 6; i++) {
-      raf.splice(0).forEach((fn) => fn());
-      await new Promise((r) => setImmediate(r));
-    }
-  };
-  return { win, document, Event, core, store, sheet, files, flush, setLang(l) { curLang = l; } };
-}
+// The harness lives in tests/helpers/holiday-harness.cjs so every holiday test uses one copy.
+const { makeHarness } = require("./helpers/holiday-harness.cjs");
 
 let passed = 0;
 async function test(name, fn) {
@@ -156,7 +29,154 @@ async function test(name, fn) {
   console.log(`ok - ${name}`);
 }
 
+// OW-75: the calendar's Tools menu is grouped by job (Create / Calendar settings / Show and find / This week as text).
+// This opens `trigger`, walks into the group that holds `label` and returns the row, so a test names the row it wants
+// and not the menu's shape.
+const openCalendarRow = (root, trigger, label, match = (text, want) => text === want || text.startsWith(want) || want.test?.(text)) => {
+  root.querySelector(trigger).click();
+  const items = () => [...root.querySelectorAll(".zn-menu-item")];
+  const hit = (want) => items().find((el) => (typeof want === "string" ? el.textContent.trim() === want || el.textContent.trim().startsWith(want) : want.test(el.textContent.trim())));
+  let row = hit(label);
+  const groups = items().filter((el) => el.classList.contains("zn-menu-group"));
+  if (!row) {
+    for (const group of groups) {
+      group.click();
+      row = hit(label);
+      if (row) break;
+      const back = root.querySelector(".zn-menu-back");
+      if (back) back.click();
+    }
+  }
+  return row;
+};
+
 (async () => {
+  await test("OW-43 pure: holiday sets are chosen apart from the interface language (PL + US, any language)", async () => {
+    // A set list is the source of truth; a fresh profile still follows the app locale.
+    assert.deepEqual(cal.cleanCalendarHolidays(null, "pl-PL").locales, ["PL"]);
+    assert.deepEqual(cal.cleanCalendarHolidays(null, "en-US").locales, ["US"]);
+    assert.deepEqual(cal.cleanCalendarHolidays(null, "fr-FR").locales, []);
+    assert.equal(cal.cleanCalendarHolidays(null, "pl-PL").region, "PL", "the first set is still reported as region");
+    assert.equal(cal.cleanCalendarHolidays(null, "fr-FR").region, "none");
+
+    // Legacy single `region` migrates once, including an explicit "none" opt-out.
+    assert.deepEqual(cal.cleanCalendarHolidays({ region: "US" }, "pl-PL").locales, ["US"]);
+    assert.deepEqual(cal.cleanCalendarHolidays({ region: "none", regionExplicit: true }, "pl-PL").locales, []);
+    assert.deepEqual(cal.cleanCalendarHolidays({ region: "none" }, "pl-PL").locales, ["PL"], "an old unconfigured none follows the locale");
+
+    // Validation and cap.
+    assert.deepEqual(cal.cleanHolidayLocales(["pl", "US", "US", "zz", "DE"]), ["PL", "US", "DE"]);
+    assert.equal(cal.cleanHolidayLocale("us"), "US");
+    assert.equal(cal.cleanHolidayLocale("none"), "");
+    assert.ok(cal.cleanHolidayLocales(["PL", "US", "DE", "GB", "EG"]).length <= cal.HOLIDAY_LOCALES_MAX);
+    assert.deepEqual(cal.defaultHolidayLocales("en-GB"), ["GB"]);
+
+    // The name language is the interface language, the set is not.
+    const plInEnglish = cal.holidaysFor("PL", 2026, "en");
+    const plInPolish = cal.holidaysFor("PL", 2026, "pl");
+    assert.ok(plInEnglish.some((h) => h.date === "2026-05-03" && h.name === "Constitution Day"));
+    assert.ok(plInPolish.some((h) => h.date === "2026-05-03" && /Konstytucji/.test(h.name)));
+    assert.ok(cal.holidaysFor("US", 2026, "pl").some((h) => h.date === "2026-11-26" && /Dzi\u0119kczynienia/.test(h.name)), "US set named in Polish");
+
+    // Two sets at once keep both names on a shared day and never drop one.
+    const both = cal.holidayEntriesFor({ enabled: true, locales: ["PL", "US"], weekend: "auto", personalDays: [] }, 2026, "en");
+    const may1 = both.filter((e) => e.date === "2026-05-01");
+    assert.equal(may1.length, 1, "only one set names that day");
+    assert.deepEqual([...may1[0].locales].sort(), ["PL"], "only Poland has 2026-05-01");
+    assert.ok(both.some((e) => e.date === "2026-07-03" && /Independence Day/.test(e.name)));
+    const wf = cal.isWorkFree("2026-05-01", { enabled: true, locales: ["PL", "US"], weekend: "auto", personalDays: [] }, "en");
+    assert.equal(wf.workFree, true);
+    assert.deepEqual(wf.holidays.map((h) => h.name), ["Labour Day"]);
+    assert.equal(wf.holiday.name, "Labour Day", "`holiday` still names the first one");
+    assert.equal(cal.isWorkFree("2026-07-03", { enabled: true, locales: ["US"], weekend: "auto", personalDays: [] }, "pl").workFree, true);
+    assert.equal(cal.isWorkFree("2026-07-03", { enabled: true, locales: ["PL"], weekend: "auto", personalDays: [] }, "pl").workFree, false);
+  });
+
+  await test("OW-44: several holiday sets at once name the set of every holiday in every view", async () => {
+    const prefs = { enabled: true, locales: ["PL", "US"], weekend: "auto", personalDays: [] };
+    // A day that belongs to both sets names both; a single set never repeats its own name.
+    const shared = cal.isWorkFree("2026-11-11", prefs, "en");
+    assert.equal(shared.holidays.length, 2, "Veterans Day and Polish Independence Day are both kept");
+    assert.deepEqual(shared.holidays.map((h) => h.name), ["National Independence Day", "Veterans Day"]);
+    assert.equal(shared.tooltip, "National Independence Day (PL) \u00b7 Veterans Day (US)", "every name says its set");
+    assert.deepEqual(cal.holidaySetsOf(shared), ["PL", "US"]);
+    assert.equal(cal.isWorkFree("2026-11-11", { ...prefs, locales: ["PL"] }, "en").tooltip, "National Independence Day");
+    // Only one set's day keeps that set's name without a suffix list.
+    assert.equal(cal.isWorkFree("2026-11-26", prefs, "en").tooltip, "Thanksgiving Day (US)");
+    // Three sets stay readable and capped.
+    const three = cal.cleanCalendarHolidays({ enabled: true, locales: ["PL", "US", "DE"], personalDays: [] });
+    assert.deepEqual([...three.locales], ["PL", "US", "DE"]);
+    assert.equal(three.region, "PL", "the first set is the primary one");
+    assert.ok(cal.holidayEntriesFor(three, 2026, "pl").length >= 29, "three sets merge into one list");
+    // The live helper caches a merge per year/language and still answers after the sets change.
+    const a = cal.holidayEntriesFor(prefs, 2026, "en");
+    const b = cal.holidayEntriesFor(prefs, 2026, "en");
+    assert.equal(a, b, "same request returns the cached list");
+    assert.notEqual(cal.holidayEntriesFor({ ...prefs, locales: ["PL"] }, 2026, "en").length, a.length);
+    assert.ok(CSS_SRC.includes(".is-multi-holiday"), "a day of several sets has its own style");
+  });
+
+  await test("OW-45: the year table adds trading Sundays and election days without touching a rule", async () => {
+    // The table is one readable place per year and carries both languages.
+    const rows2026 = cal.holidayTableEntries("PL", 2026, "pl");
+    assert.equal(rows2026.length, 6, "six trading Sundays are written for 2026");
+    assert.ok(rows2026.every((row) => row.name === "Niedziela handlowa" && row.kind === "trading-sunday"));
+    assert.ok(cal.holidayTableEntries("PL", 2026, "en").every((row) => row.name === "Trading Sunday"));
+    assert.deepEqual(cal.holidayTableYears("PL"), [2026, 2027]);
+    assert.deepEqual(cal.holidayTableYears("US"), [], "a set with no table yet is empty, not broken");
+
+    // A table entry reaches the merged list of its set and the coverage line names the years.
+    const pl2026 = cal.holidaysFor("PL", 2026, "pl");
+    assert.ok(pl2026.some((h) => h.date === "2026-12-20" && h.kind === "trading-sunday"));
+    const cov = cal.holidaySetCoverage("PL");
+    assert.equal(cov.code, "PL");
+    assert.equal(cov.ruleTo, 2100);
+    assert.equal(cov.newestYear, 2100);
+
+    // A trading Sunday is a working day: it is shown, it never tints, it never claims work-free.
+    const prefs = { enabled: true, locales: ["PL"], weekend: "none", personalDays: [] };
+    const tradingSunday = cal.isWorkFree("2026-01-25", prefs, "pl");
+    assert.equal(tradingSunday.workFree, false, "shops are open: no work-free");
+    assert.equal(tradingSunday.weekend, false);
+    assert.equal(tradingSunday.holiday.kind, "trading-sunday");
+    assert.equal(tradingSunday.tooltip, "Niedziela handlowa");
+    assert.equal(cal.isWorkFree("2026-12-20", prefs, "en").workFree, false);
+    assert.equal(cal.isWorkFree("2026-01-25", prefs, "en").holidays[0].kind, "trading-sunday");
+
+    // A real holiday is still a day off with or without a table for that year.
+    assert.equal(cal.isWorkFree("2026-12-25", prefs, "pl").workFree, true);
+    assert.equal(cal.isWorkFree("2030-12-25", prefs, "pl").workFree, true, "an unlisted year keeps its rule dates");
+    assert.equal(cal.holidaysFor("PL", 2030, "en").some((h) => h.kind === "trading-sunday"), false);
+
+    // An election day added later is data only — this is the shape the owner fills in.
+    const election = { date: "2027-10-17", name: { en: "Parliamentary election", pl: "Wybory parlamentarne" }, kind: "election" };
+    assert.deepEqual(cal.HOLIDAY_TABLE_KINDS, ["holiday", "trading-sunday", "election"]);
+    assert.ok(election.date.startsWith("2027"));
+    // The table wins over a rule on the same date (the rule loses, the table's entry is used).
+    const overlaid = cal.holidaysFor("PL", 2026, "en").filter((h) => h.date === "2026-12-25");
+    assert.equal(overlaid.length, 1, "one entry per date");
+    assert.equal(overlaid[0].name, "Christmas Day", "a table entry that is no day off never replaces a rule's day off");
+    assert.ok(CSS_SRC.includes(".is-trading-sunday") && CSS_SRC.includes(".is-election-day"), "marked days have a style of their own");
+  });
+
+  await test("OW-46: the master switch stops every holiday feature and keeps the chosen sets", async () => {
+    const on = cal.cleanCalendarHolidays({ enabled: true, locales: ["PL"], weekend: "auto", personalDays: [{ date: "2026-05-04", label: "Bridge" }] });
+    const off = cal.cleanCalendarHolidays({ ...on, enabled: false });
+    assert.deepEqual([...off.locales], ["PL"], "the chosen sets are kept while off");
+    assert.equal(off.personalDays.length, 1, "personal days off are kept while off");
+    // Nothing is computed at all: no weekend, no set, no year table, no personal day.
+    assert.equal(cal.isWorkFree("2026-05-01", off, "pl"), cal.NO_WORK_FREE, "one shared empty answer");
+    assert.equal(cal.isWorkFree("2026-05-01", off, "pl").workFree, false);
+    assert.equal(cal.isWorkFree("2026-05-02", off, "pl").weekend, false, "not even the weekend is claimed");
+    assert.equal(cal.isWorkFree("2026-05-04", off, "pl").personal, null);
+    assert.deepEqual(cal.isWorkFree("2026-05-01", off, "pl").holidays, []);
+    assert.equal(cal.isWorkFree("2026-05-01", on, "pl").workFree, true, "switching back on restores the day");
+    // A fresh profile keeps today's behaviour: the switch is on unless turned off.
+    assert.equal(cal.cleanCalendarHolidays(null, "pl-PL").enabled, true);
+    assert.equal(cal.cleanCalendarHolidays({ enabled: 1 }, "pl-PL").enabled, true, "a truthy value stays on");
+    assert.equal(cal.cleanCalendarHolidays({ enabled: "false" }, "pl-PL").enabled, true, "only a real false turns it off");
+  });
+
   await test("pure: Easter algorithm, nthWeekday, region weekends, and offline holidaysFor across PL/DE/GB/US/EG & years", async () => {
     // Verified Gregorian Easter Sundays 2024–2028
     assert.equal(cal.easterSundayYmd(2024), "2024-03-31");
@@ -324,31 +344,85 @@ async function test(name, fn) {
     assert.match(pickerMay1.title, /Labour Day/, "compact picker appends holiday name to title");
 
     // 7. Tools -> Holidays & days off dialog updates region & adds personal day off + persists across reload!
-    const toolsBtn = h.sheet.root.querySelector(".zn-calendar-tools");
-    toolsBtn.click();
-    const holMenuItem = [...h.sheet.root.querySelectorAll(".zn-menu-item")].find((b) => /Holidays & days off/i.test(b.textContent));
+    const holMenuItem = openCalendarRow(h.sheet.root, ".zn-calendar-tools", /Holidays & days off/i);
     assert.ok(holMenuItem, "Tools menu includes Holidays & days off");
     holMenuItem.click();
     await h.flush();
 
-    const regionSel = h.sheet.root.querySelector(".zn-cal-holidays-region");
+    const setPL = h.sheet.root.querySelector('.zn-cal-holidays-set[data-set="PL"]');
+    const setDE = h.sheet.root.querySelector('.zn-cal-holidays-set[data-set="DE"]');
     const dateIn = h.sheet.root.querySelector(".zn-cal-holidays-date");
     const labelIn = h.sheet.root.querySelector(".zn-cal-holidays-label");
     const addBtn = h.sheet.root.querySelector(".zn-cal-holidays-add");
-    assert.ok(regionSel && dateIn && labelIn && addBtn, "Holidays dialog controls rendered");
+    assert.ok(setPL && setDE && dateIn && labelIn && addBtn, "Holidays dialog controls rendered");
     const regionStatus = h.sheet.root.querySelector(".zn-cal-holidays-region-status");
-    assert.match(regionStatus?.textContent || "", /Showing public holidays for Poland/i, "selected public calendar is explained");
-    regionSel.value = "DE";
-    regionSel.dispatchEvent(new h.Event("change", { bubbles: true }));
+    assert.match(regionStatus?.textContent || "", /Showing public holidays: Poland \(PL\)/i, "chosen sets are explained");
+    assert.equal(setPL.checked, true, "the current set is ticked");
+    setDE.checked = true;
+    setDE.dispatchEvent(new h.Event("change", { bubbles: true }));
+    await h.flush();
     dateIn.value = "2026-05-15";
     labelIn.value = "Berlin trip";
     addBtn.click();
     await h.flush();
 
-    assert.equal(h.store.meta.calendarHolidays.region, "DE");
-    assert.equal(h.store.meta.calendarHolidays.regionExplicit, true, "manual selection is persisted as explicit");
-    assert.match(regionStatus.textContent, /Germany/i, "region status follows a changed selection");
+    assert.ok(h.sheet.root.querySelector(".zn-cal-holidays-coverage-row"), "the dialog names the years each set covers (OW-45)");
+    assert.match(h.sheet.root.querySelector(".zn-cal-holidays-coverage-row").textContent, /2100/, "the newest year is named");
+    assert.deepEqual([...h.store.meta.calendarHolidays.locales], ["PL", "DE"], "both chosen sets are kept");
+    assert.equal(h.store.meta.calendarHolidays.localesExplicit, true, "manual selection is persisted as explicit");
+    assert.match(regionStatus.textContent, /Germany \(DE\)/i, "the status follows a changed choice");
     assert.ok(h.store.meta.calendarHolidays.personalDays.some((p) => p.date === "2026-05-15" && p.label === "Berlin trip"));
+    // OW-46: the dialog's switch turns every holiday feature off in the live grid, and the sets stay chosen.
+    const enableBox = h.sheet.root.querySelector(".zn-cal-holidays-enable");
+    assert.ok(enableBox && enableBox.checked, "the switch is on for a fresh installation");
+    enableBox.checked = false;
+    enableBox.dispatchEvent(new h.Event("change", { bubbles: true }));
+    await h.flush();
+    assert.equal(h.store.meta.calendarHolidays.enabled, false);
+    assert.deepEqual([...h.store.meta.calendarHolidays.locales], ["PL", "DE"], "the sets survive the switch");
+    assert.equal([...h.sheet.root.querySelectorAll(".zn-cal-month-cell[data-holiday-sets]")].length, 0, "no cell names a holiday");
+    enableBox.checked = true;
+    enableBox.dispatchEvent(new h.Event("change", { bubbles: true }));
+    await h.flush();
+    assert.equal(h.store.meta.calendarHolidays.enabled, true);
+
+    // A day that belongs to two chosen sets carries both names (OW-44). A settings write re-renders through the
+    // sheet's own path (the dialog calls renderCalendar), so each step redraws by picking the Month view.
+    const redrawMonth = async () => {
+      h.sheet.root.querySelector(".zn-calendar-view-select").click();
+      const item = [...h.sheet.root.querySelectorAll(".zn-menu-item")].find((b) => b.textContent.includes("Month"));
+      assert.ok(item, "the view menu offers Month");
+      item.click();
+      await h.flush();
+    };
+    h.store.setMeta({ calendarPicker: { mode: "auto", minWidth: 470, minHeight: 360, colorMode: "count" } });
+    const keepPersonal = () => h.store.meta.calendarHolidays.personalDays;
+    h.store.setMeta({ calendarHolidays: { enabled: true, locales: ["PL", "US"], weekend: "auto", personalDays: keepPersonal() } });
+    await redrawMonth();
+    const mayShared = h.sheet.root.querySelector('.zn-cal-month-cell[data-day="2026-05-01"]');
+    assert.ok(mayShared, "the May grid is drawn");
+    assert.equal(mayShared.getAttribute("data-holiday-sets"), "PL", "Labour Day is Polish only");
+    assert.ok(!mayShared.classList.contains("is-multi-holiday"), "one set on that day is not marked as several");
+    assert.match(mayShared.title, /Labour Day/);
+    // Every drawn cell names only chosen sets, and every cell that names one is a holiday cell.
+    const drawn = [...h.sheet.root.querySelectorAll(".zn-cal-month-cell[data-holiday-sets]")];
+    assert.ok(drawn.length > 0, "the grid marks its holiday days");
+    for (const cell of drawn) {
+      assert.match(cell.getAttribute("data-holiday-sets"), /^(PL|US|PL US|US PL)$/, "only the chosen sets are named");
+      assert.ok(cell.classList.contains("is-holiday"), "a set name always sits on a holiday cell");
+    }
+    h.store.setMeta({ calendarHolidays: { enabled: true, locales: ["PL"], weekend: "auto", personalDays: keepPersonal() } });
+    await redrawMonth();
+    const mayOne = h.sheet.root.querySelector('.zn-cal-month-cell[data-day="2026-05-01"]');
+    assert.equal(mayOne.getAttribute("data-holiday-sets"), "PL", "one set keeps naming its day");
+    assert.ok([...h.sheet.root.querySelectorAll(".zn-cal-month-cell[data-holiday-sets]")].every((cell) => cell.getAttribute("data-holiday-sets") === "PL"), "no dropped set lingers");
+    h.store.setMeta({ calendarHolidays: { enabled: true, locales: ["PL", "DE"], weekend: "auto", personalDays: keepPersonal() } });
+    await redrawMonth();
+
+    // The second set tints its own days in the live calendar, not only in the pure helper.
+    const wfDe = cal.isWorkFree("2026-05-25", h.store.meta.calendarHolidays, "en");
+    assert.equal(wfDe.holiday?.name, "Whit Monday", "the stored sets are what the live calendar reads");
+    assert.equal(cal.isWorkFree("2026-05-25", { ...h.store.meta.calendarHolidays, locales: ["PL"] }, "en").holiday, null);
 
     await h.store.flush();
     h.sheet.destroy();
@@ -357,7 +431,8 @@ async function test(name, fn) {
     // Reload fresh store from disk -> verify full persistence
     const h2 = makeHarness({ files, lang: "pl" });
     await h2.store.open();
-    assert.equal(h2.store.meta.calendarHolidays.region, "DE");
+    assert.deepEqual([...h2.store.meta.calendarHolidays.locales], ["PL", "DE"], "the sets survive a restart");
+    assert.equal(h2.store.meta.calendarHolidays.region, "PL");
     assert.ok(h2.store.meta.calendarHolidays.personalDays.some((p) => p.date === "2026-05-15" && p.label === "Berlin trip"));
     assert.ok(CSS_SRC.includes(".zn-cal-month-cell.is-workfree"), "work-free CSS tint rule present");
     assert.ok(CSS_SRC.includes(".zn-cal-picker-day.is-workfree"), "picker work-free CSS rule present");

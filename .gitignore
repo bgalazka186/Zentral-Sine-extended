@@ -19,6 +19,11 @@ docs/*
 !docs/LEGACY_done_rows.md
 !docs/LEGACY_handoff_3.1.3.md
 !docs/NOTES_PERFORMANCE_AUDIT.md
+!docs/NOTES_DISCOVERABILITY.md
+!docs/PLAN_CODING_AGENT.md
+!docs/ADDING_A_LANGUAGE.md
+!docs/MENU_BASELINE.md
+!docs/perf-results.md
 patches/
 zentral/upstream/
 

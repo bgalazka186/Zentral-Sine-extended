@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Widgets
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.244
+// @version 3.3.332
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.244, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.332, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.244";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.332";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -165,7 +165,7 @@ const __zentralShim = (function () {
       _observer: observer,
     };
   }
-  const numericItems = [{"key":"zen.workspace.zentral.widgets.max_height_share","text":"zen.workspace.zentral.widgets.max_height_share_text","min":15,"max":80,"def":45},{"key":"zen.workspace.zentral.widgets.min_free_height","text":"zen.workspace.zentral.widgets.min_free_height_text","min":60,"max":400,"def":140},{"key":"zen.workspace.zentral.widgets.min_sidebar_width","text":"zen.workspace.zentral.widgets.min_sidebar_width_text","min":80,"max":320,"def":120},{"key":"zen.workspace.zentral.widgets.tabs_reserve_px","text":"zen.workspace.zentral.widgets.tabs_reserve_px_text","min":0,"max":200,"def":24}];
+  const numericItems = [{"key":"zen.workspace.zentral.widgets.weather.refresh_minutes","text":"zen.workspace.zentral.widgets.weather.refresh_minutes_text","min":15,"max":180,"def":30},{"key":"zen.workspace.zentral.widgets.max_height_share","text":"zen.workspace.zentral.widgets.max_height_share_text","min":15,"max":80,"def":45},{"key":"zen.workspace.zentral.widgets.min_free_height","text":"zen.workspace.zentral.widgets.min_free_height_text","min":60,"max":400,"def":140},{"key":"zen.workspace.zentral.widgets.min_sidebar_width","text":"zen.workspace.zentral.widgets.min_sidebar_width_text","min":80,"max":320,"def":120},{"key":"zen.workspace.zentral.widgets.tabs_reserve_px","text":"zen.workspace.zentral.widgets.tabs_reserve_px_text","min":0,"max":200,"def":24}];
   function nativeSidebarElement() {
       const tabs = window.gBrowser?.tabContainer;
       const candidates = [
@@ -961,8 +961,48 @@ function nativeSidebarSide() {
     }
   }
   const features = (window.__zentralStandalone ||= {});
+  // OW-94 (plan B7.1): the pause switch. The full pack publishes the same contract under `ZentralRuntime.performance`;
+  // a standalone module asks for it here. With no full pack there is nothing else to pause, so the switch is honest
+  // about being alone: `listenerCount()` is 0 and setting it simply notifies whoever subscribed.
+  const performanceSwitch = (() => {
+    let paused = false;
+    const listeners = new Set();
+    const snapshot = () => ({ paused, changes: 0, lastChangeAt: 0 });
+    const setPaused = (next) => {
+      const target = Boolean(next);
+      if (target === paused) return snapshot();
+      paused = target;
+      for (const fn of [...listeners]) {
+        try {
+          fn(paused, snapshot());
+        } catch (error) {
+          try {
+            console.warn("[Zentral standalone] pause listener failed", error);
+          } catch (_) {}
+        }
+      }
+      return snapshot();
+    };
+    const subscribe = (fn) => {
+      if (typeof fn !== "function") return () => {};
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    };
+    return {
+      isPaused: () => paused,
+      setPaused,
+      toggle: () => setPaused(!paused),
+      subscribe,
+      onChange: subscribe,
+      snapshot,
+      listenerCount: () => listeners.size,
+      reset() {},
+    };
+  })();
+
   const shim = {
     standalone: true,
+    performance: performanceSwitch,
     getPref,
     readStartupPanel() {
       try {
@@ -1139,6 +1179,31 @@ function nativeSidebarSide() {
     DATE_FORMAT: "zen.workspace.zentral.widgets.date.format",
     DATE_SHOW_YEAR: "zen.workspace.zentral.widgets.date.show_year",
     DATE_SHOW_WEEK: "zen.workspace.zentral.widgets.date.show_week_number",
+    WEATHER_ENABLED: "zen.workspace.zentral.widgets.weather.enabled",
+    WEATHER_PLACE: "zen.workspace.zentral.widgets.weather.place",
+    WEATHER_LATITUDE: "zen.workspace.zentral.widgets.weather.latitude",
+    WEATHER_LONGITUDE: "zen.workspace.zentral.widgets.weather.longitude",
+    WEATHER_UNITS: "zen.workspace.zentral.widgets.weather.units",
+    WEATHER_REFRESH_MINUTES: "zen.workspace.zentral.widgets.weather.refresh_minutes",
+    WEATHER_PLACES: "zen.workspace.zentral.widgets.weather.places",
+    TIMER_ENABLED: "zen.workspace.zentral.widgets.timer.enabled",
+    // Retired by OW-90 with the card it belonged to; read once so an owner's choice survives the swap.
+    LEGACY_STATUS_ENABLED: "zen.workspace.zentral.widgets.status.enabled",
+    TIMER_CLICK_STOPWATCH: "zen.workspace.zentral.widgets.timer.click_stopwatch",
+    CLOCK_QUICK_NOTE: "zen.workspace.zentral.widgets.clock.quick_note",
+    ORDER: "zen.workspace.zentral.widgets.order",
+    APPEARANCE_BG: "zen.workspace.zentral.widgets.appearance.background",
+    APPEARANCE_TEXT: "zen.workspace.zentral.widgets.appearance.text",
+    // OW-56: one Clock card, two faces; and what a finished countdown does.
+    CLOCK_MODE: "zen.workspace.zentral.widgets.clock.mode",
+    TIMER_END_SOUND: "zen.workspace.zentral.widgets.timer.end_sound",
+    TIMER_END_NOTICE: "zen.workspace.zentral.widgets.timer.end_notice",
+    // OW-90: the Status card is gone — Boost replaces it. The memory reading moved into `additional/boost/`, where the
+    // number and the action that lowers it live together; the battery reading left with the card (a desktop has none).
+    BOOST_ENABLED: "zen.workspace.zentral.widgets.boost.enabled",
+    // OW-64: one language for every widget. "auto" follows the Notes interface language, so the two never disagree
+    // until the person says otherwise; anything else is their own choice and stays their own choice.
+    LANGUAGE: "zen.workspace.zentral.widgets.language",
   });
 
   const DEFAULTS = Object.freeze({
@@ -1157,10 +1222,186 @@ function nativeSidebarSide() {
     DATE_FORMAT: "long",
     DATE_SHOW_YEAR: false,
     DATE_SHOW_WEEK: false,
+    // T3.9c: weather is off until a place is set; it only asks the network then.
+    WEATHER_ENABLED: false,
+    WEATHER_PLACE: "",
+    WEATHER_LATITUDE: "",
+    WEATHER_LONGITUDE: "",
+    WEATHER_UNITS: "auto",
+    WEATHER_REFRESH_MINUTES: 30,
+    TIMER_ENABLED: true,
+    TIMER_CLICK_STOPWATCH: true,
+    CLOCK_QUICK_NOTE: true,
+    ORDER: "",
+    APPEARANCE_BG: "",
+    APPEARANCE_TEXT: "",
+    CLOCK_MODE: "clock",
+    TIMER_END_SOUND: "beep",
+    TIMER_END_NOTICE: "none",
+    BOOST_ENABLED: true,
+    LANGUAGE: "auto",
   });
+
+  // ---- OW-64: one language for every widget ----------------------------------------------------------------
+  // "auto" means "whatever Notes is set to", read at the moment a string is needed, so changing the Notes language
+  // changes every widget that has not been told otherwise. An explicit choice is that person's choice and stays it.
+  const WIDGET_LANGUAGES = Object.freeze(["auto", "en", "pl"]);
+  // Lower-cased before the check: a pref is a person's text, and "PL" is not a different language from "pl".
+  const cleanWidgetLanguage = (v) => {
+    const value = String(v ?? "").trim().toLowerCase();
+    return WIDGET_LANGUAGES.includes(value) ? value : "auto";
+  };
+  const NOTES_LANGUAGE_PREF = "zen.workspace.zentral.notes.language";
+  // Every string a widget draws. Kept small on purpose: the widgets are a clock, a date, a weather line and a status
+  // line, and everything here is a word a person sees.
+  const WIDGET_STRINGS = Object.freeze({
+    en: Object.freeze({
+      "clock.title": "Clock",
+      "date.title": "Date",
+      "weather.title": "Weather",
+      "boost.title": "Boost",
+      "boost.aria": "{value} of browser memory in use. Click to free memory.",
+      "boost.ariaUnknown": "Browser memory reading unavailable. Click to free memory.",
+      "boost.free": "Free memory (light)",
+      "boost.busy": "Freeing memory\u2026",
+      "boost.freed": "Freed {mb} MB",
+      "boost.nothingFreed": "Memory was already tidy",
+      "boost.unknown": "Memory freed. This build cannot measure it.",
+      "boost.deep": "Free memory (deep)",
+      "boost.deepSoon": "Needs the shared tab policy",
+      "boost.deepDone": "Put {tabs} tab(s) and {panels} panel(s) to sleep, freed {mb} MB",
+      "boost.restoreCount": "Restore ({count})",
+      "boost.restored": "Woke {count} panel(s)",
+      "boost.limitHit": "{mb} MB in use, above your {limit} MB limit. Open Boost to free memory.",
+      "boost.limitDone": "Freed memory down to {mb} MB",
+      "boost.limitNothing": "Memory is high, but nothing else may be unloaded",
+      "boost.restore": "Restore",
+      "boost.restoreSoon": "Nothing to restore yet",
+      "boost.gameMode": "Game Mode",
+      "boost.gameModeOn": "Game Mode on \u2014 timers paused, background tabs idle",
+      "boost.gameModeOff": "Game Mode off \u2014 everything back to normal",
+      "boost.later": "More Boost actions arrive in later updates",
+      "tray.label": "Sidebar widgets",
+      "tray.move": "Move this widget",
+      "tray.moveUp": "Move this widget up",
+      "tray.moveDown": "Move this widget down",
+      "tray.moved": "{title} moved to position {position} of {total}",
+      "tray.moveHint": "Move this widget: click, or press Alt+Up / Alt+Down",
+      "clock.aria": "Clock. Click for the timer.",
+      "clock.ariaAlert": "Countdown finished. ",
+      "timer.aria": "Timer {value}{kind}. Click for the clock.",
+      "timer.kind.countdown": ", countdown",
+      "timer.kind.stopwatch": ", stopwatch",
+      "timer.kind.stopped": ", stopped",
+      "timer.clickClock": " Click for the clock.",
+      "timer.start": "Start",
+      "timer.stop": "Stop",
+      "timer.resume": "Resume",
+      "timer.set": "Set",
+      "timer.save": "Save",
+      "timer.note": "Note",
+      "timer.lap": "Lap",
+      "timer.reset": "Reset",
+      "timer.setTitle": "Start the countdown with the typed duration",
+      "timer.fieldAria": "A duration for the timer, for example 5 min or 1:30",
+      "timer.presetTitle": "Start a countdown of {value}",
+      "timer.noteAria": "Write a quick note",
+      "timer.noteSaveTitle": "Save this text as a note",
+      "timer.countdownRunning": "Countdown running",
+      "timer.stopwatchRunning": "Stopwatch running",
+      "timer.stopTitle": "Stop the countdown",
+      "timer.stopStopwatchTitle": "Stop the stopwatch",
+      "timer.startStopwatchTitle": "Start the stopwatch",
+    }),
+    pl: Object.freeze({
+      "clock.title": "Zegar",
+      "date.title": "Data",
+      "weather.title": "Pogoda",
+      "boost.title": "Boost",
+      "boost.aria": "Pami\u0119\u0107 przegl\u0105darki: {value}. Kliknij, aby j\u0105 zwolni\u0107.",
+      "boost.ariaUnknown": "Odczyt pami\u0119ci niedost\u0119pny. Kliknij, aby zwolni\u0107 pami\u0119\u0107.",
+      "boost.free": "Zwolnij pami\u0119\u0107 (lekko)",
+      "boost.busy": "Zwalnianie pami\u0119ci\u2026",
+      "boost.freed": "Zwolniono {mb} MB",
+      "boost.nothingFreed": "Pami\u0119\u0107 by\u0142a ju\u017c uporz\u0105dkowana",
+      "boost.unknown": "Pami\u0119\u0107 zwolniona. Ta wersja nie potrafi jej zmierzy\u0107.",
+      "boost.deep": "Zwolnij pami\u0119\u0107 (g\u0142\u0119boko)",
+      "boost.deepSoon": "Wymaga wsp\u00f3lnej polityki kart",
+      "boost.deepDone": "U\u015bpiono {tabs} kart i {panels} paneli, zwolniono {mb} MB",
+      "boost.restoreCount": "Przywr\u00f3\u0107 ({count})",
+      "boost.restored": "Obudzono {count} paneli",
+      "boost.limitHit": "W u\u017cyciu {mb} MB, powy\u017cej limitu {limit} MB. Otw\u00f3rz Boost, aby zwolni\u0107 pami\u0119\u0107.",
+      "boost.limitDone": "Zwolniono pami\u0119\u0107 do {mb} MB",
+      "boost.limitNothing": "Pami\u0119\u0107 jest wysoka, ale nie ma ju\u017c czego zwalnia\u0107",
+      "boost.restore": "Przywr\u00f3\u0107",
+      "boost.restoreSoon": "Nie ma jeszcze czego przywraca\u0107",
+      "boost.gameMode": "Tryb gry",
+      "boost.gameModeOn": "Tryb gry w\u0142\u0105czony \u2014 liczniki wstrzymane, karty w tle bezczynne",
+      "boost.gameModeOff": "Tryb gry wy\u0142\u0105czony \u2014 wszystko wraca do normy",
+      "boost.later": "Kolejne dzia\u0142ania Boost pojawi\u0105 si\u0119 w nast\u0119pnych wersjach",
+      "tray.label": "Widgety panelu bocznego",
+      "tray.move": "Przenieś ten widget",
+      "tray.moveUp": "Przenieś ten widget wyżej",
+      "tray.moveDown": "Przenieś ten widget niżej",
+      "tray.moved": "{title} przeniesiono na pozycję {position} z {total}",
+      "tray.moveHint": "Przenieś ten widget: kliknij albo użyj Alt+góra / Alt+dół",
+      "clock.aria": "Zegar. Kliknij, aby otworzyć minutnik.",
+      "clock.ariaAlert": "Minutnik zakończony. ",
+      "timer.aria": "Minutnik {value}{kind}. Kliknij, aby wrócić do zegara.",
+      "timer.kind.countdown": ", odliczanie",
+      "timer.kind.stopwatch": ", stoper",
+      "timer.kind.stopped": ", zatrzymany",
+      "timer.clickClock": " Kliknij, aby wrócić do zegara.",
+      "timer.start": "Start",
+      "timer.stop": "Stop",
+      "timer.resume": "Wznów",
+      "timer.set": "Ustaw",
+      "timer.save": "Zapisz",
+      "timer.note": "Notatka",
+      "timer.lap": "Międzyczas",
+      "timer.reset": "Wyzeruj",
+      "timer.setTitle": "Uruchom odliczanie wpisanego czasu",
+      "timer.fieldAria": "Czas minutnika, na przykład 5 min lub 1:30",
+      "timer.presetTitle": "Uruchom odliczanie {value}",
+      "timer.noteAria": "Napisz szybką notatkę",
+      "timer.noteSaveTitle": "Zapisz ten tekst jako notatkę",
+      "timer.countdownRunning": "Odliczanie trwa",
+      "timer.stopwatchRunning": "Stoper działa",
+      "timer.stopTitle": "Zatrzymaj odliczanie",
+      "timer.stopStopwatchTitle": "Zatrzymaj stoper",
+      "timer.startStopwatchTitle": "Uruchom stoper",
+    }),
+  });
+  // What the widgets are really set to right now. `notesRaw` is the Notes language as read from its pref; the caller
+  // passes it in so this stays a pure function.
+  function resolveWidgetLanguage(setting, notesRaw) {
+    const chosen = cleanWidgetLanguage(setting);
+    if (chosen !== "auto") return chosen;
+    return String(notesRaw ?? "").toLowerCase().startsWith("pl") ? "pl" : "en";
+  }
+  // A string with {placeholders}. A missing key falls back to English and then to the key itself, so a half-finished
+  // translation can never draw an empty button.
+  function widgetText(lang, key, params = null) {
+    const code = WIDGET_STRINGS[lang] ? lang : "en";
+    let text = WIDGET_STRINGS[code][key];
+    if (text === undefined) text = WIDGET_STRINGS.en[key];
+    if (text === undefined) return String(key);
+    if (params && typeof params === "object")
+      text = text.replace(/\{([a-z]+)\}/gi, (all, name) => (Object.hasOwn(params, name) ? String(params[name]) : all));
+    return text;
+  }
 
   const CLOCK_FORMATS = Object.freeze(["auto", "24h", "12h"]);
   const DATE_FORMATS = Object.freeze(["long", "short", "iso"]);
+  const WEATHER_UNITS = Object.freeze(["auto", "metric", "imperial"]);
+  const WEATHER_REFRESH_MIN = 15;
+  const WEATHER_REFRESH_MAX = 180;
+  // The one host the weather widget talks to. Open-Meteo needs no key and no account, which keeps the widget
+  // inside the "no cloud inside the mod" rule: nothing is synced, one place name goes out per refresh.
+  const WEATHER_ENDPOINT = "https://api.open-meteo.com/v1/forecast";
+  // A week is what the card needs: today, tomorrow, and the first day that looks wet. One request, same host.
+  const WEATHER_FORECAST_DAYS = 7;
+  const WET_ICON_GROUPS = Object.freeze(["rain", "snow", "sleet", "storm", "drizzle"]);
 
   const LIMITS = Object.freeze({
     MAX_HEIGHT_SHARE: [15, 80],
@@ -1237,6 +1478,101 @@ function nativeSidebarSide() {
       .trim()
       .toLowerCase();
     return /^[a-z0-9][a-z0-9_-]{0,47}$/.test(s) ? s : "";
+  }
+
+  // OW-71: the order the person chose, applied to whatever widgets exist. Three promises, in this order:
+  //   1. the stored ids that still exist come first, in the stored order;
+  //   2. an id nobody recognises is dropped silently (a widget was removed; that is not the person's mistake);
+  //   3. every widget NOT in the stored list follows, in its own default order — so a new widget appears without the
+  //      person having to re-order anything, and nothing is ever lost from the tray.
+  const cleanWidgetOrder = (raw) => {
+    const out = [];
+    if (typeof raw !== "string") return out;
+    for (const part of raw.split(/[\s,;]+/)) {
+      const id = normalizeWidgetId(part);
+      if (id && !out.includes(id)) out.push(id);
+    }
+    return out;
+  };
+  // `defs` is every enabled definition in its DEFAULT order.
+  function orderedByIds(defs, orderIds) {
+    const list = Array.isArray(defs) ? defs : [];
+    const wanted = Array.isArray(orderIds) ? orderIds : [];
+    const byId = new Map(list.map((d) => [d.id, d]));
+    const out = [];
+    for (const id of wanted) {
+      const def = byId.get(id);
+      if (def && !out.includes(def)) out.push(def);
+    }
+    for (const def of list) if (!out.includes(def)) out.push(def);
+    return out;
+  }
+  // The stored order after moving `id` one place in `dir` (-1 up, +1 down), among the ids that exist right now.
+  function moveInOrder(ids, id, dir, existing) {
+    const list = (Array.isArray(ids) ? ids : []).filter((x) => !existing || existing.includes(x));
+    const at = list.indexOf(id);
+    if (at < 0) return list;
+    const to = at + (dir < 0 ? -1 : 1);
+    if (to < 0 || to >= list.length) return list;
+    const next = list.slice();
+    next.splice(at, 1);
+    next.splice(to, 0, id);
+    return next;
+  }
+
+  // OW-72: the colours a person may pick. "" means "follow the theme", which is the default and writes nothing at all.
+  // Anything stored is normalised to lowercase #rrggbb, so a half-typed value can never reach the stylesheet.
+  const THEME_COLOR = /^#[0-9a-f]{6}$/;
+  function cleanWidgetColor(raw) {
+    const v = String(raw ?? "").trim().toLowerCase();
+    if (!v) return "";
+    if (/^#[0-9a-f]{3}$/.test(v)) return "#" + v[1] + v[1] + v[2] + v[2] + v[3] + v[3];
+    if (THEME_COLOR.test(v)) return v;
+    // A named colour is accepted only when the platform can parse it (rgb/name/hsl all come back as rgb()).
+    return "";
+  }
+  function parseWidgetColor(raw) {
+    const v = String(raw ?? "").trim().toLowerCase();
+    if (!v) return null;
+    if (/^#[0-9a-f]{3}([0-9a-f]{3})?$/.test(v)) {
+      const hex = v.length === 4 ? "#" + v[1] + v[1] + v[2] + v[2] + v[3] + v[3] : v;
+      return { r: parseInt(hex.slice(1, 3), 16), g: parseInt(hex.slice(3, 5), 16), b: parseInt(hex.slice(5, 7), 16) };
+    }
+    const m = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(v);
+    if (m) return { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]) };
+    return null;
+  }
+  // WCAG relative luminance and contrast ratio: the honest test of "is this readable", not a guess about "light" or
+  // "dark". AA for normal text is 4.5:1.
+  function relativeLuminance(c) {
+    const ch = [c.r, c.g, c.b].map((v) => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+  }
+  function contrastRatio(a, b) {
+    const la = relativeLuminance(a);
+    const lb = relativeLuminance(b);
+    const hi = Math.max(la, lb);
+    const lo = Math.min(la, lb);
+    return (hi + 0.05) / (lo + 0.05);
+  }
+  // What the person chose, as CSS custom properties for the tray. An unreadable pair is REFUSED here (not written and
+  // then complained about), so the cards can never end up invisible; the caller decides whether to say why.
+  const CONTRAST_MIN = 4.5;
+  function widgetAppearanceVars(bgRaw, textRaw) {
+    const bg = cleanWidgetColor(bgRaw);
+    const text = cleanWidgetColor(textRaw);
+    if (!bg && !text) return { vars: {}, readable: true, contrast: 0, refused: false };
+    const refused =
+      Boolean(bg && text) && contrastRatio(parseWidgetColor(bg), parseWidgetColor(text)) < CONTRAST_MIN;
+    if (refused) return { vars: {}, readable: false, contrast: contrastRatio(parseWidgetColor(bg), parseWidgetColor(text)), refused: true };
+    const vars = {};
+    if (bg) vars["--zw-card-bg"] = bg;
+    if (text) vars["--zw-card-text"] = text;
+    const contrast = bg && text ? contrastRatio(parseWidgetColor(bg), parseWidgetColor(text)) : 0;
+    return { vars, readable: true, contrast, refused: false };
   }
 
   function parseDisabledIds(raw) {
@@ -1334,7 +1670,10 @@ function nativeSidebarSide() {
    * The static presentation changes only when the minute or display options change;
    * on a steady 1 Hz tick, only the seconds text node is touched.
    */
-  function renderClockElements(elements, value, previousStaticKey = "") {
+  // `force` is the repaint path (OW-67): a card that is being shown again must be written even when the value looks
+  // unchanged, because the DOM may have been emptied while the sidebar was folded. Without it the "nothing changed"
+  // shortcut kept a blank clock blank forever — the owner's "sometimes it stays not rendered".
+  function renderClockElements(elements, value, previousStaticKey = "", force = false) {
     if (!elements || !value) return previousStaticKey;
     const minuteKey = value.minuteKey || value.key || "";
     const staticKey = [
@@ -1346,7 +1685,7 @@ function nativeSidebarSide() {
       value.showSeconds ? "1" : "0",
       value.showZone ? "1" : "0",
     ].join("\\u001f");
-    if (staticKey !== previousStaticKey) {
+    if (force || staticKey !== previousStaticKey) {
       setClockTextIfChanged(elements.timeEl, value.time || "");
       setClockHiddenIfChanged(elements.secEl, !value.showSeconds);
       setClockTextIfChanged(elements.merEl, value.meridiem || "");
@@ -1354,11 +1693,14 @@ function nativeSidebarSide() {
       setClockTextIfChanged(elements.zoneEl, value.zoneLabel || "");
       setClockHiddenIfChanged(elements.zoneEl, !value.zoneLabel);
       setClockAttributeIfChanged(elements.wrap, "data-zw-clock-key", minuteKey);
+      // OW-56: the card labels itself for whichever face is up; the clock's own text only wins while the clock is up.
+    if (elements.wrap?.getAttribute?.("data-zw-clock-face") !== "timer") {
       setClockAttributeIfChanged(
         elements.wrap,
         "aria-label",
         value.accessibleText || value.time || "Clock",
       );
+    }
     }
     setClockTextIfChanged(
       elements.secEl,
@@ -2244,9 +2586,20 @@ function nativeSidebarSide() {
     const entries = new Map(); // id -> { def, instance, timer, token, inflight, intervalMs }
     const cache = new Map(); // cacheKey -> { value, updatedAt }
     let paused = true;
+    // OW-94: the Game Mode hold, deliberately a SECOND flag. `paused` belongs to the sidebar-folded setting (OW-67); if
+    // Game Mode reused it, ending a game would resume a folded sidebar and starting a game would have to know whether the
+    // fold wanted pausing. Two owners, two flags, one predicate: `idle()`.
+    let held = false;
     let disposed = false;
+    const idle = () => paused || held;
 
     function cacheKeyOf(def) {
+      if (typeof def.cacheKey === "function") {
+        try {
+          const custom = def.cacheKey();
+          if (custom) return String(custom);
+        } catch (_) {}
+      }
       return def.cacheKey || def.id;
     }
 
@@ -2259,7 +2612,7 @@ function nativeSidebarSide() {
 
     function scheduleNext(entry, { isError = false, lastValue } = {}) {
       clearEntryTimer(entry);
-      if (disposed || paused || !entries.has(entry.def.id)) return;
+      if (disposed || idle() || !entries.has(entry.def.id)) return;
       const intervalMs = entry.intervalMs;
       if (!intervalMs || intervalMs <= 0) return;
       let delay = intervalMs;
@@ -2278,7 +2631,7 @@ function nativeSidebarSide() {
       }
       entry.timer = setTimer(() => {
         entry.timer = null;
-        if (!disposed && !paused && entries.has(entry.def.id)) {
+        if (!disposed && !idle() && entries.has(entry.def.id)) {
           refresh(entry.def.id, { force: true });
         }
       }, delay);
@@ -2303,7 +2656,7 @@ function nativeSidebarSide() {
     function refresh(id, { force = false, area = null } = {}) {
       const entry = entries.get(id);
       if (!entry || disposed) return Promise.resolve(false);
-      if (paused && !force) return Promise.resolve(false);
+      if (idle() && !force) return Promise.resolve(false);
       const cached = cache.get(cacheKeyOf(entry.def));
       if (!force && cached && entry.intervalMs > 0) {
         const customStale =
@@ -2327,7 +2680,7 @@ function nativeSidebarSide() {
             } catch (_) {}
           }
           clearEntryTimer(entry);
-          if (!paused) {
+          if (!idle()) {
             entry.timer = setTimer(() => {
               entry.timer = null;
               if (!disposed && !paused && entries.has(id))
@@ -2378,7 +2731,7 @@ function nativeSidebarSide() {
             area,
           });
         } catch (_) {}
-        if (!paused) scheduleNext(entry, { isError: true, lastValue: cached?.value });
+        if (!idle()) scheduleNext(entry, { isError: true, lastValue: cached?.value });
         return Promise.resolve(false);
       }
 
@@ -2403,7 +2756,7 @@ function nativeSidebarSide() {
         } catch (err) {
           onError(id, err);
         }
-        if (!paused) scheduleNext(current, { lastValue: stored?.value });
+        if (!idle()) scheduleNext(current, { lastValue: stored?.value });
         return true;
       };
 
@@ -2423,7 +2776,7 @@ function nativeSidebarSide() {
             area,
           });
         } catch (_) {}
-        if (!paused) scheduleNext(current, { isError: true, lastValue: prev?.value });
+        if (!idle()) scheduleNext(current, { isError: true, lastValue: prev?.value });
         return false;
       };
 
@@ -2477,10 +2830,44 @@ function nativeSidebarSide() {
           clearEntryTimer(entry);
         }
       } else {
-        for (const entry of entries.values()) {
-          paintCached(entry, area);
-          refresh(entry.def.id, { force: false, area });
-        }
+        resumeAll(area);
+      }
+    }
+
+    // OW-94: the Game Mode hold. Entering clears every timer, leaving resumes through `resumeAll` only when the sidebar
+    // is not itself asking for a pause — the fold's setting is not ours to override.
+    function setHeld(nextHeld, area) {
+      const target = Boolean(nextHeld);
+      if (target === held) return;
+      held = target;
+      if (held) {
+        for (const entry of entries.values()) clearEntryTimer(entry);
+      } else if (!paused) {
+        resumeAll(area);
+      }
+    }
+
+    // OW-67: coming back into view always paints what is known, whether or not the pause setting changed. The bug the
+    // owner reported ("sometimes it stays not rendered when its hidden in sidebar") was exactly this: with pausing
+    // turned OFF the paused flag never moves, so a widget whose card was blanked while the sidebar was folded was
+    // never painted again. A card the person cannot see must still be correct the moment it can be seen.
+    function resumeAll(area) {
+      for (const entry of entries.values()) {
+        const painted = paintCached(entry, area);
+        // A pure render-only widget has no fetched value to paint from, so it must be asked to draw itself: that is
+        // the case the owner hit (the Clock has no `fetch`). A widget WITH a cache keeps the "fresh cache is painted,
+        // not refetched" rule and only asks for a refresh when its value is actually stale.
+        refresh(entry.def.id, { force: !painted && typeof entry.instance?.fetch !== "function", area });
+      }
+    }
+
+    // OW-67, the other half: coming back into view when the widget was NEVER paused (the owner's setting). Nothing here
+    // may fetch — a fetch while the sidebar is folded is what the setting asked us not to do — so this only repaints
+    // what is already known, and asks a render-only widget to draw itself from its own state.
+    function repaintAll(area) {
+      for (const entry of entries.values()) {
+        const painted = paintCached(entry, area);
+        if (!painted && typeof entry.instance?.fetch !== "function") refresh(entry.def.id, { force: true, area });
       }
     }
 
@@ -2523,6 +2910,10 @@ function nativeSidebarSide() {
       deactivate,
       updateInterval,
       setPaused,
+      setHeld,
+      isHeld: () => held,
+      resumeAll,
+      repaintAll,
       refresh,
       getCached,
       setCached,
@@ -2531,6 +2922,755 @@ function nativeSidebarSide() {
       activeTimerCount,
       destroy,
     };
+  }
+
+  // ---- OW-90: the Boost card -- ---------------------------------------------------------------------------------
+  // Boost is a number and one action. The number comes from `additional/boost/` (the only place that knows how to ask
+  // the browser for its real total), so this card owns no reading of its own and no timer: the module's sampler runs
+  // only while the popup is open, and `onChange` is how the card hears about it.
+
+  // The compact line: "412 MB" while the reading is small, "1.4 GB" once it outgrows a megabyte count. A reading that
+  // does not exist is a dash, never a zero — the plan's rule, and the same one the retired Status card followed.
+  function boostParts(mb) {
+    const value = Number(mb);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    const text = value >= 1000 ? (Math.round(value / 100) / 10).toFixed(1) + " GB" : Math.round(value) + " MB";
+    // The level is the one thing this card grades: a browser near the machine's limit is worth a colour, and the
+    // number alone cannot say that (it has no limit to compare against), so the grade only says "growing".
+    return { mb: Math.round(value), text, level: value >= 4096 ? "low" : "ok" };
+  }
+
+  // What a plain click means. Pure, so the rule is testable without a sidebar: a click while the module works does
+  // nothing (a second GC while the first settles is exactly the kind of pile-up the plan forbids), a click otherwise
+  // runs the light pass.
+  function resolveBoostClick(opts = {}) {
+    if (opts.enabled === false) return { action: "none" };
+    if (!opts.available) return { action: "none", reason: "module-missing" };
+    if (opts.running) return { action: "none", reason: "busy" };
+    return { action: "free", level: 1 };
+  }
+
+  // The menu, as data. The plan's rule is that the entries that do not work yet are shown greyed rather than hidden,
+  // so a person cannot think part three already shipped; `available: false` is what draws them disabled.
+  function boostMenuItems(opts = {}) {
+    const lang = resolveWidgetLanguage(opts.language, opts.notesRaw);
+    const running = Boolean(opts.running);
+    // OW-91 made the deep pass real. `deep` is offered when the module can do it (it needs the shared tab policy) and
+    // `restore` only when something was actually put to sleep, so a greyed entry now means a fact, not "not yet".
+    const canDeep = opts.canDeep !== false;
+    const undoSize = Number(opts.undoSize) || 0;
+    const items = [
+      {
+        id: "free-light",
+        label: widgetText(lang, running ? "boost.busy" : "boost.free"),
+        available: !running,
+        primary: true,
+      },
+      {
+        id: "free-deep",
+        label: widgetText(lang, "boost.deep"),
+        available: !running && canDeep,
+        hint: canDeep ? "" : widgetText(lang, "boost.deepSoon"),
+      },
+      {
+        // B7/OW-94: the Level 3 toggle. It is a switch, not a one-shot action, so its label says which way it will
+        // move — a menu entry that reads "Game Mode" and does the opposite of what a person expects is worse than none.
+        id: "game-mode",
+        label: widgetText(lang, "boost.gameMode"),
+        available: opts.canGameMode !== false,
+        checked: Boolean(opts.gameMode),
+        hint: Boolean(opts.gameMode) ? widgetText(lang, "boost.gameModeOn") : "",
+      },
+      {
+        id: "restore",
+        label: undoSize
+          ? widgetText(lang, "boost.restoreCount", { count: undoSize })
+          : widgetText(lang, "boost.restore"),
+        available: !running && undoSize > 0,
+        hint: undoSize ? "" : widgetText(lang, "boost.restoreSoon"),
+      },
+    ];
+    return items;
+  }
+
+  // The toast line after a run. `freedMB` is null when the build cannot measure memory at all: the run still
+  // happened, so the card says that instead of inventing a number.
+  function boostResultText(result, opts = {}) {
+    const lang = resolveWidgetLanguage(opts.language, opts.notesRaw);
+    if (!result || typeof result !== "object") return widgetText(lang, "boost.unknown");
+    // A deep pass says what it put to sleep as well as what it freed; the light pass has nothing to add.
+    if (result.by === "level2" && result.unloaded) {
+      const tabs = Number(result.unloaded.tabs) || 0;
+      const panels = Number(result.unloaded.panels) || 0;
+      if (tabs || panels) {
+        return widgetText(lang, "boost.deepDone", {
+          tabs,
+          panels,
+          mb: Number.isFinite(Number(result.freedMB)) ? Math.round(Number(result.freedMB)) : 0,
+        });
+      }
+    }
+    // A finite `freedMB` is the answer; the two readings only matter when it is missing, which is exactly the
+    // "this build cannot measure memory" case — the run happened, so say that instead of inventing a number.
+    const freed = Number(result.freedMB);
+    if (result.freedMB == null || !Number.isFinite(freed)) return widgetText(lang, "boost.unknown");
+    if (freed <= 0) return widgetText(lang, "boost.nothingFreed");
+    return widgetText(lang, "boost.freed", { mb: Math.round(freed) });
+  }
+
+  // ---- T3.9d: stopwatch, quick timer and quick note -----------------------------------------------------------
+  // What a click on the Clock means. Pure, so the rule is testable and the card stays a painter:
+  //  - the quick timer wins while a countdown it started is running (a second click stops it);
+  //  - otherwise a plain click starts the stopwatch, or stops it when it runs;
+  //  - a long press (or the widget's own button) opens the "in X seconds" sheet instead.
+  function resolveClockClick(opts = {}) {
+    const enabled = Boolean(opts.clickEnabled);
+    const timerRunning = Boolean(opts.timerRunning);
+    const stopwatchRunning = Boolean(opts.stopwatchRunning);
+    const long = Boolean(opts.long);
+    if (!enabled) return { action: "none" };
+    if (timerRunning) return { action: "timer-stop" };
+    if (long) return { action: "ask-duration" };
+    return { action: stopwatchRunning ? "stopwatch-stop" : "stopwatch-start" };
+  }
+
+  // OW-49: the Clock is the only visible surface. A click on it opens one small panel; that panel is the whole timer
+  // UI. The rule is pure so the layout can be tested without a sidebar:
+  //   idle clock + click -> open the panel (and start nothing by itself)
+  //   panel open  + click -> close it, unless a countdown is running (then the click stops the countdown)
+  //   running countdown, panel closed -> the clock line carries the time, so a running timer is never invisible.
+  function resolveClockPanelState(opts = {}) {
+    const open = Boolean(opts.open);
+    if (opts.timerRunning) return { action: "stop-timer", open };
+    if (open) return { action: "close", open: false };
+    return { action: "open", open: true };
+  }
+
+  // OW-56: one card with two faces. The mode is a setting (`clock` | `timer`), and a click on the card turns it over.
+  // A person who turned the Clock click off keeps the setting as the only way to change it (the click answers
+  // "none"), which is the promise TIMER_CLICK_STOPWATCH always made.
+  const WIDGET_MODES = Object.freeze(["clock", "timer"]);
+  function cleanWidgetMode(raw) {
+    const mode = String(raw ?? "").trim().toLowerCase();
+    return WIDGET_MODES.includes(mode) ? mode : "clock";
+  }
+  // `event`: "click" (the card is turned over), or anything else (a setting change) which never flips it.
+  function nextWidgetMode(mode, event, opts = {}) {
+    const current = cleanWidgetMode(mode);
+    if (event !== "click") return current;
+    if (opts.clickEnabled === false) return current;
+    return current === "clock" ? "timer" : "clock";
+  }
+
+  // OW-56: what a finished countdown does. Two independent choices, one alert per end:
+  //   sound:  none | beep (the platform beep) | chime (a short two-note tone through WebAudio, the reminder path)
+  //   notice: none | toast (a line in the window) | system (Services.alerts, when the platform has it)
+  const TIMER_END_SOUNDS = Object.freeze(["none", "beep", "chime"]);
+  const TIMER_END_NOTICES = Object.freeze(["none", "toast", "system"]);
+  function cleanTimerEndSound(raw) {
+    const v = String(raw ?? "").trim().toLowerCase();
+    return TIMER_END_SOUNDS.includes(v) ? v : "beep";
+  }
+  function cleanTimerEndNotice(raw) {
+    const v = String(raw ?? "").trim().toLowerCase();
+    return TIMER_END_NOTICES.includes(v) ? v : "none";
+  }
+  // Every question a finished countdown asks, answered once: what to play, what to show, and whether the clock turns
+  // red. `alreadyRung` is the guard that makes a second tick (or a second window event) silent, the same rule H1.5
+  // applies to reminders: one end, one alert.
+  function timerEndPlan(opts = {}) {
+    const sound = cleanTimerEndSound(opts.sound);
+    const notice = cleanTimerEndNotice(opts.notice);
+    const alreadyRung = Boolean(opts.alreadyRung);
+    return {
+      sound: alreadyRung ? "none" : sound,
+      notice: alreadyRung ? "none" : notice,
+      markClock: !alreadyRung,
+      text: String(opts.text ?? "").trim() || "Time is up",
+    };
+  }
+
+  // OW-56: the clock's face while a countdown has ended and nobody has looked at it yet. The state is a flag on the
+  // card (per window, per run): a finished countdown is a moment, not a setting, so nothing is stored.
+  function clockAlertState(state = {}, opts = {}) {
+    const ringing = Boolean(state.ringing);
+    if (opts.clicked) return { ringing: false, tone: "none" };
+    return { ringing, tone: ringing ? "alert" : "none" };
+  }
+
+  // What the panel's own buttons are, in the order they are drawn. Deliberately few: one primary button, a lap button
+  // that exists only while the stopwatch runs, and a reset that is disabled when there is nothing to reset.
+  function clockPanelControls(state = {}, opts = {}) {
+    const timer = state.timer;
+    const stopwatch = state.stopwatch;
+    const usingTimer = Boolean(timer && (timer.running || (timer.remainingMs > 0 && timer.remainingMs < timer.durationMs)));
+    const primary = usingTimer
+      ? timer.running ? "Stop" : "Resume"
+      : stopwatch && stopwatch.running ? "Stop" : "Start";
+    return {
+      primary,
+      lap: Boolean(stopwatch && stopwatch.running),
+      reset: Boolean((stopwatch && (stopwatch.running || stopwatch.accumulatedMs > 0)) || usingTimer),
+      field: !usingTimer, // while a countdown runs the readout replaces the field, not sits next to it
+      presets: Boolean(opts.wide) && !usingTimer,
+      note: Boolean(opts.quickNote),
+      controls: ["primary", ...(stopwatch && stopwatch.running ? ["lap"] : []), ...((stopwatch && (stopwatch.running || stopwatch.accumulatedMs > 0)) || usingTimer ? ["reset"] : [])],
+    };
+  }
+
+  // What the Clock line shows while the panel is closed: a running countdown, then a running stopwatch, then nothing.
+  function clockBadge(state = {}, nowMs = 0) {
+    const timer = state.timer;
+    const stopwatch = state.stopwatch;
+    if (timer && timer.running) return { kind: "countdown", text: formatDuration(timerRemaining(timer, nowMs)) };
+    if (stopwatch && stopwatch.running) return { kind: "stopwatch", text: formatDuration(stopwatchElapsed(stopwatch, nowMs)) };
+    return { kind: "none", text: "" };
+  }
+
+  // A quick timer from "in X": the duration is read with the same parser as the widget's own field.
+  function quickTimerFromText(text, nowMs) {
+    const ms = parseTimerDuration(text);
+    return ms > 0 ? timerStart(ms, nowMs) : null;
+  }
+
+  // All three are pure state machines over a clock value the caller supplies: nothing in this part reads the wall
+  // clock, so a suspended window catches up instead of drifting.
+  const TIMER_PRESETS_MS = Object.freeze([60, 300, 600, 1800, 3600].map((s) => s * 1000));
+
+  // "5", "5m", "2 min", "90s", "1h30", "1:30" -> milliseconds. Words in both languages the mod ships.
+  function parseTimerDuration(text) {
+    const raw = String(text ?? "").trim().toLowerCase();
+    if (!raw) return 0;
+    const clock = raw.match(/^(\d{1,3}):([0-5]?\d)(?::([0-5]?\d))?$/);
+    if (clock) {
+      const a = Number(clock[1]);
+      const b = Number(clock[2]);
+      const c = clock[3] === undefined ? null : Number(clock[3]);
+      const seconds = c === null ? a * 60 + b : a * 3600 + b * 60 + c;
+      return Math.max(0, Math.min(24 * 3600, seconds)) * 1000;
+    }
+    // Split at the unit letters first ("1h30" -> "1h", "30"), then read each piece on its own.
+    const parts = raw.match(/\d+(?:[.,]\d+)?\s*(?:godz\w*|hours?|h|min\w*|minutes?|m|sec\w*|sek\w*|s)?/g);
+    if (!parts) return 0;
+    let total = 0;
+    let sawHour = false;
+    for (const part of parts) {
+      const value = Number(part.replace(",", ".").replace(/[^0-9.]/g, ""));
+      if (!Number.isFinite(value)) continue;
+      const unit = part.replace(/[0-9.,\s]+/g, "");
+      // The unit decides the scale; the letters are matched whole, so "1h30" reads as an hour and thirty minutes.
+      if (/^(h|godz\w*|hours?)$/.test(unit)) { total += value * 3600; sawHour = true; }
+      else if (/^(m|min\w*|minutes?)$/.test(unit)) total += value * 60;
+      // A bare number after an hour is minutes ("1h30"), otherwise seconds ("90" means ninety seconds).
+      else if (sawHour) total += value * 60;
+      else total += value;
+    }
+    return Math.max(0, Math.min(24 * 3600, total)) * 1000;
+  }
+
+  // 0:07 / 12:07 / 1:02:07 — an hour field only appears when there is an hour.
+  function formatDuration(ms) {
+    const total = Math.max(0, Math.floor(Number(ms) / 1000) || 0);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    return h ? h + ":" + pad2(m) + ":" + pad2(s) : m + ":" + pad2(s);
+  }
+
+  const STOPWATCH_IDLE = Object.freeze({ running: false, startedAt: 0, accumulatedMs: 0, laps: [] });
+
+  function stopwatchElapsed(state, nowMs) {
+    const acc = Number(state?.accumulatedMs) || 0;
+    if (!state?.running) return Math.max(0, acc);
+    return Math.max(0, acc + Math.max(0, Number(nowMs) - Number(state.startedAt || nowMs)));
+  }
+
+  function stopwatchStart(state, nowMs) {
+    if (state?.running) return { ...state };
+    return { running: true, startedAt: Number(nowMs) || 0, accumulatedMs: Number(state?.accumulatedMs) || 0, laps: [...(state?.laps || [])] };
+  }
+
+  function stopwatchStop(state, nowMs) {
+    if (!state?.running) return { ...STOPWATCH_IDLE, accumulatedMs: Number(state?.accumulatedMs) || 0, laps: [...(state?.laps || [])] };
+    return { running: false, startedAt: 0, accumulatedMs: stopwatchElapsed(state, nowMs), laps: [...(state.laps || [])] };
+  }
+
+  function stopwatchLap(state, nowMs) {
+    if (!state?.running) return state;
+    const at = stopwatchElapsed(state, nowMs);
+    const laps = [...(state.laps || []), at];
+    return { ...state, laps: laps.slice(-500) };
+  }
+
+  const stopwatchReset = () => ({ ...STOPWATCH_IDLE, laps: [] });
+
+  // ---- countdown ("timer in X seconds/minutes", quick alarm) ----
+  const TIMER_IDLE = Object.freeze({ running: false, endsAt: 0, remainingMs: 0, durationMs: 0, rung: false });
+
+  function timerStart(durationMs, nowMs) {
+    const span = Math.max(1000, Math.min(24 * 3600 * 1000, Math.round(Number(durationMs) || 0)));
+    return { running: true, endsAt: Number(nowMs) + span, remainingMs: span, durationMs: span, rung: false };
+  }
+  function timerRemaining(state, nowMs) {
+    if (!state?.running) return Math.max(0, Number(state?.remainingMs) || 0);
+    return Math.max(0, Number(state.endsAt || 0) - Number(nowMs));
+  }
+  // The one place a timer decides it has finished: `rung` makes it fire exactly once, even across a sleep.
+  function timerTick(state, nowMs) {
+    if (!state?.running) return { state: { ...state }, finished: false };
+    const left = timerRemaining(state, nowMs);
+    if (left > 0) return { state, finished: false };
+    if (state.rung) return { state, finished: false };
+    return { state: { ...state, running: false, remainingMs: 0, rung: true }, finished: true };
+  }
+  // Stopping freezes what is left; the caller says when, so the value is the same on every machine.
+  function timerStop(state, nowMs) {
+    return {
+      running: false,
+      endsAt: 0,
+      remainingMs: timerRemaining(state, nowMs ?? state?.endsAt ?? 0),
+      durationMs: Number(state?.durationMs) || 0,
+      rung: false,
+    };
+  }
+  const timerReset = () => ({ ...TIMER_IDLE });
+
+  // How long until the next visible change: a running timer ticks once a second only while it is on screen.
+  function nextTimerTickDelayMs(state, nowMs) {
+    if (!state?.running) return 0;
+    const left = timerRemaining(state, nowMs);
+    return left > 0 ? Math.min(1000, left) : 0;
+  }
+
+  // ---- T3.9c: weather (Open-Meteo, no key, one request per refresh) -------------------------------------------
+  // WMO weather codes, as Open-Meteo reports them. The table is the whole vocabulary: a code nobody knows is drawn
+  // as "unknown", never guessed.
+  const WMO_CODES = Object.freeze({
+    0: ["Clear sky", "sun", "Bezchmurnie"],
+    1: ["Mainly clear", "sun", "Prawie bezchmurnie"],
+    2: ["Partly cloudy", "cloud-sun", "Częściowe zachmurzenie"],
+    3: ["Overcast", "cloud", "Zachmurzenie"],
+    45: ["Fog", "fog", "Mgła"],
+    48: ["Depositing rime fog", "fog", "Mgła osadzająca szadź"],
+    51: ["Light drizzle", "drizzle", "Słaba mżawka"],
+    53: ["Drizzle", "drizzle", "Mżawka"],
+    55: ["Dense drizzle", "drizzle", "Gęsta mżawka"],
+    56: ["Light freezing drizzle", "sleet", "Słaba marznąca mżawka"],
+    57: ["Freezing drizzle", "sleet", "Marznąca mżawka"],
+    61: ["Light rain", "rain", "Słaby deszcz"],
+    63: ["Rain", "rain", "Deszcz"],
+    65: ["Heavy rain", "rain", "Ulewny deszcz"],
+    66: ["Light freezing rain", "sleet", "Słaby marznący deszcz"],
+    67: ["Freezing rain", "sleet", "Marznący deszcz"],
+    71: ["Light snow", "snow", "Słaby śnieg"],
+    73: ["Snow", "snow", "Śnieg"],
+    75: ["Heavy snow", "snow", "Intensywny śnieg"],
+    77: ["Snow grains", "snow", "Ziarna śniegu"],
+    80: ["Light showers", "rain", "Słabe przelotne opady"],
+    81: ["Showers", "rain", "Przelotne opady"],
+    82: ["Violent showers", "rain", "Gwałtowne przelotne opady"],
+    85: ["Light snow showers", "snow", "Słabe opady śniegu"],
+    86: ["Snow showers", "snow", "Opady śniegu"],
+    95: ["Thunderstorm", "storm", "Burza"],
+    96: ["Thunderstorm with hail", "storm", "Burza z gradem"],
+    99: ["Heavy thunderstorm with hail", "storm", "Silna burza z gradem"],
+  });
+
+  // Plain text glyphs, not pictures: they follow the widget font and never load a remote asset.
+  const WEATHER_ICON_GLYPHS = Object.freeze({
+    sun: "\u2600",
+    "cloud-sun": "\u26c5",
+    cloud: "\u2601",
+    fog: "\u2592",
+    drizzle: "\u2614",
+    rain: "\u2614",
+    sleet: "\u2745",
+    snow: "\u2744",
+    storm: "\u26a1",
+    unknown: "\u2601",
+  });
+
+  // OW-64: the description follows the widget language. `lang` defaults to English so a pure caller (and every test
+  // written before this) keeps exactly the words it had.
+  function weatherCodeInfo(code, lang = "en") {
+    const entry = WMO_CODES[Math.round(Number(code))];
+    if (!entry) return { code: -1, label: lang === "pl" ? "Nieznana" : "Unknown", icon: "unknown" };
+    const label = lang === "pl" && entry[2] ? entry[2] : entry[0];
+    return { code: Math.round(Number(code)), label, icon: entry[1] };
+  }
+
+  function cleanWeatherUnits(raw) {
+    const value = String(raw ?? "").trim().toLowerCase();
+    return WEATHER_UNITS.includes(value) ? value : "auto";
+  }
+
+  // Metric unless the place is in the United States (and the person did not choose): the setting is "auto".
+  function resolveWeatherUnits(units, countryCode) {
+    const chosen = cleanWeatherUnits(units);
+    if (chosen !== "auto") return chosen;
+    return String(countryCode || "").trim().toUpperCase() === "US" ? "imperial" : "metric";
+  }
+
+  function cleanRefreshMinutes(raw) {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return DEFAULTS.WEATHER_REFRESH_MINUTES;
+    return Math.round(Math.max(WEATHER_REFRESH_MIN, Math.min(WEATHER_REFRESH_MAX, n)));
+  }
+
+  // A place needs both numbers, in their real ranges: no request is made from half a place.
+  function cleanWeatherPlace(latitude, longitude) {
+    const rawLat = String(latitude ?? "").trim();
+    const rawLon = String(longitude ?? "").trim();
+    if (!rawLat || !rawLon) return null;
+    const lat = Number(rawLat);
+    const lon = Number(rawLon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+    if (lat === 0 && lon === 0) return null; // the null island is never a place somebody chose
+    return { latitude: Math.round(lat * 10000) / 10000, longitude: Math.round(lon * 10000) / 10000 };
+  }
+
+  // OW-57/OW-95: any number of places, cycled by hand. One JSON pref holds the list; the old single place (name +
+  // latitude + longitude) is migrated as the first entry, so a saved place is never lost. Each entry carries its own
+  // id, which is what makes the cache key differ per place: the old place's numbers can never show for the new one.
+  //
+  // "Unlimited" still has a ceiling, and 48 is the honest one: the list is cycled a click at a time, and a pref that
+  // somehow grew to thousands would be a menu nobody can use and a JSON blob read on every render. The value is far
+  // above any real list and it keeps `cleanWeatherPlaces` linear.
+  const WEATHER_PLACES_MAX = 48;
+  const WEATHER_PLACE_NAME_MAX = 60;
+  function cleanWeatherPlaceName(raw) {
+    return String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, WEATHER_PLACE_NAME_MAX);
+  }
+  function cleanWeatherPlaceId(raw, fallback) {
+    const id = String(raw ?? "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+    return id ? id.slice(0, 40) : fallback;
+  }
+  // `raw` is the stored JSON (string) or an already-parsed value. Returns [] for junk, at most WEATHER_PLACES_MAX entries, each
+  // { id, name, latitude, longitude } with a unique id. A entry without real numbers is dropped: no place, no request.
+  function cleanWeatherPlaces(raw) {
+    let value = raw;
+    if (typeof raw === "string") {
+      const text = raw.trim();
+      if (!text) return [];
+      try {
+        value = JSON.parse(text);
+      } catch (_) {
+        return [];
+      }
+    }
+    const list = Array.isArray(value) ? value : Array.isArray(value?.places) ? value.places : [];
+    const out = [];
+    const seen = new Set();
+    for (const entry of list) {
+      if (out.length >= WEATHER_PLACES_MAX) break;
+      const named = cleanWeatherPlaceName(entry?.name);
+      const place = cleanWeatherPlace(entry?.latitude, entry?.longitude);
+      // A typed name with no numbers yet is still a place: the lookup fills it in. Nothing is requested from it.
+      if (!place && !named) continue;
+      const name = named || `${place.latitude}, ${place.longitude}`;
+      let id = cleanWeatherPlaceId(entry?.id, "place-" + (out.length + 1));
+      while (seen.has(id)) id += "-2";
+      seen.add(id);
+      out.push(place ? { id, name, latitude: place.latitude, longitude: place.longitude } : { id, name, latitude: null, longitude: null });
+    }
+    return out;
+  }
+  function serializeWeatherPlaces(list) {
+    return JSON.stringify(cleanWeatherPlaces(list));
+  }
+  // The place that is showing: the one the person last cycled to, if it still exists, else the first ready one. An
+  // entry whose name was typed but whose numbers are still being looked up is skipped: there is nothing to fetch yet.
+  const weatherPlaceReady = (p) => Boolean(cleanWeatherPlace(p?.latitude, p?.longitude));
+  function currentWeatherPlace(list, currentId) {
+    const places = cleanWeatherPlaces(list);
+    if (!places.length) return null;
+    const ready = places.filter(weatherPlaceReady);
+    const pool = ready.length ? ready : places;
+    return pool.find((p) => p.id === currentId) || pool[0];
+  }
+  // A click moves to the next place and wraps; one place (or none) is a no-op that still answers a place or null.
+  function nextWeatherPlace(list, currentId) {
+    const places = cleanWeatherPlaces(list);
+    if (!places.length) return null;
+    const ready = places.filter(weatherPlaceReady);
+    const pool = ready.length ? ready : places;
+    const at = pool.findIndex((p) => p.id === currentId);
+    if (at < 0) return pool[0];
+    return pool[(at + 1) % pool.length];
+  }
+  // The old three prefs are one place: the reader for a build that has not migrated yet.
+  function weatherPlacesFromLegacy(name, latitude, longitude) {
+    const place = cleanWeatherPlace(latitude, longitude);
+    if (!place) return [];
+    return cleanWeatherPlaces([{ id: "place-1", name: cleanWeatherPlaceName(name) || `${place.latitude}, ${place.longitude}`, ...place }]);
+  }
+  // The cache key of the weather card: one entry per place, or the plain id when there is no place yet.
+  function weatherCacheKeyFor(baseId, place) {
+    const p = cleanWeatherPlace(place?.latitude, place?.longitude);
+    return p ? `${baseId}:${p.latitude},${p.longitude}` : baseId;
+  }
+
+  function weatherRequestUrl(place, units) {
+    const p = cleanWeatherPlace(place?.latitude, place?.longitude);
+    if (!p) return "";
+    const params = [
+      "latitude=" + p.latitude,
+      "longitude=" + p.longitude,
+      "current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
+      "daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_hours,snowfall_sum",
+      "forecast_days=" + WEATHER_FORECAST_DAYS,
+      "timeformat=unixtime",
+      "timezone=auto",
+      resolveWeatherUnits(units) === "imperial" ? "temperature_unit=fahrenheit&wind_speed_unit=mph" : "temperature_unit=celsius&wind_speed_unit=kmh",
+    ];
+    return WEATHER_ENDPOINT + "?" + params.join("&");
+  }
+
+  const roundWeather = (value, digits = 0) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    const f = 10 ** digits;
+    return Math.round(n * f) / f;
+  };
+
+  // A day is "wet" when its code says rain/snow/sleet/storm AND the numbers agree (hours of precipitation or a real
+  // chance of it). A dry-looking code with 90% probability, or a wet code with zero hours and zero chance, is noise.
+  function isWetDay(day) {
+    if (!day || typeof day !== "object") return false;
+    const info = weatherCodeInfo(day.code);
+    if (!WET_ICON_GROUPS.includes(info.icon)) return false;
+    const hours = Number(day.precipitationHours);
+    const chance = Number(day.precipitationProbability);
+    const snow = Number(day.snowfall);
+    if (Number.isFinite(snow) && snow > 0) return true;
+    if (Number.isFinite(hours) && hours > 0) return true;
+    if (Number.isFinite(chance) && chance >= 40) return true;
+    // The code alone still counts when the day reports nothing at all.
+    return !Number.isFinite(hours) && !Number.isFinite(chance);
+  }
+
+  // The first wet day after today: { index, daysAhead, date, code, label, icon } or null for a dry week.
+  function nextWetDay(days, fromIndex = 1, lang = "en") {
+    if (!Array.isArray(days)) return null;
+    for (let i = Math.max(0, fromIndex); i < days.length; i++) {
+      const day = days[i];
+      if (!isWetDay(day)) continue;
+      const info = weatherCodeInfo(day.code, lang);
+      return {
+        index: i,
+        daysAhead: i,
+        date: day.date || "",
+        code: info.code,
+        label: info.label,
+        icon: info.icon,
+      };
+    }
+    return null;
+  }
+
+  // OW-95: the weather card has three VIEWS, in a fixed order, and a click walks them. "Today", "Tomorrow" and "Week"
+  // are not three different readings — one request already carries the whole week — so a view is a lens on the same
+  // cached value: switching never fetches, and the numbers a person compares are always from the same instant.
+  const WEATHER_VIEWS = Object.freeze(["today", "tomorrow", "week"]);
+  const cleanWeatherView = (raw) => (WEATHER_VIEWS.includes(raw) ? raw : "today");
+  // A click moves to the next view and wraps. `hold` (a long press, or Escape) goes back to the first view, which is
+  // "today" — the card's main face, the one a glance should always be able to reach.
+  function nextWeatherView(current) {
+    const at = WEATHER_VIEWS.indexOf(cleanWeatherView(current));
+    return WEATHER_VIEWS[(at + 1) % WEATHER_VIEWS.length];
+  }
+  // What each view shows, from the reduced week the cache already holds. Pure: the card is a painter, and every branch
+  // here is testable without a sidebar, a place or a network.
+  function weatherViewParts(value, view, opts = {}) {
+    const days = Array.isArray(value?.week) ? value.week : [];
+    // The reading's own units always win over the caller's: a cached metric value labelled °F is a lie, and the caller
+    // (the card, a test) cannot know better than the value itself. `opts.units` is only the fallback for a hand-made
+    // value that carries none.
+    const units = cleanWeatherUnits(value?.units) || cleanWeatherUnits(opts.units);
+    const labels = weatherUnitLabels(units, value?.countryCode || opts.countryCode);
+    const temp = (n) => (n == null || !Number.isFinite(Number(n)) ? "" : Math.round(Number(n)) + labels.temperature);
+    const range = (day) => (day && (day.high != null || day.low != null) ? temp(day.high) + " / " + temp(day.low) : "");
+    const icon = cleanWeatherView(view);
+    if (icon === "tomorrow") {
+      const day = days[1] || null;
+      if (!day) return { view: icon, empty: true, text: "Tomorrow's forecast is not in this reading" };
+      return {
+        view: icon,
+        icon: day.icon,
+        label: day.label,
+        range: range(day),
+        temperature: temp(day.high),
+        text: "Tomorrow " + (day.label || "") + " " + range(day),
+      };
+    }
+    if (icon === "week") {
+      // The week view is a list, not a sentence: one line per day, which is what a narrow card can actually read.
+      const lines = days.map((day, index) => ({
+        index,
+        icon: day.icon,
+        // `day` is what the row is called: today and tomorrow are named for when they are, everything after that for
+        // what the sky does — a week list where every row says "Rain" cannot be told apart.
+        day: index === 0 ? "Today" : index === 1 ? "Tomorrow" : day.label || "",
+        // The weather word is kept for the tooltip; a row has no space for both, and the glyph already says the word.
+        label: day.label || "",
+        high: temp(day.high),
+        low: temp(day.low),
+        text: (index === 0 ? "Today" : index === 1 ? "Tomorrow" : day.label || "") + " " + range(day),
+      }));
+      return { view: icon, lines, empty: !lines.length, text: lines.map((l) => l.text).join(" \u00b7 ") };
+    }
+    // Today: the reading the card is named for.
+    return {
+      view: "today",
+      icon: value?.icon,
+      label: value?.label,
+      range: value?.high != null || value?.low != null ? temp(value.high) + " / " + temp(value.low) : "",
+      temperature: temp(value?.temperature),
+      text: [value?.label, temp(value?.temperature)].filter(Boolean).join(" "),
+    };
+  }
+
+  // What the card's second line says. Wide: tomorrow plus the next wet day. Narrow: one of them, and a click swaps.
+  // Pure, so the swap is testable without a sidebar.
+  function weatherOutlookParts(week, opts = {}) {
+    const days = Array.isArray(week) ? week : [];
+    const labels = weatherUnitLabels(opts.units, opts.countryCode);
+    const temp = (n) => (n == null ? "" : Math.round(n) + labels.temperature);
+    const tomorrow = days[1] || null;
+    const wet = nextWetDay(days, 1);
+    // "tomorrow" itself counts as the next wet day; say so once, not twice.
+    const wetIsTomorrow = Boolean(wet && wet.index === 1);
+    const wetText = wet
+      ? wetIsTomorrow
+        ? "Rain tomorrow"
+        : wet.daysAhead === 2
+          ? "Rain in 2 days"
+          : "Rain " + wet.label.toLowerCase() + " in " + wet.daysAhead + " days"
+      : days.length > 1
+        ? "No rain this week"
+        : "";
+    const tomorrowText = tomorrow
+      ? "Tomorrow " + temp(tomorrow.high) + " / " + temp(tomorrow.low) + (tomorrow.icon && tomorrow.icon !== "sun" ? " " + tomorrow.icon : "")
+      : "";
+    // OW-54: the two halves are two lines, never one that a narrow card shortens. A whole answer that wraps onto a
+    // second row is read at a glance; a fragment of it is not read at all.
+    const lines = [tomorrowText, wetText].filter(Boolean);
+    return {
+      tomorrow: tomorrowText,
+      wet: wetText,
+      wetDay: wet ? { ...wet } : null,
+      lines,
+      // Kept for callers that want the old pair (and for an older card that swapped between them).
+      faces: lines.slice(),
+      text: lines.join(" \u00b7 "),
+    };
+  }
+
+  // The response is reduced to what is drawn, once: the cache then holds a tiny object, not the raw payload.
+  function readWeatherPayload(payload, units, lang = "en") {
+    if (!payload || typeof payload !== "object") return null;
+    const cur = payload.current;
+    if (!cur || typeof cur !== "object") return null;
+    const info = weatherCodeInfo(cur.weather_code, lang);
+    const day = payload.daily || {};
+    const high = Array.isArray(day.temperature_2m_max) ? roundWeather(day.temperature_2m_max[0]) : null;
+    const low = Array.isArray(day.temperature_2m_min) ? roundWeather(day.temperature_2m_min[0]) : null;
+    // A week, reduced to one small object per day: the cache must stay tiny, and a raw payload never reaches the card.
+    const codes = Array.isArray(day.weather_code) ? day.weather_code : [];
+    const highs = Array.isArray(day.temperature_2m_max) ? day.temperature_2m_max : [];
+    const lows = Array.isArray(day.temperature_2m_min) ? day.temperature_2m_min : [];
+    const chances = Array.isArray(day.precipitation_probability_max) ? day.precipitation_probability_max : [];
+    const hours = Array.isArray(day.precipitation_hours) ? day.precipitation_hours : [];
+    const snows = Array.isArray(day.snowfall_sum) ? day.snowfall_sum : [];
+    const dates = Array.isArray(day.time) ? day.time : [];
+    const week = codes.slice(0, WEATHER_FORECAST_DAYS).map((code, index) => ({
+      code: weatherCodeInfo(code, lang).code,
+      icon: weatherCodeInfo(code, lang).icon,
+      label: weatherCodeInfo(code, lang).label,
+      high: index < highs.length ? roundWeather(highs[index]) : null,
+      low: index < lows.length ? roundWeather(lows[index]) : null,
+      precipitationProbability: index < chances.length ? roundWeather(chances[index]) : null,
+      precipitationHours: index < hours.length ? roundWeather(hours[index], 1) : null,
+      snowfall: index < snows.length ? roundWeather(snows[index], 1) : null,
+      date: index < dates.length ? String(dates[index]) : "",
+    }));
+    return {
+      week,
+      units: cleanWeatherUnits(units),
+      temperature: roundWeather(cur.temperature_2m, 1),
+      humidity: roundWeather(cur.relative_humidity_2m),
+      wind: roundWeather(cur.wind_speed_10m, 1),
+      code: info.code,
+      label: info.label,
+      icon: info.icon,
+      high,
+      low,
+      countryCode: typeof payload.countryCode === "string" ? payload.countryCode : "",
+      observedAt: Number.isFinite(Number(cur.time)) ? Number(cur.time) * 1000 : 0,
+      timezone: typeof payload.timezone === "string" ? payload.timezone : "",
+    };
+  }
+
+  // "auto" is settled by the country the geocoder reported; without one the metric world is assumed.
+  function weatherUnitLabels(units, countryCode) {
+    const imperial = resolveWeatherUnits(units, countryCode) === "imperial";
+    return { temperature: imperial ? "\u00b0F" : "\u00b0C", wind: imperial ? "mph" : "km/h" };
+  }
+
+  // What the card says, as plain parts so the DOM code stays a dumb painter.
+  function formatWeatherParts(value, units) {
+    if (!value) return null;
+    const labels = weatherUnitLabels(value.units, value.countryCode);
+    const temp = value.temperature == null ? "\u2014" : Math.round(value.temperature) + labels.temperature;
+    // The compact form on purpose: this range sits on the meta line beside wind and humidity, where two unit suffixes
+    // would double its width. The views (OW-95) label their own numbers, so nothing is lost.
+    const range = value.high == null || value.low == null ? "" : Math.round(value.high) + "\u00b0 / " + Math.round(value.low) + "\u00b0";
+    const details = [];
+    if (value.wind != null) details.push(Math.round(value.wind) + " " + labels.wind);
+    if (value.humidity != null) details.push(Math.round(value.humidity) + "%");
+    return {
+      temperature: temp,
+      label: value.label || "Unknown",
+      icon: value.icon || "unknown",
+      range,
+      details: details.join(" \u00b7 "),
+      text: [temp, value.label || "Unknown", range, details.join(", ")].filter(Boolean).join(", "),
+    };
+  }
+
+  // The cache is good for as long as the refresh interval; a value written by another setting set is not ours.
+  function isWeatherCacheFresh(nowMs, cached, refreshMinutes) {
+    if (!cached?.value) return false;
+    const age = Number(nowMs) - Number(cached.updatedAt || 0);
+    if (!Number.isFinite(age) || age < 0) return false;
+    return age < cleanRefreshMinutes(refreshMinutes) * 60000;
+  }
+
+  // How far the next automatic refresh is: aligned to the refresh interval, never faster than a minute.
+  function nextWeatherDelayMs(nowMs, refreshMinutes, updatedAt) {
+    const span = cleanRefreshMinutes(refreshMinutes) * 60000;
+    // A value written by this cycle (originAt) is fresh; only an older write shortens the wait.
+    const written = Number(updatedAt);
+    const since = Number.isFinite(written) && written > 0 && written >= Number(nowMs) - span ? Number(nowMs) - written : span;
+    return Math.max(60000, span - Math.max(0, since));
+  }
+
+  // "Warsaw, Poland" is not geocoded behind the person's back: the settings dialog asks the same host once, and
+  // this only picks the first usable hit.
+  function readGeocodePayload(payload) {
+    const hit = payload?.results?.[0];
+    if (!hit) return null;
+    const place = cleanWeatherPlace(hit.latitude, hit.longitude);
+    if (!place) return null;
+    const name = [hit.name, hit.admin1, hit.country].filter((x) => typeof x === "string" && x.trim()).join(", ");
+    return { ...place, name, countryCode: typeof hit.country_code === "string" ? hit.country_code : "" };
+  }
+
+  function geocodeUrl(query) {
+    const q = String(query ?? "").trim().slice(0, 80);
+    if (!q) return "";
+    return "https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name=" + encodeURIComponent(q);
   }
 
   function resolveCalendarOpener(win) {
@@ -2572,6 +3712,79 @@ function nativeSidebarSide() {
     formatDateParts,
     nextClockDelayMs,
     nextLocalMidnightDelayMs,
+    WMO_CODES,
+    WEATHER_UNITS,
+    WEATHER_ENDPOINT,
+    WEATHER_REFRESH_MIN,
+    WEATHER_REFRESH_MAX,
+    weatherCodeInfo,
+    cleanWeatherUnits,
+    resolveWeatherUnits,
+    cleanRefreshMinutes,
+    cleanWeatherPlace,
+    cleanWeatherPlaces,
+    serializeWeatherPlaces,
+    currentWeatherPlace,
+    nextWeatherPlace,
+    weatherPlaceReady,
+    weatherPlacesFromLegacy,
+    weatherCacheKeyFor,
+    WEATHER_PLACES_MAX,
+    weatherRequestUrl,
+    readWeatherPayload,
+    WEATHER_FORECAST_DAYS,
+    isWetDay,
+    nextWetDay,
+    weatherOutlookParts,
+    // OW-95: the three views and the two gestures, exported so the rules are testable without a card.
+    WEATHER_VIEWS,
+    cleanWeatherView,
+    nextWeatherView,
+    weatherViewParts,
+    weatherUnitLabels,
+    formatWeatherParts,
+    isWeatherCacheFresh,
+    nextWeatherDelayMs,
+    readGeocodePayload,
+    geocodeUrl,
+    TIMER_PRESETS_MS,
+    boostParts,
+    resolveBoostClick,
+    boostMenuItems,
+    boostResultText,
+    cleanWidgetOrder,
+    cleanWidgetColor, parseWidgetColor, contrastRatio, widgetAppearanceVars, CONTRAST_MIN,
+    orderedByIds,
+    moveInOrder,
+    resolveClockClick,
+    resolveClockPanelState,
+    WIDGET_MODES,
+    cleanWidgetMode,
+    nextWidgetMode,
+    TIMER_END_SOUNDS,
+    TIMER_END_NOTICES,
+    cleanTimerEndSound,
+    cleanTimerEndNotice,
+    timerEndPlan,
+    clockAlertState,
+    clockPanelControls,
+    clockBadge,
+    quickTimerFromText,
+    parseTimerDuration,
+    formatDuration,
+    STOPWATCH_IDLE,
+    TIMER_IDLE,
+    stopwatchElapsed,
+    stopwatchStart,
+    stopwatchStop,
+    stopwatchLap,
+    stopwatchReset,
+    timerStart,
+    timerRemaining,
+    timerTick,
+    timerStop,
+    timerReset,
+    nextTimerTickDelayMs,
     isClockCacheStale,
     isDateCacheStale,
     resolveWidgetRefreshMs,
@@ -2581,6 +3794,12 @@ function nativeSidebarSide() {
     measureTabsContentHeight,
     measureSidebarMetrics,
     createWidgetScheduler,
+    // OW-64: the language contract, so a test can prove the rule without a running panel.
+    WIDGET_LANGUAGES,
+    WIDGET_STRINGS,
+    cleanWidgetLanguage,
+    resolveWidgetLanguage,
+    widgetText,
   });
 
   if (window.__zentralWidgetsTestSeam) {
@@ -2622,10 +3841,23 @@ function nativeSidebarSide() {
         }
       };
 
+      // OW-64: the language every widget draws with, resolved once per draw. `auto` asks Notes at that moment, so a
+      // change there shows up here without a restart.
+      const widgetLang = () =>
+        resolveWidgetLanguage(getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), getString(NOTES_LANGUAGE_PREF, "en"));
+      // One string, in that language. Read at call time, never cached: the same rule as the language itself.
+      const tw = (key, params = null) => widgetText(widgetLang(), key, params);
+
       const registry = new Map(); // id -> def
       const mountedCards = new Map(); // id -> { card, body, instance }
       const watchedPrefs = new Map(); // pref -> observerFn
       const scheduler = createWidgetScheduler();
+      // OW-94 (plan B7.1): the shared pause switch. The subscription is idempotent with respect to the sidebar setting
+      // because the scheduler keeps the two flags apart (see `setHeld`).
+      const performanceSwitch = window.ZentralRuntime?.performance || null;
+      const unsubscribePerformance = performanceSwitch?.subscribe?.((paused) =>
+        scheduler.setHeld(paused, lastArea),
+      ) || null;
 
       let tray = null;
       let observedHost = null;
@@ -2635,6 +3867,8 @@ function nativeSidebarSide() {
       let rootAttrObserver = null;
       let rafMeasure = null;
       let lastArea = computeWidgetArea({}, { enabled: false });
+      // OW-67: the previous "is the tray on screen" answer, so only a real transition repaints (never every measure).
+      let wasVisible = false;
 
       function readConfig() {
         return {
@@ -2729,7 +3963,7 @@ function nativeSidebarSide() {
           tray.className = "zw-tray";
           tray.hidden = true;
           tray.setAttribute("role", "region");
-          tray.setAttribute("aria-label", "Sidebar widgets");
+          tray.setAttribute("aria-label", tw("tray.label"));
         }
         const rt = getRuntime();
         const fallbackSidebar =
@@ -2885,6 +4119,20 @@ function nativeSidebarSide() {
         body.className = "zw-card-body";
         if (instance?.element) body.appendChild(instance.element);
         card.appendChild(body);
+        // OW-71: the handle is part of every card, not of a widget's own drawing, so a widget cannot forget it.
+        // OW-100: it no longer claims to be draggable. HTML5 drag on a button inside Zen's sidebar did nothing for the
+        // owner — the cursor said "drag me" and the card never moved, which is worse than no handle at all. The handle
+        // is now a plain button with a menu (Move up / Move down) plus Alt+Up / Alt+Down for the keyboard, so every
+        // affordance it shows does something.
+        const grip = document.createElement("button");
+        grip.type = "button";
+        grip.className = "zw-grip";
+        grip.title = tw("tray.moveHint");
+        grip.setAttribute("aria-label", tw("tray.move") + " — " + tw("tray.moveHint"));
+        grip.textContent = "⋮⋮";
+        card.appendChild(grip);
+        card.setAttribute("data-zw-order-id", def.id);
+        installCardReordering(def, card, grip);
         if (typeof instance?.onMountCard === "function") {
           try {
             instance.onMountCard(card);
@@ -2893,6 +4141,151 @@ function nativeSidebarSide() {
           }
         }
         return { card, body };
+      }
+
+      // OW-71: moving a card. Both doors (drag, and Alt+Arrow on the handle) write the SAME pref, through this one
+      // function, so the two can never disagree about what the order is.
+      let lastMovedId = "";
+      function currentOrderIds() {
+        return sortedDefinitions().map((d) => d.id);
+      }
+      function commitOrder(ids) {
+        const existing = [...registry.keys()];
+        const cleaned = ids.filter((id) => existing.includes(id));
+        try {
+          Services.prefs.setStringPref(WIDGET_PREFS.ORDER, cleaned.join(","));
+        } catch (_) {}
+        syncWidgetsAndLayout();
+        // Every card's handle re-reads whether it can still move; a card at an end must not offer a dead row.
+        try {
+          for (const card of document.querySelectorAll("#zentral-sidebar-widgets .zw-card")) {
+            card.dispatchEvent(new Event("zw-order-changed", { bubbles: true }));
+          }
+        } catch (_) {}
+        announceMove();
+      }
+      // Say where the focused card went, for a person who cannot see the tray move.
+      let liveRegion = null;
+      function ensureLiveRegion() {
+        if (liveRegion && liveRegion.isConnected !== false) return liveRegion;
+        liveRegion = document.createElement("div");
+        liveRegion.className = "zw-live";
+        liveRegion.setAttribute("role", "status");
+        liveRegion.setAttribute("aria-live", "polite");
+        document.body?.appendChild?.(liveRegion);
+        return liveRegion;
+      }
+      function announceMove() {
+        const id = lastMovedId;
+        if (!id) return;
+        const ids = currentOrderIds();
+        const at = ids.indexOf(id);
+        const def = registry.get(id);
+        const title = def?.title || id;
+        const region = ensureLiveRegion();
+        if (region) region.textContent = widgetText(widgetLang(), "tray.moved", { title, position: at + 1, total: ids.length });
+      }
+      function moveCard(id, dir) {
+        const ids = currentOrderIds();
+        const existing = [...registry.keys()];
+        const next = moveInOrder(ids, id, dir, existing);
+        if (next.join(",") === ids.join(",")) return false; // already at the edge: nothing moved, nothing written
+        lastMovedId = id;
+        commitOrder(next);
+        return true;
+      }
+      function installCardReordering(def, card, grip) {
+        // OW-100: the handle's one and only click opens its menu. Before, the click only focused the handle, which is
+        // exactly the "control that does nothing" the owner reported.
+        grip.addEventListener("click", (e) => {
+          // A click on the handle must never reach the card's own click target (the Clock turns over on a click).
+          e?.stopPropagation?.();
+          e?.preventDefault?.();
+          grip.focus?.({ preventScroll: true });
+          openGripMenu(def, card, grip);
+        });
+        grip.addEventListener("keydown", (e) => {
+          if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+          e.preventDefault();
+          e.stopPropagation();
+          moveCard(def.id, e.key === "ArrowUp" ? -1 : 1);
+        });
+        // A card that is alone in the tray does not offer a move it cannot make.
+        const syncGrip = () => {
+          const ids = currentOrderIds();
+          const at = ids.indexOf(def.id);
+          // The ORDER counts every registered widget (a widget switched off keeps its place for when it comes back),
+          // but a move the person can actually make needs a second CARD on screen. One card means nothing to move.
+          const home = card.parentNode;
+          const visible = home ? [...(home.children || [])].filter((el) => (el?.getAttribute?.("data-zw-widget") || "") !== "").length : 0;
+          // `dataset` is not on every DOM this runs against (the widget host is also driven by a bare test double), so the
+          // state is written as attributes: the same thing in a browser, and readable everywhere.
+          grip.setAttribute("data-position", at >= 0 ? String(at + 1) : "0");
+          grip.setAttribute("data-can-move", visible > 1 ? "true" : "false");
+          grip.disabled = visible <= 1;
+          if (grip.disabled) grip.setAttribute("disabled", "true");
+          else grip.removeAttribute("disabled");
+        };
+        syncGrip();
+        card.addEventListener("zw-order-changed", syncGrip);
+        // The card is built before it is put in the tray, so the first count is zero. Every render pass re-reads it once
+        // the cards are in place (see `syncWidgetsAndLayout`), which is when the number is real.
+        try { queueMicrotask(syncGrip); } catch (_) { syncGrip(); }
+        card._syncGrip = syncGrip;
+      }
+      // OW-100: the handle's menu. Two rows, each one a real move, disabled at the ends of the list rather than
+      // silently doing nothing. The tray's own order lives in one pref, and this writes it the same way drag did.
+      function openGripMenu(def, card, anchor) {
+        // The rows describe the moves a person can make on the tray they can see, so they read the cards on screen, not
+        // the stored order (which also holds widgets that are switched off and keeping their place).
+        const home = card.parentNode;
+        const onScreen = home ? [...(home.children || [])].map((el) => el?.getAttribute?.("data-zw-widget") || "").filter(Boolean) : [];
+        const ids = onScreen.length ? onScreen : currentOrderIds();
+        const at = ids.indexOf(def.id);
+        const total = ids.length;
+        const menu = document.createElement("div");
+        menu.className = "zw-grip-menu";
+        menu.setAttribute("role", "menu");
+        menu.setAttribute("aria-label", tw("tray.move"));
+        const row = (label, dir, disabled) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "zw-grip-row";
+          button.setAttribute("role", "menuitem");
+          button.textContent = label;
+          if (disabled) {
+            button.disabled = true;
+            button.setAttribute("disabled", "true");
+            button.setAttribute("aria-disabled", "true");
+          } else {
+            button.addEventListener("click", (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              moveCard(def.id, dir);
+              closeGripMenu();
+            });
+          }
+          menu.appendChild(button);
+        };
+        row(tw("tray.moveUp"), -1, at <= 0 || total <= 1);
+        row(tw("tray.moveDown"), 1, at < 0 || at >= total - 1 || total <= 1);
+        const box = anchor.getBoundingClientRect?.() || { left: 0, top: 0, width: 0, height: 0 };
+        menu.style.position = "fixed";
+        menu.style.left = Math.max(0, Math.round(box.left)) + "px";
+        menu.style.top = Math.max(0, Math.round(box.top - 4)) + "px";
+        menu.style.transform = "translateY(-100%)";
+        card.appendChild(menu);
+        openGripMenu.current = menu;
+        const away = (e) => { if (!menu.contains(e.target)) { closeGripMenu(); document.removeEventListener("mousedown", away, true); } };
+        document.addEventListener("mousedown", away, true);
+        menu._away = away;
+      }
+      function closeGripMenu() {
+        const menu = openGripMenu.current;
+        if (!menu) return;
+        openGripMenu.current = null;
+        if (menu._away) document.removeEventListener("mousedown", menu._away, true);
+        menu.remove();
       }
 
       function unmountWidgetCard(id) {
@@ -2911,11 +4304,14 @@ function nativeSidebarSide() {
       }
 
       function sortedDefinitions() {
-        return [...registry.values()].sort(
+        const byDefault = [...registry.values()].sort(
           (a, b) =>
             (Number(a.order) || 100) - (Number(b.order) || 100) ||
             a.id.localeCompare(b.id),
         );
+        // OW-71: the person's order wins where they have one; everything else keeps its default place.
+        const chosen = cleanWidgetOrder(getString(WIDGET_PREFS.ORDER, DEFAULTS.ORDER));
+        return chosen.length ? orderedByIds(byDefault, chosen) : byDefault;
       }
 
       function syncWidgetsAndLayout() {
@@ -2976,6 +4372,7 @@ function nativeSidebarSide() {
                           scheduler.refresh(def.id, { force: true, area: lastArea, ...opts }),
                         getCachedValue: () => scheduler.getCached(def.id),
                         setCachedValue: (v) => scheduler.setCached(def.id, v),
+                        getArea: () => ({ ...lastArea }),
                       })
                     : null;
               } catch (err) {
@@ -2995,6 +4392,11 @@ function nativeSidebarSide() {
               }
             }
           }
+          // OW-100: the cards are in place now, so each handle re-reads whether it has anywhere to move. This runs after
+          // the mount and the reorder, so the count it sees is the one a person sees.
+          for (const mounted of mountedCards.values()) {
+            try { mounted.card?._syncGrip?.(); } catch (_) {}
+          }
           // Reconcile DOM order among mounted cards only if out of order.
           let expectedIdx = 0;
           for (const def of enabledDefs) {
@@ -3008,6 +4410,18 @@ function nativeSidebarSide() {
             }
             expectedIdx++;
           }
+        }
+
+        // OW-72: the look is written on the TRAY, once, so every card (and every future card) inherits it. Nothing is
+        // written when both prefs are empty, which is what "follow the theme" means.
+        if (tray) {
+          const look = widgetAppearanceVars(
+            getString(WIDGET_PREFS.APPEARANCE_BG, DEFAULTS.APPEARANCE_BG),
+            getString(WIDGET_PREFS.APPEARANCE_TEXT, DEFAULTS.APPEARANCE_TEXT),
+          );
+          for (const name of ["--zw-card-bg", "--zw-card-text"]) tray.style.removeProperty(name);
+          for (const [name, value] of Object.entries(look.vars)) tray.style.setProperty(name, value);
+          tray.setAttribute("data-zw-look", look.refused ? "unreadable" : Object.keys(look.vars).length ? "custom" : "theme");
         }
 
         // Apply layout budget & visibility without ever touching #zentral-video-preview.
@@ -3032,12 +4446,17 @@ function nativeSidebarSide() {
         scheduler.setPaused(area.paused, area);
 
         if (area.visible) {
+          // OW-67: a real hidden->visible transition repaints EVERY mounted card from its cache, whatever the pause
+          // setting says. `setPaused` only runs when its flag moves, and with pausing turned off it never moves — so
+          // this is the one place that can guarantee a card blanked while folded is whole again when it is shown.
+          if (!wasVisible && !area.paused) scheduler.repaintAll(area);
           for (const mounted of mountedCards.values()) {
             try {
               mounted.instance?.onAreaChange?.(area);
             } catch (_) {}
           }
         }
+        wasVisible = area.visible;
 
         return area;
       }
@@ -3166,6 +4585,37 @@ function nativeSidebarSide() {
 
       // ---- Event & pref wiring (no permanent polling) ----
 
+      // OW-60: the standalone Timer card is gone, but people have it switched on. That intent must not be lost: an
+      // owner who had `timer.enabled` (or `"timer"` in disabled_ids) gets the Clock resting on its timer face, once.
+      // The old pref is left alone rather than cleared — uninstalling this version must not silently change a setting.
+      function adoptLegacyTimerCard() {
+        try {
+          const def = registry.get("clock");
+          if (!def || !isWidgetEnabled(def)) return;
+          const wasOn = getBool(WIDGET_PREFS.TIMER_ENABLED, DEFAULTS.TIMER_ENABLED);
+          if (!wasOn) return;
+          if (getString(WIDGET_PREFS.CLOCK_MODE, DEFAULTS.CLOCK_MODE) === "timer") return;
+          writeStringPref(WIDGET_PREFS.CLOCK_MODE, "timer");
+        } catch (_) {}
+      }
+
+      // OW-90: the Status card is replaced by Boost, so a person who had Status switched ON gets Boost switched on.
+      // A default of `false` for everybody was the Status card's accident (off unless asked); Boost ships on, and this
+      // step only makes sure an existing owner's explicit "yes" is not silently dropped by the swap. It never turns
+      // Boost off and it never touches a pref somebody already set for Boost.
+      function adoptLegacyStatusCard() {
+        try {
+          const def = registry.get("boost");
+          if (!def) return;
+          const legacyOn = getBool(WIDGET_PREFS.LEGACY_STATUS_ENABLED, false);
+          if (!legacyOn) return;
+          const type = Services.prefs.getPrefType?.(WIDGET_PREFS.BOOST_ENABLED);
+          // 0 = pref does not exist yet; only then does the old choice speak.
+          if (type) return;
+          Services.prefs.setBoolPref(WIDGET_PREFS.BOOST_ENABLED, true);
+        } catch (_) {}
+      }
+
       const onShellPref = () => syncWidgetsAndLayout();
       for (const pref of [
         WIDGET_PREFS.ENABLED,
@@ -3175,11 +4625,36 @@ function nativeSidebarSide() {
         WIDGET_PREFS.TABS_RESERVE_PX,
         WIDGET_PREFS.PAUSE_WHEN_HIDDEN,
         WIDGET_PREFS.DISABLED_IDS,
+        WIDGET_PREFS.ORDER,
+        WIDGET_PREFS.APPEARANCE_BG,
+        WIDGET_PREFS.APPEARANCE_TEXT,
       ]) {
         watchPref(pref, onShellPref);
       }
 
+      adoptLegacyTimerCard();
+      // One listener for the whole module: when Notes appears or leaves, the mounted Clock card re-checks its note chip.
+      // It is registered with the module's own cleanups, so `destroy` removes it like every other shell listener.
+      const onCalendarAvailability = () => {
+        try { clockNoteSync?.(); } catch (_) {}
+      };
+      if (typeof window.addEventListener === "function") {
+        window.addEventListener(CALENDAR_AVAILABILITY_EVENT, onCalendarAvailability);
+        registerCleanup(() => window.removeEventListener(CALENDAR_AVAILABILITY_EVENT, onCalendarAvailability));
+      }
+
       // ---- Built-in widgets: Clock & Date (T3.9b) ----
+
+      // OW-56: the Clock card's own painter, registered by the clock widget so the timer can repaint the face it owns.
+      let clockFacePainter = null;
+      // OW-60: the badge element lives on the Clock card now. Declared here, ABOVE the card that assigns it — the OW-56
+      // factory-order trap in reverse: a module-level hook must be declared before the factory that uses it runs.
+      let clockBadgeElement = null;
+      // OW-60: the Clock card's availability refresh, published here so exactly ONE window listener serves it.
+      let clockNoteSync = null;
+      // The ended-countdown flag lives here (per window, per run): the clock reads it, the timer sets it, a click clears
+      // it. Nothing is written to prefs — a finished countdown is a moment, not a setting.
+      const clockAlert = { ringing: false };
 
       function readClockOpts() {
         return {
@@ -3201,9 +4676,45 @@ function nativeSidebarSide() {
         };
       }
 
+      // OW-57/OW-95: which place and which view are showing. Per-window state like the timer's: what a person glanced
+      // at is not a setting, and two windows may look at two places. A missing id means "the list decides" (first).
+      const weatherView = { placeId: "", view: "today", mounted: false };
+
+      // The saved places. The JSON pref is the truth once it exists; a build that only ever had the three single
+      // prefs reads them as one place, and the first read writes that place into the JSON pref so nothing is lost.
+      function readWeatherPlaces() {
+        const stored = cleanWeatherPlaces(getString(WIDGET_PREFS.WEATHER_PLACES, ""));
+        if (stored.length) return stored;
+        const legacy = weatherPlacesFromLegacy(
+          getString(WIDGET_PREFS.WEATHER_PLACE, ""),
+          getString(WIDGET_PREFS.WEATHER_LATITUDE, ""),
+          getString(WIDGET_PREFS.WEATHER_LONGITUDE, ""),
+        );
+        if (legacy.length) {
+          try {
+            Services.prefs.setStringPref(WIDGET_PREFS.WEATHER_PLACES, serializeWeatherPlaces(legacy));
+          } catch (_) {}
+        }
+        return legacy;
+      }
+
+      // T3.9c: everything the weather card needs, read once per refresh.
+      function readWeatherOpts() {
+        const places = readWeatherPlaces();
+        const active = currentWeatherPlace(places, weatherView.placeId);
+        return {
+          places,
+          placeId: active?.id || "",
+          place: active?.name || "",
+          place_: active ? cleanWeatherPlace(active.latitude, active.longitude) : null,
+          units: cleanWeatherUnits(getString(WIDGET_PREFS.WEATHER_UNITS, "auto")),
+          refreshMinutes: cleanRefreshMinutes(getInt(WIDGET_PREFS.WEATHER_REFRESH_MINUTES, DEFAULTS.WEATHER_REFRESH_MINUTES)),
+        };
+      }
+
       registerWidget({
         id: "clock",
-        title: "Clock",
+        title: tw("clock.title"),
         showHeader: false,
         order: 10,
         pref: WIDGET_PREFS.CLOCK_ENABLED,
@@ -3212,6 +4723,8 @@ function nativeSidebarSide() {
           WIDGET_PREFS.CLOCK_FORMAT,
           WIDGET_PREFS.CLOCK_SHOW_SECONDS,
           WIDGET_PREFS.CLOCK_SHOW_ZONE,
+          WIDGET_PREFS.CLOCK_MODE,
+          WIDGET_PREFS.CLOCK_QUICK_NOTE,
         ],
         resolveIntervalMs: () =>
           getBool(WIDGET_PREFS.CLOCK_SHOW_SECONDS, false) ? 1000 : 60000,
@@ -3236,13 +4749,395 @@ function nativeSidebarSide() {
           const zoneEl = doc.createElement("div");
           zoneEl.className = "zw-card-meta zw-clock-zone";
           zoneEl.hidden = true;
+          // OW-49: while the timer panel is closed a running countdown still shows here, so it is never invisible.
+          const badgeEl = doc.createElement("span");
+          badgeEl.className = "zw-clock-badge";
+          badgeEl.hidden = true;
+          clockBadgeElement = badgeEl;
           let staticRenderKey = "";
 
-          wrap.appendChild(main);
+          // OW-60: the second face is the whole stopwatch/countdown panel, not a readout. OW-56 drew the numbers here
+          // but left every control on a second card, so the two faces did not replace each other at all. The parts are
+          // the ones the old Timer card had (same classes, same pure helpers); the click still turns the card over and
+          // the setting still says which face it rests on.
+          const timerFace = doc.createElement("div");
+          timerFace.className = "zw-clock-timer-face zw-timer";
+          timerFace.hidden = true;
+
+          const readout = doc.createElement("div");
+          readout.className = "zw-timer-readout";
+          const timerValueEl = doc.createElement("span");
+          timerValueEl.className = "zw-timer-value zw-clock-timer-value";
+          const timerKindEl = doc.createElement("span");
+          timerKindEl.className = "zw-timer-mode zw-clock-timer-kind";
+          readout.appendChild(timerValueEl);
+          readout.appendChild(timerKindEl);
+
+          const timerActions = doc.createElement("div");
+          timerActions.className = "zw-timer-actions";
+          const timerButtons = {};
+          const mkTimerButton = (name, text, title) => {
+            const b = doc.createElement("button");
+            b.type = "button";
+            b.className = "zw-timer-btn";
+            b.textContent = text;
+            b.title = title;
+            b.setAttribute("aria-label", title);
+            timerButtons[name] = b;
+            timerActions.appendChild(b);
+            return b;
+          };
+          const startBtn = mkTimerButton("start", tw("timer.start"), tw("timer.startStopwatchTitle"));
+          const lapBtn = mkTimerButton("lap", tw("timer.lap"), tw("timer.lap"));
+          const resetBtn = mkTimerButton("reset", tw("timer.reset"), tw("timer.reset"));
+
+          // The same five durations the old card offered, as short chips.
+          const presets = doc.createElement("div");
+          presets.className = "zw-timer-presets";
+          const CHIP_TEXT = ["1m", "5m", "10m", "30m", "1h"];
+          const presetButtons = TIMER_PRESETS_MS.map((ms, index) => {
+            const b = doc.createElement("button");
+            b.type = "button";
+            b.className = "zw-timer-preset";
+            b.textContent = CHIP_TEXT[index] || formatDuration(ms);
+            b.title = tw("timer.presetTitle", { value: formatDuration(ms) });
+            b.setAttribute("aria-label", tw("timer.presetTitle", { value: formatDuration(ms) }));
+            presets.appendChild(b);
+            return { ms, button: b };
+          });
+
+          const fieldRow = doc.createElement("div");
+          fieldRow.className = "zw-timer-field-row";
+          const field = doc.createElement("input");
+          field.type = "text";
+          field.className = "zw-timer-field";
+          field.placeholder = "in 5 min";
+          field.setAttribute("aria-label", tw("timer.fieldAria"));
+          field.spellcheck = false;
+          const setBtn = doc.createElement("button");
+          setBtn.type = "button";
+          setBtn.className = "zw-timer-btn";
+          setBtn.textContent = tw("timer.set");
+          setBtn.title = tw("timer.setTitle");
+          fieldRow.appendChild(field);
+          fieldRow.appendChild(setBtn);
+
+          const laps = doc.createElement("ol");
+          laps.className = "zw-timer-laps";
+          laps.hidden = true;
+
+          timerFace.appendChild(readout);
+          timerFace.appendChild(timerActions);
+          timerFace.appendChild(presets);
+          timerFace.appendChild(fieldRow);
+          timerFace.appendChild(laps);
+
+          // OW-60: the quick note is reachable from the CLOCK face, which is the owner's third complaint. It is the
+          // same one opener channel (`openQuickNote`) the old card used, and it disappears entirely without Notes.
+          const clockNoteRow = doc.createElement("div");
+          clockNoteRow.className = "zw-clock-note-row";
+          clockNoteRow.hidden = true;
+          const clockNoteField = doc.createElement("input");
+          clockNoteField.type = "text";
+          clockNoteField.className = "zw-clock-note";
+          clockNoteField.placeholder = "Quick note";
+          clockNoteField.setAttribute("aria-label", tw("timer.noteAria"));
+          clockNoteField.spellcheck = false;
+          const clockNoteBtn = doc.createElement("button");
+          clockNoteBtn.type = "button";
+          clockNoteBtn.className = "zw-clock-note-btn";
+          clockNoteBtn.textContent = tw("timer.save");
+          clockNoteBtn.title = tw("timer.noteSaveTitle");
+          clockNoteRow.appendChild(clockNoteField);
+          clockNoteRow.appendChild(clockNoteBtn);
+          const clockNoteChip = doc.createElement("button");
+          clockNoteChip.type = "button";
+          clockNoteChip.className = "zw-clock-chip zw-clock-note-chip";
+          clockNoteChip.textContent = tw("timer.note");
+          clockNoteChip.title = tw("timer.noteAria");
+          clockNoteChip.setAttribute("aria-label", tw("timer.noteAria"));
+
+          const modeHintEl = doc.createElement("div");
+          modeHintEl.className = "zw-card-meta zw-clock-mode-hint";
+          modeHintEl.hidden = true;
+
+          // The owner's shape, in one place: the card is a column with a time area on top and the quick note under it.
+          // The time area holds both faces — the clock and the stopwatch panel — and exactly one of them is shown, so
+          // the note never moves: it is always directly under whichever time element is up.
+          const timeCol = doc.createElement("div");
+          timeCol.className = "zw-clock-time-col";
+          timeCol.appendChild(main);
+          timeCol.appendChild(timerFace);
+          wrap.appendChild(timeCol);
+          wrap.appendChild(badgeEl);
           wrap.appendChild(zoneEl);
+          wrap.appendChild(clockNoteRow);
+          wrap.appendChild(modeHintEl);
+          presets.appendChild(clockNoteChip);
+
+          // T3.9d: the Clock is also a shortcut. A plain click starts/stops the stopwatch, a long press (or a
+          // right click) asks for "in X", and a click while a quick timer runs stops it. The rule itself lives in
+          // resolveClockClick (pure); this block only feeds it what it cannot know.
+          let longPressTimer = null;
+          let longPressFired = false;
+          const cancelLongPress = () => {
+            if (longPressTimer !== null && typeof window.clearTimeout === "function") window.clearTimeout(longPressTimer);
+            longPressTimer = null;
+          };
+          wrap.addEventListener("pointerdown", (e) => {
+            if (e.button !== 0) return;
+            longPressFired = false;
+            cancelLongPress();
+            if (typeof window.setTimeout !== "function") return;
+            longPressTimer = window.setTimeout(() => {
+              longPressTimer = null;
+              longPressFired = true;
+              const kind = clockClickKind({ shiftKey: true });
+              if (kind.action !== "none") clockClick(kind.action);
+            }, 550);
+          });
+          wrap.addEventListener("pointerup", cancelLongPress);
+          wrap.addEventListener("pointercancel", () => { cancelLongPress(); longPressFired = false; });
+          wrap.addEventListener("pointerleave", cancelLongPress);
+          wrap.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const kind = clockClickKind({ shiftKey: true });
+            if (kind.action !== "none") clockClick(kind.action);
+          });
+          // OW-56: one click, one meaning. It turns the card over (the owner's request), and it is also the answer to
+          // a finished countdown: the red numbers go back to their colour. The panel is still reachable — from the
+          // timer face's own hint line and from a long press — but it no longer swallows the click.
+          const flipFace = () => {
+            const clickEnabled = getBool(WIDGET_PREFS.TIMER_CLICK_STOPWATCH, DEFAULTS.TIMER_CLICK_STOPWATCH);
+            const next = nextWidgetMode(readMode(), "click", { clickEnabled });
+            const acknowledged = clockAlert.ringing;
+            if (acknowledged) clockAlert.ringing = false;
+            if (next !== readMode()) writeStringPref(WIDGET_PREFS.CLOCK_MODE, next);
+            paintFace();
+            // The timer loop lives on this card now, so turning it over is enough to keep the countdown moving.
+            paintFace();
+            return { next, acknowledged };
+          };
+
+          // OW-56: which face is up, and the alert that a countdown ended while nobody was looking. `alert` is the
+          // flag; it is cleared by a click, never by time.
+          const faceState = { mode: "clock" };
+          const readMode = () => cleanWidgetMode(getString(WIDGET_PREFS.CLOCK_MODE, DEFAULTS.CLOCK_MODE));
+          // OW-60: one timer loop for the whole card, on the card that is actually always there. The old card owned a
+          // timer of its own; this one is woken by the shared rule (`nextTimerTickDelayMs`) and only while something
+          // moves, so a stopped clock still does no work.
+          let pendingTick = null;
+          const clearTick = () => {
+            if (pendingTick !== null && typeof window.clearTimeout === "function") window.clearTimeout(pendingTick);
+            pendingTick = null;
+          };
+          const nowMs = () => Date.now();
+
+          const paintFace = () => {
+            const mode = readMode();
+            const alert = clockAlertState({ ringing: clockAlert.ringing }, {});
+            const timerFaceUp = mode === "timer";
+            main.hidden = timerFaceUp;
+            zoneEl.hidden = timerFaceUp || !getBool(WIDGET_PREFS.CLOCK_SHOW_ZONE, false);
+            timerFace.hidden = !timerFaceUp;
+            wrap.setAttribute("data-zw-clock-face", mode);
+            wrap.setAttribute("data-zw-clock-alert", alert.ringing ? "true" : "false");
+
+            // The panel is drawn whatever the face is: the state it shows must be right the instant it is turned over,
+            // and the Clock line's badge is read from it while the panel is hidden.
+            const sw = timerState.stopwatch;
+            const t = timerState.timer;
+            const usingTimer = t.running || (t.remainingMs > 0 && t.remainingMs < t.durationMs);
+            const value = usingTimer ? timerRemaining(t, nowMs()) : stopwatchElapsed(sw, nowMs());
+            timerValueEl.textContent = formatDuration(value);
+            const kindKey = usingTimer ? "timer.kind.countdown" : sw.running ? "timer.kind.stopwatch" : sw.accumulatedMs > 0 ? "timer.kind.stopped" : "";
+            timerKindEl.textContent = kindKey ? tw(kindKey).replace(/^[, ]+/, "") : "";
+            startBtn.textContent = usingTimer ? (t.running ? tw("timer.stop") : tw("timer.resume")) : sw.running ? tw("timer.stop") : tw("timer.start");
+            startBtn.title = usingTimer ? tw("timer.stopTitle") : sw.running ? tw("timer.stopStopwatchTitle") : tw("timer.startStopwatchTitle");
+            startBtn.setAttribute("aria-label", startBtn.title);
+            // The face changes with the state instead of showing every control at once (OW-49's rule, kept).
+            const wide = (() => {
+              try {
+                const width = getArea?.()?.width;
+                return typeof width === "number" ? width >= 200 : true;
+              } catch (_) {
+                return true;
+              }
+            })();
+            const controls = clockPanelControls(timerState, { wide, quickNote: true });
+            lapBtn.hidden = !controls.lap;
+            lapBtn.disabled = !sw.running;
+            resetBtn.disabled = !controls.reset;
+            fieldRow.hidden = !controls.field;
+            presets.hidden = !controls.presets;
+            laps.hidden = !sw.laps.length || !sw.running;
+            if (sw.laps.length) {
+              const doc2 = laps.ownerDocument || doc;
+              laps.replaceChildren(...sw.laps.map((at, i) => {
+                const li = doc2.createElement("li");
+                li.textContent = "#" + (i + 1) + "  " + formatDuration(at);
+                return li;
+              }));
+            }
+            wrap.setAttribute("data-zw-timer", usingTimer ? (t.running ? "countdown" : "countdown-stopped") : sw.running ? "stopwatch" : "idle");
+            // OW-49: a running countdown is readable on the Clock line while the panel is closed, so it is never invisible.
+            const badge = clockBadge(timerState, nowMs());
+            wrap.dataset.zwBadge = badge.text;
+            if (clockBadgeElement) {
+              clockBadgeElement.textContent = badge.text;
+              clockBadgeElement.hidden = !badge.text;
+              clockBadgeElement.setAttribute("data-zw-badge", badge.kind);
+              if (badge.text) clockBadgeElement.title = badge.kind === "countdown" ? tw("timer.countdownRunning") : tw("timer.stopwatchRunning");
+            }
+
+            if (timerFaceUp) {
+              wrap.setAttribute("aria-label", tw("timer.aria", { value: timerValueEl.textContent, kind: timerKindEl.textContent ? ", " + timerKindEl.textContent : "" }));
+            } else {
+              wrap.setAttribute("aria-label", (alert.ringing ? tw("clock.ariaAlert") : "") + tw("clock.aria"));
+            }
+            modeHintEl.hidden = true;
+
+            // One wake-up at a time, and only while something moves.
+            clearTick();
+            const moving = usingTimer ? t.running : sw.running;
+            if (moving && typeof window.setTimeout === "function") {
+              const delay = usingTimer ? nextTimerTickDelayMs(t, nowMs()) : 1000;
+              pendingTick = window.setTimeout(() => {
+                pendingTick = null;
+                const tick = usingTimer ? timerTick(timerState.timer, nowMs()) : { state: timerState.timer, finished: false };
+                if (usingTimer && tick.state !== timerState.timer) timerState.timer = tick.state;
+                if (tick.finished) ringTimer();
+                try { paintFace(); } catch (_) {}
+              }, Math.max(200, delay));
+            }
+          };
+          faceState.paint = paintFace;
+          // OW-60: nothing else paints this state any more — the card owns it, so the hook is just its own draw.
+          clockFacePainter = paintFace;
+
+          // ---- the panel's actions: every one of these is a pure helper that already existed on the old card ----
+          const repaint = () => paintFace();
+          const startStop = () => {
+            const t = timerState.timer;
+            if (t.running) {
+              timerState.timer = timerStop(t, nowMs());
+            } else if (t.remainingMs > 0 && t.durationMs) {
+              timerState.timer = timerStart(t.remainingMs, nowMs());
+            } else {
+              timerState.stopwatch = timerState.stopwatch.running ? stopwatchStop(timerState.stopwatch, nowMs()) : stopwatchStart(timerState.stopwatch, nowMs());
+            }
+            repaint();
+          };
+          startBtn.addEventListener("click", (e) => { e?.stopPropagation?.(); startStop(); });
+          lapBtn.addEventListener("click", (e) => {
+            e?.stopPropagation?.();
+            timerState.stopwatch = stopwatchLap(timerState.stopwatch, nowMs());
+            repaint();
+          });
+          resetBtn.addEventListener("click", (e) => {
+            e?.stopPropagation?.();
+            timerState.stopwatch = stopwatchReset();
+            timerState.timer = timerReset();
+            repaint();
+          });
+          const startFromField = () => {
+            const next = quickTimerFromText(field.value, nowMs());
+            if (!next) { field.select?.(); return; }
+            timerState.timer = next;
+            field.value = "";
+            repaint();
+          };
+          setBtn.addEventListener("click", (e) => { e?.stopPropagation?.(); startFromField(); });
+          field.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") { e.preventDefault(); startFromField(); }
+          });
+          // OW-63: only a CONTROL keeps its click to itself. The timer FACE used to swallow every click here, which is
+          // exactly why clicking the stopwatch never went back to the clock: the card's own handler never saw it. The
+          // face itself now behaves like the clock face and turns the card over; the buttons and the field stop their
+          // own clicks below, where each one already does its work.
+          for (const el of [timerActions, presets, fieldRow]) {
+            el.addEventListener?.("click", (e) => e?.stopPropagation?.());
+          }
+          // A click on the numbers, the kind line or the empty part of the face is a click on the card.
+          for (const el of [timerFace, readout, timerKindEl, laps]) {
+            el?.addEventListener?.("click", (e) => { e?.stopPropagation?.(); flipFace(); });
+          }
+          for (const { ms, button } of presetButtons) {
+            button.addEventListener("click", (e) => {
+              e?.stopPropagation?.();
+              timerState.timer = timerStart(ms, nowMs());
+              repaint();
+            });
+          }
+
+          // OW-56: a countdown that ends answers the two settings once, and marks the card so the end is not missed.
+          const ringTimer = () => {
+            const plan = timerEndPlan({
+              sound: getString(WIDGET_PREFS.TIMER_END_SOUND, DEFAULTS.TIMER_END_SOUND),
+              notice: getString(WIDGET_PREFS.TIMER_END_NOTICE, DEFAULTS.TIMER_END_NOTICE),
+              alreadyRung: clockAlert.ringing,
+              text: timerNoticeText(),
+            });
+            wrap.setAttribute("data-zw-rang", "true");
+            if (typeof window.setTimeout === "function") {
+              window.setTimeout(() => wrap.removeAttribute("data-zw-rang"), 4000);
+            }
+            playTimerEndSound(plan.sound);
+            showTimerEndNotice(plan.notice, plan.text);
+            if (plan.markClock) {
+              clockAlert.ringing = true;
+              paintFace();
+            }
+          };
+
+          // OW-60: the quick note lives on the clock face now. Same opener channel, same gate, and no button at all
+          // when Notes is not installed (a button that cannot work is worse than none).
+          const saveClockNote = () => {
+            const text = String(clockNoteField.value || "").trim();
+            const opener = resolveCalendarOpener(window);
+            if (!opener || typeof opener.openQuickNote !== "function") return;
+            try { opener.openQuickNote(text); } catch (_) {}
+            clockNoteField.value = "";
+            clockNoteRow.hidden = true;
+          };
+          // The quick note is part of the Clock face, not a feature to switch on: it is there whenever Notes can take a
+          // note, and it simply disappears when it cannot. No chip, no fold, nothing to configure.
+          // OW-69: one honest switch (the old chip-and-fold arrangement is gone for good). Off means the row is not in
+          // the layout at all — it reserves no space and is not merely invisible — and it is live, no restart.
+          const syncClockNote = () => {
+            const opener = resolveCalendarOpener(window);
+            const wanted = getBool(WIDGET_PREFS.CLOCK_QUICK_NOTE, DEFAULTS.CLOCK_QUICK_NOTE);
+            const canNote = Boolean(opener && typeof opener.openQuickNote === "function");
+            const ok = wanted && canNote;
+            clockNoteChip.hidden = true;
+            clockNoteRow.hidden = !ok;
+            clockNoteRow.setAttribute("data-zw-forced-off", ok ? "false" : "true");
+            clockNoteRow.style.display = ok ? "" : "none";
+          };
+          clockNoteRow.addEventListener("click", (e) => e?.stopPropagation?.());
+          clockNoteBtn.addEventListener("click", (e) => { e?.stopPropagation?.(); saveClockNote(); });
+          clockNoteField.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") { e.preventDefault(); saveClockNote(); }
+          });
+          syncClockNote();
+          // OW-60: the availability listener is NOT registered here. `create` runs again on every `registerWidget`, and
+          // an instance discarded by that path never reaches `dispose`, so a per-card listener leaks by construction
+          // (the 3-listener leak the clock/date test caught). One module-level listener re-paints the mounted card.
+          clockNoteSync = syncClockNote;
 
           return {
             element: wrap,
+            onMountCard(card) {
+              // The card, not only its body: a click anywhere on the Clock card turns it over.
+              if (!card || typeof card.addEventListener !== "function") return;
+              card.addEventListener("click", (e) => {
+                if (longPressFired) return; // a long press asked for a duration; that is not a flip
+                if (e && ((e.button != null && e.button !== 0) || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey)) return;
+                if (e && typeof e.stopPropagation === "function") e.stopPropagation();
+                flipFace();
+              });
+            },
             fetch({ now }) {
               return formatClockParts(now, readClockOpts());
             },
@@ -3252,13 +5147,38 @@ function nativeSidebarSide() {
             nextDelayMs(now) {
               return nextClockDelayMs(now, readClockOpts().showSeconds);
             },
-            render(value) {
+            render(value, info) {
               if (!value) return;
               staticRenderKey = renderClockElements(
                 { wrap, timeEl, secEl, merEl, zoneEl },
                 value,
                 staticRenderKey,
+                // A cached repaint is the "show this card again" case: write it, do not trust the previous key.
+                Boolean(info && info.cached),
               );
+              // OW-69: every draw re-answers "should the quick note be on this face?" — a pref change repaints the card
+              // but must also put the row away (or bring it back), and this is the one place every draw goes through.
+              syncClockNote();
+              // OW-56: the face is drawn after the clock's own text, so the two never fight over the same elements.
+              paintFace();
+            },
+            // OW-60: the old Timer card answered these (the Clock's long press / right click used to land there).
+            // Now that the card is gone, the Clock answers them itself.
+            clockClick(kind) {
+              if (kind === "stopwatch-start") timerState.stopwatch = stopwatchStart(timerState.stopwatch, nowMs());
+              else if (kind === "stopwatch-stop") timerState.stopwatch = stopwatchStop(timerState.stopwatch, nowMs());
+              else if (kind === "timer-stop") timerState.timer = timerStop(timerState.timer, nowMs());
+              else if (kind === "ask-duration") {
+                if (readMode() !== "timer") writeStringPref(WIDGET_PREFS.CLOCK_MODE, "timer");
+                field.focus?.();
+              }
+              paintFace();
+              return true;
+            },
+            state: timerState,
+            dispose() {
+              clearTick();
+              if (clockNoteSync === syncClockNote) clockNoteSync = null;
             },
           };
         },
@@ -3266,7 +5186,7 @@ function nativeSidebarSide() {
 
       registerWidget({
         id: "date",
-        title: "Date",
+        title: tw("date.title"),
         showHeader: false,
         order: 20,
         pref: WIDGET_PREFS.DATE_ENABLED,
@@ -3445,6 +5365,881 @@ function nativeSidebarSide() {
         },
       });
 
+      // ---- T3.9c: weather -------------------------------------------------------------------------------------
+      // One request per refresh to Open-Meteo (no key, no account, no sync). The scheduler owns the timer, pauses it
+      // with the sidebar, and paints the cached value first, so a cold sidebar shows the last reading immediately.
+      registerWidget({
+        id: "weather",
+        title: tw("weather.title"),
+        showHeader: false,
+        order: 30,
+        pref: WIDGET_PREFS.WEATHER_ENABLED,
+        defaultEnabled: false,
+        refreshPref: WIDGET_PREFS.WEATHER_REFRESH_MINUTES,
+        refreshScale: 60000,
+        minRefreshMs: WEATHER_REFRESH_MIN * 60000,
+        maxRefreshMs: WEATHER_REFRESH_MAX * 60000,
+        refreshMs: DEFAULTS.WEATHER_REFRESH_MINUTES * 60000,
+        watchPrefs: [
+          WIDGET_PREFS.WEATHER_PLACE,
+          WIDGET_PREFS.WEATHER_LATITUDE,
+          WIDGET_PREFS.WEATHER_LONGITUDE,
+          WIDGET_PREFS.WEATHER_PLACES,
+          WIDGET_PREFS.WEATHER_UNITS,
+          WIDGET_PREFS.WEATHER_REFRESH_MINUTES,
+        ],
+        // OW-57: the cache holds one entry per place, or the place switched in the same card would show the old
+        // place's numbers for a moment (the scheduler looks the cache up by this key before every paint).
+        cacheKey() {
+          const opts = readWeatherOpts();
+          return weatherCacheKeyFor("weather", opts.place_);
+        },
+        create({ document: doc, requestRefresh }) {
+          const wrap = doc.createElement("div");
+          wrap.className = "zw-weather";
+
+          const main = doc.createElement("div");
+          main.className = "zw-weather-main";
+          const iconEl = doc.createElement("span");
+          iconEl.className = "zw-weather-icon";
+          iconEl.setAttribute("aria-hidden", "true");
+          const tempEl = doc.createElement("span");
+          tempEl.className = "zw-weather-temp";
+          const labelEl = doc.createElement("span");
+          labelEl.className = "zw-weather-label";
+          main.appendChild(iconEl);
+          main.appendChild(tempEl);
+          main.appendChild(labelEl);
+
+          const metaEl = doc.createElement("div");
+          metaEl.className = "zw-card-meta zw-weather-meta";
+          const rangeEl = doc.createElement("span");
+          rangeEl.className = "zw-weather-range";
+          const detailsEl = doc.createElement("span");
+          detailsEl.className = "zw-weather-details";
+          metaEl.appendChild(rangeEl);
+          metaEl.appendChild(detailsEl);
+
+          const placeEl = doc.createElement("div");
+          placeEl.className = "zw-card-meta zw-weather-place";
+
+          // OW-95: the outlook is no longer a click-swapped pair. The card has three views (today / tomorrow / week)
+          // and a click walks those; the outlook shows the extra days the current view needs, all of them at once.
+          const outlookEl = doc.createElement("div");
+          outlookEl.className = "zw-card-meta zw-weather-outlook";
+          outlookEl.hidden = true;
+          // The last value `paint` drew. A view change re-renders from this, which is why switching views never
+          // fetches and never blanks the card.
+          let lastPainted = null;
+          let lastPaintInfo = {};
+          // Assigned by `paint` below; declared here because `paint` writes it and a `let` after its first use is a
+          // temporal-dead-zone throw, not a hoisted `undefined`.
+          let repaintWeather = null;
+
+          wrap.appendChild(main);
+          wrap.appendChild(metaEl);
+          wrap.appendChild(outlookEl);
+          wrap.appendChild(placeEl);
+
+          const areaWidth = () => {
+            try {
+              const width = getArea?.()?.width;
+              return typeof width === "number" ? width : null;
+            } catch (_) {
+              return null;
+            }
+          };
+          // OW-54: every half of the outlook is drawn, each on its own line. A narrow card wraps; it never hides one half
+          // behind a click. This used to swap the two on a click when the card was under 200px, which was a workaround
+          // for the line being cut (white-space: nowrap + ellipsis) — the cut is gone, so the workaround is too.
+          const paintOutlook = (lines, opts) => {
+            if (!Array.isArray(lines) || !lines.length) {
+              outlookEl.hidden = true;
+              outlookEl.replaceChildren();
+              return;
+            }
+            outlookEl.replaceChildren();
+            for (const line of lines) {
+              const row = doc.createElement("span");
+              row.className = "zw-weather-outlook-line";
+              if (line && typeof line === "object") {
+                // A week row: glyph, day name, high/low. Each part its own span so the glyph can be sized on its own
+                // and a narrow card can drop the low without dropping the row.
+                if (line.icon) {
+                  const glyph = doc.createElement("span");
+                  glyph.className = "zw-weather-outlook-icon";
+                  glyph.textContent = WEATHER_ICON_GLYPHS[line.icon] || WEATHER_ICON_GLYPHS.unknown;
+                  row.appendChild(glyph);
+                }
+                const name = doc.createElement("span");
+                name.className = "zw-weather-outlook-day";
+                name.textContent = line.day || line.label || "";
+                row.appendChild(name);
+                const temps = doc.createElement("span");
+                temps.className = "zw-weather-outlook-temps";
+                temps.textContent = [line.high, line.low].filter(Boolean).join(" / ");
+                row.appendChild(temps);
+                row.title = line.text || "";
+              } else {
+                row.textContent = String(line);
+              }
+              outlookEl.appendChild(row);
+            }
+            const flat = lines.map((line) => (line && typeof line === "object" ? line.text : String(line))).filter(Boolean);
+            outlookEl.title = flat.join(" \u00b7 ");
+            outlookEl.hidden = false;
+            outlookEl.setAttribute("aria-label", (opts?.place ? opts.place + ": " : "") + flat.join(", "));
+          };
+          // The outlook is part of the card: a press on it must not be a second control, but it must still arm the
+          // hold, so only the click and the pointer handlers below decide what happens.
+          // The card's own click is not the outlook's business any more; OW-57 owns a click on the card (place cycling).
+          outlookEl.addEventListener("click", (e) => e.stopPropagation());
+
+          const paint = (value, info = {}) => {
+            lastPainted = value;
+            lastPaintInfo = info || {};
+            const opts = readWeatherOpts();
+            placeEl.textContent = opts.place || "Set a place in Settings";
+            // A control only when a click can do something: one place is a label, not a button.
+            const readyPlaces = opts.places.filter(weatherPlaceReady);
+            // OW-95: the card is a control whenever a click can do something, and a click now always can (three views,
+            // even with one place and no network). The place count still matters, so it stays on the card.
+            wrap.setAttribute("data-zw-places", String(readyPlaces.length));
+            wrap.setAttribute("role", "button");
+            wrap.setAttribute("tabindex", "0");
+            wrap.setAttribute("aria-roledescription", "weather card");
+            const viewName = { today: "today", tomorrow: "tomorrow", week: "this week" }[cleanWeatherView(weatherView.view)];
+            wrap.setAttribute("aria-label",
+              `${opts.place || ""}: showing ${viewName}. Click for the next view` +
+              (readyPlaces.length > 1 ? `, Ctrl+click or middle click for the next place (${readyPlaces.length} saved)` : "") +
+              ", hold to go back to today");
+            wrap.setAttribute("data-zw-weather", value ? (info.cached ? "cached" : "live") : info.error ? "error" : "empty");
+            if (!value) {
+              iconEl.textContent = "\u2601";
+              tempEl.textContent = info.error ? "\u2014" : "";
+              labelEl.textContent = info.error ? "Weather unavailable" : "";
+              rangeEl.textContent = "";
+              detailsEl.textContent = "";
+              outlookEl.hidden = true;
+              wrap.setAttribute("aria-label", info.error ? "Weather unavailable" : "Weather: no place set");
+              return;
+            }
+            const parts = formatWeatherParts(value, opts.units);
+            // OW-95: the view decides the first three lines; the outlook carries whatever the view does not fit.
+            const view = cleanWeatherView(weatherView.view);
+            wrap.setAttribute("data-zw-weather-view", view);
+            let viewParts = null;
+            try {
+              // The reading's own units, never the current pref: a cached metric value shown as °F would be a lie,
+              // and Open-Meteo converts server-side, so only the reading knows what its numbers are.
+              viewParts = weatherViewParts(value, view, { units: cleanWeatherUnits(value.units), countryCode: value.countryCode });
+            } catch (err) {
+              console.warn("[ZentralWidgets] weather view failed:", err);
+            }
+            const shown = viewParts && !viewParts.empty ? viewParts : null;
+            iconEl.textContent = WEATHER_ICON_GLYPHS[(shown || parts).icon] || WEATHER_ICON_GLYPHS.unknown;
+            tempEl.textContent = view === "week" ? "" : (shown || parts).temperature ?? parts.temperature;
+            labelEl.textContent = view === "week" ? "This week" : (shown || parts).label;
+            rangeEl.textContent = view === "week" ? "" : (shown || parts).range ?? "";
+            detailsEl.textContent = view === "today" ? parts.details : "";
+            try {
+              // Today keeps the OW-50 second line (tomorrow + the next wet day) because a glance at today wants what
+              // comes next; tomorrow and week own their own rows, so the outlook is theirs alone.
+              if (view === "week") paintOutlook(shown?.lines || [], opts);
+              else if (view === "tomorrow") paintOutlook([], opts);
+              else {
+                const outlook = weatherOutlookParts(value.week, opts);
+                paintOutlook((outlook.lines || []).map((line) => String(line)), opts);
+              }
+            } catch (err) {
+              outlookEl.hidden = true;
+              console.warn("[ZentralWidgets] weather outlook failed:", err);
+            }
+            wrap.setAttribute("aria-label", (opts.place ? opts.place + ": " : "") + (view === "week" ? "This week" : (shown || parts).text));
+          };
+          repaintWeather = () => {
+            if (!lastPainted) return false;
+            try {
+              paint(lastPainted, lastPaintInfo);
+              return true;
+            } catch (err) {
+              console.warn("[ZentralWidgets] weather repaint failed:", err);
+              return false;
+            }
+          };
+
+          // OW-95: the whole card is the control, and the two gestures are the two axes.
+          //   click  -> the next view: today, tomorrow, week, back to today. The data does not change, so this never
+          //             fetches: three views are one reading.
+          //   hold   -> back to the main face: TODAY, and the first saved place. A long press is the "reset" a person
+          //             reaches for after wandering, and it must work even with one place and an empty cache.
+          // The place is cycled by the hold's sibling, the middle click / the keyboard: `Ctrl`+Enter or a middle click
+          // steps the place, because a card with unlimited places still needs a way to reach the second one.
+          const setView = (next) => {
+            const clean = cleanWeatherView(next);
+            if (clean === weatherView.view) return false;
+            weatherView.view = clean;
+            repaintWeather?.();
+            return true;
+          };
+          const cycleView = () => setView(nextWeatherView(weatherView.view));
+          // Back to the main face: today, and the first saved place. Both halves are reset because "the main one" is a
+          // place AND a view to the person who asked for it; a hold that left them on another city would be a puzzle.
+          const revertToMain = () => {
+            let changed = false;
+            if (weatherView.view !== "today") {
+              weatherView.view = "today";
+              changed = true;
+            }
+            const places = readWeatherPlaces().filter(weatherPlaceReady);
+            const main = places[0] || null;
+            if (main && main.id !== weatherView.placeId) {
+              weatherView.placeId = main.id;
+              changed = true;
+            }
+            // Repaint from the last painted value at once. A view is a lens on data the card already has, so waiting
+            // for a fetch (or for a scheduler tick) would show a stale face for no reason.
+            if (changed) {
+              repaintWeather?.();
+              try {
+                requestRefresh({ force: false });
+              } catch (_) {}
+            }
+            return changed;
+          };
+          const cyclePlace = () => {
+            const places = readWeatherPlaces().filter(weatherPlaceReady);
+            if (places.length < 2) return false;
+            const active = currentWeatherPlace(places, weatherView.placeId);
+            const next = nextWeatherPlace(places, active?.id);
+            if (!next || next.id === active?.id) return false;
+            weatherView.placeId = next.id;
+            requestRefresh({ force: true });
+            return true;
+          };
+          // A hold is a real gesture, not a click variant: 550 ms is long enough not to fire while someone is reading
+          // and short enough that it does not feel stuck. Moving the pointer or releasing early cancels it.
+          const HOLD_MS = 550;
+          let holdTimer = null;
+          let held = false;
+          const cancelHold = () => {
+            if (holdTimer !== null) clearTimeout(holdTimer);
+            holdTimer = null;
+          };
+          const onPointerDown = (event) => {
+            if (event?.button !== 0) return;
+            held = false;
+            cancelHold();
+            holdTimer = setTimeout(() => {
+              holdTimer = null;
+              held = true;
+              try {
+                revertToMain();
+              } catch (err) {
+                console.warn("[ZentralWidgets] weather revert failed:", err);
+              }
+              repaintWeather?.();
+            }, HOLD_MS);
+          };
+          wrap.addEventListener("pointerdown", onPointerDown);
+          wrap.addEventListener("pointerup", cancelHold);
+          wrap.addEventListener("pointercancel", cancelHold);
+          wrap.addEventListener("pointerleave", cancelHold);
+          wrap.addEventListener("click", (event) => {
+            if (held) {
+              held = false;
+              return;
+            }
+            try {
+              // Ctrl/Cmd means "the other axis": step the place instead of the view.
+              if (event?.ctrlKey || event?.metaKey) cyclePlace();
+              else cycleView();
+            } catch (err) {
+              console.warn("[ZentralWidgets] weather control failed:", err);
+            }
+          });
+          // A middle click steps the place, the same way a middle click opens a Zen tab: one gesture, one axis.
+          wrap.addEventListener("auxclick", (event) => {
+            if (event?.button !== 1) return;
+            event.preventDefault?.();
+            try {
+              cyclePlace();
+            } catch (_) {}
+          });
+          wrap.addEventListener("keydown", (e) => {
+            if (e.key !== "Enter" && e.key !== " ") return;
+            e.preventDefault();
+            try {
+              if (e.ctrlKey || e.metaKey) cyclePlace();
+              else cycleView();
+            } catch (_) {}
+          });
+          // Escape is the keyboard's hold: back to the main face without a pointer.
+          wrap.addEventListener("keydown", (e) => {
+            if (e.key !== "Escape") return;
+            e.preventDefault();
+            revertToMain();
+            repaintWeather?.();
+          });
+
+
+          return {
+            element: wrap,
+            cacheKey() {
+              const opts = readWeatherOpts();
+              return weatherCacheKeyFor("weather", opts.place_);
+            },
+            fetch({ now, cachedValue }) {
+              const opts = readWeatherOpts();
+              if (!opts.place_) return null; // no place, no request, no network
+              if (cachedValue && isWeatherCacheFresh(now, { value: cachedValue, updatedAt: now }, opts.refreshMinutes)) return undefined;
+              const url = weatherRequestUrl(opts.place_, opts.units);
+              if (!url) return null;
+              return fetch(url, { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" })
+                .then((res) => (res && res.ok ? res.json() : null))
+                .then((payload) => (payload ? readWeatherPayload(payload, opts.units, widgetLang()) : null))
+                .catch(() => null);
+            },
+            isStale(now, cached) {
+              return !cached?.value || !isWeatherCacheFresh(now, cached, readWeatherOpts().refreshMinutes);
+            },
+            nextDelayMs(now, cached) {
+              return nextWeatherDelayMs(now, readWeatherOpts().refreshMinutes, cached?.updatedAt);
+            },
+            render(value, info) {
+              try {
+                paint(value, info || {});
+              } catch (err) {
+                console.warn("[ZentralWidgets] weather render failed:", err);
+              }
+            },
+          };
+        },
+      });
+
+      // A place name is looked up once, when the person types it (a setting change, never a poll) and on load if an
+      // entry is stored without numbers. The answer fills that entry in the places list: a name is a label, the
+      // numbers are the truth. The first entry also mirrors into the three single prefs, so someone who edits those
+      // by hand still sees what they edited.
+      let placeLookupToken = 0;
+      // OW-56: the face is a setting, so it is written the one way this file writes settings.
+      function writeStringPref(pref, value) {
+        try {
+          Services.prefs.setStringPref(pref, String(value));
+          return true;
+        } catch (_) {
+          return false;
+        }
+      }
+      function writeWeatherPlaces(list) {
+        try {
+          Services.prefs.setStringPref(WIDGET_PREFS.WEATHER_PLACES, serializeWeatherPlaces(list));
+          return true;
+        } catch (_) {
+          return false;
+        }
+      }
+      function applyGeocodeHit(hit, placeId) {
+        const places = readWeatherPlaces();
+        if (!places.length) return false;
+        const at = places.findIndex((p) => p.id === placeId);
+        if (at < 0) return false;
+        const target = places[at];
+        const name = hit.name && hit.name !== target.name ? hit.name : target.name;
+        const filled = places.map((p) =>
+          p.id === target.id ? { ...p, name, latitude: hit.latitude, longitude: hit.longitude } : p,
+        );
+        if (!writeWeatherPlaces(filled)) return false;
+        if (at === 0) {
+          try {
+            Services.prefs.setStringPref(WIDGET_PREFS.WEATHER_LATITUDE, String(hit.latitude));
+            Services.prefs.setStringPref(WIDGET_PREFS.WEATHER_LONGITUDE, String(hit.longitude));
+            if (name) Services.prefs.setStringPref(WIDGET_PREFS.WEATHER_PLACE, name);
+          } catch (_) {}
+        }
+        return true;
+      }
+      // One name -> one place. `placeId` empty means "the legacy single place", which becomes entry one.
+      function geocodeWeatherName(name, placeId) {
+        const url = geocodeUrl(name);
+        if (!url || typeof fetch !== "function") return Promise.resolve(false);
+        const token = ++placeLookupToken;
+        return fetch(url, { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" })
+          .then((res) => (res && res.ok ? res.json() : null))
+          .then((payload) => {
+            if (disposed || token !== placeLookupToken) return false;
+            const hit = readGeocodePayload(payload);
+            if (!hit) return false;
+            if (placeId) return applyGeocodeHit(hit, placeId);
+            // The legacy name has no entry yet: make it entry one, then fill it.
+            const seeded = weatherPlacesFromLegacy(name, hit.latitude, hit.longitude);
+            if (!seeded.length || !writeWeatherPlaces(seeded)) return false;
+            return applyGeocodeHit(hit, seeded[0].id);
+          })
+          .catch(() => false);
+      }
+      function lookupMissingWeatherPlaces() {
+        const places = readWeatherPlaces();
+        if (places.length) {
+          const missing = places.find((p) => !cleanWeatherPlace(p.latitude, p.longitude));
+          return missing ? geocodeWeatherName(missing.name, missing.id) : Promise.resolve(false);
+        }
+        const legacyName = String(getString(WIDGET_PREFS.WEATHER_PLACE, "") || "").trim();
+        return legacyName ? geocodeWeatherName(legacyName, "") : Promise.resolve(false);
+      }
+      watchPref(WIDGET_PREFS.WEATHER_PLACES, () => {
+        lookupMissingWeatherPlaces();
+      });
+      watchPref(WIDGET_PREFS.WEATHER_PLACE, () => {
+        // Typing a name in the single pref after a list exists fills the first entry, not a phantom place.
+        const places = readWeatherPlaces();
+        const name = String(getString(WIDGET_PREFS.WEATHER_PLACE, "") || "").trim();
+        if (!name || !places.length) return;
+        if (cleanWeatherPlace(getString(WIDGET_PREFS.WEATHER_LATITUDE, ""), getString(WIDGET_PREFS.WEATHER_LONGITUDE, ""))) return;
+        geocodeWeatherName(name, places[0].id);
+      });
+      if (getBool(WIDGET_PREFS.WEATHER_ENABLED, DEFAULTS.WEATHER_ENABLED)) lookupMissingWeatherPlaces();
+
+      // ---- T3.9d: timer, stopwatch and quick note --------------------------------------------------------------
+      // One card: a stopwatch and a countdown that share a single readout, five presets, one free field and a laps
+      // list. Its state lives here (not in prefs): a stopwatch is a moment, not a setting.
+      const timerState = { stopwatch: stopwatchReset(), timer: timerReset(), lapsOpen: false };
+      // The Clock line's small badge; the timer panel writes into it so a running countdown survives a closed panel.
+
+      // OW-56: the two halves of "a countdown that ends". Both are best-effort and silent on a platform that has
+      // neither; a missing alert must never make the timer fail to end.
+      let timerSoundCtx = null;
+      function playTimerEndSound(kind) {
+        const sound = cleanTimerEndSound(kind);
+        if (sound === "none") return;
+        if (sound === "beep") {
+          try { Services.sound.beep(); } catch (_) {}
+          return;
+        }
+        // A short two-note tone: the same WebAudio path the reminder alert uses, so it is louder than a beep but
+        // still one gesture long. A platform without WebAudio falls back to the beep.
+        try {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          if (!Ctx) throw new Error("no audio");
+          const ctx = timerSoundCtx || (timerSoundCtx = new Ctx());
+          if (ctx.state === "suspended") ctx.resume?.().catch?.(() => {});
+          for (const [at, hz] of [[0, 880], [0.22, 1174]]) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.frequency.value = hz;
+            gain.gain.setValueAtTime(0.0001, ctx.currentTime + at);
+            gain.gain.exponentialRampToValueAtTime(0.22, ctx.currentTime + at + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + at + 0.2);
+            osc.connect(gain).connect(ctx.destination);
+            osc.start(ctx.currentTime + at);
+            osc.stop(ctx.currentTime + at + 0.22);
+          }
+        } catch (_) {
+          try { Services.sound.beep(); } catch (err) {}
+        }
+      }
+      function timerNoticeText() {
+        const t = timerState.timer;
+        const minutes = t && t.durationMs ? Math.round(t.durationMs / 60000) : 0;
+        return minutes >= 1 ? `Countdown finished (${minutes} min)` : "Countdown finished";
+      }
+      function showTimerEndNotice(kind, text) {
+        const notice = cleanTimerEndNotice(kind);
+        if (notice === "none") return;
+        if (notice === "system") {
+          // The platform's own alert: outside the window, so it is seen while Zen is in the background.
+          try {
+            const alerts = Services.alerts;
+            if (alerts && typeof alerts.showAlertNotification === "function") {
+              alerts.showAlertNotification(null, "Timer", text, false, "", null, null, null, null, null, null);
+              return;
+            }
+            if (typeof window.Notification === "function") {
+              new window.Notification("Timer", { body: text });
+              return;
+            }
+          } catch (_) {}
+        }
+        showWidgetToast(text);
+      }
+      // A line in the window, on the widget tray, that leaves by itself. No pref, no timer of its own: one
+      // setTimeout that a second end replaces.
+      let widgetToastEl = null;
+      let widgetToastTimer = null;
+      function showWidgetToast(text) {
+        try {
+          const doc = window.document;
+          const host = tray || doc?.getElementById?.(TRAY_ID) || doc?.body;
+          if (!doc || !host || typeof doc.createElement !== "function") return;
+          if (!widgetToastEl || !widgetToastEl.isConnected) {
+            widgetToastEl = doc.createElement("div");
+            widgetToastEl.className = "zw-toast";
+            widgetToastEl.setAttribute("role", "status");
+            host.appendChild(widgetToastEl);
+          }
+          widgetToastEl.textContent = String(text || "");
+          widgetToastEl.hidden = false;
+          if (widgetToastTimer !== null && typeof window.clearTimeout === "function") window.clearTimeout(widgetToastTimer);
+          widgetToastTimer = null;
+          if (typeof window.setTimeout !== "function") return;
+          // OW-90: the plan's own number for the Boost toast is 4 s.
+          widgetToastTimer = window.setTimeout(() => {
+            widgetToastTimer = null;
+            if (widgetToastEl) widgetToastEl.hidden = true;
+          }, 4000);
+        } catch (_) {}
+      }
+
+      // OW-60: the panel is part of the Clock card, so a Clock click has nowhere to travel. One function, one card.
+      function clockClick(action) {
+        const clock = mountedCards.get("clock")?.instance;
+        if (!clock || typeof clock.clockClick !== "function") return false;
+        // "open"/"close-panel" only mean "show the panel" now: the panel is the other face of this same card.
+        if (action === "open" || action === "close-panel") {
+          const wanted = action === "open" ? "timer" : "clock";
+          if (readWidgetModePref() !== wanted) writeStringPref(WIDGET_PREFS.CLOCK_MODE, wanted);
+          clockFacePainter?.();
+          return true;
+        }
+        return clock.clockClick(action) !== false;
+      }
+      const readWidgetModePref = () => cleanWidgetMode(getString(WIDGET_PREFS.CLOCK_MODE, DEFAULTS.CLOCK_MODE));
+      function clockClickKind(event) {
+        return resolveClockClick({
+          clickEnabled: getBool(WIDGET_PREFS.TIMER_CLICK_STOPWATCH, DEFAULTS.TIMER_CLICK_STOPWATCH),
+          timerRunning: Boolean(timerState.timer?.running),
+          stopwatchRunning: Boolean(timerState.stopwatch?.running),
+          long: Boolean(event?.shiftKey),
+        });
+      }
+
+      // ---- OW-90: the Boost card, which replaces the Status card -----------------------------------------------
+      // The number and the action live together: the card shows what the browser is using and one click hands memory
+      // back. Nothing here reads the platform itself — `additional/boost/` owns the only reading — and nothing here
+      // polls: the module samples every 2 s only while the popup is open, and every value arrives through `onChange`.
+      //
+      // The card is a convenience, never the only door: with the tray disabled the Boost module still works through
+      // its API and (in part three) its shortcut. The README of `additional/boost/` says so too.
+      const boostModule = () => {
+        try {
+          const api = window.ZentralBoost;
+          return api && typeof api.runLevel1 === "function" ? api : null;
+        } catch (_) {
+          return null;
+        }
+      };
+      let boostUnsubscribe = null;
+      let boostLastMB = null;
+      let boostRunning = false;
+      registerWidget({
+        id: "boost",
+        title: tw("boost.title"),
+        showHeader: false,
+        order: 50,
+        pref: WIDGET_PREFS.BOOST_ENABLED,
+        defaultEnabled: DEFAULTS.BOOST_ENABLED,
+        // No cadence of its own: `fetch` answers from what the module last measured, so the scheduler never wakes the
+        // card for a reading it would have to take itself. A slow refresh is kept so a changed preference repaints.
+        refreshMs: 0,
+        create({ document: doc }) {
+          const wrap = doc.createElement("div");
+          wrap.className = "zw-boost";
+          const valueEl = doc.createElement("span");
+          valueEl.className = "zw-boost-value";
+          valueEl.textContent = "\u2014";
+          const labelEl = doc.createElement("span");
+          labelEl.className = "zw-boost-label";
+          labelEl.textContent = tw("boost.title");
+          const menuBtn = doc.createElement("button");
+          menuBtn.type = "button";
+          menuBtn.className = "zw-boost-menu-btn";
+          menuBtn.setAttribute("aria-haspopup", "true");
+          menuBtn.setAttribute("aria-expanded", "false");
+          menuBtn.setAttribute("aria-label", tw("boost.later"));
+          menuBtn.textContent = "\u25be";
+          wrap.appendChild(valueEl);
+          wrap.appendChild(labelEl);
+          wrap.appendChild(menuBtn);
+
+          // The popup: a small list of what Boost can do. The entries that later parts add are drawn, greyed and
+          // explained — the plan's rule, and the reason a person can see that "deep" exists but is not ready.
+          const popup = doc.createElement("div");
+          popup.className = "zw-boost-popup";
+          popup.hidden = true;
+          popup.setAttribute("role", "menu");
+          wrap.appendChild(popup);
+
+          const paintValue = () => {
+            const parts = boostParts(boostLastMB);
+            valueEl.textContent = parts ? parts.text : "\u2014";
+            valueEl.setAttribute("data-zw-level", parts ? parts.level : "muted");
+            const lang = { language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), notesRaw: getString(NOTES_LANGUAGE_PREF, "en") };
+            wrap.setAttribute("aria-label", parts
+              ? widgetText(resolveWidgetLanguage(lang.language, lang.notesRaw), "boost.aria", { value: parts.text })
+              : widgetText(resolveWidgetLanguage(lang.language, lang.notesRaw), "boost.ariaUnknown"));
+            wrap.setAttribute("data-zw-boost", parts ? String(parts.mb) : "");
+          };
+
+          const paintMenu = () => {
+            while (popup.children.length) popup.children[0].remove();
+            const state = typeof api()?.state === "function" ? api().state() : {};
+            const gameMode = typeof api()?.gameModeState === "function" ? api().gameModeState() : null;
+            const items = boostMenuItems({
+              running: boostRunning,
+              canDeep: state.policy !== false,
+              canGameMode: typeof api()?.setGameMode === "function",
+              gameMode: Boolean(gameMode?.on),
+              undoSize: Number(state.undoSize) || 0,
+              language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE),
+              notesRaw: getString(NOTES_LANGUAGE_PREF, "en"),
+            });
+            for (const item of items) {
+              const row = doc.createElement("button");
+              row.type = "button";
+              row.className = "zw-boost-menu-item";
+              row.setAttribute("role", "menuitem");
+              row.setAttribute("data-zw-boost-action", item.id);
+              row.textContent = item.label;
+              if (item.hint) row.title = item.hint;
+              row.disabled = !item.available;
+              row.setAttribute("aria-disabled", item.available ? "false" : "true");
+              // A switch, not an action: the state is on the row so a screen reader and a test can both read it.
+              if (item.checked !== undefined) row.setAttribute("aria-checked", item.checked ? "true" : "false");
+              if (item.available) {
+                row.addEventListener("click", (event) => {
+                  event?.preventDefault?.();
+                  event?.stopPropagation?.();
+                  closePopup();
+                  void runAction(item.id);
+                });
+              }
+              popup.appendChild(row);
+            }
+            // One line at the bottom says where the other entries will come from, translated like every other word.
+            const note = doc.createElement("div");
+            note.className = "zw-boost-menu-note";
+            note.textContent = tw("boost.later");
+            popup.appendChild(note);
+          };
+
+          const isPopupOpen = () => !popup.hidden;
+          const closePopup = () => {
+            if (popup.hidden) return false;
+            popup.hidden = true;
+            menuBtn.setAttribute("aria-expanded", "false");
+            return true;
+          };
+          const openPopup = () => {
+            paintMenu();
+            popup.hidden = false;
+            menuBtn.setAttribute("aria-expanded", "true");
+          };
+
+          const api = () => boostModule();
+
+          function runAction(id) {
+            if (id === "free-light") return runLight();
+            if (id === "free-deep") return runDeep();
+            if (id === "restore") return runRestore();
+            if (id === "game-mode") return runGameMode();
+            return Promise.resolve(null);
+          }
+
+          // OW-94: Game Mode is a toggle with its own toast. It is written through the module's own pref, so Settings
+          // and the card never disagree, and the card repaints from the module's state rather than from a local flag.
+          function runGameMode() {
+            const boost = api();
+            if (!boost || typeof boost.setGameMode !== "function") return Promise.resolve(null);
+            const next = !Boolean(boost.gameModeState?.().on);
+            let result = null;
+            try {
+              result = boost.setGameMode(next);
+            } catch (_) {
+              result = null;
+            }
+            paintMenu();
+            const t = (key) => widgetText(resolveWidgetLanguage(getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), getString(NOTES_LANGUAGE_PREF, "en")), key);
+            showWidgetToast(t(next ? "boost.gameModeOn" : "boost.gameModeOff"));
+            return Promise.resolve(result);
+          }
+
+          // OW-91: one deep pass, with the same "one at a time" rule as the light one. The result carries how many tabs
+          // and panels went to sleep, and the card says so instead of only a number.
+          async function runDeep() {
+            const boost = api();
+            if (!boost || typeof boost.runLevel2 !== "function") return null;
+            if (boostRunning) return null;
+            boostRunning = true;
+            paintMenu();
+            showWidgetToast(tw("boost.busy"));
+            let result = null;
+            try {
+              result = await boost.runLevel2();
+            } catch (_) {
+              result = null;
+            } finally {
+              boostRunning = false;
+              paintMenu();
+            }
+            showWidgetToast(boostResultText(result, {
+              language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE),
+              notesRaw: getString(NOTES_LANGUAGE_PREF, "en"),
+            }));
+            return result;
+          }
+
+          // Restore wakes what the last deep pass put to sleep; the toast reports the count the module restored.
+          function runRestore() {
+            const boost = api();
+            if (!boost || typeof boost.restore !== "function") return Promise.resolve(null);
+            let restored = null;
+            try {
+              restored = boost.restore();
+            } catch (_) {
+              restored = null;
+            }
+            paintMenu();
+            const lang = { language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), notesRaw: getString(NOTES_LANGUAGE_PREF, "en") };
+            if (restored && restored.panels) {
+              showWidgetToast(widgetText(resolveWidgetLanguage(lang.language, lang.notesRaw), "boost.restored", { count: restored.panels }));
+            }
+            return Promise.resolve(restored);
+          }
+
+          // One click, one pass. While the module works the card says so and refuses a second start, so a person
+          // cannot stack GC runs by clicking twice.
+          async function runLight() {
+            const boost = api();
+            if (!boost) return null;
+            const decision = resolveBoostClick({ available: true, running: boostRunning });
+            if (decision.action !== "free") return null;
+            boostRunning = true;
+            paintMenu();
+            showWidgetToast(tw("boost.busy"));
+            let result = null;
+            try {
+              result = await boost.runLevel1();
+            } catch (_) {
+              result = null;
+            } finally {
+              boostRunning = false;
+              paintMenu();
+            }
+            showWidgetToast(boostResultText(result, {
+              language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE),
+              notesRaw: getString(NOTES_LANGUAGE_PREF, "en"),
+            }));
+            return result;
+          }
+
+          // The module says when its reading changed; the card only repaints, it never asks.
+          const subscribe = () => {
+            const boost = api();
+            if (!boost || typeof boost.onChange !== "function") return;
+            try {
+              boostUnsubscribe = boost.onChange((value) => {
+                boostLastMB = typeof value === "number" ? value : (typeof boost.lastMB === "function" ? boost.lastMB() : null);
+                paintValue();
+              });
+            } catch (_) {
+              boostUnsubscribe = null;
+            }
+          };
+          subscribe();
+          // OW-92: the limiter acts on its own, so the card is where it says so — a soft notice, a finished hard run,
+          // or the once-per-ten-minutes "nothing left to do". Same toast as a click's result, because it is the same
+          // kind of sentence.
+          let limiterUnsubscribe = null;
+          const subscribeLimiter = () => {
+            const boost = api();
+            if (!boost || typeof boost.onLimiterEvent !== "function") return;
+            try {
+              limiterUnsubscribe = boost.onLimiterEvent((event) => {
+                const lang = { language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), notesRaw: getString(NOTES_LANGUAGE_PREF, "en") };
+                const code = resolveWidgetLanguage(lang.language, lang.notesRaw);
+                if (event?.action === "notify") {
+                  showWidgetToast(widgetText(code, "boost.limitHit", { mb: Math.round(Number(event.totalMB) || 0), limit: Math.round(Number(event.limitMB) || 0) }));
+                } else if (event?.action === "hard-done") {
+                  const freed = event.unloaded?.tabs || event.unloaded?.panels;
+                  if (freed) showWidgetToast(widgetText(code, "boost.limitDone", { mb: Math.round(Number(event.totalMB) || 0) }));
+                } else if (event?.action === "nothing-eligible") {
+                  showWidgetToast(widgetText(code, "boost.limitNothing"));
+                }
+              });
+            } catch (_) {
+              limiterUnsubscribe = null;
+            }
+          };
+          subscribeLimiter();
+          boostLastMB = typeof api()?.lastMB === "function" ? api().lastMB() : null;
+          paintValue();
+
+          // A click on the card runs the light pass; a click on the arrow opens the menu. That split keeps the plan's
+          // "left click runs Level 1" true while the arrow still reaches the rest.
+          wrap.addEventListener("click", (event) => {
+            if (popup.contains?.(event?.target)) return;
+            if (event?.target === menuBtn) return;
+            if (event && ((event.button != null && event.button !== 0) || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)) return;
+            event?.preventDefault?.();
+            void runLight();
+          });
+          menuBtn.addEventListener("click", (event) => {
+            event?.preventDefault?.();
+            event?.stopPropagation?.();
+            if (isPopupOpen()) closePopup();
+            else openPopup();
+          });
+          // A click anywhere else closes the menu, and so does Escape. Both are cleanup-registered.
+          const onDocPointer = (event) => {
+            if (!isPopupOpen()) return;
+            if (wrap.contains?.(event?.target)) return;
+            closePopup();
+          };
+          const onKeyDown = (event) => {
+            if (event?.key !== "Escape") return;
+            if (closePopup()) event?.stopPropagation?.();
+          };
+          doc.addEventListener("pointerdown", onDocPointer);
+          doc.addEventListener("keydown", onKeyDown);
+          registerCleanup(() => {
+            try {
+              doc.removeEventListener("pointerdown", onDocPointer);
+              doc.removeEventListener("keydown", onKeyDown);
+              if (typeof boostUnsubscribe === "function") boostUnsubscribe();
+              if (typeof limiterUnsubscribe === "function") limiterUnsubscribe();
+            } catch (_) {}
+            boostUnsubscribe = null;
+            limiterUnsubscribe = null;
+          });
+
+          return {
+            element: wrap,
+            fetch() {
+              return { mb: boostLastMB, available: Boolean(api()) };
+            },
+            render() {
+              // The number is painted by the module's callback; a render only keeps the arrow's state honest.
+              paintValue();
+            },
+            dispose() {
+              try {
+                if (typeof boostUnsubscribe === "function") boostUnsubscribe();
+                if (typeof limiterUnsubscribe === "function") limiterUnsubscribe();
+              } catch (_) {}
+              boostUnsubscribe = null;
+              limiterUnsubscribe = null;
+            },
+            // The test seam and any other card that wants the action without a pointer.
+            runLight,
+            openMenu: openPopup,
+            closeMenu: closePopup,
+          };
+        },
+      });
+
+      // The legacy choice is applied once both cards exist, so the migration can see the Boost definition.
+      adoptLegacyStatusCard();
+
       const onVisibilityOrResize = () => scheduleMeasure();
       const listen = (target, type, fn, opts) => {
         if (!target || typeof target.addEventListener !== "function") return;
@@ -3500,6 +6295,10 @@ function nativeSidebarSide() {
 
       syncWidgetsAndLayout();
 
+      // OW-99: the calendar's read of the weather (see `weatherDays` below). Declared above the API object, because a
+      // card-scoped `let` placed after the function that writes it is a TDZ throw the first time it is asked.
+      let weatherDaysCache = { source: null, list: [] };
+
       const api = {
         core,
         registerWidget,
@@ -3510,6 +6309,8 @@ function nativeSidebarSide() {
           return isWidgetEnabled(def);
         },
         setWidgetEnabled,
+        moveWidget: (id, dir) => moveCard(normalizeWidgetId(id), dir),
+        widgetOrder: () => currentOrderIds(),
         refreshWidget: (id, opts) =>
           scheduler.refresh(normalizeWidgetId(id), {
             force: true,
@@ -3521,15 +6322,49 @@ function nativeSidebarSide() {
             scheduler.refresh(id, { force: true, area: lastArea });
           }
         },
+        // Declared here, above its only writer: a card-scoped `let` below the function that assigns it is a TDZ throw
+        // the first time the calendar asks (the same trap the weather card's own `repaintWeather` hit in OW-95).
         getCachedValue: (id) => scheduler.getCached(normalizeWidgetId(id) || id),
+        // OW-96: the calendar draws one small symbol per day from this, and it must not have to know how the widget
+        // stores its cache. Read-only on purpose: the calendar asks, the widget owns the request and the refresh.
+        // Returns [{ key, icon, label, high, low, units }] where `key` is the local date (YYYY-MM-DD), or an empty list.
+        weatherDays: () => {
+          try {
+            const cached = scheduler.getCached("weather");
+            if (!cached) return [];
+            // OW-99: the calendar asks once per week render, and at 48 days that is a render per scroll. The reading is
+            // the same object between refreshes, so the mapped list is built once per reading and handed back as-is —
+            // the caller must not mutate it, which the comment above says.
+            if (weatherDaysCache.source === cached) return weatherDaysCache.list;
+            const days = Array.isArray(cached.week) ? cached.week : [];
+            const units = cleanWeatherUnits(cached.units);
+            const result = days
+              .filter((day) => day && typeof day.date === "string" && day.date)
+              .map((day) => ({
+                key: String(day.date).slice(0, 10),
+                icon: day.icon || "unknown",
+                label: day.label || "",
+                high: day.high,
+                low: day.low,
+                units,
+              }));
+            weatherDaysCache = { source: cached, list: result };
+            return result;
+          } catch (_) {
+            return [];
+          }
+        },
         setCachedValue: (id, value, updatedAt) =>
           scheduler.setCached(normalizeWidgetId(id) || id, value, updatedAt),
         clearCache: (id) => scheduler.clearCache(id),
         getArea: () => ({ ...lastArea }),
         getTray: () => tray,
         isPaused: () => scheduler.isPaused(),
+        // OW-94: whether Game Mode is holding this scheduler, for a live check and for the Boost card's own label.
+        isHeld: () => scheduler.isHeld(),
         activeTimerCount: () => scheduler.activeTimerCount(),
         remeasure: () => syncWidgetsAndLayout(),
+        resolveWeatherPlace: () => resolveWeatherPlaceFromName(),
         destroy() {
           if (disposed) return;
           disposed = true;
@@ -3538,6 +6373,9 @@ function nativeSidebarSide() {
           detachSidebarObservers();
           for (const id of [...mountedCards.keys()]) unmountWidgetCard(id);
           registry.clear();
+          try {
+            unsubscribePerformance?.();
+          } catch (_) {}
           scheduler.destroy();
           if (tray) {
             try {

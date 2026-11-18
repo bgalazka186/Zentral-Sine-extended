@@ -319,7 +319,7 @@
       "defaultValue": "zentral",
       "options": [
         {
-          "label": "Zentral – follows the Zen look",
+          "label": "Zentral \u2013 follows the browser's appearance theme (default)",
           "value": "zentral"
         },
         {
@@ -567,6 +567,63 @@
       "type": "string",
       "defaultValue": "",
       "control": "color"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.look_weekend_tint",
+      "label": "Notes calendar Weekend tint (six-digit #RRGGBB, empty = the shipped tint)",
+      "type": "string",
+      "defaultValue": "",
+      "control": "color"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.look_weekend_strength",
+      "label": "Notes calendar Weekend tint visibility (percent, 0-60; -1 = the shipped tint)",
+      "type": "input",
+      "defaultValue": -1,
+      "control": "slider",
+      "numeric": {
+        "min": -1,
+        "max": 60,
+        "unit": "%"
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.notes.look_holiday_tint",
+      "label": "Notes calendar Holiday tint (six-digit #RRGGBB, empty = the shipped tint)",
+      "type": "string",
+      "defaultValue": "",
+      "control": "color"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.look_holiday_strength",
+      "label": "Notes calendar Holiday tint visibility (percent, 0-60; -1 = the shipped tint)",
+      "type": "input",
+      "defaultValue": -1,
+      "control": "slider",
+      "numeric": {
+        "min": -1,
+        "max": 60,
+        "unit": "%"
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.notes.look_free_tint",
+      "label": "Notes calendar Other free days tint (six-digit #RRGGBB, empty = the shipped tint)",
+      "type": "string",
+      "defaultValue": "",
+      "control": "color"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.look_free_strength",
+      "label": "Notes calendar Other free days tint visibility (percent, 0-60; -1 = the shipped tint)",
+      "type": "input",
+      "defaultValue": -1,
+      "control": "slider",
+      "numeric": {
+        "min": -1,
+        "max": 60,
+        "unit": "%"
+      }
     },
     {
       "property": "zen.workspace.zentral.notes.capture_target",
@@ -1019,6 +1076,18 @@
       ]
     },
     {
+      "property": "zen.workspace.zentral.notes.calendar_weather_week",
+      "label": "Calendar week view: weather symbol and temperature above the day name",
+      "type": "bool",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.notes.calendar_weather_month",
+      "label": "Calendar month view: weather symbol in the day cell (off by default: a month cell has little room)",
+      "type": "bool",
+      "defaultValue": false
+    },
+    {
       "property": "zen.workspace.zentral.notes.date_display_format",
       "label": "Date display format (calendar, agenda, date chips and Notes by date)",
       "type": "dropdown",
@@ -1227,6 +1296,59 @@
       "min": 1,
       "max": 200,
       "unit": "items"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.agenda_close_action",
+      "label": "Closing an Agenda tab",
+      "type": "dropdown",
+      "defaultValue": "hide-today",
+      "options": [
+        {
+          "label": "Hide that item for today (default)",
+          "value": "hide-today"
+        },
+        {
+          "label": "Dismiss the reminder; hide an event for today",
+          "value": "dismiss"
+        },
+        {
+          "label": "Let it come back right away",
+          "value": "reappear"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.notes.agenda_fold_quiet",
+      "label": "Fold the Agenda folder during quiet hours",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.notes.agenda_fold_quiet_start",
+      "label": "Quiet hours start (HH:MM)",
+      "type": "string",
+      "defaultValue": "22:00"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.agenda_fold_quiet_end",
+      "label": "Quiet hours end (HH:MM)",
+      "type": "string",
+      "defaultValue": "07:00"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.agenda_fold_due_hours",
+      "label": "Fold when nothing is due within (hours; 0 = only when nothing is left)",
+      "type": "number",
+      "defaultValue": 0,
+      "min": 0,
+      "max": 168,
+      "unit": "hours"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.park_pseudo_tabs",
+      "label": "Keep sidebar note/agenda placeholders unloaded (saves memory)",
+      "type": "checkbox",
+      "defaultValue": true
     },
     {
       "property": "zen.workspace.zentral.notes.debug_perf",
@@ -1444,6 +1566,36 @@
     "zen.workspace.zentral.notes.look_line": {
       "category": "notes-appearance",
       "section": "Colors & backing",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.look_weekend_tint": {
+      "category": "notes-appearance",
+      "section": "Days off",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.look_weekend_strength": {
+      "category": "notes-appearance",
+      "section": "Days off",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.look_holiday_tint": {
+      "category": "notes-appearance",
+      "section": "Days off",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.look_holiday_strength": {
+      "category": "notes-appearance",
+      "section": "Days off",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.look_free_tint": {
+      "category": "notes-appearance",
+      "section": "Days off",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.look_free_strength": {
+      "category": "notes-appearance",
+      "section": "Days off",
       "owner": "notes"
     },
     "zen.workspace.zentral.notes.capture_target": {
@@ -1716,12 +1868,27 @@
       "section": "Experiments (off by default)",
       "owner": "notes"
     },
+    "zen.workspace.zentral.notes.park_pseudo_tabs": {
+      "category": "notes",
+      "section": "Performance",
+      "owner": "notes"
+    },
     "zen.workspace.zentral.notes.debug_perf": {
       "category": "notes",
       "section": "Experiments (off by default)",
       "owner": "notes"
     },
     "zen.workspace.zentral.notes.date_display_format": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.calendar_weather_week": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.calendar_weather_month": {
       "category": "notes",
       "section": "Quick notes",
       "owner": "notes"
@@ -1762,6 +1929,31 @@
       "owner": "notes"
     },
     "zen.workspace.zentral.notes.agenda_max_items": {
+      "category": "notes",
+      "section": "Experiments (off by default)",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.agenda_close_action": {
+      "category": "notes",
+      "section": "Experiments (off by default)",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.agenda_fold_quiet": {
+      "category": "notes",
+      "section": "Experiments (off by default)",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.agenda_fold_quiet_start": {
+      "category": "notes",
+      "section": "Experiments (off by default)",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.agenda_fold_quiet_end": {
+      "category": "notes",
+      "section": "Experiments (off by default)",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.agenda_fold_due_hours": {
       "category": "notes",
       "section": "Experiments (off by default)",
       "owner": "notes"

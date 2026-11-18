@@ -49,6 +49,16 @@
   }
   const dayStart = (ms) => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
   const addDays = (ms, n) => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, d.getHours(), d.getMinutes()).getTime(); };
+  // TM3.7: the start of a civil day `n` days after `ms`. `addDays` keeps the hour, so a day that begins at 01:00
+  // (midnight does not exist that day) stayed at 01:00 for every later day too; flooring after the move fixes that.
+  const civilDayStart = (ms, n = 0) => dayStart(addDays(ms, n));
+  // TM3.7: the day after a day boundary. `addDays` deliberately keeps the wall clock (a reminder at 09:00 stays at
+  // 09:00), which is wrong for a range that runs to the next midnight: in a zone whose clocks go forward at midnight
+  // (Chile, Egypt, Lebanon, Cuba) `addDays(dayStart(ms), 1)` lands on 01:00 of the next day, and the first hour of that
+  // day belongs to nobody. This one moves the calendar date and reads the new midnight back.
+  const nextDayStart = (ms) => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime(); };
+  // A civil day as [from, to), both real midnights. Used wherever a day range is built from a day boundary.
+  const dayRange = (ms) => { const from = dayStart(ms); return [from, nextDayStart(from)]; };
   const iso = (ms) => new Date(ms).toISOString();
 
   // ---------- language registry & parsing (AU-B4a) ----------
@@ -252,8 +262,14 @@
       if (preloaded && typeof preloaded === "object") {
         for (const key of Object.keys(preloaded)) registerLanguage(preloaded[key]);
       }
+      // OW-79: whatever the generated registry names, plus the historical pair as a floor. A language file that is
+      // present but not yet in the registry is still picked up when it defined itself as `notes-lang-<code>`, so the
+      // worst case is a language that appears without a menu row (until the tool runs), never a silent loss.
+      const codes = new Set([...NOTES_LANGUAGES]);
+      const listed = window.__zentralNotesLangRegistry?.languages;
+      if (Array.isArray(listed)) for (const code of listed) if (typeof code === "string" && code) codes.add(code);
       if (window.ZentralModuleLoader && typeof window.ZentralModuleLoader.get === "function") {
-        for (const code of NOTES_LANGUAGES) {
+        for (const code of codes) {
           if (!LANG_REGISTRY.has(code)) {
             const mod = window.ZentralModuleLoader.get("notes-lang-" + code);
             if (mod) registerLanguage(mod);
@@ -295,15 +311,55 @@
     return notesLanguageTable(lang)?.locale || "en-GB";
   }
   // AU-B4b: interface string lookup with per-key English fallback and `{param}` interpolation.
+  // OW-79: a key that no table has must never reach a person. `TRANSLATION_GAPS` holds the ones that did, so a
+  // developer can see them (the audit tool and the test read this list) while the screen shows readable English.
+  const TRANSLATION_GAPS = new Map();
+  const gapListeners = new Set();
+  const DOTTED_KEY_RE = /^[a-z][A-Za-z0-9]*(\.[A-Za-z0-9_]+)+$/;
+  function reportTranslationGap(key, lang) {
+    const id = String(key || "");
+    if (!id) return;
+    if (!TRANSLATION_GAPS.has(id)) TRANSLATION_GAPS.set(id, new Set());
+    const langs = TRANSLATION_GAPS.get(id);
+    if (langs.has(lang)) return; // once per key and language, not on every draw
+    langs.add(lang);
+    if (typeof console !== "undefined" && console && typeof console.warn === "function") {
+      console.warn("[Zentral Notes] missing translation: " + id + " (" + lang + ")");
+    }
+    for (const fn of gapListeners) { try { fn(id, lang); } catch (_) {} }
+  }
+  function onTranslationGap(fn) {
+    if (typeof fn !== "function") return () => {};
+    gapListeners.add(fn);
+    return () => gapListeners.delete(fn);
+  }
+  function translationGaps() {
+    return [...TRANSLATION_GAPS].map(([key, langs]) => ({ key, languages: [...langs] }));
+  }
+  // The last resort for a key nobody has: the readable part of the key itself ("cal.todayBtn" -> "Today btn"), never
+  // the dotted form. A dotted key on screen is the defect this row exists for, so this is deliberately a poor but
+  // ENGLISH-looking answer rather than an honest one a person cannot read.
+  function readableKey(key) {
+    const parts = String(key || "").split(".");
+    const last = parts[parts.length - 1] || String(key || "");
+    const words = last.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").trim();
+    return words ? words.charAt(0).toUpperCase() + words.slice(1) : "";
+  }
   function translate(key, params = null, lang = DEFAULT_NOTES_LANGUAGE) {
     const k = String(key ?? "");
     if (!k) return "";
     const resolvedLang = cleanNotesLanguage(lang);
     const primary = notesLanguageTable(resolvedLang)?.strings;
     const fallback = notesLanguageTable(DEFAULT_NOTES_LANGUAGE)?.strings;
-    let template = primary && Object.prototype.hasOwnProperty.call(primary, k) && typeof primary[k] === "string"
-      ? primary[k]
-      : (fallback && Object.prototype.hasOwnProperty.call(fallback, k) && typeof fallback[k] === "string" ? fallback[k] : k);
+    const has = (table) => table && Object.prototype.hasOwnProperty.call(table, k) && typeof table[k] === "string" && table[k].length > 0;
+    let template;
+    if (has(primary)) template = primary[k];
+    else if (has(fallback)) template = fallback[k];
+    else {
+      // Missing everywhere. Say so once, and show words rather than the key.
+      reportTranslationGap(k, resolvedLang);
+      template = DOTTED_KEY_RE.test(k) ? readableKey(k) : k;
+    }
     if (params && typeof params === "object") {
       template = template.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, name) => (
         Object.prototype.hasOwnProperty.call(params, name) && params[name] !== undefined && params[name] !== null
@@ -312,6 +368,14 @@
       ));
     }
     return template;
+  }
+  // OW-79 made `translate` never return a raw key, so "did a table have this?" can no longer be answered by comparing
+  // the result with the key. This is the explicit question, asked the same way the lookup itself asks it.
+  function hasTranslation(key, lang = DEFAULT_NOTES_LANGUAGE) {
+    const k = String(key ?? "");
+    if (!k) return false;
+    const table = notesLanguageTable(lang)?.strings;
+    return Boolean(table && Object.prototype.hasOwnProperty.call(table, k) && typeof table[k] === "string" && table[k].length > 0);
   }
   const t = translate;
   function pluralCategory(count, lang = DEFAULT_NOTES_LANGUAGE) {
@@ -337,6 +401,28 @@
       chosen = Object.prototype.hasOwnProperty.call(fallback, baseKey + "." + enCat) ? baseKey + "." + enCat : baseKey + ".other";
     }
     return translate(chosen, { ...(params && typeof params === "object" ? params : {}), count: n }, resolvedLang);
+  }
+  // OW-79: the list a menu should drawn from — whatever has been REGISTERED, not a hardcoded pair. A new
+  // `i18n/xx.js` that is loaded and registered appears here without a JS change, and `missing` says how much of it is
+  // still English so the menu can be honest about a half-finished file.
+  function notesLanguages() {
+    const base = translationKeys(DEFAULT_NOTES_LANGUAGE);
+    const out = [];
+    for (const [code, table] of LANG_REGISTRY) {
+      if (!table) continue;
+      const missing = missingTranslationKeys(code);
+      out.push(Object.freeze({
+        code,
+        name: String(table.name || code),
+        locale: String(table.locale || ""),
+        complete: missing.length === 0,
+        missing: missing.length,
+        total: base.length,
+      }));
+    }
+    // English first (it is the fallback every other table is measured against), then alphabetical by code: a menu
+    // that reshuffles when a file is added is harder to use than one that only grows.
+    return out.sort((a, b) => (a.code === DEFAULT_NOTES_LANGUAGE ? -1 : b.code === DEFAULT_NOTES_LANGUAGE ? 1 : a.code.localeCompare(b.code)));
   }
   function translationKeys(lang = DEFAULT_NOTES_LANGUAGE) {
     const strings = notesLanguageTable(lang)?.strings;
@@ -946,9 +1032,33 @@
       reminders: { overrides: minutes },
       x: {
         kind, noteId: String(x.noteId ?? "").slice(0, 120), heading: String(x.heading ?? "").slice(0, MAX_TEXT),
-        category: cleanCategoryName(x.category), tz: cleanZone(x.tz), historyId: String(x.historyId ?? "").slice(0, 120), src: ["list", "note", "manual"].includes(x.src) ? x.src : "manual", key: String(x.key ?? "").slice(0, 60), legacyKey: String(x.legacyKey ?? "").slice(0, 60), moved: x.moved ? "1" : "", calNote: String(x.calNote ?? "").slice(0, MAX_DESC), notify: cleanNotifyOverrides(x.notify), agendaWindow: cleanAgendaWindow(x.agendaWindow), recurrenceExceptions: cleanRecurrenceExceptions(x.recurrenceExceptions, allDay),
+        category: cleanCategoryName(x.category), tz: cleanZone(x.tz), historyId: String(x.historyId ?? "").slice(0, 120), src: ["list", "note", "manual", "ics"].includes(x.src) ? x.src : "manual", key: String(x.key ?? "").slice(0, 60), legacyKey: String(x.legacyKey ?? "").slice(0, 60), moved: x.moved ? "1" : "", calNote: String(x.calNote ?? "").slice(0, MAX_DESC), notify: cleanNotifyOverrides(x.notify), agendaWindow: cleanAgendaWindow(x.agendaWindow), recurrenceExceptions: cleanRecurrenceExceptions(x.recurrenceExceptions, allDay),
       },
     };
+    // ST7.8: an item's own colour is kept only when it has one, so items that were never colourised serialise (and
+    // hash) exactly as they did before this field existed — no etag churn, no needless syncs.
+    const itemColor = cleanItemColor(x.color);
+    if (itemColor) item.x.color = itemColor;
+    // OW-53: what came from a calendar file is kept only on such an item, and only when it is there: an item that never
+    // saw an .ics serialises exactly as before (no etag churn). The UID is what makes a second import an update.
+    if (item.x.src === "ics") {
+      const uid = String(x.icsUid ?? "").trim().slice(0, 300);
+      if (uid) item.x.icsUid = uid;
+      if (x.icsCalendar) item.x.icsCalendar = String(x.icsCalendar).slice(0, 200);
+      if (x.icsLocation) item.x.icsLocation = String(x.icsLocation).slice(0, 500);
+      if (x.icsCancelled === true) item.x.icsCancelled = true;
+      // T2.13a: a holiday that came from a feed is marked as imported, never as a local holiday. Kept only when set,
+      // so a file that is not a holiday feed leaves every item exactly as it was (no etag churn).
+      if (x.icsHolidayFeed === true) {
+        item.x.icsHolidayFeed = true;
+        item.x.icsHolidayName = String(x.icsHolidayName ?? "").slice(0, 120);
+      }
+    }
+    // T2.13: the sync bookkeeping, kept only on items that have actually been synced — an item that never has serialises
+    // exactly as before, so no etag churn and no needless write on export (the same rule as the colour above).
+    const syncedEtag = String(x.syncedEtag ?? "").trim().slice(0, 120);
+    if (syncedEtag) item.x.syncedEtag = syncedEtag;
+    if (x.syncedDeleted === true) item.x.syncedDeleted = true;
     if (x.src === "list" && typeof x.categoryOverride === "string") item.x.categoryOverride = cleanCategoryName(x.categoryOverride);
     if (x.src === "list" && x.categoryInNote === true) item.x.categoryInNote = true;
     if (x.src === "list") {
@@ -1223,7 +1333,10 @@
     const first = addDays(start, -offset);
     return Array.from({ length: 7 }, (_, i) => addDays(first, i));
   }
-  const WEEK_DAYS_LIMITS = Object.freeze({ min: 1, max: 14, default: 7, minColPx: 84, gutterPx: 42 });
+  // A week view is not a calendar week: it is "the next N days", and the owner asked for enough of them to be useful on
+  // a Big Picture surface. 48 is two rows of 24 — the widest span that still reads as a grid rather than a strip — and
+  // `WEEK_ROWS_MAX` is what the renderer uses to stack them when the height allows.
+  const WEEK_DAYS_LIMITS = Object.freeze({ min: 1, max: 48, default: 7, minColPx: 84, gutterPx: 42, maxRows: 2 });
   const WEEK_RANGE_STARTS = Object.freeze(["weekStart", "today", "selected"]);
   const DEFAULT_WEEK_SPAN = Object.freeze({ days: 7, anchor: "weekStart" });
   function cleanWeekDaysCount(value, fallback = 7) {
@@ -1258,13 +1371,108 @@
     const col = Math.max(1, Number(minColPx) || WEEK_DAYS_LIMITS.minColPx);
     return Math.max(min, Math.min(max, Math.floor(usable / col) || 1));
   }
-  // OW-25: `count` consecutive local midnights starting at `start` (clamped 1..14, DST-safe).
+  // OW-25: `count` consecutive local midnights starting at `start` (clamped 1..48, DST-safe).
   function visibleDays(start, count = 7) {
     const base = dayStart(start);
     const n = cleanWeekDaysCount(count, 7);
     const len = n === "auto" ? 7 : n;
     return Array.from({ length: len }, (_, i) => addDays(base, i));
   }
+  // OW-96: how many columns and how many rows a span needs. One row is the old behaviour and stays the default; past
+  // what the width can hold, the days stack into a second row instead of shrinking a column to nothing — 48 days at
+  // 84px is 4032px, which no sidebar has, and 24 columns twice is readable where 48 once is not.
+  //
+  // Pure, and it only decides; the renderer draws. `rows` is 1 unless two conditions both hold: the days do not fit on
+  // one row at this width, and the surface is tall enough for a second. A short window keeps one row and scrolls rather
+  // than squeezing two rows into a strip where neither is readable.
+  const WEEK_ROW_MIN_PX = 180;
+  function weekGridPlan({ days = 7, widthPx = 0, heightPx = 0, minColPx = WEEK_DAYS_LIMITS.minColPx, gutterPx = WEEK_DAYS_LIMITS.gutterPx, maxRows = WEEK_DAYS_LIMITS.maxRows } = {}) {
+    // `days: 0` is clamped to 1 exactly as `cleanWeekDaysCount` would: the plan must never disagree with the model
+    // about how many days there are, or the header and the timeline would wrap differently. `undefined` is 7.
+    const asked = Number(days);
+    const count = Math.max(1, Math.min(WEEK_DAYS_LIMITS.max, Number.isFinite(asked) && days != null ? Math.round(asked) : 7));
+    const col = Math.max(1, Number(minColPx) || WEEK_DAYS_LIMITS.minColPx);
+    const usable = Math.max(0, (Number(widthPx) || 0) - (Number(gutterPx) || 0));
+    const fitsOneRow = usable <= 0 ? count <= 7 : Math.floor(usable / col) >= count;
+    const rows = Math.max(1, Math.min(Math.max(1, Math.round(maxRows) || 1), 2));
+    if (fitsOneRow || rows < 2 || !(Number(heightPx) >= WEEK_ROW_MIN_PX * 2)) return { count, rows: 1, perRow: count };
+    const perRow = Math.ceil(count / 2);
+    // A stack is only a stack if each of its rows fits at the minimum column width. Otherwise two rows of 35px columns
+    // are worse than one row that scrolls: the whole point of the second row is that a column stays readable.
+    const perRowFits = usable <= 0 ? perRow <= 7 : Math.floor(usable / col) >= perRow;
+    if (!perRowFits) return { count, rows: 1, perRow: count };
+    return { count, rows: 2, perRow };
+  }
+
+  // The one unit rule the calendar needs. The widget does the converting (Open-Meteo converts server-side), so this
+  // only ever decides which suffix to print — and it prefers the reading's own units, exactly as the card does.
+  function weatherUnitLabelsFor(units) {
+    const clean = String(units || "").trim().toLowerCase() === "imperial" ? "imperial" : "metric";
+    return clean === "imperial" ? { temperature: "\u00b0F", wind: "mph" } : { temperature: "\u00b0C", wind: "km/h" };
+  }
+
+  // OW-96: how much a forecast for a given day can be trusted, and therefore how often it is worth refreshing.
+  // The owner's rule: the further the day from today, the lower the rate. It is a coarse ladder on purpose — one step
+  // per week of distance, four steps down — because a per-degree curve would imply a precision a 48-day streak of
+  // weather does not have. Returns { step, factor, trust } with factor 1 (today) down to 1/4 (a month out).
+  const FORECAST_TRUST_STEPS = Object.freeze([1, 0.75, 0.5, 0.25]);
+  function forecastTrust(distanceDays) {
+    const n = Math.round(Number(distanceDays));
+    if (!Number.isFinite(n) || n <= 0) return { step: 0, factor: FORECAST_TRUST_STEPS[0], trust: 1 };
+    const step = Math.min(FORECAST_TRUST_STEPS.length - 1, Math.floor(n / 7));
+    const factor = FORECAST_TRUST_STEPS[step];
+    return { step, factor, trust: factor };
+  }
+
+  // The refresh interval a day earns: today every `baseMinutes`, a day far out many times rarer. Never zero, never
+  // shorter than the base — the ladder only ever relaxes the rate, it can never make the widget poll harder.
+  function forecastRefreshMinutes(baseMinutes, distanceDays) {
+    const base = Math.max(1, Math.round(Number(baseMinutes) || 30));
+    const { factor } = forecastTrust(distanceDays);
+    return Math.max(base, Math.round(base / Math.max(0.05, factor)));
+  }
+
+  // OW-96: turn the widget's flat day list into the one small thing a calendar column needs: a symbol, a temperature
+  // and a sentence for the tooltip. `todayKey` is the local date of the render, so a forecast day that has already
+  // passed (an old cache) never appears on a future column, and `trust` comes from the distance ladder.
+  //
+  // Pure and tolerant: a missing high is an empty temperature, never "undefined"; a day with no icon is skipped rather
+  // than drawn as a blank box. Returns a Map keyed by the date string.
+  function calendarWeatherIndex(days, { todayKey = "", units = "metric" } = {}) {
+    const out = new Map();
+    const list = Array.isArray(days) ? days : [];
+    const labels = weatherUnitLabelsFor(units);
+    let base = null;
+    if (todayKey) {
+      const t = Date.parse(todayKey + "T00:00:00Z");
+      if (Number.isFinite(t)) base = t;
+    }
+    for (const entry of list) {
+      const key = entry && typeof entry.key === "string" ? entry.key.slice(0, 10) : "";
+      if (!key || !entry.icon || entry.icon === "unknown") continue;
+      const stamp = Date.parse(key + "T00:00:00Z");
+      const distance = base != null && Number.isFinite(stamp) ? Math.round((stamp - base) / 86400000) : 0;
+      const dayUnits = entry.units || units;
+      const suffix = weatherUnitLabelsFor(dayUnits).temperature;
+      const high = Number.isFinite(Number(entry.high)) && entry.high !== null ? Math.round(Number(entry.high)) + suffix : "";
+      const low = Number.isFinite(Number(entry.low)) && entry.low !== null ? Math.round(Number(entry.low)) + suffix : "";
+      const range = high && low ? high + " / " + low : high || low || "";
+      out.set(key, {
+        key,
+        icon: entry.icon,
+        label: entry.label || "",
+        temp: high,
+        high,
+        low,
+        range,
+        distance,
+        trust: forecastTrust(distance).trust,
+        text: [entry.label || "Weather", range].filter(Boolean).join(", "),
+      });
+    }
+    return out;
+  }
+
   function resolveWeekVisibleDays({ cursor, today, weekStart = 1, span, widthPx = 0, panDay = "" } = {}) {
     const cfg = cleanWeekSpan(span);
     const count = cfg.days === "auto" ? fitWeekDayCount(widthPx) : cfg.days;
@@ -1282,7 +1490,7 @@
     const out = [];
     for (let i = 0; i < n; i++) {
       const d = addDays(from, i);
-      out.push({ day: d, items: itemsInRange(items, d, addDays(d, 1)) });
+      out.push({ day: d, items: itemsInRange(items, d, nextDayStart(d)) });
     }
     return out;
   }
@@ -1290,7 +1498,7 @@
   // Returns [{ item, lane, lanes, startMin, endMin }]: `lanes` = columns in the item's overlap cluster (width = 1/lanes).
   // startMin / endMin are minutes on the clock of that day (in `zone`, or the computer's zone), cut off at its ends.
   function layoutDay(items, day, zone = "") {
-    const dateKey = localDateKey(day), bounds = zone ? zonedDayBounds(dateKey, zone) : [day, addDays(day, 1)];
+    const dateKey = localDateKey(day), bounds = zone ? zonedDayBounds(dateKey, zone) : [day, nextDayStart(day)];
     const d0 = bounds[0], d1 = bounds[1];
     const rows = itemsInRange(items, d0, d1).filter((it) => !isReminder(it) && !isAllDay(it)).map((it) => {
       const [s, e] = itemRange(it);
@@ -1616,6 +1824,7 @@
   function toGoogle(it) {
     const priv = {};
     for (const [k, v] of Object.entries(it.x)) if ((v !== "" || k === "categoryOverride") && v !== undefined && v !== null && !(Array.isArray(v) && !v.length)) priv["zentral_" + k] = ["notify", "recurrenceExceptions", "agendaWindow", "categoryOverride", "categoryInNote"].includes(k) ? JSON.stringify(v) : String(v);
+    // OW-53: the calendar file's UID travels with the item, so an imported event that is later synced keeps its identity.
     const out = { id: it.id, summary: it.summary, description: it.description, status: it.status, start: it.start, updated: it.updated, extendedProperties: { private: priv } };
     out.end = it.end || it.start;
     if (it.created) out.created = it.created;
@@ -1636,6 +1845,481 @@
       created: g.created, updated: g.updated, recurrence: g.recurrence, reminders: g.reminders, x: { ...x, kind: x.kind || (sameEnd ? "reminder" : "event") } }, 0);
   }
 
+
+  // ---------- OW-53: an .ics calendar file from another app (Google Calendar and every other calendar) ----------
+  // The file is a fold of lines: a line that starts with a space or a tab continues the one before it. That single rule
+  // is the most common reason a hand-written reader fails on a real export, so it is the first thing done here.
+  function icsUnfold(text) {
+    const src = String(text || "").replace(/\r\n?/g, "\n");
+    const out = [];
+    for (const line of src.split("\n")) {
+      if ((line.startsWith(" ") || line.startsWith("\t")) && out.length) out[out.length - 1] += line.slice(1);
+      else out.push(line);
+    }
+    return out;
+  }
+  // TEXT values in a calendar file escape a newline, a comma, a semicolon and the backslash itself.
+  function icsText(value) {
+    const raw = String(value == null ? "" : value);
+    let out = "";
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i];
+      if (ch !== "\\") { out += ch; continue; }
+      const next = raw[++i];
+      if (next === "n" || next === "N") out += "\n";
+      else if (next === ",") out += ",";
+      else if (next === ";") out += ";";
+      else if (next === "\\") out += "\\";
+      else if (next !== undefined) out += next;
+    }
+    return out;
+  }
+  // `NAME;PARAM=VALUE;OTHER="a,b":value` -> { name, params, value }. A quoted parameter may hold a colon or a semicolon.
+  function icsProperty(line) {
+    const text = String(line || "");
+    let colon = -1, quoted = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '"') quoted = !quoted;
+      else if (ch === ":" && !quoted) { colon = i; break; }
+    }
+    if (colon < 0) return null;
+    const head = text.slice(0, colon), value = text.slice(colon + 1);
+    const pieces = [];
+    let cur = "", inQuotes = false;
+    for (const ch of head) {
+      if (ch === '"') { inQuotes = !inQuotes; cur += ch; continue; }
+      if (ch === ";" && !inQuotes) { pieces.push(cur); cur = ""; continue; }
+      cur += ch;
+    }
+    pieces.push(cur);
+    const name = String(pieces.shift() || "").toUpperCase();
+    if (!name) return null;
+    const params = {};
+    for (const piece of pieces) {
+      const at = piece.indexOf("=");
+      if (at < 0) continue;
+      params[piece.slice(0, at).toUpperCase()] = piece.slice(at + 1).replace(/^"|"$/g, "");
+    }
+    return { name, params, value: value.replace(/\r$/, "") };
+  }
+  // The day keys and clock times a calendar file writes: `20261117`, `20261117T090000` (local or UTC), with params.
+  function icsDateValue(prop) {
+    const raw = String(prop?.value || "").trim().toUpperCase();
+    if (!raw) return null;
+    const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/.exec(raw);
+    if (!m) return null;
+    const [, y, mo, d, hh, mm, ss, utc] = m;
+    const date = { year: Number(y), month: Number(mo), day: Number(d) };
+    if (date.month < 1 || date.month > 12 || date.day < 1 || date.day > 31) return null;
+    if (hh === undefined) return { date, time: null, utc: false, floating: true };
+    const time = { hour: Number(hh), minute: Number(mm), second: Number(ss) };
+    if (time.hour > 23 || time.minute > 59 || time.second > 60) return null;
+    return { date, time, utc: utc === "Z", tzid: prop.params?.TZID || "", dateOnly: prop.params?.VALUE === "DATE" };
+  }
+  // A wall clock in a named zone, read through Intl so no zone table is needed. A zone the browser does not know is
+  // reported back instead of silently becoming UTC.
+  function icsZonedMs(date, time, tzid) {
+    const zone = String(tzid || "").trim();
+    if (!zone) return null;
+    try {
+      const guess = Date.UTC(date.year, date.month - 1, date.day, time.hour, time.minute, time.second);
+      const fmt = new Intl.DateTimeFormat("en-US", { timeZone: zone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      // Two passes: the first offset is taken at the guess, the second at the corrected instant (a zone that switched
+      // at the moment in question needs the second one to land on the right side of the change).
+      let ms = guess;
+      for (let i = 0; i < 2; i++) {
+        const parts = {};
+        for (const part of fmt.formatToParts(new Date(ms))) parts[part.type] = part.value;
+        const asUtc = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour) % 24, Number(parts.minute), Number(parts.second));
+        const offset = asUtc - ms;
+        ms = guess - offset;
+      }
+      return ms;
+    } catch (_) {
+      return null;
+    }
+  }
+  function icsStamp(value, fallbackZone = "") {
+    if (!value) return null;
+    const { date, time, utc, tzid } = value;
+    // A DATE value is a calendar day, not an instant: `20261101` means the 1st, wherever the person is. It used to be
+    // built as UTC midnight then "corrected" by the offset of *that* instant, which is a no-op in UTC and wrong
+    // everywhere else — in Los Angeles it subtracted eight hours and the day fell back to 10-31, in Auckland it added
+    // thirteen and it moved to 11-02. An imported holiday therefore marked the wrong cell (and mostly none at all).
+    // Local midnight of that day is the instant whose local date key is the day the file wrote, in every zone from
+    // UTC-11 to UTC+14 (checked against Kiritimati, Pago Pago and Lord Howe, half-hour and 45-minute offsets included).
+    if (!time) return { ms: new Date(date.year, date.month - 1, date.day).getTime(), allDay: true };
+    if (utc) return { ms: Date.UTC(date.year, date.month - 1, date.day, time.hour, time.minute, time.second), allDay: false };
+    const zoned = icsZonedMs(date, time, tzid || fallbackZone);
+    if (zoned !== null) return { ms: zoned, allDay: false };
+    // A floating time is a wall clock with no zone: it is read in the person's own zone, as the calendar shows items.
+    const local = new Date(date.year, date.month - 1, date.day, time.hour, time.minute, time.second);
+    return { ms: local.getTime(), allDay: false, floating: true };
+  }
+  // The recurrence subset the calendar's own reader accepts, in its own words. Anything else is reported, not guessed.
+  function icsRecurrence(lines) {
+    const out = { rules: [], exceptions: [] }, warnings = [];
+    for (const { name, params, value } of lines) {
+      if (name === "EXDATE") {
+        // Each value carries the parameters of its own line: an EXDATE with a TZID is a wall clock in that zone, and
+        // reading it as UTC would skip the wrong occurrence.
+        for (const piece of String(value || "").split(",")) {
+          const parsed = icsDateValue({ value: piece, params: params || {} });
+          const stamp = parsed ? icsStamp(parsed, params?.TZID || "") : null;
+          if (stamp) out.exceptions.push(new Date(stamp.ms).toISOString());
+        }
+        continue;
+      }
+      if (name !== "RRULE") continue;
+      const fields = {};
+      for (const piece of String(value || "").split(";")) {
+        const at = piece.indexOf("=");
+        if (at > 0) fields[piece.slice(0, at).toUpperCase()] = piece.slice(at + 1).toUpperCase();
+      }
+      const freq = fields.FREQ;
+      if (!["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(freq)) { warnings.push("unsupported-frequency:" + String(value || "").slice(0, 40)); continue; }
+      const rule = ["RRULE:FREQ=" + freq];
+      if (Number(fields.INTERVAL) > 1) rule.push("INTERVAL=" + Math.round(Number(fields.INTERVAL)));
+      if (Number(fields.COUNT) > 0) rule.push("COUNT=" + Math.round(Number(fields.COUNT)));
+      if (fields.UNTIL) {
+        const parsed = icsDateValue({ value: fields.UNTIL, params: {} });
+        const stamp = parsed ? icsStamp(parsed) : null;
+        // The calendar's reader wants UNTIL in the same shape as the start; a UTC instant is written as UTC.
+        if (stamp) rule.push("UNTIL=" + new Date(stamp.ms).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z"));
+      }
+      if (fields.BYDAY) rule.push("BYDAY=" + fields.BYDAY);
+      out.rules.push(rule.join(";"));
+    }
+    return { ...out, warnings };
+  }
+  // One .ics file -> { events, warnings }. Pure: no clock, no filesystem, no preferences.
+  function parseIcs(text) {
+    const lines = icsUnfold(text);
+    const events = [], warnings = [];
+    let event = null, calendarName = "", depth = 0;
+    for (const line of lines) {
+      const prop = icsProperty(line);
+      if (!prop) continue;
+      if (prop.name === "BEGIN") {
+        depth++;
+        if (String(prop.value).toUpperCase() === "VEVENT") event = { lines: [], line: depth };
+        continue;
+      }
+      if (prop.name === "END") {
+        depth = Math.max(0, depth - 1);
+        if (String(prop.value).toUpperCase() === "VEVENT" && event) { events.push(event); event = null; }
+        continue;
+      }
+      if (!event) {
+        if (prop.name === "X-WR-CALNAME" && !calendarName) calendarName = icsText(prop.value);
+        continue;
+      }
+      // A repeated property (RRULE, EXDATE, ATTENDEE) keeps all of its lines; a single one (SUMMARY) keeps the first.
+      event.lines.push({ name: prop.name, params: prop.params || {}, value: prop.value });
+    }
+    if (event) warnings.push("unterminated-event");
+    const items = [];
+    for (const raw of events) {
+      const one = (name) => raw.lines.find((l) => l.name === name) || null;
+      const all = (name) => raw.lines.filter((l) => l.name === name);
+      const uid = icsText(one("UID")?.value || "");
+      const startProp = one("DTSTART");
+      const startValue = startProp ? icsDateValue(startProp) : null;
+      // An event with no start cannot be placed on a calendar. It is still reported, so the person sees the file's
+      // own problem rather than a silent shortage: the import plan lists it under `skipped`, not in `warnings` alone.
+      if (!startValue) {
+        warnings.push("no-start:" + (uid || "unnamed"));
+        items.push({ uid, summary: icsText(one("SUMMARY")?.value || "").trim().slice(0, 500), unreadable: true, startMs: null, endMs: null, allDay: false, cancelled: false, recurrence: [], exceptions: [], calendar: calendarName });
+        continue;
+      }
+      const start = icsStamp(startValue);
+      if (!start) {
+        warnings.push("bad-start:" + (uid || "unnamed"));
+        items.push({ uid, summary: icsText(one("SUMMARY")?.value || "").trim().slice(0, 500), unreadable: true, startMs: null, endMs: null, allDay: false, cancelled: false, recurrence: [], exceptions: [], calendar: calendarName });
+        continue;
+      }
+      const endProp = one("DTEND") || one("DTSTART");
+      const endValue = endProp ? icsDateValue(endProp) : null;
+      const end = endValue ? icsStamp(endValue) : start;
+      const status = String(one("STATUS")?.value || "").toUpperCase();
+      const rec = icsRecurrence(raw.lines);
+      warnings.push(...rec.warnings);
+      const allDay = Boolean(startValue.time === null);
+      items.push({
+        uid: uid || "",
+        summary: icsText(one("SUMMARY")?.value || "").trim().slice(0, 500),
+        description: icsText(one("DESCRIPTION")?.value || "").trim().slice(0, 20000),
+        location: icsText(one("LOCATION")?.value || "").trim().slice(0, 500),
+        startMs: start.ms,
+        endMs: Math.max(start.ms, end ? end.ms : start.ms),
+        allDay,
+        cancelled: status === "CANCELLED",
+        recurrence: rec.rules,
+        exceptions: rec.exceptions,
+        floating: Boolean(start.floating),
+        tzid: startProp?.params?.TZID || "",
+        calendar: calendarName,
+      });
+    }
+    return { events: items, warnings };
+  }
+  // A parsed event as one calendar item. `kind` says whether the person wants it to remind them (a reminder) or to be
+  // something on the calendar (an event); a file has no such split, since every calendar means something different.
+  function icsToItem(event, { kind = "event", now = Date.now(), zone = "" } = {}) {
+    if (!event) return null;
+    const iso = (ms) => new Date(ms).toISOString();
+    const dayKey = (ms) => {
+      if (!zone) return localDateKey(ms);
+      try {
+        const parts = {};
+        for (const part of new Intl.DateTimeFormat("en-US", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(ms))) parts[part.type] = part.value;
+        return parts.year + "-" + parts.month + "-" + parts.day;
+      } catch (_) { return localDateKey(ms); }
+    };
+    const start = event.allDay ? { date: dayKey(event.startMs) } : { dateTime: iso(event.startMs) };
+    // An all-day event in a calendar file ends the day after its last day (DTEND is exclusive), which is what the
+    // calendar's own all-day items do too.
+    const end = event.allDay
+      ? (event.endMs > event.startMs ? { date: dayKey(event.endMs) } : { date: dayKey(event.startMs + 86400000) })
+      : (event.endMs > event.startMs ? { dateTime: iso(event.endMs) } : undefined);
+    const x = {
+      kind,
+      src: "ics",
+      ...(event.uid ? { icsUid: event.uid } : {}),
+      ...(event.calendar ? { icsCalendar: String(event.calendar).slice(0, 200) } : {}),
+      ...(event.location ? { icsLocation: event.location } : {}),
+      ...(event.tzid ? { tz: event.tzid } : {}),
+      ...(event.cancelled ? { icsCancelled: true } : {}),
+    };
+    const item = makeItem({
+      summary: event.summary || "Untitled",
+      description: event.description,
+      start,
+      ...(end ? { end } : {}),
+      ...(event.recurrence.length ? { recurrence: event.recurrence } : {}),
+      x,
+    }, now);
+    // The exceptions keep the shape `cleanItem` stores: occurrences this series skips.
+    if (item && event.exceptions.length) {
+      item.x.recurrenceExceptions = event.exceptions.map((value) => ({ scope: "this", cancelled: true, recurrenceId: event.allDay ? { date: dayKey(Date.parse(value)) } : { dateTime: value } }));
+    }
+    return item;
+  }
+  // What an import would do, without writing anything: which events are new, which update an item already imported from
+  // the same file (matched on the calendar's UID), and what is skipped and why.
+  function planIcsImport(parsed, existing, { kind = "event", now = Date.now(), zone = "" } = {}) {
+    const list = Array.isArray(existing) ? existing : [];
+    const byUid = new Map();
+    for (const item of list) if (item?.x?.icsUid && !byUid.has(item.x.icsUid)) byUid.set(item.x.icsUid, item);
+    const add = [], update = [], skipped = [];
+    let reminders = 0, events = 0, importedHolidays = 0;
+    // T2.13a: the whole file is read once for the feed it names, so every event of a holiday calendar is marked the
+    // same way. The mark is what keeps it out of the local sets and out of the work-free tint.
+    const feed = holidayFeedOf(parsed?.events);
+    for (const event of parsed?.events || []) {
+      if (event.cancelled) { skipped.push({ reason: "cancelled", summary: event.summary, uid: event.uid }); continue; }
+      if (event.unreadable) { skipped.push({ reason: "unreadable", summary: event.summary, uid: event.uid }); continue; }
+      const made = icsToItem(event, { kind, now, zone });
+      if (!made) { skipped.push({ reason: "unreadable", summary: event.summary, uid: event.uid }); continue; }
+      const item = feed ? markImportedHoliday(made, { feed }) : made;
+      if (isImportedHoliday(item)) importedHolidays++;
+      if (item.x.kind === "reminder") reminders++; else events++;
+      const already = event.uid ? byUid.get(event.uid) : null;
+      if (already) update.push({ item, existing: already });
+      else add.push(item);
+    }
+    const stamps = [...add, ...update.map((u) => u.item)].map((item) => Date.parse(item.start.dateTime || item.start.date + "T00:00:00"));
+    const valid = stamps.filter((n) => Number.isFinite(n));
+    return {
+      add, update, skipped, reminders, events, importedHolidays,
+      // The feed this file is, or "" — a holiday calendar is imported as events and is never a local holiday set.
+      holidayFeed: feed,
+      from: valid.length ? Math.min(...valid) : null,
+      to: valid.length ? Math.max(...valid) : null,
+      warnings: parsed?.warnings || [],
+    };
+  }
+
+  // ---------- syncState (T2.13) ----------
+  // Where an item stands relative to the copy it was last synced with, in the vocabulary a two-way sync needs later:
+  //   "new"      — never synced, and the other side has never seen it
+  //   "changed"  — synced once, and this side changed since
+  //   "deleted"  — gone here, still known to the other side
+  //   "clean"    — both sides agree (the etag the last sync stored is still the item's etag)
+  // `syncedEtag` is the etag of the copy the other side has. Nothing here talks to a network: it is the bookkeeping the
+  // ICS export and any future Google sync read, so a sync can be written without re-deriving what changed.
+  const SYNC_STATES = Object.freeze(["new", "changed", "deleted", "clean"]);
+  function syncStateOf(item) {
+    const synced = String(item?.x?.syncedEtag || "").trim();
+    if (item?.x?.syncedDeleted === true) return "deleted";
+    if (!synced) return "new";
+    return item.etag === synced ? "clean" : "changed";
+  }
+  // One item after a successful sync with `remoteEtag` (the etag of the copy now on the other side). The item's own etag
+  // is the one written, so a later local change is visible as a difference rather than being masked.
+  function markSynced(item, remoteEtag = "") {
+    if (!item || typeof item !== "object") return null;
+    const etag = String(remoteEtag || item.etag || "");
+    return cleanItem({ ...JSON.parse(JSON.stringify(item)), x: { ...item.x, syncedEtag: etag } }, 0);
+  }
+  // Marking a deletion has to work on a record that is gone, so it takes the id and what the other side knew.
+  function markSyncedDeleted(item) {
+    if (!item || typeof item !== "object") return null;
+    return cleanItem({ ...JSON.parse(JSON.stringify(item)), x: { ...item.x, syncedDeleted: true } }, 0);
+  }
+  // What a sync pass has to look at: everything not already "clean". Pure and clock-free; the caller decides what to do
+  // with each state (push a new one, push a change, push a delete, or nothing).
+  function syncPlan(items) {
+    const list = Array.isArray(items) ? items : [];
+    const plan = { new: [], changed: [], deleted: [], clean: [] };
+    for (const item of list) if (item) plan[syncStateOf(item)].push(item);
+    return { ...plan, pending: plan.new.length + plan.changed.length + plan.deleted.length };
+  }
+
+  // ---------- .ics export (T2.13) ----------
+  // The other direction of OW-53's reader. Everything here mirrors `parseIcs`: the same subset of RRULE, the same all-day
+  // convention (DTEND is exclusive), the same UID that makes a second import an update. A file written here and read
+  // back must produce the same calendar, and that round trip is the test.
+  // TEXT escapes are the reader's inverse: backslash, newline, comma, semicolon.
+  function icsEscape(value) {
+    return String(value == null ? "" : value)
+      .replace(/\\/g, "\\\\")
+      .replace(/\r\n?/g, "\n")
+      .replace(/\n/g, "\\n")
+      .replace(/,/g, "\\,")
+      .replace(/;/g, "\\;");
+  }
+  // A property line is folded at 75 octets (RFC 5545 3.1) with a leading space on each continuation. The reader unfolds
+  // by stripping one leading space, so folding is lossless here. Folding counts UTF-8 octets, not characters.
+  function icsFold(line) {
+    const text = String(line == null ? "" : line);
+    // UTF-8 length from the code point itself: 1, 2, 3 or 4 octets, exactly (the loop below walks code points, so a
+    // surrogate pair arrives as one character and counts once). No TextEncoder, so this part stays pure.
+    const bytesOf = (ch) => {
+      const cp = ch.codePointAt(0);
+      return cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+    };
+    const out = [];
+    let current = "", width = 0;
+    for (const ch of text) {
+      const n = bytesOf(ch);
+      // A continuation line starts with a space that itself counts, so the limit is 74 octets of content there.
+      const limit = out.length === 0 ? 75 : 74;
+      if (width + n > limit) { out.push(current); current = ch; width = 1 + n; }
+      else { current += ch; width += n; }
+    }
+    out.push(current);
+    return out.join("\r\n ");
+  }
+  // A UTC stamp in the shape the reader parses: 20261118T093000Z.
+  const icsUtcStamp = (ms) => new Date(ms).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+  // A civil date in the same shape, without a time: 20261118.
+  const icsDateStamp = (ymdText) => String(ymdText || "").replace(/-/g, "");
+
+  // One item -> one VEVENT body (an array of unfolded content lines, joined and folded by the caller).
+  function icsEventLines(item, { now = Date.now(), uidFor = null } = {}) {
+    if (!item || !item.start) return null;
+    const allDay = !!item.start.date;
+    const lines = [];
+    // The UID is what a re-import matches on. An item imported from a file keeps that file's UID; one that never saw a
+    // file gets a stable one built from its id, so exporting twice does not make two calendars.
+    const uid = String(item.x?.icsUid || "").trim() || String(uidFor ? uidFor(item) : "").trim();
+    if (!uid) return null;
+    lines.push("UID:" + icsEscape(uid));
+    // DTSTAMP is required; the item's own last change is the honest value (a file does not need a fresh stamp to differ).
+    const stamp = Number.isFinite(Date.parse(item.updated)) ? Date.parse(item.updated) : now;
+    lines.push("DTSTAMP:" + icsUtcStamp(stamp));
+    if (item.created && Number.isFinite(Date.parse(item.created))) lines.push("CREATED:" + icsUtcStamp(Date.parse(item.created)));
+    if (allDay) {
+      // An all-day DTSTART is a DATE. The stored end is already exclusive for all-day items, which is what DTEND wants.
+      lines.push("DTSTART;VALUE=DATE:" + icsDateStamp(item.start.date));
+      const endDate = item.end?.date || ymd(new Date(addDays(parseYmd(item.start.date).getTime(), 1)));
+      lines.push("DTEND;VALUE=DATE:" + icsDateStamp(endDate));
+    } else {
+      const zone = cleanZone(item.x?.tz);
+      const startMs = Date.parse(item.start.dateTime);
+      if (!Number.isFinite(startMs)) return null;
+      // While the item says which zone its wall clock belongs to, the file carries that wall clock with a TZID, so a
+      // person in another zone reads the same 09:00 the item means. Without one it is written as the UTC instant.
+      if (zone && !item.x?.icsFloating) {
+        lines.push("DTSTART;TZID=" + zone + ":" + icsWallClock(item.start.dateTime, zone));
+        const endMs = item.end?.dateTime ? Date.parse(item.end.dateTime) : startMs + 60 * MIN;
+        if (Number.isFinite(endMs)) lines.push("DTEND;TZID=" + zone + ":" + icsWallClock(new Date(endMs).toISOString(), zone));
+      } else {
+        lines.push("DTSTART:" + icsUtcStamp(startMs));
+        const endMs = item.end?.dateTime ? Date.parse(item.end.dateTime) : startMs + 60 * MIN;
+        if (Number.isFinite(endMs)) lines.push("DTEND:" + icsUtcStamp(endMs));
+      }
+    }
+    if (item.summary) lines.push("SUMMARY:" + icsEscape(item.summary));
+    if (item.description) lines.push("DESCRIPTION:" + icsEscape(item.description));
+    const location = item.x?.icsLocation || "";
+    if (location) lines.push("LOCATION:" + icsEscape(location));
+    if (item.status && item.status !== "confirmed") lines.push("STATUS:" + String(item.status).toUpperCase());
+    // The recurrence subset the reader keeps is already stored in its own lines ("RRULE:FREQ=..."), so it is written
+    // back verbatim — no re-derivation, and nothing this writer could get wrong that the reader would not notice.
+    for (const rule of Array.isArray(item.recurrence) ? item.recurrence : []) {
+      if (/^RRULE:/i.test(rule)) lines.push(rule.toUpperCase());
+    }
+    // Exceptions become EXDATE lines in the shape the start uses: a DATE for an all-day series, a UTC instant otherwise.
+    const exceptions = (item.x?.recurrenceExceptions || []).map((e) => e?.recurrenceId).filter(Boolean);
+    if (exceptions.length) {
+      const values = exceptions.map((when) => (allDay ? icsDateStamp(when.date) : icsUtcStamp(Date.parse(when.dateTime)))).filter(Boolean);
+      if (values.length) lines.push((allDay ? "EXDATE;VALUE=DATE:" : "EXDATE:") + values.join(","));
+    }
+    // The reminder offset the item carries, as one VALARM. A calendar item that reminds has to survive the round trip.
+    const overrides = item.reminders?.overrides || [];
+    if (overrides.length) {
+      const minutes = Math.round(Number(overrides[0].minutes));
+      if (Number.isFinite(minutes) && minutes >= 0) {
+        lines.push("BEGIN:VALARM", "ACTION:DISPLAY", "TRIGGER:-PT" + minutes + "M", "DESCRIPTION:" + icsEscape(item.summary || "Reminder"), "END:VALARM");
+      }
+    }
+    return lines;
+  }
+  // A wall clock in a named zone, as the reader expects beside a TZID parameter: 20261118T093000.
+  function icsWallClock(isoText, zone) {
+    const ms = Date.parse(isoText);
+    if (!Number.isFinite(ms)) return "";
+    const z = cleanZone(zone);
+    try {
+      const parts = {};
+      const fmt = new Intl.DateTimeFormat("en-US", { timeZone: z, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      for (const part of fmt.formatToParts(new Date(ms))) parts[part.type] = part.value;
+      return parts.year + parts.month + parts.day + "T" + (String(Number(parts.hour) % 24).padStart(2, "0")) + parts.minute + parts.second;
+    } catch (_) {
+      // A zone Intl does not know falls back to the UTC instant, which is what the reader would do too.
+      return new Date(ms).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+    }
+  }
+
+  // The UID an item that never came from a file is exported under. Stable for the same item, so exporting twice does
+  // not produce two calendars, and shaped like an address so a calendar app treats it as any other UID. `cleanItem`
+  // only keeps `icsUid` on imported items (deliberately: a new field must not churn etags), so this is the other way in.
+  const defaultIcsUid = (item) => {
+    const id = String(item?.id || "").trim();
+    return id ? id + "@zentral-notes" : "";
+  };
+  // A list of items -> one VCALENDAR. Pure: no clock beyond the fallback stamp, no filesystem, no preferences.
+  // `name` becomes X-WR-CALNAME, which the reader keeps as the imported calendar's name.
+  function icsFromItems(items, { now = Date.now(), name = "Zentral Notes", uidFor = defaultIcsUid, prodId = "-//Zentral Notes//Calendar//EN" } = {}) {
+    const list = (Array.isArray(items) ? items : []).filter((it) => it && it.start);
+    const out = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:" + prodId, "CALSCALE:GREGORIAN", "METHOD:PUBLISH"];
+    if (name) out.push("X-WR-CALNAME:" + icsEscape(name));
+    const skipped = [];
+    // A cancelled event is a tombstone from someone else's calendar, not our event: writing it back out would
+    // resurrect a thing that was taken away. Written once here so no caller can get it wrong.
+    const live = list.filter((it) => it.x?.icsCancelled !== true);
+    for (const item of live) {
+      const body = icsEventLines(item, { now, uidFor });
+      if (!body) { skipped.push({ reason: "no-uid", summary: item.summary || "" }); continue; }
+      out.push("BEGIN:VEVENT", ...body, "END:VEVENT");
+    }
+    out.push("END:VCALENDAR");
+    // CRLF is what RFC 5545 requires and what the reader normalises away when it reads.
+    return { text: out.map(icsFold).join("\r\n") + "\r\n", count: live.length - skipped.length, skipped };
+  }
 
   // ---------- items inside a note (roadmap T2.3) ----------
   // A section of a note becomes calendar items when a marker line `%%calendar: Category%%` stands in it (an Obsidian
@@ -2173,6 +2857,66 @@
       action, stage: ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "", at,
       ...(raw.coalesced === true ? { coalesced: true } : {}),
     };
+  }
+  // ST7.5: reading and trimming the reminder history from the settings.
+  // filterHistoryRecords is the one place that decides which records a person is looking at, so the list, the count and
+  // the export always agree. `action` is a set of actions, `days` is a look-back window (0 = everything), `text` matches
+  // the summary or the ids.
+  function cleanHistoryFilter(raw = {}) {
+    const src = raw && typeof raw === "object" ? raw : {};
+    const actions = (Array.isArray(src.actions) ? src.actions : src.action ? [src.action] : [])
+      .map((a) => String(a || "").trim()).filter((a) => REMINDER_HISTORY_ACTIONS.includes(a));
+    const days = Math.max(0, Math.min(3650, Math.floor(Number(src.days) || 0)));
+    return { actions: [...new Set(actions)], days, text: String(src.text || "").trim().slice(0, 120) };
+  }
+  function filterHistoryRecords(records, rawFilter = {}, nowMs = Date.now()) {
+    const filter = cleanHistoryFilter(rawFilter);
+    const list = Array.isArray(records) ? records : [];
+    const stamp = Number.isFinite(Number(nowMs)) ? Number(nowMs) : Date.now();
+    const cutoff = filter.days > 0 ? stamp - filter.days * 86400000 : 0;
+    const needle = filter.text.toLowerCase();
+    return list.filter((record) => {
+      if (!record) return false;
+      if (filter.actions.length && !filter.actions.includes(record.action)) return false;
+      if (cutoff && !(Number(record.at) >= cutoff)) return false;
+      if (needle) {
+        const haystack = [record.summary, record.itemId, record.occurrenceId, record.noteId, record.action, record.stage]
+          .map((value) => String(value || "").toLowerCase()).join("\u0000");
+        if (!haystack.includes(needle)) return false;
+      }
+      return true;
+    });
+  }
+  // What trimming would move now: the same rule the automatic compaction uses, run without writing anything, so the
+  // confirmation can name real numbers instead of a guess.
+  function historyPruneSurvey(records, nowMs, { retentionDays = REMINDER_HISTORY_RETENTION_DEFAULT } = {}) {
+    const list = Array.isArray(records) ? records : [];
+    const { kept, archived, cutoff, retentionDays: days } = compactReminderHistory(list, nowMs, { retentionDays });
+    const byAction = {};
+    for (const record of archived) byAction[record.action] = (byAction[record.action] || 0) + 1;
+    return { total: list.length, kept: kept.length, archived: archived.length, cutoff, retentionDays: days, byAction };
+  }
+  // A plain-text export: one line per record, newest first, the same fields a person can see in the list.
+  function exportHistoryLines(records, { lang = DEFAULT_NOTES_LANGUAGE } = {}) {
+    const list = Array.isArray(records) ? records.slice() : [];
+    list.sort((a, b) => (Number(b.at) || 0) - (Number(a.at) || 0) || (Number(b.seq) || 0) - (Number(a.seq) || 0));
+    return list.map((record) => {
+      const when = Number(record.at) ? new Date(Number(record.at)).toISOString() : "";
+      const start = record.start?.dateTime ? " start=" + record.start.dateTime : record.start?.date ? " start=" + record.start.date : "";
+      const stage = record.stage ? " stage=" + record.stage : "";
+      const summary = String(record.summary || "").replace(/\s+/g, " ").trim();
+      return [when, record.action, stage.trim(), "item=" + String(record.itemId || ""), summary].filter(Boolean).join("\t") + start;
+    }).join("\n") + (list.length ? "\n" : "");
+  }
+  // The summary line above the list, so an empty list still explains why it is empty.
+  function historySummaryLine(survey, filter = {}, { lang = DEFAULT_NOTES_LANGUAGE } = {}) {
+    const shown = Number(survey?.total) || 0, all = Number(survey?.all) || shown;
+    const parts = [String(shown) + " of " + String(all) + " records"];
+    const clean = cleanHistoryFilter(filter);
+    if (clean.days > 0) parts.push("last " + clean.days + " days");
+    if (clean.actions.length) parts.push(clean.actions.join(", "));
+    if (clean.text) parts.push("\"" + clean.text + "\"");
+    return parts.join(" \u00b7 ");
   }
   const REMINDER_STACK_LIMIT = 3;
   // Display and cross-window retirement rules for occurrence-scoped reminder cards.
@@ -3346,6 +4090,10 @@
   function cleanCalendarDensity(value) { return CALENDAR_DENSITIES.includes(value) ? value : "comfortable"; }
   const CALENDAR_LAYOUT_MODES = Object.freeze(["auto", "lr", "tb"]);
   function cleanCalendarLayout(value) { return CALENDAR_LAYOUT_MODES.includes(value) ? value : "auto"; }
+  // OW-81: what a note dragged onto the calendar becomes. "ask" keeps the old behaviour (the composer opens and the
+  // person picks), so nothing changes for anyone until they choose otherwise.
+  const NOTE_DROP_KINDS = Object.freeze(["ask", "event", "reminder"]);
+  function cleanNoteDropKind(value) { return NOTE_DROP_KINDS.includes(value) ? value : "ask"; }
   function calendarLayoutFor(mode, width, height) {
     const w = Math.max(0, Number(width) || 0), h = Math.max(0, Number(height) || 0);
     const requested = cleanCalendarLayout(mode);
@@ -3359,6 +4107,35 @@
     const n = Number(value);
     return Math.round(Math.max(0.2, Math.min(0.8, Number.isFinite(n) ? n : fallback)) * 1000) / 1000;
   }
+  // OW-97: the tree pane's width as PIXELS, set by the user, rather than a share of the window.
+  //
+  // The owner's rule: "user sets width for notes section and calendar takes all space left; when user stretches the
+  // Zentral window only the calendar section should adjust." A percentage share cannot do that — stretching the window
+  // widens both panes — so the setting is a width and the calendar is `1fr`.
+  //
+  // The bounds are the same 20%/80% the share allowed, but computed against the window at the moment it is applied, so
+  // the geometry a person already had stays reachable: a drag that used to stop at 20% of 1200px still stops at 240px.
+  // The floor is the squeeze ladder's own `tight` threshold less a margin, not an arbitrary 180: a floor above it would
+  // make the `tight` tier unreachable, and the tree would stop compacting exactly where a person drags to make it.
+  const TREE_WIDTH_LIMITS = Object.freeze({ min: 160, max: 900, default: 360 });
+  function cleanTreePaneWidth(value, fallback = TREE_WIDTH_LIMITS.default) {
+    const n = Number(value);
+    const base = Number.isFinite(n) && value !== "" && value !== null && typeof value !== "boolean"
+      ? n
+      : Number(fallback);
+    if (!Number.isFinite(base)) return TREE_WIDTH_LIMITS.default;
+    return Math.round(Math.max(TREE_WIDTH_LIMITS.min, Math.min(TREE_WIDTH_LIMITS.max, base)));
+  }
+  // The width a pixel setting becomes in a layout `widthPx` wide. Never wider than the share ceiling (a very narrow
+  // window would otherwise leave the calendar nothing) and never narrower than the floor.
+  function clampTreePaneWidth(widthPx, layoutWidthPx) {
+    const want = cleanTreePaneWidth(widthPx);
+    const layout = Math.max(0, Number(layoutWidthPx) || 0);
+    if (!layout) return want;
+    const ceiling = Math.max(TREE_WIDTH_LIMITS.min, Math.round(layout * 0.8 - 7));
+    return Math.round(Math.max(TREE_WIDTH_LIMITS.min, Math.min(want, ceiling, TREE_WIDTH_LIMITS.max)));
+  }
+
   // OW-32: All-notes tree pane squeeze tier from its effective inline width.
   // Priority order when squeezing: (1) never hide interactable areas, (2) keep titles intact, (3) collapse contents first.
   const TREE_SQUEEZE_THRESHOLDS = Object.freeze({ compact: 320, narrow: 245, tight: 170 });
@@ -3440,7 +4217,7 @@
 
   // ---------- all-day strip ----------
   // Items that sit in the strip above the time grid on `day`: all-day events and all-day reminders.
-  const allDayOf = (items, day) => itemsInRange(items, day, addDays(day, 1)).filter((it) => isAllDay(it) || (isReminder(it) && isAllDay(it)));
+  const allDayOf = (items, day) => itemsInRange(items, day, nextDayStart(day)).filter((it) => isAllDay(it) || (isReminder(it) && isAllDay(it)));
 
   // ---------- recurrence (RRULE subset: FREQ DAILY/WEEKLY/MONTHLY/YEARLY, INTERVAL, COUNT, UNTIL, BYDAY for weekly) ----------
   const DAY_CODES = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
@@ -3858,7 +4635,7 @@
     const hours = opts.hours ? cleanCalendarHours({ ...opts.hours, on: true }) : null;
     const hoursOf = (d) => workRange(d, { days: [0, 1, 2, 3, 4, 5, 6], startMin: hours.startMin, endMin: hours.endMin }, zone);
     if (opts.work || hours) {
-      for (let d = dayStart(from); d < to; d = addDays(d, 1)) {
+      for (let d = civilDayStart(from, 0); d < to; d = civilDayStart(d, 1)) {
         let r = opts.work ? workRange(d, opts.work, zone) : hoursOf(d);
         if (r && opts.work && hours) { const h = hoursOf(d); r = h ? [Math.max(r[0], h[0]), Math.min(r[1], h[1])] : null; }
         if (r) windows.push([Math.max(r[0], rangeFrom), Math.min(r[1], rangeTo)]);
@@ -3903,6 +4680,46 @@
       minHeight: bounded(o.minHeight, DEFAULT_CALENDAR_PICKER.minHeight, 240, 720),
       colorMode: ["count", "category"].includes(o.colorMode) ? o.colorMode : DEFAULT_CALENDAR_PICKER.colorMode,
     };
+  }
+  // OW-55: what a day off looks like. Three kinds, each a hex colour and a strength in percent; the defaults are
+  // exactly the literals the stylesheet shipped with, so a sheet that never touched the setting is unchanged.
+  const DEFAULT_DAY_LOOK = Object.freeze({
+    weekend: Object.freeze({ color: "#6ca8ff", strength: 10 }),
+    holiday: Object.freeze({ color: "#f0b85b", strength: 13 }),
+    free: Object.freeze({ color: "#78a9c8", strength: 4 }),
+  });
+  const DAY_LOOK_KINDS = Object.freeze(["weekend", "holiday", "free"]);
+  const DAY_LOOK_MAX_STRENGTH = 100;
+  function cleanDayLookColor(value, fallback) {
+    const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+    return /^#[0-9a-f]{6}$/.test(raw) ? raw : fallback;
+  }
+  function cleanDayLookStrength(value, fallback) {
+    if (value === null || value === undefined || value === "") return fallback;
+    const number = typeof value === "number" || (typeof value === "string" && value.trim() !== "") ? Number(value) : NaN;
+    if (!Number.isFinite(number)) return fallback;
+    return Math.max(0, Math.min(DAY_LOOK_MAX_STRENGTH, Math.round(number)));
+  }
+  // { weekend: {color, strength}, holiday: {...}, free: {...} }; junk in one field falls back for that field only.
+  function cleanDayLook(value) {
+    const o = value && typeof value === "object" ? value : {};
+    const one = (kind) => {
+      const raw = o[kind] && typeof o[kind] === "object" ? o[kind] : {};
+      const def = DEFAULT_DAY_LOOK[kind];
+      return { color: cleanDayLookColor(raw.color, def.color), strength: cleanDayLookStrength(raw.strength, def.strength) };
+    };
+    const out = {};
+    for (const kind of DAY_LOOK_KINDS) out[kind] = one(kind);
+    return out;
+  }
+  // The CSS value for one kind, or "" when it equals the default (the stylesheet's own fallback then applies and the
+  // rule stays byte-identical for anyone who never opened the setting).
+  function dayLookTint(look, kind) {
+    const clean = cleanDayLook(look);
+    const picked = clean[kind] || DEFAULT_DAY_LOOK[kind];
+    const def = DEFAULT_DAY_LOOK[kind] || DEFAULT_DAY_LOOK.free;
+    if (picked.color === def.color && picked.strength === def.strength) return "";
+    return `color-mix(in srgb, ${picked.color} ${picked.strength}%, transparent)`;
   }
   // The hours the grid has to show: the chosen ones, widened by whole hours until every timed item of the days in
   // view lies inside. Off = 0..1440. The hours follow the times of the items, not the size of their boxes: a reminder
@@ -4155,10 +4972,10 @@
   function zonedDayBounds(dateKey, zone = "") {
     const date = parseYmd(dateKey);
     if (!date) return null;
-    if (!zone) return [date.getTime(), addDays(date.getTime(), 1)];
+    if (!zone) return [date.getTime(), nextDayStart(date.getTime())];
     const valid = cleanZone(zone);
     if (!valid) return null;
-    const nextKey = localDateKey(addDays(date.getTime(), 1));
+    const nextKey = localDateKey(nextDayStart(date.getTime()));
     const start = zonedDateTimeToMs(dateKey, "00:00", valid), end = zonedDateTimeToMs(nextKey, "00:00", valid);
     return Number.isFinite(start) && Number.isFinite(end) && end > start ? [start, end] : null;
   }
@@ -4710,7 +5527,7 @@
     const parsed = typeof day === "string" ? parseYmd(day) : null;
     const value = parsed ? parsed.getTime() : Number(day);
     if (!Number.isFinite(value)) return { day: 0, count: 0, level: 0, dominantCategory: "" };
-    const from = dayStart(value), to = addDays(from, 1);
+    const from = dayStart(value), to = nextDayStart(from);
     const categories = new Map();
     const entries = expandRange(Array.isArray(items) ? items : [], from, to);
     for (const item of entries) {
@@ -4938,7 +5755,8 @@
     const start = whenMs(item.start), end = item.end ? whenMs(item.end) : start;
     if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
     const lastVisibleItemDay = dayStart(end > start ? end - 1 : start);
-    return { from: addDays(dayStart(start), -policy.leadDays), to: addDays(lastVisibleItemDay, policy.tailDays + 1) };
+    // TM3.7: the `to` edge is the next midnight after the last visible day, so it must not keep the wall clock.
+    return { from: civilDayStart(start, -policy.leadDays), to: civilDayStart(lastVisibleItemDay, policy.tailDays + 1) };
   }
   // Return local-midnight [from, to) boundaries. Offsets are civil days rather than
   // 24-hour durations, so spring/fall DST changes never shift the visible date.
@@ -4953,7 +5771,7 @@
     const stamp = Number(now);
     if (!Number.isFinite(stamp)) return null;
     const today = dayStart(stamp), count = Math.max(1, Math.min(31, Math.floor(Number(days)) || 4));
-    const tomorrow = addDays(today, 1), horizon = addDays(today, count);
+    const tomorrow = civilDayStart(today, 1), horizon = civilDayStart(today, count);
     let next = Infinity;
     for (const item of items || []) {
       const policy = preparedAgendaWindow(item, getWindow, policies);
@@ -4975,14 +5793,35 @@
     }
     return Number.isFinite(next) ? next : null;
   }
+  // SB6.9: how many of these items are still ahead. A timed item counts while it has not ended; an all-day item or a
+  // reminder counts while its own moment has not passed, and a reminder without a time counts for the whole day.
+  // SB6.9: how many of these Agenda entries are still ahead. The input is always the projected shape (see
+  // `agendaZenItem`): it carries a number start and end and says itself whether it ended. An all-day entry is a day, not
+  // a moment, so it is left until that day is over; an entry that ended is not left. Done items never reach a bucket.
+  function agendaLeftCount(items, now) {
+    const stamp = Number(now);
+    if (!Number.isFinite(stamp) || !Array.isArray(items)) return 0;
+    let left = 0;
+    for (const item of items) {
+      if (!item) continue;
+      if (item.allDay) { left++; continue; }
+      if (typeof item.ended === "boolean") { if (!item.ended) left++; continue; }
+      // A shape without `ended`: fall back to its own start and end against the clock. An entry with neither cannot be
+      // placed on the clock, so it is not counted as left (rather than being counted for ever).
+      const start = Number(item.start), end = Number.isFinite(Number(item.end)) ? Number(item.end) : start;
+      if (!Number.isFinite(start) && !Number.isFinite(end)) continue;
+      if (!Number.isFinite(end) || end > stamp) left++;
+    }
+    return left;
+  }
   function agendaBuckets(items, now, days = 4, isDone = () => false, locale = undefined) {
     const n = Math.max(1, Math.min(31, Math.floor(Number(days)) || 4));
     const base = dayStart(now);
     const out = [];
     for (let i = 0; i < n; i++) {
-      const from = addDays(base, i), to = addDays(base, i + 1);
+      const from = civilDayStart(base, i), to = civilDayStart(base, i + 1);
       const list = expandRange(items, from, to).filter((it) => !isDone(it));
-      out.push({ offset: i, key: localDateKey(from), label: agendaDayLabel(i, from, locale), from, to, count: list.length, items: list });
+      out.push({ offset: i, key: localDateKey(from), label: agendaDayLabel(i, from, locale), from, to, count: list.length, left: agendaLeftCount(list, now), items: list });
     }
     return out;
   }
@@ -4998,7 +5837,7 @@
       return "- " + range + " · " + (item.summary || "Untitled");
     };
     const today = buckets[0] || { key: localDateKey(dayStart(now)), items: [], count: 0 };
-    const tomorrow = buckets[1] || { key: localDateKey(addDays(dayStart(now), 1)), items: [], count: 0 };
+    const tomorrow = buckets[1] || { key: localDateKey(civilDayStart(now, 1)), items: [], count: 0 };
     return {
       today: { ...today, lines: today.items.map(line) },
       tomorrow: { ...tomorrow, lines: tomorrow.items.map(line) },
@@ -5066,7 +5905,7 @@
       allDay: isAllDay(item),
       reminder: isReminder(item),
       sourceNoteTrashed: !!item.x?.sourceNoteTrashed,
-      color: String(item.x?.color || resolveItemColor(item.x?.noteColor || "", item.x?.categoryColor || "") || ""),
+      color: String(resolveItemColor(item.x?.color || "", item.x?.noteColor || "", item.x?.categoryColor || "") || ""),
       ended: !isReminder(item) && end > start && end <= Number(now),
     };
   }
@@ -5094,7 +5933,7 @@
     const candidateFrom = fastDefault ? base : addDays(base, -maxTail);
     const candidateTo = fastDefault ? windowEnd : addDays(windowEnd, maxLead);
     const buckets = Array.from({ length: n }, (_, offset) => {
-      const from = addDays(base, offset), to = addDays(base, offset + 1);
+      const from = civilDayStart(base, offset), to = civilDayStart(base, offset + 1);
       return { offset, key: localDateKey(from), label: agendaDayLabel(offset, from, options?.lang), from, to, count: 0, items: [] };
     });
     let candidates;
@@ -5132,13 +5971,21 @@
       for (let offset = first; offset <= last && offset < n; offset++) buckets[offset].items.push(item);
     }
     for (const bucket of buckets) bucket.count = bucket.items.length;
-    return buckets.map((bucket) => ({
-      key: "day:" + bucket.key,
-      date: bucket.key,
-      label: bucket.label,
-      count: bucket.count,
-      items: bucket.items.map((item) => agendaZenItem(item, bucket.key, now, options?.lang)),
-    }));
+    // SB6.9: `left` is counted from the projected entries, never from the raw items: the incremental projector only has
+    // the projected shape, and a second reader of the raw shape is a second rule (the fuzz test in
+    // `tests/notes-agenda-incremental.test.cjs` is what found the difference).
+    return buckets.map((bucket) => {
+      const items = bucket.items.map((item) => agendaZenItem(item, bucket.key, now, options?.lang));
+      return {
+        key: "day:" + bucket.key,
+        date: bucket.key,
+        label: bucket.label,
+        count: bucket.count,
+        // What is still ahead: an entry that ended, or whose day is over, is not left. Done items never reached here.
+        left: agendaLeftCount(items, now),
+        items,
+      };
+    });
   }
   // SB6.10: Incremental Agenda projection.
   // Flat, allocation-light item version signature covering every field that affects
@@ -5300,7 +6147,9 @@
       return { rawOccurrences, dayMap, dayOffsets: [...dayMap.keys()], timedEnds };
     }
 
-    function materializeDayBucket(offset) {
+    // SB6.9: `left` is the one field of a bucket that the clock alone can change, so it is taken from the clock of the
+    // run doing the materializing rather than from the previous one (which is what `lastNow` still holds here).
+    function materializeDayBucket(offset, stamp = lastNow) {
       const entries = dayEntries[offset];
       const dateKey = ctx.dayKeys[offset];
       const items = new Array(entries.length);
@@ -5310,6 +6159,8 @@
         date: dateKey,
         label: ctx.dayLabels[offset],
         count: items.length,
+        // SB6.9: the same "still ahead" rule as the stateless projection, so an incremental run tells the same story.
+        left: agendaLeftCount(items, Number.isFinite(stamp) ? stamp : Date.now()),
         items,
       };
     }
@@ -5379,7 +6230,7 @@
       }
       for (let offset = 0; offset < n; offset++) {
         dayEntries[offset].sort(compareEntries);
-        materializeDayBucket(offset);
+        materializeDayBucket(offset, stamp);
       }
       recomputeEndBoundaries(stamp);
       lastNow = stamp;
@@ -5571,7 +6422,7 @@
           rebuilt.sort(compareEntries);
           dayEntries[offset] = rebuilt;
         }
-        materializeDayBucket(offset);
+        materializeDayBucket(offset, stamp);
       }
 
       if (changedIds.length || removedIds.length || stamp >= nextEndBoundary || stamp < prevEndBoundary) {
@@ -5627,6 +6478,138 @@
   function agendaVisibleDays(projection) {
     return (projection || []).filter((day) => day && day.count > 0);
   }
+  // SB6.9 (the LEFT half): should the Agenda folder fold itself away right now? Two independent reasons, either of
+  // which is enough, and none of them is allowed to fold a folder that has something due in the window they exist for:
+  //   quiet hours      — outside the person's own hours (an overnight range crosses midnight)
+  //   nothing soon     — every remaining item is further away than `dueWithinHours`
+  // The rule is pure: it takes the clock and the projection, so the behaviour can be tested at any hour. A folder with
+  // nothing in it never folds (there is nothing to hide, and an empty folder is already quiet).
+  // ST7.3: the calendar's own view state is not notes metadata. `meta.json` also holds the folders, the note opened
+  // last and up to five thousand per-note alert/Agenda overrides, and it is rewritten whole; putting the view cursor in
+  // it meant that pressing "Next" rewrote every folder and every override 600 ms later. The view now lives in its own
+  // small file, and these three helpers are the whole contract: which keys move, which stay, and how an old
+  // `meta.json` is read once so that nobody loses the view they were looking at.
+  const UI_STATE_KEYS = Object.freeze([
+    "calendarView", "calendarCursor", "calendarTab", "calendarLayout",
+    "calendarSplitLR", "calendarSplitTB", "calendarTreeWidth", "calendarTreeCollapsed", "calendarPaneCollapsed",
+    "calendarFiltersCollapsed", "calendarBigPictureFiltersCollapsed", "calendarBigPictureTreeCollapsed",
+    "calendarBigPictureSize",
+    "calendarScale", "calendarPicker", "calendarWeekStart", "calendarWeekNumbers", "calendarWeekSpan",
+    "calendarSnap", "calendarDaysForward", "calendarFilterKind", "calendarFilterCategory",
+    "calendarBigPictureFilterKind", "calendarBigPictureFilterCategory", "calendarHours",
+    "calendarDisplayZone", "calendarRecentZones",
+    // OW-103: which sheet view the person was looking at — an editor note or All notes / the calendar — and which
+    // list filter. Switching the Zentral web panel tears the sheet down and opens it again, and without these the
+    // sheet always came back on the last note, throwing the person out of the calendar they were working in.
+    "sheetView", "sheetFilter",
+  ]);
+  const isUiStateKey = (key) => UI_STATE_KEYS.includes(key);
+  // -> { ui: what belongs in the view file, meta: what is left for meta.json }. A key that is not in the list never
+  // moves: folders, notes, alerts, overrides and free/busy-day settings are content and stay where they were.
+  function splitUiState(source) {
+    const src = source && typeof source === "object" ? source : {};
+    const ui = {}, meta = {};
+    for (const key of Object.keys(src)) (isUiStateKey(key) ? ui : meta)[key] = src[key];
+    return { ui, meta };
+  }
+  // Read once, from an old `meta.json` that still carries the view. `stored` wins where it has the key (the split
+  // already happened); otherwise the view key is taken out of the metadata. Only the keys in UI_STATE_KEYS come across,
+  // so a damaged or hand-edited file cannot smuggle anything else into the view file.
+  function migrateUiState(stored, metaRaw) {
+    const source = metaRaw && typeof metaRaw === "object" ? metaRaw : {};
+    const have = stored && typeof stored === "object" ? stored : null;
+    const ui = {};
+    let migrated = false;
+    for (const key of UI_STATE_KEYS) {
+      if (have && Object.hasOwn(have, key)) ui[key] = have[key];
+      else if (Object.hasOwn(source, key)) { ui[key] = source[key]; migrated = true; }
+    }
+    // A view file that exists but says nothing useful is still "there": the caller must not keep re-reading meta.json.
+    return { ui, migrated, seen: !!have || migrated };
+  }
+  const AGENDA_FOLD_DEFAULTS = Object.freeze({ quiet: false, quietStart: "22:00", quietEnd: "07:00", dueWithinHours: 0 });
+  function cleanClockText(value, fallback) {
+    const m = /^(\d{1,2})[:.](\d{2})$/.exec(String(value ?? "").trim());
+    if (!m) return fallback;
+    const h = Number(m[1]), min = Number(m[2]);
+    if (!(h >= 0 && h <= 23) || !(min >= 0 && min <= 59)) return fallback;
+    return String(h).padStart(2, "0") + ":" + String(min).padStart(2, "0");
+  }
+  function cleanAgendaFold(raw = {}) {
+    const src = raw && typeof raw === "object" ? raw : {};
+    const hours = Number(src.dueWithinHours);
+    return {
+      quiet: src.quiet === true,
+      quietStart: cleanClockText(src.quietStart, AGENDA_FOLD_DEFAULTS.quietStart),
+      quietEnd: cleanClockText(src.quietEnd, AGENDA_FOLD_DEFAULTS.quietEnd),
+      dueWithinHours: Number.isFinite(hours) && hours >= 0 ? Math.min(168, Math.round(hours)) : 0,
+    };
+  }
+  const clockMinutes = (text) => {
+    const clean = cleanClockText(text, "");
+    if (!clean) return null;
+    const [h, m] = clean.split(":").map(Number);
+    return h * 60 + m;
+  };
+  // A range whose end is before its start crosses midnight (22:00 -> 07:00 is the normal case).
+  function inQuietHours(nowMs, startText, endText) {
+    const start = clockMinutes(startText), end = clockMinutes(endText);
+    if (start === null || end === null || start === end) return false;
+    const d = new Date(nowMs);
+    const minute = d.getHours() * 60 + d.getMinutes();
+    return start < end ? minute >= start && minute < end : minute >= start || minute < end;
+  }
+  // `days` is the Agenda projection (each day carries `from`, `to` and `items`); an item's own start decides whether it
+  // is inside the window, because a day bucket can hold tomorrow's item.
+  function agendaFoldPlan(nowMs, days, rawOptions = {}) {
+    const opts = cleanAgendaFold(rawOptions);
+    const list = (days || []).filter((day) => day && Array.isArray(day.items) && day.items.length > 0);
+    if (!list.length) return { fold: false, quiet: false, nothingSoon: false, nextMs: 0, reasons: [] };
+    // The NEXT start at or after now, not simply the earliest one: an item that already began is not something the
+    // folder has to stay open for, and taking the minimum would let a morning item keep an evening folder open.
+    let nextMs = Infinity;
+    for (const day of list) {
+      for (const item of day.items) {
+        const start = Number(item?.start ?? item?.from ?? day.from);
+        if (Number.isFinite(start) && start >= nowMs && start < nextMs) nextMs = start;
+      }
+    }
+    const quiet = opts.quiet && inQuietHours(nowMs, opts.quietStart, opts.quietEnd);
+    const windowMs = opts.dueWithinHours * 60 * 60 * 1000;
+    // "Nothing soon" is about the window, not about the next item: an item that already started (or one that is
+    // further away than the window) is not something the folder needs to stay open for.
+    // A window of 0 means "no window" — this reason is OFF. That is deliberate: a feature that hides a folder must not
+    // ship on by default, and 0 is the value the setting starts at. A person who wants it picks real hours.
+    const nothingSoon = windowMs > 0 && (!Number.isFinite(nextMs) || nextMs > nowMs + windowMs);
+    const reasons = [];
+    if (quiet) reasons.push("quiet-hours");
+    if (nothingSoon) reasons.push("nothing-soon");
+    return { fold: reasons.length > 0, quiet, nothingSoon, nextMs: Number.isFinite(nextMs) ? nextMs : 0, reasons };
+  }
+  // SB6.6: what closing an Agenda tab does. "hide-today" is the default: the row stays gone until tomorrow, because a
+  // tab that reappears the instant it is closed reads as a bug. "dismiss" runs the Dismiss command where the item
+  // has one and hides it for the day otherwise (an event has no dismiss). "reappear" keeps the old behaviour.
+  const AGENDA_CLOSE_ACTIONS = Object.freeze(["hide-today", "dismiss", "reappear"]);
+  function cleanAgendaCloseAction(value) {
+    const action = String(value ?? "").trim();
+    return AGENDA_CLOSE_ACTIONS.includes(action) ? action : "hide-today";
+  }
+  // A closed row is hidden by its projection key, which carries the day (`...@2026-11-17`), so a multi-day event keeps
+  // its other days and a recurring reminder comes back tomorrow without any bookkeeping. Nothing else is filtered:
+  // a day that loses all of its rows is dropped, as the projection would have dropped it.
+  function applyAgendaClosedDays(days, closed) {
+    const hidden = closed && typeof closed.has === "function" ? closed : new Set(closed || []);
+    if (!hidden.size) return days || [];
+    const out = [];
+    for (const day of days || []) {
+      if (!day || !Array.isArray(day.items)) { out.push(day); continue; }
+      const items = day.items.filter((item) => !hidden.has(String(item?.key || "")));
+      if (items.length === day.items.length) { out.push(day); continue; }
+      if (!items.length) continue;
+      out.push({ ...day, items, count: items.length });
+    }
+    return out;
+  }
   // SB6.4: cap the total number of non-overdue Agenda sidebar tabs across day folders,
   // distributing budget earliest-first and collapsing overflow into a single '+N more…' node.
   const AGENDA_MAX_ITEMS_DEFAULT = 40;
@@ -5670,7 +6653,7 @@
   }
   // Coalesced, store-change-driven controller for the virtual Zen Agenda folder. The host
   // supplies DOM/Zen operations through `api`; this controller owns no browser globals.
-  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getMaxItems = () => 0, getEnabled = () => true, getReady = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, hasHistoryTracking = false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), getLanguage = () => undefined, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
+  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getMaxItems = () => 0, getEnabled = () => true, getReady = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, hasHistoryTracking = false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), getLanguage = () => undefined, getHiddenKeys = null, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
     let dead = false, timer = null, timerAt = Infinity, last = [], lastMore = null, busy = false, consecutiveChanges = 0, blockedUntil = 0;
     const projector = createIncrementalAgendaProjector();
     let historyTracked = !!hasHistoryTracking, historyVersion = 0, pendingHistoryDirtyAll = false;
@@ -5701,7 +6684,7 @@
     }
     function scheduleBoundary(items, policies, projection, overdue) {
       let due = nextAgendaVisibilityBoundary(items, now(), getDays(), getWindow, policies, projection);
-      if (overdue) { const tomorrow = addDays(dayStart(now()), 1); if (due === null || tomorrow < due) due = tomorrow; }
+      if (overdue) { const tomorrow = civilDayStart(now(), 1); if (due === null || tomorrow < due) due = tomorrow; }
       if (due === null) clearScheduled(); else armAt(due);
     }
     function runNow() {
@@ -5741,8 +6724,11 @@
         lastProjectionStats = projected.stats;
         overdue = agendaOverdueProjection(sourceItems, projNow, { ...getOverdue(), isDone, getWindow, policies, lang });
         const capped = applyAgendaItemCap(agendaVisibleDays(fullProjection), getMaxItems?.(), { lang });
-        const projection = [...(overdue ? [overdue] : []), ...capped.days];
-        if (!projection.length && !capped.more) {
+        const hidden = getHiddenKeys?.() || null;
+        const baseDays = [...(overdue ? [overdue] : []), ...capped.days];
+        const projection = hidden && typeof hidden.has === "function" && hidden.size ? applyAgendaClosedDays(baseDays, hidden) : baseDays;
+        const more = capped.more && !(hidden?.has?.(String(capped.more.key || ""))) ? capped.more : null;
+        if (!projection.length && !more) {
           api.removeAll?.(); last = projection; lastMore = null; scheduleBoundary(sourceItems, policies, fullProjection, overdue); return projection;
         }
         if (api.ensureRoot?.(getPosition() === "below" ? "below" : "above") === false) { scheduleBoundary(sourceItems, policies, fullProjection, overdue); return last; }
@@ -5751,7 +6737,7 @@
           desired.push({ key: day.key, kind: "day", label: day.label, date: day.date, count: day.count, parent: "" });
           for (const item of day.items) desired.push({ ...item, kind: "item", parent: day.key, tooltip: item.details });
         }
-        if (capped.more) desired.push({ ...capped.more, kind: "item", parent: "", tooltip: capped.more.details });
+        if (more) desired.push({ ...more, kind: "item", parent: "", tooltip: more.details });
         const current = api.list?.() || [], currentByKey = new Map();
         for (const entry of current) if (entry?.key && !currentByKey.has(entry.key)) currentByKey.set(entry.key, entry);
         const desiredByKey = new Map(desired.map((entry) => [entry.key, entry]));
@@ -5768,7 +6754,7 @@
         for (const day of desired.filter((entry) => entry.kind === "day"))
           api.reorder?.(day.key, desired.filter((entry) => entry.kind === "item" && entry.parent === day.key).map((entry) => entry.key));
         last = projection;
-        lastMore = capped.more;
+        lastMore = more;
         scheduleBoundary(sourceItems, policies, fullProjection, overdue);
         if (operations || (api.mutationCount?.() || 0) !== revision) consecutiveChanges++;
         else consecutiveChanges = 0;
@@ -6018,6 +7004,76 @@
     return null;
   }
 
+  // OW-58: an item either owns text in a note (a `%%calendar%%` line, a dated list line, an Agenda mirror) or it does
+  // not (hand-made in the calendar, or imported from an .ics file). Only the first kind can be "edited in its note";
+  // the second is deleted, coloured and converted right here. One predicate, so no menu or store path has to remember
+  // the list of sources.
+  function itemOwnsNoteText(item) {
+    const src = String(item?.x?.src || "");
+    if (src === "list" || src === "note") return true;
+    return isMirroredAgendaItem(item);
+  }
+  function itemIsFreeStanding(item) {
+    return Boolean(item && typeof item === "object" && String(item.id || "")) && !itemOwnsNoteText(item);
+  }
+
+  // OW-59: the items a note has linked, in one list, so a person can see them and unlink one. Only real calendar
+  // items are listed (an item with no id, or one that belongs to another note, is not this note's business).
+  // A date alone ("what is on this day?") is a scope too: it crosses notes, because the question the owner asks from
+  // the date's menu is about the day, not about one note. A note alone scopes to that note; both scopes together
+  // answer "what of this note is on this day".
+  function noteLinkedItems(items, noteId, opts = {}) {
+    const wanted = String(noteId ?? "");
+    const dateKey = String(opts.date ?? "").trim();
+    if (!wanted && !dateKey) return [];
+    if (!Array.isArray(items)) return [];
+    return items
+      .filter((item) => item && String(item.id || ""))
+      .filter((item) => !wanted || String(item.x?.noteId || "") === wanted)
+      .filter((item) => !dateKey || localDateKey(itemRange(item)[0]) === dateKey)
+      .map((item) => ({
+        id: item.id,
+        kind: isReminder(item) ? "reminder" : "event",
+        title: String(item.summary || "").trim() || "Untitled item",
+        date: Number.isFinite(itemRange(item)[0]) ? localDateKey(itemRange(item)[0]) : "",
+        allDay: isAllDay(item),
+        source: ["list", "note"].includes(item.x?.src) ? item.x.src : item.x?.src === "ics" ? "ics" : "manual",
+        mirrored: isMirroredAgendaItem(item),
+        ownsNoteText: itemOwnsNoteText(item),
+      }))
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)) || a.title.localeCompare(b.title));
+  }
+  // How an unlink reads per source, as words the caller shows before it writes anything.
+  function unlinkPlan(item) {
+    if (!item || typeof item !== "object" || !String(item.id || "")) {
+      return { ok: false, source: "", action: "none", keepsText: false, reason: "no-item" };
+    }
+    if (!itemOwnsNoteText(item)) return { ok: false, source: "free", action: "none", keepsText: false, reason: "no-note-text" };
+    if (isMirroredAgendaItem(item)) return { ok: true, source: "list", action: "remove-line", keepsText: false, reason: "" };
+    if (item.x?.src === "list") return { ok: true, source: "list", action: "drop-date", keepsText: true, reason: "" };
+    return { ok: true, source: "note", action: "drop-schedule", keepsText: true, reason: "" };
+  }
+  // The line minus its leading date (and time): the words stay, the calendar stops seeing a schedule in them.
+  // null when the line has no leading date this reader recognises, so a caller never guesses and never half-edits.
+  function unlinkLineText(line, now = 0) {
+    const text = String(line || "");
+    if (!text) return null;
+    const head = LINE_HEAD_RE.exec(text);
+    if (!head) return null;
+    const afterBox = head[2];
+    const prefix = parseDatePrefix(stripItemIdMarks(afterBox), now);
+    if (!prefix || afterBox.indexOf(prefix.raw) !== 0) return null;
+    // A bare time ("09:00 Dentist") is not a date; unlinking that would silently delete the person's time.
+    if (/^\d{1,2}[:.]\d{2}$/.test(prefix.raw)) return null;
+    let rest = afterBox.slice(prefix.raw.length).replace(/^\s*/, "");
+    const time = LINE_TIME_RE.exec(rest);
+    if (time) rest = rest.slice(time[1].length).replace(/^\s*/, "");
+    // The identity marks go with the date: leaving `%%zn-item-id:…%%` behind would re-create the item on the next
+    // read, which is the opposite of unlinking. The words and the checkbox stay; only what made it a calendar item goes.
+    rest = stripItemIdMarks(rest).replace(ITEM_CATEGORY_RE, (m, value) => (String(value || "").trim() ? m : "")).replace(/\s+$/, "");
+    return rest ? head[1] + rest : null;
+  }
+
   // Per-target context menu model for calendar rows. This stays pure so every calendar surface can
   // render the same capabilities and reasons without duplicating lifecycle/source rules.
   // SB6.2: Agenda root folder right-click menu entries (localized via language tables).
@@ -6030,12 +7086,20 @@
       { id: "hide-agenda", label: t("sidebar.agenda.root.hide", null, lang) },
     ];
   }
-  function calendarItemMenuModel(item, { state = "pending", historyWritable = false, agendaVisible, agendaWritable = true, lang = DEFAULT_NOTES_LANGUAGE } = {}) {
+  // ST7.8: the colours an item can be given, in the order the palette already uses. "none" clears the item's own
+  // colour so the note's or the category's shows again.
+  const ITEM_COLOR_CHOICES = Object.freeze(["yellow", "green", "blue", "pink", "purple", "orange", "red", "teal", "gray", "brown", "lime", "cyan"]);
+  function calendarItemMenuModel(item, { state = "pending", historyWritable = false, agendaVisible, agendaWritable = true, lang = DEFAULT_NOTES_LANGUAGE, writable = true } = {}) {
     if (!item || typeof item !== "object" || !String(item.id || "")) return [];
     const tr = (key, params = null) => t(key, params, lang);
     const reminder = isReminder(item);
-    const source = ["list", "note", "manual"].includes(item.x?.src) ? item.x.src : "manual";
-    const manual = source === "manual", mirrored = isMirroredAgendaItem(item);
+    // OW-53: an item that came from a calendar file is handled like a hand-made one (it can be edited, coloured and
+    // deleted here); only the three note-backed sources get the "edit it in its note" wording.
+    const source = ["list", "note", "manual", "ics"].includes(item.x?.src) ? item.x.src : "manual";
+    // OW-58: only an item that owns text in a note can say "delete it in its note". An imported item (`ics`) has no
+    // note at all and a hand-made one never did; both are deleted right here, where the person is looking.
+    const noteBacked = itemOwnsNoteText(item);
+    const manual = !noteBacked, mirrored = isMirroredAgendaItem(item);
     const recurring = !!item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length > 0);
     const lifecycle = ["pending", "done", "dismissed"].includes(state) ? state : "pending";
     const action = (id, label, enabled = true, reason = "") => ({ id, command: id, label, enabled: !!enabled, reason: enabled ? "" : String(reason || tr("menu.unavailable")) });
@@ -6048,8 +7112,21 @@
       action("change-time", tr(recurring ? "menu.changeOccurrenceTime" : "menu.changeTime"), source !== "note" && (!recurring || !!item.x?.recurrenceId), tr(source === "note" ? "menu.changeTimeNoteReason" : "menu.changeTimeRecurringReason")),
       action("convert", tr(reminder ? "menu.convertToEvent" : "menu.convertToReminder"), manual, tr("menu.convertParsedReason")),
       { sep: true },
+      {
+        id: "color", command: "color", label: tr("menu.color"), enabled: !!writable,
+        reason: writable ? "" : tr("menu.colorUnavailable"),
+        group: [
+          ...ITEM_COLOR_CHOICES.map((name) => ({
+            id: "color-" + name, command: "color-" + name, label: name,
+            enabled: !!writable, reason: writable ? "" : tr("menu.colorUnavailable"),
+            checked: cleanItemColor(item.x?.color) === name,
+          })),
+          { id: "color-custom", command: "color-custom", label: tr("menu.colorCustom"), enabled: !!writable, reason: writable ? "" : tr("menu.colorUnavailable") },
+          { id: "color-none", command: "color-none", label: tr("menu.colorInherit"), enabled: !!writable, reason: writable ? "" : tr("menu.colorUnavailable") },
+        ],
+      },
       action("duplicate", tr("menu.duplicate")),
-      action("delete", tr(deleteKey), manual || mirrored, tr("menu.deleteSourceReason")),
+      action("delete", tr(deleteKey), manual || mirrored, tr(noteBacked ? "menu.deleteSourceReason" : "menu.deleteUnavailableReason")),
     ];
     if (typeof agendaVisible === "boolean") {
       const agendaKey = !agendaWritable
@@ -6096,8 +7173,12 @@
     "agenda-visibility",
     "convert",
     "duplicate",
+    // ST7.8: a colour is one store write; the custom-colour dialog stays in the sheet.
+    ...ITEM_COLOR_CHOICES.map((name) => "color-" + name),
+    "color-none",
   ]);
-  const SHEET_AGENDA_COMMANDS = Object.freeze(["open", "edit", "change-time", "snooze-custom", "delete"]);
+  // "color-custom" opens the sheet's own colour dialog, so it belongs to the sheet side of the split.
+  const SHEET_AGENDA_COMMANDS = Object.freeze(["open", "edit", "change-time", "snooze-custom", "delete", "color-custom"]);
   const isHeadlessAgendaCommand = (command) => HEADLESS_AGENDA_COMMANDS.includes(String(command || ""));
   function snoozeMondayDays(item) {
     if (!item || typeof item !== "object") return 0;
@@ -6228,12 +7309,29 @@
     return value.replace(/\s+/g, " ").trim().slice(0, MAX_TEXT);
   }
 
-  // Source-note colour is authoritative for linked items; category colour is only the fallback.
-  // An empty/"none" note colour deliberately does not mask a useful category colour.
-  function resolveItemColor(noteColor, categoryColor) {
-    const note = typeof noteColor === "string" ? noteColor.trim() : "";
-    const category = typeof categoryColor === "string" ? categoryColor.trim() : "";
-    return note && note !== "none" ? note : category;
+  // ST7.8: three layers, closest first — the item's own colour, else its source note's, else its category's.
+  // An empty/"none" layer deliberately does not mask a useful one below it. The one-argument form is the old
+  // (note, category) call and keeps working, so a stored value never means something different after an upgrade.
+  function resolveItemColor(itemColor, noteColor, categoryColor) {
+    const layers = categoryColor === undefined ? [itemColor, noteColor] : [itemColor, noteColor, categoryColor];
+    for (const layer of layers) {
+      const value = typeof layer === "string" ? layer.trim() : "";
+      if (value && value !== "none") return value;
+    }
+    return "";
+  }
+  // What a colour value looks like once stored: a palette name, a #rrggbb, or "" to inherit. Anything else is dropped
+  // rather than stored, so a typo cannot paint a row invisible.
+  function cleanItemColor(value) {
+    const raw = String(value ?? "").trim();
+    if (!raw || raw === "none") return "";
+    const lower = raw.toLowerCase();
+    if (PALETTE_COLOR_HEX[lower]) return lower;
+    const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(raw);
+    if (!hex) return "";
+    return raw.length === 4
+      ? ("#" + raw[1] + raw[1] + raw[2] + raw[2] + raw[3] + raw[3]).toLowerCase()
+      : lower;
   }
 
   // Build a complete calendar item from composer fields. Dates are civil YYYY-MM-DD values;
@@ -6813,7 +7911,11 @@
     const isLight = relativeLuminance(surface) > 0.35;
     const scheme = isLight ? "light" : "dark";
     if (!baseEntry.surface) base = baseEntry[scheme];
-    const rawText = ov.text || (cleanTheme === "zentral" || cleanTheme === "recommended" ? options.hostText : "") || (isLight ? "#1c1c22" : "#e9e9f0");
+    // OW-78: the theme's OWN text colour, not a hardcoded pair. The stylesheet's per-theme hexes (`#1d1d22` for light,
+    // `#3b3226` for paper) are the fallback a rule shows before the resolver runs, so the resolver has to answer with
+    // the same colour or the sheet changes shade the moment JS sets `--zn-text-resolved`. `base` is already resolved for
+    // the scheme above, so `base.text` is the right entry here.
+    const rawText = ov.text || (cleanTheme === "zentral" || cleanTheme === "recommended" ? options.hostText : "") || base.text;
     const text = ensureContrastHex(rawText, surface, 7.0);
     const mutedSeed = mixSrgb(text, surface, 0.68);
     const muted = ensureContrastHex(mutedSeed, surface, 4.55);
@@ -7003,8 +8105,18 @@
     }
 
     if (k === "color" || k === "colour") {
+      const rawItem = cleanItemColor(item?.x?.color ?? srcLayers.itemColor);
       const rawNote = String(noteObj.color ?? srcLayers.noteColor ?? "").trim();
       const rawCat = String(catObj.color ?? srcLayers.categoryColor ?? "").trim();
+      // ST7.8: the layer this item set itself comes first, so "Inherit" names the note or the category only when
+      // this item has no colour of its own.
+      if (rawItem) {
+        const lower = rawItem.toLowerCase();
+        const hex = PALETTE_COLOR_HEX[lower] || resolveCssColor(rawItem) || rawItem;
+        const valLabel = PALETTE_COLOR_HEX[lower] ? (lower + " " + hex) : hex;
+        const inherited = resolveItemColor("", rawNote === "none" ? "" : rawNote, rawCat === "none" ? "" : rawCat);
+        return pack(hex, "item", "", valLabel, "this item", "Inherit (this item: " + valLabel + ")" + (inherited ? " elsewhere: " + inherited : ""));
+      }
       const resolved = resolveItemColor(rawNote, rawCat);
       if (resolved && rawNote && rawNote !== "none") {
         const lower = rawNote.toLowerCase();
@@ -7113,7 +8225,51 @@
   const HOLIDAY_REGIONS = Object.freeze(["none", "PL", "DE", "GB", "US", "EG"]);
   const WEEKEND_PRESETS = Object.freeze(["auto", "sat-sun", "fri-sat", "none"]);
   const HOLIDAY_PERSONAL_MAX = 200;
+  // OW-43: the holiday SET (which country's free days are shown) is a choice of its own, not a property of the
+  // interface language. The language only decides the language of the names. A set is one entry here plus one
+  // branch in holidaysFor(); the newest year its rules (and later the HOLIDAY_TABLE of OW-45) can serve is listed so
+  // the dialog can say when a person may want to look at it again.
+  const HOLIDAY_LOCALES = Object.freeze([
+    Object.freeze({ code: "PL", weekend: [6, 0], from: 1900, to: 2100 }),
+    Object.freeze({ code: "US", weekend: [6, 0], from: 1900, to: 2100 }),
+    Object.freeze({ code: "DE", weekend: [6, 0], from: 1900, to: 2100 }),
+    Object.freeze({ code: "GB", weekend: [6, 0], from: 1900, to: 2100 }),
+    Object.freeze({ code: "EG", weekend: [5, 6], from: 1900, to: 2100 }),
+  ]);
+  const HOLIDAY_LOCALE_CODES = Object.freeze(HOLIDAY_LOCALES.map((entry) => entry.code));
+  const HOLIDAY_LOCALES_MAX = 8;
+  // OW-45: every date of a set that no rule can compute lives here, one year at a time, so adding next year's
+  // Polish election day or the trading Sundays (`niedziela handlowa`) is one line of data — not a code change.
+  // `kind`: "holiday" (a day off), "trading-sunday" (a Sunday shops may open), "election" (a voting day).
+  // `name` is written in both interface languages; a missing year falls back to the rules above.
+  const HOLIDAY_TABLE = Object.freeze({
+    PL: Object.freeze({
+      // A trading Sunday is NOT a day off; it is shown so a person can plan around it (kind marks the difference).
+      2026: Object.freeze([
+        Object.freeze({ date: "2026-01-25", name: Object.freeze({ en: "Trading Sunday", pl: "Niedziela handlowa" }), kind: "trading-sunday" }),
+        Object.freeze({ date: "2026-04-12", name: Object.freeze({ en: "Trading Sunday", pl: "Niedziela handlowa" }), kind: "trading-sunday" }),
+        Object.freeze({ date: "2026-06-28", name: Object.freeze({ en: "Trading Sunday", pl: "Niedziela handlowa" }), kind: "trading-sunday" }),
+        Object.freeze({ date: "2026-08-30", name: Object.freeze({ en: "Trading Sunday", pl: "Niedziela handlowa" }), kind: "trading-sunday" }),
+        Object.freeze({ date: "2026-12-13", name: Object.freeze({ en: "Trading Sunday", pl: "Niedziela handlowa" }), kind: "trading-sunday" }),
+        Object.freeze({ date: "2026-12-20", name: Object.freeze({ en: "Trading Sunday", pl: "Niedziela handlowa" }), kind: "trading-sunday" }),
+      ]),
+      2027: Object.freeze([
+        Object.freeze({ date: "2027-01-31", name: Object.freeze({ en: "Trading Sunday", pl: "Niedziela handlowa" }), kind: "trading-sunday" }),
+        Object.freeze({ date: "2027-04-25", name: Object.freeze({ en: "Trading Sunday", pl: "Niedziela handlowa" }), kind: "trading-sunday" }),
+        Object.freeze({ date: "2027-06-27", name: Object.freeze({ en: "Trading Sunday", pl: "Niedziela handlowa" }), kind: "trading-sunday" }),
+        Object.freeze({ date: "2027-08-29", name: Object.freeze({ en: "Trading Sunday", pl: "Niedziela handlowa" }), kind: "trading-sunday" }),
+        Object.freeze({ date: "2027-12-12", name: Object.freeze({ en: "Trading Sunday", pl: "Niedziela handlowa" }), kind: "trading-sunday" }),
+        Object.freeze({ date: "2027-12-19", name: Object.freeze({ en: "Trading Sunday", pl: "Niedziela handlowa" }), kind: "trading-sunday" }),
+      ]),
+    }),
+    US: Object.freeze({}),
+    DE: Object.freeze({}),
+    GB: Object.freeze({}),
+    EG: Object.freeze({}),
+  });
+  const HOLIDAY_TABLE_KINDS = Object.freeze(["holiday", "trading-sunday", "election"]);
   const holidayYearCache = new Map();
+  const holidayMergeCache = new Map();
 
   function pad2(n) { return String(Math.max(0, Math.floor(Number(n) || 0))).padStart(2, "0"); }
   function ymdParts(year, month, day) { return `${year}-${pad2(month)}-${pad2(day)}`; }
@@ -7164,15 +8320,15 @@
     return day >= 1 ? ymdParts(y, mo, day) : "";
   }
   function regionWeekendDays(region) {
-    const code = HOLIDAY_REGIONS.includes(region) ? region : "none";
-    return code === "EG" ? [5, 6] : [6, 0];
+    const info = holidayLocaleInfo(region);
+    return info ? [...info.weekend] : [6, 0];
   }
   function weekendDaysFor(prefs) {
     const clean = cleanCalendarHolidays(prefs);
     if (clean.weekend === "none") return [];
     if (clean.weekend === "fri-sat") return [5, 6];
     if (clean.weekend === "sat-sun") return [6, 0];
-    return regionWeekendDays(clean.region);
+    return regionWeekendDays(clean.locales[0] || clean.region);
   }
   function defaultHolidayRegion(locale) {
     const parts = String(locale || "").trim().replace(/_/g, "-").split("-").filter(Boolean);
@@ -7184,12 +8340,50 @@
     const language = String(parts[0] || "").toLowerCase();
     return language === "pl" ? "PL" : language === "de" ? "DE" : "none";
   }
+  function holidayLocaleInfo(code) {
+    const key = String(code || "").trim().toUpperCase();
+    return HOLIDAY_LOCALES.find((entry) => entry.code === key) || null;
+  }
+  function cleanHolidayLocale(code) {
+    const info = holidayLocaleInfo(code);
+    return info ? info.code : "";
+  }
+  // The sets a fresh profile starts with, from the app locale. `none` means "no set chosen", never "weekends off".
+  function defaultHolidayLocales(locale) {
+    const region = defaultHolidayRegion(locale);
+    return region && region !== "none" && cleanHolidayLocale(region) ? Object.freeze([cleanHolidayLocale(region)]) : Object.freeze([]);
+  }
+  function cleanHolidayLocales(raw) {
+    const list = Array.isArray(raw) ? raw : (typeof raw === "string" ? raw.split(",") : []);
+    const out = [];
+    for (const entry of list) {
+      const code = cleanHolidayLocale(entry);
+      if (code && !out.includes(code)) out.push(code);
+      if (out.length >= HOLIDAY_LOCALES_MAX) break;
+    }
+    return Object.freeze(out);
+  }
   function cleanCalendarHolidays(raw, locale = "") {
     const src = raw && typeof raw === "object" ? raw : {};
     const enabled = src.enabled !== false;
     const regionExplicit = src.regionExplicit === true;
     const storedRegion = HOLIDAY_REGIONS.includes(src.region) ? src.region : null;
     const region = storedRegion && (storedRegion !== "none" || regionExplicit) ? storedRegion : defaultHolidayRegion(locale);
+    // OW-43: a stored list of sets wins. Without one, a stored single selection (every version before OW-43) is
+    // migrated once, and a fresh profile starts from the app locale.
+    // Also taken: an older single-map form (`{ PL: true, US: false }`), so a hand-written or half-migrated value works.
+    const legacyMap = src.locales && !Array.isArray(src.locales) && typeof src.locales === "object"
+      ? Object.keys(src.locales).filter((key) => src.locales[key]) : null;
+    const storedLocales = Array.isArray(src.locales) ? cleanHolidayLocales(src.locales) : (legacyMap ? cleanHolidayLocales(legacyMap) : null);
+    // A stored single set other than "none" is a real choice and migrates even without the explicit flag (OW-39
+    // wrote such values without it); only a stored "none" needs `regionExplicit` to survive.
+    const legacyExplicit = storedLocales ? null : (src.localesExplicit === true || regionExplicit === true || Boolean(storedRegion && storedRegion !== "none"));
+    const locales = storedLocales
+      ? storedLocales
+      : (legacyExplicit
+        ? cleanHolidayLocales(storedRegion && storedRegion !== "none" ? [storedRegion] : [])
+        : defaultHolidayLocales(locale));
+    const localesExplicit = Boolean(storedLocales) || legacyExplicit;
     const weekend = WEEKEND_PRESETS.includes(src.weekend) ? src.weekend : "auto";
     const personalMap = new Map();
     const list = Array.isArray(src.personalDays) ? src.personalDays : [];
@@ -7201,7 +8395,9 @@
       personalMap.set(date, { date, label });
     }
     const personalDays = [...personalMap.values()].sort((a, b) => a.date.localeCompare(b.date));
-    return { enabled, region, regionExplicit, weekend, personalDays };
+    // `region` stays the first chosen set (or "none") so every reader that still asks for one keeps working.
+    const primaryRegion = locales.length ? locales[0] : "none";
+    return { enabled, region: primaryRegion, regionExplicit, locales, localesExplicit, weekend, personalDays };
   }
   function addPersonalDayOff(prefs, dateKey, label = "") {
     const clean = cleanCalendarHolidays(prefs);
@@ -7218,10 +8414,11 @@
     return cleanCalendarHolidays({ ...clean, personalDays: clean.personalDays.filter((entry) => entry.date !== key) });
   }
   function holidaysFor(region, year, lang = "en") {
-    const code = HOLIDAY_REGIONS.includes(region) ? region : "none";
+    const info = holidayLocaleInfo(region);
+    const code = info ? info.code : "none";
     const y = Math.trunc(Number(year));
     const lc = cleanNotesLanguage(lang);
-    if (code === "none" || !Number.isFinite(y) || y < 1900 || y > 2100) return [];
+    if (!info || !Number.isFinite(y) || y < info.from || y > info.to) return [];
     const cacheKey = `${code}:${y}:${lc}`;
     if (holidayYearCache.has(cacheKey)) return holidayYearCache.get(cacheKey);
     const pl = lc === "pl";
@@ -7314,30 +8511,172 @@
       add(ymdParts(y, 10, 6), pick("Armed Forces Day", "Dzie\u0144 Si\u0142 Zbrojnych"));
     }
 
-    const sorted = Object.freeze(out.sort((a, b) => a.date.localeCompare(b.date)).map((entry) => Object.freeze(entry)));
+    // OW-45: dates no rule computes (a year's election day, the trading Sundays) come from the table.
+    const sorted = Object.freeze(overlayHolidayTable(code, y, out, lc).sort((a, b) => a.date.localeCompare(b.date)).map((entry) => Object.freeze(entry)));
     if (holidayYearCache.size > 120) holidayYearCache.clear();
     holidayYearCache.set(cacheKey, sorted);
     return sorted;
   }
+  // Rule-computed holidays of one set with the table laid over them (OW-45). The table wins on a date it names,
+  // except that a table entry which is no day off never replaces a rule's day off.
+  function overlayHolidayTable(code, year, list, lang = "en") {
+    const out = [...list];
+    for (const entry of holidayTableEntries(code, year, lang)) {
+      const at = out.findIndex((existing) => existing.date === entry.date);
+      if (at < 0) out.push(entry);
+      else if (out[at].kind !== "holiday" || entry.kind === "holiday") out[at] = entry;
+    }
+    return out;
+  }
+  function holidayTableEntries(code, year, lang = "en") {
+    const set = HOLIDAY_TABLE[holidayLocaleInfo(code)?.code] || null;
+    const rows = set ? set[String(Math.trunc(Number(year)))] : null;
+    if (!Array.isArray(rows)) return [];
+    const lc = cleanNotesLanguage(lang);
+    return rows
+      .filter((row) => row && parseYmd(row.date))
+      .map((row) => ({
+        date: row.date,
+        name: typeof row.name === "string" ? row.name : String(row.name?.[lc] || row.name?.en || ""),
+        kind: HOLIDAY_TABLE_KINDS.includes(row.kind) ? row.kind : "holiday",
+      }))
+      .filter((row) => row.name);
+  }
+  // The years the table covers for one set, newest last, so the dialog can say when to look at it again.
+  function holidayTableYears(code) {
+    const set = HOLIDAY_TABLE[holidayLocaleInfo(code)?.code] || null;
+    return set ? Object.keys(set).map((year) => Number(year)).filter((year) => Number.isFinite(year)).sort((a, b) => a - b) : [];
+  }
+  // What the dialog says about a set: the newest year its own data (rules + table) reaches.
+  function holidaySetCoverage(code) {
+    const info = holidayLocaleInfo(code);
+    if (!info) return { code: "", years: [], newestYear: 0, ruleTo: 0 };
+    return { code: info.code, years: holidayTableYears(info.code), newestYear: Math.max(info.to, ...holidayTableYears(info.code)), ruleTo: info.to };
+  }
+  // Every holiday of every chosen set in one list, sorted by date (OW-43/OW-44). Two sets may name the same day;
+  // both names are kept (`name` joins them) and the entry says which sets it came from.
+  function holidayEntriesFor(prefs, year, lang = "en") {
+    const clean = cleanCalendarHolidays(prefs);
+    const codes = clean.locales.length ? clean.locales : (clean.region !== "none" ? cleanHolidayLocales([clean.region]) : []);
+    if (!codes.length) return Object.freeze([]);
+    // A month draws ~42 days; merging the chosen sets for the same year and language happens once (PF2.1).
+    const mergeKey = `${codes.join("+")}:${Math.trunc(Number(year))}:${cleanNotesLanguage(lang)}`;
+    const cached = holidayMergeCache.get(mergeKey);
+    if (cached) return cached;
+    const out = [];
+    const same = new Map();
+    for (const code of codes) {
+      for (const entry of holidaysFor(code, year, lang)) {
+        const key = `${entry.date}|${entry.name}`;
+        const seen = same.get(key);
+        // The same day with the same name in two sets is one holiday of both sets, not two entries.
+        if (seen) { seen.locales.push(code); continue; }
+        const made = { date: entry.date, name: entry.name, kind: entry.kind, locale: code, locales: [code] };
+        same.set(key, made);
+        out.push(made);
+      }
+    }
+    const order = new Map(codes.map((code, index) => [code, index]));
+    const merged = Object.freeze(out
+      .sort((a, b) => a.date.localeCompare(b.date) || order.get(a.locale) - order.get(b.locale) || a.name.localeCompare(b.name))
+      .map((entry) => Object.freeze({ ...entry, locales: Object.freeze(entry.locales) })));
+    if (holidayMergeCache.size > 60) holidayMergeCache.clear();
+    holidayMergeCache.set(mergeKey, merged);
+    return merged;
+  }
+  // The sets that give a day its holidays, in the order they are chosen (OW-44): one day may belong to several.
+  // ---------- T2.13a: a holiday calendar that came from a FILE is not a local holiday ----------
+  // A Google holiday calendar arrives through the OW-53 import as ordinary all-day events. Two things must never
+  // happen: (1) an imported event must not become a day in a local holiday set — a set is rule-computed (plus
+  // HOLIDAY_TABLE) and is never written by an import; (2) a day must not silently start looking work-free because
+  // somebody subscribed to a holiday feed. So an imported holiday is shown as itself, with a neutral "imported" look,
+  // and `isWorkFree` never reads the item store (it takes prefs only — that is the guarantee, kept here in writing).
+  //
+  // The feed is recognised by what the file says about itself, not by the event names: Google's holiday calendars all
+  // carry "Holidays" in `X-WR-CALNAME` (e.g. "Holidays in Poland"), and the URL form ends with `/holiday@group...`.
+  const HOLIDAY_FEED_RE = /\bholidays?\b|#holiday@|holiday@group/i;
+  function holidayFeedName(name) {
+    const text = String(name == null ? "" : name).replace(/\s+/g, " ").trim();
+    if (!text) return "";
+    if (!HOLIDAY_FEED_RE.test(text)) return "";
+    // A whole-calendar name is all we keep: the event text beside it is the holiday, not the feed.
+    return text.slice(0, 120);
+  }
+  // The feed a batch of imported events came from, or "" — one answer for the whole file.
+  function holidayFeedOf(events) {
+    const list = Array.isArray(events) ? events : [];
+    for (const event of list) {
+      const name = holidayFeedName(event?.calendar);
+      if (name) return name;
+    }
+    return "";
+  }
+  // Does this ITEM carry the imported-holiday mark? Only an imported item can: an event made here is never one, even
+  // if it happens to fall on a holiday and is all-day.
+  function isImportedHoliday(item) {
+    if (!item || typeof item !== "object") return false;
+    return item.x?.src === "ics" && item.x?.icsHolidayFeed === true;
+  }
+  // The mark written by the import: only on an all-day item from an .ics that came from a recognised feed. A timed
+  // event from the same file is an ordinary event (Google's holiday feeds are all-day, but a file is a file), and a
+  // reminder is never a holiday. Returns the item unchanged when the mark does not apply, so a caller can always pass
+  // the result straight to the store.
+  function markImportedHoliday(item, { feed = "" } = {}) {
+    if (!item || typeof item !== "object") return item;
+    const name = holidayFeedName(feed) || String(feed || "").trim();
+    if (!name) return item;
+    if (item.x?.src !== "ics") return item;
+    if (!item.start?.date) return item; // all-day only: a holiday feed's entries are days, not appointments
+    if (item.x?.kind === "reminder") return item;
+    return { ...item, x: { ...item.x, icsHolidayFeed: true, icsHolidayName: name.slice(0, 120) } };
+  }
+  // The look: a neutral mark, deliberately NOT the work-free tint. Kept pure so both the calendar and a test read the
+  // same decision, and so the classes are named once.
+  const IMPORTED_HOLIDAY_CLASS = "is-imported-holiday";
+  function importedHolidayAttrs(item) {
+    if (!isImportedHoliday(item)) return null;
+    const feed = String(item.x?.icsHolidayName || "").slice(0, 120);
+    return { class: IMPORTED_HOLIDAY_CLASS, "data-imported-holiday": feed || "true", title: feed };
+  }
+
+  function holidaySetsOf(wf) {
+    const list = Array.isArray(wf?.holidays) ? wf.holidays : (wf?.holiday ? [wf.holiday] : []);
+    const out = [];
+    for (const entry of list) {
+      for (const code of (Array.isArray(entry?.locales) ? entry.locales : (entry?.locale ? [entry.locale] : []))) {
+        if (!out.includes(code)) out.push(code);
+      }
+    }
+    return out;
+  }
+  const NO_WORK_FREE = Object.freeze({ workFree: false, weekend: false, holiday: null, holidays: Object.freeze([]), personal: null, reasons: Object.freeze([]), tooltip: "" });
   function isWorkFree(day, prefs, lang = "en") {
     const clean = cleanCalendarHolidays(prefs);
+    // OW-46: the master switch. Nothing is looked up at all: no weekend rule, no set, no year, no table.
+    if (!clean.enabled) return NO_WORK_FREE;
     const key = typeof day === "string" && parseYmd(day.trim()) ? day.trim() : localDateKey(day);
-    if (!clean.enabled || !key) {
-      return { workFree: false, weekend: false, holiday: null, personal: null, reasons: [], tooltip: "" };
-    }
+    if (!key) return NO_WORK_FREE;
     const wd = weekdayOfYmd(key);
     const weekend = weekendDaysFor(clean).includes(wd);
     const year = Number(key.slice(0, 4));
-    const holiday = clean.region !== "none" ? (holidaysFor(clean.region, year, lang).find((h) => h.date === key) || null) : null;
+    // Every chosen set is read (OW-44); `holiday` stays the first one for readers written before the list existed.
+    const holidays = holidayEntriesFor(clean, year, lang).filter((entry) => entry.date === key);
+    const holiday = holidays.length ? holidays[0] : null;
     const personal = clean.personalDays.find((p) => p.date === key) || null;
+    // With more than one set chosen every name says which set it comes from, so two calendars are readable apart.
+    const multiSet = clean.locales.length > 1;
+    // A trading Sunday is shown (it is in `holidays`) but it is a working day, so it never makes the day work-free.
+    const workFreeHolidays = holidays.filter((entry) => entry.kind !== "trading-sunday");
     const reasons = [];
-    if (holiday) reasons.push(holiday.name);
+    for (const entry of holidays) reasons.push(multiSet ? `${entry.name} (${entry.locales.join(", ")})` : entry.name);
     if (personal) reasons.push(personal.label ? personal.label : t("cal.holidays.personalDayOff", null, lang));
     const tooltip = reasons.join(" \u00b7 ");
     return {
-      workFree: Boolean(weekend || holiday || personal),
+      workFree: Boolean(weekend || workFreeHolidays.length || personal),
       weekend,
       holiday,
+      holidays,
+      holidayKind: holidays.length ? holidays[0].kind : "",
       personal,
       reasons,
       tooltip,
@@ -7345,11 +8684,13 @@
   }
 
   const api = {
-    KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, translate, t, pluralCategory, tCount, translationKeys, missingTranslationKeys, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, lineScheduleSignature, cleanTextSchedule, scheduleSignatureFromItem, scheduleFromParsedLine, reconcileListItem, itemFromLine,
+    KINDS, NOTES_LANGUAGES, DEFAULT_NOTES_LANGUAGE, registerLanguage, cleanNotesLanguage, notesLanguageTable, notesLocaleFor, translate, t, hasTranslation, pluralCategory, tCount, translationKeys, missingTranslationKeys, TRANSLATION_GAPS, reportTranslationGap, onTranslationGap, translationGaps, readableKey, notesLanguages, DOTTED_KEY_RE, ymd, parseYmd, dayStart, addDays, nextDayStart, dayRange, civilDayStart, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, clockOfMinutes, parseTimeRange, dateEntryOrder, parseDateEntry, parseLine, makeItem, cleanItem, lineScheduleSignature, cleanTextSchedule, scheduleSignatureFromItem, scheduleFromParsedLine, reconcileListItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
-    CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, itemIdTokens, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, cleanHistoryFilter, filterHistoryRecords, historyPruneSurvey, exportHistoryLines, historySummaryLine, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanNoteDropKind, NOTE_DROP_KINDS, cleanCalendarShare, TREE_WIDTH_LIMITS, cleanTreePaneWidth, clampTreePaneWidth, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_TABLE, HOLIDAY_TABLE_KINDS, holidayTableEntries, holidayTableYears, holidaySetCoverage, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, holidaySetsOf, HOLIDAY_FEED_RE, holidayFeedName, holidayFeedOf, isImportedHoliday, markImportedHoliday, IMPORTED_HOLIDAY_CLASS, importedHolidayAttrs, NO_WORK_FREE, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
+    DEFAULT_DAY_LOOK, DAY_LOOK_KINDS, DAY_LOOK_MAX_STRENGTH, cleanDayLookColor, cleanDayLookStrength, cleanDayLook, dayLookTint, CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, weekGridPlan, WEEK_ROW_MIN_PX, FORECAST_TRUST_STEPS, forecastTrust,
+    weatherUnitLabelsFor, calendarWeatherIndex,
+    forecastRefreshMinutes, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaLeftCount, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, AGENDA_FOLD_DEFAULTS, cleanAgendaFold, inQuietHours, agendaFoldPlan, UI_STATE_KEYS, isUiStateKey, splitUiState, migrateUiState, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, itemOwnsNoteText, itemIsFreeStanding, noteLinkedItems, unlinkPlan, unlinkLineText, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle, icsUnfold, icsText, icsProperty, icsDateValue, icsZonedMs, icsStamp, icsRecurrence, parseIcs, icsToItem, planIcsImport, icsEscape, icsFold, icsEventLines, icsFromItems, icsUtcStamp, defaultIcsUid, SYNC_STATES, syncStateOf, markSynced, markSyncedDeleted, syncPlan,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

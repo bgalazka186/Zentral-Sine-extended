@@ -1,0 +1,30 @@
+{
+  "id": "zentral-boost",
+  "name": "Zentral Boost",
+  "description": "Read browser RAM on demand and give memory back without closing anything. Standalone part of Zentral Extended.",
+  "homepage": "https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/boost",
+  "supportsUnload": true,
+  "style": {
+    "chrome": "",
+    "content": ""
+  },
+  "scripts": {
+    "ZentralBoost.standalone.uc.js": {
+      "include": [
+        "chrome://browser/content/browser.xhtml"
+      ],
+      "loadOrder": 2
+    }
+  },
+  "author": "bgalazka186",
+  "version": "3.3.332",
+  "preferences": "preferences.json",
+  "tags": [
+    "memory",
+    "zen"
+  ],
+  "fork": [
+    "zen"
+  ],
+  "readme": "https://raw.githubusercontent.com/bgalazka186/Zentral-Sine-extended/main/additional/boost/README.md"
+}

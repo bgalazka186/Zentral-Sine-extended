@@ -34,11 +34,19 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   // calls advanceClock. With the real clock running underneath, a delay computed as "due - now" depended on how busy
   // the machine was: a debounce re-armed 30 ms later asked for 220 ms instead of 250, fireTimer(250) no longer found
   // it, and a test failed only when the whole suite ran in parallel.
-  const clockBase = Date.now();
-  class FakeDate extends Date {
+  // Every window of one run shares one base: two windows built a millisecond apart otherwise disagreed about the time,
+  // which a conflict test reads as one window being newer than the other (F0.16 found this under the pinned clock).
+  // `globalThis.__zentralFakeClockBase` is what the pinned clock of `tests/helpers/fake-clock-preload.cjs` sets.
+  const clockBase = globalThis.__zentralFakeClockBase ?? (globalThis.__zentralFakeClockBase = Date.now());
+  // `Date` in the module is the real one from the sandbox's global, which a pinned clock replaces; the base above is a
+  // number, so the subclass works either way.
+  const RealDate = globalThis.Date;
+  class FakeDate extends RealDate {
     constructor(...args) { super(...(args.length ? args : [clockBase + clockOffset])); }
     static now() { return clockBase + clockOffset; }
   }
+  FakeDate.parse = RealDate.parse;
+  FakeDate.UTC = RealDate.UTC;
   const record = (node, parent) => {
     if (!node || !["tab", "zen-folder"].includes(node.localName)) return;
     operations.push({ type: node.parentElement ? "move" : "add", node, from: node.parentElement, parent });
@@ -72,7 +80,11 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     const event = new Ev(type, { target, bubbles: true, ...extra });
     event.stopImmediatePropagation = () => { event.stopped = true; event.immediateStopped = true; };
     events.push(event);
-    for (const listener of [...(listeners.get(type) || [])]) { listener(event); if (event.immediateStopped) break; }
+    // `emit` is a whole dispatch at the window: capture listeners first, then the rest, as a real window would see
+    // them. (Target-side dispatch is the fake DOM's job: it calls `__fakeWindowPropagate` for its capture phase.)
+    const set = [...(listeners.get(type) || [])];
+    for (const { fn } of set.filter((entry) => entry.capture)) { fn(event); if (event.immediateStopped) break; }
+    if (!event.immediateStopped) for (const { fn } of set.filter((entry) => !entry.capture)) { fn(event); if (event.immediateStopped) break; }
     return event;
   };
   const win = {
@@ -90,10 +102,23 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     }, innerWidth: 1200, innerHeight: 800,
     setTimeout(fn, ms) { const id = ++timerId; timers.set(id, { fn, ms }); return id; },
     clearTimeout(id) { timers.delete(id); }, requestAnimationFrame(fn) { return this.setTimeout(fn, 16); }, cancelAnimationFrame(id) { this.clearTimeout(id); },
-    addEventListener(type, fn) { if (!listeners.has(type)) listeners.set(type, new Set()); listeners.get(type).add(fn); },
-    removeEventListener(type, fn) { listeners.get(type)?.delete(fn); }, dispatchEvent(event) { return emit(event.type, event.target || win, event); },
+    // Window listeners see what a real window sees: capture listeners first, then the ones on the path to the target.
+    addEventListener(type, fn, opts) { if (!listeners.has(type)) listeners.set(type, new Set()); listeners.get(type).add({ fn, capture: opts === true || opts?.capture === true }); },
+    removeEventListener(type, fn) { const set = listeners.get(type); if (!set) return; for (const entry of [...set]) if (entry.fn === fn) set.delete(entry); },
+    dispatchEvent(event) { return emit(event.type, event.target || win, event); },
   };
   win.window = win;
+  // Fake DOM events reach the window through this hook; only the capture phase is ours to run (see `emit`).
+  globalThis.__fakeWindowPropagate = (event, phase) => {
+    if (phase !== "capture") return;
+    for (const { fn, capture } of [...(listeners.get(event.type) || [])]) {
+      if (!capture) continue;
+      fn(event);
+      if (event.immediateStopped) break;
+    }
+  };
+  // Real Gecko exposes XULMenuAnchorElement/AnchorElement; popups positioned from a pointer need one to open at all.
+  win.XULMenuAnchorElement = win.AnchorElement = class AnchorElement { constructor(x, y) { this.x = x; this.y = y; } };
   win.gBrowser = {
     get tabs() { return document.querySelectorAll("tab"); }, selectedTab: null,
     addTab(url, options = {}) { const tab = sidebar.tab(url); tab.id = `fake-${id}-${++tabId}`; tab._addTabOptions = { ...options }; tab.linkedBrowser = { currentURI: { spec: url } }; const ws = win.gZenWorkspaces.activeWorkspace; tab.setAttribute("zen-workspace-id", ws); (workspaces.get(ws)?.pinnedTabsContainer || sidebar.pinned).append(tab); if (!options.deferTabOpen) emit("TabOpen", tab); return tab; },
@@ -103,6 +128,10 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
       emit("TabClose", tab); tab.remove();
       if (deleteEmptyFolders && folder && !folder.querySelector("tab")) folder.delete();
     },
+    // OW-88: an unloaded placeholder keeps its element, label, icon and private URL; Gecko only drops the page. The
+    // fake does the same, and records every call so a test can prove placeholders are parked and real tabs are not.
+    discarded: [],
+    discardBrowser(tab, animate) { this.discarded.push(tab); tab.setAttribute("pending", "true"); tab.setAttribute("discarded", "true"); emit("TabBrowserDiscarded", tab); return true; },
     moveTabToExistingGroup(tab, folder) { folder.addTabs([tab]); emit("TabMove", tab); },
     moveTabBefore(tab, before) { before.parentElement?.insertBefore(tab, before); emit("TabMove", tab); },
   };
@@ -164,7 +193,10 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     disconnect() { this.target = null; this.options = null; mutationObservers.delete(this); }
   }
   class ResizeObserver { observe() {} unobserve() {} disconnect() {} }
-  const vmGlobals = { window: win, document, globalThis: { Services }, ChromeUtils: { importESModule: (uri) => esModules[uri] || {} }, PathUtils, IOUtils, MutationObserver, ResizeObserver, Event: Ev, Uint8Array, TextEncoder, TextDecoder,
+  // `globalThis` inside the module mirrors the page's global: the window's own members plus Services, which is how the
+  // real userscript sees it. (It used to be Services alone, so `globalThis.window` and `globalThis.document` were
+  // undefined inside the module while the browser has them.)
+  const vmGlobals = { window: win, document, globalThis: { ...win, Services }, ChromeUtils: { importESModule: (uri) => esModules[uri] || {} }, PathUtils, IOUtils, MutationObserver, ResizeObserver, Event: Ev, Uint8Array, TextEncoder, TextDecoder,
     navigator: { platform: "Linux" }, console, URL, Date: FakeDate, JSON, Math, Promise, RegExp, Number, Map, Set, WeakMap, setTimeout, clearTimeout, queueMicrotask };
   const ctx = vm.createContext(vmGlobals);
   const sharedHoverCard = loadRuntimeHoverCard(ctx);
@@ -183,6 +215,8 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     fireTimer(ms) {
       // This harness can fire the boot timer out of chronological order. The
       // shared timer may then be overdue (0ms) instead of its 250ms debounce.
+      // Among equal candidates the OLDEST id wins: a drain/repair task scheduled before another zero-delay task is
+      // what a real event loop runs first, and picking the newest made a second 0 ms task look like the first.
       const found = [...timers].find(([, timer]) => Math.abs(timer.ms - ms) <= 10) || (ms === 250 ? [...timers].find(([, timer]) => timer.ms === 0) : null);
       if (!found) return false;
       timers.delete(found[0]); clockOffset += Math.max(0, Number(ms) || 0) + 10; found[1].fn(); return true;

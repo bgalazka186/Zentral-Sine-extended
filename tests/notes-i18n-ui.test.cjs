@@ -373,7 +373,11 @@ function allText(node) {
     const chips = [...h.adapter.host.querySelectorAll(".zn-chips .zn-chip")];
     assert.equal(search.placeholder, enTable.strings["tree.searchPlaceholder"]);
     assert.equal(calHeading.textContent, enTable.strings["cal.heading"]);
-    assert.equal(calToday.textContent, enTable.strings["cal.todayBtn"]);
+    // OW-97: the button is a glyph now, so the words are its accessible name and its tooltip. Asserting textContent
+    // would pin the very thing the owner asked to remove — and would pass on an empty glyph button.
+    assert.equal(calToday.getAttribute("aria-label"), enTable.strings["cal.todayBtn"]);
+    assert.equal(calToday.title, enTable.strings["cal.todayBtn"]);
+    assert.equal(calToday.textContent.trim(), "", "no words in the button itself");
     assert.equal(calTools.textContent, enTable.strings["cal.tools"]);
     assert.equal(chips[0].textContent, enTable.strings["tree.chip.notes"]);
     assert.equal(chips[1].textContent, enTable.strings["tree.chip.recent"]);
@@ -398,12 +402,24 @@ function allText(node) {
     linksTab.click();
     await h.flushRaf();
 
-    // Find the Polish language chip in Settings -> Links & history and click it
-    const plChip = [...h.adapter.host.querySelectorAll(".zn-dialog-card button")].find((b) =>
-      b.textContent === enTable.strings["settings.choice.notesLanguage.pl"],
-    );
-    assert.ok(plChip, "Polski language choice button exists in Settings -> Links & history");
-    plChip.click();
+    // Choose Polish in Settings -> Links & history. OW-79 made the language list come from what registered, and a list
+    // of more than three options is drawn as a dropdown (`choiceIsDropdown`), so this accepts either shape rather than
+    // assuming the two-language chip row of before.
+    const plLabel = enTable.strings["settings.choice.notesLanguage.pl"];
+    const langSelect = [...h.adapter.host.querySelectorAll(".zn-dialog-card select")]
+      .find((sel) => [...sel.querySelectorAll("option")].some((o) => o.textContent === plLabel));
+    if (langSelect) {
+      const option = [...langSelect.querySelectorAll("option")].find((o) => o.textContent === plLabel);
+      assert.ok(option, "Polski is an option in Settings -> Links & history");
+      // The sheet's own listener reads `select.value`, so this is the state a person's choice leaves behind. (The fake
+      // DOM does not carry an option's `value` attribute onto the element, so the code is used directly.)
+      langSelect.value = "pl";
+      langSelect.dispatchEvent(new h.Ev("change", { bubbles: true }));
+    } else {
+      const plChip = [...h.adapter.host.querySelectorAll(".zn-dialog-card button")].find((b) => b.textContent === plLabel);
+      assert.ok(plChip, "Polski language choice exists in Settings -> Links & history");
+      plChip.click();
+    }
     await h.flushRaf();
 
     // Live refresh updated BOTH the open Settings dialog AND the underlying All notes + Calendar sheet!
@@ -413,7 +429,9 @@ function allText(node) {
     assert.ok(plTabs.includes(plTable.strings["settings.tab.writing"]) && plTabs.includes(plTable.strings["settings.tab.links"]), `expected Polish Settings tabs, got ${plTabs.join(", ")}`);
     assert.equal(search.placeholder, plTable.strings["tree.searchPlaceholder"]);
     assert.equal(calHeading.textContent, plTable.strings["cal.heading"]);
-    assert.equal(calToday.textContent, plTable.strings["cal.todayBtn"]);
+    assert.equal(calToday.getAttribute("aria-label"), plTable.strings["cal.todayBtn"], "the Polish words are the accessible name");
+    assert.equal(calToday.title, plTable.strings["cal.todayBtn"]);
+    assert.equal(calToday.textContent.trim(), "", "still no words in the button itself");
     assert.equal(calTools.textContent, plTable.strings["cal.tools"]);
     assert.equal(chips[0].textContent, plTable.strings["tree.chip.notes"]);
     assert.equal(chips[1].textContent, plTable.strings["tree.chip.recent"]);

@@ -168,6 +168,27 @@ async function test(name, fn) {
   console.log("ok -", name);
 }
 
+// OW-75: the calendar's Tools menu is grouped by job (Create / Calendar settings / Show and find / This week as text).
+// This opens `trigger`, walks into the group that holds `label` and returns the row, so a test names the row it wants
+// and not the menu's shape.
+const openCalendarRow = (root, trigger, label, match = (text, want) => text === want || text.startsWith(want) || want.test?.(text)) => {
+  root.querySelector(trigger).click();
+  const items = () => [...root.querySelectorAll(".zn-menu-item")];
+  const hit = (want) => items().find((el) => (typeof want === "string" ? el.textContent.trim() === want || el.textContent.trim().startsWith(want) : want.test(el.textContent.trim())));
+  let row = hit(label);
+  const groups = items().filter((el) => el.classList.contains("zn-menu-group"));
+  if (!row) {
+    for (const group of groups) {
+      group.click();
+      row = hit(label);
+      if (row) break;
+      const back = root.querySelector(".zn-menu-back");
+      if (back) back.click();
+    }
+  }
+  return row;
+};
+
 (async () => {
   await test("pure: Big Picture size presets (70/80/90/95%) and viewport geometry box", () => {
     assert.deepEqual([...C.CALENDAR_BIG_PICTURE_SIZES], [70, 80, 90, 95]);
@@ -440,11 +461,11 @@ async function test(name, fn) {
     assert.equal(h.sheet.isCalendarBigPictureOpen(), true);
 
     // 2. Tools menu shows "Exit Big Picture" while open and toggles it off cleanly.
-    livePane.querySelector(".zn-calendar-tools").click();
-    await flush();
+    // OW-75: while Big Picture is open its exit row sits in the Tools menu's "Show and find" group (the header
+    // maximise button has no room in the popup), so the row must be reachable through the group.
+    const exitItem = openCalendarRow(h.sheet.root, ".zn-calendar-tools", /Exit Big Picture/);
     const toolsMenu = h.sheet.root.querySelector(".zn-menu");
-    assert.ok(toolsMenu && toolsMenu.matches(":popover-open"));
-    const exitItem = [...toolsMenu.querySelectorAll(".zn-menu-item")].find((b) => b.textContent.includes("Exit Big Picture"));
+    assert.ok(toolsMenu && toolsMenu.matches(":popover-open"), "the Tools menu stays open at the group level");
     assert.ok(exitItem, "Tools menu offers Exit Big Picture");
     exitItem.click();
     await flush();
@@ -660,6 +681,115 @@ async function test(name, fn) {
     assert.equal(h2.sheet.root.querySelector(".zn-calendar-category-filter").dataset.value, "Personal");
     h2.sheet.destroy();
     await h2.store.close();
+  });
+
+  // ---- OW-80: the Notes tree lives in Big Picture, and is the same node, so every one of its functions comes along.
+  await test("OW-80: Big Picture moves the live notes tree to its left edge (no clone), keeps its search and rows, and puts it back exactly", async () => {
+    const { io } = makeMemoryIo();
+    const h = makeSheetHarness({ io });
+    await h.store.open();
+    await h.sheet.open();
+    await flush();
+    // Notes created after the sheet is up: the list renders what the open store holds, and this test is about the tree
+    // moving, not about the store's load order.
+    h.store.create("# Alpha");
+    h.store.create("# Beta");
+    await flush();
+    h.sheet.openCalendar();
+    // The list renders on its own frame after the workspace lays out; one flush is not enough for its rows.
+    await flush();
+    await flush();
+
+    const allPanels = h.sheet.root.querySelector(".zn-all-panels");
+    // The fake DOM's selector engine has no :not(); filter by hand, as the other assertions here do.
+    const realTrees = () => [...h.sheet.root.querySelectorAll(".zn-tree-pane")].filter((el) => !el.classList.contains("zn-cal-bigpicture-placeholder"));
+    const tree = realTrees()[0];
+    assert.ok(tree, "the docked tree exists before Big Picture");
+    const beforeOrder = [...allPanels.children];
+    const treeIdxBefore = beforeOrder.indexOf(tree);
+    assert.ok(treeIdxBefore >= 0, "the tree is a child of allPanels");
+    const rowsBefore = tree.querySelectorAll(".zn-item").length;
+    assert.ok(rowsBefore >= 2, "the tree has rows to keep");
+
+    h.sheet.openCalendarBigPicture();
+    await flush();
+
+    const stage = h.sheet.root.querySelector(".zn-cal-bigpicture-stage");
+    const slot = h.sheet.root.querySelector(".zn-cal-bigpicture-tree-slot");
+    assert.ok(stage && slot, "the card has a tree slot");
+    assert.equal(slot.parentElement, stage, "the slot is a column of the stage");
+    assert.equal(stage.firstElementChild, slot, "the tree comes first: it is the left edge");
+    assert.equal(tree.parentElement, slot, "the exact live tree node moved into the slot (no clone)");
+    assert.equal(realTrees().length, 1, "exactly one real tree in the document");
+    // The point of moving rather than copying: the functions are the same ones. A search box and the rows prove the
+    // render path came with the node, and that a re-render does not race a stale copy.
+    assert.ok(tree.querySelector("input"), "the tree's search box came with it");
+    assert.equal(tree.querySelectorAll(".zn-item").length, rowsBefore, "its rows came with it");
+    // Tree mode, not the flat list: the folder rows are what only the tree renderer builds.
+    assert.ok(tree.querySelector(".zn-rootrow"), "it still renders as the tree, folder rows and all");
+
+    // OW-80, the owner's choice: a click in the card SELECTS (like Ctrl/Shift-click in the docked tree) and the card
+    // stays; opening the note is the double click.
+    const beta = [...tree.querySelectorAll(".zn-item")].find((el) => /Beta/.test(el.textContent));
+    assert.ok(beta, "the Beta row is there");
+    beta.click();
+    await flush();
+    assert.equal(h.sheet.isCalendarBigPictureOpen(), true, "a click on a row keeps the card open");
+    assert.equal(beta.classList.contains("is-selected"), true, "and selects the row");
+    assert.equal(beta.getAttribute("aria-selected"), "true");
+    beta.dispatchEvent(new Ev("dblclick", { bubbles: true }));
+    await flush();
+    assert.match(h.sheet.root.querySelector(".zn-editor").value, /Beta/, "a double click opens that note");
+    assert.equal(h.sheet.isCalendarBigPictureOpen(), true, "and the card is still there: the tree is inside it");
+
+    h.sheet.closeCalendarBigPicture();
+    await flush();
+    assert.equal(tree.parentElement, allPanels, "the tree went back to the sheet");
+    assert.equal([...allPanels.children].indexOf(tree), treeIdxBefore, "it went back to its exact place in the row");
+    assert.equal(h.sheet.root.querySelectorAll(".zn-cal-bigpicture-tree-slot").length, 0, "the card is gone");
+
+    h.sheet.destroy();
+    await h.store.close();
+  });
+
+  await test("OW-80: the tree can be put away in Big Picture, and stays away next time", async () => {
+    const { io } = makeMemoryIo();
+    const h = makeSheetHarness({ io });
+    await h.store.open();
+    h.store.create("# Alpha");
+    await h.sheet.open();
+    await flush();
+    h.sheet.openCalendar();
+    await flush();
+    h.sheet.openCalendarBigPicture();
+    await flush();
+
+    const slot = h.sheet.root.querySelector(".zn-cal-bigpicture-tree-slot");
+    const btn = h.sheet.root.querySelector(".zn-cal-bigpicture-tree");
+    assert.ok(btn, "the tree toggle is in the card's bar");
+    assert.ok(!slot.hidden, "the tree starts visible, as the owner asked");
+    assert.equal(btn.getAttribute("aria-pressed"), "true");
+
+    btn.click();
+    await flush();
+    assert.equal(slot.hidden, true, "the toggle puts the tree away");
+    assert.equal(btn.getAttribute("aria-pressed"), "false");
+    assert.equal(h.store.meta.calendarBigPictureTreeCollapsed, true, "the choice is remembered");
+    assert.equal(btn.getAttribute("aria-label"), "Show the notes tree", "the label says what the next press does");
+
+    btn.click();
+    await flush();
+    assert.equal(slot.hidden, false, "and brings it back");
+    assert.equal(h.store.meta.calendarBigPictureTreeCollapsed, false);
+
+    h.sheet.closeCalendarBigPicture();
+    await flush();
+    h.sheet.openCalendarBigPicture();
+    await flush();
+    assert.ok(!h.sheet.root.querySelector(".zn-cal-bigpicture-tree-slot").hidden, "reopening shows the tree");
+
+    h.sheet.destroy();
+    await h.store.close();
   });
 
   console.log(`\nPASS notes-calendar-bigpicture (${passed} tests)`);

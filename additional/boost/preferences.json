@@ -1,0 +1,87 @@
+[
+  {
+    "property": "zen.workspace.zentral.boost.enabled",
+    "label": "Memory Boost",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.boost.startup_trim",
+    "label": "Free memory once after startup, when the browser has been quiet for 90 seconds",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.boost.keep_pinned",
+    "label": "Unloading may include pinned and Essential tabs",
+    "description": "Off by default: they restore on demand like any tab, but they are your shortlist. Turn this on to let a deep pass include them.",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.boost.shortcut",
+    "label": "Keyboard shortcut for Free memory (light)",
+    "description": "For example Accel+Shift+B. Empty means no shortcut.",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.boost.limit_enabled",
+    "label": "Keep browser RAM under a limit",
+    "description": "Off by default. When on, Boost watches the total and acts only when it crosses the limit below.",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.boost.limit_mb_text",
+    "label": "RAM limit (MB, total for all browser processes) [0 to 65536]",
+    "type": "string",
+    "defaultValue": "4096",
+    "placeholder": "4096"
+  },
+  {
+    "property": "zen.workspace.zentral.boost.limit_mode",
+    "label": "What happens at the limit",
+    "description": "Soft only tells you; hard unloads tabs and panels the tab policy allows, three at a time, until the target is met.",
+    "type": "dropdown",
+    "defaultValue": "soft",
+    "options": [
+      {
+        "label": "Soft — tell me only",
+        "value": "soft"
+      },
+      {
+        "label": "Hard — unload what the policy allows",
+        "value": "hard"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.boost.limit_cooldown_s_text",
+    "label": "Wait between limiter actions (seconds) [0 to 3600]",
+    "type": "string",
+    "defaultValue": "60",
+    "placeholder": "60"
+  },
+  {
+    "property": "zen.workspace.zentral.boost.limit_target_pct_text",
+    "label": "Stop a hard run at this share of the limit (%) [0 to 100]",
+    "type": "string",
+    "defaultValue": "85",
+    "placeholder": "85"
+  },
+  {
+    "property": "zen.workspace.zentral.boost.game_mode",
+    "label": "Game Mode: pause everything else while I play",
+    "description": "Level 3 of Memory Boost. Runs a deep pass, stops every repeating timer (widgets, video discovery, RSS, Notes), and stops painting tabs you are not looking at. Tabs that are playing sound and the video preview keep running, so a podcast or a video keeps playing. Off when the browser restarts.",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.boost.stronger_saver",
+    "label": "Stronger saver: also sleep apps marked 'keep running'",
+    "description": "Off by default. When on, Game Mode also puts to sleep the Essential apps whose background mode is 'keep running' (WhatsApp, Messenger). Restore, or leaving Game Mode, brings them back.",
+    "type": "checkbox",
+    "defaultValue": false
+  }
+]
