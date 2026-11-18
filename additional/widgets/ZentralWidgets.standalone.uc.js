@@ -1276,6 +1276,7 @@ function nativeSidebarSide() {
       "boost.deepDone": "Put {tabs} tab(s) and {panels} panel(s) to sleep, freed {mb} MB",
       "boost.restoreCount": "Restore ({count})",
       "boost.restored": "Woke {count} panel(s)",
+      "boost.restoredTabs": "{count} sleeping tab(s) ready to reload on click",
       "boost.limitHit": "{mb} MB in use, above your {limit} MB limit. Open Boost to free memory.",
       "boost.limitDone": "Freed memory down to {mb} MB",
       "boost.limitNothing": "Memory is high, but nothing else may be unloaded",
@@ -1341,6 +1342,7 @@ function nativeSidebarSide() {
       "boost.deepDone": "U\u015bpiono {tabs} kart i {panels} paneli, zwolniono {mb} MB",
       "boost.restoreCount": "Przywr\u00f3\u0107 ({count})",
       "boost.restored": "Obudzono {count} paneli",
+      "boost.restoredTabs": "{count} u\u015bpionych kart wczyta si\u0119 po klikni\u0119ciu",
       "boost.limitHit": "W u\u017cyciu {mb} MB, powy\u017cej limitu {limit} MB. Otw\u00f3rz Boost, aby zwolni\u0107 pami\u0119\u0107.",
       "boost.limitDone": "Zwolniono pami\u0119\u0107 do {mb} MB",
       "boost.limitNothing": "Pami\u0119\u0107 jest wysoka, ale nie ma ju\u017c czego zwalnia\u0107",
@@ -6238,20 +6240,43 @@ function nativeSidebarSide() {
             popup.appendChild(note);
           };
 
+          const api = () => boostModule();
+          let boostSampling = false;
+          const stopCardSampling = () => {
+            if (!boostSampling) return;
+            boostSampling = false;
+            try {
+              api()?.stopSampling?.();
+            } catch (_) {}
+          };
+          const startCardSampling = () => {
+            if (boostSampling) return;
+            const boost = api();
+            if (!boost || typeof boost.startSampling !== "function") return;
+            boostSampling = true;
+            try {
+              boost.startSampling();
+            } catch (_) {
+              boostSampling = false;
+            }
+          };
+
           const isPopupOpen = () => !popup.hidden;
           const closePopup = () => {
             if (popup.hidden) return false;
             popup.hidden = true;
             menuBtn.setAttribute("aria-expanded", "false");
+            stopCardSampling();
             return true;
           };
           const openPopup = () => {
+            ensureSubscribed();
+            paintValue();
             paintMenu();
             popup.hidden = false;
             menuBtn.setAttribute("aria-expanded", "true");
+            startCardSampling();
           };
-
-          const api = () => boostModule();
 
           function runAction(id) {
             if (id === "free-light") return runLight();
@@ -6316,8 +6341,11 @@ function nativeSidebarSide() {
             }
             paintMenu();
             const lang = { language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), notesRaw: getString(NOTES_LANGUAGE_PREF, "en") };
+            const code = resolveWidgetLanguage(lang.language, lang.notesRaw);
             if (restored && restored.panels) {
-              showWidgetToast(widgetText(resolveWidgetLanguage(lang.language, lang.notesRaw), "boost.restored", { count: restored.panels }));
+              showWidgetToast(widgetText(code, "boost.restored", { count: restored.panels }));
+            } else if (restored && restored.tabs) {
+              showWidgetToast(widgetText(code, "boost.restoredTabs", { count: restored.tabs }));
             }
             return Promise.resolve(restored);
           }
@@ -6350,6 +6378,7 @@ function nativeSidebarSide() {
 
           // The module says when its reading changed; the card only repaints, it never asks.
           const subscribe = () => {
+            if (boostUnsubscribe) return;
             const boost = api();
             if (!boost || typeof boost.onChange !== "function") return;
             try {
@@ -6357,16 +6386,19 @@ function nativeSidebarSide() {
                 boostLastMB = typeof value === "number" ? value : (typeof boost.lastMB === "function" ? boost.lastMB() : null);
                 paintValue();
               });
+              if (boostLastMB == null && typeof boost.lastMB === "function") {
+                boostLastMB = boost.lastMB();
+              }
             } catch (_) {
               boostUnsubscribe = null;
             }
           };
-          subscribe();
           // OW-92: the limiter acts on its own, so the card is where it says so — a soft notice, a finished hard run,
           // or the once-per-ten-minutes "nothing left to do". Same toast as a click's result, because it is the same
           // kind of sentence.
           let limiterUnsubscribe = null;
           const subscribeLimiter = () => {
+            if (limiterUnsubscribe) return;
             const boost = api();
             if (!boost || typeof boost.onLimiterEvent !== "function") return;
             try {
@@ -6386,8 +6418,11 @@ function nativeSidebarSide() {
               limiterUnsubscribe = null;
             }
           };
-          subscribeLimiter();
-          boostLastMB = typeof api()?.lastMB === "function" ? api().lastMB() : null;
+          const ensureSubscribed = () => {
+            subscribe();
+            subscribeLimiter();
+          };
+          ensureSubscribed();
           paintValue();
 
           // A click on the card runs the light pass; a click on the arrow opens the menu. That split keeps the plan's
@@ -6405,7 +6440,7 @@ function nativeSidebarSide() {
             if (isPopupOpen()) closePopup();
             else openPopup();
           });
-          // A click anywhere else closes the menu, and so does Escape. Both are cleanup-registered.
+          // A click anywhere else closes the menu, and so does Escape. Both are cleanup-registered AND removed on dispose().
           const onDocPointer = (event) => {
             if (!isPopupOpen()) return;
             if (wrap.contains?.(event?.target)) return;
@@ -6417,7 +6452,9 @@ function nativeSidebarSide() {
           };
           doc.addEventListener("pointerdown", onDocPointer);
           doc.addEventListener("keydown", onKeyDown);
-          registerCleanup(() => {
+          const teardownCard = () => {
+            closePopup();
+            stopCardSampling();
             try {
               doc.removeEventListener("pointerdown", onDocPointer);
               doc.removeEventListener("keydown", onKeyDown);
@@ -6426,24 +6463,22 @@ function nativeSidebarSide() {
             } catch (_) {}
             boostUnsubscribe = null;
             limiterUnsubscribe = null;
-          });
+          };
+          registerCleanup(teardownCard);
 
           return {
             element: wrap,
             fetch() {
+              ensureSubscribed();
               return { mb: boostLastMB, available: Boolean(api()) };
             },
             render() {
-              // The number is painted by the module's callback; a render only keeps the arrow's state honest.
+              // The number is painted by the module's callback; ensure late-registered Boost binds if it appeared later.
+              ensureSubscribed();
               paintValue();
             },
             dispose() {
-              try {
-                if (typeof boostUnsubscribe === "function") boostUnsubscribe();
-                if (typeof limiterUnsubscribe === "function") limiterUnsubscribe();
-              } catch (_) {}
-              boostUnsubscribe = null;
-              limiterUnsubscribe = null;
+              teardownCard();
             },
             // The test seam and any other card that wants the action without a pointer.
             runLight,

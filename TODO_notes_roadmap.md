@@ -129,7 +129,6 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 |   131 | `OW-105`    | `DONE`    | High                | S      | —                 | Widgets: explicit colour values forced in settings must be applied to every widget card and its controls |
 |   132 | `OW-106`    | `DONE`    | High                | S      | —                 | Notes / Calendar: opening the feature defaults to the All notes screen, not the last note opened |
 |   133 | `OW-107`    | `DONE`    | High                | S-M    | —                 | Weather: audit what location data leaves the browser, where it is sent, and what permissions/consent are involved; document the actual behaviour and close any unnecessary exposure |
-|   136 | `OW-110`    | `OPEN`    | High                | L      | —                 | Boost: audit and fix all feature bugs, especially Game Mode unexpectedly loading every Zentral app instead of reducing memory use |
 
 ---
 
@@ -793,20 +792,6 @@ asserting no rendered text matches `/^[a-z][A-Za-z0-9]*(\.[A-Za-z0-9_]+)+$/`. Ve
 
 **Tests / done when:** A code-backed security report states exactly what data is sent, to whom and when; tests prevent silent geolocation or unintended extra disclosure.
 
-#### `OW-110` — Audit and repair Boost, including Game Mode
-
-**Problem:** Activating Game Mode unexpectedly loads every Zentral app, which defeats its purpose as a RAM-saving feature. The owner also requests a full bug pass over Boost, not just this single symptom.
-
-**Plan (in this order):**
-
-1. Trace Game Mode activation across the Boost controller, app lifecycle, loader catalog and pause/resume subscriptions. Identify why activation eagerly initializes unrelated apps.
-2. Change the activation path so Game Mode only changes the shared pause / background policies it owns; it must not eagerly load apps, panels, widgets or other Zentral features.
-3. Audit all Boost paths (memory measurement, Light/Deep trim, per-panel sleep/restore, RAM limiter, Game Mode and teardown) for broken guards, stale state, unbounded retries/timers, incorrect restore behaviour and listeners not removed.
-4. Add targeted regression tests for the reported app-loading bug and every concrete defect found. Keep memory-affecting actions safe: selected, audible, active or otherwise protected tabs/panels must not be closed or discarded.
-5. Update the Boost README only where behaviour or safety guarantees change.
-
-**Tests / done when:** Game Mode does not initialize unrelated Zentral apps; all discovered Boost bugs have a failing regression test before their fix, and the Boost-focused suite passes without changing version 3.4.0.
-
 ---
 
 ## Track 2 design rules (owner decisions, still binding)
@@ -871,10 +856,10 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and version here in place. Keep the project version at 3.4.0 until the owner explicitly says otherwise.**
 
-State: **3.4.0 on beta**. The existing roadmap through `OW-104` remains complete as recorded above. The new owner requests `OW-105`–`OW-110` are OPEN and ordered from the smallest changes to the larger Boost audit.
+State: **3.4.0 on beta**. The existing roadmap through `OW-110` is complete (see `docs/LEGACY_done_rows.md`). Remaining open items are `T4.3a`..`T4.3c`, `ST7.4`, and the owner live-check item `OW-66`.
 
-Completed this session: OW-105 widget colour overrides are fixed and regression-tested; OW-106 makes real Notes/Calendar pseudo-tabs open on All notes while preserving explicit note navigation; OW-107 documents the Weather data flow, removes lookup while Weather is off, and guards late geocoding responses; OW-108 restores Calendar weather; OW-109 adds `weather.default_view`, direct Today/Tomorrow/Week buttons persisted via `weather.view` independently from the default, compact day-of-month labels (`18.`, `19.`, ...), actual weather descriptions for all Week rows including Today/Tomorrow, and live EN/PL localization. OW-110 remains open.
+Completed this session: OW-108 restores Calendar weather; OW-109 adds `weather.default_view`, direct Today/Tomorrow/Week buttons persisted via `weather.view` independently from the default, compact day-of-month labels (`18.`, `19.`, ...), actual weather descriptions for all Week rows including Today/Tomorrow, and live EN/PL localization; OW-110 audits Boost and fixes Game Mode (`gameModeTargets()` no longer calls `getOrCreateAppBrowser`, `applyGameMode(true)` no longer calls `syncPanelActivity()` to re-wake preload panels, `syncAppPanelBrowserActivity` respects active Game Mode, `strongerSaverSleep()` chains after `runLevel2` instead of hitting `level2Busy`, teardown clears `game_mode` pref, pending settle timers resolve cleanly on `destroy()`, async `requestProcInfo()` Promises work, trim/unload/limiter cleanup guards, and Boost widget card popup sampling/disposal/late-attach).
 
 Known debts: no live Zen/Sine runtime is available in this session; repository tests and CI must be used where possible, and live-only claims must not be presented as verified.
 
-Next action: complete OW-110 (full Boost audit and Game Mode RAM behaviour), then continue eligible smaller open items (`T4.3a`..`T4.3c`, `ST7.4`). Commit and push each completed change separately. Do not bump any version above 3.4.0.
+Next action: continue eligible smaller open items (`T4.3a` → `T4.3b` → `T4.3c`, `ST7.4`). Do not bump any version above 3.4.0.

@@ -207,6 +207,20 @@
 
       let memorySupport = null; // null = not probed yet, false = the build cannot answer
 
+      function applyAsyncProcInfo(promise) {
+        memorySupport = true;
+        Promise.resolve(promise)
+          .then((resolved) => {
+            if (disposed) return;
+            const mb = memoryMBFrom(resolved);
+            if (mb != null) {
+              lastSampleMB = mb;
+              emit(mb);
+            }
+          })
+          .catch(() => {});
+      }
+
       function memoryMB() {
         // One probe at most: the startup check's own answer is used as the first reading rather than thrown away and
         // re-read (a browser that answers costs one read, a build that cannot answer warns once).
@@ -220,6 +234,10 @@
             );
           }
           return null;
+        }
+        if (typeof info.then === "function") {
+          applyAsyncProcInfo(info);
+          return lastSampleMB;
         }
         memorySupport = true;
         return memoryMBFrom(info);
@@ -246,16 +264,34 @@
       // refuses must not turn "free memory" into an error a person sees.
       let level1Busy = false;
       let level1Timer = 0;
+      let cancelLevel1 = null;
 
       function runLevel1() {
-        if (level1Busy) return Promise.resolve(null);
+        if (disposed || level1Busy) return Promise.resolve(null);
         const beforeMB = memoryMB();
+        if (beforeMB != null) lastSampleMB = beforeMB;
         level1Busy = true;
         return new Promise((resolve) => {
+          let settled = false;
+          const settle = (value) => {
+            if (settled) return;
+            settled = true;
+            cancelLevel1 = null;
+            level1Busy = false;
+            resolve(value);
+          };
+          cancelLevel1 = () => settle(null);
           const finish = (freedBy) => {
+            if (disposed) {
+              settle(null);
+              return;
+            }
             level1Timer = setTimer(() => {
               level1Timer = 0;
-              level1Busy = false;
+              if (disposed) {
+                settle(null);
+                return;
+              }
               const afterMB = memoryMB();
               const result = {
                 beforeMB,
@@ -266,7 +302,7 @@
               };
               lastSampleMB = afterMB != null ? afterMB : lastSampleMB;
               emit(afterMB != null ? afterMB : lastSampleMB);
-              resolve(result);
+              settle(result);
             }, LEVEL1_SETTLE_MS);
           };
           const cycle = (freedBy) => {
@@ -316,6 +352,7 @@
         clearTimer(level1Timer);
         level1Timer = 0;
         level1Busy = false;
+        cancelLevel1?.();
       });
 
       /* ---------------- sampling (only while someone is looking) ---------------- */
@@ -405,14 +442,22 @@
 
       let trimTimer = 0;
       let trimMaxTimer = 0;
+      let trimIdleId = 0;
       let trimDone = false;
       let lastInputAt = 0;
+      let inputListenersAttached = false;
 
       const clearTrimTimers = () => {
         clearTimer(trimTimer);
         clearTimer(trimMaxTimer);
         trimTimer = 0;
         trimMaxTimer = 0;
+        if (trimIdleId) {
+          try {
+            window.cancelIdleCallback?.(trimIdleId);
+          } catch (_) {}
+          trimIdleId = 0;
+        }
       };
 
       const trimAllowed = () => !disposed && !trimDone && prefBool(PREF.STARTUP_TRIM, true);
@@ -421,6 +466,29 @@
         if (!trimAllowed()) return;
         clearTimer(trimTimer);
         trimTimer = setTimer(runTrimIfQuiet, TRIM_QUIET_MS);
+      }
+
+      const onUserInput = () => {
+        lastInputAt = Date.now();
+        if (!trimAllowed()) return;
+        armTrimQuietTimer();
+      };
+
+      const detachInputListeners = () => {
+        if (!inputListenersAttached) return;
+        inputListenersAttached = false;
+        for (const type of INPUT_EVENTS) {
+          try {
+            window.removeEventListener(type, onUserInput, { capture: true, passive: true });
+          } catch (_) {}
+        }
+      };
+
+      function finishStartupTrim() {
+        trimDone = true;
+        clearTrimTimers();
+        detachInputListeners();
+        void runLevel1();
       }
 
       function runTrimIfQuiet() {
@@ -432,41 +500,29 @@
           armTrimQuietTimer();
           return;
         }
-        const idle =
-          typeof window.requestIdleCallback === "function"
-            ? window.requestIdleCallback
-            : (cb) => setTimer(cb, TRIM_IDLE_TIMEOUT_MS);
-        try {
-          idle(
-            () => {
-              if (!trimAllowed()) return;
-              trimDone = true;
-              clearTrimTimers();
-              void runLevel1();
-            },
-            { timeout: TRIM_IDLE_TIMEOUT_MS },
-          );
-        } catch (_) {
-          trimDone = true;
-          clearTrimTimers();
-          void runLevel1();
+        if (typeof window.requestIdleCallback === "function") {
+          try {
+            trimIdleId = window.requestIdleCallback(
+              () => {
+                trimIdleId = 0;
+                if (!trimAllowed()) return;
+                finishStartupTrim();
+              },
+              { timeout: TRIM_IDLE_TIMEOUT_MS },
+            );
+            return;
+          } catch (_) {
+            trimIdleId = 0;
+          }
         }
+        finishStartupTrim();
       }
-
-      const onUserInput = () => {
-        lastInputAt = Date.now();
-        if (!trimAllowed()) return;
-        armTrimQuietTimer();
-      };
 
       for (const type of INPUT_EVENTS) {
         window.addEventListener(type, onUserInput, { capture: true, passive: true });
-        onCleanup(() => {
-          try {
-            window.removeEventListener(type, onUserInput, { capture: true, passive: true });
-          } catch (_) {}
-        });
       }
+      inputListenersAttached = true;
+      onCleanup(detachInputListeners);
 
       function scheduleStartupTrim() {
         if (!trimAllowed()) return;
@@ -477,9 +533,7 @@
           // still happens once, and never again.
           trimMaxTimer = 0;
           if (!trimAllowed()) return;
-          trimDone = true;
-          clearTrimTimers();
-          void runLevel1();
+          finishStartupTrim();
         }, TRIM_MAX_WAIT_MS);
       }
 
@@ -553,8 +607,15 @@
       // A deep run, in three steps that can each say no: tabs by the policy (oldest first), then panel records whose
       // mode allows sleep, then the wake-up list for Restore. The counts and the freed number are the result.
       let level2Busy = false;
+      let cancelLevel2Wait = null;
+      onCleanup(() => {
+        cancelLevel2Wait?.();
+        cancelLevel2Wait = null;
+        level2Busy = false;
+      });
+
       async function runLevel2(options = {}) {
-        if (level2Busy) return null;
+        if (disposed || level2Busy) return null;
         if (!policy()) {
           warn("the tab policy is not loaded, so the deep pass is not offered in this build");
           return null;
@@ -568,11 +629,14 @@
         level2Busy = true;
         try {
           const beforeMB = memoryMB();
+          if (beforeMB != null) lastSampleMB = beforeMB;
           const ctx = {
             videoSourceTab: videoSourceTab(),
             selectedTab: gBrowser.selectedTab,
             sessionUrlFor: (tab) => {
               try {
+                const liveSpec = tab?.linkedBrowser?.currentURI?.spec;
+                if (liveSpec && liveSpec !== "about:blank") return String(liveSpec);
                 const state = JSON.parse(window.SessionStore?.getTabState?.(tab) || "{}");
                 const entries = Array.isArray(state.entries) ? state.entries : [];
                 const index = entries.length ? Math.max(0, Math.min(entries.length - 1, (Number(state.index) || 1) - 1)) : -1;
@@ -593,7 +657,7 @@
             // them. `batch` is the only difference, so both go through the same policy.
             const limit = Number(options.batch) > 0 ? Number(options.batch) : Infinity;
             for (const tab of candidates) {
-              if (unloaded.tabs >= limit) break;
+              if (disposed || unloaded.tabs >= limit) break;
               const verdict = canUnload(tab, ctx);
               if (!verdict.allowed) {
                 if (verdict.reason !== "selected" && skipped.length < 5) skipped.push(verdict.reason);
@@ -605,6 +669,7 @@
                   await gBrowser.prepareDiscardBrowser?.(tab);
                   gBrowser.discardBrowser?.(tab, true);
                 }
+                if (disposed) return null;
                 unloaded.tabs += 1;
                 rememberUndone("tabs", {
                   tab: null, // the element is gone from the session's point of view; the URL is what Restore lists
@@ -619,12 +684,13 @@
           }
           // Panels: only records the person marked `asleep-allowed`. `live` and `throttled` stay exactly as they are —
           // the mode is theirs, and this pass does not read it as advice.
-          if (options.allowPanels !== false) {
+          if (!disposed && options.allowPanels !== false) {
             // A manual deep pass and the limiter sleep only `asleep-allowed` records — the mode is the person's advice
             // and this pass does not read it as consent. A Stronger-saver Game Mode pass passes `allowModes` with every
             // mode, because that switch IS the consent (plan B7.2).
             const modes = Array.isArray(options.allowModes) ? options.allowModes : ["asleep-allowed"];
             for (const record of essentialRecords()) {
+              if (disposed) break;
               if (!modes.includes(modeOf(record))) continue;
               const verdict = canUnload(record.tab, ctx);
               if (!verdict.allowed) {
@@ -634,6 +700,7 @@
               try {
                 if (typeof gBrowser.explicitUnloadTabs === "function") await gBrowser.explicitUnloadTabs([record.tab]);
                 else gBrowser.discardBrowser?.(record.tab, true);
+                if (disposed) return null;
                 unloaded.panels += 1;
                 rememberUndone("panels", { appId: record.app?.id || record.appId, title: String(record.app?.name || ""), when: Date.now() });
               } catch (_) {
@@ -641,18 +708,43 @@
               }
             }
           }
+          if (disposed) return null;
           // Gecko frees after the sleep, not during it: the same 3 s settle as Level 1, for the same reason.
           const afterMB = await new Promise((resolve) => {
-            setTimer(() => {
+            let done = false;
+            let t1 = 0;
+            let t2 = 0;
+            const settle = (value) => {
+              if (done) return;
+              done = true;
+              cancelLevel2Wait = null;
+              clearTimer(t1);
+              clearTimer(t2);
+              resolve(value);
+            };
+            cancelLevel2Wait = () => settle(undefined);
+            t1 = setTimer(() => {
+              t1 = 0;
+              if (disposed) {
+                settle(undefined);
+                return;
+              }
               runGcCc();
-              setTimer(() => resolve(memoryMB()), LEVEL1_SETTLE_MS);
+              t2 = setTimer(() => {
+                t2 = 0;
+                settle(disposed ? undefined : memoryMB());
+              }, LEVEL1_SETTLE_MS);
             }, LEVEL1_SETTLE_MS);
           });
+          if (disposed || afterMB === undefined) return null;
           const freedMB = beforeMB != null && afterMB != null ? Math.max(0, beforeMB - afterMB) : null;
-          lastSampleMB = afterMB;
-          emit(afterMB);
+          if (afterMB != null) {
+            lastSampleMB = afterMB;
+            emit(afterMB);
+          }
           return { beforeMB, afterMB, freedMB, by: "level2", unloaded, skipped, undoSize: undoSize() };
         } finally {
+          cancelLevel2Wait = null;
           level2Busy = false;
         }
       }
@@ -840,6 +932,7 @@
         lastAction: "",
         lastReason: "",
         runs: 0,
+        busy: false,
       };
 
       // One tick: read, decide, act, and arm exactly one more timer. The chain stops the moment the pref is off or the
@@ -870,7 +963,7 @@
               listener({ kind: "limit", action: "notify", totalMB, limitMB: settings.limitMB, targetMB: decision.targetMB });
             } catch (_) {}
           }
-        } else if (decision.action === "unload") {
+        } else if (decision.action === "unload" && !limiter.busy) {
           limiter.lastRunAt = Date.now();
           limiter.runs += 1;
           void limiterRunHard(settings, decision, totalMB);
@@ -881,35 +974,42 @@
       // A hard run in batches: three tabs, re-read, stop at the target or when nothing is left. `runLevel2` already
       // does the policy work; this only decides when to stop, which is the part that makes a hard mode safe.
       async function limiterRunHard(settings, decision, totalMB) {
-        let current = totalMB;
-        let rounds = 0;
-        let unloaded = { tabs: 0, panels: 0 };
-        // A hard run is a deep pass repeated until the number is where the person wants it, with a bounded number of
-        // rounds so a page that refuses to sleep cannot make this loop forever.
-        while (rounds < 12 && current > decision.targetMB) {
-          rounds += 1;
-          const result = await runLevel2({ batch: LIMIT_BATCH });
-          if (!result || result.by !== "level2") break;
-          unloaded.tabs += result.unloaded?.tabs || 0;
-          unloaded.panels += result.unloaded?.panels || 0;
-          const after = Number(result.afterMB);
-          if (!Number.isFinite(after) || after >= current) break; // nothing changed: stop rather than spin
-          current = after;
-          if (!(result.unloaded?.tabs || result.unloaded?.panels)) break;
-        }
-        for (const listener of limiterListeners) {
-          try {
-            listener({ kind: "limit", action: "hard-done", totalMB: current, unloaded, runs: rounds });
-          } catch (_) {}
-        }
-        // Still above the limit with nothing eligible: one quiet line per ten minutes, never a loop of them.
-        if (current > decision.targetMB && !unloaded.tabs && !unloaded.panels && shouldNag(limiter.lastNagAt, Date.now())) {
-          limiter.lastNagAt = Date.now();
+        if (limiter.busy) return;
+        limiter.busy = true;
+        try {
+          let current = totalMB;
+          let rounds = 0;
+          let unloaded = { tabs: 0, panels: 0 };
+          // A hard run is a deep pass repeated until the number is where the person wants it, with a bounded number of
+          // rounds so a page that refuses to sleep cannot make this loop forever.
+          while (!disposed && limiterSettings().enabled && rounds < 12 && current > decision.targetMB) {
+            rounds += 1;
+            const result = await runLevel2({ batch: LIMIT_BATCH });
+            if (!result || result.by !== "level2") break;
+            unloaded.tabs += result.unloaded?.tabs || 0;
+            unloaded.panels += result.unloaded?.panels || 0;
+            const after = Number(result.afterMB);
+            if (!Number.isFinite(after) || after >= current) break; // nothing changed: stop rather than spin
+            current = after;
+            if (!(result.unloaded?.tabs || result.unloaded?.panels)) break;
+          }
+          if (disposed || !limiterSettings().enabled) return;
           for (const listener of limiterListeners) {
             try {
-              listener({ kind: "limit", action: "nothing-eligible", totalMB: current, limitMB: settings.limitMB });
+              listener({ kind: "limit", action: "hard-done", totalMB: current, unloaded, runs: rounds });
             } catch (_) {}
           }
+          // Still above the limit with nothing eligible: one quiet line per ten minutes, never a loop of them.
+          if (current > decision.targetMB && !unloaded.tabs && !unloaded.panels && shouldNag(limiter.lastNagAt, Date.now())) {
+            limiter.lastNagAt = Date.now();
+            for (const listener of limiterListeners) {
+              try {
+                listener({ kind: "limit", action: "nothing-eligible", totalMB: current, limitMB: settings.limitMB });
+              } catch (_) {}
+            }
+          }
+        } finally {
+          limiter.busy = false;
         }
       }
 
@@ -990,36 +1090,53 @@
         return "";
       }
 
-      // Everything Game Mode may touch: the browsers of open tabs (never the selected one) and every loaded panel
-      // browser. Records are matched to their browser through the panel module, because a record stores its `tab`,
-      // not a browser: `getOrCreateAppBrowser` is the documented way back from an app to its browser.
+      // Everything Game Mode may touch: the browsers of open tabs (never the selected one) and ONLY already-loaded panel
+      // browsers. Never call `getOrCreateAppBrowser` here: creating browsers for unloaded apps would spin up and load
+      // every Zentra/Essential app on demand when turning Game Mode on.
       function gameModeTargets() {
         const bodies = [];
+        const seen = new Set();
         const videoSource = videoSourceTab();
         const gBrowser = window.gBrowser;
         try {
           for (const tab of gBrowser?.tabs || []) {
             const browser = tab?.linkedBrowser;
-            if (!browser || !tab.isConnected) continue;
+            if (!browser || !tab.isConnected || seen.has(browser)) continue;
+            seen.add(browser);
             const why = gameModeExemptReason(tab, videoSource);
             bodies.push({ id: browser, kind: "tab", exempt: Boolean(why), why });
           }
         } catch (_) {}
         try {
+          const panelCtx = panels();
           const apps = window.Zentral?.Apps;
+          const recordsByAppId = new Map();
           for (const record of essentialRecords()) {
-            const browser = apps?.getOrCreateAppBrowser
-              ? (() => {
-                  try {
-                    return apps.getOrCreateAppBrowser(record.app)?.browser || null;
-                  } catch (_) {
-                    return null;
-                  }
-                })()
-              : null;
-            if (!browser?.isConnected) continue;
-            const why = gameModeExemptReason(record.tab, videoSource);
+            const appId = record?.app?.id || record?.appId;
+            if (appId) recordsByAppId.set(appId, record);
+          }
+          const addPanelBrowser = (browser, record) => {
+            if (!browser?.isConnected || seen.has(browser)) return;
+            seen.add(browser);
+            let why = record?.tab ? gameModeExemptReason(record.tab, videoSource) : "";
+            if (!why && browser.audioPlaying) why = "audible";
+            if (!why && videoSource && browser === videoSource.linkedBrowser) why = "video-source";
             bodies.push({ id: browser, kind: "panel", exempt: Boolean(why), why: why || "panel" });
+          };
+          const liveBrowsers =
+            typeof panelCtx?.getAllAppBrowsers === "function" ? panelCtx.getAllAppBrowsers() : [];
+          for (const browser of liveBrowsers || []) {
+            const appId = browser?._bgalazkaAppId;
+            addPanelBrowser(browser, appId ? recordsByAppId.get(appId) : null);
+          }
+          for (const record of recordsByAppId.values()) {
+            const appId = record?.app?.id || record?.appId;
+            const browser =
+              (typeof apps?.getAppBrowser === "function" ? apps.getAppBrowser(appId) : null) ||
+              apps?.appBrowsers?.get?.(appId) ||
+              record?.tab?.linkedBrowser ||
+              null;
+            addPanelBrowser(browser, record);
           }
         } catch (_) {}
         return bodies;
@@ -1128,15 +1245,20 @@
             gameMode.pausedBy = true;
           }
           // Level 2 first (the plan's "Level 2 +"), then the activity pass. Level 2 is async and must not block the
-          // switch: the activity pass is what the person feels, and it is synchronous by design.
+          // switch: the activity pass is what the person feels, and it is synchronous by design. Do NOT call
+          // `syncPanelActivity()` here on turn-on: `deactivateForGameMode` already idled background panels, whereas
+          // `syncPanelActivity()` would reactivate preload `live` notification panels right back.
           const level2 = runLevel2({ allowPanels: false });
           if (level2 && typeof level2.catch === "function") level2.catch(() => {});
           const activity = deactivateForGameMode(gameModeTargets());
           if (prefBool(PREF.STRONGER_SAVER, false)) {
-            const sleep = strongerSaverSleep();
-            if (sleep && typeof sleep.catch === "function") sleep.catch(() => {});
+            Promise.resolve(level2)
+              .then(() => {
+                if (disposed || !gameMode.on || !prefBool(PREF.STRONGER_SAVER, false)) return null;
+                return strongerSaverSleep();
+              })
+              .catch(() => {});
           }
-          syncPanelActivity();
           gameMode.lastResult = { ...gameModeState(), acted: activity.acted, kept: activity.kept.length };
           return gameMode.lastResult;
         }
@@ -1168,14 +1290,12 @@
 
       // The pref is the switch, so Settings and the widget write the same thing and only one path acts on it.
       function installGameMode() {
-        let last = prefBool(PREF.GAME_MODE, false);
-        if (last) applyGameMode(true);
+        if (prefBool(PREF.GAME_MODE, false)) applyGameMode(true);
         const observer = {
           observe(_subject, _topic, data) {
             if (data && data !== PREF.GAME_MODE) return;
             const next = prefBool(PREF.GAME_MODE, false);
-            if (next === last) return;
-            last = next;
+            if (next === gameMode.on) return;
             applyGameMode(next);
           },
         };
@@ -1187,10 +1307,15 @@
             } catch (_) {}
           });
         } catch (_) {}
-        // Leaving a window that is in Game Mode must not leave the browser deactivated: turning it off on teardown is
-        // the same path the person's own switch takes, so there is nothing special about it.
+        // Leaving a window that is in Game Mode must not leave the browser deactivated or persist the pref across a
+        // restart: turning it off on teardown restores activity and clears the pref so the next launch starts normal.
         onCleanup(() => {
           if (gameMode.on) applyGameMode(false);
+          if (prefBool(PREF.GAME_MODE, false)) {
+            try {
+              Services.prefs.setBoolPref(PREF.GAME_MODE, false);
+            } catch (_) {}
+          }
         });
       }
 
@@ -1265,7 +1390,13 @@
       }
 
       window.ZentralBoost = api;
-      window.addEventListener("unload", () => api.destroy(), { once: true });
+      const onWindowUnload = () => api.destroy();
+      window.addEventListener("unload", onWindowUnload, { once: true });
+      onCleanup(() => {
+        try {
+          window.removeEventListener("unload", onWindowUnload);
+        } catch (_) {}
+      });
       installShortcut();
       installLimiter();
       installGameMode();
@@ -1279,6 +1410,10 @@
         warn(
           "this build does not expose ChromeUtils.requestProcInfo(); the RAM reading is unavailable, freeing memory still works",
         );
+      } else if (typeof probeInfo.then === "function") {
+        const pendingProbe = probeInfo;
+        probeInfo = null;
+        applyAsyncProcInfo(pendingProbe);
       }
 
       // B2.3: after session restore, once per browser start. The runtime activates features only after its own
