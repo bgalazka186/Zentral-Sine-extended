@@ -133,9 +133,12 @@ test("a module switch silences only its own module", () => {
   env.store.set("zen.workspace.zentral.debug.tabs", true);
   seam.record("info", "TabSelect", "tab measured");
   assert.equal(count(), start + 1, "turning the module on lets its lines through");
-  // core is always on once logging is on
+  // OW-87: the core category is its own switch now, off by default, and it is honoured like any other.
   seam.record("info", "Zentral", "core line", "core");
-  assert.equal(count(), start + 2);
+  assert.equal(count(), start + 1, "core is off while its own pref is off, even with logging on");
+  env.store.set("zen.workspace.zentral.debug.core", true);
+  seam.record("info", "Zentral", "core line", "core");
+  assert.equal(count(), start + 2, "turning core on lets its lines through");
 });
 
 test("tags are classified into the module an export is filtered by", () => {
@@ -199,7 +202,11 @@ test("a shared export carries no account name, query, address or token", () => {
 test("the export is a whole document, and raw is the only way past redaction", () => {
   // The export includes a layout snapshot when the layout module is on; that needs a real document tree, which this
   // test is not about, so the layout module stays off and the trace is what is proven.
-  const env = boot({ "zen.workspace.zentral.debug": true, "zen.workspace.zentral.debug.full": false });
+  const env = boot({
+    "zen.workspace.zentral.debug": true,
+    "zen.workspace.zentral.debug.full": false,
+    "zen.workspace.zentral.debug.core": true,
+  });
   const seam = begin(env);
   seam.record("info", "Zentral", "opened /home/bob/notes.txt", "core");
   const share = seam.generateLogString();

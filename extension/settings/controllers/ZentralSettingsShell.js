@@ -502,7 +502,11 @@
             );
           }
           if (get("zs-pref-logger-core")) {
-            get("zs-pref-logger-core").checked = true; // Always on
+            // OW-87: the row follows the stored pref; it is no longer forced on.
+            get("zs-pref-logger-core").checked = Core.getPref(
+              Constants.Diagnostics.PREF_LOGGER_CORE,
+              false,
+            );
           }
           if (get("zs-pref-logger-tabs")) {
             get("zs-pref-logger-tabs").checked = Core.getPref(
@@ -727,7 +731,12 @@
               get("zs-pref-logger-full").checked,
             );
           }
-          Core.setPref(Constants.Diagnostics.PREF_LOGGER_CORE, true);
+          if (get("zs-pref-logger-core")) {
+            Core.setPref(
+              Constants.Diagnostics.PREF_LOGGER_CORE,
+              get("zs-pref-logger-core").checked,
+            );
+          }
           if (get("zs-pref-logger-tabs")) {
             Core.setPref(
               Constants.Diagnostics.PREF_LOGGER_TABS,
@@ -971,7 +980,7 @@
         <div class="zs-header">
           <div class="zs-title-group">
             <h2 class="zs-title">Zentral Settings</h2>
-            <span class="zs-version-badge">v3.3.313</span>
+            <span class="zs-version-badge">v3.3.315</span>
           </div>
           <div class="zs-header-actions">
             <button id="zs-kofi-btn" class="zs-kofi-btn" title="Support Zentral on Ko-fi (ko-fi.com/michele501st)">
@@ -1279,14 +1288,14 @@
                     Active Log Modules
                   </div>
 
-                  <!-- 1. Core & Gecko Errors (Always On, Disabled) -->
+                  <!-- 1. Core & Gecko Errors (OW-87: off by default, the person decides) -->
                   <div class="zs-row" style="padding: 2px 0;">
                     <div class="zs-label-container">
                       <span class="zs-label" style="font-size: 13px;">Core Engine & Gecko Errors</span>
-                      <span class="zs-sublabel" style="font-size: 11.5px;">Uncaught script exceptions and Gecko console errors (Always Active)</span>
+                      <span class="zs-sublabel" style="font-size: 11.5px;">Uncaught script exceptions and Gecko console errors — off unless you switch it on</span>
                     </div>
                     <label class="zs-switch">
-                      <input type="checkbox" id="zs-pref-logger-core" checked disabled />
+                      <input type="checkbox" id="zs-pref-logger-core" />
                       <span class="zs-slider"></span>
                     </label>
                   </div>
@@ -1843,7 +1852,6 @@
                 Constants.Diagnostics.PREF_LOGGER_ENABLED,
                 loggerMasterToggle.checked,
               );
-              Core.setPref(Constants.Diagnostics.PREF_LOGGER_CORE, true);
             }
             if (loggerFullToggle) {
               Core.setPref(
@@ -1895,6 +1903,14 @@
           }
 
           // Diagnostic Logging Full Log Toggle & Modular Sub-Selections
+          // OW-87: the core category is an ordinary choice now, so it saves like the others.
+          const coreToggle = this.modal.querySelector("#zs-pref-logger-core");
+          if (coreToggle) {
+            coreToggle.addEventListener("change", () => {
+              saveDiagnosticsPrefsImmediately();
+            });
+          }
+
           const loggerFullToggle = this.modal.querySelector(
             "#zs-pref-logger-full",
           );

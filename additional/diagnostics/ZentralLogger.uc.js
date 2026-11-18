@@ -101,7 +101,6 @@
 
         function isModuleEnabled(moduleName) {
           if (!isLoggerEnabled()) return false;
-          if (moduleName === "core") return true;
 
           try {
             // If "Full Log" is active, all modules are enabled

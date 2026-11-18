@@ -23,7 +23,7 @@
     "zen.workspace.tabgroups.label_opacity": 85,
     "zen.workspace.zentral.debug": false,
     "zen.workspace.zentral.debug.full": false,
-    "zen.workspace.zentral.debug.core": true,
+    "zen.workspace.zentral.debug.core": false,
     "zen.workspace.zentral.debug.tabs": false,
     "zen.workspace.zentral.debug.menus": false,
     "zen.workspace.zentral.debug.layout": false,

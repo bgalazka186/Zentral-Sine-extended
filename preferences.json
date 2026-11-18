@@ -4997,9 +4997,9 @@
   },
   {
     "property": "zen.workspace.zentral.debug.core",
-    "label": "Core Engine & Gecko Errors (Always On)",
+    "label": "Core Engine & Gecko Errors",
     "type": "checkbox",
-    "defaultValue": true
+    "defaultValue": false
   },
   {
     "property": "zen.workspace.zentral.debug.tabs",
