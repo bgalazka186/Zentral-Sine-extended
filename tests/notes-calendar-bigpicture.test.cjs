@@ -711,7 +711,10 @@ const openCalendarRow = (root, trigger, label, match = (text, want) => text === 
     const rowsBefore = tree.querySelectorAll(".zn-item").length;
     assert.ok(rowsBefore >= 2, "the tree has rows to keep");
 
+    // A docked splitter sets an inline, non-growing flex item. It must not size the tree in its new slot.
+    tree.style.flex = "0 0 280px";
     h.sheet.openCalendarBigPicture();
+    assert.ok(!tree.style.flex, "Big Picture releases the docked inline width on entry");
     await flush();
 
     const stage = h.sheet.root.querySelector(".zn-cal-bigpicture-stage");

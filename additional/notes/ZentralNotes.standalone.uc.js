@@ -5171,10 +5171,8 @@ const __zentralEmbeddedLoader = (function () {
     const first = addDays(start, -offset);
     return Array.from({ length: 7 }, (_, i) => addDays(first, i));
   }
-  // A week view is not a calendar week: it is "the next N days", and the owner asked for enough of them to be useful on
-  // a Big Picture surface. 48 is two rows of 24 — the widest span that still reads as a grid rather than a strip — and
-  // `WEEK_ROWS_MAX` is what the renderer uses to stack them when the height allows.
-  const WEEK_DAYS_LIMITS = Object.freeze({ min: 1, max: 48, default: 7, minColPx: 84, gutterPx: 42, maxRows: 2 });
+  // Week shows a configurable run of dates: up to four weeks in each of two bands.
+  const WEEK_DAYS_LIMITS = Object.freeze({ min: 1, max: 56, perRow: 28, default: 7, minColPx: 84, gutterPx: 42, maxRows: 2 });
   const WEEK_RANGE_STARTS = Object.freeze(["weekStart", "today", "selected"]);
   const DEFAULT_WEEK_SPAN = Object.freeze({ days: 7, anchor: "weekStart" });
   function cleanWeekDaysCount(value, fallback = 7) {
@@ -5209,37 +5207,19 @@ const __zentralEmbeddedLoader = (function () {
     const col = Math.max(1, Number(minColPx) || WEEK_DAYS_LIMITS.minColPx);
     return Math.max(min, Math.min(max, Math.floor(usable / col) || 1));
   }
-  // OW-25: `count` consecutive local midnights starting at `start` (clamped 1..48, DST-safe).
+  // OW-25: `count` consecutive local midnights starting at `start` (clamped 1..56, DST-safe).
   function visibleDays(start, count = 7) {
     const base = dayStart(start);
     const n = cleanWeekDaysCount(count, 7);
     const len = n === "auto" ? 7 : n;
     return Array.from({ length: len }, (_, i) => addDays(base, i));
   }
-  // OW-96: how many columns and how many rows a span needs. One row is the old behaviour and stays the default; past
-  // what the width can hold, the days stack into a second row instead of shrinking a column to nothing — 48 days at
-  // 84px is 4032px, which no sidebar has, and 24 columns twice is readable where 48 once is not.
-  //
-  // Pure, and it only decides; the renderer draws. `rows` is 1 unless two conditions both hold: the days do not fit on
-  // one row at this width, and the surface is tall enough for a second. A short window keeps one row and scrolls rather
-  // than squeezing two rows into a strip where neither is readable.
-  const WEEK_ROW_MIN_PX = 180;
-  function weekGridPlan({ days = 7, widthPx = 0, heightPx = 0, minColPx = WEEK_DAYS_LIMITS.minColPx, gutterPx = WEEK_DAYS_LIMITS.gutterPx, maxRows = WEEK_DAYS_LIMITS.maxRows } = {}) {
-    // `days: 0` is clamped to 1 exactly as `cleanWeekDaysCount` would: the plan must never disagree with the model
-    // about how many days there are, or the header and the timeline would wrap differently. `undefined` is 7.
-    const asked = Number(days);
-    const count = Math.max(1, Math.min(WEEK_DAYS_LIMITS.max, Number.isFinite(asked) && days != null ? Math.round(asked) : 7));
-    const col = Math.max(1, Number(minColPx) || WEEK_DAYS_LIMITS.minColPx);
-    const usable = Math.max(0, (Number(widthPx) || 0) - (Number(gutterPx) || 0));
-    const fitsOneRow = usable <= 0 ? count <= 7 : Math.floor(usable / col) >= count;
-    const rows = Math.max(1, Math.min(Math.max(1, Math.round(maxRows) || 1), 2));
-    if (fitsOneRow || rows < 2 || !(Number(heightPx) >= WEEK_ROW_MIN_PX * 2)) return { count, rows: 1, perRow: count };
-    const perRow = Math.ceil(count / 2);
-    // A stack is only a stack if each of its rows fits at the minimum column width. Otherwise two rows of 35px columns
-    // are worse than one row that scrolls: the whole point of the second row is that a column stays readable.
-    const perRowFits = usable <= 0 ? perRow <= 7 : Math.floor(usable / col) >= perRow;
-    if (!perRowFits) return { count, rows: 1, perRow: count };
-    return { count, rows: 2, perRow };
+  // Resizing may change the auto day count, but never moves a given date between bands.
+  function weekGridPlan({ days = 7 } = {}) {
+    const count = cleanWeekDaysCount(days);
+    const n = count === "auto" ? WEEK_DAYS_LIMITS.default : count;
+    const perRow = Math.min(n, WEEK_DAYS_LIMITS.perRow);
+    return { count: n, perRow, rows: Math.ceil(n / perRow) };
   }
 
   // The one unit rule the calendar needs. The widget does the converting (Open-Meteo converts server-side), so this
@@ -12540,7 +12520,7 @@ const __zentralEmbeddedLoader = (function () {
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, itemIdTokens, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, cleanHistoryFilter, filterHistoryRecords, historyPruneSurvey, exportHistoryLines, historySummaryLine, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanNoteDropKind, NOTE_DROP_KINDS, cleanCalendarShare, TREE_WIDTH_LIMITS, cleanTreePaneWidth, clampTreePaneWidth, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_TABLE, HOLIDAY_TABLE_KINDS, holidayTableEntries, holidayTableYears, holidaySetCoverage, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, holidaySetsOf, HOLIDAY_FEED_RE, holidayFeedName, holidayFeedOf, isImportedHoliday, markImportedHoliday, IMPORTED_HOLIDAY_CLASS, importedHolidayAttrs, NO_WORK_FREE, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     DEFAULT_DAY_LOOK, DAY_LOOK_KINDS, DAY_LOOK_MAX_STRENGTH, cleanDayLookColor, cleanDayLookStrength, cleanDayLook, dayLookTint, CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, weekGridPlan, WEEK_ROW_MIN_PX, FORECAST_TRUST_STEPS, forecastTrust,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, weekGridPlan, FORECAST_TRUST_STEPS, forecastTrust,
     weatherUnitLabelsFor, CALENDAR_WEATHER_GLYPHS, calendarWeatherIndex,
     forecastRefreshMinutes, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaLeftCount, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, AGENDA_FOLD_DEFAULTS, cleanAgendaFold, inQuietHours, agendaFoldPlan, UI_STATE_KEYS, isUiStateKey, splitUiState, migrateUiState, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, itemOwnsNoteText, itemIsFreeStanding, noteLinkedItems, unlinkPlan, unlinkLineText, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle, icsUnfold, icsText, icsProperty, icsDateValue, icsZonedMs, icsStamp, icsRecurrence, parseIcs, icsToItem, planIcsImport, icsEscape, icsFold, icsEventLines, icsFromItems, icsUtcStamp, defaultIcsUid, SYNC_STATES, syncStateOf, markSynced, markSyncedDeleted, syncPlan,
   };
@@ -31571,8 +31551,9 @@ __zentralShim.register = function (def) {
         if (!state) return;
         if (Number.isFinite(state.contentScrollTop)) calendarContent.scrollTop = Math.max(0, state.contentScrollTop);
         if (Number.isFinite(state.contentScrollLeft)) calendarContent.scrollLeft = Math.max(0, state.contentScrollLeft);
-        const timeScroll = calendarContent.querySelector(".zn-cal-time-scroll");
-        if (timeScroll && state.scrollTop !== null && state.scrolls) timeScroll.scrollTop = Math.max(0, state.scrollTop);
+        calendarContent.querySelectorAll(".zn-cal-time-scroll").forEach((el, i) => {
+          if (Number.isFinite(state.timelineTops[i])) el.scrollTop = Math.max(0, state.timelineTops[i]);
+        });
         const monthSel = calendarContent.querySelector(".zn-cal-month-selection");
         if (monthSel && state.selectionScrollTop !== null) monthSel.scrollTop = Math.max(0, state.selectionScrollTop);
       }
@@ -31739,6 +31720,9 @@ __zentralShim.register = function (def) {
           scheduleCalendarFit();
         });
         stage.append(treeSlot, calendarPane);
+        // A docked tree has an inline splitter width. In the card the slot owns the width;
+        // retaining flex-grow: 0 on this inline-size container can leave the live tree at 0px.
+        treePane.style.flex = "";
         treeSlot.append(treePane);
         treePane.hidden = false;
         treePane.dataset.bigPicture = "true";
@@ -31944,7 +31928,6 @@ __zentralShim.register = function (def) {
         if (!bigPicture && widthApplies) {
           if (treeWidth) {
             treePane.style.flex = `0 0 ${treeWidth}px`;
-            treePane.style.removeProperty("flex-basis");
           } else if (picked.orientation === "lr") {
             treePane.style.removeProperty("flex");
             treePane.style.flexBasis = `${Math.round(share * 1000) / 10}%`;
@@ -34560,15 +34543,17 @@ __zentralShim.register = function (def) {
       // What the calendar as it is drawn was sized for (OW-03): { view, compact (Month as a list in a narrow pane),
       // size ("auto" or px), hourPx (Week, Day), rowPx and lines (Month) }.
       let calendarFit = null;
-      // The box the calendar is fitted to: the timeline of Week and Day, the grid of Month. It is watched, so that a
-      // change that does not come through this code is followed too (the text size, the toolbar taking another row,
-      // the splitter). One box at a time; `calendarFitWatch` is set where the sheet's observers are set up.
-      let calendarFitWatch = null, calendarFitWatched = null;
-      function watchCalendarFit(node) {
-        if (calendarFitWatched === node) return;
-        if (calendarFitWatched) { try { calendarFitWatch?.unobserve(calendarFitWatched); } catch (_) {} }
-        calendarFitWatched = node || null;
-        if (node) { try { calendarFitWatch?.observe(node); } catch (_) {} }
+      // Watch each timeline (or the Month grid): either band's all-day strip can change
+      // its available height without changing the outer pane.
+      let calendarFitWatch = null, calendarFitWatched = [];
+      function watchCalendarFit(...nodes) {
+        for (const node of calendarFitWatched) if (!nodes.includes(node)) {
+          try { calendarFitWatch?.unobserve(node); } catch (_) {}
+        }
+        for (const node of nodes) if (!calendarFitWatched.includes(node)) {
+          try { calendarFitWatch?.observe(node); } catch (_) {}
+        }
+        calendarFitWatched = nodes;
       }
       // Where a size in px applies: Week, Day and the Month grid (Month in a narrow pane is a list).
       const calendarSizedView = (name, compact) => CALENDAR_UI.sizedView(name, compact);
@@ -34621,7 +34606,22 @@ __zentralShim.register = function (def) {
         try { if (g.button.hasPointerCapture?.(g.pointerId)) g.button.releasePointerCapture(g.pointerId); } catch (_) {}
         queueCalendarBackgroundFlush();
       }
-      const calendarDragPoint = (g, event) => CALENDAR_UI.dragPoint(CALENDAR_PART, g, event);
+      const calendarDragPoint = (g, event) => {
+        const hit = CALENDAR_UI.dragPoint(CALENDAR_PART, g, event);
+        const band = !hit && g.scroll.closest?.(".zn-cal-time-band");
+        if (!band) return hit;
+        // Pointer capture stays with the source button, even when crossing the midpoint.
+        for (const other of band.parentElement.children) {
+          if (other === band) continue;
+          const scroll = other.querySelector(g.allDay ? ".zn-cal-time-allday-row" : ".zn-cal-time-scroll");
+          const columns = g.allDay ? scroll : other.querySelector(".zn-cal-time-columns");
+          if (scroll && columns) {
+            const target = CALENDAR_UI.dragPoint(CALENDAR_PART, { ...g, columns, scroll }, event);
+            if (target) return target;
+          }
+        }
+        return null;
+      };
       function updateCalendarDrag(event) {
         const g = calendarDrag;
         if (!g || (event.pointerId !== undefined && event.pointerId !== g.pointerId)) return;
@@ -35062,6 +35062,8 @@ __zentralShim.register = function (def) {
       function calendarTimeGridView(items, cursor, mode, patch = null) {
         const C = CALENDAR_PART, zone = calendarDisplayZone(), weekStart = calendarWeekStartDay(), showWeeks = calendarShowWeekNumbers();
         const days = mode === "week" ? calendarShownWeekDays(cursor) : [C.dayStart(cursor)];
+        const { rows, perRow } = C.weekGridPlan({ days: days.length });
+        if (patch && rows > 1) return "refit";
         if (!patch && calendarFit && mode === "week") calendarFit.weekDays = days.length;
         const workDays = patch ? days.filter((day) => patch.days.has(C.localDateKey(day))) : days;
         const firstDay = workDays[0], firstBounds = C.zonedDayBounds(C.localDateKey(firstDay), zone) || [firstDay, C.addDays(firstDay, 1)];
@@ -35102,100 +35104,78 @@ __zentralShim.register = function (def) {
         const setEndGridMin = C.timelineCivilToGridMin(timeline, hoursSet.endMin);
         const fmt = (day) => calendarDayLabel(day, { weekday: mode === "week" ? "short" : "long", year: true });
         calendarPeriod.textContent = mode === "week" && days.length > 1 ? `${fmt(days[0])} – ${fmt(days[days.length - 1])}` : fmt(days[0]);
-        // OW-96: 48 days do not fit 48 columns. `weekGridPlan` decides whether the days stack into two rows of 24 at
-        // this width and height; it is asked once here, before anything is built, because the header, the all-day row
-        // and the timeline all have to wrap the same way or their cells sit under the wrong days. With one row — the
-        // normal case — every branch below is the code that was always there.
         const todayKey = C.zonedDateKey(nowMs(), zone);
-        const weekRowPlan = mode === "week" && days.length > 1
-          ? C.weekGridPlan({ days: days.length, widthPx: calendarPaneWidth(), heightPx: calendarPaneHeight() })
-          : { count: days.length, rows: 1, perRow: days.length };
-        // The header wraps exactly as the timeline does (see the columns below). With one row this is the original
-        // `repeat(days.length, ...)`; with two it is `repeat(perRow, ...)` and the day heads wrap.
-        const headPerRow = Math.max(1, weekRowPlan.perRow);
-        const cols = weekRowPlan.rows === 2
-          ? `repeat(${headPerRow}, minmax(0, 1fr))`
-          : `42px repeat(${days.length}, minmax(0, 1fr))`;
         const root = h("div", { class: "zn-cal-time-view is-" + mode, "aria-label": t(mode === "week" ? "cal.weekCalendar.aria" : "cal.dayCalendar.aria") });
         root.dataset.hours = hoursSet.on ? "limited" : "all";
+        root.dataset.rows = String(rows);
         root.style.setProperty("--zn-cal-hours", String(gridHours));
-        const header = h("div", { class: "zn-cal-time-head" });
-        header.style.gridTemplateColumns = cols;
-        const cornerWeek = showWeeks ? C.weekNumber(days[0], weekStart) : 0;
-        // With two rows the week number would eat the first cell of the first row; the period line above the grid
-        // already names the span, so the corner is left out and the days start in column one.
-        if (weekRowPlan.rows !== 2) {
+        const calWeather = mode === "week" ? calendarWeatherByDay(nowMs()) : null;
+        const visibleSlots = timeline.slots.filter((s) => s.gridStartMin >= grid.startMin && s.gridStartMin < grid.endMin);
+        // Each band owns its date strip, all-day cells, hour gutter and scrollport. A short last band
+        // keeps the same column width as the first, so day 29 lines up with day 1.
+        const bands = [];
+        for (let i = 0; i < rows; i++) {
+          const bandDays = days.slice(i * perRow, (i + 1) * perRow);
+          const drawnDays = patch ? workDays : bandDays;
+          const band = rows === 1 ? root : h("div", { class: "zn-cal-time-band" });
+          if (band !== root) root.append(band);
+          const cols = `42px repeat(${perRow}, minmax(0, 1fr))`;
+          const header = h("div", { class: "zn-cal-time-head" });
+          header.style.gridTemplateColumns = cols;
+          const cornerWeek = showWeeks ? C.weekNumber(bandDays[0], weekStart) : 0;
           header.append(
             showWeeks
               ? h("span", { class: "zn-cal-time-corner zn-cal-week-num", "aria-label": t("cal.week.aria", { num: cornerWeek }), title: t("cal.week.aria", { num: cornerWeek }) }, t("cal.week.short", { num: cornerWeek }))
               : h("span", { class: "zn-cal-time-corner", "aria-hidden": "true" }),
           );
-        }
-        // OW-96: one read of the widget's forecast for the whole render, then a map lookup per day. The card owns the
-        // fetching; the calendar only asks what it already has, so a calendar render never starts a network request.
-        const calWeather = mode === "week" ? calendarWeatherByDay(nowMs()) : null;
-        // OW-99: the row-start test used to be `days.indexOf(day)` inside three loops — a quadratic scan, twice over,
-        // on the one path (48 days) where it matters, and computed twice on the 7-day path where the answer is never
-        // used. A counter and one `rows === 2` guard cost nothing and say the same thing.
-        let headIndex = 0;
-        for (const day of days) {
-          const isToday = C.localDateKey(day) === todayKey;
-          const wf = calendarWorkFreeInfo(day);
-          const wx = calWeather ? calWeather.get(CALENDAR_PART.localDateKey(day)) : null;
-          const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", " + calendarTodayLabel() : "") + (wf.tooltip ? ", " + wf.tooltip : "") + (wx ? ", " + wx.text : "") },
-            // The symbol sits above the weekday name: it answers "what is this day going to be like" before the eye
-            // reaches the name that identifies the column, which is the order the owner asked for.
-            ...(wx ? [h("span", { class: "zn-cal-weather", "aria-hidden": "true", title: wx.text }, h("span", { class: "zn-cal-weather-icon" }, wx.glyph || wx.icon), h("span", { class: "zn-cal-weather-temp" }, wx.temp))] : []),
-            h("strong", {}, new Date(day).toLocaleDateString(notesLocale(), { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), ...(wf.tooltip ? [h("span", { class: "zn-cal-holiday-pill", title: wf.tooltip }, wf.tooltip)] : []));
-          applyWorkFreeAttrs(dayHead, wf);
-          dayHead.addEventListener("click", () => { store.setMeta({ calendarCursor: C.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); });
-          bindCalendarDayContext(dayHead, day);
-          // Each wrapped row starts on its own line under column one, never half a column off.
-          if (weekRowPlan.rows === 2 && headIndex % headPerRow === 0) dayHead.style.gridColumnStart = "1";
-          headIndex++;
-          header.append(dayHead);
-        }
-        const allDayRow = h("div", { class: "zn-cal-time-allday-row", "aria-label": t("cal.allDayRow.aria") });
-        allDayRow.style.gridTemplateColumns = cols;
-        const dragAllDayRow = patch?.allDayRow || allDayRow;
-        // OW-96: two rows wrap here as well, or the all-day cells would sit under the wrong days. The label cell stays
-        // in the first column of the first row; the second row begins at column one.
-        if (weekRowPlan.rows === 2) {
-          allDayRow.style.gridTemplateColumns = `42px repeat(${headPerRow}, minmax(0, 1fr))`;
-          allDayRow.dataset.rows = "2";
-        }
-        allDayRow.append(h("span", { class: "zn-cal-time-all-label" }, t("cal.allDay")));
-        // Its own counter: this loop walks `workDays`, which a patch narrows, so it cannot share the header's index.
-        let allDayIndex = 0;
-        for (const day of workDays) {
-          const isToday = C.localDateKey(day) === todayKey;
-          const cell = h("div", { class: "zn-cal-time-allday-cell" + (isToday ? " is-today" : ""), tabindex: "0", "aria-label": t("cal.allDayFor.aria", { day: fmt(day) }), "data-day": C.ymd(new Date(day)) });
-          applyWorkFreeAttrs(cell, calendarWorkFreeInfo(day));
-          bindCalendarDayContext(cell, day);
-          if (weekRowPlan.rows === 2 && allDayIndex % headPerRow === 0) cell.style.gridColumnStart = "2";
-          allDayIndex++;
-          for (const item of C.allDayOf(expanded, day)) {
-            const button = calendarItemButton(item, true);
-            // A drag in the all-day row moves a reminder by days and never reads the height of an hour (which is not
-            // known yet: it is measured below, once this row is in the document).
-            if (C.isReminder(item)) bindCalendarDrag(button, item, { track: cell, columns: dragAllDayRow, scroll: dragAllDayRow, dayKey: C.localDateKey(day), hourHeight: 0, zone, allDay: true });
-            cell.append(button);
+          for (const day of bandDays) {
+            const isToday = C.localDateKey(day) === todayKey;
+            const wf = calendarWorkFreeInfo(day);
+            const wx = calWeather ? calWeather.get(CALENDAR_PART.localDateKey(day)) : null;
+            const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", " + calendarTodayLabel() : "") + (wf.tooltip ? ", " + wf.tooltip : "") + (wx ? ", " + wx.text : "") },
+              // The symbol sits above the weekday name: it answers "what is this day going to be like" before the eye
+              // reaches the name that identifies the column, which is the order the owner asked for.
+              ...(wx ? [h("span", { class: "zn-cal-weather", "aria-hidden": "true", title: wx.text }, h("span", { class: "zn-cal-weather-icon" }, wx.glyph || wx.icon), h("span", { class: "zn-cal-weather-temp" }, wx.temp))] : []),
+              h("strong", {}, new Date(day).toLocaleDateString(notesLocale(), { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, calendarTodayLabel())] : []), ...(wf.tooltip ? [h("span", { class: "zn-cal-holiday-pill", title: wf.tooltip }, wf.tooltip)] : []));
+            applyWorkFreeAttrs(dayHead, wf);
+            dayHead.addEventListener("click", () => { store.setMeta({ calendarCursor: C.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); });
+            bindCalendarDayContext(dayHead, day);
+            header.append(dayHead);
           }
-          allDayRow.append(cell);
+          const allDayRow = h("div", { class: "zn-cal-time-allday-row", "aria-label": t("cal.allDayRow.aria") });
+          allDayRow.style.gridTemplateColumns = cols;
+          const dragAllDayRow = patch?.allDayRow || allDayRow;
+          allDayRow.append(h("span", { class: "zn-cal-time-all-label" }, t("cal.allDay")));
+          for (const day of drawnDays) {
+            const isToday = C.localDateKey(day) === todayKey;
+            const cell = h("div", { class: "zn-cal-time-allday-cell" + (isToday ? " is-today" : ""), tabindex: "0", "aria-label": t("cal.allDayFor.aria", { day: fmt(day) }), "data-day": C.ymd(new Date(day)) });
+            applyWorkFreeAttrs(cell, calendarWorkFreeInfo(day));
+            bindCalendarDayContext(cell, day);
+            for (const item of C.allDayOf(expanded, day)) {
+              const button = calendarItemButton(item, true);
+              // A drag in the all-day row moves a reminder by days and never reads the height of an hour (which is not
+              // known yet: it is measured below, once this row is in the document).
+              if (C.isReminder(item)) bindCalendarDrag(button, item, { track: cell, columns: dragAllDayRow, scroll: dragAllDayRow, dayKey: C.localDateKey(day), hourHeight: 0, zone, allDay: true });
+              cell.append(button);
+            }
+            allDayRow.append(cell);
+          }
+          const scroll = h("div", { class: "zn-cal-time-scroll", tabindex: "0", "aria-label": hoursSet.on ? t("cal.timelineRange.aria", { start: gridClock(grid.startMin), end: gridClock(grid.endMin) }) : t("cal.timelineHours.aria", { hours: gridHours }) });
+          // Why the grid shows more than the chosen hours: one line above the timeline, only while it does.
+          let hint = null;
+          if (grid.extendedTop || grid.extendedBottom) {
+            const name = (cause) => String(cause.item?.summary || "").trim() || "item";
+            const parts = grid.top && grid.bottom && grid.top.item === grid.bottom.item
+              ? [`${gridClock(grid.top.startMin)}–${gridClock(grid.bottom.endMin)} ${name(grid.top)}`]
+              : [grid.top ? `${gridClock(grid.top.startMin)} ${name(grid.top)}` : "",
+                 grid.bottom ? `${C.isReminder(grid.bottom.item) ? gridClock(grid.bottom.startMin) : "until " + gridClock(grid.bottom.endMin)} ${name(grid.bottom)}` : ""].filter(Boolean);
+            const text = "Extended: " + parts.join(" · ");
+            hint = h("div", { class: "zn-cal-hours-hint", role: "status", title: `${text}. Week and Day show ${gridClock(setStartGridMin)}–${gridClock(setEndGridMin)} and more hours while a day in view has something outside them.` }, text);
+          }
+          band.append(header, allDayRow, ...(hint ? [hint] : []), scroll);
+          bands.push({ scroll, allDayRow, hint, drawnDays });
         }
-        const scroll = h("div", { class: "zn-cal-time-scroll", tabindex: "0", "aria-label": hoursSet.on ? t("cal.timelineRange.aria", { start: gridClock(grid.startMin), end: gridClock(grid.endMin) }) : t("cal.timelineHours.aria", { hours: gridHours }) });
-        // Why the grid shows more than the chosen hours: one line above the timeline, only while it does.
-        let hint = null;
-        if (grid.extendedTop || grid.extendedBottom) {
-          const name = (cause) => String(cause.item?.summary || "").trim() || "item";
-          const parts = grid.top && grid.bottom && grid.top.item === grid.bottom.item
-            ? [`${gridClock(grid.top.startMin)}–${gridClock(grid.bottom.endMin)} ${name(grid.top)}`]
-            : [grid.top ? `${gridClock(grid.top.startMin)} ${name(grid.top)}` : "",
-               grid.bottom ? `${C.isReminder(grid.bottom.item) ? gridClock(grid.bottom.startMin) : "until " + gridClock(grid.bottom.endMin)} ${name(grid.bottom)}` : ""].filter(Boolean);
-          const text = "Extended: " + parts.join(" · ");
-          hint = h("div", { class: "zn-cal-hours-hint", role: "status", title: `${text}. Week and Day show ${gridClock(setStartGridMin)}–${gridClock(setEndGridMin)} and more hours while a day in view has something outside them.` }, text);
-        }
-        root.append(header, allDayRow, ...(hint ? [hint] : []), scroll);
+        const scroll = bands[0].scroll;
         calendarContent.dataset.compact = "false";
         // (3) The height of an hour (OW-03). A fixed size, or fitted: the hours of the grid fill the timeline. How high
         // the timeline is is known only once everything above it (the header, the all-day row, the line that says
@@ -35208,7 +35188,7 @@ __zentralShim.register = function (def) {
           h("span", { class: "zn-cal-item-time" }, "00:00"), h("span", { class: "zn-cal-item-title" }, "Ag"));
         if (probe) scroll.append(probe);
         if (!patch) calendarContent.append(root);
-        const room = patch ? NaN : calendarTimelineRoom(scroll);
+        const room = patch ? NaN : Math.min(...bands.map(b => calendarTimelineRoom(b.scroll)));
         const linesPx = patch ? calendarGridHours.linesPx : Number(probe.offsetHeight) > 0 ? Number(probe.offsetHeight) : 22;
         if (probe) probe.remove();
         const hourPx = patch ? calendarGridHours.hourPx : size !== "auto" ? size : C.fitHourHeight(room, gridHours, { minPx: calendarMinHourPx() });
@@ -35222,8 +35202,8 @@ __zentralShim.register = function (def) {
           if (calendarFit) calendarFit.hourPx = hourPx;
           // The hours fit: the timeline has nothing to scroll and shows no scrollbar, also not for the one frame in
           // which the pane is already lower and the hours are not drawn again yet.
-          scroll.dataset.fitted = size === "auto" && gridHours * hourPx <= room ? "true" : "false";
-          watchCalendarFit(scroll);
+          for (const b of bands) b.scroll.dataset.fitted = size === "auto" && gridHours * hourPx <= calendarTimelineRoom(b.scroll) ? "true" : "false";
+          watchCalendarFit(...bands.map(b => b.scroll));
         }
         const gridY = (minute) => C.gridOffsetOf(minute, hourPx, grid);
         // (4) Events and timed reminders share one overlap layout. No box is lower than `minBoxPx` (20px; less in a
@@ -35243,169 +35223,154 @@ __zentralShim.register = function (def) {
           const entries = C.layoutGridSpans(spans, { minBoxMin, overlapMin, gridEndMin: grid.endMin });
           laidOut.set(dayKey, { bounds, entries });
         }
-        const gridRow = h("div", { class: "zn-cal-time-grid-row" });
-        // Only the gutter and the columns wrapper are direct children; the wrapper owns all day tracks.
-        gridRow.style.gridTemplateColumns = "42px minmax(0, 1fr)";
-        const hours = h("div", { class: "zn-cal-hour-gutter" });
-        const visibleSlots = timeline.slots.filter((s) => s.gridStartMin >= grid.startMin && s.gridStartMin < grid.endMin);
-        for (const slot of visibleSlots) {
-          // An hour outside the chosen ones: it is shown only because something in view lies in it.
-          const extra = hoursSet.on && (slot.gridStartMin < setStartGridMin || slot.gridStartMin >= setEndGridMin);
-          const attrs = { class: "zn-cal-hour-label" + (extra ? " is-extended" : "") + (slot.repeated ? " is-dst-repeated" : "") };
-          if (slot.repeated) {
-            attrs["data-dst"] = "fall-" + slot.repeated;
-            attrs.title = `${slot.clock} (${slot.offsetText}, ${slot.repeated === 1 ? "first pass before DST change" : "second pass after DST change"})`;
-          } else if (slot.springBefore?.length) {
-            const skippedList = slot.springBefore.map((hr) => String(hr).padStart(2, "0") + ":00").join(", ");
-            attrs["data-dst"] = "spring";
-            attrs.title = `${skippedList} skipped (DST)`;
-          }
-          const labelEl = slot.repeated
-            ? h("span", attrs, slot.clock, h("span", { class: "zn-cal-hour-dst-tag" }, slot.offsetShort))
-            : h("span", attrs, slot.clock);
-          hours.append(labelEl);
-        }
-        gridRow.append(hours);
-        // OW-96: 48 days do not fit 48 columns. When the plan asks for two rows the days are split across two column
-        // grids of the same width, stacked — hour gutter and timeline on the left of both, so the two rows line up and
-        // read as one grid rather than two calendars. Each row keeps the second row's own hour rules; only the days
-        // move. `weekRowPlan.perRow` is 24 for a full 48-day span.
-        // OW-96: with two rows the grid is laid out as `perRow` columns and the days simply wrap into the next row —
-        // CSS grid does the stacking, and every row keeps its own full-height tracks. The first day of a row is pinned
-        // to the second column so it never lands under the hour gutter, which exists only once. With one row (the
-        // normal case, and every patch) `perRow` is the day count and nothing about the view changes at all.
-        const perRow = weekRowPlan.rows === 2 ? Math.max(1, weekRowPlan.perRow) : days.length;
-        const columns = h("div", { class: "zn-cal-time-columns" });
-        const dragColumns = patch?.columns || columns, dragScroll = patch?.scroll || scroll;
-        columns.style.gridTemplateColumns = `repeat(${perRow}, minmax(0, 1fr))`;
-        if (weekRowPlan.rows === 2) columns.dataset.rows = "2";
-        // A patch cannot re-flow a grid whose shape changed: the caller draws the whole view instead.
-        if (patch && weekRowPlan.rows !== 1) return "refit";
-        const work = C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK);
-        let columnIndex = 0;
-        for (const day of workDays) {
-          const dayKey = C.localDateKey(day);
-          const { bounds, entries } = laidOut.get(dayKey);
-          const isToday = dayKey === todayKey;
-          const track = h("div", { class: "zn-cal-time-track", tabindex: "0", "aria-label": "Timeline for " + fmt(day), "data-day": C.ymd(new Date(day)) });
-          bindCalendarDayContext(track, day);
-          bindCalendarCreate(track, dragColumns, dragScroll, dayKey, hourPx, zone, grid);
-          track.style.height = (gridHours * hourPx) + "px";
-          for (let hour = 0; hour < gridHours; hour++) {
-            track.append(h("span", { class: "zn-cal-time-hour-line", style: `top:${hour * hourPx}px` }));
-          }
-          // T2.4c4: render skipped/spacer DST gaps, repeated fall-back bands and spring-forward jump dividers.
-          const gaps = timeline.dayGaps?.get(dayKey) || [];
-          const gapStartSet = new Set(gaps.map((gap) => gap.gridStartMin));
-          for (const gap of gaps) {
-            if (gap.gridEndMin <= grid.startMin || gap.gridStartMin >= grid.endMin) continue;
-            const top = Math.max(0, gridY(gap.gridStartMin));
-            const height = Math.max(1, (Math.min(grid.endMin, gap.gridEndMin) - Math.max(grid.startMin, gap.gridStartMin)) / 60 * hourPx);
-            track.append(h("span", { class: "zn-cal-dst-gap is-" + gap.kind, "data-dst-gap": gap.kind, "data-dst-clock": gap.clock, title: gap.label, style: `top:${top}px;height:${height}px`, "aria-hidden": "true" }));
-          }
+        for (const band of bands) {
+          const { scroll, drawnDays } = band;
+          const gridRow = h("div", { class: "zn-cal-time-grid-row" });
+          // Only the gutter and the columns wrapper are direct children; the wrapper owns all day tracks.
+          gridRow.style.gridTemplateColumns = "42px minmax(0, 1fr)";
+          const hours = h("div", { class: "zn-cal-hour-gutter" });
           for (const slot of visibleSlots) {
-            if (slot.repeated && !gapStartSet.has(slot.gridStartMin)) {
-              const top = Math.max(0, gridY(slot.gridStartMin));
-              track.append(h("span", { class: "zn-cal-dst-band is-repeated-" + slot.repeated, "data-dst-repeated": String(slot.repeated), title: `${slot.clock} (${slot.offsetText})`, style: `top:${top}px;height:${hourPx}px`, "aria-hidden": "true" }));
-            }
-            if (slot.springBefore?.length) {
+            // An hour outside the chosen ones: it is shown only because something in view lies in it.
+            const extra = hoursSet.on && (slot.gridStartMin < setStartGridMin || slot.gridStartMin >= setEndGridMin);
+            const attrs = { class: "zn-cal-hour-label" + (extra ? " is-extended" : "") + (slot.repeated ? " is-dst-repeated" : "") };
+            if (slot.repeated) {
+              attrs["data-dst"] = "fall-" + slot.repeated;
+              attrs.title = `${slot.clock} (${slot.offsetText}, ${slot.repeated === 1 ? "first pass before DST change" : "second pass after DST change"})`;
+            } else if (slot.springBefore?.length) {
               const skippedList = slot.springBefore.map((hr) => String(hr).padStart(2, "0") + ":00").join(", ");
-              track.append(h("span", { class: "zn-cal-dst-divider is-spring", "data-dst-skipped": skippedList, title: `Clocks skip ${skippedList} → ${slot.clock} (DST)`, style: `top:${gridY(slot.gridStartMin)}px`, "aria-hidden": "true" }));
+              attrs["data-dst"] = "spring";
+              attrs.title = `${skippedList} skipped (DST)`;
             }
+            const labelEl = slot.repeated
+              ? h("span", attrs, slot.clock, h("span", { class: "zn-cal-hour-dst-tag" }, slot.offsetShort))
+              : h("span", attrs, slot.clock);
+            hours.append(labelEl);
           }
-          // The part of the grid beyond the chosen hours, there because something in view lies in it.
-          if (grid.extendedTop) track.append(h("span", { class: "zn-cal-hours-extra is-top", style: `top:0;height:${gridY(setStartGridMin)}px`, "aria-hidden": "true" }));
-          if (grid.extendedBottom) track.append(h("span", { class: "zn-cal-hours-extra is-bottom", style: `top:${gridY(setEndGridMin)}px;bottom:0`, "aria-hidden": "true" }));
-          const workRange = C.workRange(day, work, zone);
-          const workStart = workRange ? Math.max(0, Math.round(C.timelineMinuteOfMs(workRange[0], dayKey, timeline, zone))) : 0;
-          const workEnd = workRange ? Math.min(timeline.totalMinutes, Math.round(C.timelineMinuteOfMs(workRange[1], dayKey, timeline, zone))) : 0;
-          if (!workRange) {
-            track.append(h("span", { class: "zn-cal-off-hours is-all-day", "aria-hidden": "true" }));
-          } else {
-            if (workStart > grid.startMin) track.append(h("span", { class: "zn-cal-off-hours", style: `top:0;height:${gridY(Math.min(workStart, grid.endMin))}px`, "aria-hidden": "true" }));
-            if (workEnd < grid.endMin) track.append(h("span", { class: "zn-cal-off-hours", style: `top:${gridY(Math.max(workEnd, grid.startMin))}px;bottom:0`, "aria-hidden": "true" }));
-          }
-          const busy = C.busyRanges(expanded.filter((it) => !C.isAllDay(it)), bounds[0], bounds[1]);
-          for (const [start, end] of busy) {
-            const startMinute = C.timelineMinuteOfMs(start, dayKey, timeline, zone);
-            const top = Math.max(0, gridY(startMinute));
-            const bottom = Math.min(grid.endMin, C.timelineMinuteOfMs(end, dayKey, timeline, zone));
-            const height = Math.max(1, (bottom - Math.max(grid.startMin, startMinute)) / 60 * hourPx);
-            track.append(h("span", { class: "zn-cal-busy-range", style: `top:${top}px;height:${height}px`, "aria-hidden": "true" }));
-          }
-          if (isToday) {
-            const nowMinutes = C.timelineMinuteOfMs(nowMs(), dayKey, timeline, zone);
-            if (!hoursSet.on || (nowMinutes >= grid.startMin && nowMinutes <= grid.endMin)) {
-              track.append(h("div", { class: "zn-cal-now-line", style: `top:${gridY(nowMinutes)}px`, "aria-label": "Current time" }, h("span", { class: "zn-cal-now-dot" })));
-            } else if (Number.isFinite(nowMinutes)) {
-              // The current time is not among the hours shown: a line in the grid would lie about it. The edge it
-              // is beyond carries a mark instead; the time of day does not widen the grid, only items do.
-              const before = nowMinutes < grid.startMin, clock = C.clockIn(nowMs(), zone);
-              const label = `Current time ${clock}, ${before ? "before" : "after"} the hours shown`;
-              track.append(h("div", { class: "zn-cal-now-edge " + (before ? "is-before" : "is-after"), role: "img", "aria-label": label, title: label }));
+          gridRow.append(hours);
+          const columns = h("div", { class: "zn-cal-time-columns" });
+          const dragColumns = patch?.columns || columns, dragScroll = patch?.scroll || scroll;
+          columns.style.gridTemplateColumns = `repeat(${perRow}, minmax(0, 1fr))`;
+          const work = C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK);
+          for (const day of drawnDays) {
+            const dayKey = C.localDateKey(day);
+            const { bounds, entries } = laidOut.get(dayKey);
+            const isToday = dayKey === todayKey;
+            const track = h("div", { class: "zn-cal-time-track", tabindex: "0", "aria-label": "Timeline for " + fmt(day), "data-day": C.ymd(new Date(day)) });
+            bindCalendarDayContext(track, day);
+            bindCalendarCreate(track, dragColumns, dragScroll, dayKey, hourPx, zone, grid);
+            track.style.height = (gridHours * hourPx) + "px";
+            for (let hour = 0; hour < gridHours; hour++) {
+              track.append(h("span", { class: "zn-cal-time-hour-line", style: `top:${hour * hourPx}px` }));
             }
-          }
-          for (const entry of entries) {
-            const original = entry.original;
-            const reminder = C.isReminder(original);
-            const button = calendarItemButton(original, true);
-            button.classList.add(reminder ? "zn-cal-time-reminder" : "zn-cal-time-event");
-            applyCalendarItemColors(button, calendarItemColor(original), "time");
-            const top = gridY(entry.startMin);
-            const height = reminder ? minBoxPx : Math.max(minBoxPx, ((entry.span ? entry.span.endMin - entry.span.startMin : entry.endMin - entry.startMin)) / 60 * hourPx);
-            button.style.top = top + "px";
-            button.style.height = height + "px";
-            // An event too low for its two lines shows the title alone (the style sheet leaves the time out; it is
-            // in the tooltip and the hover card). The lower padding of 2px may be used by the text, hence the 2.
-            if (!reminder && height < linesPx - 2) button.classList.add("is-short");
-            button.style.left = (entry.lane * 100 / entry.lanes) + "%";
-            button.style.width = (100 / entry.lanes) + "%";
-            button.style.zIndex = reminder ? "3" : "2";
-            const [itemStart, itemEnd] = C.itemRange(original);
-            const startLabel = C.clockIn(Math.max(itemStart, bounds[0]), zone);
-            const endLabel = reminder ? "reminder" : C.clockIn(Math.min(itemEnd, bounds[1]), zone);
-            button.setAttribute("aria-label", `${original.summary}, ${startLabel}${reminder ? " reminder" : " to " + endLabel}, lane ${entry.lane + 1} of ${entry.lanes}`);
-            bindCalendarDrag(button, original, { track, columns: dragColumns, scroll: dragScroll, dayKey, hourHeight: hourPx, zone, grid });
-            track.append(button);
-            if (!reminder && !original.x?.series && !(original.recurrence || []).length && original.x?.src !== "note") {
-              for (const edge of ["start", "end"]) {
-                if (edge === "start" ? itemStart < bounds[0] || itemStart >= bounds[1] : itemEnd <= bounds[0] || itemEnd > bounds[1]) continue;
-                const handle = h("button", { type: "button", class: "zn-cal-resize-handle is-" + edge,
-                  "aria-label": "Resize " + edge + " of " + (original.summary || "event") + "; use up and down arrows",
-                  "data-item-id": original.id, "data-edge": edge, title: "Drag or use Up/Down to resize " + edge });
-                // The handle is 8px high and sits astride the edge it moves. At the end of the grid it stays inside:
-                // hanging out, it gave the timeline a few px to scroll (an event that ends at 20:00 in 08:00-20:00).
-                handle.style.top = (edge === "end" ? Math.min(top + height - 4, gridHours * hourPx - 8) : top - 4) + "px";
-                handle.style.left = button.style.left; handle.style.width = button.style.width;
-                bindCalendarDrag(handle, original, { track, columns: dragColumns, scroll: dragScroll, dayKey, hourHeight: hourPx, zone, grid, edge });
-                handle.addEventListener("keydown", (event) => {
-                  if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
-                  event.preventDefault(); event.stopPropagation();
-                  const current = currentCalendarItem(original);
-                  if (!current || current.rev !== original.rev || current.etag !== original.etag) return flash("Calendar item changed; reopen it to resize");
-                  const snap = C.cleanCalendarSnap(store.meta.calendarSnap), delta = event.key === "ArrowUp" ? -snap : snap;
-                  const placement = C.calendarResizePlacement(current, edge, dayKey, 720, dayKey, 720 + delta, zone, snap);
-                  if (!placement) return;
-                  applyCalendarPlacement({ before: current, edge, zone, snap }, placement);
-                  Array.from(calendarContent.querySelectorAll(".zn-cal-resize-handle")).find((node) => node.getAttribute("data-item-id") === current.id && node.getAttribute("data-edge") === edge)?.focus({ preventScroll: true });
-                });
-                track.append(handle);
+            // T2.4c4: render skipped/spacer DST gaps, repeated fall-back bands and spring-forward jump dividers.
+            const gaps = timeline.dayGaps?.get(dayKey) || [];
+            const gapStartSet = new Set(gaps.map((gap) => gap.gridStartMin));
+            for (const gap of gaps) {
+              if (gap.gridEndMin <= grid.startMin || gap.gridStartMin >= grid.endMin) continue;
+              const top = Math.max(0, gridY(gap.gridStartMin));
+              const height = Math.max(1, (Math.min(grid.endMin, gap.gridEndMin) - Math.max(grid.startMin, gap.gridStartMin)) / 60 * hourPx);
+              track.append(h("span", { class: "zn-cal-dst-gap is-" + gap.kind, "data-dst-gap": gap.kind, "data-dst-clock": gap.clock, title: gap.label, style: `top:${top}px;height:${height}px`, "aria-hidden": "true" }));
+            }
+            for (const slot of visibleSlots) {
+              if (slot.repeated && !gapStartSet.has(slot.gridStartMin)) {
+                const top = Math.max(0, gridY(slot.gridStartMin));
+                track.append(h("span", { class: "zn-cal-dst-band is-repeated-" + slot.repeated, "data-dst-repeated": String(slot.repeated), title: `${slot.clock} (${slot.offsetText})`, style: `top:${top}px;height:${hourPx}px`, "aria-hidden": "true" }));
+              }
+              if (slot.springBefore?.length) {
+                const skippedList = slot.springBefore.map((hr) => String(hr).padStart(2, "0") + ":00").join(", ");
+                track.append(h("span", { class: "zn-cal-dst-divider is-spring", "data-dst-skipped": skippedList, title: `Clocks skip ${skippedList} → ${slot.clock} (DST)`, style: `top:${gridY(slot.gridStartMin)}px`, "aria-hidden": "true" }));
               }
             }
+            // The part of the grid beyond the chosen hours, there because something in view lies in it.
+            if (grid.extendedTop) track.append(h("span", { class: "zn-cal-hours-extra is-top", style: `top:0;height:${gridY(setStartGridMin)}px`, "aria-hidden": "true" }));
+            if (grid.extendedBottom) track.append(h("span", { class: "zn-cal-hours-extra is-bottom", style: `top:${gridY(setEndGridMin)}px;bottom:0`, "aria-hidden": "true" }));
+            const workRange = C.workRange(day, work, zone);
+            const workStart = workRange ? Math.max(0, Math.round(C.timelineMinuteOfMs(workRange[0], dayKey, timeline, zone))) : 0;
+            const workEnd = workRange ? Math.min(timeline.totalMinutes, Math.round(C.timelineMinuteOfMs(workRange[1], dayKey, timeline, zone))) : 0;
+            if (!workRange) {
+              track.append(h("span", { class: "zn-cal-off-hours is-all-day", "aria-hidden": "true" }));
+            } else {
+              if (workStart > grid.startMin) track.append(h("span", { class: "zn-cal-off-hours", style: `top:0;height:${gridY(Math.min(workStart, grid.endMin))}px`, "aria-hidden": "true" }));
+              if (workEnd < grid.endMin) track.append(h("span", { class: "zn-cal-off-hours", style: `top:${gridY(Math.max(workEnd, grid.startMin))}px;bottom:0`, "aria-hidden": "true" }));
+            }
+            const busy = C.busyRanges(expanded.filter((it) => !C.isAllDay(it)), bounds[0], bounds[1]);
+            for (const [start, end] of busy) {
+              const startMinute = C.timelineMinuteOfMs(start, dayKey, timeline, zone);
+              const top = Math.max(0, gridY(startMinute));
+              const bottom = Math.min(grid.endMin, C.timelineMinuteOfMs(end, dayKey, timeline, zone));
+              const height = Math.max(1, (bottom - Math.max(grid.startMin, startMinute)) / 60 * hourPx);
+              track.append(h("span", { class: "zn-cal-busy-range", style: `top:${top}px;height:${height}px`, "aria-hidden": "true" }));
+            }
+            if (isToday) {
+              const nowMinutes = C.timelineMinuteOfMs(nowMs(), dayKey, timeline, zone);
+              if (!hoursSet.on || (nowMinutes >= grid.startMin && nowMinutes <= grid.endMin)) {
+                track.append(h("div", { class: "zn-cal-now-line", style: `top:${gridY(nowMinutes)}px`, "aria-label": "Current time" }, h("span", { class: "zn-cal-now-dot" })));
+              } else if (Number.isFinite(nowMinutes)) {
+                // The current time is not among the hours shown: a line in the grid would lie about it. The edge it
+                // is beyond carries a mark instead; the time of day does not widen the grid, only items do.
+                const before = nowMinutes < grid.startMin, clock = C.clockIn(nowMs(), zone);
+                const label = `Current time ${clock}, ${before ? "before" : "after"} the hours shown`;
+                track.append(h("div", { class: "zn-cal-now-edge " + (before ? "is-before" : "is-after"), role: "img", "aria-label": label, title: label }));
+              }
+            }
+            for (const entry of entries) {
+              const original = entry.original;
+              const reminder = C.isReminder(original);
+              const button = calendarItemButton(original, true);
+              button.classList.add(reminder ? "zn-cal-time-reminder" : "zn-cal-time-event");
+              applyCalendarItemColors(button, calendarItemColor(original), "time");
+              const top = gridY(entry.startMin);
+              const height = reminder ? minBoxPx : Math.max(minBoxPx, ((entry.span ? entry.span.endMin - entry.span.startMin : entry.endMin - entry.startMin)) / 60 * hourPx);
+              button.style.top = top + "px";
+              button.style.height = height + "px";
+              // An event too low for its two lines shows the title alone (the style sheet leaves the time out; it is
+              // in the tooltip and the hover card). The lower padding of 2px may be used by the text, hence the 2.
+              if (!reminder && height < linesPx - 2) button.classList.add("is-short");
+              button.style.left = (entry.lane * 100 / entry.lanes) + "%";
+              button.style.width = (100 / entry.lanes) + "%";
+              button.style.zIndex = reminder ? "3" : "2";
+              const [itemStart, itemEnd] = C.itemRange(original);
+              const startLabel = C.clockIn(Math.max(itemStart, bounds[0]), zone);
+              const endLabel = reminder ? "reminder" : C.clockIn(Math.min(itemEnd, bounds[1]), zone);
+              button.setAttribute("aria-label", `${original.summary}, ${startLabel}${reminder ? " reminder" : " to " + endLabel}, lane ${entry.lane + 1} of ${entry.lanes}`);
+              bindCalendarDrag(button, original, { track, columns: dragColumns, scroll: dragScroll, dayKey, hourHeight: hourPx, zone, grid });
+              track.append(button);
+              if (!reminder && !original.x?.series && !(original.recurrence || []).length && original.x?.src !== "note") {
+                for (const edge of ["start", "end"]) {
+                  if (edge === "start" ? itemStart < bounds[0] || itemStart >= bounds[1] : itemEnd <= bounds[0] || itemEnd > bounds[1]) continue;
+                  const handle = h("button", { type: "button", class: "zn-cal-resize-handle is-" + edge,
+                    "aria-label": "Resize " + edge + " of " + (original.summary || "event") + "; use up and down arrows",
+                    "data-item-id": original.id, "data-edge": edge, title: "Drag or use Up/Down to resize " + edge });
+                  // The handle is 8px high and sits astride the edge it moves. At the end of the grid it stays inside:
+                  // hanging out, it gave the timeline a few px to scroll (an event that ends at 20:00 in 08:00-20:00).
+                  handle.style.top = (edge === "end" ? Math.min(top + height - 4, gridHours * hourPx - 8) : top - 4) + "px";
+                  handle.style.left = button.style.left; handle.style.width = button.style.width;
+                  bindCalendarDrag(handle, original, { track, columns: dragColumns, scroll: dragScroll, dayKey, hourHeight: hourPx, zone, grid, edge });
+                  handle.addEventListener("keydown", (event) => {
+                    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+                    event.preventDefault(); event.stopPropagation();
+                    const current = currentCalendarItem(original);
+                    if (!current || current.rev !== original.rev || current.etag !== original.etag) return flash("Calendar item changed; reopen it to resize");
+                    const snap = C.cleanCalendarSnap(store.meta.calendarSnap), delta = event.key === "ArrowUp" ? -snap : snap;
+                    const placement = C.calendarResizePlacement(current, edge, dayKey, 720, dayKey, 720 + delta, zone, snap);
+                    if (!placement) return;
+                    applyCalendarPlacement({ before: current, edge, zone, snap }, placement);
+                    Array.from(calendarContent.querySelectorAll(".zn-cal-resize-handle")).find((node) => node.getAttribute("data-item-id") === current.id && node.getAttribute("data-edge") === edge)?.focus({ preventScroll: true });
+                  });
+                  track.append(handle);
+                }
+              }
+            }
+            const col = h("div", { class: "zn-cal-time-column" + (isToday ? " is-today" : "") }, track);
+            applyWorkFreeAttrs(col, calendarWorkFreeInfo(day));
+            columns.append(col);
           }
-          const col = h("div", { class: "zn-cal-time-column" + (isToday ? " is-today" : "") }, track);
-          applyWorkFreeAttrs(col, calendarWorkFreeInfo(day));
-          // The row comes from the day's place in `days`, not in `workDays`: a patch draws a subset, and the row a
-          // column belongs to must not move because its neighbours were skipped.
-          // Same counter rule as the two rows above: `workDays` is what is drawn, so it is what decides the row.
-          if (weekRowPlan.rows === 2 && columnIndex % perRow === 0) { col.style.gridColumnStart = "1"; col.classList.add("is-row-start"); }
-          columnIndex++;
-          columns.append(col);
+          band.columns = columns;
+          gridRow.append(columns);
+          scroll.append(gridRow);
         }
-        gridRow.dataset.rows = String(weekRowPlan.rows);
-        gridRow.append(columns);
-        scroll.append(gridRow);
         if (patch) {
+          const { allDayRow, columns, hint } = bands[0];
           // The hours are the ones already drawn (checked above), so the line is there exactly when it was: only
           // what it names can have changed.
           const shownHint = calendarContent.querySelector(".zn-cal-hours-hint");
@@ -36246,17 +36211,15 @@ __zentralShim.register = function (def) {
       function captureCalendarViewState() {
         const focused = document.activeElement?.closest?.("[data-item-key]");
         const savedNode = (node) => node && calendarContent.contains(node) ? { key: node.getAttribute("data-item-key"), day: node.closest?.("[data-day]")?.getAttribute("data-day") || "" } : null;
-        const scroll = calendarContent.querySelector(".zn-cal-time-scroll");
+        const timelineTops = Array.from(calendarContent.querySelectorAll(".zn-cal-time-scroll"),
+          el => el.dataset.fitted === "true" ? null : el.scrollTop);
         const monthSel = calendarContent.querySelector(".zn-cal-month-selection");
-        // gridStart, hourPx: the first hour of the timeline as it is drawn now and the height of its hours. scrolls:
-        // whether it was drawn as one that scrolls (not with its hours fitted: that one has no position to keep).
-        const scrolls = !!scroll && scroll.dataset.fitted !== "true";
         return {
           view: calendarContent.dataset.view || "",
           contentScrollTop: Number(calendarContent.scrollTop) || 0,
           contentScrollLeft: Number(calendarContent.scrollLeft) || 0,
           selectionScrollTop: monthSel ? (Number(monthSel.scrollTop) || 0) : null,
-          scrollTop: scroll ? scroll.scrollTop : null, scrolls, gridStart: scroll && calendarGridHours ? calendarGridHours.startMin : null, hourPx: scroll && calendarGridHours ? calendarGridHours.hourPx : null,
+          timelineTops, gridStart: calendarGridHours?.startMin ?? null, hourPx: calendarGridHours?.hourPx ?? null,
           focused: savedNode(focused), hover: savedNode(calendarHoverAnchor),
         };
       }
@@ -36267,30 +36230,31 @@ __zentralShim.register = function (def) {
           const monthSel = calendarContent.querySelector(".zn-cal-month-selection");
           if (monthSel && state.selectionScrollTop !== null && Number.isFinite(state.selectionScrollTop)) monthSel.scrollTop = Math.max(0, state.selectionScrollTop);
         }
-        const scroll = calendarContent.querySelector(".zn-cal-time-scroll");
-        if (scroll && scroll.dataset.fitted === "true") {
-          // The hours are fitted: there is nothing to scroll and no position to bring back.
-        } else if (scroll && state.scrollTop !== null && state.scrolls) {
-          // The grid may now begin at another hour, and its hours may have another height (the Size slider): keep
-          // the same time at the top, not the same number of px. One exception: a timeline held to some hours that
-          // was at its very top stays at its top, so hours that were added above (for an item, or by choosing an
-          // earlier first hour) are in sight. All 24 hours keep the time: they would jump to midnight.
-          const held = CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours).on;
-          if (held && state.scrollTop <= 0) scroll.scrollTop = 0;
-          else if (state.gridStart === null || !calendarGridHours) scroll.scrollTop = Math.max(0, state.scrollTop);
-          else {
-            // In px of the new grid: what was scrolled, stretched by the change of the hour (exactly 1 when the hour
-            // is the same: the position comes back to the px), and the hours the grid gained or lost above.
-            const hourPx = calendarGridHours.hourPx, stretch = state.hourPx > 0 ? hourPx / state.hourPx : 1;
-            scroll.scrollTop = Math.max(0, state.scrollTop * stretch + (state.gridStart - calendarGridHours.startMin) / 60 * hourPx);
+        calendarContent.querySelectorAll(".zn-cal-time-scroll").forEach((scroll, i) => {
+          if (scroll.dataset.fitted === "true") return;
+          const top = state.timelineTops[i];
+          if (Number.isFinite(top)) {
+            // The grid may now begin at another hour, and its hours may have another height (the Size slider): keep
+            // the same time at the top, not the same number of px. One exception: a timeline held to some hours that
+            // was at its very top stays at its top, so hours that were added above (for an item, or by choosing an
+            // earlier first hour) are in sight. All 24 hours keep the time: they would jump to midnight.
+            const held = CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours).on;
+            if (held && top <= 0) scroll.scrollTop = 0;
+            else if (state.gridStart === null || !calendarGridHours) scroll.scrollTop = Math.max(0, top);
+            else {
+              // In px of the new grid: what was scrolled, stretched by the change of the hour (exactly 1 when the hour
+              // is the same: the position comes back to the px), and the hours the grid gained or lost above.
+              const hourPx = calendarGridHours.hourPx, stretch = state.hourPx > 0 ? hourPx / state.hourPx : 1;
+              scroll.scrollTop = Math.max(0, top * stretch + (state.gridStart - calendarGridHours.startMin) / 60 * hourPx);
+            }
+          } else if (calendarGridHours && Number(scroll.scrollHeight) > Number(scroll.clientHeight)) {
+            // This timeline scrolls (a fixed size, or a pane too low for the smallest hour) and there was none before
+            // it, or one that had nothing to scroll (the view was another, the sheet was just opened, the hours were
+            // fitted until now): it opens an hour before the current time when today is in view, else where the
+            // working day or the first item begins (gridOpenMinute), not at midnight.
+            scroll.scrollTop = Math.max(0, CALENDAR_PART.gridOffsetOf(calendarGridHours.openMin, calendarGridHours.hourPx, calendarGridHours));
           }
-        } else if (scroll && calendarGridHours && Number(scroll.scrollHeight) > Number(scroll.clientHeight)) {
-          // This timeline scrolls (a fixed size, or a pane too low for the smallest hour) and there was none before
-          // it, or one that had nothing to scroll (the view was another, the sheet was just opened, the hours were
-          // fitted until now): it opens an hour before the current time when today is in view, else where the
-          // working day or the first item begins (gridOpenMinute), not at midnight.
-          scroll.scrollTop = Math.max(0, CALENDAR_PART.gridOffsetOf(calendarGridHours.openMin, calendarGridHours.hourPx, calendarGridHours));
-        }
+        });
         const find = (ref) => {
           if (!ref?.key) return null;
           const candidates = [...calendarContent.querySelectorAll("[data-item-key]")].filter((node) => node.getAttribute("data-item-key") === ref.key);
@@ -36340,7 +36304,7 @@ __zentralShim.register = function (def) {
       // `kept`: the view state to return to, when the caller took it before it changed the grid.
       function renderCalendar(kept = null) {
         if (!CALENDAR_PART || !calendarContent) return;
-        const prior = kept && typeof kept === "object" && "scrollTop" in kept && "scrolls" in kept ? kept : captureCalendarViewState();
+        const prior = Array.isArray(kept?.timelineTops) ? kept : captureCalendarViewState();
         calendarBackgroundPending = false;
         if (menu?.calendar && menu.calendarView !== (store.meta.calendarView || "month")) closeMenu();
         cancelCalendarDrag();
@@ -36369,7 +36333,7 @@ __zentralShim.register = function (def) {
         calendarContent.dataset.density = CALENDAR_PART.calendarScaleDensity(view, size);
         if (view === "month" && sized && size !== "auto") calendarContent.style.setProperty("--zn-cal-month-row", size + "px");
         else calendarContent.style.removeProperty("--zn-cal-month-row");
-        if (view !== "week" && view !== "day" && !(view === "month" && !compact)) watchCalendarFit(null);
+        if (view !== "week" && view !== "day" && !(view === "month" && !compact)) watchCalendarFit();
         calendarSnapSelect.textContent = t("cal.snap.btn", { min: CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap) });
         calendarSnapSelect.hidden = view !== "week" && view !== "day";
         const hoursSet = CALENDAR_PART.cleanCalendarHours(store.meta.calendarHours), hoursText = calendarHoursText(hoursSet);
@@ -36423,11 +36387,12 @@ __zentralShim.register = function (def) {
         const fontPx = calendarFontPx();
         if (fontPx > 0 && calendarGridHours.fontPx > 0 && fontPx !== calendarGridHours.fontPx) return true;
         if (!calendarGridHours.fit) return false;
-        const room = calendarTimelineRoom(scroll);
+        const scrolls = Array.from(calendarContent.querySelectorAll(".zn-cal-time-scroll"));
+        const room = Math.min(...scrolls.map(calendarTimelineRoom));
         if (!(room > 0)) return false;
         const hours = (calendarGridHours.endMin - calendarGridHours.startMin) / 60;
         const hourPx = CALENDAR_PART.fitHourHeight(room, hours, { minPx: calendarMinHourPx() });
-        return hourPx !== calendarGridHours.hourPx || (hours * hourPx <= room) !== (scroll.dataset.fitted === "true");
+        return hourPx !== calendarGridHours.hourPx || scrolls.some(el => (hours * hourPx <= calendarTimelineRoom(el)) !== (el.dataset.fitted === "true"));
       }
       // The pane changed (the window, the sheet, the splitter, the toolbar taking another row, the text size).
       // Nothing is drawn again that would come out the same: Month fits its cells in place, Week and Day are drawn
@@ -36619,8 +36584,7 @@ __zentralShim.register = function (def) {
             { icon: anchorNow === "selected" ? "check" : undefined, label: t("cal.days.selectedDay"), action: () => setWeekSpan({ anchor: "selected" }, true) },
           ]);
         }
-        // OW-96: the span goes up to the model's ceiling (48) now that the grid can stack two rows of 24. The short
-        // spans stay first, because they are what a person picks nine times out of ten.
+        // Next days is a list with its own presets, independent of the Week span.
         calendarChoiceMenu(calendarDaysSelect,
           [3, 7, 14, 21, 30, 48].map((days) => ({ value: String(days), label: tCount("cal.days", days) })),
           String(store.meta.calendarDaysForward || 7), (value) => { store.setMeta({ calendarDaysForward: Number(value) }); renderCalendar(); });
@@ -42987,7 +42951,7 @@ __zentralShim.register = function (def) {
           const fitRO = new RO(scheduleCalendarFit);
           fitRO.observe(calendarContent);
           calendarFitWatch = fitRO;
-          if (calendarFitWatched) fitRO.observe(calendarFitWatched);
+          for (const node of calendarFitWatched) fitRO.observe(node);
           cleanups.push(resources.observer("sheet:fitRO", "ResizeObserver", () => { calendarFitWatch = null; fitRO.disconnect(); }));
         }
       } catch (_) {}

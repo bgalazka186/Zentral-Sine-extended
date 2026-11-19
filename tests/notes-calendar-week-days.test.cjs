@@ -94,12 +94,12 @@ const openCalendarRow = (root, trigger, label) => {
 (async () => {
   await test("pure visibleDays(start, count), cleanWeekSpan, fitWeekDayCount and resolveWeekVisibleDays across DST and month/year borders", () => {
     assert.equal(cal.WEEK_DAYS_LIMITS.min, 1);
-    assert.equal(cal.WEEK_DAYS_LIMITS.max, 48, "OW-96: a span goes up to 48 days, two rows of 24");
+    assert.equal(cal.WEEK_DAYS_LIMITS.max, 56, "two rows of 28 days");
     assert.deepEqual([...cal.WEEK_RANGE_STARTS], ["weekStart", "today", "selected"]);
     assert.deepEqual(cal.cleanWeekSpan(), { days: 7, anchor: "weekStart" });
     assert.deepEqual(cal.cleanWeekSpan({ days: "auto", anchor: "today" }), { days: "auto", anchor: "today" });
     assert.deepEqual(cal.cleanWeekSpan({ days: 0, anchor: "selected" }), { days: 1, anchor: "selected" });
-    assert.deepEqual(cal.cleanWeekSpan({ days: 99, anchor: "invalid" }), { days: 48, anchor: "weekStart" });
+    assert.deepEqual(cal.cleanWeekSpan({ days: 99, anchor: "invalid" }), { days: 56, anchor: "weekStart" });
     assert.deepEqual(cal.cleanWeekSpan(5), { days: 5, anchor: "weekStart" });
     assert.deepEqual(cal.cleanWeekSpan("auto"), { days: "auto", anchor: "weekStart" });
 
@@ -115,7 +115,7 @@ const openCalendarRow = (root, trigger, label) => {
     ]);
     assert.equal(cal.visibleDays(day(2026, 11, 16), 0).length, 1);
     assert.equal(cal.visibleDays(day(2026, 11, 16), 25).length, 25, "25 days is now inside the ceiling");
-    assert.equal(cal.visibleDays(day(2026, 11, 16), 99).length, 48, "and the ceiling is what stops it");
+    assert.equal(cal.visibleDays(day(2026, 11, 16), 99).length, 56, "and the ceiling is what stops it");
 
     // DST weeks (EU March/October, US March/November, NZ April/September): consecutive civil days without gaps or duplicates.
     for (const [y, m, d] of [[2026, 3, 6], [2026, 3, 27], [2026, 4, 3], [2026, 9, 25], [2026, 10, 23], [2026, 10, 30]]) {
@@ -138,7 +138,7 @@ const openCalendarRow = (root, trigger, label) => {
     assert.equal(mediumAuto, 7);
     assert.equal(wideAuto, 12);
     assert.equal(cal.fitWeekDayCount(2400), 28, "auto keeps fitting: 2400px less the 42px gutter, in 84px columns");
-    assert.equal(cal.fitWeekDayCount(99999), 48, "and never asks for more than the model allows");
+    assert.equal(cal.fitWeekDayCount(99999), 56, "and never asks for more than the model allows");
 
     // Range anchors: weekStart (Mon vs Sun), today, selected.
     const wed18 = day(2026, 11, 18);
@@ -410,6 +410,40 @@ const openCalendarRow = (root, trigger, label) => {
     assert.equal(shownTrackDays().length, 3, "Week view restores its persisted 3-day regulator setting");
     assert.equal(daysChip.textContent, "3 days");
 
+    daysChip.click();
+    const spanSlider = root.querySelector(".zn-menu input");
+    spanSlider.value = "29";
+    spanSlider.dispatchEvent(new dom.Ev("input", { bubbles: true }));
+    await flush();
+    const heads = root.querySelectorAll(".zn-cal-time-head");
+    assert.equal(heads.length, 2, "day 29 starts a second complete timetable");
+    for (const [index, head] of Array.from(heads).entries()) {
+      const band = head.parentElement, count = index === 0 ? 28 : 1;
+      assert.equal(head.querySelectorAll(".zn-cal-time-day-head").length, count);
+      assert.equal(band.querySelectorAll(".zn-cal-hour-gutter").length, 1);
+      const dates = (selector) => Array.from(band.querySelectorAll(selector), el => el.getAttribute("data-day"));
+      assert.deepEqual(dates(".zn-cal-time-allday-cell"), shownTrackDays().slice(index * 28, index * 28 + count));
+      assert.deepEqual(dates(".zn-cal-time-track"), dates(".zn-cal-time-allday-cell"));
+    }
+    // The two scrollports are independent and both positions survive a full redraw.
+    const timelines = () => root.querySelectorAll(".zn-cal-time-scroll");
+    timelines()[0].scrollTop = 35;
+    timelines()[1].scrollTop = 125;
+    sheet.refreshCalendar();
+    assert.deepEqual(timelines().map(el => el.scrollTop), [35, 125]);
+
+    // Pointer capture starts in the first band, but day 29 is still a valid move target.
+    const rows = root.querySelectorAll(".zn-cal-time-allday-row");
+    const target = rows[1].querySelector(".zn-cal-time-allday-cell");
+    const button = Array.from(rows[0].querySelectorAll(".zn-cal-item")).find(el => el.textContent.includes("Move me"));
+    const box = y => ({ left: 400, right: 600, top: y, bottom: y + 30, width: 200, height: 30 });
+    rows[0].getBoundingClientRect = () => box(90);
+    rows[1].getBoundingClientRect = target.getBoundingClientRect = () => box(400);
+    button.setPointerCapture = () => {};
+    button.dispatchEvent(new dom.Ev("pointerdown", { bubbles: true, button: 0, pointerId: 2, clientX: 450, clientY: 100 }));
+    for (const type of ["pointermove", "pointerup"]) root.dispatchEvent(new dom.Ev(type, { bubbles: true, button: 0, pointerId: 2, clientX: 450, clientY: 410 }));
+    await flush();
+    assert.equal(store.items.get("drag-rem").start.date, target.getAttribute("data-day"));
     sheet.destroy();
   });
 

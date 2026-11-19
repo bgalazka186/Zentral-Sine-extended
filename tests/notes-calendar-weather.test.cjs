@@ -2,7 +2,7 @@
 /* OW-96: the calendar's weather line and the two new week-view shapes.
  *
  * Four things are pinned here, and each one is a rule rather than an implementation detail:
- *   1. the span ceiling is 48 and a plan stacks it into two rows of 24 only when both width and height allow it;
+ *   1. the span ceiling is 56 and day 29 starts the second band;
  *   2. the trust ladder decays with distance — a forecast a month out is refreshed four times rarer than today's;
  *   3. the calendar reads the widget's cache and never fetches (a calendar repaint is not a network event);
  *   4. a forecast index drops what it cannot draw instead of drawing "undefined" or an empty box.
@@ -23,29 +23,11 @@ const NOTES_SRC = fs.readFileSync(path.join(__dirname, "..", "additional", "note
 const NOTES_CSS = fs.readFileSync(path.join(__dirname, "..", "additional", "notes", "ZentralNotes.css"), "utf8");
 const WIDGETS_SRC = fs.readFileSync(path.join(__dirname, "..", "additional", "widgets", "ZentralWidgets.uc.js"), "utf8");
 
-test("the span ceiling is 48, and the model says so everywhere", () => {
-  assert.equal(cal.WEEK_DAYS_LIMITS.max, 48);
-  assert.equal(cal.WEEK_DAYS_LIMITS.maxRows, 2, "two rows is the shape 48 days are meant to take");
-  assert.equal(cal.cleanWeekSpan({ days: 1000 }).days, 48, "a request beyond the ceiling is clamped, not refused");
-  assert.equal(cal.visibleDays(new Date(2026, 0, 1).getTime(), 500).length, 48);
-});
-
-test("48 days stack into two rows of 24 only when the surface is wide and tall enough", () => {
-  const wide = cal.weekGridPlan({ days: 48, widthPx: 2100, heightPx: 700 });
-  assert.deepEqual(wide, { count: 48, rows: 2, perRow: 24 }, "the owner's case: two lines of 24");
-  const narrow = cal.weekGridPlan({ days: 48, widthPx: 900, heightPx: 700 });
-  assert.equal(narrow.rows, 1, "a narrow pane keeps one row and scrolls rather than squeezing two");
-  const short = cal.weekGridPlan({ days: 48, widthPx: 2100, heightPx: 320 });
-  assert.equal(short.rows, 1, "a short pane keeps one row: two rows in a strip is worse than a scroll");
-  const seven = cal.weekGridPlan({ days: 7, widthPx: 900, heightPx: 700 });
-  assert.deepEqual(seven, { count: 7, rows: 1, perRow: 7 }, "a normal week never changes shape");
-});
-
-test("the plan is safe on junk, because it runs on measured pixels that can be zero", () => {
-  assert.deepEqual(cal.weekGridPlan({}), { count: 7, rows: 1, perRow: 7 });
-  assert.deepEqual(cal.weekGridPlan({ days: 0, widthPx: 0, heightPx: 0 }), { count: 1, rows: 1, perRow: 1 });
-  assert.equal(cal.weekGridPlan({ days: 48, widthPx: 2100, heightPx: 700, maxRows: 1 }).rows, 1, "maxRows is honoured");
-  assert.equal(cal.weekGridPlan({ days: 48, widthPx: NaN, heightPx: NaN }).rows, 1, "an unmeasured pane is one row");
+test("the week uses up to 28 consecutive dates per band", () => {
+  for (const [days, count, rows, perRow] of [[0, 1, 1, 1], [7, 7, 1, 7], [28, 28, 1, 28],
+    [29, 29, 2, 28], [48, 48, 2, 28], [56, 56, 2, 28], [999, 56, 2, 28]]) {
+    assert.deepEqual(cal.weekGridPlan({ days }), { count, rows, perRow });
+  }
 });
 
 test("trust decays with distance, and never makes the widget poll harder", () => {
