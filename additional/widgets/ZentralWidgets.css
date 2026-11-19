@@ -607,6 +607,13 @@
   cursor: inherit !important;
 }
 
+/* Week view has seven rows: let the card grow to show all of them together instead
+   of creating a second, nested scroll area inside the weather widget. */
+#zentral-sidebar-widgets .zw-weather[data-zw-weather-view="week"] .zw-weather-outlook {
+  max-height: none !important;
+  overflow: visible !important;
+}
+
 #zentral-sidebar-widgets .zw-weather-outlook .zw-weather-outlook-line {
   display: block !important;
   white-space: normal !important;

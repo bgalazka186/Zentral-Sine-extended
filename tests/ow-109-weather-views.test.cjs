@@ -10,6 +10,7 @@ const root = path.resolve(__dirname, "..");
 const SRC = fs.readFileSync(path.join(root, "additional/widgets/ZentralWidgets.uc.js"), "utf8");
 const SETTINGS = JSON.parse(fs.readFileSync(path.join(root, "additional/widgets/settings.json"), "utf8"));
 const STANDALONE = JSON.parse(fs.readFileSync(path.join(root, "additional/widgets/standalone.json"), "utf8"));
+const WIDGETS_CSS = fs.readFileSync(path.join(root, "additional/widgets/ZentralWidgets.css"), "utf8");
 const LAYOUT = JSON.parse(fs.readFileSync(path.join(root, "extension/settings/layout.json"), "utf8"));
 
 const seam = {};
@@ -122,6 +123,15 @@ test("weatherViewParts keeps actual Today/Tomorrow descriptions and compact date
   const plTomorrow = c.weatherViewParts(reduced, "tomorrow", { lang: "pl" });
   assert.equal(plTomorrow.label, "S\u0142aby deszcz");
   assert.match(plTomorrow.text, /^Jutro/);
+});
+
+test("Week view shows all seven forecast rows without an inner scroll area", () => {
+  const rule = WIDGETS_CSS.match(
+    /#zentral-sidebar-widgets \\.zw-weather\\[data-zw-weather-view="week"\\] \\.zw-weather-outlook\\s*\\{([^}]*)\\}/,
+  );
+  assert.ok(rule, "Week view has its own outlook layout rule");
+  assert.match(rule[1], /max-height:\\s*none\\s*!important/, "the seven rows are not height-capped");
+  assert.match(rule[1], /overflow:\\s*visible\\s*!important/, "the outlook does not scroll internally");
 });
 
 (async () => {
