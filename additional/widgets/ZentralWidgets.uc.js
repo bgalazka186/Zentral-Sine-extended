@@ -151,7 +151,17 @@
       "boost.gameMode": "Game Mode",
       "boost.gameModeOn": "Game Mode on \u2014 timers paused, background tabs idle",
       "boost.gameModeOff": "Game Mode off \u2014 everything back to normal",
-      "boost.later": "More Boost actions arrive in later updates",
+      "boost.later": "Boost levels: Light, Deep, Game Mode and Restore",
+      "boost.levels": "Boost levels and Restore",
+      "boost.shortLight": "Light",
+      "boost.shortDeep": "Deep",
+      "boost.shortGame": "Game",
+      "boost.shortRestore": "Restore",
+      "boost.levelLight": "Light: GC/CC + memory minimize. No tabs touched.",
+      "boost.levelDeep": "Deep: Light clean first, then eligible tabs sleep. Restore available.",
+      "boost.levelGame": "Game Mode: pauses repeating features and idles non-essential browsers.",
+      "boost.levelRestore": "Restore: wakes sleeping panels; sleeping tabs reload on click.",
+      "boost.resultSkipped": " \u00b7 skipped {count} protected tab(s)",
       "tray.label": "Sidebar widgets",
       "tray.move": "Move this widget",
       "tray.moveUp": "Move this widget up",
@@ -219,7 +229,17 @@
       "boost.gameMode": "Tryb gry",
       "boost.gameModeOn": "Tryb gry w\u0142\u0105czony \u2014 liczniki wstrzymane, karty w tle bezczynne",
       "boost.gameModeOff": "Tryb gry wy\u0142\u0105czony \u2014 wszystko wraca do normy",
-      "boost.later": "Kolejne dzia\u0142ania Boost pojawi\u0105 si\u0119 w nast\u0119pnych wersjach",
+      "boost.later": "Poziomy Boost: Lekko, Głęboko, Tryb gry i Przywróć",
+      "boost.levels": "Poziomy Boost i Przywróć",
+      "boost.shortLight": "Lekko",
+      "boost.shortDeep": "Głęboko",
+      "boost.shortGame": "Gra",
+      "boost.shortRestore": "Przywróć",
+      "boost.levelLight": "Lekko: GC/CC i minimalizacja pamięci. Karty nie są ruszane.",
+      "boost.levelDeep": "Głęboko: najpierw lekkie czyszczenie, potem usypianie kart. Dostępne Przywróć.",
+      "boost.levelGame": "Tryb gry: wstrzymuje cykliczne funkcje i wygasza niepotrzebne karty.",
+      "boost.levelRestore": "Przywróć: budzi uśpione panele; karty wczytują się po kliknięciu.",
+      "boost.resultSkipped": " \u00b7 pominięto {count} chronionych kart",
       "tray.label": "Widgety panelu bocznego",
       "tray.move": "Przenieś ten widget",
       "tray.moveUp": "Przenieś ten widget wyżej",
@@ -1847,6 +1867,17 @@
     return entries.map(([reason, count]) => `${reason}: ${count}`).join(" \u00b7 ");
   }
 
+  // OW-121: the post-run line uses the FULL grouped skip counts, never OW-115's bounded five-entry sample. Pure,
+  // so an unreadable result cannot invent a number and the toast stays one short line.
+  function boostSkippedCount(result) {
+    const counts = result && typeof result === "object" ? result.skippedCounts : null;
+    if (!counts || typeof counts !== "object") return 0;
+    return Object.values(counts).reduce((sum, value) => {
+      const count = Number(value);
+      return Number.isFinite(count) && count > 0 ? sum + Math.floor(count) : sum;
+    }, 0);
+  }
+
   // What a plain click means. Pure, so the rule is testable without a sidebar: a click while the module works does
   // nothing (a second GC while the first settles is exactly the kind of pile-up the plan forbids), a click otherwise
   // runs the light pass.
@@ -1874,12 +1905,18 @@
       {
         id: "free-light",
         label: widgetText(lang, running ? "boost.busy" : "boost.free"),
+        shortLabel: running ? "\u2026" : widgetText(lang, "boost.shortLight"),
+        description: widgetText(lang, "boost.levelLight"),
+        level: "light",
         available: !running,
         primary: true,
       },
       {
         id: "free-deep",
         label: widgetText(lang, "boost.deep"),
+        shortLabel: widgetText(lang, "boost.shortDeep"),
+        description: widgetText(lang, "boost.levelDeep"),
+        level: "deep",
         available: !running && canDeep,
         hint: canDeep ? "" : widgetText(lang, "boost.deepSoon"),
       },
@@ -1888,6 +1925,9 @@
         // move — a menu entry that reads "Game Mode" and does the opposite of what a person expects is worse than none.
         id: "game-mode",
         label: widgetText(lang, "boost.gameMode"),
+        shortLabel: widgetText(lang, "boost.shortGame"),
+        description: widgetText(lang, "boost.levelGame"),
+        level: "game",
         available: opts.canGameMode !== false,
         checked: Boolean(opts.gameMode),
         hint: Boolean(opts.gameMode) ? widgetText(lang, "boost.gameModeOn") : "",
@@ -1897,6 +1937,8 @@
         label: undoSize
           ? widgetText(lang, "boost.restoreCount", { count: undoSize })
           : widgetText(lang, "boost.restore"),
+        shortLabel: widgetText(lang, "boost.shortRestore"),
+        description: widgetText(lang, "boost.levelRestore"),
         available: !running && undoSize > 0,
         hint: undoSize ? "" : widgetText(lang, "boost.restoreSoon"),
       },
@@ -1916,28 +1958,33 @@
   }
 
   // The toast line after a run. `freedMB` is null when the build cannot measure memory at all: the run still
-  // happened, so the card says that instead of inventing a number.
+  // happened, so the card says that instead of inventing a number. OW-121 adds the grouped protected-tab count
+  // as a suffix on the SAME line; it never appends a second card row or grows the widget's height.
   function boostResultText(result, opts = {}) {
     const lang = resolveWidgetLanguage(opts.language, opts.notesRaw);
-    if (!result || typeof result !== "object") return widgetText(lang, "boost.unknown");
+    const withSkipped = (text) => {
+      const count = boostSkippedCount(result);
+      return count ? text + widgetText(lang, "boost.resultSkipped", { count }) : text;
+    };
+    if (!result || typeof result !== "object") return withSkipped(widgetText(lang, "boost.unknown"));
     // A deep pass says what it put to sleep as well as what it freed; the light pass has nothing to add.
     if (result.by === "level2" && result.unloaded) {
       const tabs = Number(result.unloaded.tabs) || 0;
       const panels = Number(result.unloaded.panels) || 0;
       if (tabs || panels) {
-        return widgetText(lang, "boost.deepDone", {
+        return withSkipped(widgetText(lang, "boost.deepDone", {
           tabs,
           panels,
           mb: Number.isFinite(Number(result.freedMB)) ? Math.round(Number(result.freedMB)) : 0,
-        });
+        }));
       }
     }
     // A finite `freedMB` is the answer; the two readings only matter when it is missing, which is exactly the
     // "this build cannot measure memory" case — the run happened, so say that instead of inventing a number.
     const freed = Number(result.freedMB);
-    if (result.freedMB == null || !Number.isFinite(freed)) return widgetText(lang, "boost.unknown");
-    if (freed <= 0) return widgetText(lang, "boost.nothingFreed");
-    return widgetText(lang, "boost.freed", { mb: Math.round(freed) });
+    if (result.freedMB == null || !Number.isFinite(freed)) return withSkipped(widgetText(lang, "boost.unknown"));
+    if (freed <= 0) return withSkipped(widgetText(lang, "boost.nothingFreed"));
+    return withSkipped(widgetText(lang, "boost.freed", { mb: Math.round(freed) }));
   }
 
   // ---- T3.9d: stopwatch, quick timer and quick note -----------------------------------------------------------
@@ -2755,6 +2802,7 @@
     boostParts,
     resolveBoostClick,
     boostSkippedLine,
+    boostSkippedCount,
     boostMenuItems,
     boostResultText,
     cleanWidgetOrder,
@@ -5066,10 +5114,12 @@
           const menuBtn = doc.createElement("button");
           menuBtn.type = "button";
           menuBtn.className = "zw-boost-menu-btn";
-          menuBtn.setAttribute("aria-haspopup", "true");
+          // OW-121: this is a compact level group, not a drop-down list. The same inline popup stays in normal
+          // flow, but its four buttons now sit on ONE row; "..." opens it, "Boost levels and Restore" names it.
+          menuBtn.setAttribute("aria-haspopup", "false");
           menuBtn.setAttribute("aria-expanded", "false");
-          menuBtn.setAttribute("aria-label", tw("boost.later"));
-          menuBtn.textContent = "\u25be";
+          menuBtn.setAttribute("aria-label", tw("boost.levels"));
+          menuBtn.textContent = "\u22ef";
           wrap.appendChild(valueEl);
           wrap.appendChild(labelEl);
           wrap.appendChild(menuBtn);
@@ -5079,7 +5129,8 @@
           const popup = doc.createElement("div");
           popup.className = "zw-boost-popup";
           popup.hidden = true;
-          popup.setAttribute("role", "menu");
+          popup.setAttribute("role", "group");
+          popup.setAttribute("aria-label", tw("boost.levels"));
           wrap.appendChild(popup);
 
           const paintValue = () => {
@@ -5109,14 +5160,23 @@
               language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE),
               notesRaw: getString(NOTES_LANGUAGE_PREF, "en"),
             });
+            // OW-121: the old disabled explanation row and "more actions" note are folded into tooltips. Nothing
+            // is appended below the four buttons, so the open popup stays exactly one compact row high.
+            const skippedInfo = items.find((item) => item.id === "deep-skipped");
             for (const item of items) {
+              if (item.id === "deep-skipped") continue;
               const row = doc.createElement("button");
               row.type = "button";
               row.className = "zw-boost-menu-item";
-              row.setAttribute("role", "menuitem");
+              row.setAttribute("role", item.checked !== undefined ? "switch" : "button");
               row.setAttribute("data-zw-boost-action", item.id);
-              row.textContent = item.label;
-              if (item.hint) row.title = item.hint;
+              if (item.level) row.setAttribute("data-zw-boost-level", item.level);
+              row.textContent = item.shortLabel || item.label;
+              row.setAttribute("aria-label", item.label);
+              const hints = [item.description, item.hint];
+              if (item.id === "free-deep" && skippedInfo) hints.push(skippedInfo.label, skippedInfo.hint);
+              const title = hints.filter(Boolean).join(" \u00b7 ");
+              if (title) row.setAttribute("title", title);
               row.disabled = !item.available;
               row.setAttribute("aria-disabled", item.available ? "false" : "true");
               // A switch, not an action: the state is on the row so a screen reader and a test can both read it.
@@ -5131,11 +5191,6 @@
               }
               popup.appendChild(row);
             }
-            // One line at the bottom says where the other entries will come from, translated like every other word.
-            const note = doc.createElement("div");
-            note.className = "zw-boost-menu-note";
-            note.textContent = tw("boost.later");
-            popup.appendChild(note);
           };
 
           const api = () => boostModule();

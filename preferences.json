@@ -1976,8 +1976,8 @@
   },
   {
     "property": "zen.workspace.zentral.widgets.boost.enabled",
-    "label": "Show the Boost widget (memory and Free memory)",
-    "description": "Boost replaces the old Status card: it shows browser RAM and frees memory without closing anything.",
+    "label": "Show the Boost widget (memory and compact levels)",
+    "description": "Boost replaces the old Status card: browser RAM plus compact Light, Deep, Game Mode and Restore cards; no extra widget height.",
     "type": "checkbox",
     "defaultValue": true
   },

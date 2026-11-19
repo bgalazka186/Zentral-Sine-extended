@@ -28,6 +28,7 @@ docs/*
 !docs/st7-4-agenda-rows-research.md
 !docs/bugfix-2026-11-18.md
 !docs/ow-120-owner-diagnosis.md
+!docs/ow-121-boost-ux.md
 patches/
 zentral/upstream/
 

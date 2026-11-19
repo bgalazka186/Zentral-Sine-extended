@@ -4,7 +4,7 @@ const MB = 1_000_000; // Firefox ProcInfo.memory is bytes; fixtures are written 
  *
  * `runLevel2` already collects named `skipped` reasons but nothing shows them, and there is no way to
  * see how many loaded tabs are pinned vs unpinned. This suite checks the CURRENT behaviour first:
- * grouped reason counts (not just the five-entry sample), a localized popup row, and state counts.
+ * grouped reason counts (not just the five-entry sample), localized Deep-tooltip data, and state counts.
  */
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -42,7 +42,7 @@ test("the grouped reason line is pure, counted, sorted and localized", () => {
     "pinned-kept: 12 \u00b7 audible: 2 \u00b7 pending: 1");
   assert.equal(c.boostSkippedLine({ "audible": 0, "pinned-kept": "junk" }), "", "junk is ignored");
   assert.equal(c.boostSkippedLine(null), "");
-  // Both languages have their own words, and the popup row is built from them.
+  // Both languages have their own words, and the tooltip is built from them.
   for (const lang of ["en", "pl"]) {
     assert.ok(c.WIDGET_STRINGS[lang]["boost.skipped"], lang + " has the skipped template");
     assert.ok(c.WIDGET_STRINGS[lang]["boost.loaded"], lang + " has the loaded-tabs template");
@@ -51,12 +51,12 @@ test("the grouped reason line is pure, counted, sorted and localized", () => {
   assert.notEqual(c.WIDGET_STRINGS.pl["boost.loaded"], c.WIDGET_STRINGS.en["boost.loaded"]);
 });
 
-test("the Boost popup shows the grouped reasons and loaded-tab counts in both languages", () => {
+test("the Boost menu data shows the grouped reasons and loaded-tab counts in both languages", () => {
   const skipped = { "pinned-kept": 12, "audible": 2 };
   const loadedTabs = { pinned: 12, unpinned: 7 };
   const en = c.boostMenuItems({ running: false, canDeep: true, skipped, loadedTabs });
   const row = en.find((x) => x.id === "deep-skipped");
-  assert.ok(row, "a disabled explanation row appears after a deep pass with skips");
+  assert.ok(row, "disabled explanation data appears after a deep pass with skips");
   assert.equal(row.available, false, "it is information, not another action");
   assert.equal(row.label, c.WIDGET_STRINGS.en["boost.skipped"].replace("{reasons}", "pinned-kept: 12 \u00b7 audible: 2"));
   assert.equal(row.hint, c.WIDGET_STRINGS.en["boost.loaded"].replace("{pinned}", "12").replace("{unpinned}", "7"));

@@ -290,9 +290,63 @@
         }
       };
 
+      // The GC/CC pair on its own. OW-121 makes this the shared tail of the light-clean actions, and Level 2's
+      // final settle still uses it after the tab/panel sweep so its own after-reading stays honest.
+      function runGcCc() {
+        try {
+          if (typeof ChromeUtils?.forceGC === "function") ChromeUtils.forceGC();
+        } catch (_) {}
+        try {
+          if (typeof ChromeUtils?.forceCC === "function") ChromeUtils.forceCC();
+        } catch (_) {}
+      }
+
       // Gecko's minimizeMemoryUsage takes a callback; some builds reject a bare function strictly, so it is wrapped in
       // an object with run() (the plan's own instruction) and every step is separately guarded: GC/CC that a build
       // refuses must not turn "free memory" into an error a person sees.
+      //
+      // OW-121: this is ONE shared light-clean action list, not a second 3 s wait. Level 1 uses it on its own;
+      // Level 2 now awaits it before its tab/panel sweep, so "deep clean also does light clean" is true in the
+      // module, not only in the widget. A build whose reporter manager never answers is bounded by a 50 ms
+      // fallback, and destroy() resolves the pending promise instead of leaving a run hanging.
+      const lightCleanCancels = new Set();
+      function lightClean() {
+        return new Promise((resolve) => {
+          let settled = false;
+          let fallback = 0;
+          const done = (by) => {
+            if (settled) return;
+            settled = true;
+            lightCleanCancels.delete(cancel);
+            clearTimer(fallback);
+            if (!disposed) runGcCc();
+            resolve(by);
+          };
+          const cancel = () => done("gc-cc-only");
+          lightCleanCancels.add(cancel);
+          let manager = null;
+          try {
+            manager = reporterManager();
+          } catch (_) {}
+          if (!manager || typeof manager.minimizeMemoryUsage !== "function") {
+            done("gc-cc-only");
+            return;
+          }
+          let answered = false;
+          const answer = () => {
+            if (answered) return;
+            answered = true;
+            done("minimize");
+          };
+          fallback = setTimer(() => done("gc-cc-only"), 50);
+          try {
+            manager.minimizeMemoryUsage({ run: answer });
+          } catch (_) {
+            done("gc-cc-only");
+          }
+        });
+      }
+
       let level1Busy = false;
       let level1Timer = 0;
       let cancelLevel1 = null;
@@ -312,6 +366,11 @@
             resolve(value);
           };
           cancelLevel1 = () => settle(null);
+          // Level 1 is still "one click, one pass": the shared light-clean actions answer with the path they
+          // used, then the SAME 3 s settle as before reads memory and emits exactly one result. No second
+          // GC/minimize is stacked, no tab is touched, and a dispose while the manager answer or settle timer
+          // is pending resolves null rather than leaving a dangling Promise. The widget, the shortcut and the
+          // startup trim all keep their old contract: one light run, one honest after-reading, one toast.
           const finish = (freedBy) => {
             if (disposed) {
               settle(null);
@@ -336,47 +395,15 @@
               settle(result);
             }, LEVEL1_SETTLE_MS);
           };
-          const cycle = (freedBy) => {
-            try {
-              if (typeof ChromeUtils?.forceGC === "function") ChromeUtils.forceGC();
-            } catch (_) {}
-            try {
-              if (typeof ChromeUtils?.forceCC === "function") ChromeUtils.forceCC();
-            } catch (_) {}
-            finish(freedBy);
-          };
-          let manager = null;
-          try {
-            manager = reporterManager();
-          } catch (_) {}
-          if (!manager || typeof manager.minimizeMemoryUsage !== "function") {
-            cycle("gc-cc-only");
-            return;
-          }
-          let answered = false;
-          const answer = () => {
-            if (answered) return;
-            answered = true;
-            cycle("minimize");
-          };
-          try {
-            manager.minimizeMemoryUsage({ run: answer });
-          } catch (_) {
-            cycle("gc-cc-only");
-          }
+          void lightClean().then(finish).catch(() => finish("gc-cc-only"));
         });
       }
 
-      // The GC/CC pair on its own, for Level 2's settle (the manager's minimize already ran as Level 1's part of a deep
-      // pass only when a caller asks for both halves; a deep pass keeps its own numbers honest by doing the same work).
-      function runGcCc() {
-        try {
-          if (typeof ChromeUtils?.forceGC === "function") ChromeUtils.forceGC();
-        } catch (_) {}
-        try {
-          if (typeof ChromeUtils?.forceCC === "function") ChromeUtils.forceCC();
-        } catch (_) {}
-      }
+      // Destroy while one or more light-clean answers are pending must not leave Level 1 / Level 2 waiting forever.
+      onCleanup(() => {
+        for (const cancel of [...lightCleanCancels]) cancel();
+        lightCleanCancels.clear();
+      });
 
       // Destroy while a Level 1 run is settling must not touch a disposed feature.
       onCleanup(() => {
@@ -684,6 +711,11 @@
         try {
           const beforeMB = memoryMB();
           if (beforeMB != null) lastSampleMB = beforeMB;
+          // OW-121: every deep clean now includes the light clean first. This is the same shared minimize +
+          // GC/CC action list Level 1 uses, without a second 3 s settle; the one after-reading below is the
+          // honest combined result. The public deep action never skips it, and the result says which path ran.
+          const lightBy = await lightClean();
+          if (disposed) return null;
           const ctx = {
             // OW-112: read the consent once for the whole run, not once per tab.
             keepPinned: mayUnloadPinned(),
@@ -816,7 +848,11 @@
             emit(afterMB);
           }
           lastSkipped = { ...skippedCounts };
-          return { beforeMB, afterMB, freedMB, by: "level2", unloaded, skipped, skippedCounts: { ...skippedCounts }, undoSize: undoSize() };
+          return {
+            beforeMB, afterMB, freedMB, by: "level2", unloaded, skipped,
+            skippedCounts: { ...skippedCounts }, undoSize: undoSize(),
+            light: { by: lightBy },
+          };
         } finally {
           cancelLevel2Wait = null;
           level2Busy = false;

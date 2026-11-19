@@ -272,15 +272,24 @@
   opacity: 1 !important;
 }
 
+/* OW-121: the four actions are level cards on ONE row. The popup is capped at a 20 px button plus 2 px padding
+   and a 1 px border on each side, so adding descriptions/result text never makes the Boost card taller. */
 #zentral-sidebar-widgets .zw-boost-popup {
   flex: 1 0 100% !important;
   display: flex !important;
-  flex-direction: column !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
   gap: 2px !important;
   min-width: 0 !important;
   max-width: 100% !important;
+  height: 26px !important;
+  max-height: 26px !important;
+  min-height: 0 !important;
   margin-top: 2px !important;
-  padding: 4px !important;
+  padding: 2px !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
   border: 1px solid var(--zw-card-line, color-mix(in srgb, currentColor 14%, transparent)) !important;
   border-radius: var(--zw-radius, 10px) !important;
   background: var(--zw-card-bg, color-mix(in srgb, var(--zen-colors-tertiary, var(--toolbar-field-background-color, rgba(127, 127, 127, 0.16))) 92%, transparent)) !important;
@@ -294,17 +303,36 @@
 #zentral-sidebar-widgets .zw-boost-menu-item {
   appearance: none !important;
   display: block !important;
-  width: 100% !important;
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  width: auto !important;
+  height: 20px !important;
+  box-sizing: border-box !important;
   margin: 0 !important;
-  padding: 4px 6px !important;
-  border: 0 !important;
+  padding: 2px 4px !important;
+  border: 1px solid transparent !important;
   border-radius: var(--zw-radius, 8px) !important;
   background: transparent !important;
   color: inherit !important;
   font: inherit !important;
-  font-size: 11px !important;
-  text-align: start !important;
+  font-size: 10px !important;
+  line-height: 1 !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
   cursor: pointer !important;
+}
+
+#zentral-sidebar-widgets .zw-boost-menu-item[data-zw-boost-level] {
+  border-color: var(--zw-card-line, color-mix(in srgb, currentColor 14%, transparent)) !important;
+  background: color-mix(in srgb, currentColor 6%, transparent) !important;
+}
+
+#zentral-sidebar-widgets .zw-boost-menu-item[data-zw-boost-level][aria-checked="true"] {
+  border-color: currentColor !important;
+  background: var(--zw-hover, rgba(128, 128, 128, 0.16)) !important;
+  font-weight: 600 !important;
 }
 
 #zentral-sidebar-widgets .zw-boost-menu-item:hover:not([disabled]),
@@ -318,9 +346,10 @@
 }
 
 #zentral-sidebar-widgets .zw-boost-menu-note {
-  padding: 2px 6px 0 !important;
+  display: none !important;
+  padding: 0 !important;
   font-size: 10px !important;
-  line-height: 1.25 !important;
+  line-height: 1 !important;
   opacity: 0.6 !important;
   overflow-wrap: anywhere !important;
 }

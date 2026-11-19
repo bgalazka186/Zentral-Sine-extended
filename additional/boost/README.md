@@ -20,14 +20,26 @@ reloading anything. Part of the owner's RAM plan (`docs/PLAN_CODING_AGENT.md`, t
   is a single one-shot timer that a new input cancels and re-arms; the final run waits for `requestIdleCallback` with a
   timeout. A hard ceiling runs it once anyway if the session never goes quiet (a first-run session with lots of input).
 
-## The widget (OW-90)
+## The widget (OW-90, OW-121)
 
 The sidebar Widgets tray draws this module as the card **Boost**, which replaced the old Status card: the RAM number
-and the button that lowers it, in one place. The card lives in `additional/widgets/` and knows only three things about
-this module — `runLevel1()`, `onChange(cb)` and `lastMB()` — so this file stays usable with the tray switched off.
-A click runs Level 1 and the card toasts what was freed; the arrow opens a menu whose **Free memory (light)** entry
-works and whose **deep** / **Restore** entries are greyed until OW-91. The card's own switch is
-`zen.workspace.zentral.widgets.boost.enabled` (default on).
+and the action that lowers it, in one place. The card lives in `additional/widgets/`; it reads the module's own
+`memoryMB` / `onChange` result, calls `runLevel1()` on a plain click, and reaches `runLevel2()`, `restore()` and
+`setGameMode()` through the compact level group. A missing module still leaves a dash, never an error, so this file
+stays usable with the tray switched off.
+
+The OW-121 level group is one horizontal row, capped at 26 px high: **Light**, **Deep**, **Game** and **Restore**.
+It is not a drop-down list and adds no height to the widget. Each card carries a deterministic one-line description
+in its tooltip, in both widget languages:
+
+- **Light** — GC/CC + memory minimize. No tabs touched.
+- **Deep** — Light clean first, then eligible tabs sleep. Restore available.
+- **Game Mode** — pauses repeating features and idles non-essential browsers.
+- **Restore** — wakes sleeping panels; sleeping tabs reload on click.
+
+OW-115's grouped skip reasons and pinned/unpinned loaded-tab counts are folded into the Deep tooltip. The existing
+post-run toast adds a short ` · skipped N protected tab(s)` suffix when a run reports grouped skips; no result row
+was added under the card. The card's own switch is `zen.workspace.zentral.widgets.boost.enabled` (default on).
 
 ## Preferences
 
@@ -47,12 +59,12 @@ Both are read live, so switching them needs no restart. This module writes nothi
   placeholder, an audible tab, a sharing tab, a picture-in-picture tab, the video preview's source tab, an already
   sleeping tab, and — unless `zen.workspace.zentral.boost.unload_pinned` says otherwise — pinned and Essential tabs.
   Each refusal is a named reason, which is what `state()` and the tests read.
-- **Deep pass** (`runLevel2()`): Level 1 plus every eligible tab **oldest `lastAccessed` first**, plus the Essential
+- **Deep pass** (`runLevel2()`): OW-121 starts with the shared `lightClean()` — reporter-manager minimize + GC/CC, with no second 3 s settle — then every eligible tab **oldest `lastAccessed` first**, plus the Essential
   panel records whose own mode is `asleep-allowed`. A tab that backs an Essential-panel record is owned by its record
   (`OW-111`): the generic tab sweep skips it, and the record's mode is the consent that lets a pinned/Essential tab
   sleep — `live` and `throttled` stay loaded even when the pinned-tab pref is on, while Stronger saver may sleep all
   three modes. Every other "never" rule still wins. Sleep is `gBrowser.explicitUnloadTabs([tab])` with the same
-  `discardBrowser` fallback TabUnload uses; panels wake through `loadEssentialInBackground(record, true)`. Nothing is
+  `discardBrowser` fallback TabUnload uses; panels wake through `loadEssentialInBackground(record, true)`. The result now also carries `light: { by: "minimize" | "gc-cc-only" }`, so a deep pass says which light-clean path ran. Nothing is
   closed, and the selection never moves — a tab that would need a successor is simply not unloaded by a deep run.
 - **Restore** (`restore()`): an in-memory `undoState` (cap 50) of what the last deep run put to sleep. Panels wake
   immediately; tabs are listed and reload when clicked. The record is deliberately lost on restart.
@@ -113,7 +125,7 @@ window while it is on runs the same off-path, so nothing is left deactivated.
 ```js
 ZentralBoost.memoryMB();          // total MB, or null when this build cannot answer
 ZentralBoost.runLevel1();         // Promise<{beforeMB, afterMB, freedMB, by}>
-ZentralBoost.runLevel2();         // Promise<{...same, unloaded:{tabs,panels}, skipped, skippedCounts, undoSize}>
+ZentralBoost.runLevel2();         // Promise<{...same, unloaded:{tabs,panels}, skipped, skippedCounts, undoSize, light:{by}}>
 ZentralBoost.restore();           // {panels, tabs} — panels wake now, tabs when clicked
 ZentralBoost.undoSize();          // how many things the last deep run put to sleep
 ZentralBoost.setBackgroundMode(appId, "live" | "throttled" | "asleep-allowed");
@@ -133,7 +145,7 @@ ZentralBoost.destroy();
 `by` says which path answered: `minimize` (the reporter manager ran), `gc-cc-only` (the manager was missing or threw,
 so only GC/CC ran). `skipped` remains a bounded sample for diagnostics; OW-115 adds `skippedCounts` (every named
 reason), `state().lastSkipped` (the last run's counts) and `state().loadedTabs` (`{pinned, unpinned}` — loaded rows
-only), which the Boost popup uses to explain a pass that kept tabs.
+only), which the Deep card tooltip and the short post-run result line use to explain a pass that kept tabs.
 
 ## Rules this module keeps
 

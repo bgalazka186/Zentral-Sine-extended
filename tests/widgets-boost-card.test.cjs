@@ -4,8 +4,8 @@
  * The pure tests pin the words and the rules. This file proves the wiring the plan asked for:
  *   - a plain click calls `runLevel1` exactly once, and the toast says what was freed;
  *   - a second click while the first run settles does not stack a second run;
- *   - the arrow opens the menu, the menu's only working entry runs the light pass, and the greyed entries are
- *     disabled (part three has not shipped);
+ *   - the arrow opens the one-row level group; Light runs the light pass, Deep/Restore/Game Mode answer
+ *     what the module can really do, and OW-121 keeps every compact label on one line;
  *   - the tray's `pause_when_hidden` is what the shell already does, so nothing new is asserted about it here;
  *   - destroying the shell unsubscribes from the module, so no callback outlives the card. */
 const assert = require("node:assert/strict");
@@ -140,6 +140,9 @@ test("the menu offers what the build can really do, and greys the rest", async (
   assert.equal(arrow.getAttribute("aria-expanded"), "true", "and says so");
   const items = popup.querySelectorAll(".zw-boost-menu-item");
   assert.equal(items.length, 4, "light, deep, the Game Mode switch and restore");
+  assert.deepEqual(items.slice(0, 3).map((row) => row.textContent), ["Light", "Deep", "Game"],
+    "OW-121 draws three compact level cards on one row");
+  assert.deepEqual(items.slice(0, 3).map((row) => row.getAttribute("data-zw-boost-level")), ["light", "deep", "game"]);
   assert.equal(items[0].disabled, false, "the light pass works");
   assert.equal(items[1].disabled, false, "OW-91 made the deep pass real");
   assert.equal(items[2].getAttribute("data-zw-boost-action"), "game-mode", "OW-94's Level 3 toggle sits before Restore");
@@ -157,7 +160,8 @@ test("the menu offers what the build can really do, and greys the rest", async (
   fire(arrow, "click");
   const after = popup.querySelectorAll(".zw-boost-menu-item");
   assert.equal(after[3].disabled, false, "three things asleep is three to wake");
-  assert.equal(after[3].textContent, "Restore (3)");
+  assert.equal(after[3].textContent, "Restore", "the compact Restore card stays on one line");
+  assert.equal(after[3].getAttribute("aria-label"), "Restore (3)", "the full count stays accessible");
   fire(after[3], "click");
   await tick(20);
   api.destroy();
