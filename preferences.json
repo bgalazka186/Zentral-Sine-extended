@@ -2038,6 +2038,18 @@
     "defaultValue": ""
   },
   {
+    "property": "zen.workspace.zentral.widgets.space_priority",
+    "label": "Widget space priority (ids, first keeps space; empty = current order)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.space_scroll",
+    "label": "Widgets reachable by scroll (ids; empty = all, none = no overflow)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
     "property": "zen.workspace.zentral.widgets.pause_when_hidden",
     "label": "Pause widget updates when window or sidebar is hidden",
     "type": "checkbox",

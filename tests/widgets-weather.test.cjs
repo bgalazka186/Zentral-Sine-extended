@@ -59,6 +59,13 @@ test("the one request carries the place, the units and nothing else", () => {
   assert.match(url, /precipitation_probability_max/, "the wet-day rule needs a probability");
   assert.match(url, /precipitation_hours/);
   assert.match(url, /snowfall_sum/, "snow is not rain; it needs its own number");
+  // OW-128 Option A: one request also carries hourly rain and a bounded
+  // 15-minute near-term prefix; the old daily week remains the last fallback.
+  assert.match(url, /hourly=precipitation,rain,showers,weather_code,precipitation_probability/);
+  assert.match(url, /minutely_15=precipitation,rain,weather_code/);
+  assert.match(url, /forecast_hours=48/);
+  assert.match(url, /forecast_minutely_15=48/);
+  assert.match(url, /precipitation_unit=mm/);
   assert.match(url, /timezone=auto/);
   const imperial = c.weatherRequestUrl({ latitude: "40.71", longitude: "-74.0" }, "imperial");
   assert.match(imperial, /temperature_unit=fahrenheit/);

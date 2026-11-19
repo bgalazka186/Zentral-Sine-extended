@@ -69,7 +69,10 @@ try {
   test("5. live behavior remains an OWNER GATE, not a measured claim", () => {
     assert.match(doc, /OWNER GATE/);
     assert.match(doc, /does not claim live visual, performance, memory, multi-tab copy, compact-tab or\s+startup behavior/);
-    assert.match(widgets, /Rain tomorrow/, "the weather rain-timing bug is still open as OW-128");
+    assert.match(doc, /Weather rain timing \(`OW-128`\)[\s\S]{0,300}Option A/, "OW-128's Option A static fix is recorded without a live claim");
+    assert.match(widgets, /weatherRainPlan/);
+    assert.match(widgets, /pojutrze/);
+    assert.doesNotMatch(widgets, /Rain tomorrow/, "the hard-coded English rain outlook is gone");
   });
 
   console.log(`Zen 1.24.3b compatibility audit tests passed (${passed})`);

@@ -8,6 +8,9 @@ const todo = fs.readFileSync(path.join(ROOT, "TODO_notes_roadmap.md"), "utf8");
 const flatTodo = todo.replace(/\s+/g, " ");
 const weather = fs.readFileSync(path.join(ROOT, "additional/widgets/ZentralWidgets.uc.js"), "utf8");
 const options = fs.readFileSync(path.join(ROOT, "docs/weather-rain-options.md"), "utf8");
+const notes = fs.readFileSync(path.join(ROOT, "additional/notes/ZentralNotes.uc.js"), "utf8");
+const calendar = fs.readFileSync(path.join(ROOT, "additional/notes/calendar/ZentralNotesCalendar.js"), "utf8");
+const hover = fs.readFileSync(path.join(ROOT, "extension/panels/interaction/ZentralPanelHover.js"), "utf8");
 
 let passed = 0;
 function test(name, fn) {
@@ -58,9 +61,9 @@ try {
     assert.match(todo, /must not add height to the collapsed sidebar/);
   });
 
-  test("5. weather implementation is explicitly gated on the owner's Open-Meteo choice", () => {
-    assert.match(todo, /owner must first choose one of the four Open-Meteo options/);
-    assert.match(options, /No implementation is shipped before the owner chooses a plan/);
+  test("5. weather implementation follows the owner's Option A choice", () => {
+    assert.match(todo, /Owner chose \*\*Option A\*\*/);
+    assert.match(options, /Owner chose \*\*Option A\*\*/);
     assert.match(options, /## Option A — Hourly \+ optional 15-minute near-term \(recommended\)/);
     assert.match(options, /## Option B — Hourly only/);
     assert.match(options, /## Option C — Daily only/);
@@ -69,11 +72,16 @@ try {
     assert.match(options, /all day/);
     assert.match(options, /heavy rain/);
     assert.match(options, /15\/30\/45 min/);
+    assert.match(options, /keeping the existing one-request refresh policy/);
   });
 
-  test("6. the current weather bug is still present in source, not silently claimed fixed", () => {
-    assert.match(weather, /Rain tomorrow/);
-    assert.doesNotMatch(weather, /pojutrze/i, "no weather implementation was added before the owner choice");
+  test("6. Option A source uses bounded rain series and localized phrases, not a hard-coded English outlook", () => {
+    assert.match(weather, /weatherRainPlan/);
+    assert.match(weather, /readWeatherRainSeries/);
+    assert.match(weather, /hourly=precipitation,rain,showers,weather_code,precipitation_probability/);
+    assert.match(weather, /minutely_15=precipitation,rain,weather_code/);
+    assert.match(weather, /pojutrze/);
+    assert.doesNotMatch(weather, /Rain tomorrow/, "the daily-only hard-coded phrase is gone");
   });
 
   test("7. clock quick note, pill menu, reminder color and DEMO colors keep their explicit contracts", () => {
@@ -82,6 +90,19 @@ try {
     assert.match(flatTodo, /inherits the\s+category color but allows another color while keeping the category/);
     assert.match(flatTodo, /stable per-demo color to each `DEMO_NOTES` entry/);
     assert.match(flatTodo, /do not change existing installed demo\s+notes on reinstall/);
+    for (const suite of [
+      "ow-124-duplicated-sidebar-title.test.cjs",
+      "ow-127-widget-space-priority.test.cjs",
+      "ow-128-weather-rain-timing.test.cjs",
+      "ow-129-clock-quick-note-chevron.test.cjs",
+      "ow-130-pill-autohide-gesture.test.cjs",
+      "ow-131-ow-132-note-colors.test.cjs",
+    ]) assert.ok(fs.existsSync(path.join(ROOT, "tests", suite)), suite + " RED->GREEN suite exists");
+    assert.match(weather, /clockQuickNoteVisibility/);
+    assert.match(weather, /cleanWidgetSpacePolicy/);
+    assert.match(hover, /classifyPillAutohideGesture/);
+    assert.match(calendar, /resolveCalendarItemColor/);
+    assert.match(notes, /demoNoteColorPlan/);
   });
 
   test("8. version and release-loop constraints remain pinned", () => {

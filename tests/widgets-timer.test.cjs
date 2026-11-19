@@ -192,9 +192,11 @@ test("the panel is compact: chips instead of five full presets, and the note is 
   const clockStart = SRC.indexOf('id: "clock"');
   const clock = SRC.slice(clockStart, SRC.indexOf('id: "date"', clockStart));
   assert.match(clock, /CHIP_TEXT = \["1m", "5m", "10m", "30m", "1h"\]/, "the presets are short chips");
-  // OW-65, the owner's shape: the note is a plain part of the Clock face, drawn whenever Notes can take one — not a
-  // fold revealed by a chip, which made a permanent feature look like an optional extra.
-  assert.match(clock, /clockNoteRow\.hidden = !ok/, "Notes availability is what shows or hides the row");
+  // OW-65's one-line row stays; OW-129 makes it chevron-revealed rather than
+  // always visible. OW-69's switch still decides whether Notes can take a note.
+  assert.match(clock, /clockQuickNoteVisibility\(/, "a pure visibility resolver owns the state");
+  assert.match(clock, /clockNoteRow\.hidden = !state\.visible/, "only the resolved visible state shows the row");
+  assert.match(clock, /clockNoteToggle\.addEventListener\("click"/, "the chevron opens the row");
   assert.ok(!/clockNoteChip\.addEventListener\("click"/.test(clock), "there is no chip to reveal it any more");
   assert.match(clock, /laps\.hidden = !sw\.laps\.length \|\| !sw\.running/, "laps only while the stopwatch runs");
 });

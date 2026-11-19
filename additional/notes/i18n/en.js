@@ -517,6 +517,8 @@
       "compose.agenda.heading": "Agenda visibility (independent of alerts)",
       "compose.agenda.help": "Choose whether this item appears in Zen Agenda and how many local calendar days before or after its date it remains visible. Inherited values come from the linked note, category, then global defaults.",
       "compose.color.default": "Color follows the linked note, then the category",
+      "compose.color.custom": "Custom item colour: {label}",
+      "compose.color.inherit": "Inherit colour",
       "compose.color.effective": "Effective item colour: {label}",
       "compose.color.none": "No inherited or category colour ({label})",
       "compose.field.description": "Description",

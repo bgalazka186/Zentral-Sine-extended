@@ -49,12 +49,15 @@ try {
     assert.match(doc, /keeps the existing\s+one-request refresh policy/);
   });
 
-  test("4. no implementation is shipped before the owner chooses", () => {
-    assert.match(doc, /No implementation is shipped before the owner chooses a plan/);
-    assert.match(todo, /owner must first choose one of the four Open-Meteo options/);
-    assert.match(todo, /`OW-128`[^\n]*`OPEN`/);
-    assert.match(widgets, /Rain tomorrow/);
-    assert.doesNotMatch(widgets, /pojutrze/i);
+  test("4. owner chose Option A and the static implementation is shipped", () => {
+    assert.match(doc, /Owner chose \*\*Option A\*\*/);
+    assert.match(todo, /Owner chose \*\*Option A\*\*/);
+    assert.match(todo, /`OW-128`[^\n]*`DONE`/);
+    assert.match(widgets, /weatherRainPlan/);
+    assert.match(widgets, /hourly=precipitation,rain,showers,weather_code,precipitation_probability/);
+    assert.match(widgets, /minutely_15=precipitation,rain,weather_code/);
+    assert.match(widgets, /pojutrze/);
+    assert.doesNotMatch(widgets, /Rain tomorrow/, "the hard-coded English outlook is gone");
   });
 
   console.log(`Weather rain-timing options tests passed (${passed})`);

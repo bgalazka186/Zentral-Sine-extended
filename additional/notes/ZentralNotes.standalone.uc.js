@@ -2265,6 +2265,8 @@ const __zentralEmbeddedLoader = (function () {
       "compose.agenda.heading": "Agenda visibility (independent of alerts)",
       "compose.agenda.help": "Choose whether this item appears in Zen Agenda and how many local calendar days before or after its date it remains visible. Inherited values come from the linked note, category, then global defaults.",
       "compose.color.default": "Color follows the linked note, then the category",
+      "compose.color.custom": "Custom item colour: {label}",
+      "compose.color.inherit": "Inherit colour",
       "compose.color.effective": "Effective item colour: {label}",
       "compose.color.none": "No inherited or category colour ({label})",
       "compose.field.description": "Description",
@@ -3315,6 +3317,8 @@ const __zentralEmbeddedLoader = (function () {
       "compose.agenda.heading": "Widoczno\u015b\u0107 w Agendzie (niezale\u017cna od alert\u00f3w)",
       "compose.agenda.help": "Wybierz, czy ten element ma pojawia\u0107 si\u0119 w Zen Agendzie oraz przez ile lokalnych dni przed i po terminie ma pozosta\u0107 widoczny. Odziedziczone warto\u015bci pochodz\u0105 z powi\u0105zanej notatki, kategorii, a nast\u0119pnie z ustawie\u0144 globalnych.",
       "compose.color.default": "Kolor dziedziczy po powi\u0105zanej notatce, a nast\u0119pnie po kategorii",
+      "compose.color.custom": "W\u0142asny kolor elementu: {label}",
+      "compose.color.inherit": "Dziedzicz kolor",
       "compose.color.effective": "Aktywny kolor elementu: {label}",
       "compose.color.none": "Brak odziedziczonego koloru ani koloru kategorii ({label})",
       "compose.field.description": "Opis",
@@ -11172,6 +11176,30 @@ const __zentralEmbeddedLoader = (function () {
     }
     return "";
   }
+  // OW-131: the composer's custom colour is an ITEM override. It never rewrites
+  // the linked note or the selected category; the effective colour is resolved
+  // from the three layers, with a stable hex for the preview.
+  function resolveCalendarItemColor(input = {}) {
+    const v = input && typeof input === "object" ? input : {};
+    const override = cleanItemColor(v.itemColor);
+    const noteColor = cleanItemColor(v.noteColor);
+    const categoryColor = cleanItemColor(v.categoryColor);
+    const inherited = noteColor || categoryColor;
+    const effective = override || inherited;
+    const source = override ? "item" : noteColor ? "note" : categoryColor ? "category" : "none";
+    const lower = effective.toLowerCase();
+    const effectiveHex = PALETTE_COLOR_HEX[lower] || (lower.startsWith("#") ? lower : "");
+    return {
+      override,
+      noteColor,
+      categoryColor,
+      inherited,
+      effective,
+      effectiveHex,
+      source,
+      categoryPreserved: true,
+    };
+  }
   // What a colour value looks like once stored: a palette name, a #rrggbb, or "" to inherit. Anything else is dropped
   // rather than stored, so a typo cannot paint a row invisible.
   function cleanItemColor(value) {
@@ -11233,6 +11261,9 @@ const __zentralEmbeddedLoader = (function () {
     const recurrence = Array.isArray(input.recurrence) ? input.recurrence : (previous?.recurrence || []);
     const notify = cleanNotifyOverrides(input.notify === undefined ? previousX.notify : input.notify);
     const moved = previousX.moved || (previous && JSON.stringify(previous.start) !== JSON.stringify(start) ? "1" : "");
+    // OW-131: "none" is an explicit Inherit action. It removes only this
+    // item's override; the category selected above is an independent field.
+    const composerColor = cleanItemColor(input.color === undefined ? previousX.color : input.color);
     const record = {
       ...(previous || {}),
       id: String(input.id || previous?.id || "").slice(0, 120) || undefined,
@@ -11256,6 +11287,8 @@ const __zentralEmbeddedLoader = (function () {
         moved,
       },
     };
+    if (composerColor) record.x.color = composerColor;
+    else delete record.x.color;
     if (previousX.src === "list") {
       if (input.categoryOverride === null) delete record.x.categoryOverride;
       else if (typeof input.categoryOverride === "string") record.x.categoryOverride = cleanCategoryName(input.categoryOverride);
@@ -12542,7 +12575,7 @@ const __zentralEmbeddedLoader = (function () {
     DEFAULT_DAY_LOOK, DAY_LOOK_KINDS, DAY_LOOK_MAX_STRENGTH, cleanDayLookColor, cleanDayLookStrength, cleanDayLook, dayLookTint, CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
     cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, weekGridPlan, WEEK_ROW_MIN_PX, FORECAST_TRUST_STEPS, forecastTrust,
     weatherUnitLabelsFor, CALENDAR_WEATHER_GLYPHS, calendarWeatherIndex,
-    forecastRefreshMinutes, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaLeftCount, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, AGENDA_FOLD_DEFAULTS, cleanAgendaFold, inQuietHours, agendaFoldPlan, UI_STATE_KEYS, isUiStateKey, splitUiState, migrateUiState, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, itemOwnsNoteText, itemIsFreeStanding, noteLinkedItems, unlinkPlan, unlinkLineText, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle, icsUnfold, icsText, icsProperty, icsDateValue, icsZonedMs, icsStamp, icsRecurrence, parseIcs, icsToItem, planIcsImport, icsEscape, icsFold, icsEventLines, icsFromItems, icsUtcStamp, defaultIcsUid, SYNC_STATES, syncStateOf, markSynced, markSyncedDeleted, syncPlan,
+    forecastRefreshMinutes, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaLeftCount, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, AGENDA_FOLD_DEFAULTS, cleanAgendaFold, inQuietHours, agendaFoldPlan, UI_STATE_KEYS, isUiStateKey, splitUiState, migrateUiState, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, itemOwnsNoteText, itemIsFreeStanding, noteLinkedItems, unlinkPlan, unlinkLineText, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, resolveCalendarItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle, icsUnfold, icsText, icsProperty, icsDateValue, icsZonedMs, icsStamp, icsRecurrence, parseIcs, icsToItem, planIcsImport, icsEscape, icsFold, icsEventLines, icsFromItems, icsUtcStamp, defaultIcsUid, SYNC_STATES, syncStateOf, markSynced, markSyncedDeleted, syncPlan,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -24285,7 +24318,7 @@ __zentralShim.register = function (def) {
           if (have) return { note: have, created: false };
           const t = now();
           const calendarOnly = Boolean(opts && opts.calendarOnly);
-          const note = decorateNoteOwnership({ id, body, created: t, updated: t, touched: false, color: "none", label: "", folder: cleanFolder(folder), pinned: false, calendarOnly, trashed: 0, remind: 0, reminded: 0, _onDisk: false, _mtime: t }, { ownerSpaceId: activeSpaceId, ownerDir: dir, foreign: false });
+          const note = decorateNoteOwnership({ id, body, created: t, updated: t, touched: false, color: cleanNoteColor(opts.color), label: "", folder: cleanFolder(folder), pinned: false, calendarOnly, trashed: 0, remind: 0, reminded: 0, _onDisk: false, _mtime: t }, { ownerSpaceId: activeSpaceId, ownerDir: dir, foreign: false });
           notes.set(id, note);
           if (body || calendarOnly) markDirty(id);
           if (body) syncItems(id, true, true);
@@ -24303,7 +24336,7 @@ __zentralShim.register = function (def) {
             created: t,
             updated: t,
             touched: false,
-            color: "none",
+            color: cleanNoteColor(opts.color),
             label: "",
             folder: cleanFolder(folder),
             pinned: false,
@@ -28251,8 +28284,11 @@ __zentralShim.register = function (def) {
         "",
       ].join("\n");
     }
+    // OW-132: a first install gives every Help note a stable, distinct colour.
+    // Reinstalling never recolours an edited note: existing ids are skipped.
+    const DEMO_NOTE_COLORS = Object.freeze(NOTE_COLORS.filter((c) => c !== "none"));
     const DEMO_NOTES = Object.freeze([
-      { id: "zn-demo-tour", body: [
+      { id: "zn-demo-tour", color: DEMO_NOTE_COLORS[0], body: [
         "# Notes syntax tour", "",
         "Everything here is plain Markdown. Switch between Edit, Read and Split with the toolbar to compare.", "",
         "## Text", "",
@@ -28267,9 +28303,9 @@ __zentralShim.register = function (def) {
         "A [web link](https://example.com), a link to another note: [[Linking notes demo]], and a footnote.[^1]", "",
         "[^1]: Footnotes are collected at the bottom of the read view.", "",
         "---", "", "Next: [[Callouts and reminders]], [[Markdown flavors showcase]], [[Typing shortcuts and where things are]]", ""].join("\n") },
-      { id: DEMO_WHERE_NOTE_ID, body: buildWhereDemoBody() },
-      { id: DEMO_CALENDAR_NOTE_ID, body: buildCalendarDemoBody() },
-      { id: "zn-demo-links", body: [
+      { id: DEMO_WHERE_NOTE_ID, color: DEMO_NOTE_COLORS[1], body: buildWhereDemoBody() },
+      { id: DEMO_CALENDAR_NOTE_ID, color: DEMO_NOTE_COLORS[2], body: buildCalendarDemoBody() },
+      { id: "zn-demo-links", color: DEMO_NOTE_COLORS[3], body: [
         "# Linking notes demo", "",
         "Write `[[` and start typing a note's title to link to it. Links work in both directions:", "",
         "- This note links to [[Notes syntax tour]] and [[Callouts and reminders]].",
@@ -28278,7 +28314,7 @@ __zentralShim.register = function (def) {
         "[Go to Section B](#section-b) scrolls to the heading below.", "",
         "## Section A", "", "Some text.", "",
         "## Section B", "", "You landed here. Try the Table of contents button on the toolbar to see every heading of this note.", ""].join("\n") },
-      { id: "zn-demo-callouts", body: [
+      { id: "zn-demo-callouts", color: DEMO_NOTE_COLORS[4], body: [
         "# Callouts and reminders", "",
         "> [!NOTE]", "> A note callout. Insert one from the caret menu at the end of the toolbar: Callout.", "",
         "> [!TIP] A tip with its own title", "> Tips can have several lines.", "> Second line.", "",
@@ -28286,17 +28322,27 @@ __zentralShim.register = function (def) {
         "## Reminders", "",
         "Open More > Remind me\u2026, pick a time (to the minute) and a bell chip appears beside the title when it is set.",
         "Try a time two minutes from now to see the notification.", ""].join("\n") },
-      { id: "zn-demo-flavors", body: ["# Markdown flavors showcase", "", "Syntax from GitHub, Obsidian and Reddit in one note (Settings > Markdown: the mode decides which spelling wins where they differ). Every entry below has a button: open the caret menu at the end of the toolbar.", "", "## Text styles", "", "**bold**, *italic*, ***both***, ~~strike~~, ==highlight==, =={green}green==, `code`, <u>underline</u>, ||spoiler||, X^2^, H~2~O, <kbd>Ctrl</kbd>.", "", "A %%hidden comment%% sits between these words and shows only while editing.", "", "## Callouts", "", "> [!NOTE]", "> GitHub kinds: note, tip, important, warning, caution.", "", "> [!QUESTION] Obsidian kinds, with a title", "> abstract, info, todo, success, question, failure, danger, bug, example, quote.", "", "> [!FAQ]- Foldable, closed", "> Click the title to open. Use + instead of - to start open.", "", "## Tasks", "", "- [ ] to do", "- [x] done", "- [/] in progress", "- [-] cancelled", "- [?] question", "- [!] important", "- [>] forwarded", "- [*] star", "(hold the Checklist button to pick a state)", "", "## Math", "", "Inline: $E = mc^2$. Block:", "", "$$", "\\int_0^1 x^2 \\, dx = \\frac{1}{3}", "$$", "", "## Collapsible section", "", "<details>", "<summary>Click to open</summary>", "", "Hidden text with **formatting**.", "", "</details>", "", "## Code", "", "```diff", "- removed line", "+ added line", "```", "", "## Table with line breaks", "", "| Item | Note |", "| --- | --- |", "| one | first line<br>second line |", "", "## Dates and tags", "", "Today is {{date}}. Insert it from the caret menu: Date and time. Tags like #demo/flavors are recognised.", "", "## Footnote", "", "A claim with a footnote.[^1]", "", "[^1]: Insert > Blocks and notes > Footnote.", "", "Related: [[Typing shortcuts and where things are]], [[Notes syntax tour]]", ""].join("\n") },
-      { id: "zn-demo-shortcuts", body: ["# Typing shortcuts and where things are", "", "## Type a word, get a value", "", "Settings > Markdown switches these on or off and sets the date and time format.", "", "- `{{date}}`, `{{time}}`, `{{title}}`: replaced when you type the closing braces.", "- `@today`, `@tomorrow`, `@yesterday`, `@weekday`, `@now`: replaced on Space or Enter.", "- `@+3d`, `@-2d`, `@+1w`, `@monday`: a date that far away.", "- `/today`, `/time`, `/tomorrow`: the same with a slash.", "", "No typing needed: Insert caret menu > Date and time, or give it a key under Keyboard shortcuts.", "", "## Where is everything", "", "- **Toolbar**: bold, italic, strike, highlight, headings, lists, checklist (hold: task states), quote, nest in/out, rule, code, links, image, table, **Table of contents**.", "- **Caret menu at the end of the toolbar**: pictures, callouts (all kinds, foldable), more text styles (underline, spoiler, hidden comment, sup, sub, key, line break), math, collapsible section, footnote, hub list, date and time.", "- **Quick settings** (sliders button): text size, wrapping, Markdown mode, theme.", "- **Settings**: Writing, Markdown, Window, Appearance, Capture, Links & history.", "- **More (three dots)**: import and export, labels, reminder, templates, links and dates, version history, window, settings and help. It also holds `Where is a function?`, the list of every control.", "", "Back to [[Notes syntax tour]].", ""].join("\n") },
-      { id: "zn-demo-torture", body: [
+      { id: "zn-demo-flavors", color: DEMO_NOTE_COLORS[5], body: ["# Markdown flavors showcase", "", "Syntax from GitHub, Obsidian and Reddit in one note (Settings > Markdown: the mode decides which spelling wins where they differ). Every entry below has a button: open the caret menu at the end of the toolbar.", "", "## Text styles", "", "**bold**, *italic*, ***both***, ~~strike~~, ==highlight==, =={green}green==, `code`, <u>underline</u>, ||spoiler||, X^2^, H~2~O, <kbd>Ctrl</kbd>.", "", "A %%hidden comment%% sits between these words and shows only while editing.", "", "## Callouts", "", "> [!NOTE]", "> GitHub kinds: note, tip, important, warning, caution.", "", "> [!QUESTION] Obsidian kinds, with a title", "> abstract, info, todo, success, question, failure, danger, bug, example, quote.", "", "> [!FAQ]- Foldable, closed", "> Click the title to open. Use + instead of - to start open.", "", "## Tasks", "", "- [ ] to do", "- [x] done", "- [/] in progress", "- [-] cancelled", "- [?] question", "- [!] important", "- [>] forwarded", "- [*] star", "(hold the Checklist button to pick a state)", "", "## Math", "", "Inline: $E = mc^2$. Block:", "", "$$", "\\int_0^1 x^2 \\, dx = \\frac{1}{3}", "$$", "", "## Collapsible section", "", "<details>", "<summary>Click to open</summary>", "", "Hidden text with **formatting**.", "", "</details>", "", "## Code", "", "```diff", "- removed line", "+ added line", "```", "", "## Table with line breaks", "", "| Item | Note |", "| --- | --- |", "| one | first line<br>second line |", "", "## Dates and tags", "", "Today is {{date}}. Insert it from the caret menu: Date and time. Tags like #demo/flavors are recognised.", "", "## Footnote", "", "A claim with a footnote.[^1]", "", "[^1]: Insert > Blocks and notes > Footnote.", "", "Related: [[Typing shortcuts and where things are]], [[Notes syntax tour]]", ""].join("\n") },
+      { id: "zn-demo-shortcuts", color: DEMO_NOTE_COLORS[6], body: ["# Typing shortcuts and where things are", "", "## Type a word, get a value", "", "Settings > Markdown switches these on or off and sets the date and time format.", "", "- `{{date}}`, `{{time}}`, `{{title}}`: replaced when you type the closing braces.", "- `@today`, `@tomorrow`, `@yesterday`, `@weekday`, `@now`: replaced on Space or Enter.", "- `@+3d`, `@-2d`, `@+1w`, `@monday`: a date that far away.", "- `/today`, `/time`, `/tomorrow`: the same with a slash.", "", "No typing needed: Insert caret menu > Date and time, or give it a key under Keyboard shortcuts.", "", "## Where is everything", "", "- **Toolbar**: bold, italic, strike, highlight, headings, lists, checklist (hold: task states), quote, nest in/out, rule, code, links, image, table, **Table of contents**.", "- **Caret menu at the end of the toolbar**: pictures, callouts (all kinds, foldable), more text styles (underline, spoiler, hidden comment, sup, sub, key, line break), math, collapsible section, footnote, hub list, date and time.", "- **Quick settings** (sliders button): text size, wrapping, Markdown mode, theme.", "- **Settings**: Writing, Markdown, Window, Appearance, Capture, Links & history.", "- **More (three dots)**: import and export, labels, reminder, templates, links and dates, version history, window, settings and help. It also holds `Where is a function?`, the list of every control.", "", "Back to [[Notes syntax tour]].", ""].join("\n") },
+      { id: "zn-demo-torture", color: DEMO_NOTE_COLORS[7], body: [
         "# Torture test (placeholder)", "",
         "These lines poke at edge cases. Each should render without breaking the layout; the owner's own torture test should replace or extend this note.", "",
         "- unclosed **bold and *italic", "- =={nonsense}unknown highlight colour==", "- ==== and =={red}== stay literal", "- <b>raw html is shown as text</b>",
         "- escaped \\*stars\\* and a lone * star", "- a very long unbroken word: " + "x".repeat(120), "- unicode: zażółć gęślą jaźń, 日本語, emoji 🙂", "",
         "#### Empty list items and fences", "", "-", "- ", "", "```", "an unclosed code fence swallows the rest, as in GitHub", "",
         "Not supported yet (see the roadmap, Cycle G): `![[embed]]`. Extra task states `[-]` `[/]` `[?]` `[!]` work (hold the checklist button).", ""].join("\n") },
-      { id: "zn-demo-showcase", body: buildShowcaseNote() },
+      { id: "zn-demo-showcase", color: DEMO_NOTE_COLORS[8], body: buildShowcaseNote() },
     ]);
+    function demoNoteColorPlan(demos = DEMO_NOTES, installedIds = []) {
+      const list = Array.isArray(demos) ? demos : [];
+      const installed = new Set(Array.isArray(installedIds) ? installedIds.map(String) : []);
+      return list.map((demo, index) => {
+        const d = demo && typeof demo === "object" ? demo : {};
+        const picked = cleanNoteColor(d.color);
+        const color = picked !== "none" ? picked : (DEMO_NOTE_COLORS[index] || "");
+        return { ...d, color };
+      }).filter((row) => row.id && row.color && row.color !== "none" && !installed.has(String(row.id)));
+    }
     const demoTitle = (d) => titleOf(d.body);
 
     // Quick capture (Cycle G #34): one line appended to a note. "bullet-time" = "- 14:05 text" (local time), "task" = "- [ ] text".
@@ -30072,25 +30118,42 @@ __zentralShim.register = function (def) {
     // ---- Sidebar helpers that touch the browser's DOM (kept outside start() so the fake DOM can test them) ------------------
     // Facts from the real Zen DOM: a zen-folder carries its colour as seven inline --tab-group-* properties, its icon is
     // `.tab-group-folder-icon svg g.icon > image`, a tab's icon is `img.tab-icon-image`, fed by the tab's `image` attribute.
-    // Zen/Firefox can own both roads to a sidebar title: the tab's `label` attribute and the
-    // native `.tab-label` node. A discard/session restore may rewrite either one to `[pending]`,
-    // so Notes always writes/restores both and never relies on a XUL binding seeing our attribute.
+    // OW-124. The owner's short 1.24.3b row showed a XUL `.tab-label` with BOTH
+    // `value="ThisShouldNotRepeat"` and textContent `ThisShouldNotRepeat`.
+    // Firefox's tab binding declares `text=label`: the native `label` attribute
+    // owns `.tab-label.textContent`. A `value` attribute is a second visual
+    // road on the same XUL label, so writing both is what repeats the title.
+    // One canonical attribute + one native text road; no generic CSS or hiding.
+    function cleanSidebarLabelRoads(input = {}) {
+      const textOf = (v) => v === null || v === undefined ? "" : String(v);
+      const label = textOf(input.label);
+      const value = textOf(input.value);
+      const text = textOf(input.text);
+      const canonical = Object.prototype.hasOwnProperty.call(input, "label")
+        ? label
+        : (value && value === text ? value : "");
+      const repeated = !!canonical && value === canonical && text === canonical;
+      return Object.freeze({ label: canonical, value: "", text: canonical, repeated });
+    }
     function setSidebarTabLabel(tab, label) {
       const next = String(label ?? "");
       if (!tab) return false;
       let changed = false;
-      if ((tab.getAttribute?.("label") || "") !== next) {
-        tab.setAttribute?.("label", next);
+      const native = tab.querySelector?.(".tab-label");
+      const state = cleanSidebarLabelRoads({ label: next, value: native?.getAttribute?.("value"), text: native?.textContent });
+      if ((tab.getAttribute?.("label") || "") !== state.label) {
+        tab.setAttribute?.("label", state.label);
         changed = true;
       }
-      const native = tab.querySelector?.(".tab-label");
       if (native) {
-        if ((native.getAttribute?.("value") || "") !== next) {
-          native.setAttribute?.("value", next);
+        // Remove the legacy second road even when it already holds the right
+        // title: a XUL label draws `value` and its child text independently.
+        if (native.hasAttribute?.("value")) {
+          native.removeAttribute?.("value");
           changed = true;
         }
-        if ((native.textContent || "") !== next) {
-          try { native.textContent = next; changed = true; } catch (_) {}
+        if ((native.textContent || "") !== state.text) {
+          try { native.textContent = state.text; changed = true; } catch (_) {}
         }
       }
       return changed;
@@ -30103,8 +30166,13 @@ __zentralShim.register = function (def) {
     }
     function needsLabelRepair(tab) {
       const native = tab?.querySelector?.(".tab-label");
+      const nativeValue = native?.getAttribute?.("value") ?? null;
+      const nativeText = native?.textContent ?? "";
+      const canonical = tab?.getAttribute?.("bgalazka-notes-label") || "";
+      const state = cleanSidebarLabelRoads({ label: canonical, value: nativeValue, text: nativeText });
       return isBrowserPendingLabel(tab?.getAttribute?.("label")) ||
-        (!!native && (isBrowserPendingLabel(native.getAttribute("value")) || isBrowserPendingLabel(native.textContent)));
+        state.repeated ||
+        (!!native && ((nativeValue !== null && isBrowserPendingLabel(nativeValue)) || isBrowserPendingLabel(nativeText)));
     }
     function restoreSidebarTabLabel(tab, onlyPlaceholder = false) {
       const wanted = tab?.getAttribute?.("bgalazka-notes-label") || "";
@@ -30422,8 +30490,8 @@ __zentralShim.register = function (def) {
         flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART, CALENDAR_UI_PART, CALENDAR_UI, PARSER_PART, PARSER_UI, ZEN_SIDEBAR_PART, ZEN_UI, notesLang, notesLocale, t, tCount,
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS, SHARED_TURN_WAIT_MS, STARTUP_TURN_WAIT_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
-        wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, DEMO_WHERE_NOTE_ID, DEMO_CALENDAR_NOTE_ID, buildCalendarDemoBody, buildWhereDemoBody, SHOWCASE_NOTE_ID, buildShowcaseNote, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, SPELL_MAX_SUGGESTIONS, wordRangeAtOffset, replaceWordRange, cleanSpellLanguages, toggleSpellLanguage, formatSpellLanguageLabel, collectSpellSuggestions, buildEditorSpellMenuModel, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
-        makeFolderUid, ensureFolderUids, setSidebarTabLabel, isBrowserPendingLabel, needsLabelRepair, restoreSidebarTabLabel, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_STYLE, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, SPACE_MODES, cleanSpaceMode, SPACES_DIR, SPACE_REGISTRY_FILE, SPACE_SHARES_FILE, cleanWorkspaceId, workspaceDirKey, readZenWorkspaces, resolveActiveWorkspaceIdentity, cleanSpaceRegistry, reconcileSpaceRegistry, cleanShareTargets, cleanShareRecord, cleanSpaceShares, mergeSpaceShares, isSharedWithSpace, planSpaceSharesForSpace, resolveSpaceStorageTarget, canShareCalendarItemWithoutNote, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
+        wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_NOTE_COLORS, demoNoteColorPlan, DEMO_FOLDER, DEMO_WHERE_NOTE_ID, DEMO_CALENDAR_NOTE_ID, buildCalendarDemoBody, buildWhereDemoBody, SHOWCASE_NOTE_ID, buildShowcaseNote, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, SPELL_MAX_SUGGESTIONS, wordRangeAtOffset, replaceWordRange, cleanSpellLanguages, toggleSpellLanguage, formatSpellLanguageLabel, collectSpellSuggestions, buildEditorSpellMenuModel, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
+        makeFolderUid, ensureFolderUids, cleanSidebarLabelRoads, setSidebarTabLabel, isBrowserPendingLabel, needsLabelRepair, restoreSidebarTabLabel, setNotesTabIcon, setAgendaTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_STYLE, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, agendaFaviconUri, sharedProjectionPlan, SPACE_MODES, cleanSpaceMode, SPACES_DIR, SPACE_REGISTRY_FILE, SPACE_SHARES_FILE, cleanWorkspaceId, workspaceDirKey, readZenWorkspaces, resolveActiveWorkspaceIdentity, cleanSpaceRegistry, reconcileSpaceRegistry, cleanShareTargets, cleanShareRecord, cleanSpaceShares, mergeSpaceShares, isSharedWithSpace, planSpaceSharesForSpace, resolveSpaceStorageTarget, canShareCalendarItemWithoutNote, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, folderPathMatchesNote, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         FOLDER_ZEN_SIDEBAR_VALUES, cleanFolderZenSidebar, resolveFolderZenSidebar, folderZenSidebarMenuAction,
@@ -35842,7 +35910,27 @@ __zentralShim.register = function (def) {
           h("p", { class: "zn-empty" }, t("compose.agenda.help")));
         const colorPreview = h("span", { class: "zn-cal-compose-color", "aria-hidden": "true" });
         const colorLabel = h("span", { class: "zn-cal-compose-color-label", "aria-live": "polite" }, t("compose.color.default"));
-        const colorRow = h("div", { class: "zn-cal-compose-color-row" }, colorPreview, colorLabel);
+        // OW-131: a native colour input is this item's override. Inherit removes
+        // only that override; the category and linked note keep their colours.
+        const initialCustomColor = C.cleanItemColor(original?.x?.color || "");
+        let customColor = initialCustomColor;
+        const colorInput = h("input", { type: "color", class: "zn-cal-compose-color-input", "aria-label": t("compose.color.custom") });
+        colorInput.value = C.PALETTE_COLOR_HEX[initialCustomColor.toLowerCase()] || initialCustomColor || "#5aa9ff";
+        const colorInheritBtn = h("button", { type: "button", class: "zn-chip zn-cal-compose-color-inherit", "aria-pressed": initialCustomColor ? "true" : "false" }, t("compose.color.inherit"));
+        const colorRow = h("div", { class: "zn-cal-compose-color-row" }, colorPreview, colorInput, colorInheritBtn, colorLabel);
+        colorInput.addEventListener("change", () => {
+          customColor = C.cleanItemColor(colorInput.value);
+          syncComposeInheritance();
+        });
+        colorInheritBtn.addEventListener("click", () => {
+          customColor = "";
+          const layers = composeLayers();
+          const inherited = C.resolveCalendarItemColor({
+            itemColor: "", noteColor: layers.note?.color || "", categoryColor: layers.category?.color || "",
+          });
+          colorInput.value = inherited.effectiveHex || "#5aa9ff";
+          syncComposeInheritance();
+        });
 
         const description = h("textarea", { class: "zn-field zn-calendar-note-field", rows: "3", "aria-label": t("compose.field.description"), placeholder: t("compose.field.descriptionPlaceholder") });
         description.value = original?.description || options.description || "";
@@ -35970,8 +36058,18 @@ __zentralShim.register = function (def) {
           const folDesc = C.describeInheritance("notify.followup", null, layers);
           notifyInheritHint.textContent = t("compose.alerts.inherit", { source: preDesc.sourceLabel, pre: preDesc.valueLabel, due: dueDesc.valueLabel, followup: folDesc.valueLabel });
           const cDesc = C.describeInheritance("color", null, layers);
-          colorPreview.style.backgroundColor = cDesc.value || "transparent";
-          colorLabel.textContent = t(cDesc.value ? "compose.color.effective" : "compose.color.none", { label: cDesc.label });
+          const resolvedColor = C.resolveCalendarItemColor({
+            itemColor: customColor,
+            noteColor: layers.note?.color || "",
+            categoryColor: layers.category?.color || "",
+          });
+          colorPreview.style.backgroundColor = resolvedColor.effectiveHex || cDesc.value || "transparent";
+          colorLabel.textContent = t(resolvedColor.override
+            ? "compose.color.custom"
+            : resolvedColor.inherited ? "compose.color.effective" : "compose.color.none",
+            { label: resolvedColor.override ? resolvedColor.effectiveHex : (cDesc.label || resolvedColor.effective) });
+          colorInheritBtn.disabled = !resolvedColor.override;
+          colorInheritBtn.setAttribute("aria-pressed", resolvedColor.override ? "true" : "false");
         }
         function paintColor() {
           syncComposeInheritance();
@@ -36089,7 +36187,7 @@ __zentralShim.register = function (def) {
             endDate: endDate.input.value, endTime: endTime.input.value,
             noteId: selectedExistingNoteId(), category: selectedCategory(),
             ...(original?.x?.src === "list" ? { categoryOverride: categorySelect.value === inheritCategory ? null : selectedCategory() } : {}),
-            description: description.value, calNote: calNote.value,
+            description: description.value, calNote: calNote.value, color: customColor,
             heading: original?.x?.heading || options.heading || "", tz: zoneValue,
             recurrence, notify, agendaWindow: agendaWindowEditor.read(),
           }, nowMs());
@@ -40272,7 +40370,9 @@ __zentralShim.register = function (def) {
       function installDemoNotes() {
         let made = 0;
         const folder = store.meta.folders.some((f) => f.id === DEMO_FOLDER) ? DEMO_FOLDER : store.addFolder("Help") || "";
-        for (const d of DEMO_NOTES) if (store.ensureNote(d.id, d.body, folder).created) made++;
+        const installedDemoIds = DEMO_NOTES.filter((d) => store.get(d.id)).map((d) => d.id);
+        for (const row of demoNoteColorPlan(DEMO_NOTES, installedDemoIds))
+          if (store.ensureNote(row.id, row.body, folder, { color: row.color }).created) made++;
         flash(made ? `Installed ${made} demo ${made === 1 ? "note" : "notes"} in the Help folder` : "Demo notes are already installed");
         const first = store.get(DEMO_NOTES[0].id);
         if (first && !first.trashed) openNote(first.id);

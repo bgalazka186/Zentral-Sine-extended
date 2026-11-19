@@ -191,8 +191,8 @@ test("the end sound has a real tone behind the beep, and falls back to the beep"
   }
 }
 
-// ---- the owner's shape (2026-11-17): clock, then the quick note under it; click the hour, the stopwatch panel
-// appears where the clock was, with the same note still under it. Driven on the real card with Notes present. ----
+// ---- the owner's shape (OW-65, updated by OW-129): clock, then a chevron-revealed quick note under it;
+// click the hour, the stopwatch panel appears where the clock was, with the same note still under it. ----
 (async () => {
   const h = createFakeSidebarHarness({
     "zen.workspace.zentral.widgets.enabled": true,
@@ -210,7 +210,13 @@ test("the end sound has a real tone behind the beep, and falls back to the beep"
   const timeCol = body.querySelector(".zw-clock-time-col");
 
   assert.equal(body.getAttribute("data-zw-clock-face"), "clock", "the card rests on the clock");
-  assert.equal(noteRow.hidden, false, "the quick note is under the clock by default — no click, no chip");
+  const toggle = body.querySelector(".zw-clock-note-toggle");
+  assert.ok(toggle, "OW-129's bottom-right chevron is present");
+  assert.equal(noteRow.hidden, true, "the quick note starts hidden");
+  for (const [type, fn] of [...(toggle._listeners || [])]) {
+    if (type === "click") fn({ type: "click", stopPropagation() {}, preventDefault() {} });
+  }
+  assert.equal(noteRow.hidden, false, "clicking the chevron puts the quick note under the clock");
   assert.equal(body.querySelector(".zw-clock-note-chip").hidden, true, "and there is no separate chip to reveal it");
   const order = Array.from(body.children).map((el) => el.className);
   assert.ok(order.indexOf("zw-clock-time-col") !== -1 && order.indexOf("zw-clock-note-row") > order.indexOf("zw-clock-time-col"),

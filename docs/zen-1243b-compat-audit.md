@@ -48,6 +48,11 @@ live Zen/Sine runtime is available here.
    Live behavior with OW-91/Boost remains an OWNER GATE.
 7. **Security fixes:** no bundled Gecko/Firefox code is patched by Zentral. No
    change required.
+8. **Weather rain timing (`OW-128`):** the owner chose Option A. The widget
+   now uses one Open-Meteo request with hourly and bounded 15-minute fields,
+   pure rain-series reduction, hourly/daily fallback and localized EN/PL
+   phrases. This is a general `OW-128` fix, not a 1.24.3b-specific mod change;
+   live text, timing and narrow-card layout remain an OWNER GATE.
 
 ## Static checks
 
@@ -57,8 +62,12 @@ live Zen/Sine runtime is available here.
   `additional`, `extension`, `loader` or `zentral` runtime source.
 - Root `theme.json` remains `3.4.0`; generated standalone bundles are rebuilt
   with `--keep-version`.
-- Exact `--keep-version` chain and docs-inclusive full suite are green; see
-  `docs/bugfix-2026-11-18.md`.
+- Exact `--keep-version` chain is `CHAIN_GREEN` (12 packages, `601 Sine
+  preferences`) and the docs-inclusive full suite is `293/293 passed; 0 failed`
+  (`323.3 s` combined / `120 s` wall); see `docs/bugfix-2026-11-18.md`.
+- `OW-128`'s Option A source has no hard-coded `Rain tomorrow` English outlook;
+  `weatherRainPlan`, `pojutrze` and the bounded rain series are covered
+  statically. No live weather rendering is claimed here.
 
 ## Conclusion
 

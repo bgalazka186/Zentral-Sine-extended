@@ -1,10 +1,11 @@
-# Weather rain-timing options (OW-128, owner choice required)
+# Weather rain-timing options (OW-128, owner chose Option A)
 
 The owner wants the Today view to stop saying “tomorrow” when rain is due
 today, and to support phrases such as `today`, `jutro` / `tomorrow`,
 `pojutrze`, `in about 45 min / 30 min / 15 min`, a rain window like `9–15`,
 `heavy rain`, and `all day`. The text must stay readable at every widget
-width/height. No implementation is shipped before the owner chooses a plan.
+width/height. Owner chose **Option A**. A pure, localized implementation now
+ships in the widget source and tests; live text and layout remain an OWNER GATE.
 
 ## What Open-Meteo can provide
 
@@ -72,14 +73,31 @@ hourly/daily beyond that. Best for `in 15/30/45 min` at the owner's Poland
 location (Central Europe has native ICON-D2 / AROME data), but it is more
 region-dependent and adds a second data shape to test.
 
+## Implementation note (Option A, 2026-11-18)
+
+Owner chose **Option A**. `weatherRequestUrl()` now asks for hourly
+precipitation/rain/showers/WMO code/probability and a bounded 15-minute prefix
+in the same one request, keeping the existing one-request refresh policy and
+seven-day daily fallback. `readWeatherRainSeries()` reduces those arrays to
+bounded wet/heavy samples; `weatherRainPlan()` prefers 15-minute onset, then
+hourly, then the old daily week. `weatherOutlookParts()` exposes localized
+short/long rain lines for EN/PL, including `pojutrze`, `~15/30/45 min`,
+`9–15`, `heavy rain` / `ulewa` and `all day` / `cały dzień`. Responsive CSS
+wraps or scrolls the outlook instead of clipping it.
+
+`tests/ow-128-weather-rain-timing.test.cjs` is RED on the daily-only source and
+GREEN here (8 passed). The exact `--keep-version` chain is `CHAIN_GREEN`
+(12 packages, `601 Sine preferences`) and the docs-inclusive full suite is
+`293/293 passed; 0 failed` (`323.3 s` combined / `120 s` wall). No live
+Zen/Sine runtime, screenshot, click or visual result is claimed: live timing,
+localization and narrow-card layout remain an OWNER GATE.
+
 ## Additional proposals (optional, not implemented)
 
 - “Dry until 18:00” / “rain-free window” when there is a long gap before onset.
 - “Heaviest burst 13:00–14:00” using hourly mm or WMO code severity.
 - An umbrella badge or color accent only when rain starts within the owner's
   chosen lead time.
-- Full EN/PL localization with `today` / `dzisiaj`, `tomorrow` / `jutro`,
-  `day after tomorrow` / `pojutrze`, `all day` / `cały dzień`.
 - A preference for the lead-time threshold (e.g. 2 h) and whether to show
   probability, without adding a new widget card or height.
 

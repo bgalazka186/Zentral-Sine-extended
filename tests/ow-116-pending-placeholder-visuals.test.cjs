@@ -47,11 +47,13 @@ const rewriteLabel = (tab, value) => {
 const assertLabel = (tab, wanted, why) => {
   assert.equal(tab.getAttribute("label"), wanted, why + ": native label attribute");
   const node = labelNode(tab);
-  assert.equal(node.getAttribute("value"), wanted, why + ": native label value");
+  // OW-124: `value` and textContent on one XUL label are two visual roads.
+  // Only Zen's inherited text road may carry the title.
+  assert.equal(node.getAttribute("value"), null, why + ": no duplicate XUL label value");
   assert.equal(node.textContent, wanted, why + ": native label text");
 };
 
-test("a projected Notes row writes the title into BOTH label roads and restores both after a pending rewrite", async () => {
+test("a projected Notes row keeps one native label road and repairs doubled/placeholder rewrites", async () => {
   const h = createFakeZen({ prefs: { [NOTES_FOLDER]: "all", [PARK]: true }, parts: PARTS, discardRewritesVisuals: true });
   await h.seam.ensureStore();
   h.seam.store.create("# First note");
@@ -68,8 +70,9 @@ test("a projected Notes row writes the title into BOTH label roads and restores 
   const icon = tab.getAttribute("image");
   assert.ok(icon, "the note favicon is still set");
 
-  // OW-88's parking path: the fake browser rewrites BOTH label roads and drops the favicon.
-  // Notes must heal them in place even inside the 500 ms quiet window (no projection run).
+  // OW-88's parking path: the fake browser rewrites the label roads and drops the favicon.
+  // Notes must heal the canonical attribute + native text in place, removing any legacy
+  // `value` road, even inside the 500 ms quiet window (no projection run).
   h.advanceClock(1000);
   assert.equal(h.seam.parkPseudoTab(tab), "", "the note placeholder is parked");
   assert.equal(tab.getAttribute("pending"), "true", "the browser marked it pending");
@@ -109,7 +112,7 @@ test("the Agenda row keeps its title/favicon when the browser rewrites a pending
   assert.ok(icon, "the Agenda favicon is set");
 
   // The user explicitly warned NOT to break Agenda favicons like Notes titles: parking may
-  // blank the distinct Agenda icon, and both the label roads and the icon must come back.
+  // blank the distinct Agenda icon, and the one canonical label road and icon must come back.
   h.advanceClock(1000);
   assert.equal(h.seam.parkPseudoTab(tab), "", "the Agenda placeholder is parked");
   assert.equal(tab.getAttribute("pending"), "true", "the browser marked it pending");

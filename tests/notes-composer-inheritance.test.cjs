@@ -1,7 +1,7 @@
 "use strict";
-/* OW-11 — Composer 'Inherit' settings show their live resolved value and source layer
- * across Agenda window (enabled/lead/tail), item colour (T2.3g), category stage defaults,
- * and reminder sound / quiet-hours bypass settings. */
+/* OW-11 / OW-131 — Composer 'Inherit' settings show their live resolved value and source layer
+ * across Agenda window (enabled/lead/tail), item colour (now with an editable override),
+ * category stage defaults, and reminder sound / quiet-hours bypass settings. */
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -283,6 +283,18 @@ async function test(name, fn) {
     assert.match(notifyInherit.textContent, /from category Work/);
     assert.match(notifyInherit.textContent, /7 min/);
     assert.match(card.textContent, /Inherit \(quiet, loud, from category Work\)/);
+    // OW-131: colour is now editable, not a read-only inheritance hint. The
+    // override and Inherit control resolve against the same category layer.
+    const colorInput = card.querySelector(".zn-cal-compose-color-input");
+    const colorInheritBtn = card.querySelector(".zn-cal-compose-color-inherit");
+    assert.ok(colorInput && colorInheritBtn, "the color input and Inherit control are present");
+    colorInput.value = "#ff0000";
+    colorInput.dispatchEvent(new Ev("change", { bubbles: true }));
+    await flush();
+    assert.match(colorLabel.textContent, /Custom item colour: #ff0000/);
+    colorInheritBtn.dispatchEvent(new Ev("click", { bubbles: true }));
+    await flush();
+    assert.match(colorLabel.textContent, /Effective item colour: Inherit \(category Work colour: #4a90e2\)/);
 
     // Switch category -> Personal (live update!)
     catSelect.value = "Personal";

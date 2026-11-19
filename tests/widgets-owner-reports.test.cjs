@@ -21,6 +21,11 @@ const STANDALONE = fs.readFileSync(path.join(root, "additional/widgets/standalon
 let passed = 0;
 const test = async (name, fn) => { await fn(); passed++; console.log("ok -", name); };
 const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms));
+const click = (el) => {
+  for (const [type, fn] of [...(el._listeners || el.listeners || [])]) {
+    if (type === "click") fn({ type: "click", preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {} });
+  }
+};
 
 const BASE = {
   "zen.workspace.zentral.widgets.enabled": true,
@@ -111,17 +116,24 @@ const BASE = {
     await tick(40);
     const body = api.getTray().children.find((el) => el.getAttribute("data-zw-widget") === "clock").querySelector(".zw-clock");
     const noteRow = body.querySelector(".zw-clock-note-row");
-    assert.equal(noteRow.hidden, false, "shown while the switch is on and Notes can take a note");
+    const toggle = body.querySelector(".zw-clock-note-toggle");
+    assert.ok(toggle, "OW-129 adds an accessible chevron");
+    assert.equal(noteRow.hidden, true, "hidden by default, even while the switch is on");
+    assert.equal(toggle.hidden, false, "the chevron is available while the switch is on");
+    click(toggle);
+    assert.equal(noteRow.hidden, false, "clicking the chevron opens the one-line row");
     const setBool = (v) => { h.prefs.set(pref, v); h.Services.prefs.setBoolPref(pref, v); };
     setBool(false);
     await tick(60);
     h.flushRaf();
     assert.equal(noteRow.hidden, true, "off means gone from the face");
     assert.equal(noteRow.style.display, "none", "and taking no space");
+    assert.equal(toggle.hidden, true, "and no dead chevron is left behind");
     setBool(true);
     await tick(60);
     h.flushRaf();
-    assert.equal(noteRow.hidden, false, "and back without a restart");
+    assert.equal(toggle.hidden, false, "the chevron is back without a restart");
+    assert.equal(noteRow.hidden, true, "turning the switch on does not auto-open the row");
     api.destroy();
   });
 

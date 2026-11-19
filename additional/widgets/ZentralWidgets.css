@@ -37,6 +37,45 @@
   display: none !important;
 }
 
+/* OW-127: the existing tray owns the scrollbar. A fixed policy does not offer
+   an unreachable overflow; a scroll policy snaps allowed cards into view. No
+   new control or row is added, and the collapsed max-height stays 0px. */
+#zentral-sidebar-widgets[data-zw-space-mode="fixed"] {
+  overflow-y: hidden !important;
+}
+#zentral-sidebar-widgets[data-zw-space-mode="scroll"] {
+  scroll-snap-type: y proximity !important;
+}
+#zentral-sidebar-widgets[data-zw-space-pressure="true"] .zw-card[data-zw-space="scroll"] {
+  scroll-snap-align: start !important;
+}
+
+/* OW-129: the quick-note chevron is a small absolute control in the Clock's
+   bottom-right corner. It never creates a row or changes the card's height. */
+#zentral-sidebar-widgets .zw-clock { position: relative !important; }
+#zentral-sidebar-widgets .zw-clock-note-toggle {
+  position: absolute !important;
+  bottom: 3px !important;
+  inset-inline-end: 4px !important;
+  width: 18px !important;
+  height: 18px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 4px !important;
+  background: transparent !important;
+  color: inherit !important;
+  font: inherit !important;
+  font-size: 14px !important;
+  line-height: 16px !important;
+  opacity: 0.62 !important;
+  cursor: pointer !important;
+}
+#zentral-sidebar-widgets .zw-clock-note-toggle:hover,
+#zentral-sidebar-widgets .zw-clock-note-toggle:focus-visible { opacity: 1 !important; }
+#zentral-sidebar-widgets .zw-clock-note-toggle:focus-visible { outline: 2px solid var(--zw-accent, currentColor) !important; }
+#zentral-sidebar-widgets .zw-clock-note-toggle[data-zw-open="true"] { transform: rotate(180deg) !important; }
+#zentral-sidebar-widgets .zw-clock-note-toggle[hidden] { display: none !important; }
+
 /* ---- OW-71 / OW-72: reordering and appearance -------------------------------------
    The tray gains a small handle per card and a set of colour variables that every card (and every future card)
    inherits. The variables are written on the tray by the shell; the effective card rules below consume them. */
@@ -563,6 +602,8 @@
   overflow: visible !important;
   text-overflow: clip !important;
   overflow-wrap: anywhere !important;
+  max-height: 6em !important;
+  overflow-y: auto !important;
   cursor: inherit !important;
 }
 
@@ -571,6 +612,21 @@
   white-space: normal !important;
   overflow-wrap: anywhere !important;
 }
+
+/* OW-128: short and long rain phrases are both present; density chooses which
+   one is visible. Both wrap and the outlook scrolls when the card is short.
+   No ellipsis, nowrap or clipped control is used at any width/height. */
+#zentral-sidebar-widgets .zw-weather-rain-line {
+  display: block !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  text-overflow: clip !important;
+}
+#zentral-sidebar-widgets .zw-weather-rain-long { display: inline !important; }
+#zentral-sidebar-widgets .zw-weather-rain-short { display: none !important; }
+#zentral-sidebar-widgets[data-zw-density="compact"] .zw-weather-rain-long { display: none !important; }
+#zentral-sidebar-widgets[data-zw-density="compact"] .zw-weather-rain-short { display: inline !important; }
+#zentral-sidebar-widgets:not([data-zw-density="compact"]) .zw-weather-rain-short { display: none !important; }
 
 /* A line of its own only when there is more than one: one half stays as compact as the line beside it. */
 #zentral-sidebar-widgets .zw-weather-outlook .zw-weather-outlook-line + .zw-weather-outlook-line {
