@@ -2590,16 +2590,9 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-hour-label:first-child { transform: none; }
 .zentral-notes-sheet .zn-cal-time-columns { grid-column: 2 / -1; display: grid; min-width: 0; width: 100%; }
 .zentral-notes-sheet .zn-cal-time-column { min-width: 0; border-left: 1px solid var(--zn-line); }
-/* OW-96: a span too long for one row of columns wraps into a second. The grid gets one more row, the hour gutter
-   spans both (it is a single column of hours, and repeating it would draw the day twice), and a wrapped row starts on
-   a fresh line with a rule above it so the two halves read as two rows of one calendar, not as one broken grid.
-   With one row nothing here applies. */
-.zentral-notes-sheet .zn-cal-time-columns[data-rows="2"] { grid-auto-rows: min-content; row-gap: 6px; }
-.zentral-notes-sheet .zn-cal-time-grid-row[data-rows="2"] { grid-template-rows: 1fr; }
-.zentral-notes-sheet .zn-cal-time-grid-row[data-rows="2"] > .zn-cal-hour-gutter { grid-row: 1 / -1; grid-column: 1; }
-/* The first column of a wrapped line has nothing to its left to separate it from: the hour gutter already did. */
-.zentral-notes-sheet .zn-cal-time-column.is-row-start { border-left: 0; }
-.zentral-notes-sheet .zn-cal-time-head[data-rows="2"], .zentral-notes-sheet .zn-cal-time-allday-row[data-rows="2"] { grid-auto-flow: row; }
+/* The grid divides the available height, not the intrinsic heights of its two timetables. */
+.zentral-notes-sheet .zn-cal-time-view[data-rows="2"] { display: grid; grid-template-rows: repeat(2, minmax(0, 1fr)); }
+.zentral-notes-sheet .zn-cal-time-band { display: flex; flex-direction: column; min-height: 0; min-width: 0; gap: 3px; overflow: auto; }
 
 .zentral-notes-sheet .zn-cal-time-column.is-today { background: color-mix(in srgb, var(--zn-accent) 5%, transparent); }
 .zentral-notes-sheet .zn-cal-time-track { position: relative; min-width: 0; background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--zn-cal-hour-height, 54px) - 1px), var(--zn-line) calc(var(--zn-cal-hour-height, 54px) - 1px), var(--zn-line) var(--zn-cal-hour-height, 54px)); }

@@ -1333,10 +1333,8 @@
     const first = addDays(start, -offset);
     return Array.from({ length: 7 }, (_, i) => addDays(first, i));
   }
-  // A week view is not a calendar week: it is "the next N days", and the owner asked for enough of them to be useful on
-  // a Big Picture surface. 48 is two rows of 24 — the widest span that still reads as a grid rather than a strip — and
-  // `WEEK_ROWS_MAX` is what the renderer uses to stack them when the height allows.
-  const WEEK_DAYS_LIMITS = Object.freeze({ min: 1, max: 48, default: 7, minColPx: 84, gutterPx: 42, maxRows: 2 });
+  // Week shows a configurable run of dates: up to four weeks in each of two bands.
+  const WEEK_DAYS_LIMITS = Object.freeze({ min: 1, max: 56, perRow: 28, default: 7, minColPx: 84, gutterPx: 42, maxRows: 2 });
   const WEEK_RANGE_STARTS = Object.freeze(["weekStart", "today", "selected"]);
   const DEFAULT_WEEK_SPAN = Object.freeze({ days: 7, anchor: "weekStart" });
   function cleanWeekDaysCount(value, fallback = 7) {
@@ -1371,37 +1369,19 @@
     const col = Math.max(1, Number(minColPx) || WEEK_DAYS_LIMITS.minColPx);
     return Math.max(min, Math.min(max, Math.floor(usable / col) || 1));
   }
-  // OW-25: `count` consecutive local midnights starting at `start` (clamped 1..48, DST-safe).
+  // OW-25: `count` consecutive local midnights starting at `start` (clamped 1..56, DST-safe).
   function visibleDays(start, count = 7) {
     const base = dayStart(start);
     const n = cleanWeekDaysCount(count, 7);
     const len = n === "auto" ? 7 : n;
     return Array.from({ length: len }, (_, i) => addDays(base, i));
   }
-  // OW-96: how many columns and how many rows a span needs. One row is the old behaviour and stays the default; past
-  // what the width can hold, the days stack into a second row instead of shrinking a column to nothing — 48 days at
-  // 84px is 4032px, which no sidebar has, and 24 columns twice is readable where 48 once is not.
-  //
-  // Pure, and it only decides; the renderer draws. `rows` is 1 unless two conditions both hold: the days do not fit on
-  // one row at this width, and the surface is tall enough for a second. A short window keeps one row and scrolls rather
-  // than squeezing two rows into a strip where neither is readable.
-  const WEEK_ROW_MIN_PX = 180;
-  function weekGridPlan({ days = 7, widthPx = 0, heightPx = 0, minColPx = WEEK_DAYS_LIMITS.minColPx, gutterPx = WEEK_DAYS_LIMITS.gutterPx, maxRows = WEEK_DAYS_LIMITS.maxRows } = {}) {
-    // `days: 0` is clamped to 1 exactly as `cleanWeekDaysCount` would: the plan must never disagree with the model
-    // about how many days there are, or the header and the timeline would wrap differently. `undefined` is 7.
-    const asked = Number(days);
-    const count = Math.max(1, Math.min(WEEK_DAYS_LIMITS.max, Number.isFinite(asked) && days != null ? Math.round(asked) : 7));
-    const col = Math.max(1, Number(minColPx) || WEEK_DAYS_LIMITS.minColPx);
-    const usable = Math.max(0, (Number(widthPx) || 0) - (Number(gutterPx) || 0));
-    const fitsOneRow = usable <= 0 ? count <= 7 : Math.floor(usable / col) >= count;
-    const rows = Math.max(1, Math.min(Math.max(1, Math.round(maxRows) || 1), 2));
-    if (fitsOneRow || rows < 2 || !(Number(heightPx) >= WEEK_ROW_MIN_PX * 2)) return { count, rows: 1, perRow: count };
-    const perRow = Math.ceil(count / 2);
-    // A stack is only a stack if each of its rows fits at the minimum column width. Otherwise two rows of 35px columns
-    // are worse than one row that scrolls: the whole point of the second row is that a column stays readable.
-    const perRowFits = usable <= 0 ? perRow <= 7 : Math.floor(usable / col) >= perRow;
-    if (!perRowFits) return { count, rows: 1, perRow: count };
-    return { count, rows: 2, perRow };
+  // Resizing may change the auto day count, but never moves a given date between bands.
+  function weekGridPlan({ days = 7 } = {}) {
+    const count = cleanWeekDaysCount(days);
+    const n = count === "auto" ? WEEK_DAYS_LIMITS.default : count;
+    const perRow = Math.min(n, WEEK_DAYS_LIMITS.perRow);
+    return { count: n, perRow, rows: Math.ceil(n / perRow) };
   }
 
   // The one unit rule the calendar needs. The widget does the converting (Open-Meteo converts server-side), so this
@@ -8702,7 +8682,7 @@
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, ALERT_LAYOUTS, cleanAlertLayout, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, reminderDueAt, reminderPreCountdownText, reminderCountdownDelayMs, calendarSectionAt, setCalendarSectionCategory,
     itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, unmirroredItem, isMirroredAgendaItem, removeMirroredAgendaLine, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, itemIdTokens, listCheckboxStates, setListCheckbox, setListLineSummary, setListLineCategory, itemsFromNoteReminders, createHistoryCoordinator, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ARCHIVE_FILE, REMINDER_HISTORY_RETENTION_DEFAULT, REMINDER_HISTORY_ACTIONS, cleanReminderHistoryRetentionDays, compactReminderHistory, formatHistoryArchiveLines, parseHistoryArchiveLines, cleanHistoryFilter, filterHistoryRecords, historyPruneSurvey, exportHistoryLines, historySummaryLine, REMINDER_STACK_LIMIT, reminderAlertPresentation, orderOverlayAlertActions, reminderStackMoreLabel, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanNoteDropKind, NOTE_DROP_KINDS, cleanCalendarShare, TREE_WIDTH_LIMITS, cleanTreePaneWidth, clampTreePaneWidth, TREE_SQUEEZE_THRESHOLDS, treePaneSqueezeState, ALL_NOTES_CHROME_THRESHOLDS, allNotesChromeDensity, calendarActiveFilterCount, CALENDAR_FILTER_KINDS, cleanCalendarFilterKind, cleanCalendarFilterCategory, calendarFilterKeysFor, readCalendarFilters, CALENDAR_BIG_PICTURE_SIZES, DEFAULT_CALENDAR_BIG_PICTURE_SIZE, cleanCalendarBigPictureSize, calendarBigPictureBox, HOLIDAY_REGIONS, HOLIDAY_LOCALES, HOLIDAY_TABLE, HOLIDAY_TABLE_KINDS, holidayTableEntries, holidayTableYears, holidaySetCoverage, HOLIDAY_LOCALE_CODES, HOLIDAY_LOCALES_MAX, holidayLocaleInfo, cleanHolidayLocale, cleanHolidayLocales, defaultHolidayLocales, WEEKEND_PRESETS, defaultHolidayRegion, easterSundayYmd, nthWeekdayYmd, shiftYmd, weekdayOfYmd, regionWeekendDays, weekendDaysFor, cleanCalendarHolidays, holidaysFor, holidayEntriesFor, holidaySetsOf, HOLIDAY_FEED_RE, holidayFeedName, holidayFeedOf, isImportedHoliday, markImportedHoliday, IMPORTED_HOLIDAY_CLASS, importedHolidayAttrs, NO_WORK_FREE, isWorkFree, addPersonalDayOff, removePersonalDayOff, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, isRecurrenceCandidate, recurrenceUntilMs, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, DEFAULT_CALENDAR_HOURS, cleanCalendarHours, DEFAULT_CALENDAR_PICKER, cleanCalendarPicker, visibleHourRange, gridOffsetOf, gridMinuteAt,
     DEFAULT_DAY_LOOK, DAY_LOOK_KINDS, DAY_LOOK_MAX_STRENGTH, cleanDayLookColor, cleanDayLookStrength, cleanDayLook, dayLookTint, CALENDAR_SCALE_VIEWS, CALENDAR_SCALE_LIMITS, cleanCalendarScaleValue, calendarScaleStep, cleanCalendarScale, calendarScaleDensity, fitHourHeight, fitMinHourPx, calendarMinBoxPx, gridOpenMinute, monthCellLines, monthCellPlan,
-    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, weekGridPlan, WEEK_ROW_MIN_PX, FORECAST_TRUST_STEPS, forecastTrust,
+    cleanZone, parseZoneOffset, fixedZoneId, zoneFixedOffset, zoneOffsetAt, zoneOffsetText, zoneSearchText, zoneChoice, zoneChoices, searchZones, resolveZoneText, cleanRecentZones, zoneGroups, FIXED_ZONE_CHOICES, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, dayTimelineHours, buildGridTimeline, timelineMinuteOfMs, timelineCivilToGridMin, timelineToCivilMinute, timelineClockLabel, timelineMsAt, weekText, dayHeat, pickerMonth, stepMonth, pickerKey, WEEK_START_DAYS, cleanWeekStart, cleanWeekNumbers, weekdayLabels, weekNumber, monthGrid, weekDays, WEEK_DAYS_LIMITS, WEEK_RANGE_STARTS, DEFAULT_WEEK_SPAN, cleanWeekDaysCount, cleanWeekRangeAnchor, cleanWeekSpan, fitWeekDayCount, weekGridPlan, FORECAST_TRUST_STEPS, forecastTrust,
     weatherUnitLabelsFor, CALENDAR_WEATHER_GLYPHS, calendarWeatherIndex,
     forecastRefreshMinutes, visibleDays, resolveWeekVisibleDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, blockAgendaDrag, agendaZenItem, agendaZenProjection, agendaItemSignature, createIncrementalAgendaProjector, agendaOverdueProjection, agendaLeftCount, agendaVisibleDays, AGENDA_MAX_ITEMS_DEFAULT, applyAgendaItemCap, AGENDA_CLOSE_ACTIONS, cleanAgendaCloseAction, applyAgendaClosedDays, AGENDA_FOLD_DEFAULTS, cleanAgendaFold, inQuietHours, agendaFoldPlan, UI_STATE_KEYS, isUiStateKey, splitUiState, migrateUiState, ITEM_COLOR_CHOICES, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, formatAgendaDoctorBytes, diagnoseAgenda, planAgendaDoctorRepair, resolveAgendaOccurrence, AGENDA_ROOT_MENU_COMMANDS, agendaRootMenuModel, itemOwnsNoteText, itemIsFreeStanding, noteLinkedItems, unlinkPlan, unlinkLineText, calendarItemMenuModel, HEADLESS_AGENDA_COMMANDS, SHEET_AGENDA_COMMANDS, isHeadlessAgendaCommand, snoozeMondayDays, undoLifecycleAction, agendaActionMessage, formatAgendaHoverTime, resolveItemColor, cleanItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, mergeCalendarSnapshots, lwwPick, ALL_NOTES_NEW_CHOICES, cleanAllNotesNewChoice, allNotesNewMenuModel, allNotesNewButtonLabel, CLOCK_MODES, cleanClockMode, clockUses12Hour, clockPointerAngle, clockAngleOfHour, clockHourFromAngle, clockAngleOfMinute, ANALOG_CLOCK_SNAP, clockMinuteFromAngle, stepClockHand, clockDialPoints, PALETTE_COLOR_HEX, NOTE_THEME_SURFACES, parseColorRgb, rgbToHex, relativeLuminance, contrastRatio, mixSrgb, colorHsl, hslToHex, hueDistanceDeg, resolveCssColor, ensureContrastHex, resolveThemeSurface, derivePaletteTokens, resolveFolderSurfaceTokens, describeInheritance, layoutDay, layoutGridSpans, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarOccurrenceTargetStart, calendarMoveRecurringOccurrence, NOTE_DRAG_MIME, calendarNoteDropSlot, calendarNoteDropLabel, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle, icsUnfold, icsText, icsProperty, icsDateValue, icsZonedMs, icsStamp, icsRecurrence, parseIcs, icsToItem, planIcsImport, icsEscape, icsFold, icsEventLines, icsFromItems, icsUtcStamp, defaultIcsUid, SYNC_STATES, syncStateOf, markSynced, markSyncedDeleted, syncPlan,
   };
