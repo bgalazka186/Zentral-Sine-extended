@@ -100,7 +100,8 @@ try {
     ]) assert.ok(fs.existsSync(path.join(ROOT, "tests", suite)), suite + " RED->GREEN suite exists");
     assert.match(weather, /clockQuickNoteVisibility/);
     assert.match(weather, /cleanWidgetSpacePolicy/);
-    assert.match(hover, /classifyPillAutohideGesture/);
+    assert.match(hover, /\/\/ <<OW-130 PIN-STYLE GESTURE>>/);
+    assert.match(hover, /pillAutohidePending/);
     assert.match(calendar, /resolveCalendarItemColor/);
     assert.match(notes, /demoNoteColorPlan/);
   });

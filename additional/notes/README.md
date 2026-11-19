@@ -16,7 +16,7 @@ Quick notes that open **over the panel you are looking at**, without touching it
   - It stays below the top bar and beside the native sidebar (never over either).
   - Drag it past a window edge and it **docks** there: full height, flush, with its own remembered width. Drag it away and it detaches. Hold the pill's move button to dock / detach without dragging.
   - Only while docked: **push the page** from that side (pill button or the setting) and **autohide** (the card folds into a thin strip at the edge and comes back on hover or a press on the strip). A detached card never pushes.
-  - The **pill** beside the card has push, move / resize (tap: show handles on every side, drag: move), larger, autohide and close. A short click on autohide hides the docked card once even when the saved autohide preference is off; hold it for 550 ms to toggle that preference. A docked card resizes from its inner edge.
+  - The **pill** beside the card has push, move / resize (tap: show handles on every side, drag: move), larger, autohide and close. Its autohide button uses the same `createHoldAction()` click/hold pattern as the pin / keep buttons: a short click hides the docked card once even when the saved autohide preference is off; hold it for 550 ms to toggle that preference. A docked card resizes from its inner edge.
   - Split view only widens the card for display; the remembered width is never the widened one.
 
 | Action | How |

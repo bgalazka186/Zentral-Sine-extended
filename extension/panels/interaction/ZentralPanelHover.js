@@ -21,8 +21,8 @@
  * Literal DOM event subscriptions: blur; click; contextmenu; focusin; focusout; keydown; mousedown;
  *   mouseup; pointercancel; pointerdown; pointerenter; pointerleave; pointermove; pointerout; pointerover;
  *   pointerup; popuphidden; popupshowing; resize; zentral-notes-request-reveal (document; Notes asks for an
- *   autohidden panel to come back before it docks its sheet inside it). The pill autohide recognizer uses only
- *   pointerdown/move/up/cancel plus click, with a real movement threshold.
+ *   autohidden panel to come back before it docks its sheet inside it). The pill autohide recognizer copies the
+ *   pin button's pointerdown/move/up/cancel/blur/click pattern; a short click is never swallowed.
  *
  * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
  * contracts from this source, not a promise that every collaborator is enabled at runtime.
@@ -57,10 +57,11 @@
       let hoverRevealLedgeBounds = null;
       const HIDDEN_PANEL_REVEAL_DEFAULT_MS = 160;
       const HIDDEN_PANEL_REVEAL_DEFAULT_WIDTH_PX = 1;
-      // OW-130 / 3.4.1: a short pointer-up hides once, even when the saved
-      // autohide preference is off; a completed 550 ms hold toggles that
-      // preference. Pointer jitter inside this radius does not cancel either
-      // gesture. The existing Triple/Super-pin long press is untouched.
+      // OW-130 / 3.4.1: copy the pill pin button's proven click/hold
+      // recognizer. A short click always reaches its own action; only a
+      // completed 550 ms hold is suppressed. The timer exists only between
+      // pointerdown and pointerup/cancel/move. The Triple/Super-pin long press
+      // is untouched.
       const PILL_AUTOHIDE_HOLD_MS = 550;
       const PILL_AUTOHIDE_MOVE_TOLERANCE_PX = 8;
       const PILL_AUTOHIDE_SELECTOR = "#zen-app-hover-reveal-btn";
@@ -776,54 +777,13 @@
           ),
         );
       };
-      function classifyPillAutohideGesture(opts = {}) {
-        // An absent timestamp is not 0/Unix epoch: it is not a press at all.
-        const downAt = typeof opts.downAt === "number" ? opts.downAt : NaN;
-        const upAt = typeof opts.upAt === "number" ? opts.upAt : NaN;
-        const requestedHold = Number(opts.holdMs);
-        const holdMs =
-          Number.isFinite(requestedHold) && requestedHold >= 0
-            ? requestedHold
-            : 550;
-        const valid =
-          Number.isFinite(downAt) &&
-          Number.isFinite(upAt) &&
-          !opts.moved &&
-          !opts.cancelled &&
-          upAt >= downAt;
-        const pressedMs = valid ? Math.max(0, Math.round(upAt - downAt)) : 0;
-        const held = valid && pressedMs >= holdMs;
-        const action = !valid ? "none" : held ? "toggle" : "hide-once";
-        return { action, held, pressedMs };
-      }
-      function pillPointerMovement(opts = {}) {
-        const finite = (value) =>
-          typeof value === "number" && Number.isFinite(value);
-        const startX = finite(opts.startX) ? opts.startX : NaN;
-        const startY = finite(opts.startY) ? opts.startY : NaN;
-        const x = finite(opts.x) ? opts.x : NaN;
-        const y = finite(opts.y) ? opts.y : NaN;
-        const tolerancePx =
-          finite(opts.tolerancePx) && opts.tolerancePx >= 0
-            ? opts.tolerancePx
-            : 8;
-        const hasCoords = finite(startX) && finite(startY) && finite(x) && finite(y);
-        const distancePx = hasCoords ? Math.hypot(x - startX, y - startY) : 0;
-        return {
-          moved: hasCoords && distancePx > tolerancePx,
-          distancePx: Math.round(distancePx * 100) / 100,
-        };
-      }
-      // <<OW-130 GESTURE END>>
+      // <<OW-130 PIN-STYLE GESTURE>>
       let lastAutohidePref =
         getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) === true;
-      let pillAutohidePress = null;
-      let pillAutohideConsumedClick = false;
-      let pillAutohideSuppressClick = false;
-      const pillPointerMatches = (press, event) =>
-        press.pointerId == null ||
-        event?.pointerId == null ||
-        press.pointerId === event.pointerId;
+      let pillAutohidePending = null;
+      let pillAutohideSuppress = null;
+      const pillAutohideTarget = (node) =>
+        node?.closest?.(PILL_AUTOHIDE_SELECTOR);
       function hidePanelOnce() {
         clearHoverHide();
         setHoverPanelHidden(true, { once: true });
@@ -837,155 +797,78 @@
         if (!next) setHoverPanelHidden(false);
         syncHoverPanelAvailability();
       }
-      function clearPillAutohidePress() {
-        const press = pillAutohidePress;
-        pillAutohidePress = null;
-        if (!press) return;
-        press.target.removeAttribute("data-hold-active");
-        if (press.timer != null) clearTimeout(press.timer);
-      }
-      function pillAutohideTarget(event) {
-        const target = event?.target?.closest?.(PILL_AUTOHIDE_SELECTOR);
-        return target || null;
-      }
-      const onPillAutohideDown = (event) => {
-        if (event.button !== 0 || event.isTrusted === false) return;
-        const target = pillAutohideTarget(event);
-        if (!target) return;
-        clearPillAutohidePress();
-        pillAutohideConsumedClick = false;
-        pillAutohideSuppressClick = false;
-        const press = {
-          downAt: Date.now(),
-          target,
-          pointerId:
-            typeof event.pointerId === "number" ? event.pointerId : null,
-          startX:
-            typeof event.clientX === "number" && Number.isFinite(event.clientX)
-              ? event.clientX
-              : null,
-          startY:
-            typeof event.clientY === "number" && Number.isFinite(event.clientY)
-              ? event.clientY
-              : null,
-          moved: false,
-          cancelled: false,
-          held: false,
-          timer: null,
-        };
-        pillAutohidePress = press;
-        press.timer = setTimeout(() => {
-          if (pillAutohidePress !== press) return;
-          press.held = true;
-          press.target.setAttribute("data-hold-active", "true");
-        }, PILL_AUTOHIDE_HOLD_MS);
+      const cancelPillAutohidePending = () => {
+        if (pillAutohidePending) clearTimeout(pillAutohidePending.timer);
+        pillAutohidePending = null;
       };
-      const onPillAutohideCancel = (event) => {
-        const press = pillAutohidePress;
-        if (press && !pillPointerMatches(press, event)) return;
-        const hadPress = !!press;
-        if (press) press.cancelled = true;
-        clearPillAutohidePress();
-        pillAutohideConsumedClick = false;
-        pillAutohideSuppressClick = hadPress;
+      const onPillAutohideDown = (event) => {
+        if (event.button !== 0 || !hoverPanelAvailable()) return;
+        const btn = pillAutohideTarget(event.target);
+        if (!btn) return;
+        cancelPillAutohidePending();
+        pillAutohideSuppress = null;
+        btn.removeAttribute("data-hold-active");
+        pillAutohidePending = {
+          btn,
+          x: event.clientX,
+          y: event.clientY,
+          timer: setTimeout(() => {
+            pillAutohidePending = null;
+            pillAutohideSuppress = btn;
+            toggleAutohidePref();
+            btn.setAttribute("data-hold-active", "true");
+          }, PILL_AUTOHIDE_HOLD_MS),
+        };
       };
       const onPillAutohideMove = (event) => {
-        const press = pillAutohidePress;
-        if (!press || !pillPointerMatches(press, event)) return;
-        // A zero-delta or sub-threshold pointermove is jitter, not a drag.
-        const movement = pillPointerMovement({
-          startX: press.startX,
-          startY: press.startY,
-          x: event.clientX,
-          y: event.clientY,
-          tolerancePx: PILL_AUTOHIDE_MOVE_TOLERANCE_PX,
-        });
-        if (!movement.moved) return;
-        press.moved = true;
-        onPillAutohideCancel(event);
-      };
-      const onPillAutohideUp = (event) => {
-        const press = pillAutohidePress;
-        if (!press) {
-          pillAutohideConsumedClick = false;
-          return;
-        }
-        if (!pillPointerMatches(press, event)) return;
-        if (!pillAutohideTarget(event)) {
-          onPillAutohideCancel(event);
-          return;
-        }
-        const release = pillPointerMovement({
-          startX: press.startX,
-          startY: press.startY,
-          x: event.clientX,
-          y: event.clientY,
-          tolerancePx: PILL_AUTOHIDE_MOVE_TOLERANCE_PX,
-        });
-        const verdict = classifyPillAutohideGesture({
-          downAt: press.downAt,
-          upAt: Date.now(),
-          moved: press.moved || release.moved,
-          cancelled:
-            press.cancelled ||
-            (typeof event.button === "number" && event.button !== 0),
-          holdMs: PILL_AUTOHIDE_HOLD_MS,
-        });
-        const held = press.held || verdict.held;
-        clearPillAutohidePress();
-        if (verdict.action === "none") {
-          pillAutohideConsumedClick = false;
-          pillAutohideSuppressClick = true;
-          return;
-        }
-        pillAutohideConsumedClick = true;
-        if (held || verdict.action === "toggle") toggleAutohidePref();
-        else hidePanelOnce();
+        if (
+          pillAutohidePending &&
+          Math.hypot(
+            event.clientX - pillAutohidePending.x,
+            event.clientY - pillAutohidePending.y,
+          ) > PILL_AUTOHIDE_MOVE_TOLERANCE_PX
+        )
+          cancelPillAutohidePending();
       };
       const onPillAutohideClick = (event) => {
-        if (!pillAutohideTarget(event)) {
-          pillAutohideConsumedClick = false;
-          pillAutohideSuppressClick = false;
-          return;
-        }
-        if (pillAutohideConsumedClick || pillAutohideSuppressClick) {
-          pillAutohideConsumedClick = false;
-          pillAutohideSuppressClick = false;
+        const btn = pillAutohideTarget(event.target);
+        if (!btn) return;
+        if (pillAutohideSuppress === btn) {
+          pillAutohideSuppress = null;
+          btn.removeAttribute("data-hold-active");
           event.preventDefault();
-          event.stopPropagation();
-          event.stopImmediatePropagation?.();
+          event.stopImmediatePropagation();
           return;
         }
-        // A plain click, keyboard activation or a synthetic click without a
-        // pointerdown/up pair is the one-shot hide.
+        // Exactly like the pin button: a short click reaches its own action.
         hidePanelOnce();
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation?.();
-      };
-      const onPillAutohideKeyDown = (event) => {
-        if (event.key === "Escape" || event.key === "Esc")
-          onPillAutohideCancel(event);
       };
       const removePillAutohideListeners = () => {
-        document.removeEventListener("pointerdown", onPillAutohideDown, true);
-        window.removeEventListener("pointerup", onPillAutohideUp, true);
+        window.removeEventListener("pointerdown", onPillAutohideDown, true);
         window.removeEventListener("pointermove", onPillAutohideMove, true);
-        window.removeEventListener("pointercancel", onPillAutohideCancel, true);
-        window.removeEventListener("blur", onPillAutohideCancel, true);
-        document.removeEventListener("click", onPillAutohideClick, true);
-        window.removeEventListener("keydown", onPillAutohideKeyDown, true);
-        clearPillAutohidePress();
-        pillAutohideConsumedClick = false;
-        pillAutohideSuppressClick = false;
+        window.removeEventListener(
+          "pointerup",
+          cancelPillAutohidePending,
+          true,
+        );
+        window.removeEventListener(
+          "pointercancel",
+          cancelPillAutohidePending,
+          true,
+        );
+        window.removeEventListener("blur", cancelPillAutohidePending);
+        window.removeEventListener("click", onPillAutohideClick, true);
+        cancelPillAutohidePending();
+        pillAutohideSuppress?.removeAttribute("data-hold-active");
+        pillAutohideSuppress = null;
       };
-      document.addEventListener("pointerdown", onPillAutohideDown, true);
-      window.addEventListener("pointerup", onPillAutohideUp, true);
+      window.addEventListener("pointerdown", onPillAutohideDown, true);
       window.addEventListener("pointermove", onPillAutohideMove, true);
-      window.addEventListener("pointercancel", onPillAutohideCancel, true);
-      window.addEventListener("blur", onPillAutohideCancel, true);
-      document.addEventListener("click", onPillAutohideClick, true);
-      window.addEventListener("keydown", onPillAutohideKeyDown, true);
+      window.addEventListener("pointerup", cancelPillAutohidePending, true);
+      window.addEventListener("pointercancel", cancelPillAutohidePending, true);
+      window.addEventListener("blur", cancelPillAutohidePending);
+      window.addEventListener("click", onPillAutohideClick, true);
+      // <<OW-130 PIN-STYLE GESTURE END>>
 
       function ensurePillHoverRevealButton() {
         const pill = document.getElementById("zen-app-panel-pill");
@@ -1542,7 +1425,6 @@
       };
       registerCleanup(() => {
         removePillAutohideListeners();
-        clearPillAutohidePress();
         panelEntryAllowed = false;
         panelEntryListening = false;
         window.removeEventListener("mouseover", onPanelNativeWindowEntry, true);
@@ -1573,7 +1455,6 @@
       syncPanelWindowEntry();
 
       return {
-        classifyPillAutohideGesture,
         clearHoverHide,
         ensureAutohidePanelPinned,
         ensurePillHoverRevealButton,

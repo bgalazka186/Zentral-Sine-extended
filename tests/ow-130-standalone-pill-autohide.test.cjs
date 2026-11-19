@@ -1,7 +1,7 @@
 "use strict";
-/* 3.4.1: the standalone Notes card pill uses the same click/hold contract as
- * the full-pack panel pill. A short pointer press or plain click hides once
- * without changing the saved autohide preference; a 550 ms hold toggles it. */
+/* 3.4.1: the standalone Notes card pill now uses the exact same hold-action
+ * pattern as the pin / keep buttons. A short click is a tap, a completed hold
+ * is a separate action, and the click that ends a hold is swallowed. */
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -43,36 +43,22 @@ function notesCore() {
   return win.__zentralNotesTestSeam.core;
 }
 
-function gesture(core) {
+function holdAction(core) {
   let now = 1000;
   let nextTimer = 0;
   const timers = new Map();
-  let holdActive = false;
   let hidden = 0;
   let toggled = 0;
-  const api = core.createPillAutohideGesture({
-    now: () => now,
+  const api = core.createHoldAction({
+    ms: core.PILL_AUTOHIDE_HOLD_MS,
     setTimer: (fn, ms) => {
       const id = ++nextTimer;
       timers.set(id, { fn, at: now + ms });
       return id;
     },
     clearTimer: (id) => timers.delete(id),
-    setHoldActive: (active) => { holdActive = active; },
-    onHideOnce: () => { hidden++; },
-    onToggle: () => { toggled++; },
-  });
-  const ev = (extra = {}) => ({
-    button: 0,
-    isTrusted: true,
-    pointerId: 7,
-    clientX: 100,
-    clientY: 100,
-    detail: 1,
-    preventDefault() { this.defaultPrevented = true; },
-    stopPropagation() { this.stopped = true; },
-    stopImmediatePropagation() { this.immediateStopped = true; },
-    ...extra,
+    onTap: () => { hidden++; },
+    onHold: () => { toggled++; },
   });
   const advance = (ms) => {
     now += ms;
@@ -84,21 +70,21 @@ function gesture(core) {
     }
   };
   return {
-    api, ev, advance,
-    state: () => ({ hidden, toggled, holdActive, press: !!api.press, suppress: api.suppressClick }),
+    api, advance,
+    state: () => ({ hidden, toggled, armed: api.armed }),
   };
 }
 
 try {
-  test("1. the Notes core exports pointer helpers and a parent-panel hidden check", () => {
+  test("1. the Notes core exposes the pin-style hold action and parent-panel hidden check", () => {
     const core = notesCore();
     assert.equal(core.PILL_AUTOHIDE_HOLD_MS, 550);
-    assert.equal(core.PILL_AUTOHIDE_MOVE_TOLERANCE_PX, 8);
     assert.equal(core.PANEL_HIDDEN_ONCE_ATTR, "bgalazka-hover-panel-hidden-once");
-    assert.equal(typeof core.classifyPillAutohideGesture, "function");
-    assert.equal(typeof core.pillPointerMovement, "function");
-    assert.equal(typeof core.createPillAutohideGesture, "function");
+    assert.equal(typeof core.createHoldAction, "function");
     assert.equal(typeof core.zentralPanelHidden, "function");
+    assert.equal(typeof core.classifyPillAutohideGesture, "undefined", "the old custom classifier is gone");
+    assert.equal(typeof core.pillPointerMovement, "undefined", "the old custom movement helper is gone");
+    assert.equal(typeof core.createPillAutohideGesture, "undefined", "the old custom gesture is gone");
     const root = (attrs) => ({ hasAttribute: (name) => attrs.includes(name) });
     assert.equal(core.zentralPanelHidden(root(["bgalazka-hover-panel-hidden"])), false,
       "the hidden attribute alone is not a one-shot parent-panel hide");
@@ -106,82 +92,69 @@ try {
     assert.equal(core.zentralPanelHidden(root(["bgalazka-hover-panel-hidden", "bgalazka-hover-panel-hidden-once"])), true);
   });
 
-  test("2. a short pointer press with jitter hides once and consumes its click", () => {
-    const g = gesture(notesCore());
-    g.api.down(g.ev());
-    g.api.move(g.ev({ clientX: 105, clientY: 106 }));
-    g.advance(200);
-    g.api.up(g.ev({ clientX: 105, clientY: 106 }));
-    const click = g.ev();
-    assert.equal(g.api.click(click), false);
-    assert.equal(click.defaultPrevented, true);
-    assert.deepEqual(g.state(), { hidden: 1, toggled: 0, holdActive: false, press: false, suppress: false });
+  test("2. a short press is a tap and hides once", () => {
+    const h = holdAction(notesCore());
+    assert.equal(h.state().armed, false, "no timer outside a press");
+    h.api.press();
+    assert.equal(h.state().armed, true, "the timer exists only while pressed");
+    h.api.release();
+    assert.equal(h.api.click(), true, "a short click reaches its own action");
+    assert.deepEqual(h.state(), { hidden: 1, toggled: 0, armed: false });
   });
 
-  test("3. a completed hold toggles autohide and never hides twice", () => {
-    const g = gesture(notesCore());
-    g.api.down(g.ev());
-    g.advance(550);
-    assert.equal(g.state().holdActive, true, "the hold becomes visible");
-    g.api.up(g.ev());
-    const click = g.ev();
-    assert.equal(g.api.click(click), false);
-    assert.deepEqual(g.state(), { hidden: 0, toggled: 1, holdActive: false, press: false, suppress: false });
+  test("3. a completed hold toggles autohide and swallows the hold-ending click", () => {
+    const h = holdAction(notesCore());
+    h.api.press();
+    h.advance(550);
+    h.api.release();
+    assert.equal(h.api.click(), false, "the click that ends a hold is swallowed");
+    assert.deepEqual(h.state(), { hidden: 0, toggled: 1, armed: false });
   });
 
-  test("4. real movement, cancellation and plain clicks keep the one-shot contract", () => {
-    const g = gesture(notesCore());
-    g.api.down(g.ev());
-    g.api.move(g.ev({ clientX: 130 }));
-    assert.equal(g.state().press, false, "30 px is a drag, not jitter");
-    assert.equal(g.state().suppress, true);
-    g.api.up(g.ev());
-    const canceledClick = g.ev();
-    assert.equal(g.api.click(canceledClick), false);
-    assert.equal(canceledClick.defaultPrevented, true);
-    assert.equal(g.state().hidden, 0, "a canceled drag does not hide");
-    const plainClick = g.ev({ detail: 0 });
-    assert.equal(g.api.click(plainClick), false);
-    assert.equal(g.state().hidden, 1, "keyboard/plain activation is a one-shot hide");
-    assert.equal(g.state().toggled, 0);
-    g.api.down(g.ev());
-    g.api.cancel(g.ev({ key: "Escape" }));
-    assert.equal(g.state().press, false);
-    assert.equal(g.state().suppress, true);
-    g.api.destroy();
-    assert.equal(g.state().suppress, false, "destroy clears a stale cancel latch");
+  test("4. pointerleave / cancel leaves the next click as a tap, not a hold", () => {
+    const h = holdAction(notesCore());
+    h.api.press();
+    h.api.cancel();
+    assert.equal(h.state().armed, false, "cancel stops the timer");
+    assert.equal(h.api.click(), true);
+    assert.deepEqual(h.state(), { hidden: 1, toggled: 0, armed: false });
   });
 
-  test("5. the standalone pill is wired to the pointer recognizer, not the old click-only toggle", () => {
+  test("5. the standalone pill is wired exactly like the pin / keep hold buttons", () => {
     assert.match(NOTES, /const PILL_AUTOHIDE_HOLD_MS = 550;/);
-    assert.match(NOTES, /const PILL_AUTOHIDE_MOVE_TOLERANCE_PX = 8;/);
     assert.match(NOTES, /const PANEL_HIDDEN_ONCE_ATTR = "bgalazka-hover-panel-hidden-once";/);
     assert.match(NOTES, /hiddenOnceCard \|\| !!getPref\(PREF\.CARD_AUTOHIDE, false\)/);
-    assert.match(NOTES, /const hideCardOnce = \(\) => \{/);
-    assert.match(NOTES, /const toggleCardAutohide = \(\) => \{/);
+    assert.doesNotMatch(NOTES, /classifyPillAutohideGesture|pillPointerMovement|createPillAutohideGesture|PILL_AUTOHIDE_MOVE_TOLERANCE_PX/);
+    assert.match(NOTES, /holdHide = createHoldAction\(\{[\s\S]{0,240}ms: PILL_AUTOHIDE_HOLD_MS/);
+    assert.match(NOTES, /onTap: \(\) => \{[\s\S]{0,160}hideCardOnce\(\)/);
+    assert.match(NOTES, /onHold: \(\) => \{[\s\S]{0,160}toggleCardAutohide\(\)/);
+    assert.match(NOTES, /listen\(hide, "pointerdown", \(e\) => \{[\s\S]{0,120}holdHide\.press\(\)/);
+    assert.match(NOTES, /listen\(hide, "pointerup", \(\) => holdHide\.release\(\)\)/);
+    assert.match(NOTES, /listen\(hide, "pointerleave", \(\) => \{[\s\S]{0,160}holdHide\.cancel\(\)/);
+    assert.match(NOTES, /listen\(hide, "click", \(\) => \{[\s\S]{0,120}holdHide\.click\(\)/);
+    assert.match(NOTES, /cleanups\.push\(\(\) => holdHide\?\.cancel\(\)\)/, "sheet cleanup survives a dropped pill");
+    assert.match(NOTES, /holdHide\?\.cancel\(\);/);
     const hideBlock = NOTES.slice(NOTES.indexOf("const hideCardOnce = () => {"), NOTES.indexOf("const toggleCardAutohide = () => {"));
     assert.doesNotMatch(hideBlock, /setPref\(PREF\.CARD_AUTOHIDE/, "a one-shot hide never writes the saved pref");
     assert.match(hideBlock, /hiddenOnceCard = true;/);
     assert.match(hideBlock, /collapse\(\);/);
-    const toggleBlock = NOTES.slice(NOTES.indexOf("const toggleCardAutohide = () => {"), NOTES.indexOf("pillHideGesture = createPillAutohideGesture"));
+    const toggleBlock = NOTES.slice(NOTES.indexOf("const toggleCardAutohide = () => {"), NOTES.indexOf("holdHide = createHoldAction"));
     assert.match(toggleBlock, /hiddenOnceCard = false;/);
     assert.match(toggleBlock, /if \(collapsed\) expand\(false\);/);
     assert.match(toggleBlock, /setPref\(PREF\.CARD_AUTOHIDE, next\)/);
-    assert.match(NOTES, /listen\(hide, "pointerdown", \(e\) => pillHideGesture\.down\(e\), true\)/);
-    assert.match(NOTES, /listen\(window, "pointermove", \(e\) => pillHideGesture\.move\(e\), true\)/);
-    assert.match(NOTES, /listen\(window, "pointerup", \(e\) => pillHideGesture\.up\(e\), true\)/);
-    assert.match(NOTES, /listen\(window, "pointercancel", \(e\) => pillHideGesture\.cancel\(e\), true\)/);
-    assert.match(NOTES, /listen\(hide, "click", \(e\) => pillHideGesture\.click\(e\), true\)/);
     assert.match(NOTES, /data-once-hidden/);
     assert.match(NOTES, /PANEL_HIDDEN_ONCE_ATTR,/);
-    assert.doesNotMatch(NOTES, /listen\(hide, "click", \(\) => \{\s*if \(!dockedSide\(\)\) return flash/);
+    assert.match(NOTES, /data-hold-active/);
   });
 
-  test("6. shared hover and both pill styles expose the one-shot and hold states", () => {
+  test("6. shared hover uses the pin-button recognizer and both pill styles expose hold / one-shot states", () => {
+    assert.match(HOVER, /\/\/ <<OW-130 PIN-STYLE GESTURE>>/);
+    assert.match(HOVER, /window\.addEventListener\("pointerdown", onPillAutohideDown, true\)/);
+    assert.match(HOVER, /window\.addEventListener\("pointerup", cancelPillAutohidePending, true\)/);
+    assert.match(HOVER, /window\.addEventListener\("click", onPillAutohideClick, true\)/);
     assert.match(HOVER, /setHoverPanelHidden\(true, \{ once: true \}\)/);
     assert.match(HOVER, /PILL_AUTOHIDE_HIDDEN_ONCE_ATTR/);
-    assert.match(HOVER, /PILL_AUTOHIDE_MOVE_TOLERANCE_PX = 8/);
-    assert.match(HOVER, /document\.addEventListener\("pointerdown", onPillAutohideDown, true\)/);
+    assert.doesNotMatch(HOVER, /classifyPillAutohideGesture|pillPointerMovement|pillAutohideConsumedClick|pillAutohideSuppressClick/);
     assert.match(APPEARANCE_CSS, /data-once-hidden="true"/);
     assert.match(APPEARANCE_CSS, /data-hold-active="true"/);
     assert.match(NOTES_CSS, /data-hold-active="true"/);

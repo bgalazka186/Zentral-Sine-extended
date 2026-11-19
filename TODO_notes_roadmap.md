@@ -132,7 +132,7 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 |   138 | `OW-127`    | `DONE`    | Med                 | L      | —                 | Widget space priority: configurable order in which widgets give up space, and whether a widget may be reached by scroll or never. Needs settings, preferences, tests and readable responsive behavior. Implemented statically with two text prefs; live narrow sidebar OWNER GATE |
 |   139 | `OW-128`    | `DONE`    | High                | L      | OW-107            | Weather Today view rain timing: fix “tomorrow” when rain is today; support `today`, `jutro`/`tomorrow`, `pojutrze`, `in ~45/30/15 min`, `9–15`, heavy rain and `all day`, readable at all widths/heights. Owner chose Option A; pure/static rain timing ships, live text/layout OWNER GATE |
 |   140 | `OW-129`    | `DONE`    | Med                 | M      | OW-65, OW-69      | Clock quick note hidden by default; a small chevron at the clock widget's bottom-right corner opens it. Implemented statically; live click/labels OWNER GATE |
-|   141 | `OW-130`    | `DONE`    | Med                 | M      | —                 | All pill menus' `toggle panel autohide`: short click / pointer-up hides once even with autohide off, 550 ms hold toggles the saved preference; pointer-based 8 px threshold and standalone Notes parity. Live gesture OWNER GATE |
+|   141 | `OW-130`    | `DONE`    | Med                 | M      | —                 | All pill menus' `toggle panel autohide`: short click hides once even with autohide off, 550 ms hold toggles the saved preference; the pin button's exact click/hold recognizer is copied and standalone Notes uses the same hold-action pattern. Live gesture OWNER GATE |
 |   142 | `OW-131`    | `DONE`    | Med                 | M      | —                 | `create reminder...` view: color picker for reminder/event color, inherits category color but allows another color while keeping the category. Implemented statically as an item override; live composer OWNER GATE |
 |   143 | `OW-132`    | `DONE`    | Low                 | S      | OW-131            | DEMO notes must demo per-note/reminder colors so each demo entry can be colored on its own. Implemented statically with stable distinct installer colors; live Help-folder colors OWNER GATE |
 
@@ -1023,16 +1023,19 @@ pointer-up or click applies hide once, even when autohide is off; hold toggles
 the saved preference. The old mouse-only press cancelled on any move event and
 the one-shot path was gated by the saved preference.
 
-**Plan:** split short press and hold paths with a pointer-based recognizer and
-a real 8 px movement threshold; keep one-shot hiding independent of the saved
-preference; apply the same contract to the standalone Notes card pill; do not
-block the existing Triple/Super-pin long-press gesture.
+**Plan:** copy the pill pin button's proven click/hold recognizer exactly: a
+short click always reaches its own action, a 550 ms hold fires its own action
+and suppresses only the hold-ending click, pointer movement over 8 px cancels
+the pending hold, and pointerup/cancel/blur clear it. Keep one-shot hiding
+independent of the saved preference; apply the same `createHoldAction()` pattern
+used by the pin / keep buttons to the standalone Notes card pill; do not block
+the existing Triple/Super-pin long-press gesture.
 
-**Implemented statically:** marker-bounded `classifyPillAutohideGesture`,
-`pillPointerMovement`, a 550 ms hold, a `bgalazka-hover-panel-hidden-once`
-marker and delegated pointer listeners/cleanup. The standalone Notes core adds
-`createPillAutohideGesture()` and a local one-shot collapse. Coverage:
-`tests/ow-130-pill-autohide-gesture.test.cjs`,
+**Implemented statically:** the marker-bounded `// <<OW-130 PIN-STYLE
+GESTURE>>` block mirrors `ZentralSecondaryViews.uc.js`, with a
+`bgalazka-hover-panel-hidden-once` marker for the reveal edge and parent-panel
+consumers. The standalone Notes core reuses `createHoldAction()` with a local
+one-shot collapse. Coverage: `tests/ow-130-pill-autohide-gesture.test.cjs`,
 `tests/ow-130-standalone-pill-autohide.test.cjs`, the updated cross-feature
 regression sweep and a real fake-DOM Notes pill test. The existing
 Triple/Super-pin gesture is untouched.
@@ -1082,10 +1085,10 @@ OWNER GATE: live Help folder colors.
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and version here in place. Keep the project version at 3.4.1 until the owner explicitly says otherwise.**
 
-State: **3.4.1**. The owner asked for a 3.4.1 bump and a fix for every pill menu's `Toggle panel autohide` button. The full-pack panel pill and standalone Notes card pill now use the same pointer-based click/hold contract: a short click or pointer-up hides once even when saved autohide is off, pointer jitter within 8 px does not cancel, and a 550 ms hold toggles the saved preference. The one-shot hidden panel keeps the shared reveal edge and parent-panel ownership marker; standalone Notes uses a local one-shot collapse. Generated standalone bundles/locks, preferences, CSS audits, z-map and all main/standalone version markers were rebuilt through the explicit `--set 3.4.1` chain. Historical `OW-120` / `OW-117` / `OW-118` results and owner-accepted as fixed claims are unchanged. No live Zen/Sine gesture is claimed.
+State: **3.4.1**. The owner asked to stay on 3.4.1 and copy the pill pin button's click/hold behavior exactly. The full-pack panel pill now uses the `ZentralSecondaryViews.uc.js` pin recognizer: a short click always reaches its own one-shot hide, a 550 ms hold toggles saved autohide and suppresses only the hold-ending click, 8 px jitter keeps the hold armed and a real move cancels it. The standalone Notes card pill uses the same `createHoldAction()` pattern as its pin / keep buttons. The one-shot hidden panel keeps the shared reveal edge and parent-panel ownership marker; standalone Notes uses a local one-shot collapse. Generated standalone bundles/locks, preferences, CSS audits, z-map and all main/standalone version markers remain 3.4.1. Historical `OW-120` / `OW-117` / `OW-118` results and owner-accepted as fixed claims are unchanged. No live Zen/Sine gesture is claimed.
 
-Completed this session: resolved the checked-in merge-conflict remnants, regenerated the CSS audit and z-map, rewrote the mouse-only OW-130 tests for pointer events, added standalone Notes pointer-gesture and fake-DOM pill coverage, updated the 3.4.0-pinned tests/docs, bumped every main/standalone marker to 3.4.1, rebuilt every standalone package and ran the docs-inclusive full suite plus settings consistency.
+Completed this session: replaced the custom autohide gesture with the exact pin-button recognizer, switched standalone Notes to the existing pin/keep hold action, rewrote the OW-130 and regression-sweep runtime harnesses, refreshed generated bundles with `--keep-version` and kept every version marker at 3.4.1. The docs-inclusive full suite and settings consistency were rerun.
 
 Known debts: live Zen/Sine click, hold, reveal-edge, parent-panel and standalone-card behavior remains an OWNER GATE. The older visual, compact-tabs, restart, weather, chevron, composer, Help-folder and `OW-121` Boost popup OWNER GATEs remain open; `OW-123` still needs outer duplicate-tab evidence, and `OW-125` / `OW-126` are static audits only. `OW-117` resize performance and `OW-118` Boost RAM reporting remain owner-accepted as fixed without live measurements here. The `OW-114` audit handoff still names `additional/tabs/ZentralTabDensity.css:357` through `additional/tabs/ZentralTabDensity.css:488`, with `arc-grayscale-unloaded-tabs` and `browser.tabs.fadeOutUnloadedTabs` as third-party OWNER GATE caveats.
 
-Next action: owner checks the short click, 550 ms hold, Escape/cancel and reveal edge on a real Zentral panel pill and a docked standalone Notes card with autohide both off and on; then continue the existing live OWNER GATE checklist. Keep the version at 3.4.1; the explicit `tools/sync-version.cjs --set 3.4.1` bump is already applied. Do not run plain `--bump` or a second version change. No ZIP or `.git` archive.
+Next action: owner checks the short click, 550 ms hold, pointer move/cancel and reveal edge on a real Zentral panel pill and a docked standalone Notes card with autohide both off and on; then continue the existing live OWNER GATE checklist. Keep the version at 3.4.1; the explicit `tools/sync-version.cjs --set 3.4.1` bump is already applied. Do not run plain `--bump` or a second version change. No ZIP or `.git` archive.

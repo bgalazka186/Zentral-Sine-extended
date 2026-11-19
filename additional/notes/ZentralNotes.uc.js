@@ -15,8 +15,8 @@
  * Layout: store (files) -> pure core (format, markdown, edit helpers) -> sheet UI -> bar/host bindings.
  * Registration: notes
  * Loaded/created by: loader/ZentralCatalog.js
- * Literal DOM event subscriptions: unload; pointerdown; pointermove; pointerup; pointercancel; click; keydown; blur.
- *   The standalone card pill's autohide recognizer is pointer-based with an 8 px movement threshold.
+ * Literal DOM event subscriptions: unload; pointerdown; pointerup; pointerleave; click.
+ *   The standalone card pill's autohide button uses the same hold-action pattern as the pin / keep buttons.
  *
  * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
  * contracts from this source, not a promise that every collaborator is enabled at runtime.
@@ -7865,12 +7865,10 @@
         },
       };
     }
-    // 3.4.1: the pill autohide gesture is pointer-based and movement-thresholded.
-    // A short press hides once even when the saved preference is off; a 550 ms
-    // hold toggles the preference. This is pure so both the full pack and the
-    // standalone bundle can be tested without a live Gecko pointer.
+    // 3.4.1: the card pill's autohide button uses the same hold-action pattern
+    // as the pin / keep buttons. A short click is a tap, a completed hold is a
+    // separate action, and the click that ends a hold is swallowed.
     const PILL_AUTOHIDE_HOLD_MS = 550;
-    const PILL_AUTOHIDE_MOVE_TOLERANCE_PX = 8;
     const PANEL_HIDDEN_ONCE_ATTR = "bgalazka-hover-panel-hidden-once";
     function zentralPanelHidden(root) {
       return (
@@ -7878,195 +7876,6 @@
         (root.hasAttribute("bgalazka-hover-panel-enabled") ||
           root.hasAttribute(PANEL_HIDDEN_ONCE_ATTR))
       );
-    }
-    function classifyPillAutohideGesture(opts = {}) {
-      const downAt = typeof opts.downAt === "number" ? opts.downAt : NaN;
-      const upAt = typeof opts.upAt === "number" ? opts.upAt : NaN;
-      const requestedHold = Number(opts.holdMs);
-      const holdMs =
-        Number.isFinite(requestedHold) && requestedHold >= 0
-          ? requestedHold
-          : PILL_AUTOHIDE_HOLD_MS;
-      const valid =
-        Number.isFinite(downAt) &&
-        Number.isFinite(upAt) &&
-        !opts.moved &&
-        !opts.cancelled &&
-        upAt >= downAt;
-      const pressedMs = valid ? Math.max(0, Math.round(upAt - downAt)) : 0;
-      const held = valid && pressedMs >= holdMs;
-      return { action: !valid ? "none" : held ? "toggle" : "hide-once", held, pressedMs };
-    }
-    function pillPointerMovement(opts = {}) {
-      const finite = (value) => typeof value === "number" && Number.isFinite(value);
-      const startX = finite(opts.startX) ? opts.startX : NaN;
-      const startY = finite(opts.startY) ? opts.startY : NaN;
-      const x = finite(opts.x) ? opts.x : NaN;
-      const y = finite(opts.y) ? opts.y : NaN;
-      const tolerancePx =
-        finite(opts.tolerancePx) && opts.tolerancePx >= 0
-          ? opts.tolerancePx
-          : PILL_AUTOHIDE_MOVE_TOLERANCE_PX;
-      const hasCoords = finite(startX) && finite(startY) && finite(x) && finite(y);
-      const distancePx = hasCoords ? Math.hypot(x - startX, y - startY) : 0;
-      return {
-        moved: hasCoords && distancePx > tolerancePx,
-        distancePx: Math.round(distancePx * 100) / 100,
-      };
-    }
-    function createPillAutohideGesture({
-      ms = PILL_AUTOHIDE_HOLD_MS,
-      tolerancePx = PILL_AUTOHIDE_MOVE_TOLERANCE_PX,
-      now = () => Date.now(),
-      setTimer = () => 0,
-      clearTimer = () => {},
-      setHoldActive = () => {},
-      onHideOnce = () => {},
-      onToggle = () => {},
-    } = {}) {
-      let press = null;
-      let consumedClick = false;
-      let suppressClick = false;
-      const samePointer = (event) =>
-        press?.pointerId == null ||
-        event?.pointerId == null ||
-        press.pointerId === event.pointerId;
-      const clearPress = () => {
-        const active = press;
-        press = null;
-        if (!active) return;
-        if (active.timer != null) clearTimer(active.timer);
-        setHoldActive(false);
-      };
-      const cancel = (event) => {
-        if (press && !samePointer(event)) return;
-        const hadPress = !!press;
-        if (press) press.cancelled = true;
-        clearPress();
-        consumedClick = false;
-        suppressClick = hadPress;
-      };
-      return {
-        down(event) {
-          if (
-            event?.isTrusted === false ||
-            (typeof event?.button === "number" && event.button !== 0)
-          )
-            return;
-          clearPress();
-          consumedClick = false;
-          suppressClick = false;
-          const active = {
-            downAt: now(),
-            pointerId:
-              typeof event?.pointerId === "number" ? event.pointerId : null,
-            startX:
-              typeof event?.clientX === "number" && Number.isFinite(event.clientX)
-                ? event.clientX
-                : null,
-            startY:
-              typeof event?.clientY === "number" && Number.isFinite(event.clientY)
-                ? event.clientY
-                : null,
-            moved: false,
-            cancelled: false,
-            held: false,
-            timer: null,
-          };
-          press = active;
-          active.timer = setTimer(() => {
-            if (press !== active) return;
-            active.held = true;
-            setHoldActive(true);
-          }, ms);
-        },
-        move(event) {
-          if (!press || !samePointer(event)) return;
-          const movement = pillPointerMovement({
-            startX: press.startX,
-            startY: press.startY,
-            x: event?.clientX,
-            y: event?.clientY,
-            tolerancePx,
-          });
-          if (!movement.moved) return;
-          press.moved = true;
-          cancel(event);
-        },
-        up(event) {
-          if (!press) {
-            consumedClick = false;
-            return;
-          }
-          if (!samePointer(event)) return;
-          const active = press;
-          const release = pillPointerMovement({
-            startX: active.startX,
-            startY: active.startY,
-            x: event?.clientX,
-            y: event?.clientY,
-            tolerancePx,
-          });
-          const verdict = classifyPillAutohideGesture({
-            downAt: active.downAt,
-            upAt: now(),
-            moved: active.moved || release.moved,
-            cancelled:
-              active.cancelled ||
-              (typeof event?.button === "number" && event.button !== 0),
-            holdMs: ms,
-          });
-          const held = active.held || verdict.held;
-          clearPress();
-          if (verdict.action === "none") {
-            consumedClick = false;
-            suppressClick = true;
-            return;
-          }
-          consumedClick = true;
-          if (held || verdict.action === "toggle") onToggle();
-          else onHideOnce();
-        },
-        click(event) {
-          if (consumedClick) {
-            consumedClick = false;
-            event?.preventDefault?.();
-            event?.stopPropagation?.();
-            event?.stopImmediatePropagation?.();
-            return false;
-          }
-          if (suppressClick) {
-            suppressClick = false;
-            event?.preventDefault?.();
-            event?.stopPropagation?.();
-            event?.stopImmediatePropagation?.();
-            return false;
-          }
-          // A plain click (including assistive activation and a synthetic test
-          // click without pointerdown/up) is the one-shot hide. A completed
-          // pointer gesture consumed its click above.
-          onHideOnce();
-          event?.preventDefault?.();
-          event?.stopPropagation?.();
-          event?.stopImmediatePropagation?.();
-          return false;
-        },
-        cancel,
-        destroy() {
-          clearPress();
-          consumedClick = false;
-          suppressClick = false;
-        },
-        get press() {
-          return press;
-        },
-        get consumedClick() {
-          return consumedClick;
-        },
-        get suppressClick() {
-          return suppressClick;
-        },
-      };
     }
 
     // Most recently opened note first, no duplicates, at most `max`.
@@ -16827,8 +16636,7 @@
         alignDelim, buildImage, insertImageMd, pastedWebAddress, CODE_LANGS, CALLOUT_KINDS, CALLOUT_FOLDABLE, calloutMemory, calloutId, insertCallout,
         HIDEABLE_TOOLS, parseHidden, serializeHidden, applyTreeSelection, resolveTreeSelection, cleanBatchTag, appendTagToBody,
         normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, clearOfRect, sideOf, createHoldAction,
-        PILL_AUTOHIDE_HOLD_MS, PILL_AUTOHIDE_MOVE_TOLERANCE_PX, PANEL_HIDDEN_ONCE_ATTR, zentralPanelHidden,
-        classifyPillAutohideGesture, pillPointerMovement, createPillAutohideGesture,
+        PILL_AUTOHIDE_HOLD_MS, PANEL_HIDDEN_ONCE_ATTR, zentralPanelHidden,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, cleanSlotPx, cleanCardPx, cleanCardShare, resolveSlotHeight, resolveCardHeight, hasStartupPanelPref, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, gapPageFloor, gapMaxPx, clampGapPx, GAP_PANEL_MIN_PX, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
@@ -30477,7 +30285,7 @@
       let pillEl = null;
       const pillBtn = {};
       let holdMove = null;
-      let pillHideGesture = null;
+      let holdHide = null;
       const pillHideOffs = [];
       let pillOffLive = null; // live vertical place while the handle is dragged (percent, -50..50)
       let pillSideLock = ""; // keeps the pill's side steady during a gesture
@@ -30582,44 +30390,39 @@
           scheduleLayout();
           armGrace();
         };
-        pillHideGesture = createPillAutohideGesture({
-          setTimer: (fn, ms) => resources.setTimeout("pill-hide-hold", fn, ms),
-          clearTimer: (id) => resources.clearTimeout(id),
-          setHoldActive: (active) => {
-            if (active) hide.setAttribute("data-hold-active", "true");
-            else hide.removeAttribute("data-hold-active");
+        holdHide = createHoldAction({
+          ms: PILL_AUTOHIDE_HOLD_MS,
+          setTimer: (fn, ms) => window.setTimeout(fn, ms),
+          clearTimer: (id) => window.clearTimeout(id),
+          onTap: () => {
+            hide.removeAttribute("data-hold-active");
+            hideCardOnce();
           },
-          onHideOnce: hideCardOnce,
-          onToggle: toggleCardAutohide,
+          onHold: () => {
+            hide.setAttribute("data-hold-active", "true");
+            toggleCardAutohide();
+          },
         });
         pillHideOffs.push(
-          listen(hide, "pointerdown", (e) => pillHideGesture.down(e), true),
+          listen(hide, "pointerdown", (e) => {
+            if (e.button === undefined || e.button === 0) holdHide.press();
+          }),
         );
         pillHideOffs.push(
-          listen(hide, "click", (e) => pillHideGesture.click(e), true),
+          listen(hide, "pointerup", () => holdHide.release()),
         );
         pillHideOffs.push(
-          listen(window, "pointermove", (e) => pillHideGesture.move(e), true),
+          listen(hide, "pointerleave", () => {
+            holdHide.cancel();
+            hide.removeAttribute("data-hold-active");
+          }),
         );
         pillHideOffs.push(
-          listen(window, "pointerup", (e) => pillHideGesture.up(e), true),
+          listen(hide, "click", () => {
+            if (!holdHide.click()) hide.removeAttribute("data-hold-active");
+          }),
         );
-        pillHideOffs.push(
-          listen(window, "pointercancel", (e) => pillHideGesture.cancel(e), true),
-        );
-        pillHideOffs.push(
-          listen(window, "blur", (e) => pillHideGesture.cancel(e), true),
-        );
-        pillHideOffs.push(
-          listen(
-            window,
-            "keydown",
-            (e) => {
-              if (e.key === "Escape" || e.key === "Esc") pillHideGesture.cancel(e);
-            },
-            true,
-          ),
-        );
+        cleanups.push(() => holdHide?.cancel());
         listen(size, "click", () => toggleSpan());
         listen(close2, "click", () => close());
         // Pin = keep open (the header's pin): it stays when something outside is clicked.
@@ -30719,8 +30522,8 @@
       }
       function dropPill() {
         holdMove?.cancel?.();
-        pillHideGesture?.destroy();
-        pillHideGesture = null;
+        holdHide?.cancel();
+        holdHide = null;
         for (const off of pillHideOffs.splice(0)) {
           try { off(); } catch (_) {}
         }
