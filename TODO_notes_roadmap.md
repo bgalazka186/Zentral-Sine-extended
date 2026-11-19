@@ -125,6 +125,16 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 |   131 | `OW-105`    | `DONE`    | High                | S      | —                 | Widgets: explicit colour values forced in settings must be applied to every widget card and its controls |
 |   132 | `OW-106`    | `DONE`    | High                | S      | —                 | Notes / Calendar: opening the feature defaults to the All notes screen, not the last note opened |
 |   133 | `OW-107`    | `DONE`    | High                | S-M    | —                 | Weather: audit what location data leaves the browser, where it is sent, and what permissions/consent are involved; document the actual behaviour and close any unnecessary exposure |
+|   134 | `OW-123`    | `OPEN`    | High                | M      | OW-122            | After restart sometimes notes duplicate: duplicates have no title but do have a favicon and appear right under the Notes folder. Distinct from OW-122's inner-stack post-restart investigation; targeted outer-tab evidence required |
+|   135 | `OW-124`    | `DONE`    | High                | M      | OW-116, OW-120    | Notes titles in the Zen sidebar can duplicate: a note named `Problemy` renders `ProblemyProblemy`. One-road label repair shipped statically; live EN/PL titles remain an OWNER GATE |
+|   136 | `OW-125`    | `OPEN`    | Med                 | S      | OW-122            | Zen `1.24.3b` compatibility audit: Firefox 160.0.1, security fixes, Boost/controls, Spaces Sync containers, copy URL of selected tabs, new-window performance, single-toolbar zoom toast. Audit report shipped; live gates remain |
+|   137 | `OW-126`    | `OPEN`    | Med                 | M      | —                 | Twilight `1.25t` readiness: Little Zen window and Zen's own settings window. Audit settings/window assumptions and mods; no code change until a tagged build exposes the actual DOM |
+|   138 | `OW-127`    | `DONE`    | Med                 | L      | —                 | Widget space priority: configurable order in which widgets give up space, and whether a widget may be reached by scroll or never. Needs settings, preferences, tests and readable responsive behavior. Implemented statically with two text prefs; live narrow sidebar OWNER GATE |
+|   139 | `OW-128`    | `DONE`    | High                | L      | OW-107            | Weather Today view rain timing: fix “tomorrow” when rain is today; support `today`, `jutro`/`tomorrow`, `pojutrze`, `in ~45/30/15 min`, `9–15`, heavy rain and `all day`, readable at all widths/heights. Owner chose Option A; pure/static rain timing ships, live text/layout OWNER GATE |
+|   140 | `OW-129`    | `DONE`    | Med                 | M      | OW-65, OW-69      | Clock quick note hidden by default; a small chevron at the clock widget's bottom-right corner opens it. Implemented statically; live click/labels OWNER GATE |
+|   141 | `OW-130`    | `DONE`    | Med                 | M      | —                 | All pill menus' `toggle panel autohide`: mouse-up applies hide once, hold preserves the old toggle behavior; do not interfere with hold. Implemented statically with a 550 ms classifier; live gesture OWNER GATE |
+|   142 | `OW-131`    | `DONE`    | Med                 | M      | —                 | `create reminder...` view: color picker for reminder/event color, inherits category color but allows another color while keeping the category. Implemented statically as an item override; live composer OWNER GATE |
+|   143 | `OW-132`    | `DONE`    | Low                 | S      | OW-131            | DEMO notes must demo per-note/reminder colors so each demo entry can be colored on its own. Implemented statically with stable distinct installer colors; live Help-folder colors OWNER GATE |
 
 
 ---
@@ -862,22 +872,235 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 
 ---
 
+## Owner backlog 2026-11-18 (`OW-123`–`OW-132`)
+
+These ten rows are owner-reported work. `OW-123` remains evidence-gated until
+the outer duplicate-tab attributes are supplied; `OW-124` has a static one-road
+label repair. Owner chose Option A for `OW-128`, and `OW-127` / `OW-129`–`OW-132`
+are statically implemented with pure helpers and RED→GREEN suites. Live behavior
+remains an OWNER GATE; the compatibility rows are static audits only.
+
+#### `OW-123` — Restart duplicates under the Notes folder
+
+**Status:** `OPEN` · **Impact:** High · **Effort:** M · **Depends on:** `OW-122`
+
+**Problem:** after restart sometimes notes duplicate; the duplicates have no
+title but do have a favicon and appear right under the Notes folder. This is
+distinct from OW-122's two stray inner-stack pseudo-tabs.
+
+**Plan:** request only the outer attributes of the duplicate `<tab>` elements
+(`id`, `label`, `image`, `pending`, `pinned`, `bgalazka-notes-*`), their parent
+folder id, `.tab-label` value/text and the canonical
+`_zenPinnedInitialState.entry.url`. Do not ask for a full JSON dump. Then write
+a RED harness test for the observed duplicate key and add a narrow dedupe that
+never deletes a real owner tab or a labelled projection entry.
+
+**Tests:** `tests/ow-123-ow-132-backlog.test.cjs` pins the specification and the
+targeted-evidence rule; the product regression must be added after the owner's
+short paste. OWNER GATE: live restart and duplicate disappearance.
+
+#### `OW-124` — Duplicated sidebar titles
+
+**Status:** `DONE` (static) · **Impact:** High · **Effort:** M · **Depends on:** `OW-116`, `OW-120`
+
+**Problem:** a note named `Problemy` can render `ProblemyProblemy` in the Zen
+sidebar.
+
+**Plan:** inspect the three label roads (`label` attribute,
+`bgalazka-notes-label`, native `.tab-label` value/text) for one affected row.
+Do not guess which road duplicates. Add a pure label-healing test that proves
+idempotence for `Problemy` before changing projection / discard healing.
+
+**Implemented statically:** supplied two-label XUL shape is pinned by
+`tests/ow-124-duplicated-sidebar-title.test.cjs`; `cleanSidebarLabelRoads()` keeps
+Zen's native `text=label` road, removes the legacy XUL `value` road, and heals
+pending rewrites idempotently. No outer duplicate-tab road was guessed; `OW-123`
+remains evidence-gated. OWNER GATE: live EN/PL titles.
+
+**Tests:** specification pinned in `tests/ow-123-ow-132-backlog.test.cjs`;
+product RED/GREEN test after targeted evidence. OWNER GATE: live EN/PL titles.
+
+#### `OW-125` — Zen 1.24.3b compatibility audit
+
+**Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Depends on:** `OW-122`
+
+**Problem:** Zen updated `1.24.2b` → `1.24.3b`; check whether mods need changes.
+
+**Done statically:** `docs/zen-1243b-compat-audit.md` maps the release notes to
+Zentral source. The Spaces Sync gap is fixed by `OW-122`; no other static mod
+change is required. No `--bump` / `sync-version`.
+
+**Tests:** `tests/zen-1243b-compat.test.cjs` pins the release facts, upstream
+paths, source greps and no-preferences-window assumption. OWNER GATE: live
+cold start, second window, selected-tab copy, single-toolbar zoom toast,
+Boost/split-view/glance behavior.
+
+#### `OW-126` — Twilight 1.25t readiness
+
+**Status:** `DONE` (static) · **Impact:** Med · **Effort:** M
+
+**Problem:** Twilight adds Little Zen and Zen's own settings window; check
+settings/window assumptions and mods.
+
+**Done statically:** `docs/zen-125t-compat-audit.md` records that Zentral
+already owns its settings shell and does not open Firefox's preferences page,
+and identifies the `navigator:browser` / `Services.focus.activeWindow` window
+assumptions. No `1.25t` tag exists yet, so no code guard is guessed.
+
+**Tests:** `tests/zen-125t-compat.test.cjs` pins the audit and targeted live
+facts to request. OWNER GATE: actual Little Zen window type/hosts and settings
+entry points.
+
+#### `OW-127` — Widget space priority and scroll access
+
+**Status:** `DONE` (static) · **Impact:** Med · **Effort:** L
+
+**Problem:** configurable order in which widgets give up space, and whether a
+given widget can be accessible with scroll or never.
+
+**Plan:** add a pure priority resolver and settings/preferences rows first;
+preserve current widget order as the default. Scroll access must be readable
+and must not add height to the collapsed sidebar. No guess about which widget
+the owner wants pinned.
+
+**Implemented statically:** `cleanWidgetSpacePolicy`, `planWidgetSpace`,
+`space_priority` / `space_scroll` schema rows and tray `data-zw-space-*`
+markers are covered by `tests/ow-127-widget-space-priority.test.cjs` (6 passed).
+No widget is chosen as pinned by default and no collapsed height is added.
+
+**Tests:** `tests/ow-123-ow-132-backlog.test.cjs` pins the settings/tests/responsive
+contract; product tests after the preference schema is added. OWNER GATE: live
+narrow sidebar and scroll behavior.
+
+#### `OW-128` — Weather rain timing
+
+**Status:** `DONE` (static) · **Impact:** High · **Effort:** L · **Depends on:** `OW-107`
+
+**Problem:** Today view says “tomorrow” even when rain is due today. Desired:
+`today`, `jutro`/`tomorrow`, `pojutrze`, `in ~45/30/15 min`, `9–15`, heavy
+rain, `all day`, readable at all widths/heights.
+
+**Plan:** Owner chose **Option A** — hourly plus optional 15-minute near-term
+with hourly fallback — in `docs/weather-rain-options.md`. Implement a pure
+next-rain helper, RED test, localized short/long strings, responsive CSS and
+the exact `--keep-version` chain/full suite. The one-request refresh policy and
+seven-day daily fallback stay intact; missing 15-minute data falls back to
+hourly, then daily.
+
+**Implemented statically:** `readWeatherRainSeries`, `weatherRainPlan`,
+`weatherRainText`, EN/PL phrase tables, `rainLines` with short/long spans and
+bounded outlook scrolling now live in the widgets source/CSS.
+
+**Tests:** `tests/weather-rain-options.test.cjs` pins the API facts, all four
+options and the owner's choice; `tests/ow-128-weather-rain-timing.test.cjs`
+is RED on the old daily-only contract and GREEN here (8 passed).
+OWNER GATE: live text, timing, localization and layout.
+
+#### `OW-129` — Clock quick note chevron
+
+**Status:** `DONE` (static) · **Impact:** Med · **Effort:** M · **Depends on:** `OW-65`, `OW-69`
+
+**Problem:** quick note is shown by default; owner wants it hidden until a small
+bottom-right chevron on the clock widget is clicked.
+
+**Plan:** change the default to hidden, add an accessible chevron button with a
+bounded scope listener, preserve the existing quick-note opener and OW-69
+one-line/Save-button rules, and keep the card height unchanged.
+
+**Implemented statically:** `clockQuickNoteVisibility` and the accessible
+absolute chevron are covered by `tests/ow-129-clock-quick-note-chevron.test.cjs`
+(5 passed). OW-69's switch and OW-68's one-line row remain intact.
+
+**Tests:** specification pinned; product RED/GREEN with the fake widgets harness
+before implementation. OWNER GATE: live click, EN/PL label and narrow card.
+
+#### `OW-130` — Pill menu autohide: click vs hold
+
+**Status:** `DONE` (static) · **Impact:** Med · **Effort:** M
+
+**Problem:** all pill menus' `toggle panel autohide` button should apply hide
+once on mouse-up, while hold keeps the old toggle behavior.
+
+**Plan:** split pointer-up and hold paths; do not fire the hold action on a
+short click and do not block the existing long-press gesture. Add a pure
+gesture classifier and harness test for short/long/cancelled presses.
+
+**Implemented statically:** marker-bounded `classifyPillAutohideGesture`,
+550 ms hold, hide-once/toggle split, delegated listeners and cleanup are covered
+by `tests/ow-130-pill-autohide-gesture.test.cjs` (4 passed). The existing
+Triple/Super-pin gesture is untouched.
+
+**Tests:** specification pinned; product RED/GREEN before implementation.
+OWNER GATE: live click, hold and Escape/cancel.
+
+#### `OW-131` — Reminder/event color picker
+
+**Status:** `OPEN` · **Impact:** Med · **Effort:** M
+
+**Problem:** `create reminder...` view needs a color picker that inherits the
+category color but allows another color while keeping the category.
+
+**Plan:** add a pure color-resolution helper (`custom ?? category ?? default`),
+expose it through the composer seam, store the override without mutating the
+category, and keep linked-note recoloring behavior from OW-120 tests intact.
+
+**Implemented statically:** `resolveCalendarItemColor`, composer color input /
+Inherit control, EN/PL keys and CSS are covered by
+`tests/ow-131-ow-132-note-colors.test.cjs` (5 passed). The override is stored on
+the item only; the category is preserved.
+
+**Tests:** specification pinned; product RED/GREEN before implementation.
+OWNER GATE: live composer, category persistence and calendar colors.
+
+#### `OW-132` — Colored DEMO notes
+
+**Status:** `DONE` (static) · **Impact:** Low · **Effort:** S · **Depends on:** `OW-131`
+
+**Problem:** DEMO notes should demo each note/reminder being colored on its own.
+
+**Plan:** assign a stable per-demo color to each `DEMO_NOTES` entry and have the
+installer pass it through `ensureNote`; do not change existing installed demo
+notes on reinstall. Add a fixture test for distinct colors and idempotence.
+
+**Implemented statically:** `DEMO_NOTE_COLORS` and `demoNoteColorPlan` are
+covered by `tests/ow-131-ow-132-note-colors.test.cjs` (5 passed). The installer
+skips existing ids and never recolours an edited demo note.
+
+**Tests:** specification pinned; product RED/GREEN before implementation.
+OWNER GATE: live Help folder colors.
+
+---
+
 ## NEXT SESSION HANDOFF (version 3.4.0, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and version here in place. Keep the project version at 3.4.0 until the owner explicitly says otherwise.**
 
+<<<<<<< HEAD
 State: **3.4.0**. `OW-122` is DONE: fresh Notes uses full available card height, a 50% single-panel slot and a 40% between-panel slot; saved sizes and the one-panel preference remain in force. Fake-DOM and Triple View startup tests pass; real Zen geometry remains an OWNER GATE. `OW-123` static audit is DONE: five findings plus candidates and verification limits are in `docs/ow-123-standalone-ownership-audit.md`; no findings were fixed. Big Picture layout fixes are on the test branch. Prerequisites `OW-108`–`OW-110` (through `0090091`, merged here as `c86d4b6`) are included. All five owner Boost-audit findings F1–F5 (`OW-111`–`OW-115`), `T4.3a`–`T4.3c`, the `ST7.4` prototype report, the four-bug owner fix set (`OW-116`–`OW-118`), the corrective compact-tabs/runtime-syntax fix `OW-119`, the diagnostic-first Notes/Agenda visual fix `OW-120` and the four-proposition Boost UX fix `OW-121` are DONE (see `docs/LEGACY_done_rows.md`, `docs/bugfix-2026-11-18.md`, `docs/ow-120-owner-diagnosis.md` and `docs/ow-121-boost-ux.md`). `OW-117` resize performance and `OW-118` Boost RAM reporting are owner-accepted as fixed. The earlier `04be3bae` DONE claim is superseded by `OW-119`; `OW-116`'s visual result was not accepted and is addressed by `OW-120`'s narrow fix, still an OWNER GATE. The previous auto loop remains complete; `OW-66` is the owner's live-Zen check with no code work and every `PARKED` item remains intentionally skipped.
 
 Completed this session: fixed the zero-width Big Picture notes tree and split 29–56 day weeks into equal-height timetables.
 
 Previously: added F1–F5 to the roadmap, then shipped `OW-111`..`OW-115`, `T4.3a`, `T4.3b`, `T4.3c` and the `ST7.4` research report, each with tests RED on the previous HEAD and GREEN after the fix, the `--keep-version` chain, full suite (`276/276` after the ninth new suite) and `git diff --check`. F1: record tabs now obey `backgroundMode` in Level 2/limiter/Game Mode. F2: `keep_pinned` → `unload_pinned` with one-time migration and a one-release fallback, no default change. F3: the video preview publishes a live `__zentralVideoSourceTab` getter over `deps.current`, removed on destroy. F4: `tools/audit-pending-placeholder-css.cjs` + `tests/ow-114-pending-placeholder-css.test.cjs` + `docs/ow-114-pending-css-audit.md` are the screenshot-free audit; eight narrow Notes/Agenda overrides at `additional/tabs/ZentralTabDensity.css:937` restore opacity/filter/layout. F5: `runLevel2()` now returns `skippedCounts` for every named reason while keeping the bounded `skipped` sample; `boost.state()` publishes `lastSkipped` and `{pinned, unpinned}` loaded-tab counts; the Boost popup added one disabled, localized explanation row after a deep pass with skips, with the counts in its tooltip (OW-121 later folds that row into the Deep card tooltip to keep the popup one row high). `tests/ow-115-boost-skipped.test.cjs` covers both widget languages, the real deep-pass result and no new pref. T4.3a: `additional/notes/calendar/ZentralNotesCalendarUI.js` is a new `notes-calendar-ui` part embedded in the standalone bundle; the monolith delegates 23 calendar UI decisions through `CALENDAR_UI`, keeps a compatibility shim, and still exposes the old core seam plus `CALENDAR_UI_PART` / `CALENDAR_UI`. `tests/notes-calendar-ui-part.test.cjs` covers the API, manifest order, delegation, seam and missing-part fallback. T4.3b: `additional/notes/parser/ZentralNotesParserGraph.js` is a new `notes-parser` part with 20 pure parser/wiki-graph/import-export decisions and a `createParserGraph(deps)` factory; 20 monolith functions delegate through `PARSER_UI` when the part is present and keep their original inline bodies when it is absent. `tests/notes-parser-graph-part.test.cjs` covers the API, manifest order, delegation, seam and missing-part fallback. T4.3c: `additional/notes/zen/ZentralNotesZenSidebar.js` is a new `notes-zen-sidebar` part with 21 pure Zen-sidebar UI decisions and a `createZenSidebar(deps, config)` factory; 21 monolith functions delegate through `ZEN_UI` when present and keep inline fallback bodies when absent. `ZentralNotes.uc.js` remains the single build/loader entry: one catalog entry, one manifest `entry`/`output`, one Sine script, one `loadPart` and one `include` row for the part. `tests/notes-zen-sidebar-part.test.cjs` covers the API, factory, single build entry, delegation, seam and missing-part fallback. ST7.4: `docs/st7-4-agenda-rows-research.md` is the prototype report. It documents the real-tab Agenda projection, a proposed flag-gated non-tab row design (`zen.workspace.zentral.notes.agenda_dom_rows`, not shipped), the hover/drag/session contracts, the live-Zen owner gate and the static abandon decision; no runtime prototype, pref, timer or listener was added. `tests/st7-4-agenda-rows-research.test.cjs` pins the report, its Git visibility and its verification limits. `docs/perf-results.md` has one line per task. Corrective `OW-119`: restored the compact-tabs stylesheet and generated compact-hover bundle byte-for-byte, moved OW-116's `filter`/`opacity` rules into Notes CSS, removed the duplicate panels `const docRoot` `SyntaxError`, regenerated the OW-114 audit with `visual` rules separate, and added `tests/ow-119-compact-tabs-look-regression.test.cjs` (RED on `04be3bae` for both causes, GREEN here). Diagnostic-first `OW-120`: the owner ran `owner-sidebar-console-diagnostics.md` and attached a 5.46 MB Browser Console JSON; `docs/ow-120-owner-diagnosis.md` records the expanded-state geometry (12 px centred Notes header, 26 px note row / 0 px label container, Agenda `opacity: 0.69` / `filter: grayscale(1)`). The fix adds a narrow, high-specificity OW-120 block in `additional/notes/ZentralNotes.css` for the three owned Notes/Agenda folder markers and the two `[pending]` placeholder markers; the OW-116 block, compact-tabs CSS and compact-hover bundles are unchanged. `tools/audit-pending-placeholder-css.cjs` now reports 42 separate `placeholder-layout` rules; `tests/ow-120-agenda-folder-scope.test.cjs` is RED on the old CSS and GREEN here. The owner deleted that temporary diagnostic from GitHub after running it (`13755e4`, "delete temp file"); it is intentionally not re-added. The first diagnostic capped matched rules at 120, so exact third-party custom-sheet selectors remain unresolved and no extra follow-up is shipped. Boost UX `OW-121`: all four owner propositions are implemented in one 26 px popup row (Light / Deep / Game / Restore), with a shared light clean before every deep pass, deterministic en/pl tooltips and a one-line skipped-tabs suffix in the existing toast; no added card height, pref, timer, listener or DOM row. `docs/ow-121-boost-ux.md` and `tests/ow-121-boost-ux.test.cjs` cover it.
+=======
+State: **3.4.0 on beta**. Prerequisites `OW-108`–`OW-110` (through `0090091`, merged here as `c86d4b6`) are included. All five owner Boost-audit findings F1–F5 (`OW-111`–`OW-115`), `T4.3a`–`T4.3c`, the `ST7.4` prototype report, the four-bug owner fix set (`OW-116`–`OW-118`), the corrective compact-tabs/runtime-syntax fix `OW-119`, the diagnostic-first Notes/Agenda visual fix `OW-120`, the four-proposition Boost UX fix `OW-121` and the post-restart Spaces Sync pseudo-tab isolation fix `OW-122` are DONE; owner chose weather **Option A**; `OW-124` and `OW-127`–`OW-132` are statically DONE with pure helpers/RED→GREEN suites, the post-batch regression sweep is DONE with four fixes and one new six-test suite, `OW-123` remains evidence-gated, and `OW-125` / `OW-126` are static audits only (see `docs/LEGACY_done_rows.md`, `docs/bugfix-2026-11-18.md`, `docs/ow-120-owner-diagnosis.md`, `docs/ow-121-boost-ux.md` and `docs/ow-122-restart-pseudo-tabs.md`). `OW-117` resize performance and `OW-118` Boost RAM reporting are owner-accepted as fixed. The earlier `04be3bae` DONE claim is superseded by `OW-119`; `OW-116`'s visual result was not accepted and is addressed by `OW-120`'s narrow fix, still an OWNER GATE. The previous auto loop remains complete; `OW-66` is the owner's live-Zen check with no code work and every `PARKED` item remains intentionally skipped.
 
-**Owner four-bug set (2026-11-18) + `OW-120` diagnostic follow-up:** `OW-117` resize performance and `OW-118` Boost RAM reporting are owner-accepted as fixed. `OW-119` corrected the rejected `04be3bae` compact-tabs/panels regression. `OW-116` heals both label roads and favicons but its visible result was not accepted; the owner Browser Console JSON showed that its CSS and the OW-114 compact overrides only matched `zen-folder[bgalazka-notes-folder]`, while Agenda rows live under `bgalazka-notes-agenda-folder` / `-day`. `OW-120` therefore adds narrow Notes/Agenda-folder-scoped `filter`/`opacity` and geometry rules without changing Zen's collapsed/expanded sidebar behavior, ordinary compact tabs or the compact-tabs stylesheet. Details: `docs/bugfix-2026-11-18.md` and `docs/ow-120-owner-diagnosis.md`. `tests/ow-116-pending-placeholder-visuals.test.cjs`, `tests/ow-117-notes-resize-coalescing.test.cjs`, `tests/ow-118-boost-procinfo-bytes.test.cjs`, `tests/ow-119-compact-tabs-look-regression.test.cjs` and `tests/ow-120-agenda-folder-scope.test.cjs` cover the source; exact `--keep-version` chain is `CHAIN_GREEN` and the docs-inclusive full suite is `282/282 passed; 0 failed` (`325.2 s` combined / `120 s` wall), `0 TODO failing: none` (details in `docs/bugfix-2026-11-18.md` and `docs/ow-121-boost-ux.md`). Live Notes/Agenda visuals, compact-tabs appearance, real resize/frame-rate performance and live RAM measurement are OWNER GATEs, not claimed.
+Completed this session: added F1–F5 to the roadmap, then shipped `OW-111`..`OW-115`, `T4.3a`, `T4.3b`, `T4.3c` and the `ST7.4` research report, each with tests RED on the previous HEAD and GREEN after the fix, the `--keep-version` chain, full suite (`276/276` after the ninth new suite) and `git diff --check`. F1: record tabs now obey `backgroundMode` in Level 2/limiter/Game Mode. F2: `keep_pinned` → `unload_pinned` with one-time migration and a one-release fallback, no default change. F3: the video preview publishes a live `__zentralVideoSourceTab` getter over `deps.current`, removed on destroy. F4: `tools/audit-pending-placeholder-css.cjs` + `tests/ow-114-pending-placeholder-css.test.cjs` + `docs/ow-114-pending-css-audit.md` are the screenshot-free audit; eight narrow Notes/Agenda overrides at `additional/tabs/ZentralTabDensity.css:937` restore opacity/filter/layout. F5: `runLevel2()` now returns `skippedCounts` for every named reason while keeping the bounded `skipped` sample; `boost.state()` publishes `lastSkipped` and `{pinned, unpinned}` loaded-tab counts; the Boost popup added one disabled, localized explanation row after a deep pass with skips, with the counts in its tooltip (OW-121 later folds that row into the Deep card tooltip to keep the popup one row high). `tests/ow-115-boost-skipped.test.cjs` covers both widget languages, the real deep-pass result and no new pref. T4.3a: `additional/notes/calendar/ZentralNotesCalendarUI.js` is a new `notes-calendar-ui` part embedded in the standalone bundle; the monolith delegates 23 calendar UI decisions through `CALENDAR_UI`, keeps a compatibility shim, and still exposes the old core seam plus `CALENDAR_UI_PART` / `CALENDAR_UI`. `tests/notes-calendar-ui-part.test.cjs` covers the API, manifest order, delegation, seam and missing-part fallback. T4.3b: `additional/notes/parser/ZentralNotesParserGraph.js` is a new `notes-parser` part with 20 pure parser/wiki-graph/import-export decisions and a `createParserGraph(deps)` factory; 20 monolith functions delegate through `PARSER_UI` when the part is present and keep their original inline bodies when it is absent. `tests/notes-parser-graph-part.test.cjs` covers the API, manifest order, delegation, seam and missing-part fallback. T4.3c: `additional/notes/zen/ZentralNotesZenSidebar.js` is a new `notes-zen-sidebar` part with 21 pure Zen-sidebar UI decisions and a `createZenSidebar(deps, config)` factory; 21 monolith functions delegate through `ZEN_UI` when present and keep inline fallback bodies when absent. `ZentralNotes.uc.js` remains the single build/loader entry: one catalog entry, one manifest `entry`/`output`, one Sine script, one `loadPart` and one `include` row for the part. `tests/notes-zen-sidebar-part.test.cjs` covers the API, factory, single build entry, delegation, seam and missing-part fallback. ST7.4: `docs/st7-4-agenda-rows-research.md` is the prototype report. It documents the real-tab Agenda projection, a proposed flag-gated non-tab row design (`zen.workspace.zentral.notes.agenda_dom_rows`, not shipped), the hover/drag/session contracts, the live-Zen owner gate and the static abandon decision; no runtime prototype, pref, timer or listener was added. `tests/st7-4-agenda-rows-research.test.cjs` pins the report, its Git visibility and its verification limits. `docs/perf-results.md` has one line per task. Corrective `OW-119`: restored the compact-tabs stylesheet and generated compact-hover bundle byte-for-byte, moved OW-116's `filter`/`opacity` rules into Notes CSS, removed the duplicate panels `const docRoot` `SyntaxError`, regenerated the OW-114 audit with `visual` rules separate, and added `tests/ow-119-compact-tabs-look-regression.test.cjs` (RED on `04be3bae` for both causes, GREEN here). Diagnostic-first `OW-120`: the owner ran `owner-sidebar-console-diagnostics.md` and attached a 5.46 MB Browser Console JSON; `docs/ow-120-owner-diagnosis.md` records the expanded-state geometry (12 px centred Notes header, 26 px note row / 0 px label container, Agenda `opacity: 0.69` / `filter: grayscale(1)`). The fix adds a narrow, high-specificity OW-120 block in `additional/notes/ZentralNotes.css` for the three owned Notes/Agenda folder markers and the two `[pending]` placeholder markers; the OW-116 block, compact-tabs CSS and compact-hover bundles are unchanged. `tools/audit-pending-placeholder-css.cjs` now reports 42 separate `placeholder-layout` rules; `tests/ow-120-agenda-folder-scope.test.cjs` is RED on the old CSS and GREEN here. The owner deleted that temporary diagnostic from GitHub after running it (`13755e4`, "delete temp file"); it is intentionally not re-added. The first diagnostic capped matched rules at 120, so exact third-party custom-sheet selectors remain unresolved and no extra follow-up is shipped. Boost UX `OW-121`: all four owner propositions are implemented in one 26 px popup row (Light / Deep / Game / Restore), with a shared light clean before every deep pass, deterministic en/pl tooltips and a one-line skipped-tabs suffix in the existing toast; no added card height, pref, timer, listener or DOM row. `docs/ow-121-boost-ux.md` and `tests/ow-121-boost-ux.test.cjs` cover it. Restart/Spaces Sync `OW-122`: the owner reported two untitled favicon-only pending pinned tabs after a Zen 1.24.3b restart. Upstream tag `1.24.3b` was verified to assign `zenSyncId` to every opened tab, collect blank stand-ins that have one, persist `_zenPinnedInitialState`, project pinned `about:blank#zn-*` seeds through the `Spaces` engine and re-materialize them as lazy pinned tabs with static data-URI icons. Local shields now wrap `ZenWindowSync`, `ZenSessionStore.getSidebarData()`, `ZenSpacesSyncModel.projections()` and `ZenSpacesSyncApplier.applyBatch()`; the sync-finish allowlist includes `Spaces`; stray pending pseudo-tabs are swept at startup, sync finish, restore and delayed boot. `tests/ow-122-restart-pseudo-tabs.test.cjs` is RED on `f4b6a51` and GREEN here (8 passed); `docs/ow-122-restart-pseudo-tabs.md` carries the full evidence chain. Backlog setup `OW-123`–`OW-132`: added the ten owner rows/blocks, `tests/ow-123-ow-132-backlog.test.cjs`, `tests/zen-1243b-compat.test.cjs`, `tests/zen-125t-compat.test.cjs`, `tests/weather-rain-options.test.cjs`, and the reports `docs/zen-1243b-compat-audit.md`, `docs/zen-125t-compat-audit.md`, `docs/weather-rain-options.md`. Zen 1.24.3b needs no static mod change beyond `OW-122`; Twilight 1.25t has no tagged build yet, so no window guard is guessed. Weather implementation is deliberately gated on the owner's Open-Meteo option; `OW-123`/`OW-124` are gated on short targeted live tab attributes, not a full dump. No product fix for those gated items is claimed. Post-batch regression sweep: `tests/ow-127-ow-132-regression-sweep.test.cjs` (6 passed) found and pinned four cross-feature regressions (daily rain intensity, orphan quick-note opener, stale pill click latch and nested inherited-colour preview); the exact `--keep-version` chain, regenerated standalone/locks, 16 targeted suites and docs-inclusive full suite `294/294 passed; 0 failed` are green.
+>>>>>>> c9a40c9f63370ac412ebec7b7a750cb1114f2c92
+
+**Approved backlog implementation (this session):** owner chose weather Option A, `paste_rows`, and all five non-gated fixes. `OW-124` pins the supplied two-label XUL row and removes the legacy XUL `value` road; `OW-127` adds two space-policy prefs and pure planning; `OW-128` adds one-request hourly + bounded 15-minute rain timing with hourly/daily fallback and EN/PL phrases; `OW-129` hides the quick note behind an accessible chevron; `OW-130` splits short hide-once from the 550 ms hold toggle; `OW-131` adds a composer item-color override/inherit control; `OW-132` colors only newly installed DEMO notes. Six new/updated RED→GREEN suites, the new six-test cross-feature regression sweep and the revised weather/options/backlog/compat/quick-note/composer specs are green. The sweep fixed four batched regressions: daily `precipitation_hours` was misread as mm/h heavy rain, an orphaned quick-note Save left the chevron row open with stale text, cancelled pill gestures could swallow the next click, and the composer showed a nested `Inherit` sentence inside its concise colour preview. Exact `--keep-version` chain is `CHAIN_GREEN` (12 packages, `601 Sine preferences`, z-map `42/72/3`), generated standalone/locks and the CSS audit are rebuilt by their tools, and the docs-inclusive full suite is `294/294 passed; 0 failed`. No live click, restart, visual, timing, gesture, composer or Help-folder color result is claimed.
+
+**Owner four-bug set (2026-11-18) + `OW-120` diagnostic follow-up:** `OW-117` resize performance and `OW-118` Boost RAM reporting are owner-accepted as fixed. `OW-119` corrected the rejected `04be3bae` compact-tabs/panels regression. `OW-116` heals both label roads and favicons but its visible result was not accepted; the owner Browser Console JSON showed that its CSS and the OW-114 compact overrides only matched `zen-folder[bgalazka-notes-folder]`, while Agenda rows live under `bgalazka-notes-agenda-folder` / `-day`. `OW-120` therefore adds narrow Notes/Agenda-folder-scoped `filter`/`opacity` and geometry rules without changing Zen's collapsed/expanded sidebar behavior, ordinary compact tabs or the compact-tabs stylesheet. Details: `docs/bugfix-2026-11-18.md` and `docs/ow-120-owner-diagnosis.md`. `tests/ow-116-pending-placeholder-visuals.test.cjs`, `tests/ow-117-notes-resize-coalescing.test.cjs`, `tests/ow-118-boost-procinfo-bytes.test.cjs`, `tests/ow-119-compact-tabs-look-regression.test.cjs` and `tests/ow-120-agenda-folder-scope.test.cjs` cover the source; exact `--keep-version` chain is `CHAIN_GREEN`; the earlier docs-inclusive full suite was `293/293 passed; 0 failed` and the current regression-sweep-inclusive suite is `294/294 passed; 0 failed`, `0 TODO failing: none` (details in `docs/bugfix-2026-11-18.md`, `docs/ow-121-boost-ux.md` and `docs/ow-122-restart-pseudo-tabs.md`). Live Notes/Agenda visuals, compact-tabs appearance, real resize/frame-rate performance and live RAM measurement are OWNER GATEs, not claimed.
 
 **OW-114 CSS audit report (screenshot-free; full table in `docs/ow-114-pending-css-audit.md`):** after `OW-120`, 87 candidate rules in `additional` + `extension` CSS mention `[pending]` / `[pending="true"]` (17 original candidates, 10 Notes-owned OW-116 visual selector rows and 42 OW-120 `placeholder-layout` selector rows). Four OUR compact-density rules MATCH a pinned parked placeholder and hide/collapse it or its folder: `additional/tabs/ZentralTabDensity.css:357` (collapsed child tab: height/opacity/pointer-events/overflow), `additional/tabs/ZentralTabDensity.css:371` (its `.tab-content`), `additional/tabs/ZentralTabDensity.css:388` (nested folder with no "loaded" pinned tab), `additional/tabs/ZentralTabDensity.css:488` (folder whose header Zen zeroed and no "loaded" pinned tab). Five `extension/appearance/ZentralAppearance.css` candidates at `:300`, `:307`, `:316`, `:323`, `:323` do NOT match: they require a LOADED Essential-panel tile/launcher inside the pending tab, which a Notes/Agenda placeholder never has. Eight original narrow override selectors at `additional/tabs/ZentralTabDensity.css:937` restore the row/folder look; the stylesheet ends at `:983` and is byte-for-byte the pre-regression compact-tabs file. Ten `OW-116` visual selector rows in `additional/notes/ZentralNotes.css` reset only opacity/filter and are reported as `visual`, never as compact overrides. The generated audit lists 8 overrides, 10 visual rules and 42 OW-120 `placeholder-layout` rules; the OW-120 rules are never counted as compact-density matches. `zentral/groups/styles/ZentralGroupsInjected.css` already resets `filter: none` for a pending folder tab, but it is outside the audited trees and covers only the filter.
 
 **Third-party / OWNER GATE:** `arc-grayscale-unloaded-tabs = true` and `browser.tabs.fadeOutUnloadedTabs = true` are Arc 2.0 / Zen mod styles, not rules in this repository. `OW-120` now overrides their computed `filter` / `opacity` on owned Notes/Agenda placeholders, but the exact third-party selectors were truncated by the first diagnostic's 120-rule cap. The owner deleted the temporary diagnostic file after running it; no custom-sheet follow-up is shipped or re-added. No live Zen/Sine runtime or screenshot is available here. OWNER GATE: compare Notes folder alignment, Notes/Agenda titles, Agenda favicon colour, grayscale/opacity and spacing with compact mode, a collapsed folder and the space indicator; also verify ordinary compact tabs keep their clipping, icon visibility and row sizing after `OW-119`. `docs/ow-114-pending-css-audit.md` and `docs/ow-120-owner-diagnosis.md` carry the same caveat; do not present the visual result as verified until the owner checks it.
 
+<<<<<<< HEAD
 Known debts: calendar geometry reproduced in headless Chromium, not yet checked in Zen. no live Zen/Sine runtime is available in this session; repository tests and CI must be used where possible, and live-only claims must not be presented as verified. The `OW-120` visual OWNER GATE (Notes folder alignment, Notes/Agenda titles, Agenda favicon colour, grayscale/opacity and spacing with compact mode, a collapsed folder and the space indicator) and the `OW-119` live compact-tabs OWNER GATE remain open; `OW-117` resize performance and `OW-118` Boost RAM reporting are owner-accepted as fixed, while real frame-rate and live `about:processes` measurements are still not claimed. Third-party Arc/Zen selectors remain outside this repository; OW-120 overrides only their computed effect on owned placeholders. `ST7.4` research is DONE but its proposed non-tab row implementation is abandoned statically: a future live-Zen spike would still have to prove folder hosting, drag, hover, session and workspace behaviour before reopening it. Boost dropdown, deep-clean/light-clean behavior and boost-level descriptions were implemented in `OW-121`; live Boost popup height/appearance is now the remaining Boost OWNER GATE.
 
 Next action: get owner approval before any fixes to `OW-123` findings; the static audit is not a full live feature-removal matrix. In Zen verify the three fresh Notes starting heights and saved resizing; then open Big Picture after dragging the docked tree splitter; toggle the tree and compare 28, 29 and 56 days. Then continue the owner live-Zen/Sine checks for `OW-120` (Notes folder alignment, Notes/Agenda titles, Agenda favicon colour, grayscale/opacity and spacing), `OW-119` (ordinary compact-tabs look) and `OW-121` (Boost popup still fits one row, compact labels, tooltips and deep result line), then re-confirm the already owner-accepted `OW-117` resize feel and `OW-118` Boost RAM reading if desired; after `OW-121`, no further approved code work is open here. If exact third-party Arc 2.0 / Sine selectors are ever needed, request a new owner-approved diagnostic; the old temporary file is not re-added. Owner live-Zen `OW-66` and every `PARKED` item remain skipped. Keep the version at 3.4.0; never `--bump` or `sync-version`; no ZIP.
+=======
+Known debts: no live Zen/Sine runtime is available in this session; repository tests and CI must be used where possible, and live-only claims must not be presented as verified. The `OW-120` visual OWNER GATE (Notes folder alignment, Notes/Agenda titles, Agenda favicon colour, grayscale/opacity and spacing with compact mode, a collapsed folder and the space indicator) and the `OW-119` live compact-tabs OWNER GATE remain open; `OW-117` resize performance and `OW-118` Boost RAM reporting are owner-accepted as fixed, while real frame-rate and live `about:processes` measurements are still not claimed. Third-party Arc/Zen selectors remain outside this repository; OW-120 overrides only their computed effect on owned placeholders. `ST7.4` research is DONE but its proposed non-tab row implementation is abandoned statically: a future live-Zen spike would still have to prove folder hosting, drag, hover, session and workspace behaviour before reopening it. Boost dropdown, deep-clean/light-clean behavior and boost-level descriptions were implemented in `OW-121`; live Boost popup height/appearance is now the remaining Boost OWNER GATE. `OW-122` adds a live post-restart OWNER GATE: confirm the two untitled favicon-only seeds do not return with Spaces Sync signed in, clicking any remaining pseudo-tab still opens Notes/Agenda, and ordinary pinned tabs, folders, compact tabs and multi-window tabs are unchanged. Exact stale-record count on the owner's Firefox Account was not available here. The new static fixes add live OWNER GATEs for `OW-124` sidebar titles, `OW-127` narrow-sidebar space/scroll, `OW-128` rain timing/layout, `OW-129` chevron click, `OW-130` pill click/hold/cancel, `OW-131` composer category persistence and `OW-132` Help-folder colors; `OW-123` remains blocked until the outer duplicate-tab attributes are supplied. The static post-batch regression sweep is DONE; it does not replace any live OWNER GATE.
+
+Next action: the static regression sweep is complete; no new static regression work is pending. Owner supplies only the short outer-tab attributes for `OW-123` if that evidence-gated fix should proceed; no weather option needs choosing because Option A is already shipped. Then owner live-Zen/Sine checks for `OW-122` (restart with Spaces Sync signed in; no two untitled favicon-only seeds; click behavior unchanged), `OW-120` (Notes folder alignment, Notes/Agenda titles, Agenda favicon colour, grayscale/opacity and spacing), `OW-119` (ordinary compact-tabs look), `OW-121` (Boost popup still fits one row, compact labels, tooltips and deep result line), `OW-124` (EN/PL titles), `OW-127` (narrow-sidebar space/scroll), `OW-128` (rain timing, localization and layout), `OW-129` (chevron click), `OW-130` (short click / 550 ms hold / Escape), `OW-131` (composer color and category persistence) and `OW-132` (Help-folder colors); re-confirm the already owner-accepted `OW-117` resize feel and `OW-118` Boost RAM reading if desired. `OW-125` / `OW-126` remain static audits until tagged/live Zen facts are available. If exact third-party Arc 2.0 / Sine selectors are ever needed, request a new owner-approved diagnostic; the old temporary file is not re-added. Owner live-Zen `OW-66` and every `PARKED` item remain skipped. Keep the version at 3.4.0; never `--bump` or change the version. `tools/sync-version.cjs` is only the exact chain's no-op 3.4.0 check; no ZIP or `.git` archive.
+>>>>>>> c9a40c9f63370ac412ebec7b7a750cb1114f2c92

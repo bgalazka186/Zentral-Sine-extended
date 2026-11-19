@@ -347,6 +347,18 @@
     "defaultValue": ""
   },
   {
+    "property": "zen.workspace.zentral.widgets.space_priority",
+    "label": "Widget space priority (ids, first keeps space; empty = current order)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.space_scroll",
+    "label": "Widgets reachable by scroll (ids; empty = all, none = no overflow)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
     "property": "zen.workspace.zentral.widgets.appearance.background",
     "label": "Card background colour (#rrggbb or empty to follow the theme)",
     "type": "string",

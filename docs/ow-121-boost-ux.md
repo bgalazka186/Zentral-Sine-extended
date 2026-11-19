@@ -37,7 +37,9 @@ The Deep card's tooltip also folds in the OW-115 grouped skip reasons and pinned
 - Updated `tests/widgets-boost-card.test.cjs` for the compact labels and accessible full Restore count; all existing Boost/widget/OW-89/OW-91/OW-110/OW-115/OW-118 suites stay green.
 - Exact `--keep-version` chain: `CHAIN_GREEN` — 12 standalone packages, `599 Sine preferences`, z-map `42/72/3`, `catalog checks passed`, `defaults agree`, `Standalone packages are up to date`. Generated Boost/Widgets standalone scripts and locks were rebuilt by `tools/build-standalone.cjs`, never hand-edited.
 - Docs-inclusive full suite: `282/282 passed; 0 failed` (`325.2 s` combined runtime / `120 s` wall), `0 TODO failing: none`, `DOCS_INCLUSIVE_SUITE_EXIT=0`. `git diff --check` clean.
-- No `--bump`, `sync-version`, ZIP or version change.
+- No `--bump` or version change; `tools/sync-version.cjs` is only the exact chain's no-op 3.4.0 check. No ZIP or `.git` archive.
+
+*Historical snapshot:* the `599 Sine preferences` and `282/282` figures above belong to the OW-121 cycle. Later `OW-127` added two prefs (`601`) and the post-batch regression sweep raised the docs-inclusive suite to `294/294`; see `docs/bugfix-2026-11-18.md`.
 
 ## OWNER GATE
 

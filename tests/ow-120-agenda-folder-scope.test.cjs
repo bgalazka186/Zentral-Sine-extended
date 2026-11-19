@@ -139,7 +139,8 @@ test("generated Notes standalone reflects the OW-120 CSS; version stays 3.4.0", 
   assert.notEqual(lock.hash, OLD_NOTES_LOCK_HASH, "--keep-version refreshed the CSS content hash without changing the version");
   assert.match(read("additional/notes/ZentralNotes.standalone.uc.js"), /@version 3\.4\.0/);
   assert.match(read("loader/Zentral.uc.js"), /3\.4\.0/);
-  assert.match(read("docs/bugfix-2026-11-18.md"), /no `--bump` or `sync-version`/);
+  assert.match(read("docs/bugfix-2026-11-18.md"), /no `--bump` and no version change/);
+  assert.match(read("docs/bugfix-2026-11-18.md"), /tools\/sync-version\.cjs/);
 });
 
 (async () => {

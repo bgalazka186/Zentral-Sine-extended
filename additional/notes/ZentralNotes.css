@@ -2770,6 +2770,9 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-compose-clock-host:empty { display: none; }
 .zentral-notes-sheet .zn-cal-compose-color-row { display: flex; align-items: center; gap: 8px; margin: 5px 0 10px; color: var(--zn-muted); font-size: .85em; }
 .zentral-notes-sheet .zn-cal-compose-color { width: 1em; height: 1em; flex: none; border: 1px solid var(--zn-line); border-radius: 50%; }
+.zentral-notes-sheet .zn-cal-compose-color-input { width: 26px; height: 22px; padding: 1px; flex: none; border: 1px solid var(--zn-line); border-radius: 5px; background: transparent; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-compose-color-inherit { flex: none; padding: 2px 7px; font-size: .9em; }
+.zentral-notes-sheet .zn-cal-compose-color-inherit:disabled { opacity: .55; cursor: default; }
 .zentral-notes-sheet .zn-cal-compose-section { min-width: 0; }
 .zentral-notes-sheet .zn-cal-compose-alerts { margin-top: 14px; }
 .zentral-notes-sheet .zn-cal-compose-status[data-error="true"] { color: #ff6b6b; }

@@ -527,6 +527,8 @@
       "compose.agenda.heading": "Widoczno\u015b\u0107 w Agendzie (niezale\u017cna od alert\u00f3w)",
       "compose.agenda.help": "Wybierz, czy ten element ma pojawia\u0107 si\u0119 w Zen Agendzie oraz przez ile lokalnych dni przed i po terminie ma pozosta\u0107 widoczny. Odziedziczone warto\u015bci pochodz\u0105 z powi\u0105zanej notatki, kategorii, a nast\u0119pnie z ustawie\u0144 globalnych.",
       "compose.color.default": "Kolor dziedziczy po powi\u0105zanej notatce, a nast\u0119pnie po kategorii",
+      "compose.color.custom": "W\u0142asny kolor elementu: {label}",
+      "compose.color.inherit": "Dziedzicz kolor",
       "compose.color.effective": "Aktywny kolor elementu: {label}",
       "compose.color.none": "Brak odziedziczonego koloru ani koloru kategorii ({label})",
       "compose.field.description": "Opis",

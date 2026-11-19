@@ -46,14 +46,15 @@ function makeZenSidebar({ El, document }) {
   const pinned = mk("vbox", "zen-workspace-tabs-section zen-workspace-pinned-tabs-section");
   ws.append(scroll); scroll.append(pinned); document.body.append(ws);
   // a tab: tab > stack.tab-stack > hbox.tab-content > stack.tab-icon-stack > img.tab-icon-image
-  // plus Zen's native label node. Firefox/Zen can rewrite the `label` attribute and the
-  // `.tab-label` node independently when a placeholder is parked, so the harness keeps both.
+  // plus Zen's native label node. Firefox/Zen own the `label` attribute and the
+  // `.tab-label` textContent through `text=label`; OW-124 removed the second XUL
+  // `value` road, so the harness now starts from the native one-road shape.
   const tab = (label, attrs = {}) => {
     const t = mk("tab", "tabbrowser-tab", { label, pinned: "true", ...attrs });
     const content = mk("hbox", "tab-content");
     const img = mk("img", "tab-icon-image", { src: "data:image/x-icon;base64,AAAA" });
     const iconStack = mk("stack", "tab-icon-stack"), labelContainer = mk("hbox", "tab-label-container");
-    const labelNode = mk("label", "tab-label", { value: label }); labelNode.textContent = label;
+    const labelNode = mk("label", "tab-label"); labelNode.textContent = label;
     iconStack.append(img); labelContainer.append(labelNode); content.append(iconStack, labelContainer);
     t.append(mk("stack", "tab-stack")); t.querySelector(".tab-stack").append(content);
     return t;

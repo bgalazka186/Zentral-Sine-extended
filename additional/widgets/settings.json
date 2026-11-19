@@ -64,6 +64,18 @@
       "defaultValue": ""
     },
     {
+      "property": "zen.workspace.zentral.widgets.space_priority",
+      "label": "Widget space priority (ids, first keeps space; empty = current order)",
+      "type": "input",
+      "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.zentral.widgets.space_scroll",
+      "label": "Widgets reachable by scroll (ids; empty = all, none = no overflow)",
+      "type": "input",
+      "defaultValue": ""
+    },
+    {
       "property": "zen.workspace.zentral.widgets.appearance.background",
       "label": "Card background colour (#rrggbb or empty to follow the theme)",
       "type": "input",
@@ -494,6 +506,16 @@
       "owner": "widgets"
     },
     "zen.workspace.zentral.widgets.order": {
+      "category": "widgets",
+      "section": "Layout & visibility",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.space_priority": {
+      "category": "widgets",
+      "section": "Layout & visibility",
+      "owner": "widgets"
+    },
+    "zen.workspace.zentral.widgets.space_scroll": {
       "category": "widgets",
       "section": "Layout & visibility",
       "owner": "widgets"

@@ -1194,6 +1194,9 @@ function nativeSidebarSide() {
     TIMER_CLICK_STOPWATCH: "zen.workspace.zentral.widgets.timer.click_stopwatch",
     CLOCK_QUICK_NOTE: "zen.workspace.zentral.widgets.clock.quick_note",
     ORDER: "zen.workspace.zentral.widgets.order",
+    // OW-127: two text policies, not one guessed "pinned widget". Empty means today's behavior.
+    SPACE_PRIORITY: "zen.workspace.zentral.widgets.space_priority",
+    SPACE_SCROLL: "zen.workspace.zentral.widgets.space_scroll",
     APPEARANCE_BG: "zen.workspace.zentral.widgets.appearance.background",
     APPEARANCE_TEXT: "zen.workspace.zentral.widgets.appearance.text",
     // OW-56: one Clock card, two faces; and what a finished countdown does.
@@ -1237,6 +1240,8 @@ function nativeSidebarSide() {
     TIMER_CLICK_STOPWATCH: true,
     CLOCK_QUICK_NOTE: true,
     ORDER: "",
+    SPACE_PRIORITY: "",
+    SPACE_SCROLL: "",
     APPEARANCE_BG: "",
     APPEARANCE_TEXT: "",
     CLOCK_MODE: "clock",
@@ -1305,6 +1310,8 @@ function nativeSidebarSide() {
       "tray.moved": "{title} moved to position {position} of {total}",
       "tray.moveHint": "Move this widget: click, or press Alt+Up / Alt+Down",
       "clock.aria": "Clock. Click for the timer.",
+      "clock.quickNoteOpen": "Show quick note",
+      "clock.quickNoteClose": "Hide quick note",
       "clock.ariaAlert": "Countdown finished. ",
       "timer.aria": "Timer {value}{kind}. Click for the clock.",
       "timer.kind.countdown": ", countdown",
@@ -1383,6 +1390,8 @@ function nativeSidebarSide() {
       "tray.moved": "{title} przeniesiono na pozycję {position} z {total}",
       "tray.moveHint": "Przenieś ten widget: kliknij albo użyj Alt+góra / Alt+dół",
       "clock.aria": "Zegar. Kliknij, aby otworzyć minutnik.",
+      "clock.quickNoteOpen": "Pokaż szybką notatkę",
+      "clock.quickNoteClose": "Ukryj szybką notatkę",
       "clock.ariaAlert": "Minutnik zakończony. ",
       "timer.aria": "Minutnik {value}{kind}. Kliknij, aby wrócić do zegara.",
       "timer.kind.countdown": ", odliczanie",
@@ -1446,6 +1455,27 @@ function nativeSidebarSide() {
   // A week is what the card needs: today, tomorrow, and the first day that looks wet. One request, same host.
   const WEATHER_FORECAST_DAYS = 7;
   const WET_ICON_GROUPS = Object.freeze(["rain", "snow", "sleet", "storm", "drizzle"]);
+  // OW-128: rain, freezing rain, showers and thunderstorms are "wet"; snow is
+  // deliberately not called rain. WMO 65/67/82 or >=3 mm/h are "heavy rain".
+  const WEATHER_RAIN_ICON_GROUPS = Object.freeze(["rain", "sleet", "storm", "drizzle"]);
+  const WEATHER_RAIN_CODES = Object.freeze([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99]);
+  const WEATHER_HEAVY_RAIN_CODES = Object.freeze([65, 67, 82]);
+  const WEATHER_RAIN_MMH = 0.1;
+  const WEATHER_HEAVY_RAIN_MMH = 3;
+  const WEATHER_RAIN_TEXT = Object.freeze({
+    en: Object.freeze({
+      rain: "Rain", now: "now", today: "today", tomorrow: "tomorrow", dayAfter: "in 2 days",
+      inDays: "in {n} days", minutesShort: "~{n} min", minutesLong: "in ~{n} min",
+      hoursShort: "~{n} h", hoursLong: "in ~{n} h", allDay: "all day", heavy: "heavy rain",
+      noRain: "No rain this week",
+    }),
+    pl: Object.freeze({
+      rain: "Deszcz", now: "teraz", today: "dzisiaj", tomorrow: "jutro", dayAfter: "pojutrze",
+      inDays: "za {n} dni", minutesShort: "~{n} min", minutesLong: "za ~{n} min",
+      hoursShort: "~{n} godz.", hoursLong: "za ~{n} godz.", allDay: "cały dzień", heavy: "ulewa",
+      noRain: "Brak deszczu w tym tygodniu",
+    }),
+  });
 
   const LIMITS = Object.freeze({
     MAX_HEIGHT_SHARE: [15, 80],
@@ -1562,6 +1592,93 @@ function nativeSidebarSide() {
     next.splice(at, 1);
     next.splice(to, 0, id);
     return next;
+  }
+
+  // OW-127: space priority is independent from display order. The first id keeps space;
+  // the END of this list gives it up. Scroll access is per widget: empty = all,
+  // "none" = no overflow access, otherwise only the named ids. Unknown ids never
+  // turn into hidden widgets. No choice is made for the owner by default.
+  function cleanWidgetSpacePolicy(priorityRaw, scrollRaw, registeredIds = []) {
+    const ids = Array.isArray(registeredIds) ? registeredIds.map(normalizeWidgetId).filter(Boolean) : [];
+    const known = (id) => ids.includes(id);
+    const chosen = cleanWidgetOrder(priorityRaw).filter(known);
+    const priority = [...chosen];
+    for (const id of ids) if (!priority.includes(id)) priority.push(id);
+    const rawScroll = String(scrollRaw ?? "").trim().toLowerCase();
+    let scroll = [];
+    let scrollMode = "some";
+    if (!rawScroll || rawScroll === "all") {
+      scroll = ids.slice();
+      scrollMode = "all";
+    } else if (rawScroll === "none") {
+      scrollMode = "none";
+    } else {
+      scroll = cleanWidgetOrder(scrollRaw).filter(known);
+    }
+    const never = ids.filter((id) => !scroll.includes(id));
+    return { priority, scroll, never, scrollMode };
+  }
+  // The tray already owns overflow-y:auto. Under pressure, keep a prefix in the
+  // visible budget, append widgets the owner allowed to be reached by scroll,
+  // and unmount the rest. Without pressure every enabled widget stays mounted.
+  function planWidgetSpace(defs, policy = {}, opts = {}) {
+    const list = Array.isArray(defs) ? defs.filter(Boolean) : [];
+    const ids = list.map((d) => normalizeWidgetId(d.id)).filter(Boolean);
+    const priority = Array.isArray(policy.priority) ? policy.priority.filter((id) => ids.includes(id)) : [];
+    const order = [...priority];
+    for (const id of ids) if (!order.includes(id)) order.push(id);
+    const scrollSet = new Set(Array.isArray(policy.scroll) ? policy.scroll : []);
+    const pressure = Boolean(opts.pressure);
+    const minHeight = Math.max(1, Math.floor(Number(opts.minHeight) || 48));
+    let budget = Math.max(0, Math.floor(Number(opts.maxHeight) || 0));
+    const byId = new Map(list.filter((d) => normalizeWidgetId(d.id)).map((d) => [normalizeWidgetId(d.id), d]));
+    const visible = [];
+    const scroll = [];
+    const never = [];
+    if (!pressure) {
+      // No pressure: the owner's display order is untouched and every enabled
+      // widget stays mounted. Priority is only a rule for constrained space.
+      return {
+        pressure: false,
+        visible: ids.slice(),
+        scroll: [],
+        never: [],
+        order: ids.slice(),
+        trayScroll: false,
+        spaceMode: "all",
+      };
+    }
+    for (const id of order) {
+      const need = Math.max(1, Math.floor(Number(byId.get(id)?.minHeight) || minHeight));
+      if (budget >= need) { visible.push(id); budget -= need; continue; }
+      if (scrollSet.has(id)) scroll.push(id);
+      else never.push(id);
+    }
+    const trayScroll = pressure && scroll.length > 0;
+    return {
+      pressure,
+      visible,
+      scroll,
+      never,
+      order: [...visible, ...scroll],
+      trayScroll,
+      spaceMode: !pressure ? "all" : trayScroll ? "scroll" : "fixed",
+    };
+  }
+  // OW-129: one pure visibility state for the chevron and the OW-69 switch.
+  // `opened` belongs to one mounted Clock card; it is deliberately not a pref.
+  function clockQuickNoteVisibility(input = {}) {
+    const enabled = input.enabled !== false;
+    const canNote = Boolean(input.canNote);
+    const available = enabled && canNote;
+    const visible = available && Boolean(input.opened);
+    return {
+      available,
+      visible,
+      expanded: visible,
+      toggleHidden: !available,
+      ariaPressed: visible ? "true" : "false",
+    };
   }
 
   // OW-72: the colours a person may pick. "" means "follow the theme", which is the default and writes nothing at all.
@@ -3560,7 +3677,16 @@ function nativeSidebarSide() {
       "longitude=" + p.longitude,
       "current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
       "daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_hours,snowfall_sum",
+      // OW-128 Option A: hourly is the robust 48-hour base; minutely_15 is an
+      // optional near-term prefix. Missing/interpolated 15-minute data falls
+      // back to hourly, and an old daily-only cache falls back to the week.
+      "hourly=precipitation,rain,showers,weather_code,precipitation_probability",
+      "minutely_15=precipitation,rain,weather_code",
       "forecast_days=" + WEATHER_FORECAST_DAYS,
+      "forecast_hours=48",
+      "forecast_minutely_15=48",
+      "past_minutely_15=0",
+      "precipitation_unit=mm",
       "timeformat=unixtime",
       "timezone=auto",
       resolveWeatherUnits(units) === "imperial" ? "temperature_unit=fahrenheit&wind_speed_unit=mph" : "temperature_unit=celsius&wind_speed_unit=kmh",
@@ -3574,6 +3700,172 @@ function nativeSidebarSide() {
     const f = 10 ** digits;
     return Math.round(n * f) / f;
   };
+
+  // ---- OW-128 / Open-Meteo Option A: pure rain-timing rules -------------------------------
+  const weatherRainLanguage = (lang) => String(lang || "").toLowerCase().startsWith("pl") ? "pl" : "en";
+  const weatherRainStrings = (lang) => WEATHER_RAIN_TEXT[weatherRainLanguage(lang)];
+  const weatherRainFill = (template, params = {}) => String(template).replace(/\{(\w+)\}/g, (_m, key) => String(params[key] ?? ""));
+  const weatherRainNumber = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.max(0, n) : 0;
+  };
+
+  function isWetRainSample(sample) {
+    if (!sample || typeof sample !== "object") return false;
+    const info = weatherCodeInfo(sample.code);
+    if (!WEATHER_RAIN_ICON_GROUPS.includes(info.icon) && !WEATHER_RAIN_CODES.includes(Number(sample.code))) return false;
+    return weatherRainNumber(sample.precipitation) > WEATHER_RAIN_MMH ||
+      WEATHER_RAIN_CODES.includes(Number(sample.code)) ||
+      weatherRainNumber(sample.probability) >= 40;
+  }
+  function isHeavyRainSample(sample) {
+    if (!sample || typeof sample !== "object") return false;
+    return WEATHER_HEAVY_RAIN_CODES.includes(Number(sample.code)) ||
+      weatherRainNumber(sample.precipitation) >= WEATHER_HEAVY_RAIN_MMH;
+  }
+  function normalizeWeatherRainSeries(raw, intervalSeconds, cap) {
+    const source = raw && typeof raw === "object" ? raw : {};
+    const times = Array.isArray(source.time) ? source.time : [];
+    const columns = ["precipitation", "rain", "showers"];
+    const codes = Array.isArray(source.weather_code) ? source.weather_code : [];
+    const chances = Array.isArray(source.precipitation_probability) ? source.precipitation_probability : [];
+    const out = [];
+    for (let i = 0; i < Math.min(times.length, cap); i++) {
+      const time = Number(times[i]);
+      if (!Number.isFinite(time)) continue;
+      const amounts = columns.map((key) => weatherRainNumber(Array.isArray(source[key]) ? source[key][i] : 0));
+      const sample = {
+        time,
+        intervalSeconds,
+        code: Math.round(Number(codes[i]) || 0),
+        precipitation: roundWeather(Math.max(...amounts), 2),
+        probability: chances.length > i && Number.isFinite(Number(chances[i])) ? roundWeather(chances[i]) : null,
+      };
+      sample.wet = isWetRainSample(sample);
+      sample.heavy = isHeavyRainSample(sample);
+      out.push(sample);
+    }
+    return out;
+  }
+  function readWeatherRainSeries(payload) {
+    const p = payload && typeof payload === "object" ? payload : {};
+    const offset = Number(p.utc_offset_seconds);
+    const currentTime = Number(p.current?.time);
+    return {
+      hourly: normalizeWeatherRainSeries(p.hourly, 3600, 48),
+      minutely15: normalizeWeatherRainSeries(p.minutely_15, 900, 96),
+      observedAt: Number.isFinite(currentTime) ? currentTime * 1000 : 0,
+      timezone: typeof p.timezone === "string" ? p.timezone : "",
+      utcOffsetSeconds: Number.isFinite(offset) ? offset : 0,
+    };
+  }
+  function weatherRainLocalParts(seconds, offsetSeconds) {
+    const localMs = (Number(seconds) + Number(offsetSeconds || 0)) * 1000;
+    const date = new Date(localMs);
+    return {
+      dayIndex: Math.floor(localMs / 86400000),
+      hour: date.getUTCHours(),
+      minute: date.getUTCMinutes(),
+    };
+  }
+  function weatherRainWindow(run, offsetSeconds, intervalSeconds) {
+    const first = run[0], last = run[run.length - 1];
+    const start = weatherRainLocalParts(first.time, offsetSeconds);
+    const end = weatherRainLocalParts(last.time + intervalSeconds, offsetSeconds);
+    let endHour = end.dayIndex > start.dayIndex ? 24 : end.hour;
+    if (end.dayIndex === start.dayIndex && end.minute > 0) endHour = Math.min(24, endHour + 1);
+    const startHour = start.hour;
+    const hours = run.length * intervalSeconds / 3600;
+    return {
+      window: startHour === endHour ? String(startHour) : startHour + "\u2013" + endHour,
+      startHour,
+      endHour,
+      hours,
+      allDay: hours >= 12 || (startHour <= 6 && endHour >= 20),
+    };
+  }
+  function weatherRainText(plan, lang) {
+    const s = weatherRainStrings(lang);
+    const dayWord = plan.dayOffset === 0 ? s.today
+      : plan.dayOffset === 1 ? s.tomorrow
+        : plan.dayOffset === 2 ? s.dayAfter
+          : weatherRainFill(s.inDays, { n: plan.dayOffset });
+    const useHours = plan.onsetMinutes >= 90 || (plan.onsetMinutes >= 60 && plan.source !== "minutely_15");
+    const onsetShort = !useHours
+      ? weatherRainFill(s.minutesShort, { n: plan.onsetMinutes })
+      : weatherRainFill(s.hoursShort, { n: Math.max(1, Math.round(plan.onsetMinutes / 60)) });
+    const onsetLong = !useHours
+      ? weatherRainFill(s.minutesLong, { n: plan.onsetMinutes })
+      : weatherRainFill(s.hoursLong, { n: Math.max(1, Math.round(plan.onsetMinutes / 60)) });
+    const timedOnset = !plan.allDay && plan.dayOffset === 0 && plan.source !== "daily" && plan.onsetMinutes > 0 && plan.onsetMinutes < 180;
+    const head = plan.allDay ? s.allDay : timedOnset ? onsetShort : plan.onsetMinutes <= 0 ? s.now : dayWord;
+    const headLong = plan.allDay || (plan.dayOffset > 0 && plan.source !== "minutely_15") || plan.source === "daily"
+      ? head
+      : timedOnset ? onsetLong : plan.onsetMinutes <= 0 ? s.now : head;
+    const detail = plan.allDay ? [] : [plan.window].filter(Boolean);
+    const short = [s.rain, head, ...detail].filter(Boolean).join(" \u00b7 ");
+    const long = [s.rain, headLong, ...detail, plan.heavy ? s.heavy : ""].filter(Boolean).join(" \u00b7 ");
+    return { short, long, text: long };
+  }
+  function weatherRainPlan(value, opts = {}) {
+    const v = value && typeof value === "object" ? value : {};
+    const lang = weatherRainLanguage(opts.lang);
+    const strings = weatherRainStrings(lang);
+    const rain = v.rain && typeof v.rain === "object" ? v.rain : readWeatherRainSeries(v);
+    const offset = Number(rain.utcOffsetSeconds || v.utcOffsetSeconds || 0);
+    const nowMs = Number(opts.nowMs) || Number(v.observedAt || rain.observedAt) || Date.now();
+    const now = nowMs / 1000;
+    const days = Array.isArray(v.week) ? v.week : [];
+    const fromSeries = (samples, intervalSeconds, source) => {
+      const candidates = (Array.isArray(samples) ? samples : [])
+        .filter((sample) => sample.time >= now - intervalSeconds && sample.time <= now + 48 * 3600)
+        .sort((a, b) => a.time - b.time);
+      const at = candidates.findIndex((sample) => sample.wet && sample.time + intervalSeconds > now);
+      if (at < 0) return null;
+      const run = [];
+      for (let i = at; i < candidates.length; i++) {
+        const sample = candidates[i];
+        if (!sample.wet) break;
+        if (run.length && sample.time !== run[run.length - 1].time + intervalSeconds) break;
+        run.push(sample);
+      }
+      const onset = candidates[at];
+      const rawMinutes = Math.max(0, Math.round((onset.time - now) / 60));
+      const intervalMinutes = intervalSeconds / 60;
+      const onsetMinutes = rawMinutes <= 0 ? 0 : Math.max(intervalMinutes, Math.round(rawMinutes / intervalMinutes) * intervalMinutes);
+      const localOnset = weatherRainLocalParts(onset.time, offset);
+      const localNow = weatherRainLocalParts(now, offset);
+      const window = weatherRainWindow(run, offset, intervalSeconds);
+      const plan = {
+        source,
+        onsetMinutes,
+        dayOffset: Math.max(0, localOnset.dayIndex - localNow.dayIndex),
+        window: window.window,
+        allDay: window.allDay,
+        heavy: run.some((sample) => sample.heavy),
+        noRain: false,
+      };
+      const text = weatherRainText(plan, lang);
+      return { ...plan, short: text.short, long: text.long, text: text.text };
+    };
+    const minutely = (rain.minutely15 || []).filter((sample) => sample.time >= now - 900 && sample.time <= now + 3 * 3600);
+    const hourly = rain.hourly || [];
+    const plan = fromSeries(minutely, 900, "minutely_15") ||
+      fromSeries(hourly, 3600, "hourly") ||
+      (() => {
+        const wet = nextWetDay(days, 0, lang);
+        if (!wet) return { source: "daily", onsetMinutes: 0, dayOffset: 0, window: "", allDay: false, heavy: false, noRain: true, short: "", long: "", text: "" };
+        const day = days[wet.index] || {};
+        // Daily `precipitation_hours` is a duration, not an mm/h intensity.
+        // Only WMO 65/67/82 can honestly claim heavy rain on the daily fallback.
+        const heavy = WEATHER_HEAVY_RAIN_CODES.includes(Number(wet.code));
+        const allDay = weatherRainNumber(day.precipitationHours) >= 8;
+        const dailyPlan = { source: "daily", onsetMinutes: 999, dayOffset: wet.index, window: "", allDay, heavy, noRain: false };
+        const text = weatherRainText(dailyPlan, lang);
+        return { ...dailyPlan, short: text.short, long: text.long, text: text.text };
+      })();
+    return { ...plan, noRainText: strings.noRain };
+  }
 
   // A day is "wet" when its code says rain/snow/sleet/storm AND the numbers agree (hours of precipitation or a real
   // chance of it). A dry-looking code with 90% probability, or a wet code with zero hours and zero chance, is noise.
@@ -3717,37 +4009,48 @@ function nativeSidebarSide() {
 
   // What the card's second line says. Wide: tomorrow plus the next wet day. Narrow: one of them, and a click swaps.
   // Pure, so the swap is testable without a sidebar.
-  function weatherOutlookParts(week, opts = {}) {
-    const days = Array.isArray(week) ? week : [];
+  function weatherOutlookParts(raw, opts = {}) {
+    const value = Array.isArray(raw) ? { week: raw } : (raw && typeof raw === "object" ? raw : {});
+    const days = Array.isArray(value.week) ? value.week : [];
     const labels = weatherUnitLabels(opts.units, opts.countryCode);
     const temp = (n) => (n == null ? "" : Math.round(n) + labels.temperature);
+    const lang = weatherRainLanguage(opts.lang);
+    const strings = weatherRainStrings(lang);
     const tomorrow = days[1] || null;
-    const wet = nextWetDay(days, 1);
-    // "tomorrow" itself counts as the next wet day; say so once, not twice.
-    const wetIsTomorrow = Boolean(wet && wet.index === 1);
+    const wet = nextWetDay(days, 0, lang);
     const wetText = wet
-      ? wetIsTomorrow
-        ? "Rain tomorrow"
-        : wet.daysAhead === 2
-          ? "Rain in 2 days"
-          : "Rain " + wet.label.toLowerCase() + " in " + wet.daysAhead + " days"
+      ? wet.index === 0
+        ? strings.rain + " " + strings.today
+        : wet.index === 1
+          ? strings.rain + " " + (lang === "pl" ? strings.tomorrow : "tomorrow")
+          : wet.index === 2
+            ? strings.rain + " " + (lang === "pl" ? strings.dayAfter : "in 2 days")
+            : strings.rain + " " + weatherRainFill(strings.inDays, { n: wet.daysAhead })
       : days.length > 1
-        ? "No rain this week"
+        ? strings.noRain
         : "";
     const tomorrowText = tomorrow
       ? "Tomorrow " + temp(tomorrow.high) + " / " + temp(tomorrow.low) + (tomorrow.icon && tomorrow.icon !== "sun" ? " " + tomorrow.icon : "")
       : "";
-    // OW-54: the two halves are two lines, never one that a narrow card shortens. A whole answer that wraps onto a
-    // second row is read at a glance; a fragment of it is not read at all.
+    const rain = weatherRainPlan(value, opts);
+    const rainShort = rain.short || "";
+    const rainLong = rain.long || "";
+    const rainLines = rainShort ? [{ type: "rain", short: rainShort, long: rainLong, text: rainLong }] : [];
+    // OW-54: the legacy pair stays two whole lines. OW-128's precise timing is
+    // a separate short/long pair so a narrow card never truncates either half.
     const lines = [tomorrowText, wetText].filter(Boolean);
     return {
       tomorrow: tomorrowText,
       wet: wetText,
       wetDay: wet ? { ...wet } : null,
       lines,
-      // Kept for callers that want the old pair (and for an older card that swapped between them).
+      rain,
+      rainShort,
+      rainLong,
+      rainSource: rain.source,
+      rainLines,
       faces: lines.slice(),
-      text: lines.join(" \u00b7 "),
+      text: [rainLong, ...lines].filter(Boolean).join(" \u00b7 "),
     };
   }
 
@@ -3757,6 +4060,7 @@ function nativeSidebarSide() {
     const cur = payload.current;
     if (!cur || typeof cur !== "object") return null;
     const info = weatherCodeInfo(cur.weather_code, lang);
+    const rain = readWeatherRainSeries(payload);
     const day = payload.daily || {};
     const high = Array.isArray(day.temperature_2m_max) ? roundWeather(day.temperature_2m_max[0]) : null;
     const low = Array.isArray(day.temperature_2m_min) ? roundWeather(day.temperature_2m_min[0]) : null;
@@ -3781,6 +4085,8 @@ function nativeSidebarSide() {
     }));
     return {
       week,
+      rain,
+      utcOffsetSeconds: rain.utcOffsetSeconds,
       units: cleanWeatherUnits(units),
       temperature: roundWeather(cur.temperature_2m, 1),
       humidity: roundWeather(cur.relative_humidity_2m),
@@ -3921,6 +4227,11 @@ function nativeSidebarSide() {
     isWetDay,
     nextWetDay,
     weatherOutlookParts,
+    readWeatherRainSeries,
+    isWetRainSample,
+    isHeavyRainSample,
+    weatherRainPlan,
+    weatherRainText,
     // OW-95 / OW-109: the three views and the two gestures, exported so the rules are testable without a card.
     WEATHER_VIEWS,
     cleanWeatherView,
@@ -3945,6 +4256,9 @@ function nativeSidebarSide() {
     cleanWidgetColor, parseWidgetColor, contrastRatio, widgetAppearanceVars, CONTRAST_MIN,
     orderedByIds,
     moveInOrder,
+    cleanWidgetSpacePolicy,
+    planWidgetSpace,
+    clockQuickNoteVisibility,
     resolveClockClick,
     resolveClockPanelState,
     WIDGET_MODES,
@@ -4056,6 +4370,7 @@ function nativeSidebarSide() {
       let rootAttrObserver = null;
       let rafMeasure = null;
       let lastArea = computeWidgetArea({}, { enabled: false });
+      let lastSpacePlan = null;
       // OW-67: the previous "is the tray on screen" answer, so only a real transition repaints (never every measure).
       let wasVisible = false;
 
@@ -4090,6 +4405,8 @@ function nativeSidebarSide() {
           disabledIds: parseDisabledIds(
             getString(WIDGET_PREFS.DISABLED_IDS, ""),
           ),
+          spacePriority: getString(WIDGET_PREFS.SPACE_PRIORITY, DEFAULTS.SPACE_PRIORITY),
+          spaceScroll: getString(WIDGET_PREFS.SPACE_SCROLL, DEFAULTS.SPACE_SCROLL),
         };
       }
 
@@ -4510,12 +4827,6 @@ function nativeSidebarSide() {
         const enabledDefs = config.enabled
           ? defs.filter((d) => isWidgetEnabled(d, config))
           : [];
-        const enabledIds = new Set(enabledDefs.map((d) => d.id));
-
-        // Unmount disabled or removed widgets first.
-        for (const id of [...mountedCards.keys()]) {
-          if (!enabledIds.has(id)) unmountWidgetCard(id);
-        }
 
         if (config.enabled) {
           ensureTray();
@@ -4541,9 +4852,34 @@ function nativeSidebarSide() {
         });
         lastArea = area;
 
+        // OW-127: decide which enabled widgets keep their place BEFORE mounting.
+        // The tray already scrolls; this only prevents never-accessible cards
+        // from being mounted while free height is under pressure.
+        const spacePolicy = cleanWidgetSpacePolicy(config.spacePriority, config.spaceScroll, defs.map((d) => d.id));
+        const spaceMinHeight = 48;
+        const estimatedHeight = enabledDefs.length * spaceMinHeight + Math.max(0, enabledDefs.length - 1) * 6;
+        const spacePressure = Boolean(area.visible && area.maxTrayHeight > 0 && estimatedHeight > area.maxTrayHeight);
+        const spacePlan = planWidgetSpace(enabledDefs, spacePolicy, {
+          maxHeight: area.maxTrayHeight,
+          minHeight: spaceMinHeight,
+          pressure: spacePressure,
+        });
+        lastSpacePlan = spacePlan;
+        const mountableIds = new Set(spacePlan.order);
+
+        // Unmount disabled, removed, or explicitly never-accessible widgets first.
+        for (const id of [...mountedCards.keys()]) {
+          if (!mountableIds.has(id)) unmountWidgetCard(id);
+        }
+        if (tray) {
+          tray.setAttribute("data-zw-space-mode", spacePlan.spaceMode);
+          tray.setAttribute("data-zw-space-pressure", spacePressure ? "true" : "false");
+        }
+
         // Mount newly enabled widgets in deterministic sort order.
         if (config.enabled && tray) {
           for (const def of enabledDefs) {
+            if (!mountableIds.has(def.id)) continue;
             if (!mountedCards.has(def.id)) {
               let instance = null;
               try {
@@ -4580,6 +4916,17 @@ function nativeSidebarSide() {
                 tray.appendChild(mounted.card);
               }
             }
+          }
+          // OW-127: the tray's flex order follows the visible/scroll plan, not a
+          // guessed pinned widget; no card is hidden with a generic CSS rule.
+          for (const [id, mounted] of mountedCards) {
+            const role = spacePlan.visible.includes(id)
+              ? "visible"
+              : spacePlan.scroll.includes(id)
+                ? "scroll"
+                : "never";
+            mounted.card.setAttribute("data-zw-space", role);
+            mounted.card.style.setProperty("order", String(Math.max(0, spacePlan.order.indexOf(id))));
           }
           // OW-100: the cards are in place now, so each handle re-reads whether it has anywhere to move. This runs after
           // the mount and the reorder, so the count it sees is the one a person sees.
@@ -5070,6 +5417,17 @@ function nativeSidebarSide() {
           clockNoteChip.textContent = tw("timer.note");
           clockNoteChip.title = tw("timer.noteAria");
           clockNoteChip.setAttribute("aria-label", tw("timer.noteAria"));
+          // OW-129: one small bottom-right chevron. It is absolutely positioned, so the
+          // Clock card keeps its height and the quick note starts closed.
+          const clockNoteToggle = doc.createElement("button");
+          clockNoteToggle.type = "button";
+          clockNoteToggle.className = "zw-clock-note-toggle";
+          clockNoteToggle.textContent = "\u2304";
+          clockNoteToggle.setAttribute("aria-expanded", "false");
+          clockNoteToggle.setAttribute("aria-pressed", "false");
+          clockNoteToggle.setAttribute("aria-label", tw("clock.quickNoteOpen"));
+          clockNoteToggle.title = tw("clock.quickNoteOpen");
+          let quickNoteOpen = false;
 
           const modeHintEl = doc.createElement("div");
           modeHintEl.className = "zw-card-meta zw-clock-mode-hint";
@@ -5087,6 +5445,7 @@ function nativeSidebarSide() {
           wrap.appendChild(zoneEl);
           wrap.appendChild(clockNoteRow);
           wrap.appendChild(modeHintEl);
+          wrap.appendChild(clockNoteToggle);
           presets.appendChild(clockNoteChip);
 
           // T3.9d: the Clock is also a shortcut. A plain click starts/stops the stopwatch, a long press (or a
@@ -5310,25 +5669,44 @@ function nativeSidebarSide() {
           const saveClockNote = () => {
             const text = String(clockNoteField.value || "").trim();
             const opener = resolveCalendarOpener(window);
-            if (!opener || typeof opener.openQuickNote !== "function") return;
+            if (!opener || typeof opener.openQuickNote !== "function") {
+              clockNoteField.value = "";
+              quickNoteOpen = false;
+              syncClockNote();
+              return;
+            }
             try { opener.openQuickNote(text); } catch (_) {}
             clockNoteField.value = "";
-            clockNoteRow.hidden = true;
+            quickNoteOpen = false;
+            syncClockNote();
           };
-          // The quick note is part of the Clock face, not a feature to switch on: it is there whenever Notes can take a
-          // note, and it simply disappears when it cannot. No chip, no fold, nothing to configure.
-          // OW-69: one honest switch (the old chip-and-fold arrangement is gone for good). Off means the row is not in
-          // the layout at all — it reserves no space and is not merely invisible — and it is live, no restart.
+          // OW-69 keeps its one honest switch; OW-129 adds a per-card open state.
+          // The row is hidden by default, and an unavailable switch hides the
+          // control too — a button that cannot work is worse than none.
           const syncClockNote = () => {
             const opener = resolveCalendarOpener(window);
             const wanted = getBool(WIDGET_PREFS.CLOCK_QUICK_NOTE, DEFAULTS.CLOCK_QUICK_NOTE);
             const canNote = Boolean(opener && typeof opener.openQuickNote === "function");
-            const ok = wanted && canNote;
+            const state = clockQuickNoteVisibility({ enabled: wanted, canNote, opened: quickNoteOpen });
+            if (!state.available) quickNoteOpen = false;
             clockNoteChip.hidden = true;
-            clockNoteRow.hidden = !ok;
-            clockNoteRow.setAttribute("data-zw-forced-off", ok ? "false" : "true");
-            clockNoteRow.style.display = ok ? "" : "none";
+            clockNoteToggle.hidden = state.toggleHidden;
+            clockNoteToggle.setAttribute("aria-expanded", state.expanded ? "true" : "false");
+            clockNoteToggle.setAttribute("aria-pressed", state.ariaPressed);
+            clockNoteToggle.setAttribute("data-zw-open", state.visible ? "true" : "false");
+            clockNoteToggle.setAttribute("aria-label", tw(state.visible ? "clock.quickNoteClose" : "clock.quickNoteOpen"));
+            clockNoteToggle.title = clockNoteToggle.getAttribute("aria-label");
+            clockNoteRow.hidden = !state.visible;
+            clockNoteRow.setAttribute("data-zw-forced-off", state.available ? "false" : "true");
+            clockNoteRow.style.display = state.visible ? "" : "none";
           };
+          clockNoteToggle.addEventListener("click", (e) => {
+            e?.stopPropagation?.();
+            if (clockNoteToggle.hidden) return;
+            quickNoteOpen = !quickNoteOpen;
+            syncClockNote();
+            if (quickNoteOpen) try { clockNoteField.focus?.(); } catch (_) {}
+          });
           clockNoteRow.addEventListener("click", (e) => e?.stopPropagation?.());
           clockNoteBtn.addEventListener("click", (e) => { e?.stopPropagation?.(); saveClockNote(); });
           clockNoteField.addEventListener("keydown", (e) => {
@@ -5686,6 +6064,22 @@ function nativeSidebarSide() {
             for (const line of lines) {
               const row = doc.createElement("span");
               row.className = "zw-weather-outlook-line";
+              if (line && typeof line === "object" && line.type === "rain") {
+                // OW-128: one DOM row, two density-scoped text spans. Both wrap;
+                // neither is clipped with an ellipsis or swapped behind a click.
+                row.classList.add("zw-weather-rain-line");
+                const shortEl = doc.createElement("span");
+                shortEl.className = "zw-weather-rain-short";
+                shortEl.textContent = String(line.short || line.text || "");
+                const longEl = doc.createElement("span");
+                longEl.className = "zw-weather-rain-long";
+                longEl.textContent = String(line.long || line.text || "");
+                row.appendChild(shortEl);
+                row.appendChild(longEl);
+                row.title = String(line.long || line.text || "");
+                outlookEl.appendChild(row);
+                continue;
+              }
               if (line && typeof line === "object") {
                 row.classList.add("zw-weather-outlook-week-line");
                 // A week row: glyph, compact date + actual weather description, high/low.
@@ -5801,8 +6195,14 @@ function nativeSidebarSide() {
               if (view === "week") paintOutlook(shown?.lines || [], opts);
               else if (view === "tomorrow") paintOutlook([], opts);
               else {
-                const outlook = weatherOutlookParts(value.week, opts);
-                paintOutlook((outlook.lines || []).map((line) => String(line)), opts);
+                const outlook = weatherOutlookParts(value, { ...opts, lang });
+                const rainLine = (outlook.rainLines || [])[0] || null;
+                paintOutlook(
+                  rainLine
+                    ? [rainLine, ...(outlook.tomorrow ? [outlook.tomorrow] : [])]
+                    : (outlook.lines || []).map((line) => String(line)),
+                  opts,
+                );
               }
             } catch (err) {
               outlookEl.hidden = true;
