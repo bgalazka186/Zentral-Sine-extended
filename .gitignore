@@ -29,6 +29,7 @@ docs/*
 !docs/bugfix-2026-11-18.md
 !docs/ow-120-owner-diagnosis.md
 !docs/ow-121-boost-ux.md
+!docs/ow-122-restart-pseudo-tabs.md
 patches/
 zentral/upstream/
 

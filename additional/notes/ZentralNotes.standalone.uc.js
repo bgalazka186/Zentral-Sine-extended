@@ -28839,6 +28839,201 @@ __zentralShim.register = function (def) {
     const STALE_PSEUDO_TAB_ATTRS = [NOTES_ATTR, AGENDA_ATTR, EPHEMERAL_TAB_ATTR, SKIP_SESSION_ATTR];
     const PSEUDO_PAYLOAD_HINT_RE = /zn-(?:note:|new:|agenda-)|bgalazka-zentral-notes|zentral-notes-agenda|bgalazka-ephemeral-tab/;
     const isManagedPseudoFolderId = (id) => typeof id === "string" && (id === NOTES_ZEN_ROOT_ID || id.startsWith(NOTES_ZEN_SUB_PREFIX) || id === AGENDA_ROOT_ID || id.startsWith("zentral-notes-agenda-day-"));
+
+    // Zen 1.24.x gives every opened tab a persistent zenSyncId and freezes a
+    // pinned tab's canonical url/title/icon in _zenPinnedInitialState. A
+    // discarded Notes/Agenda seed can lose its fragment URL and its in-memory
+    // expando while that native pin record still points at about:blank#zn-*,
+    // which Spaces Sync can project back after a restart. Recognize that native
+    // evidence without trusting it on a live real page.
+    const ZENTRAL_PSEUDO_URL_RE = /^about:blank#zn-(?:note:|new:|agenda-)/;
+    const isPseudoSpacesSyncUrl = (value) => ZENTRAL_PSEUDO_URL_RE.test(String(value || ""));
+    function zenPinnedPseudoUrl(tab) {
+      try {
+        const live = String(tab?.linkedBrowser?.currentURI?.spec || "");
+        if (live && live !== "about:blank" && !ZENTRAL_PSEUDO_URL_RE.test(live)) return "";
+        const pinned = String(tab?._zenPinnedInitialState?.entry?.url || "");
+        return ZENTRAL_PSEUDO_URL_RE.test(pinned) ? pinned : "";
+      } catch (_) { return ""; }
+    }
+    function isZentralPseudoTab(tab) {
+      if (!tab) return false;
+      try {
+        const live = String(tab.linkedBrowser?.currentURI?.spec || "");
+        if (live && live !== "about:blank") return ZENTRAL_PSEUDO_URL_RE.test(live);
+        const marked = !!(tab.hasAttribute?.(NOTES_ATTR) || tab.hasAttribute?.(AGENDA_ATTR) || tab.hasAttribute?.(EPHEMERAL_TAB_ATTR) || tab.hasAttribute?.(SKIP_SESSION_ATTR));
+        const remembered = String(tab._zentralNotesUrl || "");
+        return !!(marked || ZENTRAL_PSEUDO_URL_RE.test(remembered) || zenPinnedPseudoUrl(tab));
+      } catch (_) { return false; }
+    }
+    const spacesSyncChildId = (value) => {
+      if (typeof value === "string") return value;
+      if (value && typeof value === "object") return String(value.id || value.tabId || value.folderId || value.splitId || "");
+      return "";
+    };
+    function cleanSpacesSyncData(data, removedIds) {
+      if (!data || typeof data !== "object" || !removedIds?.size) return { data, changed: false };
+      let next = null, changed = false;
+      for (const key of ["children", "tabs"]) {
+        if (!Array.isArray(data[key])) continue;
+        const kept = data[key].filter((value) => !removedIds.has(spacesSyncChildId(value)));
+        if (kept.length !== data[key].length) {
+          if (!next) next = { ...data };
+          next[key] = kept;
+          changed = true;
+        }
+      }
+      if (data.essentials && typeof data.essentials === "object" && !Array.isArray(data.essentials)) {
+        const essentials = {};
+        let essentialsChanged = false;
+        for (const [key, value] of Object.entries(data.essentials)) {
+          if (Array.isArray(value)) {
+            const kept = value.filter((id) => !removedIds.has(String(id)));
+            if (kept.length !== value.length) essentialsChanged = true;
+            essentials[key] = kept;
+          } else essentials[key] = value;
+        }
+        if (essentialsChanged) {
+          if (!next) next = { ...data };
+          next.essentials = essentials;
+          changed = true;
+        }
+      }
+      return { data: next || data, changed };
+    }
+    const spacesSyncProjectionCache = new WeakMap();
+    function filterSpacesSyncProjections(projections) {
+      if (!(projections instanceof Map)) return projections;
+      const cached = spacesSyncProjectionCache.get(projections);
+      if (cached && cached.size === projections.size) return cached.filtered;
+      const pseudoIds = new Set();
+      for (const [id, entry] of projections) {
+        if (entry?.kind === "tab" && isPseudoSpacesSyncUrl(entry?.data?.url)) pseudoIds.add(id);
+      }
+      if (!pseudoIds.size) {
+        spacesSyncProjectionCache.set(projections, { size: projections.size, filtered: projections });
+        return projections;
+      }
+      const removedIds = new Set(pseudoIds);
+      for (const [id, entry] of projections) {
+        if (entry?.kind !== "split" || !Array.isArray(entry?.data?.tabs)) continue;
+        const kept = entry.data.tabs.filter((value) => !pseudoIds.has(spacesSyncChildId(value)));
+        if (kept.length < 2) removedIds.add(id);
+      }
+      let droppedFolder = true;
+      while (droppedFolder) {
+        droppedFolder = false;
+        for (const [id, entry] of projections) {
+          if (removedIds.has(id) || entry?.kind !== "folder") continue;
+          const folderId = String(entry?.data?.folderId || id);
+          if (!isManagedPseudoFolderId(folderId)) continue;
+          const children = Array.isArray(entry?.data?.children) ? entry.data.children : [];
+          if (!children.some((value) => !removedIds.has(spacesSyncChildId(value)))) {
+            removedIds.add(id);
+            droppedFolder = true;
+          }
+        }
+      }
+      const next = new Map();
+      let changed = false;
+      for (const [id, entry] of projections) {
+        if (removedIds.has(id)) { changed = true; continue; }
+        const cleaned = cleanSpacesSyncData(entry?.data, removedIds);
+        if (cleaned.changed) { next.set(id, { ...entry, data: cleaned.data }); changed = true; }
+        else next.set(id, entry);
+      }
+      const filtered = changed ? next : projections;
+      spacesSyncProjectionCache.set(projections, { size: projections.size, filtered });
+      return filtered;
+    }
+    function filterSpacesSyncIncomingRecords(records) {
+      const list = Array.isArray(records) ? records : [];
+      const pseudoIds = new Set();
+      for (const record of list) {
+        if (!record?.deleted && record?.cleartext?.kind === "tab" && isPseudoSpacesSyncUrl(record.cleartext?.data?.url)) pseudoIds.add(String(record.id));
+      }
+      if (!pseudoIds.size) return records;
+      const removedIds = new Set(pseudoIds);
+      for (const record of list) {
+        if (record?.deleted || record?.cleartext?.kind !== "split" || !Array.isArray(record.cleartext?.data?.tabs)) continue;
+        const kept = record.cleartext.data.tabs.filter((value) => !pseudoIds.has(spacesSyncChildId(value)));
+        if (kept.length < 2) removedIds.add(String(record.id));
+      }
+      let droppedFolder = true;
+      while (droppedFolder) {
+        droppedFolder = false;
+        for (const record of list) {
+          const id = String(record?.id || "");
+          if (!id || removedIds.has(id) || record?.deleted || record?.cleartext?.kind !== "folder") continue;
+          const folderId = String(record.cleartext?.data?.folderId || id);
+          if (!isManagedPseudoFolderId(folderId)) continue;
+          const children = Array.isArray(record.cleartext?.data?.children) ? record.cleartext.data.children : [];
+          if (!children.some((value) => !removedIds.has(spacesSyncChildId(value)))) {
+            removedIds.add(id);
+            droppedFolder = true;
+          }
+        }
+      }
+      const out = [];
+      let changed = false;
+      for (const record of list) {
+        const id = String(record?.id || "");
+        if (removedIds.has(id)) { changed = true; continue; }
+        const cleaned = cleanSpacesSyncData(record?.cleartext?.data, removedIds);
+        if (cleaned.changed) {
+          out.push({ ...record, cleartext: { ...record.cleartext, data: cleaned.data } });
+          changed = true;
+        } else out.push(record);
+      }
+      return changed ? out : records;
+    }
+    const ZEN_WINDOW_SYNC_OPEN_SHIELD = Symbol.for("zentral-notes/zen-window-sync-open-shield/v1");
+    const ZEN_WINDOW_SYNC_PIN_SHIELD = Symbol.for("zentral-notes/zen-window-sync-pin-shield/v1");
+    const ZEN_WINDOW_SYNC_MOVE_SHIELD = Symbol.for("zentral-notes/zen-window-sync-move-shield/v1");
+    function acquireZenWindowSyncShield(target, warn = () => {}) {
+      const skipOwned = (original, self, args) => {
+        try { if (isZentralPseudoTab(args[0]?.target)) return Promise.resolve(); } catch (_) {}
+        return Reflect.apply(original, self, args);
+      };
+      const releases = [];
+      for (const [method, key] of [
+        ["on_TabOpen", ZEN_WINDOW_SYNC_OPEN_SHIELD],
+        ["on_TabPinned", ZEN_WINDOW_SYNC_PIN_SHIELD],
+        ["on_TabMove", ZEN_WINDOW_SYNC_MOVE_SHIELD],
+      ]) {
+        const release = acquireMethodShield(target, method, key, skipOwned, warn);
+        if (release) releases.push(release);
+      }
+      if (!releases.length) return null;
+      const release = () => { for (const fn of releases) fn(); };
+      release.isCurrent = () => releases.every((fn) => fn.isCurrent());
+      return release;
+    }
+    const ZEN_SPACES_SYNC_MODEL_SHIELD = Symbol.for("zentral-notes/zen-spaces-sync-model-projections/v1");
+    function acquireSpacesSyncModelShield(target, warn = () => {}) {
+      return acquireMethodShield(target, "projections", ZEN_SPACES_SYNC_MODEL_SHIELD, (original, self, args, w) => {
+        const result = Reflect.apply(original, self, args);
+        try { return filterSpacesSyncProjections(result); }
+        catch (error) { try { w(error); } catch (_) {} return result; }
+      }, warn);
+    }
+    const ZEN_SPACES_SYNC_APPLIER_SHIELD = Symbol.for("zentral-notes/zen-spaces-sync-applier-batch/v1");
+    function acquireSpacesSyncApplierShield(target, warn = () => {}) {
+      return acquireMethodShield(target, "applyBatch", ZEN_SPACES_SYNC_APPLIER_SHIELD, (original, self, args, w) => {
+        let next = args[0];
+        try { next = filterSpacesSyncIncomingRecords(next); }
+        catch (error) { try { w(error); } catch (_) {} }
+        return Reflect.apply(original, self, [next, ...args.slice(1)]);
+      }, warn);
+    }
+    const ZEN_SIDEBAR_DATA_SHIELD = Symbol.for("zentral-notes/zen-sidebar-data-shield/v1");
+    function acquireZenSidebarDataShield(target, warn = () => {}) {
+      return acquireMethodShield(target, "getSidebarData", ZEN_SIDEBAR_DATA_SHIELD, (original, self, args, w) => {
+        const result = Reflect.apply(original, self, args);
+        try { return filterSessionStoreState(result); }
+        catch (error) { try { w(error); } catch (_) {} return result; }
+      }, warn);
+    }
     function sweepRestoredPseudoTabs(tabs, { notesEnabled = false, agendaEnabled = false, getTabState, removeTab, warn = () => {} } = {}) {
       let removed = 0;
       for (const tab of tabs || []) {
@@ -28863,7 +29058,11 @@ __zentralShim.register = function (def) {
             } catch (_) {}
             continue;
           }
-          const kind = pseudoTabCleanupKind({ url, sessionUrl, remembered: tab._zentralNotesUrl || "", notesMarked: tab.hasAttribute?.(NOTES_ATTR), agendaMarked: tab.hasAttribute?.(AGENDA_ATTR) }, { notesEnabled, agendaEnabled });
+          const pinnedPseudo = zenPinnedPseudoUrl(tab);
+          const effectiveUrl = url && url !== "about:blank" ? url
+            : sessionUrl && sessionUrl !== "about:blank" ? sessionUrl
+              : pinnedPseudo;
+          const kind = pseudoTabCleanupKind({ url: effectiveUrl, sessionUrl, remembered: tab._zentralNotesUrl || pinnedPseudo || "", notesMarked: tab.hasAttribute?.(NOTES_ATTR), agendaMarked: tab.hasAttribute?.(AGENDA_ATTR) }, { notesEnabled, agendaEnabled });
           if (kind && typeof removeTab === "function") { removeTab(tab); removed++; }
         } catch (error) { try { warn(error); } catch (_) {} }
       }
@@ -30254,7 +30453,7 @@ __zentralShim.register = function (def) {
         hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_FOLDER_LABEL, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
         DATE_TITLE_RE, dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
         HISTORY_DIR, HISTORY_DEFAULTS, HISTORY_RANGE, BACKUP_DIR, BACKUP_HOURS, backupEntryName, parseBackupName, backupPlan, backupLeft, UNLOAD_RECOVERY_DIR, UNLOAD_KINDS, unloadEntryStem, parseUnloadEntryName, planUnloadWrites, decideNoteRecovery, historyOptions, historyStamp, historyFileName, parseHistoryName, shouldSnapshot, pruneHistory, historyWarning,
-        orderPlan, childSequence, wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, pseudoTabCleanupKind, sweepRestoredPseudoTabs, filterSessionStoreState, filterZenSidebarState, filterSessionFilePayload, acquireZenSidebarShield, acquireSessionFileShield, isPseudoPinRecord, planSyncedPseudoRecordCleanup, prunePreviouslySyncedPseudoRecords, acquirePinnedTabsStorageShield, restoredPseudoFolderKind, retireRestoredPseudoFolder, CTRL_TAB_FILTER_KEY, registerCtrlTabFilter, projectZen,
+        orderPlan, childSequence, wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, pseudoTabCleanupKind, sweepRestoredPseudoTabs, filterSessionStoreState, filterZenSidebarState, filterSessionFilePayload, acquireZenSidebarShield, acquireZenSidebarDataShield, acquireSessionFileShield, isPseudoPinRecord, planSyncedPseudoRecordCleanup, prunePreviouslySyncedPseudoRecords, acquirePinnedTabsStorageShield, zenPinnedPseudoUrl, isZentralPseudoTab, filterSpacesSyncProjections, filterSpacesSyncIncomingRecords, acquireZenWindowSyncShield, acquireSpacesSyncModelShield, acquireSpacesSyncApplierShield, restoredPseudoFolderKind, retireRestoredPseudoFolder, CTRL_TAB_FILTER_KEY, registerCtrlTabFilter, projectZen,
         utf8Bytes, createPerfSampler, createResourceRegistry, ACTIVE_RESOURCE_INVENTORY, createZenFolder,
       };
     }
@@ -45632,6 +45831,7 @@ __zentralShim.register = function (def) {
       let zenSessionManager = null;
       try { zenSessionManager = ChromeUtils.importESModule?.("resource:///modules/zen/ZenSessionManager.sys.mjs")?.ZenSessionStore || null; } catch (_) {}
       attachNativeShield("notes-zen-sidebar-session-shield", () => zenSessionManager, acquireZenSidebarShield);
+      attachNativeShield("notes-zen-sidebar-data-shield", () => zenSessionManager, acquireZenSidebarDataShield);
 
       let firefoxSessionFile = null;
       try { firefoxSessionFile = ChromeUtils.importESModule?.("resource:///modules/sessionstore/SessionFile.sys.mjs")?.SessionFile || null; } catch (_) {}
@@ -45643,6 +45843,24 @@ __zentralShim.register = function (def) {
           || window.gZenPinnedTabManager?._zenPinnedTabsStorage || null;
       } catch (_) {}
       attachNativeShield("notes-zen-pinned-storage-shield", () => zenPinnedStorage, acquirePinnedTabsStorageShield);
+
+      // Zen 1.24.x Spaces Sync: do not let a transient Notes/Agenda seed tab
+      // become a synced pin, do not upload an old pseudo record, and do not
+      // materialize one arriving from another device.
+      let zenWindowSync = null;
+      try {
+        zenWindowSync = ChromeUtils.importESModule?.("resource:///modules/zen/ZenWindowSync.sys.mjs")?.ZenWindowSync
+          || window.gZenWindowSync || null;
+      } catch (_) {}
+      attachNativeShield("notes-zen-window-sync-shield", () => zenWindowSync, acquireZenWindowSyncShield);
+
+      let spacesSyncModel = null;
+      try { spacesSyncModel = ChromeUtils.importESModule?.("resource:///modules/zen/ZenSpacesSyncModel.sys.mjs")?.ZenSpacesSyncModel || null; } catch (_) {}
+      attachNativeShield("notes-zen-spaces-sync-model-shield", () => spacesSyncModel, acquireSpacesSyncModelShield);
+
+      let spacesSyncApplier = null;
+      try { spacesSyncApplier = ChromeUtils.importESModule?.("resource:///modules/zen/ZenSpacesSyncApplier.sys.mjs")?.ZenSpacesSyncApplier || null; } catch (_) {}
+      attachNativeShield("notes-zen-spaces-sync-applier-shield", () => spacesSyncApplier, acquireSpacesSyncApplierShield);
 
       const prefBool = (k, d) => {
         try {
@@ -46521,7 +46739,7 @@ __zentralShim.register = function (def) {
       let pseudoTabCreationDepth = 0;
       const internalPseudoTabs = new WeakSet();
       const routedPseudoTabs = new WeakSet();
-      const isZentralPseudoUrl = (url) => /^about:blank#zn-(?:note:|new:|agenda-)/.test(String(url || ""));
+      const isZentralPseudoUrl = (url) => ZENTRAL_PSEUDO_URL_RE.test(String(url || ""));
       function sessionCurrentTabUrl(tab) {
         try {
           if (typeof window.SessionStore?.getTabState !== "function") return null;
@@ -46551,8 +46769,9 @@ __zentralShim.register = function (def) {
           return "";
         }
         const remembered = String(tab._zentralNotesUrl || "");
+        const pinnedPseudo = zenPinnedPseudoUrl(tab);
         const shouldCheckSession = !!(tab.hasAttribute?.(NOTES_ATTR) || tab.hasAttribute?.(AGENDA_ATTR) ||
-          isZentralPseudoUrl(remembered) || tab.pinned || tab.hasAttribute?.("pending"));
+          isZentralPseudoUrl(remembered) || pinnedPseudo || tab.pinned || tab.hasAttribute?.("pending"));
         const sessionUrl = shouldCheckSession ? sessionCurrentTabUrl(tab) : null;
         // Only the current SessionStore entry is meaningful. A pseudo URL in
         // an old history entry must never make a reused normal tab pseudo again.
@@ -46562,12 +46781,13 @@ __zentralShim.register = function (def) {
           // SessionStore entry before its fragment navigation commits. Its
           // in-memory creation mark plus private URL is authoritative only
           // during that window; a live normal URL always wins above.
-          if (sessionUrl === "about:blank" && internalPseudoTabs.has(tab) && isZentralPseudoUrl(remembered))
-            return remembered;
+          if (sessionUrl === "about:blank" && (internalPseudoTabs.has(tab) || pinnedPseudo) && isZentralPseudoUrl(remembered || pinnedPseudo))
+            return isZentralPseudoUrl(remembered) ? remembered : pinnedPseudo;
           clearStalePseudoTabMarks(tab, sessionUrl !== "about:blank");
           return "";
         }
         if (isZentralPseudoUrl(remembered)) return remembered;
+        if (pinnedPseudo) return pinnedPseudo;
         return "";
       }
       function notesTabKey(tab) {
@@ -48666,18 +48886,18 @@ __zentralShim.register = function (def) {
       function pseudoUrlForTab(tab) {
         let live = "";
         try { live = tab?.linkedBrowser?.currentURI?.spec || ""; } catch (_) {}
-        if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(live)) return live;
+        if (isZentralPseudoUrl(live)) return live;
         const remembered = String(tab?._zentralNotesUrl || "");
-        if ((!live || live === "about:blank") && /^about:blank#zn-(?:note:|new:|agenda-)/.test(remembered)) return remembered;
+        if ((!live || live === "about:blank") && isZentralPseudoUrl(remembered)) return remembered;
         try {
           if ((!live || live === "about:blank") && window.SessionStore?.getTabState) {
             const state = JSON.parse(window.SessionStore.getTabState(tab) || "{}");
             const index = Math.max(0, (Number(state.index) || 1) - 1);
             const url = String(state.entries?.[index]?.url || "");
-            if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(url)) return url;
+            if (isZentralPseudoUrl(url)) return url;
           }
         } catch (_) {}
-        return "";
+        return zenPinnedPseudoUrl(tab);
       }
       function agendaEntryForKey(key) {
         if (key === "more:agenda" && agendaController.more) return agendaController.more;
@@ -49382,8 +49602,40 @@ __zentralShim.register = function (def) {
           retireRestoredPseudoFolder(folder, kind);
         }
       }
+      // A restored/Sync-materialized pseudo-tab is only legitimate inside its
+      // managed Notes/Agenda root. A duplicate seed outside the root has no
+      // title, keeps the note favicon and closes as soon as its zn- URL loads.
+      function isManagedPseudoTab(tab) {
+        const notesRoot = zenRootEl(), agendaRoot = agendaRootEl();
+        const url = pseudoUrlForTab(tab);
+        if (/^about:blank#zn-agenda-/.test(url)) return !!agendaRoot?.contains?.(tab);
+        if (parseZenUrl(url)) return !!notesRoot?.contains?.(tab);
+        return !!(tab.hasAttribute?.(AGENDA_ATTR) && agendaRoot?.contains?.(tab));
+      }
+      function cleanStrayPseudoTabs(tabs = null) {
+        const list = tabs || [...(document.querySelectorAll?.("tab") || [])];
+        let removed = 0;
+        for (const tab of list) {
+          try {
+            if (!tab || tab.isConnected === false || tab.closing || tab.hasAttribute?.("zen-essential")) continue;
+            const live = String(tab.linkedBrowser?.currentURI?.spec || "");
+            if (live && live !== "about:blank" && !isZentralPseudoUrl(live)) continue;
+            const sessionUrl = sessionCurrentTabUrl(tab);
+            if (sessionUrl && sessionUrl !== "about:blank" && !isZentralPseudoUrl(sessionUrl)) {
+              clearStalePseudoTabMarks(tab);
+              continue;
+            }
+            if (!isZentralPseudoTab(tab) || isManagedPseudoTab(tab)) continue;
+            zenRemoveTab(tab);
+            removed++;
+          } catch (error) { warn(error); }
+        }
+        return removed;
+      }
       cleanRestoredPseudoTabs([...(document.querySelectorAll?.("tab") || [])]);
+      cleanStrayPseudoTabs();
       cleanDisabledPseudoFolders();
+      try { spacesSyncModel?.invalidate?.(); } catch (_) {}
       let syncPrunePromise = null;
       const pruneSyncedPseudoNow = () => {
         if (disposed || !zenPinnedStorage) return;
@@ -49396,9 +49648,11 @@ __zentralShim.register = function (def) {
         observe(_subject, _topic, data) {
           if (disposed) return;
           const engine = String(data || "");
-          if (engine && !/^(tabs|zen[-_]?pins|pinned[-_]?tabs)$/i.test(engine)) return;
+          if (engine && !/^(tabs|spaces|zen[-_]?pins|pinned[-_]?tabs)$/i.test(engine)) return;
           cleanRestoredPseudoTabs([...(document.querySelectorAll?.("tab") || [])]);
+          cleanStrayPseudoTabs();
           cleanDisabledPseudoFolders();
+          try { spacesSyncModel?.invalidate?.(); } catch (_) {}
           pruneSyncedPseudoNow();
         },
       };
@@ -49420,6 +49674,7 @@ __zentralShim.register = function (def) {
           folder = parent;
         }
         cleanRestoredPseudoTabs([event.target]);
+        cleanStrayPseudoTabs([event.target]);
         if (folder && kind) cleanDisabledPseudoFolders(folder);
         scheduleParkPseudoTab(event.target); // OW-88: a restored placeholder comes back live, park it again
       };
@@ -49431,7 +49686,7 @@ __zentralShim.register = function (def) {
         onCleanup(() => window.removeEventListener("SSTabRestored", onPseudoTabRestored, true));
       }
       // Only the projection waits (it is not on the critical start-up path); the guards are bound at the end of start().
-      const zenBoot = window.setTimeout(zenSoon, 6000);
+      const zenBoot = window.setTimeout(() => { zenSoon(); cleanStrayPseudoTabs(); }, 6000);
       onCleanup(() => window.clearTimeout(zenBoot));
       // A click (or Enter) on one of our tabs opens the note instead of selecting the tab. Capture phase, our tabs only;
       // TabSelect is the second line for keyboard / programmatic selection: it hands the selection straight back.
