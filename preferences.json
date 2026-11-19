@@ -2913,10 +2913,10 @@
   },
   {
     "property": "zen.workspace.zentral.notes.push_panel_percent_text",
-    "label": "Push page in a panel: share of the panel height the Notes sheet takes (%, 20–80) [20 to 80 %]",
+    "label": "Notes share of one web panel (%, 20–80); between two panels starts at 40% [20 to 80 %]",
     "type": "string",
-    "defaultValue": "45",
-    "placeholder": "45"
+    "defaultValue": "50",
+    "placeholder": "50"
   },
   {
     "property": "zen.workspace.zentral.notes.reveal_height_px_text",

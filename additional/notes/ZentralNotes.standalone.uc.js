@@ -166,7 +166,7 @@ const __zentralShim = (function () {
       _observer: observer,
     };
   }
-  const numericItems = [{"key":"zen.workspace.zentral.notes.push_panel_percent","text":"zen.workspace.zentral.notes.push_panel_percent_text","min":20,"max":80,"def":45},{"key":"zen.workspace.zentral.notes.reveal_height_px","text":"zen.workspace.zentral.notes.reveal_height_px_text","min":2,"max":24,"def":10},{"key":"zen.workspace.zentral.notes.reveal_delay_ms","text":"zen.workspace.zentral.notes.reveal_delay_ms_text","min":0,"max":1000,"def":100},{"key":"zen.workspace.zentral.hybrid.dock_push_px","text":"zen.workspace.zentral.hybrid.dock_push_px_text","min":4,"max":440,"def":15},{"key":"zen.workspace.zentral.hybrid.detached_height_percent","text":"zen.workspace.zentral.hybrid.detached_height_percent_text","min":20,"max":100,"def":78},{"key":"zen.workspace.bgalazka.pill_position","text":"zen.workspace.bgalazka.pill_position_text","min":-50,"max":50,"def":0},{"key":"zen.workspace.bgalazka.pill_background_opacity","text":"zen.workspace.bgalazka.pill_background_opacity_text","min":0,"max":100,"def":48},{"key":"zen.workspace.bgalazka.pill_peek_dot_opacity","text":"zen.workspace.bgalazka.pill_peek_dot_opacity_text","min":0,"max":100,"def":31},{"key":"zen.workspace.bgalazka.hover_reveal_width_px","text":"zen.workspace.bgalazka.hover_reveal_width_px_text","min":0,"max":464,"def":1},{"key":"zen.workspace.bgalazka.hover_reveal_delay_ms","text":"zen.workspace.bgalazka.hover_reveal_delay_ms_text","min":0,"max":60000,"def":160},{"key":"zen.workspace.zentral.panels.autohide_delay_ms","text":"zen.workspace.zentral.panels.autohide_delay_ms_text","min":0,"max":60000,"def":400},{"key":"zen.workspace.zentral.notes.wide_percent","text":"zen.workspace.zentral.notes.wide_percent_text","min":130,"max":300,"def":200},{"key":"zen.workspace.zentral.notes.look_radius","text":"zen.workspace.zentral.notes.look_radius_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_border","text":"zen.workspace.zentral.notes.look_border_text","min":-1,"max":8,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_blur","text":"zen.workspace.zentral.notes.look_shadow_blur_text","min":-1,"max":120,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_y","text":"zen.workspace.zentral.notes.look_shadow_y_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_alpha","text":"zen.workspace.zentral.notes.look_shadow_alpha_text","min":-1,"max":100,"def":-1},{"key":"zen.workspace.zentral.notes.look_opacity","text":"zen.workspace.zentral.notes.look_opacity_text","min":-1,"max":100,"def":-1},{"key":"zen.workspace.zentral.notes.look_padding","text":"zen.workspace.zentral.notes.look_padding_text","min":-1,"max":64,"def":-1},{"key":"zen.workspace.zentral.notes.look_btn_size","text":"zen.workspace.zentral.notes.look_btn_size_text","min":-1,"max":56,"def":-1},{"key":"zen.workspace.zentral.notes.look_btn_radius","text":"zen.workspace.zentral.notes.look_btn_radius_text","min":-1,"max":50,"def":-1},{"key":"zen.workspace.zentral.notes.look_weekend_strength","text":"zen.workspace.zentral.notes.look_weekend_strength_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_holiday_strength","text":"zen.workspace.zentral.notes.look_holiday_strength_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_free_strength","text":"zen.workspace.zentral.notes.look_free_strength_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.autosave_seconds","text":"zen.workspace.zentral.notes.autosave_seconds_text","min":2,"max":60,"def":5},{"key":"zen.workspace.zentral.notes.font_size","text":"zen.workspace.zentral.notes.font_size_text","min":8,"max":40,"def":13},{"key":"zen.workspace.zentral.notes.line_height","text":"zen.workspace.zentral.notes.line_height_text","min":100,"max":300,"def":160},{"key":"zen.workspace.zentral.notes.history_keep","text":"zen.workspace.zentral.notes.history_keep_text","min":1,"max":200,"def":20},{"key":"zen.workspace.zentral.notes.history_minutes","text":"zen.workspace.zentral.notes.history_minutes_text","min":1,"max":1440,"def":10},{"key":"zen.workspace.zentral.notes.history_cap_kb","text":"zen.workspace.zentral.notes.history_cap_kb_text","min":16,"max":4096,"def":512},{"key":"zen.workspace.zentral.notes.history_warn_mb","text":"zen.workspace.zentral.notes.history_warn_mb_text","min":5,"max":2000,"def":100},{"key":"zen.workspace.zentral.notes.trash_auto_empty_days","text":"zen.workspace.zentral.notes.trash_auto_empty_days_text","min":0,"max":3650,"def":30},{"key":"zen.workspace.zentral.notes.spellcheck_max_chars","text":"zen.workspace.zentral.notes.spellcheck_max_chars_text","min":1000,"max":1000000,"def":100000}];
+  const numericItems = [{"key":"zen.workspace.zentral.notes.push_panel_percent","text":"zen.workspace.zentral.notes.push_panel_percent_text","min":20,"max":80,"def":50},{"key":"zen.workspace.zentral.notes.reveal_height_px","text":"zen.workspace.zentral.notes.reveal_height_px_text","min":2,"max":24,"def":10},{"key":"zen.workspace.zentral.notes.reveal_delay_ms","text":"zen.workspace.zentral.notes.reveal_delay_ms_text","min":0,"max":1000,"def":100},{"key":"zen.workspace.zentral.hybrid.dock_push_px","text":"zen.workspace.zentral.hybrid.dock_push_px_text","min":4,"max":440,"def":15},{"key":"zen.workspace.zentral.hybrid.detached_height_percent","text":"zen.workspace.zentral.hybrid.detached_height_percent_text","min":20,"max":100,"def":78},{"key":"zen.workspace.bgalazka.pill_position","text":"zen.workspace.bgalazka.pill_position_text","min":-50,"max":50,"def":0},{"key":"zen.workspace.bgalazka.pill_background_opacity","text":"zen.workspace.bgalazka.pill_background_opacity_text","min":0,"max":100,"def":48},{"key":"zen.workspace.bgalazka.pill_peek_dot_opacity","text":"zen.workspace.bgalazka.pill_peek_dot_opacity_text","min":0,"max":100,"def":31},{"key":"zen.workspace.bgalazka.hover_reveal_width_px","text":"zen.workspace.bgalazka.hover_reveal_width_px_text","min":0,"max":464,"def":1},{"key":"zen.workspace.bgalazka.hover_reveal_delay_ms","text":"zen.workspace.bgalazka.hover_reveal_delay_ms_text","min":0,"max":60000,"def":160},{"key":"zen.workspace.zentral.panels.autohide_delay_ms","text":"zen.workspace.zentral.panels.autohide_delay_ms_text","min":0,"max":60000,"def":400},{"key":"zen.workspace.zentral.notes.wide_percent","text":"zen.workspace.zentral.notes.wide_percent_text","min":130,"max":300,"def":200},{"key":"zen.workspace.zentral.notes.look_radius","text":"zen.workspace.zentral.notes.look_radius_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_border","text":"zen.workspace.zentral.notes.look_border_text","min":-1,"max":8,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_blur","text":"zen.workspace.zentral.notes.look_shadow_blur_text","min":-1,"max":120,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_y","text":"zen.workspace.zentral.notes.look_shadow_y_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_alpha","text":"zen.workspace.zentral.notes.look_shadow_alpha_text","min":-1,"max":100,"def":-1},{"key":"zen.workspace.zentral.notes.look_opacity","text":"zen.workspace.zentral.notes.look_opacity_text","min":-1,"max":100,"def":-1},{"key":"zen.workspace.zentral.notes.look_padding","text":"zen.workspace.zentral.notes.look_padding_text","min":-1,"max":64,"def":-1},{"key":"zen.workspace.zentral.notes.look_btn_size","text":"zen.workspace.zentral.notes.look_btn_size_text","min":-1,"max":56,"def":-1},{"key":"zen.workspace.zentral.notes.look_btn_radius","text":"zen.workspace.zentral.notes.look_btn_radius_text","min":-1,"max":50,"def":-1},{"key":"zen.workspace.zentral.notes.look_weekend_strength","text":"zen.workspace.zentral.notes.look_weekend_strength_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_holiday_strength","text":"zen.workspace.zentral.notes.look_holiday_strength_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_free_strength","text":"zen.workspace.zentral.notes.look_free_strength_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.autosave_seconds","text":"zen.workspace.zentral.notes.autosave_seconds_text","min":2,"max":60,"def":5},{"key":"zen.workspace.zentral.notes.font_size","text":"zen.workspace.zentral.notes.font_size_text","min":8,"max":40,"def":13},{"key":"zen.workspace.zentral.notes.line_height","text":"zen.workspace.zentral.notes.line_height_text","min":100,"max":300,"def":160},{"key":"zen.workspace.zentral.notes.history_keep","text":"zen.workspace.zentral.notes.history_keep_text","min":1,"max":200,"def":20},{"key":"zen.workspace.zentral.notes.history_minutes","text":"zen.workspace.zentral.notes.history_minutes_text","min":1,"max":1440,"def":10},{"key":"zen.workspace.zentral.notes.history_cap_kb","text":"zen.workspace.zentral.notes.history_cap_kb_text","min":16,"max":4096,"def":512},{"key":"zen.workspace.zentral.notes.history_warn_mb","text":"zen.workspace.zentral.notes.history_warn_mb_text","min":5,"max":2000,"def":100},{"key":"zen.workspace.zentral.notes.trash_auto_empty_days","text":"zen.workspace.zentral.notes.trash_auto_empty_days_text","min":0,"max":3650,"def":30},{"key":"zen.workspace.zentral.notes.spellcheck_max_chars","text":"zen.workspace.zentral.notes.spellcheck_max_chars_text","min":1000,"max":1000000,"def":100000}];
   function nativeSidebarElement() {
       const tabs = window.gBrowser?.tabContainer;
       const candidates = [
@@ -2489,7 +2489,7 @@ const __zentralEmbeddedLoader = (function () {
       "settings.opt.avoid": "Keep clear of the native sidebar (standalone card)",
       "settings.opt.push": "Push the page aside while the standalone card is docked to an edge (a sheet in a panel always takes its own slot)",
       "settings.opt.cardHide": "Standalone card docked to an edge: hide it there, show it on hover",
-      "settings.opt.pushPct": "Share of the panel height the sheet takes",
+      "settings.opt.pushPct": "Share of one panel height (between panels starts at 40%)",
       "settings.opt.stripH": "Hidden sheet: height of the strip that brings it back",
       "settings.opt.stripD": "Hover delay",
       "settings.opt.hover": "Hide on an outside click instead of closing; bring back from the top edge",
@@ -3539,7 +3539,7 @@ const __zentralEmbeddedLoader = (function () {
       "settings.opt.avoid": "Nie zas\u0142aniaj natywnego paska bocznego (niezale\u017cna karta)",
       "settings.opt.push": "Odsun\u0105\u0107 stron\u0119, gdy niezale\u017cna karta jest zadokowana do kraw\u0119dzi (arkusz w panelu zawsze ma w\u0142asne miejsce)",
       "settings.opt.cardHide": "Niezale\u017cna karta przy kraw\u0119dzi: ukryj j\u0105 tam i pokazuj po najechaniu",
-      "settings.opt.pushPct": "Udzia\u0142 wysoko\u015bci panelu zajmowany przez arkusz",
+      "settings.opt.pushPct": "Udzia\u0142 wysoko\u015bci jednego panelu (mi\u0119dzy panelami pocz\u0105tkowo 40%)",
       "settings.opt.stripH": "Ukryty arkusz: wysoko\u015b\u0107 paska przywracaj\u0105cego",
       "settings.opt.stripD": "Op\u00f3\u017anienie po najechaniu",
       "settings.opt.hover": "Ukryj po klikni\u0119ciu poza arkuszem zamiast zamyka\u0107; przywracaj z g\u00f3rnej kraw\u0119dzi",
@@ -19554,7 +19554,7 @@ __zentralShim.register = function (def) {
           { kind: "heading", i18nKey: "settings.heading.pushPage", label: "Push page" },
           { id: "push", label: "Push the page aside while the standalone card is docked to an edge (a sheet in a panel always takes its own slot)", pref: PREF.PUSH_PAGE, kind: "bool", def: false },
           { id: "cardHide", label: "Standalone card docked to an edge: hide it there, show it on hover", pref: PREF.CARD_AUTOHIDE, kind: "bool", def: false },
-          S("pushPct", "Share of the panel height the sheet takes", PREF.PUSH_PANEL_PERCENT, 20, 80, "%", 45),
+          S("pushPct", "Share of one panel height (between panels starts at 40%)", PREF.PUSH_PANEL_PERCENT, 20, 80, "%", 50),
           { kind: "heading", i18nKey: "settings.heading.hoverReveal", label: "Hover reveal" },
           S("stripH", "Hidden sheet: height of the strip that brings it back", PREF.REVEAL_HEIGHT, 2, 24, "px", 10),
           S("stripD", "Hover delay", PREF.REVEAL_DELAY, 0, 1000, "ms", 100),
@@ -21472,10 +21472,10 @@ __zentralShim.register = function (def) {
     const SLOT_MIN_SHARE = 0.15, SLOT_MAX_SHARE = 0.85, SLOT_LARGE_SHARE = 0.8, SLOT_MIN_PX = 140, SLOT_PAGE_MIN_PX = 120, GAP_PANEL_MIN_PX = 120;
     const clampShare = (v) => (Number.isFinite(v) ? Math.max(SLOT_MIN_SHARE, Math.min(SLOT_MAX_SHARE, v)) : 0);
     // size peek = the remembered / preferred share, full = a big share, span = no slot at all (overlay fills the area).
-    function slotShare({ size = "peek", pref = 45, custom = 0 } = {}) {
+    function slotShare({ size = "peek", pref = 50, custom = 0 } = {}) {
       if (size === "span") return 0;
       const own = Number(custom) > 0 ? clampShare(Number(custom)) : 0;
-      const base = own > 0 ? own : clampShare(Number(pref) / 100) || 0.45;
+      const base = own > 0 ? own : clampShare(Number(pref) / 100) || 0.50;
       return size === "full" ? Math.max(base, SLOT_LARGE_SHARE) : base;
     }
     // Height in px for a share of `base`: never below a usable sheet, never leaving the pages less than a strip.
@@ -21516,7 +21516,7 @@ __zentralShim.register = function (def) {
     };
     // Exact px wins when the panel height matches the session that saved it (no rounding or chrome-settle drift);
     // proportional share takes over when the window/monitor size changed substantially.
-    function resolveSlotHeight({ size = "peek", pref = 45, share = 0, px = 0, base = 0, room = 0, between = false } = {}) {
+    function resolveSlotHeight({ size = "peek", pref = 50, share = 0, px = 0, base = 0, room = 0, between = false } = {}) {
       if (size === "span" || !(base > 200)) return 0;
       const fit = (v) => (between && room > 0 ? clampGapPx(v, room) : v);
       const s = slotShare({ size, pref, custom: share });
@@ -43625,7 +43625,7 @@ __zentralShim.register = function (def) {
         store.meta.cardW, store.meta.cardH, store.meta.cardHShare, store.meta.shareDock,
         store.meta.shareGap, store.meta.dockPx, store.meta.gapPx, store.meta.dock,
         store.meta.hideOverlay, dockMode(), hoverMode(), hidesOverlay(),
-        getPref(PREF.PUSH_PAGE, false), getPref(PREF.PUSH_PANEL_PERCENT, 45),
+        getPref(PREF.PUSH_PAGE, false), getPref(PREF.PUSH_PANEL_PERCENT, 50),
         getPref(PREF.WIDE_PERCENT, 200), getPref(PREF.REVEAL_HEIGHT, 10),
         getPref(PREF.HOVER_REVEAL, false), window.innerWidth, window.innerHeight,
         document.documentElement.hasAttribute("bgalazka-triple-view") ? 1 : 0,
@@ -43731,6 +43731,11 @@ __zentralShim.register = function (def) {
           if (adapter.cardMode && size === "peek" && !a.wideFill && b.height >= 320 && (store.meta.cardH > 0 || store.meta.cardHShare > 0)) {
             hgt = resolveCardHeight({ px: store.meta.cardH, share: store.meta.cardHShare, areaH: b.height, fallbackH: r.h });
             top = a.anchor === "bottom" ? Math.max(a.top + 6, a.top + a.height - 6 - hgt) : a.top + r.y;
+          } else if (adapter.cardMode && (size === "full" || (size === "peek" && !geo))) {
+            // A new or enlarged standalone card fills its available height; saved peek geometry still wins above.
+            // The floating placement area has a decorative 4px inset; its bounds are the actual safe room.
+            top = key === "float" ? b.top : a.top;
+            hgt = key === "float" ? b.height : a.height;
           } else {
             top = a.top + r.y;
             hgt = r.h;
@@ -43797,7 +43802,7 @@ __zentralShim.register = function (def) {
           const strip = on && isOpen && collapsed && !foldedByParentPanel ? hoverStripPx(getPref(PREF.REVEAL_HEIGHT, 10)) : 0;
           // While the edge is being dragged the live share wins over the remembered one.
           const dragShare = gesture && gesture.slot && gesture.active && gesture.share > 0 ? gesture.share : 0;
-          const prefPct = getPref(PREF.PUSH_PANEL_PERCENT, 45);
+          const prefPct = between ? 40 : getPref(PREF.PUSH_PANEL_PERCENT, 50);
           const savedShare = between ? store.meta.shareGap : store.meta.shareDock;
           const savedPx = !dragShare && store.meta.size === "peek" ? (between ? store.meta.gapPx : store.meta.dockPx) : 0;
           const share =
@@ -45013,7 +45018,7 @@ __zentralShim.register = function (def) {
         // the geometry module reads --zentral-notes-panel-reserve and shortens the panel. Between: the
         // secondary-views module reads --zentral-notes-gap and opens a gap at the divider (both panels
         // shrink by their share). Returns true while the sheet is a layout slot of Triple View.
-        pushPanel(fraction, { strip = 0, px: wantPx = 0, up: wantUp = -1, upFrac = -1, savedPx = 0, savedShare = 0, size = "peek", pref = 45 } = {}) {
+        pushPanel(fraction, { strip = 0, px: wantPx = 0, up: wantUp = -1, upFrac = -1, savedPx = 0, savedShare = 0, size = "peek", pref = 50 } = {}) {
           const rootEl = document.documentElement;
           let wants = strip > 0 || fraction > 0 || wantPx > 0;
           const between = api.placement() === "between";

@@ -5725,7 +5725,7 @@
           { kind: "heading", i18nKey: "settings.heading.pushPage", label: "Push page" },
           { id: "push", label: "Push the page aside while the standalone card is docked to an edge (a sheet in a panel always takes its own slot)", pref: PREF.PUSH_PAGE, kind: "bool", def: false },
           { id: "cardHide", label: "Standalone card docked to an edge: hide it there, show it on hover", pref: PREF.CARD_AUTOHIDE, kind: "bool", def: false },
-          S("pushPct", "Share of the panel height the sheet takes", PREF.PUSH_PANEL_PERCENT, 20, 80, "%", 45),
+          S("pushPct", "Share of one panel height (between panels starts at 40%)", PREF.PUSH_PANEL_PERCENT, 20, 80, "%", 50),
           { kind: "heading", i18nKey: "settings.heading.hoverReveal", label: "Hover reveal" },
           S("stripH", "Hidden sheet: height of the strip that brings it back", PREF.REVEAL_HEIGHT, 2, 24, "px", 10),
           S("stripD", "Hover delay", PREF.REVEAL_DELAY, 0, 1000, "ms", 100),
@@ -7643,10 +7643,10 @@
     const SLOT_MIN_SHARE = 0.15, SLOT_MAX_SHARE = 0.85, SLOT_LARGE_SHARE = 0.8, SLOT_MIN_PX = 140, SLOT_PAGE_MIN_PX = 120, GAP_PANEL_MIN_PX = 120;
     const clampShare = (v) => (Number.isFinite(v) ? Math.max(SLOT_MIN_SHARE, Math.min(SLOT_MAX_SHARE, v)) : 0);
     // size peek = the remembered / preferred share, full = a big share, span = no slot at all (overlay fills the area).
-    function slotShare({ size = "peek", pref = 45, custom = 0 } = {}) {
+    function slotShare({ size = "peek", pref = 50, custom = 0 } = {}) {
       if (size === "span") return 0;
       const own = Number(custom) > 0 ? clampShare(Number(custom)) : 0;
-      const base = own > 0 ? own : clampShare(Number(pref) / 100) || 0.45;
+      const base = own > 0 ? own : clampShare(Number(pref) / 100) || 0.50;
       return size === "full" ? Math.max(base, SLOT_LARGE_SHARE) : base;
     }
     // Height in px for a share of `base`: never below a usable sheet, never leaving the pages less than a strip.
@@ -7687,7 +7687,7 @@
     };
     // Exact px wins when the panel height matches the session that saved it (no rounding or chrome-settle drift);
     // proportional share takes over when the window/monitor size changed substantially.
-    function resolveSlotHeight({ size = "peek", pref = 45, share = 0, px = 0, base = 0, room = 0, between = false } = {}) {
+    function resolveSlotHeight({ size = "peek", pref = 50, share = 0, px = 0, base = 0, room = 0, between = false } = {}) {
       if (size === "span" || !(base > 200)) return 0;
       const fit = (v) => (between && room > 0 ? clampGapPx(v, room) : v);
       const s = slotShare({ size, pref, custom: share });
@@ -29796,7 +29796,7 @@
         store.meta.cardW, store.meta.cardH, store.meta.cardHShare, store.meta.shareDock,
         store.meta.shareGap, store.meta.dockPx, store.meta.gapPx, store.meta.dock,
         store.meta.hideOverlay, dockMode(), hoverMode(), hidesOverlay(),
-        getPref(PREF.PUSH_PAGE, false), getPref(PREF.PUSH_PANEL_PERCENT, 45),
+        getPref(PREF.PUSH_PAGE, false), getPref(PREF.PUSH_PANEL_PERCENT, 50),
         getPref(PREF.WIDE_PERCENT, 200), getPref(PREF.REVEAL_HEIGHT, 10),
         getPref(PREF.HOVER_REVEAL, false), window.innerWidth, window.innerHeight,
         document.documentElement.hasAttribute("bgalazka-triple-view") ? 1 : 0,
@@ -29902,6 +29902,11 @@
           if (adapter.cardMode && size === "peek" && !a.wideFill && b.height >= 320 && (store.meta.cardH > 0 || store.meta.cardHShare > 0)) {
             hgt = resolveCardHeight({ px: store.meta.cardH, share: store.meta.cardHShare, areaH: b.height, fallbackH: r.h });
             top = a.anchor === "bottom" ? Math.max(a.top + 6, a.top + a.height - 6 - hgt) : a.top + r.y;
+          } else if (adapter.cardMode && (size === "full" || (size === "peek" && !geo))) {
+            // A new or enlarged standalone card fills its available height; saved peek geometry still wins above.
+            // The floating placement area has a decorative 4px inset; its bounds are the actual safe room.
+            top = key === "float" ? b.top : a.top;
+            hgt = key === "float" ? b.height : a.height;
           } else {
             top = a.top + r.y;
             hgt = r.h;
@@ -29968,7 +29973,7 @@
           const strip = on && isOpen && collapsed && !foldedByParentPanel ? hoverStripPx(getPref(PREF.REVEAL_HEIGHT, 10)) : 0;
           // While the edge is being dragged the live share wins over the remembered one.
           const dragShare = gesture && gesture.slot && gesture.active && gesture.share > 0 ? gesture.share : 0;
-          const prefPct = getPref(PREF.PUSH_PANEL_PERCENT, 45);
+          const prefPct = between ? 40 : getPref(PREF.PUSH_PANEL_PERCENT, 50);
           const savedShare = between ? store.meta.shareGap : store.meta.shareDock;
           const savedPx = !dragShare && store.meta.size === "peek" ? (between ? store.meta.gapPx : store.meta.dockPx) : 0;
           const share =
@@ -31184,7 +31189,7 @@
         // the geometry module reads --zentral-notes-panel-reserve and shortens the panel. Between: the
         // secondary-views module reads --zentral-notes-gap and opens a gap at the divider (both panels
         // shrink by their share). Returns true while the sheet is a layout slot of Triple View.
-        pushPanel(fraction, { strip = 0, px: wantPx = 0, up: wantUp = -1, upFrac = -1, savedPx = 0, savedShare = 0, size = "peek", pref = 45 } = {}) {
+        pushPanel(fraction, { strip = 0, px: wantPx = 0, up: wantUp = -1, upFrac = -1, savedPx = 0, savedShare = 0, size = "peek", pref = 50 } = {}) {
           const rootEl = document.documentElement;
           let wants = strip > 0 || fraction > 0 || wantPx > 0;
           const between = api.placement() === "between";

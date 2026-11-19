@@ -620,7 +620,7 @@
     "text": "zen.workspace.zentral.notes.push_panel_percent_text",
     "min": 20,
     "max": 80,
-    "def": 45
+    "def": 50
   },
   {
     "key": "zen.workspace.zentral.notes.reveal_height_px",

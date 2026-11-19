@@ -41,12 +41,12 @@ function suiteMath() {
   return new Function(names.map(grab).join("\n") + "\nreturn { " + names.join(", ") + " };")();
 }
 
-// An application that was closed with Notes open between the pages of the linked pair "mail" / "chat", and that opens
+// An application that was closed with Notes open (a saved 45% gap unless overridden) between the pages of the linked pair "mail" / "chat", and that opens
 // this pair at start-up. `share` = the upper page's part of the two pages, as the suite saved it.
 async function startUp({ share = 0.5, meta = {}, hide = true, revealAt = 0, storeMs = 0, window: windowOptions = {} } = {}) {
   const world = createPanelWorld({ sharedGlobal: { Map, Object } });
   world.disk.set(DIR + "/n1.md", noteText("One"));
-  world.disk.set(DIR + "/meta.json", JSON.stringify({ openIn: "triple", folders: [], ...meta }));
+  world.disk.set(DIR + "/meta.json", JSON.stringify({ openIn: "triple", folders: [], shareGap: 0.45, ...meta }));
   world.prefs.set(STARTUP, JSON.stringify({ id: "mail", mode: "triple" }));
   const t = openTripleWindow(world, windowOptions);
   const pair = t.link("mail", "chat", share);
@@ -192,10 +192,10 @@ const upperGave = (t, pair) => { const s = stack(t); return (s.upper + s.lower +
   // =====================================================================================================================
   // 2. Start-up with the panel left on screen
   // =====================================================================================================================
-  await test("an evenly divided pair is exactly as before: 45% of the pages for Notes, half from each page", async () => {
-    const { world, t, pair, end } = await startUp({ hide: false });
+  await test("a fresh evenly divided pair starts at 40%, half from each page", async () => {
+    const { world, t, pair, end } = await startUp({ hide: false, meta: { shareGap: 0 } });
     const s = assertAtRest(t, "even pair");
-    assert.deepEqual([s.gap, s.up, s.upper, s.lower], [345, 173, 185, 186]);
+    assert.deepEqual([s.gap, s.up, s.upper, s.lower], [306, 153, 205, 205]);
     assert.ok(Math.abs(upperGave(t, pair) - s.up) <= 1, "what Notes holds as its upper part is what the upper page gave");
     await assertEdgeOnly(t, world, "n", -40, "even pair, top edge up");
     await assertEdgeOnly(t, world, "s", 30, "even pair, bottom edge down");
@@ -638,7 +638,7 @@ const upperGave = (t, pair) => { const s = stack(t); return (s.upper + s.lower +
   });
 
   await test("\"Reset position and size\" after a drag: the band is a new one again, and closing it leaves the split alone", async () => {
-    const { world, t, pair, end } = await startUp({ share: 0.3, hide: false });
+    const { world, t, pair, end } = await startUp({ share: 0.3, hide: false, meta: { shareGap: 0 } });
     const fresh = place(t);
     await assertEdgeOnly(t, world, "s", 40, "bottom grip down");
     const head = t.parts().sheet.querySelectorAll(".zn-head")[0];

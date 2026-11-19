@@ -741,7 +741,7 @@
       "settings.opt.avoid": "Keep clear of the native sidebar (standalone card)",
       "settings.opt.push": "Push the page aside while the standalone card is docked to an edge (a sheet in a panel always takes its own slot)",
       "settings.opt.cardHide": "Standalone card docked to an edge: hide it there, show it on hover",
-      "settings.opt.pushPct": "Share of the panel height the sheet takes",
+      "settings.opt.pushPct": "Share of one panel height (between panels starts at 40%)",
       "settings.opt.stripH": "Hidden sheet: height of the strip that brings it back",
       "settings.opt.stripD": "Hover delay",
       "settings.opt.hover": "Hide on an outside click instead of closing; bring back from the top edge",

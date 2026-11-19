@@ -751,7 +751,7 @@
       "settings.opt.avoid": "Nie zas\u0142aniaj natywnego paska bocznego (niezale\u017cna karta)",
       "settings.opt.push": "Odsun\u0105\u0107 stron\u0119, gdy niezale\u017cna karta jest zadokowana do kraw\u0119dzi (arkusz w panelu zawsze ma w\u0142asne miejsce)",
       "settings.opt.cardHide": "Niezale\u017cna karta przy kraw\u0119dzi: ukryj j\u0105 tam i pokazuj po najechaniu",
-      "settings.opt.pushPct": "Udzia\u0142 wysoko\u015bci panelu zajmowany przez arkusz",
+      "settings.opt.pushPct": "Udzia\u0142 wysoko\u015bci jednego panelu (mi\u0119dzy panelami pocz\u0105tkowo 40%)",
       "settings.opt.stripH": "Ukryty arkusz: wysoko\u015b\u0107 paska przywracaj\u0105cego",
       "settings.opt.stripD": "Op\u00f3\u017anienie po najechaniu",
       "settings.opt.hover": "Ukryj po klikni\u0119ciu poza arkuszem zamiast zamyka\u0107; przywracaj z g\u00f3rnej kraw\u0119dzi",

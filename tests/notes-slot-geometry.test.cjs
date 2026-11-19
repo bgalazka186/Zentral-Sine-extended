@@ -257,7 +257,7 @@ function cssTests() {
   root.append(slider);
   document.body.append(root);
   slider.getBoundingClientRect = () => rect(0, 0, 400, 600);
-  prefs.set(P + "push_panel_percent", 45);
+  // No preference override: exercise the fresh installation default.
 
   let stop;
   stop = registered.init();
@@ -270,7 +270,7 @@ function cssTests() {
     primaryBtn.click(); await sleep(30); await flush();
     const sheet = sheetsIn(slider)[0];
     const reserve = num("--zentral-notes-panel-reserve");
-    assert.ok(reserve > 0, "panel gave up height");
+    assert.equal(reserve, 294, "fresh one-panel slot takes half of the 588px page area");
     const panelBottom = 640 - reserve, pageBottom = 600 - reserve;
     assert.ok(panelBottom > pageBottom, "URL bar lies between the page and the panel bottom");
     assert.equal(parseFloat(sheet.style.top), 600 - reserve + 6, "pseudo Triple View: the band is the bottom of the slider (inside the panel) + its 6px inset");
@@ -293,6 +293,8 @@ function cssTests() {
     assert.equal(html.hasAttribute("bgalazka-notes-pseudo"), false);
   });
 
+  // A one-panel preference must not change the fresh between-panel default.
+  prefs.set(P + "push_panel_percent", 70);
   // ---- Triple View gap -----------------------------------------------------------------------------------------
   // A tiny model of the real layout: the secondary-views module sets the two web panels from the gap variables.
   const lower = new El("browser");
@@ -348,6 +350,7 @@ function cssTests() {
     const sheet = sheetsIn(slider).find((s) => s.dataset.slot === "gap");
     assert.ok(sheet, "gap slot");
     const m = model();
+    assert.equal(m.gap, Math.round(TOTAL * 0.4), "fresh gap takes 40% of the available panel pages");
     assert.ok(m.gap > 0 && Math.abs(m.up - m.gap / 2) <= 1, "opens with an EVEN split: the divider sits in the middle of Notes");
     assert.equal(html.getAttribute("bgalazka-notes-gap"), "true");
     assert.equal(parseFloat(sheet.style.top), m.dividerTop - m.gap + 6, "sheet = the gap (+6px inset), ending above the divider");
