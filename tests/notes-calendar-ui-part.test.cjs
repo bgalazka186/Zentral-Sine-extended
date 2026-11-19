@@ -46,7 +46,7 @@ test("the standalone manifest embeds the UI part right after the calendar core",
   const core = include.indexOf("calendar/ZentralNotesCalendar.js");
   const ui = include.indexOf("calendar/ZentralNotesCalendarUI.js");
   assert.ok(core >= 0 && ui > core, "the core loads first, then the UI part");
-  assert.equal(MANIFEST.version, "3.4.0", "no version bump");
+  assert.equal(MANIFEST.version, "3.4.1", "explicit 3.4.1 release");
 });
 
 test("the monolith loads the part and delegates each extracted decision to it", () => {

@@ -129,16 +129,16 @@ test("the owner's temporary diagnostic file is not re-added after the delete com
   assert.match(read("docs/bugfix-2026-11-18.md"), /13755e4/);
 });
 
-test("generated Notes standalone reflects the OW-120 CSS; version stays 3.4.0", () => {
+test("generated Notes standalone reflects the OW-120 CSS; shipping version is 3.4.1", () => {
   const theme = JSON.parse(read("additional/notes/theme.json"));
-  assert.equal(theme.version, "3.4.0");
+  assert.equal(theme.version, "3.4.1");
   assert.equal(theme.style.chrome, "ZentralNotes.css", "Sine loads the Notes CSS that now contains OW-120");
   assert.equal(Object.keys(theme.scripts)[0], "ZentralNotes.standalone.uc.js");
   const lock = JSON.parse(read("additional/notes/standalone.lock.json"));
-  assert.equal(lock.version, "3.4.0");
+  assert.equal(lock.version, "3.4.1");
   assert.notEqual(lock.hash, OLD_NOTES_LOCK_HASH, "--keep-version refreshed the CSS content hash without changing the version");
-  assert.match(read("additional/notes/ZentralNotes.standalone.uc.js"), /@version 3\.4\.0/);
-  assert.match(read("loader/Zentral.uc.js"), /3\.4\.0/);
+  assert.match(read("additional/notes/ZentralNotes.standalone.uc.js"), /@version 3\.4\.1/);
+  assert.match(read("loader/Zentral.uc.js"), /3\.4\.1/);
   assert.match(read("docs/bugfix-2026-11-18.md"), /no `--bump` and no version change/);
   assert.match(read("docs/bugfix-2026-11-18.md"), /tools\/sync-version\.cjs/);
 });

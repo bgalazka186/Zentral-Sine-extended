@@ -10,7 +10,7 @@
  * Local interface selectors: .zentral-notes-btn; .zentral-notes-sheet; .zn-*
  * Local interface selectors (dock): .zentral-notes-sidebar-btn
  * Attribute selectors used: bgalazka-force-panel-black; bgalazka-notes-icon; data-active; data-color; data-dragging; data-geo; data-h; data-slot;
- *   data-collapsed; data-dock; data-host; data-mode; data-placement; data-settled; data-size; popover; data-split; data-state; data-trashed; data-view
+ *   data-collapsed; data-dock; data-hold-active; data-host; data-mode; data-once-hidden; data-placement; data-settled; data-size; popover; data-split; data-state; data-trashed; data-view
  *
  * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
  * contracts from this source, not a promise that every collaborator is enabled at runtime.
@@ -2042,6 +2042,8 @@
 .zentral-notes-pill .zn-pill-btn svg { width: 18px; height: 18px; min-width: 18px; min-height: 18px; flex: 0 0 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .zentral-notes-pill .zn-pill-btn:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
 .zentral-notes-pill .zn-pill-btn.is-on { background: color-mix(in srgb, currentColor 20%, transparent); }
+.zentral-notes-pill .zn-pill-btn[data-hold-active="true"] { outline: 2px solid #dc3545; outline-offset: -2px; }
+.zentral-notes-pill .zn-pill-btn[data-once-hidden="true"] { outline: 1px dashed var(--zen-primary-color, #83a5ff); outline-offset: -2px; }
 .zentral-notes-pill .zn-pill-btn.zn-unavailable { opacity: 0.45; }
 /* Idle mini dot (the panel's "peek dot"): the pill shrinks to a small coloured dot until it is hovered or dragged. */
 .zentral-notes-pill[data-peek="true"]:not(:hover, :focus-within, [data-dragging]) {

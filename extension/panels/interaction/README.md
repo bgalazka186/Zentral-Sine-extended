@@ -1,12 +1,12 @@
 # extension/panels/interaction
 
-Owner and local file guide for Extended 3.4.0. Original Zentral reference: 1.1.0.
+Owner and local file guide for Extended 3.4.1. Original Zentral reference: 1.1.0.
 
 | File                          | Responsibility                                                                                  |
 | ----------------------------- | ----------------------------------------------------------------------------------------------- |
 | `ZentralAppShortcuts.js`      | Owns custom per-app/panel keyboard shortcuts: Notes-compatible parsing, collision checking, tile context menu, recorder prompt, and global reveal/hide toggle. |
 | `ZentralPanelAudio.js`        | Tracks owned panel media controllers, builds native mute/unmute controls and performs bounded   |
-| `ZentralPanelHover.js`        | Owns extended panel hover reveal/hide, pinned offscreen geometry, edge/pill reveal controls and |
+| `ZentralPanelHover.js`        | Owns extended panel hover reveal/hide, pinned offscreen geometry, edge/pill reveal controls, pin-button-style pill click/hold autohide and |
 | `ZentralPanelInput.js`        | Scopes panel pointer/navigation/context-menu input and delegates native Back/Forward commands   |
 | `ZentralPanelPopupRouting.js` | Optional adapter for opening links/popups into owned panels while delegating normal browser     |
 
