@@ -524,6 +524,11 @@
         userContextId: record.userContextId,
         width: record.app.width,
         zoom: record.app.zoom,
+        // OW-91 (plan B4.3): what this panel may do in the background. `live` for every record written before this
+        // existed, so the saved shape does not change for anybody who never touches the setting.
+        backgroundMode: ["live", "throttled", "asleep-allowed"].includes(record.backgroundMode)
+          ? record.backgroundMode
+          : "live",
       };
       essentialSettingsCache.set(record.tab, value);
       try {
@@ -555,9 +560,15 @@
         if (ctx.getActiveAppBrowser() !== browser) browser.style.display = "none";
         // This opt-in preload is meant to receive site notifications even
         // before the Essential tab itself is selected or restored.
+        //
+        // OW-93 (plan B6): not for a `throttled` record. A panel the person marked throttled gets its activity from
+        // `syncAppPanelBrowserActivity`, which keeps it inactive while it is hidden — activating it here would undo
+        // that on every preload and put the page back to burning a third of a core in the background.
         try {
-          browser.docShellIsActive = true;
-          if (browser.isRemoteBrowser) browser.renderLayers = false;
+          if (record.backgroundMode !== "throttled") {
+            browser.docShellIsActive = true;
+            if (browser.isRemoteBrowser) browser.renderLayers = false;
+          }
         } catch (_) {}
         const uri = Services.io.newURI(record.app.url);
         browser.fixupAndLoadURIString(record.app.url, {
@@ -645,8 +656,26 @@
       return true;
     }
 
+    function isNotesAgendaPseudoTab(tab) {
+      if (!tab) return false;
+      if (tab.hasAttribute?.("bgalazka-notes-item") || tab.hasAttribute?.("bgalazka-notes-agenda-item")) return true;
+      let url = "";
+      try { url = tab._zentralNotesUrl || tab.linkedBrowser?.currentURI?.spec || ""; } catch (_) {}
+      if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(url)) return true;
+      try {
+        if ((!url || url === "about:blank") && essentialSessionStore()?.getTabState) {
+          const state = JSON.parse(essentialSessionStore().getTabState(tab) || "{}");
+          const entry = state.entries?.[Math.max(0, (state.index || 1) - 1)];
+          if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(entry?.url || "")) return true;
+        }
+      } catch (_) {}
+      return false;
+    }
+
     function getEssentialSource(tab) {
       // Inspect restored history instead of touching a sleeping native browser.
+      // Notes and Agenda tabs are model pointers, never launchable web pages.
+      if (isNotesAgendaPseudoTab(tab)) return null;
       if (!tab.linkedPanel || tab.hasAttribute("pending") || tab.hasAttribute("discarded") ||
           (tab.hasAttribute("zen-dormant") && tab.getAttribute("zen-dormant") !== "false")) return null;
       const url = tab.linkedBrowser?.currentURI?.spec;
@@ -656,6 +685,7 @@
     }
 
     function getRestoredEssentialSource(tab) {
+      if (isNotesAgendaPseudoTab(tab)) return null;
       const live = getEssentialSource(tab);
       if (live) return live;
       try {
@@ -672,6 +702,7 @@
       }
     }
     function openEssentialPanel(record) {
+      if (isNotesAgendaPseudoTab(record?.tab)) { releaseTabPanelLauncher(record); return; }
       const apps = window.Zentral?.Apps;
       if (!apps?.openPanel || !record.tab.isConnected) return;
       const root = document.getElementById("zen-app-panel-root");
@@ -733,6 +764,7 @@
                   !tab.closing &&
                   !tab.hasAttribute("bgalazka-addon-host") &&
                   !tab.hasAttribute("bgalazka-addon-host-fallback") &&
+                  !isNotesAgendaPseudoTab(tab) &&
                   !tab.closest(
                     "#bgalazka-zentral-addon-hosts, [bgalazka-addon-host-folder='true']",
                   ) &&
@@ -742,6 +774,13 @@
         );
         for (const [id, record] of essentialPanels) {
           if (targets.has(record.tab)) continue;
+          if (isNotesAgendaPseudoTab(record.tab)) {
+            try { window.Zentral?.Apps?.closeApp?.(id); } catch (_) {}
+            releaseTabPanelLauncher(record);
+            essentialTabRecords.delete(record.tab);
+            essentialPanels.delete(id);
+            continue;
+          }
           const removed =
             record.tab.closing ||
             !storedTabs.has(record.tab) ||
@@ -773,10 +812,16 @@
         for (const tab of targets) {
           let record = essentialTabRecords.get(tab);
           if (!record) {
-            const source = getRestoredEssentialSource(tab);
-            if (!source) continue; // wait until SessionStore has supplied its URL
             const settings = readEssentialSettings(tab);
             const savedId = settings.panelId;
+            // Sleeping Essential tabs do not need ZentralStartup to wake them: when SessionStore has
+            // not populated tab entries yet, recover the URL from the saved Triple View pair snapshot.
+            const source =
+              getRestoredEssentialSource(tab) ||
+              (typeof savedId === "string" &&
+                linkedPairFor(savedId)?.apps?.[savedId]?.url) ||
+              null;
+            if (!source) continue; // wait until SessionStore has supplied its URL
             const stableId =
               typeof savedId === "string" &&
               /^bgalazka-essential-[\w-]+$/.test(savedId) &&
@@ -803,6 +848,11 @@
               loadedSource: null,
               preloadAttempted: false,
               mobileUa: settings.mobileUa === true,
+              // OW-91: the mode a person set on the tile's menu comes back with the record; a record saved before the
+              // setting existed is live, which is exactly what those panels did before.
+              backgroundMode: ["live", "throttled", "asleep-allowed"].includes(settings.backgroundMode)
+                ? settings.backgroundMode
+                : "live",
               userContextId:
                 Number.isInteger(settings.userContextId) &&
                 settings.userContextId >= 0
@@ -917,7 +967,14 @@
       if (syncTimer) ctx.clearTimeout(syncTimer);
       syncTimer = ctx.setTimeout(syncCornerTiles, delay);
     }
+    const onPseudoTabAttributes = (event) => {
+      if (isNotesAgendaPseudoTab(event.target)) requestTileSync(0);
+    };
+    for (const type of ["TabOpen", "TabAttrModified", "TabPinned", "TabUnpinned", "TabMove", "SSTabRestored"])
+      window.addEventListener(type, onPseudoTabAttributes, true);
     ctx.registerCleanup(() => {
+      for (const type of ["TabOpen", "TabAttrModified", "TabPinned", "TabUnpinned", "TabMove", "SSTabRestored"])
+        window.removeEventListener(type, onPseudoTabAttributes, true);
       if (syncTimer) ctx.clearTimeout(syncTimer);
     });
   });

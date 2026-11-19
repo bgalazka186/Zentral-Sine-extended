@@ -23,7 +23,8 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
   const store = c.createStore({ io, getHistory: () => ({ on: true, keep: 5, minutes: 1, capKB: 512, warnMB: 100 }), notify() {}, windowId: "t", getDir: async () => "/n", getMaxSaveMs: () => 5000, setTimer: setTimeout, clearTimer: clearTimeout });
   const calls = [];
   const prefs = new Map();
-  const env = { openLink: (u) => calls.push(["link", u]), copyText() {}, exportNote() {}, exportAll() {}, revealFolder() {}, getPref: (k, d) => (prefs.has(k) ? prefs.get(k) : d), setPref: (k, v) => prefs.set(k, v) };
+  let exportReadOpts = {};
+  const env = { readOpts: () => ({ ...exportReadOpts }), openLink: (u) => calls.push(["link", u]), copyText() {}, exportNote: (...args) => calls.push(["exportNote", ...args]), exportAll: (...args) => calls.push(["exportAll", ...args]), exportZip: (...args) => { calls.push(["exportZip", ...args]); return 0; }, revealFolder() {}, getPref: (k, d) => (prefs.has(k) ? prefs.get(k) : d), setPref: (k, v) => prefs.set(k, v) };
   const host = new El("div");
   const adapter = { position: "fixed", host, attach: (r) => host.appendChild(r), getArea: () => ({ left: 0, top: 0, width: 400, height: 600, anchor: "top" }), watch: () => () => {}, setActive() {}, rewatch() {} };
   const sheet = c.createSheet({ store, adapter, env, ensureStore: () => store.open() });
@@ -37,6 +38,190 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
   const tick = () => new Promise((r) => setImmediate(r));
   const menuItem = (label) => q(".zn-menu").querySelectorAll("button").find((b) => b.textContent.startsWith(label));
   const openMore = () => { if (q(".zn-menu")) click(byTitle("More")); click(byTitle("More")); };
+
+  await test("T3.4 sidebar subfolder action validates parent identity before saving", async () => {
+    const parentId = store.addFolder("Sidebar parent");
+    const parent = store.meta.folders.find((folder) => folder.id === parentId);
+    assert.equal(typeof sheet.newSubfolder, "function");
+    assert.equal(sheet.newSubfolder(parent.id, parent.uid), true);
+    const dialog = q(".zn-dialog"), input = dialog.querySelector("input");
+    input.value = "Child";
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Save"));
+    assert.ok(store.meta.folders.some((folder) => folder.id === parent.id + "/child"));
+    assert.equal(sheet.newSubfolder(parent.id, parent.uid), true);
+    const staleDialog = q(".zn-dialog"), staleInput = staleDialog.querySelector("input");
+    staleInput.value = "Orphan";
+    store.removeFolder(parent.id, "toRoot");
+    click(staleDialog.querySelectorAll("button").find((button) => button.textContent === "Save"));
+    assert.ok(!store.meta.folders.some((folder) => folder.id === parent.id + "/orphan"), "a removed parent is not recreated implicitly");
+    assert.equal(sheet.newSubfolder(parent.id, parent.uid), false);
+    const replacementId = store.addFolder("Sidebar parent");
+    assert.equal(replacementId, parentId);
+    assert.equal(sheet.newSubfolder(replacementId, parent.uid), false, "a replacement folder with the same path is not the old folder");
+    assert.equal(sheet.newSubfolder("a/b/c/d", "stale"), false);
+    assert.equal(sheet.newSubfolder("", ""), true, "the all-notes root creates a top-level folder");
+    const rootDialog = q(".zn-dialog"); rootDialog.querySelector("input").value = "Top level child";
+    click(rootDialog.querySelectorAll("button").find((button) => button.textContent === "Save"));
+    assert.ok(store.meta.folders.some((folder) => folder.id === "top-level-child"));
+  });
+
+  await test("T3.4 sidebar folder styling resolves the current folder by stable identity", async () => {
+    const id = store.addFolder("Sidebar colors");
+    const folder = store.meta.folders.find((entry) => entry.id === id);
+    assert.equal(typeof sheet.sidebarFolderStyle, "function");
+    assert.equal(sheet.sidebarFolderStyle(id, folder.uid), true);
+    let dialog = q(".zn-dialog");
+    const icon = dialog.querySelectorAll("input").find((input) => input.getAttribute("placeholder") === "e.g. 📓");
+    assert.ok(icon); icon.value = "📓";
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Apply and close"));
+    assert.equal(store.meta.folders.find((entry) => entry.id === id).icon, "📓");
+    assert.equal(sheet.sidebarFolderStyle(id, folder.uid), true);
+    dialog = q(".zn-dialog");
+    store.removeFolder(id, "toRoot");
+    assert.equal(store.addFolder("Sidebar colors"), id);
+    const replacement = store.meta.folders.find((entry) => entry.id === id);
+    dialog.querySelectorAll("input").find((input) => input.getAttribute("placeholder") === "e.g. 📓").value = "🐈";
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Apply"));
+    assert.equal(store.meta.folders.find((entry) => entry.id === id).uid, replacement.uid);
+    assert.notEqual(store.meta.folders.find((entry) => entry.id === id).icon, "🐈", "never style a replacement folder");
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Close"));
+    assert.equal(sheet.sidebarFolderStyle(id, folder.uid), false);
+    assert.equal(sheet.sidebarFolderStyle("", ""), true, "the NOTES root uses its dedicated style dialog");
+    dialog = q(".zn-dialog");
+    assert.ok(dialog.textContent.includes("NOTES folder in the Zen sidebar"));
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Close"));
+  });
+
+  await test("T3.4 sidebar folder deletion keeps notes and rejects stale identities", async () => {
+    let id = store.addFolder("Sidebar delete"), folder = store.meta.folders.find((entry) => entry.id === id);
+    const note = store.create("# Preserve", id);
+    assert.equal(typeof sheet.sidebarFolderDelete, "function");
+    assert.equal(sheet.sidebarFolderDelete(id, folder.uid), true);
+    let dialog = q(".zn-dialog");
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Notes to top level"));
+    assert.equal(store.get(note.id).folder, "");
+    assert.ok(!store.get(note.id).trashed);
+    assert.ok(!store.meta.folders.some((entry) => entry.id === id));
+    id = store.addFolder("Sidebar delete"); folder = store.meta.folders.find((entry) => entry.id === id);
+    assert.equal(sheet.sidebarFolderDelete(id, folder.uid), true);
+    dialog = q(".zn-dialog");
+    store.removeFolder(id, "toRoot"); store.addFolder("Sidebar delete");
+    const replacement = store.meta.folders.find((entry) => entry.id === id);
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Notes to top level"));
+    assert.equal(store.meta.folders.find((entry) => entry.id === id).uid, replacement.uid, "a stale dialog cannot delete the replacement folder");
+    assert.equal(sheet.sidebarFolderDelete(id, folder.uid), false);
+    assert.equal(sheet.sidebarFolderDelete("", ""), false, "the NOTES root is not deletable");
+    const reminderNote = store.create("# Reminder", id);
+    assert.equal(store.setReminder(reminderNote.id, Date.now() + 86400000), true);
+    assert.equal(sheet.sidebarFolderDelete(id, replacement.uid), true);
+    dialog = q(".zn-dialog");
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Notes to trash"));
+    dialog = q(".zn-dialog");
+    assert.ok(dialog.textContent.includes("reminder"), "reminder impact is reviewed before trashing");
+    const added = store.create("# Added while reviewing", id);
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Move notes to Trash"));
+    assert.ok(!store.get(reminderNote.id).trashed && !store.get(added.id).trashed, "changed folder contents require a new review");
+    assert.ok(store.meta.folders.some((entry) => entry.id === id));
+    assert.equal(sheet.sidebarFolderDelete(id, replacement.uid), true);
+    dialog = q(".zn-dialog"); click(dialog.querySelectorAll("button").find((button) => button.textContent === "Notes to trash"));
+    dialog = q(".zn-dialog"); click(dialog.querySelectorAll("button").find((button) => button.textContent === "Move notes to Trash"));
+    assert.ok(store.get(reminderNote.id).trashed && store.get(added.id).trashed);
+  });
+
+  await test("T3.4 sidebar folder export snapshots only its live subtree and offers compatibility choices", async () => {
+    const parentId = store.addFolder("Sidebar export"), childId = store.addFolder("Child", parentId);
+    const parent = store.meta.folders.find((folder) => folder.id === parentId);
+    const direct = store.create("# Export parent\n\n[TOC]\n## Part", parentId);
+    const nested = store.create("# Export child", childId), other = store.create("# Other folder");
+    const deleted = store.create("# Trashed", parentId); store.trash(deleted.id);
+    calls.length = 0;
+    assert.equal(typeof sheet.sidebarFolderExport, "function");
+    assert.equal(sheet.sidebarFolderExport(parentId, parent.uid), true);
+    const dialog = q(".zn-dialog"); assert.ok(dialog.textContent.includes("folder structure"));
+    assert.ok(dialog.textContent.includes("assets"));
+    store.update(direct.id, "# Changed after review", "external");
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Keep raw syntax"));
+    const call = calls.at(-1);
+    assert.equal(call[0], "exportAll");
+    assert.deepEqual(J(call[1].map((note) => note.id).sort()), [direct.id, nested.id].sort());
+    assert.equal(call[1].find((note) => note.id === direct.id).body, "# Export parent\n\n[TOC]\n## Part");
+    assert.equal(call[2].markdownMode, "raw");
+    assert.ok(!call[1].some((note) => note.id === other.id || note.id === deleted.id));
+    assert.equal(call[2].pickerTitle, "Export folder notes");
+    calls.length = 0; assert.equal(sheet.sidebarFolderExport(parentId, parent.uid), true);
+    let cancelDialog = q(".zn-dialog");
+    click(cancelDialog.querySelectorAll("button").find((button) => button.textContent === "Cancel"));
+    assert.equal(calls.length, 0, "cancel never opens the destination picker");
+    assert.equal(sheet.sidebarFolderExport("", ""), true, "the all-notes root can export all live notes");
+    cancelDialog = q(".zn-dialog");
+    click(cancelDialog.querySelectorAll("button").find((button) => button.textContent === "Convert to portable Markdown"));
+    assert.equal(calls.at(-1)[2].markdownMode, "portable");
+    assert.ok(calls.at(-1)[1].some((note) => note.id === other.id));
+    assert.ok(!calls.at(-1)[1].some((note) => note.id === deleted.id));
+    store.removeFolder(parentId, "toRoot"); store.addFolder("Sidebar export");
+    assert.equal(sheet.sidebarFolderExport(parentId, parent.uid), false, "a replacement folder is never exported through a stale action");
+  });
+
+  await test("B3.3.50-9 opening a headingless item in read mode reveals its source line", async () => {
+    const body = "# Long note\n\nIntro\n- [ ] Reminder %%zn-item-id:abcd1%%\nAfter\n";
+    const previousMode = store.meta.mode, n = store.create(body);
+    assert.deepEqual(J(c.itemMarkerLineRange(body, "abcd1")), { start: body.indexOf("- [ ] Reminder"), end: body.indexOf("\nAfter") });
+    assert.equal(c.itemMarkerLineRange(body, "missing"), null);
+    assert.equal(c.itemMarkerLineRange(body, ""), null);
+    prefs.set("zen.workspace.zentral.notes.default_view", "read");
+    try {
+      assert.equal(sheet.openNoteById(n.id, "", "abcd1"), true);
+      await flushRaf();
+      const editor = q(".zn-editor"), start = body.indexOf("- [ ] Reminder"), end = body.indexOf("\n", start);
+      assert.equal(store.meta.mode, "split", "switch to a visible editor to reveal the hidden marker");
+      assert.equal(editor.selectionStart, start); assert.equal(editor.selectionEnd, end);
+      assert.equal(editor.value, body, "navigation never changes the note body");
+      const before = store.meta.mode;
+      sheet.openNoteById(n.id, "", "absent"); assert.equal(store.meta.mode, "read", "missing marker keeps requested read mode");
+    } finally { prefs.delete("zen.workspace.zentral.notes.default_view"); store.setMeta({ mode: previousMode }); }
+  });
+
+  await test("T1.18 Markdown export offers cancel, raw, or portable for syntax that needs conversion", async () => {
+    const note = store.create("# Export warning\n\n[TOC]\n\n## Heading\n> [!NOTE] Notice\n> Body\n");
+    sheet.openNoteById(note.id); await flushRaf();
+    const openExport = async (label) => { openMore(); click(menuItem("Import & export")); click(menuItem(label)); await flushRaf(); };
+    const choice = (text) => q(".zn-dialog").querySelectorAll("button").find((button) => button.textContent === text);
+    calls.length = 0;
+    await openExport("Save as Markdown");
+    assert.ok(q(".zn-dialog"), "warning appears before file picker");
+    assert.ok(q(".zn-dialog").textContent.includes("callout"));
+    click(choice("Cancel")); assert.equal(calls.length, 0, "cancel never exports");
+    exportReadOpts = { flavor: "mixed", ignore: "O01", tilde: "strike" };
+    await openExport("Save as Markdown");
+    exportReadOpts = { flavor: "github", ignore: "", tilde: "sub" };
+    const originalBody = note.body;
+    store.update(note.id, originalBody + "Changed in another window\n", "external");
+    click(choice("Keep raw syntax"));
+    assert.equal(calls.at(-1)[0], "exportNote"); assert.equal(calls.at(-1)[3].markdownMode, "raw");
+    assert.equal(calls.at(-1)[1].body, originalBody, "the user's choice applies to the same snapshot that was scanned");
+    assert.deepEqual(J(calls.at(-1)[3].markdownReadOpts), { flavor: "mixed", ignore: "O01", tilde: "strike" }, "reader settings are captured when the dialog is opened");
+    exportReadOpts = {};
+    store.update(note.id, originalBody, "external");
+    await openExport("Save as Markdown"); click(choice("Convert to portable Markdown"));
+    assert.equal(calls.at(-1)[3].markdownMode, "portable");
+    await openExport("Export all notes"); click(choice("Convert to portable Markdown"));
+    assert.equal(calls.at(-1)[0], "exportAll"); assert.equal(calls.at(-1)[2].markdownMode, "portable");
+    exportReadOpts = { flavor: "mixed", ignore: "O01" };
+    await openExport("Export all as zip"); click(choice("Keep raw syntax"));
+    exportReadOpts = { flavor: "github", ignore: "" };
+    assert.ok(q(".zn-dialog"), "zip retains its existing export confirmation");
+    click(q(".zn-dialog").querySelectorAll("button").find((button) => button.textContent.startsWith("Choose where")));
+    await flushRaf(); assert.equal(calls.at(-1)[0], "exportZip"); assert.equal(calls.at(-1)[2].markdownMode, "raw");
+    assert.deepEqual(J(calls.at(-1)[2].markdownReadOpts), { flavor: "mixed", ignore: "O01" }, "zip confirmation retains the reviewed settings");
+    exportReadOpts = {};
+    const plain = store.create("# Plain export\n\nOrdinary Markdown.");
+    sheet.openNoteById(plain.id); await flushRaf(); calls.length = 0;
+    await openExport("Save as Markdown");
+    assert.equal(q(".zn-dialog"), null, "plain Markdown goes directly to the existing file picker");
+    assert.equal(calls.at(-1)[0], "exportNote");
+    assert.equal(calls.at(-1)[1].id, plain.id);
+    assert.equal(note.body.includes("[TOC]"), true, "export choices do not modify the source note");
+  });
 
   await test("[[ completion: strip appears while typing, Arrow+Enter picks, the link is inserted and the strip closes", async () => {
     const a = store.create("Alpha plan\nx"), b = store.create("Alpine notes\nx"), src = store.create("Typing here");
@@ -84,6 +269,14 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
     openMore(); click(menuItem("Links & dates")); click(menuItem("Notes by date")); await tick();
     click(q(".zn-menu").querySelectorAll("button").find((b) => b.textContent.startsWith("Today")));
     assert.equal(store.list().filter((x) => c.dateOfNote(x) === today).length, 1, "second time opens the same note");
+    prefs.set("zen.workspace.zentral.notes.agenda_folder", true);
+    const beforeAgendaCount = store.list().filter((x) => c.dateOfNote(x) === today).length;
+    openMore(); click(menuItem("Links & dates")); click(menuItem("Notes by date")); await tick();
+    click(q(".zn-menu").querySelectorAll("button").find((b) => b.textContent.startsWith("Today")));
+    await flushRaf();
+    assert.equal(store.list().filter((x) => c.dateOfNote(x) === today).length, beforeAgendaCount, "Agenda mode replaces manual New Date Note actions with Day view navigation");
+    assert.equal(store.meta.calendarView, "day");
+    prefs.delete("zen.workspace.zentral.notes.agenda_folder");
     prefs.set("zen.workspace.zentral.notes.date_notes_mode", "single");
     openMore(); click(menuItem("Links & dates")); click(menuItem("Notes by date")); await tick();
     click(q(".zn-menu").querySelectorAll("button").find((b) => b.textContent.startsWith("Tomorrow")));
@@ -126,6 +319,26 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
     }
   });
 
+  await test("T1.8 the Table of contents menu inserts the Markdown block under the title, then offers Update; leaving the editor refreshes it", async () => {
+    const body = "# Doc\n\nintro\n\n## One\n\ntext\n";
+    const o = store.create(body); await flushRaf(); sheet.openNoteById(o.id); await flushRaf();
+    const ta = q(".zn-editor"); dom.state.activeElement = ta;
+    ta.selectionStart = ta.selectionEnd = body.length;
+    click(byTitle("Table of contents")); await tick();
+    const pick = (label) => q(".zn-menu").querySelectorAll("button").find((b) => b.textContent === label);
+    click(pick("Insert table of contents under the title")); await flushRaf();
+    assert.ok(ta.value.startsWith("# Doc\n\n---\n\n## Table of Contents\n\n1. [One](#one)\n\n---\n\nintro"), ta.value);
+    assert.equal(store.get(o.id).body, ta.value, "the stored note has the block too");
+    ta.value += "\n## Two\n";
+    ta.dispatchEvent(new dom.Ev("input", { bubbles: true }));
+    ta.dispatchEvent(new dom.Ev("blur"));
+    await flushRaf();
+    assert.ok(ta.value.includes("2. [Two](#two)"), "blur refreshes an existing block");
+    click(byTitle("Table of contents")); await tick();
+    assert.ok(pick("Update the table of contents block") && !pick("Insert table of contents at the end"));
+    click(byTitle("Table of contents")); await tick(); // closes the menu again
+  });
+
   await test("outline (#27): the Table of contents button lists the headings, marks the one under the caret and jumps to the chosen one", async () => {
     const body = "Title line\n\n## Install\nsteps\n\n### Linux\nmore\n\n## Usage\nrun it\n";
     const o = store.create(body); await flushRaf(); sheet.openNoteById(o.id); await flushRaf();
@@ -134,15 +347,17 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
     assert.ok(byTitle("Table of contents"), "the toolbar has a Table of contents button");
     click(byTitle("Table of contents")); await tick();
     const labels = () => q(".zn-menu").querySelectorAll("button").map((b) => b.textContent);
-    assert.deepEqual(labels(), ["Install", "\u2003Linux", "Usage"]);
+    assert.deepEqual(labels(), ["Open Outline panel", "Install", "\u2003Linux", "Usage", "Insert table of contents under the title", "Insert table of contents at the end"]);
     const btns = q(".zn-menu").querySelectorAll("button");
-    assert.ok(/is-current|pin/.test(btns[1].innerHTML || btns[1].children.map((x) => x.className || x.tag).join(" ")) || btns[1].children.length > 1, "the current heading carries an icon");
-    click(btns[2]); await flushRaf();
+    assert.ok(/is-current|pin/.test(btns[2].innerHTML || btns[2].children.map((x) => x.className || x.tag).join(" ")) || btns[2].children.length > 1, "the current heading carries an icon");
+    click(btns[3]); await flushRaf();
     assert.equal(ta.selectionStart, body.indexOf("## Usage"), "the caret moved to the heading line");
     const plain = store.create("no headings here"); await flushRaf(); sheet.openNoteById(plain.id); await flushRaf();
     click(byTitle("Table of contents")); await tick();
     assert.match(q(".zn-menu").textContent, /No headings in this note/, "a note without headings says so");
-    assert.equal(q(".zn-menu").querySelectorAll("button").length, 0, "and nothing in it is clickable");
+    const emptyMenuButtons = q(".zn-menu").querySelectorAll("button");
+    assert.equal(emptyMenuButtons.length, 1, "the Outline action remains available without headings");
+    assert.equal(emptyMenuButtons[0].textContent, "Open Outline panel");
     openMore();
   });
 
@@ -199,15 +414,15 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
     click(sheet.root.all().find((e) => e._classes?.has("zn-chip") && e.textContent === "Close")); await tick();
   });
 
-  await test("demo notes (#3): More > Install demo notes creates six notes in the Help folder, opens the tour, and a second run adds nothing", async () => {
+  await test("demo notes (#3, T4.1, T2.11b2): More > Install demo notes creates the nine teaching notes in the Help folder, opens the tour, and a second run adds nothing", async () => {
     const helpCount = () => store.list().filter((n) => n.folder === "help").length;
     const before = helpCount();
     openMore(); click(menuItem("Settings & help")); click(menuItem("Install demo notes")); await flushRaf();
-    assert.equal(helpCount(), before + 6);
+    assert.equal(helpCount(), before + 9);
     assert.equal(store.meta.folders.find((f) => f.id === "help")?.label, "Help");
     assert.equal(q(".zn-title").textContent, "Notes syntax tour", "the tour opens");
     openMore(); click(menuItem("Settings & help")); click(menuItem("Install demo notes")); await flushRaf();
-    assert.equal(helpCount(), before + 6, "second run adds nothing");
+    assert.equal(helpCount(), before + 9, "second run adds nothing");
     assert.match(q(".zn-flash")?.textContent ?? sheet.root.textContent, /already installed/);
   });
 

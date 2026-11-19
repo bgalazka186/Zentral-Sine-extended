@@ -1,0 +1,25 @@
+{
+  "id": "boost",
+  "themeId": "zentral-boost",
+  "name": "Zentral Boost",
+  "description": "Read browser RAM on demand and give memory back without closing anything. Standalone part of Zentral Extended.",
+  "version": "3.4.0",
+  "entry": "ZentralBoost.uc.js",
+  "output": "ZentralBoost.standalone.uc.js",
+  "settings": "settings.json",
+  "tags": [
+    "memory",
+    "zen"
+  ],
+  "sharedSources": [
+    "loader/ZentralTabPolicy.js"
+  ],
+  "externalPrefs": [
+    "zen.workspace.zentral.boost.keep_pinned"
+  ],
+  "externalPrefsReason": "OW-112 reads the retired keep_pinned pref once, to carry an owner's existing 'on' choice over to unload_pinned and use it as a read-only fallback for one release. It is no longer a user-facing setting.",
+  "fullPackOnly": [
+    "Zentral"
+  ],
+  "fullPackOnlyReason": "The panel layer (`window.Zentral.Panels`) only exists in the full pack. Every use is guarded: a standalone Boost has no Essential panels to put to sleep, so a deep pass there unloads tabs only."
+}

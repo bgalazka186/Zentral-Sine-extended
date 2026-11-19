@@ -36,8 +36,8 @@ const TIERS = {
 };
 const TOP_LAYER_NOTES = {
   "additional/video/controllers/ZentralVideoEnlarge.js": "Big Preview: popover=\"manual\", shown with showPopover() while enlarged",
-  "additional/notes/ZentralNotes.uc.js": "Notes standalone card: popover=\"manual\" only WHILE Notes has the focus (raise on focus / press inside, drop and remove the attribute on any outside press), so it is above Big Preview unless Big Preview was pressed",
-  "additional/rss/ZentralRssDisplay.uc.js": "RSS reader card: popover=\"manual\", re-shown on every showCard so it sits above Big Preview",
+  "additional/notes/ZentralNotes.uc.js": "Notes standalone card, Calendar Big Picture popup & Agenda action toast: popover=\"manual\" (Notes card only WHILE Notes has focus; Big Picture while calendar is expanded; toast shown on headless Agenda actions)",
+  "loader/ZentralRuntime.js": "Shared sidebar hover card engine (createSidebarHoverCard, copied verbatim to ZentralStandaloneShim.js): used by RSS, Notes, and Agenda cards; popover=\"manual\", re-shown on every show so it sits above Big Preview",
 };
 
 const rel = (f) => path.relative(root, f).split(path.sep).join("/");

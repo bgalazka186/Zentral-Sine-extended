@@ -19,7 +19,11 @@ Also update:
 - `INSTALL.md` heading (one version per release), the version badge and the "Extended X.Y.Z uses Zentral…" line in `.github/README.md`
 - Any other `README.md`/`docs/*.md` that cite the old version
 
+`node tools/sync-version.cjs` does all of the above in one step: it raises every listed place to the highest version found in the repository (`--set X.Y.Z` to choose one, `--check` to only report drift; `tests/version-sync.test.cjs` fails on drift). Per chunk: `node tools/build-standalone.cjs --bump && node tools/sync-version.cjs && node tools/build-standalone.cjs`.
+
 After a bump, run `node tools/build-standalone.cjs` (regenerates the bundles and lock files; do not hand-edit the lock files' versions) and `node tools/build-preferences.cjs` (keeps the root `preferences.json` in step with the schema), then `node tools/build-standalone.cjs --check` and `node tests/standalone.test.cjs`. After changing settings placement, run `node tools/organize-layout-order.cjs` before building preferences.
+
+**Always end a chunk with `node tools/check-settings-consistency.cjs`.** A `schema` row with no `settings` entry generates a preference that the dialog never renders — exactly the OW-61 bug, where `clock.mode`, `timer.end_sound`, `timer.end_notice` and `weather.places` were shipped but invisible for two releases because this check lived outside the chain. It must print `catalog checks passed`.
 
 Never leave a standalone module at an older version than the main mod. Verify with `grep 3.0.2` (or whatever the prior version was) after a bump to confirm zero stale references remain.
 
@@ -69,12 +73,12 @@ The video standalone bootstrap mirrors source/construction contracts. Keep both 
 
 ## Notes roadmap handoff
 
-After any change to Zentral Notes, update the "NEXT SESSION HANDOFF" block at the end of `TODO_notes_roadmap.md` in place (old history: `docs/LEGACY_notes_roadmap.md`, frozen) (state, next picks, live checklist, debts, version). It is the only handoff; never add a second one.
+After any change to Zentral Notes, update the "NEXT SESSION HANDOFF" block at the end of `TODO_notes_roadmap.md` in place (old history: `docs/LEGACY_notes_roadmap.md` and `docs/LEGACY_done_rows.md`, frozen; the roadmap contains only work still to do) (state, next picks, live checklist, debts, version). It is the only handoff; never add a second one.
 
 ## .git folder
 
 user may send to AI full project file, and ask to update it with changes and give back, Always dont include .git file (drop and replace on root folder may destroy unfinished uncommited diffs and change what is staged and what not just avoid it)
 
-## Delivering changes (download card)
+## Delivering changes
 
-Whenever an AI edit changes files for the user, finish the turn by presenting the changed files as a download card: zip them (without `.git`), place the zip in `/mnt/user-data/outputs/`, and call `present_files` on it. Do this every time, unless the changes were just uploaded to GitHub in this same turn. A chat reply that only describes the changes is not a delivery.
+The owner now works with Git-based AIs: commit changes to the repository. Do not create or present ZIPs unless the owner asks for one in chat. Never include `.git` in any archive that is requested.

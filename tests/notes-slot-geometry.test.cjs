@@ -134,10 +134,10 @@ function loadTripleMath() {
     for (let k = j; k < sv.length; k++) { if (sv[k] === "{") depth++; else if (sv[k] === "}" && --depth === 0) return sv.slice(i, k + 1); }
     throw new Error("unbalanced " + name);
   };
-  return new Function(grab("tripleHeights") + "\n" + grab("tripleShareFor") + "\nreturn { tripleHeights, tripleShareFor };")();
+  return new Function(grab("tripleFloor") + "\n" + grab("tripleHeights") + "\n" + grab("tripleShareFor") + "\n" + grab("tripleShareAfterNotes") + "\nreturn { tripleHeights, tripleShareFor, tripleShareAfterNotes };")();
 }
 function tripleTests() {
-  const { tripleHeights: H, tripleShareFor: S } = loadTripleMath();
+  const { tripleHeights: H, tripleShareFor: S, tripleShareAfterNotes: AFTER } = loadTripleMath();
   // no Notes: unchanged proportional split
   let h = H({ usable: 586, gap: 0, share: 0.5 });
   assert.deepEqual([h.top, h.bottom], [293, 293]);
@@ -145,29 +145,58 @@ function tripleTests() {
   h = H({ usable: 316, gap: 270, share: 0.5, up: -1 });
   assert.deepEqual([h.top, h.bottom], [158, 158]);
   // explicit up: U = (usable + gap) * share - up, and U + L is always `usable`
-  h = H({ usable: 256, gap: 330, share: 0.5, up: 195 });
-  assert.equal(h.top, 98); assert.equal(h.top + h.bottom, 256);
+  h = H({ usable: 556, gap: 330, share: 0.5, up: 195 });
+  assert.equal(h.top, 248); assert.equal(h.top + h.bottom, 556);
   // the lower panel's start is unchanged by a top-edge drag: bottom edge of the whole stack is fixed
-  const before = H({ usable: 316, gap: 270, share: 0.5, up: 135 });
-  const afterTop = H({ usable: 256, gap: 330, share: 0.5, up: 195 });
+  const before = H({ usable: 616, gap: 270, share: 0.5, up: 135 });
+  const afterTop = H({ usable: 556, gap: 330, share: 0.5, up: 195 });
   assert.equal(before.bottom, afterTop.bottom, "top-edge drag leaves the lower panel's height (and start) alone");
-  const afterBottom = H({ usable: 276, gap: 310, share: 0.5, up: 135 });
+  const afterBottom = H({ usable: 576, gap: 310, share: 0.5, up: 135 });
   assert.equal(before.top, afterBottom.top, "bottom-edge drag leaves the upper panel alone");
   assert.equal(before.bottom - afterBottom.bottom, 40, "bottom-edge drag takes exactly the dragged distance from the lower panel");
-  // min height keeps both panels usable
+  // A floor keeps both panels usable while Notes is open: 120 px, or a quarter of what the two share WITHOUT Notes.
+  // It must not change with the band (OW-26: it was a quarter of what was left, so a panel resting on it moved with
+  // every px of the band and took the other edge of Notes along; tests/notes-triple-view-startup.test.cjs).
   h = H({ usable: 300, gap: 280, share: 0.5, up: 5000 });
-  assert.equal(h.top, 75); assert.equal(h.bottom, 225);
+  assert.deepEqual([h.top, h.bottom], [120, 180]);
+  assert.equal(H({ usable: 330, gap: 250, share: 0.5, up: 5000 }).top, 120, "the same floor at another band height");
+  h = H({ usable: 200, gap: 200, share: 0.5, up: 5000 });
+  assert.deepEqual([h.top, h.bottom], [100, 100], "two panels that share 400 px: a quarter each");
   // divider drag inverse: dragging the divider changes the share only, and H(S(x)) puts the panel at x
   for (const up of [-1, 0, 100, 250]) for (const gap of [0, 270]) {
     if (up >= 0 && !gap) continue;
-    const usable = 586 - gap;
-    const share = S({ usable, gap, topPx: 200, up });
+    const usable = 886 - gap;
+    const share = S({ usable, gap, topPx: 300, up });
     assert.ok(share > 0 && share < 1);
-    assert.equal(Math.round(H({ usable, gap, share, up }).top), 200, `round trip gap=${gap} up=${up}`);
+    assert.equal(Math.round(H({ usable, gap, share, up }).top), 300, `round trip gap=${gap} up=${up}`);
   }
   // out-of-range pointer positions clamp
   assert.equal(H({ usable: 586, gap: 0, share: S({ usable: 586, gap: 0, topPx: -50 }) }).top, 146.5);
   assert.equal(H({ usable: 586, gap: 0, share: S({ usable: 586, gap: 0, topPx: 9999 }) }).top, 439.5);
+  // closing Notes: the divider returns to the MIDDLE of the band, so both panels take back the same room
+  assert.equal(AFTER({ top: 365, gap: 270, total: 1000, share: 0.5 }), 0.5, "an evenly split band gives the original share back");
+  const lopsided = AFTER({ top: 265, gap: 370, total: 1000, share: 0.5 });
+  assert.equal(lopsided, 0.45, "a band dragged upward still closes at its middle (265 + 185 = 450 of 1000)");
+  assert.equal(H({ usable: 1000, gap: 0, share: lopsided }).top - 265, 185, "the upper panel takes back half of the band");
+  assert.equal(1000 - H({ usable: 1000, gap: 0, share: lopsided }).top - (1000 - 265 - 370), 185, "and so does the lower panel");
+  assert.equal(AFTER({ top: 300, gap: 0, total: 1000, share: 0.62 }), 0.62, "no band: the share is untouched");
+  assert.equal(AFTER({ top: 0, gap: 900, total: 1000, share: 0.5 }), 0.45, "never beyond the share limits");
+  // A band of an odd height: its middle is a whole px, rounded the way Notes rounds the upper part of a new band
+  // (Math.round(px / 2)), so closing and opening again is a round trip. The exact half (172.5 of 345) moved the
+  // divider half a px up every time, and the suite saves the split on every close (OW-26).
+  const odd = AFTER({ top: 185, gap: 345, total: 716, share: 0.4 });
+  assert.equal(odd, 0.5, "185 + 173 of 716");
+  assert.equal(H({ usable: 716 - 345, gap: 345, share: odd, up: Math.round(345 / 2) }).top, 185, "reopened with Notes' own split, the upper panel has the height it had");
+  let creeping = 0.5;
+  for (let i = 0; i < 50; i++) creeping = AFTER({ top: H({ usable: 371, gap: 345, share: creeping, up: 173 }).top, gap: 345, total: 716, share: creeping });
+  assert.equal(creeping, 0.5, "fifty rounds of closing and opening leave the share where it was");
+  // Swap top and bottom: the gap's upper part becomes its lower part and the share is mirrored.
+  for (const [gap, up, share] of [[270, 135, 0.5], [330, 60, 0.4], [250, 250, 0.7]]) {
+    const total = 1000, usable = total - gap;
+    const a = H({ usable, gap, share, up }), b = H({ usable, gap, share: 1 - share, up: gap - up });
+    assert.equal(Math.round(b.top), Math.round(a.bottom), `swap: new upper = old lower (gap ${gap}, up ${up})`);
+    assert.equal(Math.round(b.bottom), Math.round(a.top), "swap: new lower = old upper");
+  }
 }
 
 // Hit-target CSS: no later rule may switch the Triple divider handle on over a rule that switches it off
@@ -176,16 +205,27 @@ function cssTests() {
   const css = fs.readFileSync(path.resolve(__dirname, "../extension/panels/browsers/ZentralBrowserIntegrations.css"), "utf8");
   const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ sel: m[1].trim().replace(/\/\*[\s\S]*?\*\//g, "").trim(), body: m[2] }));
   const handleRules = rules.filter((r) => r.sel.includes(".bgalazka-triple-drag-handle") && /pointer-events/.test(r.body));
+  const hiddenHandleSel = ":root[bgalazka-hover-panel-hidden] .bgalazka-triple-drag-handle";
   for (const r of handleRules) {
-    if (/pointer-events:\s*none/.test(r.body)) assert.fail("a rule disables the Triple divider handle: " + r.sel);
+    if (/pointer-events:\s*none/.test(r.body) && r.sel.replace(/\s+/g, " ") !== hiddenHandleSel) {
+      assert.fail("a rule disables the Triple divider handle: " + r.sel);
+    }
   }
-  assert.ok(handleRules.length >= 1, "the handle is switched on while the panel is open");
+  assert.ok(handleRules.some((r) => /pointer-events:\s*auto/.test(r.body)), "the handle is switched on while the panel is open");
+  assert.ok(handleRules.some((r) => r.sel.replace(/\s+/g, " ") === hiddenHandleSel && /pointer-events:\s*none/.test(r.body)), "the handle takes no pointer events while the panel is slid away");
   const sv = fs.readFileSync(path.resolve(__dirname, "../extension/panels/secondary-views/ZentralSecondaryViews.uc.js"), "utf8");
   assert.match(sv, /const lead = notesGap\(\) > 0 \? 0 : 3;/, "handle does not reach above the divider while Notes owns the gap");
   assert.match(sv, /state\.dividerHandle\.style\.top = `\$\{line\.top - lead\}px`/);
   // Notes edge gestures never write the Triple share
   const notes = fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.uc.js"), "utf8");
   assert.ok(!/state\.share|--bgalazka-top-share["']\s*,/.test(notes.replace(/getPropertyValue\?\.\("--bgalazka-(top|bottom)-share"\)/g, "")), "Notes never writes the Triple share");
+  assert.match(notes, /function liveGapUp\(\)[\s\S]{0,200}--zentral-notes-gap-up/, "Notes reads the live split after a top/bottom swap");
+  assert.match(notes, /function keptGapUp\(px\)[\s\S]{0,240}Math\.round\(px \/ 2\)/, "a new Notes band starts evenly around the divider");
+  assert.match(notes, /zentral-triple-swapped/, "Notes re-lays out after the panel swap");
+  assert.doesNotMatch(notes, /patch\.gapSplit|upFrac: between \? store\.meta\.gapSplit/, "edge drags do not persist a stale split");
+  assert.match(notes, /if \(document\.documentElement\.hasAttribute\("bgalazka-triple-view"\)\) \{[\s\S]{0,260}return null;/, "span never falls back to one browser when the Triple View rects are in transition");
+  const noteCss = fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.css"), "utf8");
+  assert.match(noteCss, /bgalazka-notes-spill="true"\]\[bgalazka-triple-view="true"\][^{]*\{[^}]*order:\s*3\s*!important;[^}]*z-index:\s*40\s*!important;/, "a span sheet paints above the divider, super bar and both browser slots");
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -217,7 +257,7 @@ function cssTests() {
   root.append(slider);
   document.body.append(root);
   slider.getBoundingClientRect = () => rect(0, 0, 400, 600);
-  prefs.set(P + "push_panel_percent", 45);
+  // No preference override: exercise the fresh installation default.
 
   let stop;
   stop = registered.init();
@@ -230,7 +270,7 @@ function cssTests() {
     primaryBtn.click(); await sleep(30); await flush();
     const sheet = sheetsIn(slider)[0];
     const reserve = num("--zentral-notes-panel-reserve");
-    assert.ok(reserve > 0, "panel gave up height");
+    assert.equal(reserve, 294, "fresh one-panel slot takes half of the 588px page area");
     const panelBottom = 640 - reserve, pageBottom = 600 - reserve;
     assert.ok(panelBottom > pageBottom, "URL bar lies between the page and the panel bottom");
     assert.equal(parseFloat(sheet.style.top), 600 - reserve + 6, "pseudo Triple View: the band is the bottom of the slider (inside the panel) + its 6px inset");
@@ -253,18 +293,28 @@ function cssTests() {
     assert.equal(html.hasAttribute("bgalazka-notes-pseudo"), false);
   });
 
+  // A one-panel preference must not change the fresh between-panel default.
+  prefs.set(P + "push_panel_percent", 70);
   // ---- Triple View gap -----------------------------------------------------------------------------------------
   // A tiny model of the real layout: the secondary-views module sets the two web panels from the gap variables.
   const lower = new El("browser");
   const divider = new El("div"); divider.className = "bgalazka-triple-divider";
   const box = new El("div"), bar = new El("div"); bar.className = "bgalazka-super-bar"; bar.append(new El("button")); box.append(bar);
-  const SHARE = 0.5, TOTAL = 1000, DIV = 14; // a stack tall enough that both panels have room to give
+  let SHARE = 0.5; const TOTAL = 1000, DIV = 14; // a stack tall enough that both panels have room to give
   const model = () => {
     const gap = num("--zentral-notes-gap"), up = vars.has("--zentral-notes-gap-up") ? num("--zentral-notes-gap-up") : -1;
     const usable = TOTAL - DIV - gap;
     const { top, bottom } = H({ usable, gap, share: SHARE, up });
     return { gap, up, U: top, L: bottom, dividerTop: top + gap, lowerTop: top + gap + DIV };
   };
+  // Model the secondary views' reserve listener: remember the open band, then commit its midpoint when it closes.
+  const { tripleShareAfterNotes: AFTER_NOTES } = loadTripleMath();
+  let openRec = null;
+  document.addEventListener("zentral-notes-reserve", () => {
+    const g = num("--zentral-notes-gap");
+    if (g > 0) { const m = model(); openRec = { top: m.U, gap: g, total: TOTAL - DIV }; }
+    else if (openRec) { SHARE = AFTER_NOTES({ ...openRec, share: SHARE }); openRec = null; }
+  });
   let winH = TOTAL;
   page.getAttribute("x");
   page.setAttribute("data-bgalazka-triple-slot", "top");
@@ -300,7 +350,8 @@ function cssTests() {
     const sheet = sheetsIn(slider).find((s) => s.dataset.slot === "gap");
     assert.ok(sheet, "gap slot");
     const m = model();
-    assert.ok(m.gap > 0 && m.up === -1, "opens with a proportional gap");
+    assert.equal(m.gap, Math.round(TOTAL * 0.4), "fresh gap takes 40% of the available panel pages");
+    assert.ok(m.gap > 0 && Math.abs(m.up - m.gap / 2) <= 1, "opens with an EVEN split: the divider sits in the middle of Notes");
     assert.equal(html.getAttribute("bgalazka-notes-gap"), "true");
     assert.equal(parseFloat(sheet.style.top), m.dividerTop - m.gap + 6, "sheet = the gap (+6px inset), ending above the divider");
     assert.equal(Math.round(m.U + m.gap + DIV + m.L), TOTAL, "gap + divider + panels fill the stack");
@@ -326,7 +377,8 @@ function cssTests() {
     assert.ok(writes.every((k) => k.startsWith("--zentral-notes-")), "writes: " + [...new Set(writes)]);
     await release(sheet, 51);
     assert.equal(sheet.dataset.dragging, undefined, "gesture finished");
-    assert.ok(readMeta().gapSplit >= 0 && readMeta().gapSplit <= 1, "split persisted");
+    assert.ok(Number.isFinite(readMeta().shareGap) && readMeta().shareGap > 0, "the resized Notes gap height is persisted as a share of the available page height");
+    assert.equal(readMeta().gapSplit, undefined, "the split lives in the shared CSS variable and is never remembered across a close");
     assert.equal(model().gap, m1.gap, "release does not jump");
   });
 
@@ -349,7 +401,6 @@ function cssTests() {
     let m = model();
     assert.ok(m.gap <= 880, "max slot " + m.gap);
     assert.ok(m.U >= 119 && m.L >= 119, "both web panels stay usable (>=120px): " + [m.U, m.L]);
-    assert.ok(readMeta().gapSplit === undefined || true);
     await release(sheet, 53);
     await drag(sheet, "s", 400, -4000, 54);
     m = model();
@@ -371,18 +422,89 @@ function cssTests() {
     await sleep(100); await flush();
     assert.equal(vars.has("--zentral-notes-gap"), false, "a stale pointer event does not re-open the gap");
     const m = model();
-    assert.deepEqual([Math.round(m.U), Math.round(m.L)], [Math.round(closed.U), Math.round(closed.L)], "closed geometry equals the original proportions");
+    assert.equal(Math.round(m.U + m.L), TOTAL - DIV, "closed: the two panels fill the whole stack again");
   });
 
-  await test("close/reopen: the remembered split returns; closing restores the original panel proportions", async () => {
+  await test("close/reopen: the reopened band is split evenly again and closing fills the stack", async () => {
+    SHARE = 0.5; openRec = null;
     tripleBtn.click(); await sleep(30); await flush();
     const m = model();
     assert.ok(m.gap > 0);
-    assert.ok(m.up >= 0, "remembered edge position is applied (explicit upper part)");
-    assert.ok(Math.abs(m.up / m.gap - readMeta().gapSplit) < 0.01, "same split as saved");
+    assert.ok(Math.abs(m.up - m.gap / 2) <= 1, "an earlier edge drag is not replayed: the band is centred on the divider");
     tripleBtn.click(); await flush();
     const c = model();
-    assert.deepEqual([Math.round(c.U), Math.round(c.L)], [Math.round(closed.U), Math.round(closed.L)]);
+    assert.ok(Math.abs(c.U - closed.U) <= 1 && Math.abs(c.L - closed.L) <= 1, "an evenly split band closes at the original proportions (within 1px rounding)");
+  });
+
+  await test("close after asymmetric edge drags: both panels take back exactly half of the Notes band", async () => {
+    SHARE = 0.5; openRec = null;
+    tripleBtn.click(); await sleep(30); await flush();
+    const sheet = sheetsIn(slider).find((s) => s.dataset.slot === "gap");
+    await drag(sheet, "n", 500, 400, 60); await release(sheet, 60); // upper edge up 100px
+    const open = model();
+    assert.ok(open.up > open.gap / 2 + 40, "Notes grew mostly over the upper panel");
+    tripleBtn.click(); await flush();
+    const c = model();
+    assert.ok(Math.abs((c.U - open.U) - (c.L - open.L)) <= 1, `upper +${c.U - open.U}, lower +${c.L - open.L}`);
+    assert.ok(Math.abs((c.U - open.U) - open.gap / 2) <= 1, "each takes exactly half of the closing band");
+    assert.equal(Math.round(c.U + c.L), TOTAL - DIV);
+  });
+
+  await test("Larger / Smaller / fill re-centre the band on the divider (no growth over one panel only)", async () => {
+    SHARE = 0.5; openRec = null;
+    tripleBtn.click(); await sleep(30); await flush();
+    const sheet = sheetsIn(slider).find((s) => s.dataset.slot === "gap");
+    await drag(sheet, "n", 500, 400, 61); await release(sheet, 61);
+    assert.ok(model().up > model().gap / 2 + 40);
+    const larger = sheet.querySelector(".zn-head").children.find((el) => el.title.startsWith("Larger"));
+    assert.ok(larger, "Larger button exists");
+    larger.click(); await sleep(30); await flush();
+    const big = model();
+    assert.equal(sheet.dataset.size, "full");
+    assert.ok(big.gap > 0 && Math.abs(big.up - big.gap / 2) <= 1, "Larger grows the band evenly: " + JSON.stringify(big));
+    // Hold = fill the whole area: the gap is released and the sheet covers BOTH panels.
+    larger.dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0 }));
+    await sleep(480); await flush();
+    larger.dispatchEvent(new Ev("pointerup", { bubbles: true }));
+    assert.equal(sheet.dataset.size, "span");
+    assert.equal(vars.has("--zentral-notes-gap"), false, "fill releases the gap");
+    assert.equal(parseFloat(sheet.style.top), 6, "the sheet starts at the top of the upper panel");
+    assert.equal(parseFloat(sheet.style.top) + parseFloat(sheet.style.height), winH - 6, "and ends at the bottom of the LOWER panel");
+    assert.equal(Math.round(model().U), Math.round(model().L), "both panels are even again behind the sheet");
+    assert.equal(html.hasAttribute("bgalazka-notes-spill"), true, "span enables spill so the sheet can paint over both Triple slots");
+    larger.click(); await flush(); // the hold swallowed its click
+    larger.click(); await sleep(30); await flush();
+    const back = model();
+    assert.equal(sheet.dataset.size, "peek");
+    assert.ok(back.gap > 0 && Math.abs(back.up - back.gap / 2) <= 1, "back from fill: centred again");
+    tripleBtn.click(); await flush();
+  });
+
+  await test("Swap top and bottom panels while Notes is open: panels trade places, Notes stays, its edges keep working", async () => {
+    SHARE = 0.5; openRec = null;
+    tripleBtn.click(); await sleep(30); await flush();
+    const sheet = sheetsIn(slider).find((s) => s.dataset.slot === "gap");
+    await drag(sheet, "n", 500, 440, 62); await release(sheet, 62); // lopsided: up = even + 60
+    const before = model();
+    vars.set("--zentral-notes-gap-up", Math.round(before.gap - before.up) + "px");
+    SHARE = 1 - SHARE;
+    document.dispatchEvent(new Ev("zentral-triple-swapped")); await sleep(30); await flush();
+    const after = model();
+    assert.equal(Math.round(after.U), Math.round(before.L), "new upper panel = old lower panel");
+    assert.equal(Math.round(after.L), Math.round(before.U), "new lower panel = old upper panel");
+    assert.equal(after.gap, before.gap, "Notes keeps its height");
+    assert.equal(Math.round(after.up), Math.round(before.gap - before.up), "its upper part is now the old lower part");
+    assert.equal(sheetsIn(slider).filter((x) => x.dataset.slot === "gap").length, 1, "still one Notes sheet");
+    const m0 = model();
+    await drag(sheet, "n", 500, 470, 63);
+    const m1 = model();
+    assert.equal(Math.round(m0.U - m1.U), 30, "the upper panel gave exactly the dragged distance");
+    assert.equal(Math.round(m1.L), Math.round(m0.L), "the lower panel did not move");
+    await release(sheet, 63);
+    const open = model();
+    tripleBtn.click(); await flush();
+    const c = model();
+    assert.ok(Math.abs((c.U - open.U) - (c.L - open.L)) <= 1, "equal gain after a swap too");
   });
 
   await test("browser resize: the gap follows the stored share of the pages, it does not accumulate", async () => {
@@ -439,12 +561,36 @@ function cssTests() {
 
   await test("teardown: disposing Notes while a slot is open leaves no variable, marker or listener behind", async () => {
     primaryBtn.click(); await sleep(30); await flush();
-    assert.ok(vars.has("--zentral-notes-panel-reserve") || html.hasAttribute("bgalazka-quad-view") || true);
+    // A slot is open, so the page is reserved one way or the other: the gap and the panel reserve are the two
+    // mutually exclusive forms (a between-tabs slot sets the gap, a quad view sets the reserve), and the marker
+    // attribute says which. Before this was `|| true`, which proved nothing at all.
+    assert.ok(
+      vars.has("--zentral-notes-gap") || vars.has("--zentral-notes-panel-reserve"),
+      "an open slot reserves space, by the gap or by the panel reserve",
+    );
+    if (html.hasAttribute("bgalazka-quad-view"))
+      assert.ok(vars.has("--zentral-notes-panel-reserve"), "quad view reserves through the panel reserve");
     stop();
     await flush();
     for (const k of ["--zentral-notes-gap", "--zentral-notes-gap-up", "--zentral-notes-panel-reserve"]) assert.equal(vars.has(k), false, k);
     for (const a of ["bgalazka-notes-gap", "bgalazka-quad-view", "bgalazka-notes-spill"]) assert.equal(html.hasAttribute(a), false, a);
     assert.deepEqual(windowListeners.filter((l) => l.t !== "unload").map((l) => l.t), [], "window listeners removed (the one-off unload hook is intentionally kept)");
+  });
+
+  await test("source guards: a released Notes slot flushes its remembered height immediately", () => {
+    assert.match(source, /store\.setMeta\(patch\);\s*Promise\.resolve\(store\.flush\?\.\(\)\)\.catch\(\(error\) => console\.warn\(/,
+      "the new share is durable as soon as the resize gesture is released");
+  });
+
+  await test("source guards: secondary views mirror the gap on swap; when Notes closes they commit the middle of a band that was moved, and nothing for one that was not", async () => {
+    const sv = fs.readFileSync(path.resolve(__dirname, "../extension/panels/secondary-views/ZentralSecondaryViews.uc.js"), "utf8");
+    assert.match(sv, /--zentral-notes-gap-up[\s\S]{0,100}gapNow - upNow/, "swapPair mirrors the gap's upper part");
+    assert.match(sv, /zentral-triple-swapped/, "swapPair tells Notes");
+    assert.match(sv, /function scheduleSecondaryGeometryFit/, "Triple View has a bounded delayed geometry settle");
+    assert.match(sv, /var secondaryFitFrame = null;\s*var secondaryFitTimer = null;/, "fit state is hoisted so an early startup call cannot hit a temporal dead zone");
+    assert.match(sv, /scheduleSecondaryGeometryFit\(\);/, "the settle runs after slot changes and browser creation");
+    assert.match(sv, /if \(was && notesGap\(\) === 0 && state\.mode === "triple"\) \{\s*if \(!was\.asOpened\) state\.share = tripleShareAfterNotes\(/, "closing Notes commits the middle of the band, but only of a band that does not lie where it was opened");
+    assert.ok(/state\.notesOpen =\s*gap > 0\s*\? \{ top, gap, total: usable \+ gap, asOpened: tripleBandAsOpened\(\{ usable, gap, share: state\.share, top \}\) \}/.test(sv), "the open band, and whether it lies where it was opened, is recorded on every fit");
   });
 
   console.log(`\n${passed} slot-geometry tests passed`);

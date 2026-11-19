@@ -67,10 +67,53 @@
       if (window.gBrowserInit?.delayedStartupFinished) run();
     }
   }
+  // A reader binding belongs to exactly one native tab strip.
+  function readerBindingAction(enabled, current, next) {
+    if (!enabled || !next) return current ? "unbind" : "keep";
+    if (!current) return "bind";
+    return current === next ? "keep" : "replace";
+  }
+  // Small pure helpers the card's behaviour is built from, exported for the suite: a clamped delay, a known side,
+  // and a URL that is only a URL when the platform agrees.
+  // The bounds the running card uses (see CARD_DELAY_LIMITS in start()); kept here so the seam has no inner state.
+  const CARD_DELAY_BOUNDS = Object.freeze({ hover: [0, 2000], hide: [0, 5000] });
+  function clampCardDelay(name, raw) {
+    const [min, max] = CARD_DELAY_BOUNDS[name] || [0, 0];
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return null;
+    return Math.max(min, Math.min(max, Math.round(value)));
+  }
+  function cleanReaderSide(value) {
+    return ["auto", "left", "right"].includes(value) ? value : "auto";
+  }
+  function cleanCardGap(raw) {
+    const value = parseFloat(raw);
+    return Number.isFinite(value) ? Math.max(0, Math.min(32, value)) : 6;
+  }
+  function urlsInText(text, hrefOf) {
+    const re = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+    const out = [];
+    let match;
+    while ((match = re.exec(String(text ?? "")))) {
+      const href = typeof hrefOf === "function" ? hrefOf(match[0]) : "";
+      if (href) out.push(href);
+    }
+    return out;
+  }
+  if (window.__zentralRssTestSeam) {
+    window.__zentralRssTestSeam.readerBindingAction = readerBindingAction;
+    window.__zentralRssTestSeam.clampCardDelay = clampCardDelay;
+    window.__zentralRssTestSeam.cleanReaderSide = cleanReaderSide;
+    window.__zentralRssTestSeam.cleanCardGap = cleanCardGap;
+    window.__zentralRssTestSeam.urlsInText = urlsInText;
+    window.__zentralRssTestSeam.LIMITS = CARD_DELAY_BOUNDS;
+  }
   (function () {
-    function start({ lifecycle } = {}) {
+    function start({ lifecycle, runtime: hostRuntime } = {}) {
       const cleanups = [];
       const registerCleanup = (fn) => cleanups.push(fn);
+      const getRuntime = () =>
+        hostRuntime || window.ZentralRuntime || window.__zentralStandaloneRuntime || null;
       const getPref = (key, fallback) =>
         Services.prefs.getBoolPref(key, fallback);
       // Colors are optional overrides: an unset (or invalid) value keeps the
@@ -119,6 +162,10 @@
       });
       const rssMarkedFolders = new Set();
       let rssScanTimer = null;
+      // OW-94 (plan B7.1): the shared pause switch. Absent in a standalone build with no full pack around it, and a
+      // missing switch means "not paused", which is exactly the behaviour from before.
+      const rssPerformance = window.ZentralRuntime?.performance || null;
+      const performancePaused = () => Boolean(rssPerformance?.isPaused?.());
       let rssObserver = null,
         rssObservedContainer = null,
         nativeBinding = null;
@@ -203,16 +250,11 @@
       }
 
       // ---- Reader card -------------------------------------------------
-      // Own hover card for live-folder articles. Replaces the native tab
-      // tooltip (only for those tabs) and continues with the next article
-      // after a dismiss, so no extra mouse movement is needed.
-      let card = null,
-        cardTab = null,
-        hideTimer = null,
-        showTimer = null,
-        showTab = null,
-        lastXY = null,
-        readerBound = false;
+      // Own hover card for live-folder articles, backed by the shared
+      // createSidebarHoverCard engine (full pack + standalone). Replaces the
+      // native tab tooltip (only for those tabs) and continues with the next
+      // article after a dismiss, so no extra mouse movement is needed.
+      let readerContainer = null;
       const itemTab = (el) => {
         const tab = el?.closest?.("tab, .tabbrowser-tab");
         if (!tab) return null;
@@ -226,15 +268,6 @@
         } catch (_) {
           return "";
         }
-      };
-      const cancelHide = () => {
-        clearTimeout(hideTimer);
-        hideTimer = null;
-      };
-      const cancelShow = () => {
-        clearTimeout(showTimer);
-        showTimer = null;
-        showTab = null;
       };
       const cardDelay = (name, key) => {
         const [min, max] = CARD_DELAY_LIMITS[name];
@@ -260,43 +293,22 @@
       };
       // The card's look is owned by the Look custom properties on the root
       // element. Only the behavior switches are applied here.
-      function applyCardParts() {
-        if (!card) return;
-        card.querySelector(".rc-folder").hidden = !getPref(
-          EXT_PREFS.RSS_CARD_SHOW_FOLDER,
-          true,
-        );
-        card.querySelector(".rc-url").hidden = !getPref(
-          EXT_PREFS.RSS_CARD_SHOW_URL,
-          true,
-        );
-        card.querySelector(".rc-actions").hidden = !getPref(
-          EXT_PREFS.RSS_CARD_SHOW_BUTTONS,
-          true,
-        );
-        card.dataset.side = readerSide();
+      function applyCardParts(node) {
+        const target = node || rssCard?.getNode?.();
+        if (!target) return;
+        const folderEl = target.querySelector(".rc-folder");
+        const urlEl = target.querySelector(".rc-url");
+        const actionsEl = target.querySelector(".rc-actions");
+        if (folderEl) folderEl.hidden = !getPref(EXT_PREFS.RSS_CARD_SHOW_FOLDER, true);
+        if (urlEl) urlEl.hidden = !getPref(EXT_PREFS.RSS_CARD_SHOW_URL, true);
+        if (actionsEl) actionsEl.hidden = !getPref(EXT_PREFS.RSS_CARD_SHOW_BUTTONS, true);
+        target.dataset.side = readerSide();
       }
       // A behavior change only restyles the open card; it never triggers a
       // folder refresh.
       function applyCardStyle() {
         applyCardParts();
-        if (card && cardTab && !card.hidden) showCard(cardTab);
-      }
-      // Big Preview (and other popovers) live in the browser's top layer, which no
-      // z-index can outrank. The card is therefore a manual popover too, and every
-      // show re-enters the top layer, because a later popover sits above an earlier
-      // one. Without popover support the z-index in the stylesheet still applies.
-      function raiseCard(c) {
-        if (typeof c.showPopover !== "function") return;
-        try {
-          if (c.matches(":popover-open")) c.hidePopover();
-          c.showPopover();
-        } catch (_) {}
-      }
-      function dropCard(c) {
-        try {
-          if (c?.matches(":popover-open")) c.hidePopover();
-        } catch (_) {}
+        rssCard?.refresh?.();
       }
       const URL_RE = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
       const HTML_HINT_RE =
@@ -436,70 +448,6 @@
           appendLinkifiedText(container, doc.body?.textContent || "", baseUrl);
         }
       }
-      function hideCard(delay = 0) {
-        cancelShow();
-        cancelHide();
-        hideTimer = setTimeout(
-          () => {
-            hideTimer = null;
-            if (card) {
-              card.hidden = true;
-              dropCard(card);
-            }
-            cardTab = null;
-          },
-          Math.max(0, delay),
-        );
-      }
-      function ensureCard() {
-        if (card) return card;
-        card = document.createElement("div");
-        card.id = "bgalazka-rss-card";
-        card.setAttribute("popover", "manual");
-        card.hidden = true;
-        card.innerHTML =
-          '<div class="rc-folder"></div><div class="rc-text"></div>' +
-          '<div class="rc-url"></div><div class="rc-actions">' +
-          '<button data-a="open">Open</button>' +
-          '<button data-a="dismiss">Dismiss</button>' +
-          '<button data-a="all">Dismiss all</button></div>';
-        card.addEventListener("mouseenter", cancelHide);
-        card.addEventListener("mouseleave", () => hideCard(hideDelay()));
-        card.addEventListener("click", (e) => {
-          const a = e.target.closest("button")?.dataset.a;
-          if (!a || !cardTab) return;
-          const tab = cardTab;
-          if (a === "open") {
-            gBrowser.selectedTab = tab;
-            hideCard();
-          } else if (a === "dismiss") dismiss(tab, false);
-          else if (a === "all") {
-            const folder = tab.closest("zen-folder");
-            const tabs = folder
-              ? [...folder.querySelectorAll("tab, .tabbrowser-tab")].filter(
-                  (t) => itemTab(t) && !t.hasAttribute("zen-empty-tab"),
-                )
-              : [tab];
-            if (
-              getPref(EXT_PREFS.RSS_CARD_CONFIRM_ALL, false) &&
-              !window.confirm(
-                "Dismiss all " +
-                  tabs.length +
-                  " article" +
-                  (tabs.length === 1 ? "" : "s") +
-                  " in this folder?",
-              )
-            )
-              return;
-            hideCard();
-            tabs.forEach((t) => gBrowser.removeTab(t, { animate: false }));
-          }
-        });
-        document.documentElement.appendChild(card);
-        applyCardParts();
-        registerCleanup(() => card?.remove());
-        return card;
-      }
       // The article that follows the dismissed one inside the same folder.
       function nextArticle(folder, tab) {
         if (!folder) return null;
@@ -581,43 +529,97 @@
         }
         return best;
       }
-      function showCard(tab) {
-        if (!tab) return;
-        const c = ensureCard();
-        cancelHide();
-        cancelShow();
-        cardTab = tab;
-        const folder = tab.closest("zen-folder");
-        c.querySelector(".rc-folder").textContent =
-          folder?.label || folder?.getAttribute("label") || "";
-        const url = tabUrl(tab);
-        const rcText = c.querySelector(".rc-text");
-        rcText.className = "rc-text";
-        renderRichText(rcText, getFullTabText(tab), url);
-        c.querySelector(".rc-url").textContent = url;
-        applyCardParts();
-        c.hidden = false;
-        raiseCard(c);
-        const side = document.getElementById("navigator-toolbox");
-        const sr = side?.getBoundingClientRect();
-        const tr = tab.getBoundingClientRect();
-        const w = c.offsetWidth,
-          h = c.offsetHeight;
-        const onRight = sr && sr.left > window.innerWidth / 2;
-        const sidePref = readerSide();
-        const placeLeft =
-          sidePref === "left" ? true : sidePref === "right" ? false : onRight;
-        const gap = cardGap();
-        let left = placeLeft ? tr.left - w - gap : tr.right + gap;
-        // Fall back to the other side when the chosen one has no room.
-        if (left < 4) {
-          const flipped = tr.right + gap;
-          if (flipped + w <= window.innerWidth - 4) left = flipped;
-        }
-        c.style.left =
-          Math.max(4, Math.min(left, window.innerWidth - w - 4)) + "px";
-        c.style.top =
-          Math.max(4, Math.min(tr.top, window.innerHeight - h - 4)) + "px";
+      let rssCard = null;
+      function ensureRssCard() {
+        if (rssCard) return rssCard;
+        const factory = getRuntime()?.createSidebarHoverCard;
+        if (typeof factory !== "function") return null;
+        rssCard = factory({
+          id: "bgalazka-rss-card",
+          describeTarget: false,
+          defaultWidth: 340,
+          defaultHeight: 120,
+          isEnabled: () => !disposed && readerOn(),
+          matchTarget: itemTab,
+          isValid: (tab) => !disposed && readerOn() && !!tab && tab.isConnected !== false && !!itemTab(tab),
+          getShowDelay: hoverDelay,
+          getHideDelay: hideDelay,
+          getSide: readerSide,
+          getGap: cardGap,
+          suppressTooltipWhenClosed: true,
+          shouldSuppressTooltip: () => getPref(EXT_PREFS.RSS_CARD_REPLACE_TOOLTIP, true),
+          onCreate(c, ctrl) {
+            const makeEl = (tag, cls, text) => {
+              const el = document.createElement(tag);
+              if (cls) el.className = cls;
+              if (text) el.textContent = text;
+              return el;
+            };
+            const folderEl = makeEl("div", "rc-folder");
+            const textEl = makeEl("div", "rc-text");
+            const urlEl = makeEl("div", "rc-url");
+            const actionsEl = makeEl("div", "rc-actions");
+            for (const [action, label] of [
+              ["open", "Open"],
+              ["dismiss", "Dismiss"],
+              ["all", "Dismiss all"],
+            ]) {
+              const btn = makeEl("button", "", label);
+              btn.setAttribute("data-a", action);
+              btn.dataset.a = action;
+              actionsEl.append(btn);
+            }
+            c.append(folderEl, textEl, urlEl, actionsEl);
+            c.addEventListener("click", (e) => {
+              const btn = e.target.closest?.("button");
+              const a = btn?.getAttribute?.("data-a") || btn?.dataset?.a;
+              const tab = ctrl.getTarget();
+              if (!a || !tab) return;
+              if (a === "open") {
+                window.gBrowser.selectedTab = tab;
+                ctrl.hide();
+              } else if (a === "dismiss") dismiss(tab, false);
+              else if (a === "all") {
+                const folder = tab.closest("zen-folder");
+                const tabs = folder
+                  ? [...folder.querySelectorAll("tab, .tabbrowser-tab")].filter(
+                      (t) => itemTab(t) && !t.hasAttribute("zen-empty-tab"),
+                    )
+                  : [tab];
+                if (
+                  getPref(EXT_PREFS.RSS_CARD_CONFIRM_ALL, false) &&
+                  !window.confirm(
+                    "Dismiss all " +
+                      tabs.length +
+                      " article" +
+                      (tabs.length === 1 ? "" : "s") +
+                      " in this folder?",
+                  )
+                )
+                  return;
+                ctrl.hide();
+                tabs.forEach((t) => window.gBrowser.removeTab(t, { animate: false }));
+              }
+            });
+            applyCardParts(c);
+          },
+          render(c, tab) {
+            const folder = tab.closest("zen-folder");
+            const folderEl = c.querySelector(".rc-folder");
+            if (folderEl) folderEl.textContent = folder?.label || folder?.getAttribute("label") || "";
+            const url = tabUrl(tab);
+            const rcText = c.querySelector(".rc-text");
+            if (rcText) {
+              rcText.className = "rc-text";
+              renderRichText(rcText, getFullTabText(tab), url);
+            }
+            const urlEl = c.querySelector(".rc-url");
+            if (urlEl) urlEl.textContent = url;
+            applyCardParts(c);
+          },
+        });
+        registerCleanup(() => { rssCard?.destroy(); rssCard = null; });
+        return rssCard;
       }
       // A dismiss never hides the card first: it continues with the next
       // article, so the reader sees no flash of a closed card.
@@ -625,57 +627,17 @@
         if (!tab) return;
         const folder = tab.closest("zen-folder");
         const next = nextArticle(folder, tab);
-        gBrowser.removeTab(tab, { animate: false });
-        if (
-          viaPointer &&
-          getPref(EXT_PREFS.RSS_CARD_RETARGET, true) &&
-          lastXY
-        ) {
-          // The list shifts under a still pointer: re-target the item that
-          // moved under it. The card stays open while that happens.
-          window.requestAnimationFrame(() => {
-            if (!readerOn()) return;
-            const under = itemTab(document.elementFromPoint(...lastXY));
-            if (under) showCard(under);
-            else if (next?.isConnected) showCard(next);
-            else hideCard();
-          });
-          return;
-        }
-        if (next) {
-          showCard(next);
-          return;
-        }
-        hideCard();
+        window.gBrowser.removeTab(tab, { animate: false });
+        const ctrl = ensureRssCard();
+        if (!ctrl) return;
+        ctrl.retarget(tab, {
+          viaPointer: !!viaPointer,
+          allowPointer: getPref(EXT_PREFS.RSS_CARD_RETARGET, true),
+          nextTarget: next,
+        });
       }
-      const onOver = (e) => {
-        if (!readerOn()) return;
-        lastXY = [e.clientX, e.clientY];
-        const tab = itemTab(e.target);
-        if (tab) {
-          scheduleShow(tab);
-          return;
-        }
-        if (card && !card.hidden && !card.contains(e.target))
-          hideCard(hideDelay());
-      };
-      const scheduleShow = (tab) => {
-        const delay = hoverDelay();
-        if (delay <= 0) {
-          cancelShow();
-          showCard(tab);
-          return;
-        }
-        if (showTimer !== null && showTab === tab) return;
-        cancelShow();
-        showTab = tab;
-        showTimer = setTimeout(() => {
-          showTimer = null;
-          showTab = null;
-          if (readerOn()) showCard(tab);
-        }, delay);
-      };
-      const onMove = (e) => (lastXY = [e.clientX, e.clientY]);
+      const onOver = (e) => { ensureRssCard()?.over(e); };
+      const onMove = (e) => { ensureRssCard()?.move(e); };
       const onAux = (e) => {
         if (e.button !== 1 || !readerOn()) return;
         if (!getPref(EXT_PREFS.RSS_CARD_MMB_DISMISS, true)) return;
@@ -685,41 +647,41 @@
         e.stopPropagation();
         dismiss(tab, true);
       };
-      const onPopup = (e) => {
-        if (!readerOn() || e.target.id !== "tabbrowser-tab-tooltip") return;
-        if (!getPref(EXT_PREFS.RSS_CARD_REPLACE_TOOLTIP, true)) return;
-        if (itemTab(e.target.triggerNode)) e.preventDefault();
-      };
-      const onKeyDown = (e) => {
-        if (e.key !== "Escape" || !readerOn()) return;
-        if (!card || card.hidden) return;
-        e.preventDefault();
-        e.stopPropagation();
-        hideCard();
-      };
-      const onContainerLeave = () => hideCard(hideDelay());
+      const onPopup = (e) => { ensureRssCard()?.popup(e); };
+      const onKeyDown = (e) => { ensureRssCard()?.key(e); };
+      const onContainerLeave = () => { rssCard?.scheduleHide?.(); };
+      function unbindReader() {
+        const container = readerContainer;
+        if (!container) return;
+        readerContainer = null;
+        container.removeEventListener("mouseover", onOver);
+        container.removeEventListener("mousemove", onMove);
+        container.removeEventListener("auxclick", onAux, true);
+        container.removeEventListener("mouseleave", onContainerLeave);
+        window.removeEventListener("popupshowing", onPopup, true);
+        window.removeEventListener("keydown", onKeyDown);
+      }
+      function resetReaderCard() {
+        rssCard?.hide?.();
+      }
+      registerCleanup(() => { unbindReader(); resetReaderCard(); });
       function syncReader() {
-        const container = window.gBrowser?.tabContainer;
-        // Appearance preferences reach the card through the same refresh path
-        // as the folder state, so a change applies without a restart.
+        const container = window.gBrowser?.tabContainer || null;
         applyCardStyle();
-        if (readerOn() && container && !readerBound) {
-          readerBound = true;
+        const action = readerBindingAction(readerOn(), readerContainer, container);
+        if (action === "unbind" || action === "replace") {
+          unbindReader();
+          resetReaderCard();
+        }
+        if (action === "bind" || action === "replace") {
+          readerContainer = container;
           container.addEventListener("mouseover", onOver);
           container.addEventListener("mousemove", onMove);
           container.addEventListener("auxclick", onAux, true);
           container.addEventListener("mouseleave", onContainerLeave);
           window.addEventListener("popupshowing", onPopup, true);
           window.addEventListener("keydown", onKeyDown);
-          registerCleanup(() => {
-            container.removeEventListener("mouseover", onOver);
-            container.removeEventListener("mousemove", onMove);
-            container.removeEventListener("auxclick", onAux, true);
-            container.removeEventListener("mouseleave", onContainerLeave);
-            window.removeEventListener("popupshowing", onPopup, true);
-            window.removeEventListener("keydown", onKeyDown);
-          });
-        } else if (!readerOn()) hideCard();
+        }
       }
       function syncRssFolderDisplay() {
         if (disposed) return;
@@ -748,6 +710,13 @@
           if (rssScanTimer !== null) clearTimeout(rssScanTimer);
           rssScanTimer = null;
         }
+        // OW-94: a paused pass does not scan. Folders change while a person is not gaming too, so the observer stays
+        // attached and the scan that follows the resume picks up everything it missed — this only skips the work.
+        if (performancePaused()) {
+          if (rssScanTimer !== null) clearTimeout(rssScanTimer);
+          rssScanTimer = null;
+          return;
+        }
         safeScanRssFolders();
         if (!rssObserver && container) {
           rssObservedContainer = container;
@@ -755,6 +724,7 @@
             if (disposed || !rssEnabled() || rssScanTimer !== null) return;
             rssScanTimer = setTimeout(() => {
               rssScanTimer = null;
+              if (performancePaused()) return;
               safeScanRssFolders();
             }, 100);
           });
@@ -865,6 +835,15 @@
         );
       });
       syncRssFolderDisplay();
+
+      // OW-94: resume runs the scan the paused window skipped. Registered with the module's own cleanups, and a
+      // switch that is missing entirely simply has no listener to add.
+      if (rssPerformance?.subscribe) {
+        const unsubscribe = rssPerformance.subscribe((paused) => {
+          if (!paused && !disposed) syncRssFolderDisplay();
+        });
+        if (unsubscribe) cleanups.push(() => unsubscribe());
+      }
 
       const api = {
         refresh: syncRssFolderDisplay,

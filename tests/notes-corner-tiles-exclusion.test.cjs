@@ -1,0 +1,10 @@
+"use strict";
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const source = fs.readFileSync(path.resolve(__dirname, "../extension/panels/corner-tiles/ZentralCornerPanels.uc.js"), "utf8");
+assert.match(source, /function isNotesAgendaPseudoTab\(tab\)/);
+assert.match(source, /!isNotesAgendaPseudoTab\(tab\)/, "the panel tile candidate set excludes Notes and Agenda pseudo-tabs");
+assert.match(source, /if \(isNotesAgendaPseudoTab\(record\.tab\)\)/, "existing panel launchers are removed when a tab becomes a pseudo-tab");
+assert.match(source, /if \(isNotesAgendaPseudoTab\(tab\)\) return null;/, "restored pseudo-URLs are not converted to panel sources");
+console.log("Notes and Agenda pseudo-tabs are excluded from Zentral favicon panel launchers");

@@ -1,0 +1,32 @@
+"use strict";
+const assert = require("node:assert/strict");
+const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
+const day = new Date(2026, 10, 13, 0, 0, 0).getTime();
+let now = day + 10 * 3600000;
+const make = (id, start, end, extra = {}) => C.makeItem({ id, summary: id, start: { dateTime: new Date(start).toISOString() }, end: { dateTime: new Date(end).toISOString() }, x: { kind: "event", src: "manual", ...(extra.x || {}) }, ...Object.fromEntries(Object.entries(extra).filter(([k]) => k !== "x")) }, now);
+const ordinary = make("meeting", day + 10 * 3600000, day + 11 * 3600000);
+const recurring = make("daily", day - 14 * 3600000, day - 13 * 3600000, { recurrence: ["RRULE:FREQ=DAILY;COUNT=3"] });
+const hidden = make("hidden", now, now + 60000, { x: { agendaWindow: { enabled: false } } });
+const overnight = make("overnight", day - 3600000, day + 10.5 * 3600000);
+const reminder = C.makeItem({ id: "rem", start: { dateTime: new Date(now + 5 * 60000).toISOString() }, x: { kind: "reminder", src: "manual" } }, now);
+assert.equal(C.nextAgendaVisibilityBoundary([ordinary, hidden, reminder], now), day + 11 * 3600000, "only visible event ends cause a timer");
+assert.equal(C.nextAgendaVisibilityBoundary([ordinary, overnight], now), day + 10.5 * 3600000, "overnight event ends today");
+assert.equal(C.nextAgendaVisibilityBoundary([recurring], now), day + 11 * 3600000, "a recurring occurrence ending today wakes the controller");
+assert.equal(C.nextAgendaVisibilityBoundary([hidden], now), null, "hidden events do not schedule an update");
+const tomorrowEvent = make("tomorrow", C.addDays(day, 1) + 9 * 3600000, C.addDays(day, 1) + 10 * 3600000, { x: { agendaWindow: { leadDays: 1 } } });
+assert.equal(C.nextAgendaVisibilityBoundary([tomorrowEvent], now), C.addDays(day, 1), "tomorrow's pre-visible event waits for local midnight");
+const allDay = C.makeItem({ id: "all-day", start: { date: C.localDateKey(day) }, end: { date: C.localDateKey(C.addDays(day, 1)) }, x: { kind: "event" } }, now);
+assert.equal(C.nextAgendaVisibilityBoundary([allDay], now), C.addDays(day, 1), "all-day events do not create intraday timers");
+let timerId = 0; const timers = new Map(), current = new Map();
+const api = { ensureRoot: () => true, list: () => [...current.values()], add: (entry) => { current.set(entry.key, { ...entry }); return true; }, update: (entry) => current.set(entry.key, { ...entry }), remove: (key) => current.delete(key), reorder() {}, removeAll: () => current.clear() };
+const controller = C.createZenAgenda({ api, getItems: () => [ordinary], now: () => now, setTimer(fn, ms) { const id = ++timerId; timers.set(id, { fn, at: now + ms }); return id; }, clearTimer(id) { timers.delete(id); } });
+try {
+  controller.runNow();
+  const event = () => [...current.values()].find((entry) => entry.kind === "item");
+  assert.equal(event().ended, false);
+  const next = [...timers.values()][0]; assert.equal(next.at, day + 11 * 3600000);
+  now = next.at; timers.clear(); next.fn();
+  assert.equal(event().ended, true, "ends/fades at 11:00 without store events");
+  assert.equal([...timers.values()][0].at, C.addDays(day, 1), "next deadline advances to the day boundary");
+} finally { controller.destroy(); }
+console.log("Agenda event end deadlines passed");

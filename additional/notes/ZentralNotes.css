@@ -59,11 +59,18 @@
 
 /* ---- sheet ------------------------------------------------------------- */
 .zentral-notes-sheet {
-  --zn-accent: var(--zen-primary-color, #83a5ff);
-  --zn-surface: var(--bgalazka-look-toolbar-surface, var(--bgalazka-look-surface, #1e1e24));
-  --zn-text: var(--bgalazka-look-text, #e9e9f0);
-  --zn-muted: color-mix(in srgb, var(--zn-text) 58%, transparent);
-  --zn-line: color-mix(in srgb, var(--zn-text) 14%, transparent);
+  color-scheme: light dark;
+  /* OW-78: ONE chain, read from one end. The resolved value the JS resolver computed wins; before it is computed (or in
+     a document where the sheet was never opened) Zen's own palette answers, and --bgalazka-look-* is the LAST fallback
+     only — it is the RSS card's private palette, another module's look. Never put an RSS token before --zen-colors-*:
+     that is how the same sheet came to have two palettes. The resolver reads exactly these three names (see
+     resolveThemeSurface in ZentralNotesCalendar.js), so both paths answer with the same colour. */
+  --zn-accent: var(--zn-accent-safe, var(--zen-primary-color, #83a5ff));
+  --zn-surface: var(--zn-surface-resolved, var(--zen-colors-base, var(--bgalazka-look-toolbar-surface, var(--bgalazka-look-surface, #1e1e24))));
+  --zn-panel: var(--zn-surface);
+  --zn-text: var(--zn-text-resolved, var(--zen-colors-text, var(--bgalazka-look-text, #e9e9f0)));
+  --zn-muted: var(--zn-muted-resolved, color-mix(in srgb, var(--zn-text) 64%, transparent));
+  --zn-line: color-mix(in srgb, var(--zn-text) 16%, transparent);
   --zn-hover: color-mix(in srgb, var(--zn-text) 10%, transparent);
   --zn-radius: var(--zen-border-radius, 10px);
   --zn-tint: color-mix(in srgb, var(--zn-surface) 94%, transparent);
@@ -86,6 +93,8 @@
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
   animation: zn-in 0.14s ease-out;
 }
+.zentral-notes-sheet[data-scheme="light"] { color-scheme: light; }
+.zentral-notes-sheet[data-scheme="dark"] { color-scheme: dark; }
 .zentral-notes-sheet[hidden] {
   display: none !important;
 }
@@ -198,7 +207,38 @@
   padding: 4px 6px;
   border-top: 3px solid var(--zn-note);
   border-bottom: 1px solid var(--zn-line);
+  /* OW-85: one row, and nothing may be cut by the window edge. The bar holds the title, the three layout buttons and
+     the note's own actions, so it is the title that gives ground (it already ellipsises) and then the buttons that are
+     least needed; the row wraps only if the sheet is genuinely too narrow, and it scrolls rather than clipping. */
+  flex-wrap: wrap;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
 }
+/* OW-101: the sheet is a column flexbox, and every chrome row in it (this one, the tools, the strip, the find bar, the
+   wiki bar, the footer) declared no `flex` at all — so each defaulted to `flex: 0 1 auto`, i.e. it was the one thing
+   that could shrink. When the editor's own content pushed back, these rows lost height; `align-items: center` then
+   centred a 26px button inside a 12px box, the row's content sank, and the bar underneath painted over the overflow.
+   That is the "top bar sits at the bottom of its space and is half hidden behind the tool strip" report. A chrome row
+   is exactly `flex: 0 0 auto`: it is as tall as its content and never gives a pixel of that away. Only the body grows. */
+.zentral-notes-sheet .zn-head,
+.zentral-notes-sheet .zn-tools,
+.zentral-notes-sheet .zn-strip,
+.zentral-notes-sheet .zn-findbar,
+.zentral-notes-sheet .zn-wikibar,
+.zentral-notes-sheet .zn-foot {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+.zentral-notes-sheet .zn-head { align-content: center; }
+.zentral-notes-sheet .zn-head::-webkit-scrollbar { height: 0; }
+/* While the calendar workspace is on screen only these three layout buttons are useful; in the editor they are hidden
+   in JS. Keep them from being pushed out by the title. */
+.zentral-notes-sheet .zn-head > .zn-btn { flex: 0 0 auto; }
+.zentral-notes-sheet .zn-head > .zn-calendar-layout-btn,
+.zentral-notes-sheet .zn-head > .zn-calendar-tree-toggle,
+.zentral-notes-sheet .zn-head > .zn-calendar-pane-toggle { flex: 0 0 auto; }
 .zentral-notes-sheet .zn-title {
   appearance: none;
   flex: 1 1 auto;
@@ -218,6 +258,18 @@
   cursor: pointer;
 }
 .zentral-notes-sheet .zn-title:hover { background: var(--zn-hover); }
+.zentral-notes-sheet .zn-category-btn {
+  gap: 5px;
+  max-width: 122px;
+  min-width: 0;
+  padding-inline: 6px;
+  color: var(--zn-muted);
+  font: inherit;
+  font-size: 0.82em;
+}
+.zentral-notes-sheet .zn-category-btn:hover { color: var(--zn-text); background: var(--zn-hover); }
+.zentral-notes-sheet .zn-category-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zentral-notes-sheet .zn-category-dot { flex: 0 0 10px; width: 10px; height: 10px; }
 .zentral-notes-sheet .zn-dot {
   display: block;
   width: 12px;
@@ -273,13 +325,84 @@
 }
 .zentral-notes-sheet .zn-editor,
 .zentral-notes-sheet .zn-read,
-.zentral-notes-sheet .zn-list {
+.zentral-notes-sheet .zn-all-layout {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
+}
+/* The sheet clips its outer frame, but the editor and rendered note are independent scrollports.
+   Keeping overflow:hidden here makes long notes impossible to scroll with the wheel/trackpad;
+   it also breaks the two-pane split view even though programmatic scrollTop still appears to work. */
+.zentral-notes-sheet .zn-editor,
+.zentral-notes-sheet .zn-read {
   overflow: auto;
+  overscroll-behavior: contain;
   scrollbar-width: thin;
 }
+.zentral-notes-sheet .zn-all-layout { display: flex; flex-direction: column; }
+.zentral-notes-sheet .zn-all-layout[hidden] { display: none !important; }
+/* OW-73 was reverted at 3.3.306 (OW-85): it targeted the wrong row. See the sheet bar below. */
+.zentral-notes-sheet .zn-all-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 4px; flex: 0 0 auto; min-width: 0; padding: 3px 6px; border-bottom: 1px solid var(--zn-line); }
+.zentral-notes-sheet .zn-all-toolbar .zn-btn { flex: 0 0 auto; }
+.zentral-notes-sheet .zn-all-toolbar .zn-chip { flex: 0 0 auto; }
+.zentral-notes-sheet .zn-all-toolbar .zn-grow { flex: 1 1 auto; min-width: 0; }
+.zentral-notes-sheet .zn-all-toolbar .zn-calendar-tab { display: none; }
+.zentral-notes-sheet .zn-all-layout[data-layout="tabs"] .zn-all-toolbar .zn-calendar-tab { display: inline-flex; }
+.zentral-notes-sheet[data-all-notes-active="true"] .zn-all-toolbar .zn-calendar-tab[hidden] { display: none !important; }
+.zentral-notes-sheet .zn-all-panels { display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; overflow: hidden; }
+.zentral-notes-sheet .zn-all-panels[data-orientation="tb"] { flex-direction: column; }
+.zentral-notes-sheet .zn-tree-pane,
+.zentral-notes-sheet .zn-calendar-pane { display: flex; flex: 1 1 0; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.zentral-notes-sheet .zn-tree-pane[hidden],
+.zentral-notes-sheet .zn-calendar-pane[hidden] { display: none !important; }
+.zentral-notes-sheet .zn-tree-pane { flex: 0 0 var(--zn-calendar-tree-share, 36%); }
+.zentral-notes-sheet .zn-list { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; scrollbar-width: thin; }
+.zentral-notes-sheet .zn-calendar-splitter { z-index: 1; flex: 0 0 7px; cursor: col-resize; background: var(--zn-line); opacity: 0.45; touch-action: none; outline-offset: -2px; }
+.zentral-notes-sheet .zn-calendar-splitter:hover,
+.zentral-notes-sheet .zn-calendar-splitter:focus-visible { opacity: 1; background: var(--zn-accent); }
+.zentral-notes-sheet .zn-all-panels[data-orientation="tb"] .zn-calendar-splitter { cursor: row-resize; }
+.zentral-notes-sheet .zn-calendar-pane { background: color-mix(in srgb, var(--zn-hover) 22%, transparent); }
+.zentral-notes-sheet .zn-calendar-pane-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--zn-line); }
+/* OW-74: the header holds the calendar name, then the basic controls, then the long period name. The controls are the
+   ones that must never be squeezed out: the name is the only item that gives ground and ellipsises, so hiding the
+   control strip cannot cost the person their way between months or back to today. */
+.zentral-notes-sheet .zn-calendar-pane-head > strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zentral-notes-sheet .zn-calendar-head-nav { display: flex; align-items: center; flex: 0 0 auto; min-width: 0; gap: 3px; }
+.zentral-notes-sheet .zn-calendar-head-nav > .zn-chip { flex: 0 0 auto; }
+/* OW-83 (owner, 2026-11-18: "the buttons you added to calendar control row are WAY too big, i asked specifically
+   for small < o > chevrons"). The chevrons keep the chip's click box but lose its pill: no border, no pill radius, no
+   side padding, a 20px square, and the glyph drawn at 1em rather than the chip's 0.92em. Measured before: 22x20 with a
+   999px radius and a 1px border, visually the same weight as "Go to today" beside them. */
+.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-nav {
+  min-width: 20px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 1em;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-nav:hover { background: var(--zn-hover); color: var(--zn-text); }
+.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-nav:focus-visible { outline: 2px solid var(--zn-accent); outline-offset: -1px; }
+.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-view-toggle { min-width: 0; }
+.zentral-notes-sheet .zn-calendar-pane-head-right { display: flex; align-items: center; flex: 0 0 auto; min-width: 0; gap: 6px; }
+.zentral-notes-sheet .zn-calendar-pane-hint { color: var(--zn-muted); font-size: 0.82em; }
+.zentral-notes-sheet .zn-calendar-pane-content { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 0; padding: 20px; text-align: center; color: var(--zn-muted); }
+.zentral-notes-sheet .zn-calendar-pane-content strong { color: var(--zn-text); }
+.zentral-notes-sheet .zn-calendar-pane-content p { max-width: 34em; margin: 0; }
+.zentral-notes-sheet .zn-all-panels[data-layout="tabs"] { display: flex; }
+.zentral-notes-sheet .zn-all-panels[data-layout="tabs"] .zn-calendar-splitter { display: none; }
+.zentral-notes-sheet .zn-all-panels[data-tree-collapsed="true"] .zn-tree-pane,
+.zentral-notes-sheet .zn-all-panels[data-calendar-collapsed="true"] .zn-calendar-pane { display: none !important; }
+.zentral-notes-sheet .zn-all-panels[data-layout="tabs"][data-tab="tree"] .zn-calendar-pane,
+.zentral-notes-sheet .zn-all-panels[data-layout="tabs"][data-tab="calendar"] .zn-tree-pane { display: none !important; }
 .zentral-notes-sheet .zn-editor {
   appearance: none;
   display: block;
@@ -300,7 +423,7 @@
 .zentral-notes-sheet .zn-read[hidden] { display: none !important; }
 .zentral-notes-sheet[data-view="list"] .zn-editor,
 .zentral-notes-sheet[data-view="list"] .zn-read { display: none !important; }
-.zentral-notes-sheet[data-view="editor"] .zn-list { display: none; }
+.zentral-notes-sheet[data-view="editor"] .zn-all-layout { display: none; }
 
 /* read mode */
 .zentral-notes-sheet .zn-read { padding: 10px 14px; outline: none; line-height: var(--zentral-notes-line-height, 1.6); }
@@ -435,13 +558,13 @@
 .zentral-notes-sheet .zn-empty { margin: 14px 12px; color: var(--zn-muted); }
 
 /* list view */
-.zentral-notes-sheet .zn-list-head { display: flex; align-items: center; gap: 4px; padding: 4px 6px; }
+.zentral-notes-sheet .zn-list-head { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 4px; min-width: 0; padding: 4px 6px; }
 .zentral-notes-sheet .zn-search-wrap {
-  flex: 1 1 auto;
+  flex: 1 1 92px;
   display: flex;
   align-items: center;
   gap: 6px;
-  min-width: 0;
+  min-width: 72px;
   padding: 0 8px;
   border-radius: 6px;
   background: var(--zn-hover);
@@ -459,18 +582,40 @@
   color: var(--zn-text);
   font: inherit;
 }
-.zentral-notes-sheet .zn-new { background: color-mix(in srgb, var(--zn-accent) 24%, transparent); opacity: 1; }
-.zentral-notes-sheet .zn-chips { display: flex; align-items: center; gap: 4px; padding: 0 6px 4px; }
+.zentral-notes-sheet .zn-new-split {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--zn-accent) 24%, transparent);
+}
+.zentral-notes-sheet .zn-new { background: transparent; opacity: 1; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.zentral-notes-sheet .zn-new-menu {
+  width: 16px;
+  padding: 0;
+  opacity: 0.85;
+  border-left: 1px solid color-mix(in srgb, var(--zn-line) 70%, transparent);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.zentral-notes-sheet .zn-new-menu:hover { opacity: 1; }
+.zentral-notes-sheet .zn-chips { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 4px; min-width: 0; padding: 0 6px 4px; }
+/* The chips shrink before anything may move to a second row, but never into an unreadable sliver: the 4.5em floor keeps
+   a tappable label, the label ellipsises, and the row scrolls on the rare pane narrow enough to beat the floor. */
+.zentral-notes-sheet .zn-chips .zn-chip { flex: 0 0 auto; }
+/* UI4.10: a chip is a control, so it follows the text size with its label instead of staying at 12px (at 28px text the
+   label was large and the On / Off chips beside it small). The em sizes keep the old look at the default 13px and grow
+   with it; the padding and the line height are shares of the same text, so the pill never becomes tighter than its text. */
 .zentral-notes-sheet .zn-chip {
   appearance: none;
-  padding: 0 8px;
-  line-height: 18px;
+  padding: 0 0.62em;
+  line-height: 1.4;
   border: 1px solid var(--zn-line);
   border-radius: 999px;
   background: transparent;
   color: var(--zn-muted);
   font: inherit;
-  font-size: 12px;
+  font-size: 0.92em;
   cursor: pointer;
 }
 .zentral-notes-sheet .zn-chip[hidden] { display: none; }
@@ -536,6 +681,17 @@
     var(--zn-backing);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
+/* Context menus use viewport geometry rather than a narrow panel's clip. */
+.zentral-notes-sheet .zn-menu[popover][data-calendar-menu="true"] {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  box-sizing: border-box;
+  min-width: min(170px, calc(100vw - 12px));
+  max-width: calc(100vw - 12px);
+  max-height: calc(100vh - 12px);
+  color: var(--zn-text);
+}
 .zentral-notes-sheet .zn-menu-item {
   appearance: none;
   display: flex;
@@ -554,6 +710,12 @@
 .zentral-notes-sheet .zn-menu-item:hover,
 .zentral-notes-sheet .zn-menu-item:focus-visible { background: var(--zn-hover); outline: none; }
 .zentral-notes-sheet .zn-menu-item.is-danger { color: #ff6b6b; }
+.zentral-notes-sheet .zn-menu-item.is-bold { font-weight: 600; }
+.zentral-notes-sheet .zn-menu-check { display: inline-flex; width: 14px; height: 14px; flex: 0 0 14px; align-items: center; justify-content: center; color: var(--zn-accent); }
+.zentral-notes-sheet .zn-menu-item.is-disabled { cursor: not-allowed; opacity: 0.58; text-align: left; flex-wrap: wrap; }
+.zentral-notes-sheet .zn-menu-item.is-disabled:hover,
+.zentral-notes-sheet .zn-menu-item.is-disabled:focus-visible { background: transparent; }
+.zentral-notes-sheet .zn-menu-reason { flex: 1 0 100%; margin-left: 24px; color: var(--zn-muted); font-size: 0.82em; white-space: normal; }
 .zentral-notes-sheet .zn-sep { height: 1px; margin: 4px 2px; background: var(--zn-line); }
 .zentral-notes-sheet .zn-swatches { display: flex; flex-wrap: wrap; gap: 6px; max-width: 128px; padding: 4px 6px; }
 .zentral-notes-sheet .zn-swatch {
@@ -561,12 +723,15 @@
   width: 20px;
   height: 20px;
   padding: 0;
-  border: 2px solid var(--zn-line);
+  border: 2px solid var(--zn-pal-outline, var(--zn-line));
   border-radius: 50%;
   background: transparent;
   cursor: pointer;
 }
-.zentral-notes-sheet .zn-swatch.is-on { border-color: var(--zn-text); }
+.zentral-notes-sheet .zn-swatch:hover,
+.zentral-notes-sheet .zn-swatch:focus-visible { outline: 2px solid var(--zn-pal-outline, var(--zn-accent)); outline-offset: 1px; }
+.zentral-notes-sheet .zn-swatch.is-on { border-color: var(--zn-pal-selected-outline, var(--zn-text)); box-shadow: inset 0 0 0 2px var(--zn-surface), 0 0 0 1px var(--zn-pal-selected-outline, var(--zn-text)); }
+.zentral-notes-sheet .zn-swatch:disabled { background: var(--zn-pal-disabled-bg, transparent); border-color: var(--zn-pal-disabled-outline, var(--zn-line)); color: var(--zn-pal-disabled-fg, var(--zn-muted)); cursor: not-allowed; }
 .zentral-notes-sheet .zn-swatch[data-color="yellow"] { background: #f5c542; }
 .zentral-notes-sheet .zn-swatch[data-color="green"] { background: #4cc38a; }
 .zentral-notes-sheet .zn-swatch[data-color="blue"] { background: #5aa9ff; }
@@ -577,7 +742,21 @@
 .zentral-notes-sheet .zn-swatch[data-color="teal"] { background: #2ec4b6; }
 
 /* ---- Markdown: tables and images ------------------------------------------- */
-.zentral-notes-sheet .zn-read .zn-table-wrap { max-width: 100%; overflow-x: auto; margin: 0.5em 0; scrollbar-width: thin; }
+.zentral-notes-sheet .zn-read .zn-table-wrap {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto !important;
+  overscroll-behavior-x: contain;
+  margin: 0.5em 0;
+  /* Zen themes can hide scrollbars or make them nearly invisible. Keep the
+     native horizontal control usable, including in a narrow split pane. */
+  scrollbar-width: auto !important;
+  scrollbar-color: var(--zn-muted) transparent;
+}
+.zentral-notes-sheet .zn-read .zn-table-wrap:focus-visible { outline: 2px solid var(--zn-text); outline-offset: 2px; }
 .zentral-notes-sheet .zn-read .zn-table { border-collapse: collapse; font-size: 0.95em; }
 .zentral-notes-sheet .zn-read .zn-table th,
 .zentral-notes-sheet .zn-read .zn-box { margin: 0 0 var(--zn-gap, 0.6em); }
@@ -612,6 +791,92 @@
 .zentral-notes-sheet[data-mode="split"][data-split="side"] .zn-read { border-left: 1px solid var(--zn-line); }
 .zentral-notes-sheet[data-mode="split"][data-split="stack"] .zn-read { border-top: 1px solid var(--zn-line); }
 
+/* T3.8: the reference note beside the one being edited. The main area keeps whatever it shows (editor, preview or
+   both) and the reference takes the other half; the divider moves its share between a quarter and three quarters. */
+.zentral-notes-sheet[data-companion="on"][data-view="editor"] .zn-body { display: flex; flex-direction: row; }
+.zentral-notes-sheet[data-companion="on"][data-view="editor"][data-companion-axis="stack"] .zn-body { flex-direction: column; }
+.zentral-notes-sheet[data-companion="on"][data-view="editor"] .zn-body > .zn-editor,
+.zentral-notes-sheet[data-companion="on"][data-view="editor"] .zn-body > .zn-read {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  width: auto;
+  height: auto;
+}
+/* Editor and preview stay inside the main half: a grid, so the two of them never become a third column beside
+   the reference. The reference always keeps its full share. */
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"] .zn-body {
+  display: grid;
+  grid-template-columns: calc(100% - var(--zn-companion-share, 50) * 1%) calc(var(--zn-companion-share, 50) * 1%);
+  grid-template-rows: 1fr 1fr;
+}
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"] > .zn-body > .zn-editor { grid-column: 1; grid-row: 1; }
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"] > .zn-body > .zn-read { grid-column: 1; grid-row: 2; }
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"] > .zn-body > .zn-companion { grid-column: 2; grid-row: 1 / span 2; flex: 1 1 auto; }
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"][data-companion-axis="stack"] .zn-body {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: calc(100% - var(--zn-companion-share, 50) * 1%) calc(var(--zn-companion-share, 50) * 1%);
+}
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"][data-companion-axis="stack"] > .zn-body > .zn-editor { grid-column: 1; grid-row: 1; }
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"][data-companion-axis="stack"] > .zn-body > .zn-read { grid-column: 2; grid-row: 1; }
+.zentral-notes-sheet[data-companion="on"][data-mode="split"][data-view="editor"][data-companion-axis="stack"] > .zn-body > .zn-companion { grid-column: 1 / span 2; grid-row: 2; }
+.zentral-notes-sheet .zn-companion {
+  --zn-companion-share: 50;
+  position: relative;
+  display: flex;
+  flex: 0 0 calc(var(--zn-companion-share, 50) * 1%);
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--zn-line);
+  overflow: hidden;
+}
+.zentral-notes-sheet .zn-companion[hidden] { display: none !important; }
+.zentral-notes-sheet[data-companion-axis="stack"] .zn-companion,
+.zentral-notes-sheet[data-companion="on"][data-companion-axis="stack"] > .zn-body > .zn-companion {
+  border-left: 0;
+  border-top: 1px solid var(--zn-line);
+}
+/* The divider is a thin grip on the shared edge: it takes the keyboard and grows under the pointer. */
+.zentral-notes-sheet .zn-companion-divider {
+  position: absolute;
+  z-index: 2;
+  touch-action: none;
+  cursor: col-resize;
+}
+.zentral-notes-sheet[data-companion-axis="side"] .zn-companion-divider { top: 0; bottom: 0; left: -3px; width: 7px; }
+.zentral-notes-sheet[data-companion-axis="stack"] .zn-companion-divider { left: 0; right: 0; top: -3px; height: 7px; cursor: row-resize; }
+.zentral-notes-sheet .zn-companion-divider:hover,
+.zentral-notes-sheet .zn-companion-divider:focus-visible,
+.zentral-notes-sheet[data-companion-dragging="true"] .zn-companion-divider {
+  background: color-mix(in srgb, var(--zn-accent, currentColor) 35%, transparent);
+  outline: none;
+}
+.zentral-notes-sheet[data-companion-dragging="true"] { user-select: none; }
+.zentral-notes-sheet .zn-companion-head {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--zn-line);
+  font-size: 0.92em;
+}
+.zentral-notes-sheet .zn-companion-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zentral-notes-sheet .zn-companion-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding: 4px 8px;
+}
+
 /* ---- export notice ------------------------------------------------------------- */
 .zentral-notes-sheet .zn-dialog {
   position: absolute;
@@ -622,6 +887,20 @@
   justify-content: center;
   padding: 12px;
   background: color-mix(in srgb, var(--zn-surface) 70%, transparent);
+}
+/* Calendar dialogs in a panel are their own top-layer surface, anchored to
+   the sheet. This avoids clipping by the panel and remote browser surfaces
+   without raising the whole sheet or covering the rest of the window. */
+.zentral-notes-sheet .zn-dialog[popover][data-calendar-layer="true"] {
+  position: fixed;
+  inset: auto;
+  box-sizing: border-box;
+  margin: 0;
+  border: 0;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  color: var(--zn-text);
 }
 .zentral-notes-sheet .zn-dialog-card {
   /* V4-QS: sized in em so it follows the sheet font; it may grow past the sheet (JS fitDialog) up to the window */
@@ -648,8 +927,12 @@
 .zentral-notes-sheet .zn-dialog-card.zn-folder-style-card .zn-fstyle { min-width: 0; }
 .zentral-notes-sheet .zn-dialog-card.zn-folder-style-card .zn-fstyle-part > * { min-width: 0; max-width: 100%; }
 .zentral-notes-sheet .zn-dialog-card.zn-folder-style-card .zn-dialog-actions { flex-wrap: wrap; }
-.zentral-notes-sheet .zn-dialog-card p { margin: 6px 0 10px; color: var(--zn-muted); line-height: 1.45; }
-.zentral-notes-sheet .zn-dialog-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.zentral-notes-sheet .zn-dialog-card p { margin: 6px 0 10px; color: var(--zn-muted); line-height: 1.45; overflow-wrap: anywhere; }
+.zentral-notes-sheet .zn-dialog-card > strong { overflow-wrap: anywhere; }
+.zentral-notes-sheet .zn-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 0.6em; }
+.zentral-notes-sheet .zn-share-list { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 12px; max-height: 220px; overflow-y: auto; }
+.zentral-notes-sheet .zn-share-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.zentral-notes-sheet .zn-share-row:hover { background: color-mix(in srgb, currentColor 7%, transparent); }
 
 /* ---- callouts: > [!NOTE] Title ---------------------------------------------------- */
 .zentral-notes-sheet .zn-read .zn-callout { --zn-callout: #6aa7ff; border-left-color: var(--zn-callout); background: color-mix(in srgb, var(--zn-callout) 10%, transparent); padding: 4px 10px; border-radius: 0 6px 6px 0; }
@@ -669,6 +952,98 @@
 .zentral-notes-sheet .zn-read .zn-callout[data-kind="bug"] { --zn-callout: #d6568f; }
 .zentral-notes-sheet .zn-read .zn-callout[data-kind="example"] { --zn-callout: #9a7ae6; }
 .zentral-notes-sheet .zn-read .zn-callout[data-kind="quote"] { --zn-callout: #8b94a3; }
+/* Interactive callouts (T1.6). Their state is ordinary Markdown task markers, so it survives
+   autosave, export and reopening without a parallel metadata store. */
+.zentral-notes-sheet .zn-read .zn-callout[data-kind="bingo"] { --zn-callout: #3fbf83; }
+.zentral-notes-sheet .zn-read .zn-callout[data-kind="poll"] { --zn-callout: #9a7ae6; }
+.zentral-notes-sheet .zn-read .zn-bingo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5em), 1fr));
+  gap: 6px;
+  margin: 6px 0 4px;
+}
+.zentral-notes-sheet .zn-read .zn-bingo-cell {
+  display: flex;
+  min-width: 0;
+  min-height: 3.2em;
+  align-items: center;
+  justify-content: center;
+  padding: 7px;
+  border: 1px solid color-mix(in srgb, var(--zn-callout) 48%, var(--zn-line));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--zn-callout) 7%, var(--zn-panel));
+  color: var(--zn-text);
+  font: inherit;
+  font-size: .9em;
+  text-align: center;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.zentral-notes-sheet .zn-read .zn-bingo-cell:hover,
+.zentral-notes-sheet .zn-read .zn-bingo-cell:focus-visible {
+  border-color: var(--zn-callout);
+  outline: 2px solid color-mix(in srgb, var(--zn-callout) 35%, transparent);
+  outline-offset: 1px;
+}
+.zentral-notes-sheet .zn-read .zn-bingo-cell[data-checked="true"] {
+  background: color-mix(in srgb, var(--zn-callout) 24%, var(--zn-panel));
+  border-color: var(--zn-callout);
+  text-decoration: line-through;
+}
+.zentral-notes-sheet .zn-read .zn-poll-options { display: grid; gap: 6px; margin: 6px 0 4px; }
+.zentral-notes-sheet .zn-read .zn-poll-summary {
+  margin: 0 0 4px;
+  color: var(--zn-muted);
+  font-size: 0.8em;
+}
+.zentral-notes-sheet .zn-read .zn-poll-vote {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(4em, 35%) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--zn-line);
+  border-radius: 7px;
+  background: var(--zn-panel);
+  color: var(--zn-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.zentral-notes-sheet .zn-read .zn-poll-vote:hover,
+.zentral-notes-sheet .zn-read .zn-poll-vote:focus-visible {
+  border-color: var(--zn-callout);
+  outline: 2px solid color-mix(in srgb, var(--zn-callout) 28%, transparent);
+  outline-offset: 1px;
+}
+.zentral-notes-sheet .zn-read .zn-poll-vote[data-checked="true"] {
+  border-color: var(--zn-callout);
+  background: color-mix(in srgb, var(--zn-callout) 8%, var(--zn-panel));
+}
+.zentral-notes-sheet .zn-read .zn-poll-label { min-width: 0; overflow-wrap: anywhere; }
+.zentral-notes-sheet .zn-read .zn-poll-track {
+  display: block;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--zn-muted) 18%, transparent);
+}
+.zentral-notes-sheet .zn-read .zn-poll-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--zn-callout);
+  transition: width 120ms ease-out;
+}
+.zentral-notes-sheet .zn-read .zn-poll-tally {
+  min-width: 2.5em;
+  color: var(--zn-muted);
+  font-size: .75em;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
 /* foldable callouts: > [!note]- closed, > [!note]+ open */
 .zentral-notes-sheet .zn-read .zn-callout[data-fold] .zn-fold-title { cursor: pointer; user-select: none; }
 .zentral-notes-sheet .zn-read .zn-callout[data-fold] .zn-fold-title::before { content: "\25BE\00a0"; }
@@ -708,6 +1083,8 @@
   border-radius: 999px; padding: 0 6px;
 }
 .zentral-notes-sheet .zn-read .zn-date { border-bottom: 1px dotted color-mix(in srgb, currentColor 55%, transparent); }
+.zentral-notes-sheet .zn-read .zn-date-chip { display: inline; appearance: none; border: 0; border-radius: 3px; padding: 0 1px; margin: 0; color: inherit; background: color-mix(in srgb, var(--zn-accent, currentColor) 9%, transparent); border-bottom: 1px dotted color-mix(in srgb, currentColor 60%, transparent); font: inherit; line-height: inherit; cursor: pointer; }
+.zentral-notes-sheet .zn-read .zn-date-chip:hover, .zentral-notes-sheet .zn-read .zn-date-chip:focus-visible { background: color-mix(in srgb, var(--zn-accent, currentColor) 18%, transparent); outline: 1px solid color-mix(in srgb, currentColor 35%, transparent); outline-offset: 1px; }
 
 /* ---- B2: code colors, sub/superscript, keys, dialogs, copy in read view ----------------- */
 .zentral-notes-sheet .zn-read { --zn-tk-kw: #c792ea; --zn-tk-str: #8bd49c; --zn-tk-num: #f0a46a; --zn-tk-com: color-mix(in srgb, var(--zn-text) 45%, transparent); --zn-tk-fn: #82aaff; --zn-tk-lit: #ff9e80; --zn-tk-prop: #7fd6e8; --zn-tk-tag: #f07178; }
@@ -731,22 +1108,84 @@
 /* hidden copy of the editor text, used to measure where each source line sits for linked scrolling */
 .zentral-notes-sheet .zn-mirror { position: absolute; top: 0; left: 0; visibility: hidden; pointer-events: none; overflow: hidden; height: 0; border-style: solid; border-color: transparent; }
 .zentral-notes-sheet .zn-dialog-card { overflow: auto; }
-.zentral-notes-sheet[data-dialog-spill="true"] { overflow: visible; }
+.zentral-notes-sheet[data-dialog-spill="true"],
+.zentral-notes-sheet[popover][data-dialog-spill="true"] { overflow: visible; }
 .zentral-notes-sheet .zn-dialog[data-spill="true"] .zn-dialog-card { position: absolute; }
-.zentral-notes-sheet .zn-field-row { display: grid; gap: 3px; margin: 8px 0; color: var(--zn-muted); font-size: 0.9em; }
+/* UI4.10: the field inside its label follows the column it was given. A grid item's default `min-width: auto` is its
+   content, so a text field held its width and took the card past the sheet; `minmax(0, 1fr)` lets it shrink instead. */
+.zentral-notes-sheet .zn-field-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; margin: 8px 0; color: var(--zn-muted); font-size: 0.9em; }
 .zentral-notes-sheet .zn-field {
   padding: 5px 8px; border: 1px solid var(--zn-line); border-radius: 6px; background: transparent; color: var(--zn-text); font: inherit; outline: none;
+  min-width: 0; max-width: 100%; box-sizing: border-box;
 }
 .zentral-notes-sheet .zn-field:focus { border-color: var(--zn-accent); }
 .zentral-notes-sheet .zn-field[data-bad="true"] { border-color: #ff6b6b; }
-.zentral-notes-sheet .zn-field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.zentral-notes-sheet .zn-grid { display: grid; grid-template-columns: repeat(var(--cols, 8), 1fr); gap: 3px; margin: 6px 0; }
-.zentral-notes-sheet .zn-gcell { aspect-ratio: 1; min-width: 18px; padding: 0; border: 1px solid var(--zn-line); border-radius: 3px; background: transparent; cursor: pointer; }
+/* UI4.10: two number fields side by side shrink with a narrow card instead of holding their width and taking the card
+   past the sheet (which a classic scrollbar then showed). `minmax(0, 1fr)` lets the fields go below their content. */
+.zentral-notes-sheet .zn-field-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.zentral-notes-sheet .zn-calendar-note-field { display: block; width: 100%; min-height: 7em; box-sizing: border-box; resize: vertical; }
+.zentral-notes-sheet .zn-recurrence-editor { display: grid; gap: 4px; margin: 12px 0; padding-top: 8px; border-top: 1px solid var(--zn-line); }
+.zentral-notes-sheet .zn-recurrence-interval { grid-template-columns: auto minmax(4em, 7em) auto; align-items: center; justify-content: start; }
+.zentral-notes-sheet .zn-recurrence-interval .zn-field { width: 6em; }
+.zentral-notes-sheet .zn-recurrence-days { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0 8px; }
+.zentral-notes-sheet .zn-recurrence-day { display: inline-flex; align-items: center; gap: 3px; padding: 3px 6px; border: 1px solid var(--zn-line); border-radius: 5px; }
+.zentral-notes-sheet .zn-recurrence-until { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
+/* OW-23: the time-zone picker. A field, "Browse…" beside it, one line that says what the field holds, and the list of
+   matches in the flow of the dialog (not floating: the dialog scrolls, the list scrolls inside it). */
+/* OW-24: how a typed time or date is read, in a line under its field (the last child of the field's row). */
+.zentral-notes-sheet .zn-entry-hint { min-width: 0; color: var(--zn-muted); font-size: 0.95em; overflow-wrap: anywhere; }
+.zentral-notes-sheet .zn-entry-hint:empty { display: none; }
+.zentral-notes-sheet .zn-entry-hint[data-bad="true"] { color: #ff6b6b; }
+/* A field with a button beside it ("Pick date…", "Choose date…"): .zn-entry-row on the grid that holds both. The
+   grid itself lays out the caption, the field and the line (the field's own row gives up its box), so the button
+   stands beside the field whatever the line under it says. Two classes in the selector, so that these win over
+   the rules of the two grids wherever those stand in this file. Padding, not margin: the space the field's row had
+   around it did not collapse either. */
+.zentral-notes-sheet .zn-cal-compose-date-row.zn-entry-row,
+.zentral-notes-sheet .zn-recurrence-until.zn-entry-row { grid-template-areas: "caption caption" "field button" "hint hint"; align-items: center; gap: 3px 8px; padding: 8px 0; }
+.zentral-notes-sheet .zn-entry-row > .zn-field-row { display: contents; }
+.zentral-notes-sheet .zn-entry-row > .zn-field-row > span:first-child { grid-area: caption; }
+.zentral-notes-sheet .zn-entry-row > .zn-field-row > .zn-field { grid-area: field; }
+.zentral-notes-sheet .zn-entry-row > .zn-field-row > .zn-entry-hint { grid-area: hint; }
+.zentral-notes-sheet .zn-entry-row > .zn-chip { grid-area: button; }
+.zentral-notes-sheet .zn-zone-picker { min-width: 0; margin: 8px 0; }
+.zentral-notes-sheet .zn-zone-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
+.zentral-notes-sheet .zn-zone-row .zn-field-row { min-width: 0; margin: 0; }
+.zentral-notes-sheet .zn-zone-row .zn-field { width: 100%; box-sizing: border-box; }
+.zentral-notes-sheet .zn-zone-hint { margin: 3px 0 0; font-size: 0.85em; }
+.zentral-notes-sheet .zn-zone-hint:empty { display: none; }
+.zentral-notes-sheet .zn-zone-list { max-height: min(15em, 40vh); margin-top: 4px; overflow: auto; border: 1px solid var(--zn-line); border-radius: 6px; }
+.zentral-notes-sheet .zn-zone-list[hidden] { display: none; }
+.zentral-notes-sheet .zn-zone-group { position: sticky; top: 0; padding: 4px 8px; background: var(--zn-surface); color: var(--zn-muted); font-size: 0.8em; font-weight: 600; border-bottom: 1px solid var(--zn-line); }
+.zentral-notes-sheet .zn-zone-option { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; padding: 4px 8px; cursor: pointer; }
+.zentral-notes-sheet .zn-zone-option:hover { background: var(--zn-hover); }
+.zentral-notes-sheet .zn-zone-option[aria-selected="true"] { background: color-mix(in srgb, var(--zn-accent) 22%, transparent); }
+.zentral-notes-sheet .zn-zone-name { color: var(--zn-text); }
+.zentral-notes-sheet .zn-zone-detail { color: var(--zn-muted); font-size: 0.85em; }
+.zentral-notes-sheet .zn-zone-none { padding: 6px 8px; color: var(--zn-muted); font-size: 0.9em; }
+
+/* UI4.10: the grid was as wide as the card, so on a wide card its cells grew with it (and the card grew taller with
+   every pixel of width). The cells are now limited to a comfortable square: the grid stops growing past them. */
+.zentral-notes-sheet .zn-grid { display: grid; grid-template-columns: repeat(var(--cols, 8), minmax(0, 26px)); justify-content: start; gap: 3px; margin: 6px 0; }
+.zentral-notes-sheet .zn-gcell { aspect-ratio: 1; min-width: 0; padding: 0; border: 1px solid var(--zn-line); border-radius: 3px; background: transparent; cursor: pointer; }
 .zentral-notes-sheet .zn-gcell.is-on { background: color-mix(in srgb, var(--zn-accent) 40%, transparent); border-color: var(--zn-accent); }
-.zentral-notes-sheet .zn-quick { display: grid; gap: 4px; margin: 8px 0; }
+/* A list of setting rows: one row a line, never wider than the card. Loose items (the quick colours, the code
+   languages) carry zn-flow and run on like words. Both were `.zn-quick` once and the later rule won for the lists too:
+   their rows ran on like words as well. */
+.zentral-notes-sheet .zn-quick { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin: 8px 0; }
+.zentral-notes-sheet .zn-quick.zn-flow { display: flex; flex-wrap: wrap; gap: 6px; }
 .zentral-notes-sheet .zn-quick-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
-.zentral-notes-sheet .zn-quick-label { flex: 1 1 12em; min-width: 0; }
-.zentral-notes-sheet .zn-quick-value { min-width: 4.4em; text-align: center; font-variant-numeric: tabular-nums; }
+.zentral-notes-sheet .zn-quick-label { flex: 1 1 12em; min-width: 0; overflow-wrap: anywhere; }
+/* The controls of one setting stay together (see controlGroup): beside the label when there is room, below it when not.
+   4px between them, as between the chips of a choice. */
+.zentral-notes-sheet .zn-ctl { display: flex; flex: 0 1 auto; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
+/* A slider with its value and reset button takes the width that is left: beside the label while at least 60px of
+   slider fit there, otherwise below it at full width. Only when a line is too short for the three do they break up. */
+.zentral-notes-sheet .zn-ctl-fill { flex: 1 1 auto; flex-wrap: wrap; gap: 4px 8px; }
+.zentral-notes-sheet .zn-ctl-fill > .zn-range { flex: 1 1 60px; width: 60px; }
+/* The value between minus and plus keeps a steady width so the plus button does not move with every digit; it gives
+   that width up (down to its own text, never less) before a button would leave the card. */
+.zentral-notes-sheet .zn-quick-value { flex: 0 1 auto; width: 4.4em; min-width: min-content; white-space: nowrap; text-align: center; font-variant-numeric: tabular-nums; }
 .zentral-notes-sheet .zn-keys { max-height: 46vh; overflow: auto; }
 .zentral-notes-sheet .zn-keybtn { min-width: 8.5em; }
 .zentral-notes-sheet .zn-key-note { min-height: 2.6em; }
@@ -820,24 +1259,29 @@
 :root[zentral-notes-push="left"] #tabbrowser-tabbox { margin-left: var(--zentral-notes-push) !important; }
 /* Themes. "recommended" copies the RSS card: popup colours, solid surface, soft shadow. */
 :root[zentral-notes-theme="recommended"] .zentral-notes-sheet {
-  --zn-surface: var(--zl-popup, var(--arrowpanel-background, #1f1f24));
-  --zn-text: var(--zl-popup-text, var(--arrowpanel-color, #eee));
-  --zn-line: var(--zl-button-border-color, var(--arrowpanel-border-color, #444));
+  /* The popup's light/dark palette, rather than Zen's sometimes-black primary color, chooses the accent. */
+  color-scheme: var(--zl-input-scheme, light dark);
+  --zn-surface: var(--zn-surface-resolved, var(--zl-popup, var(--arrowpanel-background, light-dark(#ffffff, #1f1f24))));
+  --zn-text: var(--zn-text-resolved, var(--zl-popup-text, var(--arrowpanel-color, light-dark(#18181b, #eeeeee))));
+  --zn-muted: var(--zn-muted-resolved, color-mix(in srgb, var(--zn-text) 66%, transparent));
+  --zn-hover: color-mix(in srgb, var(--zn-text) 10%, transparent);
+  --zn-accent: light-dark(#2459b4, #9bbdff);
+  --zn-line: var(--zl-button-border-color, var(--arrowpanel-border-color, light-dark(#d0d0d7, #44444c)));
   --zn-tint: var(--zn-surface);
   --zn-radius: 10px;
   box-shadow: 0 6px 24px #0008;
 }
 :root[zentral-notes-theme="light"] .zentral-notes-sheet {
   color-scheme: light;
-  --zn-surface: #fbfbfd; --zn-text: #1d1d22; --zn-accent: #3b6df0; --zn-tint: #fbfbfd;
+  --zn-surface: var(--zn-surface-resolved, #fbfbfd); --zn-text: var(--zn-text-resolved, #1d1d22); --zn-accent: #3b6df0; --zn-tint: #fbfbfd;
 }
 :root[zentral-notes-theme="dark"] .zentral-notes-sheet {
   color-scheme: dark;
-  --zn-surface: #17171c; --zn-text: #e9e9f0; --zn-accent: #83a5ff; --zn-tint: #17171c;
+  --zn-surface: var(--zn-surface-resolved, #17171c); --zn-text: var(--zn-text-resolved, #e9e9f0); --zn-accent: #83a5ff; --zn-tint: #17171c;
 }
 :root[zentral-notes-theme="paper"] .zentral-notes-sheet {
   color-scheme: light;
-  --zn-surface: #f4ecd8; --zn-text: #3b3226; --zn-accent: #9a6b2f; --zn-tint: #f4ecd8;
+  --zn-surface: var(--zn-surface-resolved, #f4ecd8); --zn-text: var(--zn-text-resolved, #3b3226); --zn-accent: #9a6b2f; --zn-tint: #f4ecd8;
 }
 
 /* ---- Notes appearance menu: one rule per flag in :root[zentral-notes-ov] ------------------------------
@@ -888,11 +1332,17 @@
 
 /* ---- Settings view: wide card with tabs, sliders and the in-card colour picker -------------------------- */
 .zentral-notes-sheet .zn-dialog-card.zn-settings { width: 100%; max-width: none; height: 100%; max-height: none; display: flex; flex-direction: column; box-sizing: border-box; }
-.zentral-notes-sheet .zn-set-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
-.zentral-notes-sheet .zn-set-body { flex: 1 1 0; min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: 6px; padding-right: 4px; }
-.zentral-notes-sheet .zn-set-heading { margin-top: 8px; color: var(--zn-muted); font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; }
-.zentral-notes-sheet .zn-set-row { display: flex; align-items: center; gap: 8px; min-height: 28px; }
-.zentral-notes-sheet .zn-set-row .zn-quick-label { flex: 1 1 40%; }
+.zentral-notes-sheet .zn-set-tabs { display: flex; flex-wrap: wrap; gap: 4px 0.5em; margin: 8px 0; }
+/* Rows of max-content: with `auto` rows, a body that has to scroll gave every row only its 28px min-height (for an item
+   with a min-height that is all an `auto` row must give), and whatever was taller lay over the next row. One column
+   that never grows past the card. */
+.zentral-notes-sheet .zn-set-body { flex: 1 1 0; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; align-content: start; gap: 6px; padding-right: 4px; }
+.zentral-notes-sheet .zn-set-heading { margin-top: 8px; color: var(--zn-muted); font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; overflow-wrap: anywhere; }
+/* UI4.10: the floor is a share of the text (a comfortable target) rather than 28px, which at a large text size was
+   smaller than one line of the row and let a wrapped control spill over its neighbour. */
+.zentral-notes-sheet .zn-set-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 2em; }
+/* The label keeps at least 9em (about 18 letters a line). A control that does not fit beside that goes below the label. */
+.zentral-notes-sheet .zn-set-row .zn-quick-label { flex: 1 1 9em; min-width: min(100%, 9em); }
 /* Dropdown choice rows (settings window and quick settings): label on its own line, the select below it at full width. */
 .zentral-notes-sheet .zn-select {
   flex: 1 1 100%; min-width: 0; max-width: 100%; box-sizing: border-box;
@@ -905,16 +1355,21 @@
 .zentral-notes-sheet .zn-quick-row[data-dropdown="true"] { flex-wrap: wrap; gap: 3px 8px; }
 .zentral-notes-sheet .zn-set-row[data-dropdown="true"] .zn-quick-label,
 .zentral-notes-sheet .zn-quick-row[data-dropdown="true"] .zn-quick-label { flex: 1 1 100%; }
-.zentral-notes-sheet .zn-set-chips { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.zentral-notes-sheet .zn-set-chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; max-width: 100%; }
 .zentral-notes-sheet .zn-range { flex: 1 1 90px; min-width: 60px; height: 8px; margin: 0; accent-color: var(--zn-accent); }
-.zentral-notes-sheet .zn-set-row .zn-quick-value { min-width: 3.6em; }
-.zentral-notes-sheet .zn-swatch { width: 38px; height: 22px; padding: 0; border: 1px solid var(--zn-line); border-radius: 6px; cursor: pointer; }
+.zentral-notes-sheet .zn-set-row .zn-quick-value { width: 3.6em; }
+/* The value of a slider is as wide as its text ("100000chars"), at least 3.6em, and breaks only when a line is too short for it. */
+.zentral-notes-sheet .zn-set-row .zn-ctl-fill > .zn-quick-value { width: auto; min-width: 3.6em; white-space: normal; overflow-wrap: anywhere; }
+/* A text field beside its label keeps its own width; below the label it is never wider than the row. */
+.zentral-notes-sheet .zn-set-row > .zn-field { flex: 0 1 auto; min-width: 0; max-width: 100%; box-sizing: border-box; }
+.zentral-notes-sheet .zn-swatch { width: 38px; height: 22px; padding: 0; border: 1px solid var(--zn-pal-outline, var(--zn-line)); border-radius: 6px; cursor: pointer; }
 .zentral-notes-sheet .zn-swatch[data-empty="true"] { background-image: repeating-linear-gradient(45deg, var(--zn-line) 0 4px, transparent 4px 8px) !important; }
-.zentral-notes-sheet .zn-cpanel { display: grid; gap: 6px; margin: 4px 0 8px; padding: 8px; border: 1px solid var(--zn-line); border-radius: 8px; }
+.zentral-notes-sheet .zn-cpanel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin: 4px 0 8px; padding: 8px; border: 1px solid var(--zn-line); border-radius: 8px; }
 .zentral-notes-sheet .zn-cpanel[hidden] { display: none; }
-.zentral-notes-sheet .zn-set-sub { display: grid; grid-template-columns: 6em 1fr; align-items: center; gap: 8px; color: var(--zn-muted); font-size: 0.9em; }
+.zentral-notes-sheet .zn-set-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; color: var(--zn-muted); font-size: 0.9em; }
+.zentral-notes-sheet .zn-set-sub > span { flex: 0 1 6em; min-width: 0; overflow-wrap: anywhere; }
 .zentral-notes-sheet .zn-set-sub .zn-range { height: 12px; border-radius: 6px; }
-.zentral-notes-sheet .zn-hex { max-width: 9em; font-family: ui-monospace, Consolas, monospace; }
+.zentral-notes-sheet .zn-hex { max-width: min(9em, 100%); min-width: 0; box-sizing: border-box; font-family: ui-monospace, Consolas, monospace; }
 
 /* ---- reveal strip: thin hover zone along the top of an open panel's bar ----------------------------- */
 
@@ -929,9 +1384,15 @@
 :root[bgalazka-notes-spill="true"] #zen-app-panel-root #zen-app-panel-clip {
   pointer-events: none !important;
 }
-:root[bgalazka-notes-spill="true"] #zen-app-panel-root #zen-app-panel-slider > .zentral-notes-sheet {
+ :root[bgalazka-notes-spill="true"] #zen-app-panel-root #zen-app-panel-slider > .zentral-notes-sheet {
   position: absolute;
   pointer-events: auto !important;
+}
+/* A Triple View span sheet is above the two browser slots, divider and middle bar. It is a positioned flex child,
+   so keep its order explicit as well as its z-index: this prevents the bottom remote <browser> from painting over it. */
+:root[bgalazka-notes-spill="true"][bgalazka-triple-view="true"] #zen-app-panel-root #zen-app-panel-slider > .zentral-notes-sheet {
+  order: 3 !important;
+  z-index: 40 !important;
 }
 :root[bgalazka-notes-spill="true"] #zen-app-panel-root #zen-app-panel-slider > browser {
   border-radius: inherit;
@@ -949,17 +1410,119 @@
 .zentral-notes-sheet .zn-tree-head .zn-item-time { margin-left: auto; }
 .zentral-notes-sheet .zn-item-folder { opacity: 0.8; }
 
-/* ---- compact list: one line per note, folders tight, so a long tree fits ------------------------------ */
-.zentral-notes-sheet .zn-item-main { flex-direction: row; align-items: baseline; gap: 6px; }
-.zentral-notes-sheet .zn-item-main .zn-item-title { flex: 0 1 auto; min-width: 0; max-width: 70%; }
-.zentral-notes-sheet .zn-item-main .zn-item-snippet { flex: 1 1 0; min-width: 0; opacity: 0.75; }
-.zentral-notes-sheet .zn-item-main .zn-item-label { flex: 0 0 auto; margin-left: 0; line-height: 1.2; }
+/* ---- compact list & OW-32 squeeze priority: protect interactable areas -> keep titles -> collapse contents first ---- */
+.zentral-notes-sheet .zn-tree-pane { container-type: inline-size; container-name: zn-tree; }
+.zentral-notes-sheet .zn-item { min-width: 0; overflow: hidden; }
+.zentral-notes-sheet .zn-item-main { flex-direction: row; align-items: baseline; gap: 6px; overflow: hidden; }
+/* Never cap title below 100% while snippet/badges take space: snippet has basis 0 and collapses first. */
+.zentral-notes-sheet .zn-item-main .zn-item-title { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+.zentral-notes-sheet .zn-item-main .zn-item-snippet { flex: 1 999 0; min-width: 0; opacity: 0.75; }
+.zentral-notes-sheet .zn-item-main .zn-item-label,
+.zentral-notes-sheet .zn-frow-zen-badge { flex: 0 20 auto; min-width: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: 0; line-height: 1.2; }
+.zentral-notes-sheet .zn-item-time { flex: 0 10 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zentral-notes-sheet .zn-item-actions,
+.zentral-notes-sheet .zn-frow .zn-chev,
+.zentral-notes-sheet .zn-list-head .zn-newfolder,
+.zentral-notes-sheet .zn-list-head .zn-new-split { flex: 0 0 auto; }
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="compact"] .zn-item-snippet,
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="narrow"] .zn-item-snippet,
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="tight"] .zn-item-snippet { display: none; }
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="narrow"] .zn-item-time,
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="tight"] .zn-item-time { display: none; }
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="narrow"] .zn-items[role="tree"] .zn-item,
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="tight"] .zn-items[role="tree"] .zn-item { padding-left: calc(4px + var(--d, 0) * 0.7em); }
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="tight"] .zn-item-label,
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="tight"] .zn-frow-zen-badge { display: none; }
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="tight"] .zn-item { gap: 4px; padding-right: 4px; }
+@container zn-tree (max-width: 319px) {
+  .zentral-notes-sheet .zn-tree-pane .zn-item-snippet { display: none; }
+}
+@container zn-tree (max-width: 244px) {
+  .zentral-notes-sheet .zn-tree-pane .zn-item-time { display: none; }
+  .zentral-notes-sheet .zn-tree-pane .zn-items[role="tree"] .zn-item { padding-left: calc(4px + var(--d, 0) * 0.7em); }
+}
+@container zn-tree (max-width: 169px) {
+  .zentral-notes-sheet .zn-tree-pane .zn-item-label,
+  .zentral-notes-sheet .zn-tree-pane .zn-frow-zen-badge { display: none; }
+  .zentral-notes-sheet .zn-tree-pane .zn-item { gap: 4px; padding-right: 4px; }
+}
 .zentral-notes-sheet .zn-items[role="tree"] .zn-item { min-height: 22px; padding-top: 1px; padding-bottom: 1px; }
 .zentral-notes-sheet .zn-items[role="tree"] .zn-frow { min-height: 22px; font-size: 0.96em; }
 .zentral-notes-sheet .zn-items[role="tree"] .zn-frow .zn-item-actions svg,
 .zentral-notes-sheet .zn-items[role="tree"] .zn-item .zn-item-actions svg { width: 12px; height: 12px; }
 .zentral-notes-sheet .zn-items[role="tree"] .zn-item-actions button { width: 20px; height: 20px; }
 .zentral-notes-sheet .zn-tree-head { padding: 3px 6px 1px; }
+
+/* ---- OW-33: small-window All notes chrome compactness & overflow safety ------------------------------ */
+.zentral-notes-sheet[data-view="list"] .zn-head { flex-wrap: wrap; row-gap: 2px; min-width: 0; }
+.zentral-notes-sheet[data-view="list"] .zn-head > .zn-btn { flex: 0 0 auto; }
+.zentral-notes-sheet[data-view="list"] .zn-head .zn-title { min-width: 48px; }
+/* OW-33 asked for wrapping so nothing overflowed; OW-74 makes that the wrong answer here, because the header now carries
+   the controls and a wrapped header would move them out from between the name and the period. The name ellipsises
+   instead, which is what the owner asked for (the controls outrank the name). */
+.zentral-notes-sheet .zn-calendar-pane-head { flex-wrap: nowrap; row-gap: 2px; min-width: 0; }
+/* OW-97: when the header runs out of room, it gives up its pieces in the owner's order and never pushes anything out of
+   the window. Three rules, in order of what goes first:
+     1. the calendar's name ("Calendar"), which is the least informative thing in the row;
+     2. the long period ("17 Nov 2026 – 4 Jan 2027"), which is useful but is repeated by the grid below it;
+     3. only then does the row stop shrinking, and the buttons keep every pixel they had.
+   The controls (prev/today/next/the view toggle, then settings and Big Picture) are `flex: 0 0 auto` and never shrink;
+   the name starts from a tiny `flex-basis` so it is the first to lose width, and the period comes next. */
+.zentral-notes-sheet .zn-calendar-pane-head > strong { flex: 0 1 auto; min-width: 0; }
+.zentral-notes-sheet .zn-calendar-head-nav { flex: 0 0 auto; }
+.zentral-notes-sheet .zn-calendar-head-nav > .zn-chip { flex: 0 0 auto; }
+.zentral-notes-sheet .zn-calendar-pane-head-right { flex: 0 1 auto; min-width: 0; }
+.zentral-notes-sheet .zn-calendar-pane-head-right > .zn-btn { flex: 0 0 auto; }
+/* The name goes first: it may shrink to nothing before the period loses a character. */
+.zentral-notes-sheet .zn-calendar-pane-head > strong { flex-shrink: 999; }
+/* Then the period, which keeps its text but ellipsises. */
+.zentral-notes-sheet .zn-calendar-pane-hint { flex: 0 1 auto; flex-shrink: 1; }
+/* The two icon buttons are chips like prev/next: a fixed square, so a word in a translation can never widen them again. */
+.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-today,
+.zentral-notes-sheet .zn-calendar-head-nav .zn-calendar-view-toggle { width: 26px; height: 24px; padding: 0; justify-content: center; }
+.zentral-notes-sheet .zn-calendar-today { position: relative; }
+/* "Today" is a calendar with a dot in the last row: the glyph alone in a row of arrows reads as "go to a date". */
+.zentral-notes-sheet .zn-calendar-today-dot { position: absolute; right: 5px; bottom: 4px; width: 3px; height: 3px; border-radius: 50%; background: currentColor; }
+/* The view toggle points where the next press goes: down to the week, up back to the month. The icon set's `chevron`
+   points RIGHT (`m9 6 6 6-6 6`), so the two states are 90° and 270° — not 0° and 180°, which would have pointed it
+   sideways at nothing. */
+.zentral-notes-sheet .zn-calendar-view-toggle[data-next="week"] svg { transform: rotate(90deg); }
+.zentral-notes-sheet .zn-calendar-view-toggle[data-next="month"] svg { transform: rotate(270deg); }
+.zentral-notes-sheet .zn-calendar-view-toggle svg { transition: transform .12s ease; }
+@media (prefers-reduced-motion: reduce) { .zentral-notes-sheet .zn-calendar-view-toggle svg { transition: none; } }
+
+.zentral-notes-sheet .zn-calendar-pane-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zentral-notes-sheet[data-all-chrome="compact"] .zn-head,
+.zentral-notes-sheet[data-all-chrome="tight"] .zn-head { padding: 2px 4px; gap: 1px; }
+.zentral-notes-sheet[data-all-chrome="compact"] .zn-head > .zn-btn { width: 24px; height: 24px; }
+.zentral-notes-sheet[data-all-chrome="tight"] .zn-head > .zn-btn { width: 22px; height: 22px; }
+.zentral-notes-sheet[data-all-chrome="compact"] .zn-all-toolbar,
+.zentral-notes-sheet[data-all-chrome="tight"] .zn-all-toolbar { padding: 2px 4px; gap: 2px 3px; }
+.zentral-notes-sheet[data-all-chrome="compact"] .zn-all-toolbar .zn-btn,
+.zentral-notes-sheet[data-all-chrome="tight"] .zn-all-toolbar .zn-btn { width: 22px; height: 22px; }
+.zentral-notes-sheet[data-all-chrome="compact"] .zn-all-toolbar .zn-chip,
+.zentral-notes-sheet[data-all-chrome="tight"] .zn-all-toolbar .zn-chip { padding: 0 6px; line-height: 17px; }
+.zentral-notes-sheet[data-all-chrome="compact"] .zn-list-head,
+.zentral-notes-sheet[data-all-chrome="tight"] .zn-list-head,
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="narrow"] .zn-list-head,
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="tight"] .zn-list-head { padding: 3px 5px; gap: 3px; }
+.zentral-notes-sheet[data-all-chrome="compact"] .zn-search-wrap,
+.zentral-notes-sheet[data-all-chrome="tight"] .zn-search-wrap,
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="narrow"] .zn-search-wrap,
+.zentral-notes-sheet .zn-tree-pane[data-tree-squeeze="tight"] .zn-search-wrap { padding: 0 6px; gap: 4px; }
+.zentral-notes-sheet[data-all-chrome="compact"] .zn-search,
+.zentral-notes-sheet[data-all-chrome="tight"] .zn-search { height: 20px; }
+.zentral-notes-sheet[data-all-chrome="compact"] .zn-chips,
+.zentral-notes-sheet[data-all-chrome="tight"] .zn-chips { padding: 0 5px 3px; gap: 2px 3px; }
+.zentral-notes-sheet[data-all-chrome="compact"] .zn-chips .zn-chip,
+.zentral-notes-sheet[data-all-chrome="tight"] .zn-chips .zn-chip { padding: 0 6px; line-height: 17px; font-size: 11.5px; }
+.zentral-notes-sheet[data-all-chrome="compact"] .zn-chips .zn-grow,
+.zentral-notes-sheet[data-all-chrome="tight"] .zn-chips .zn-grow { display: none; }
+.zentral-notes-sheet[data-all-chrome="compact"] .zn-batch-bar,
+.zentral-notes-sheet[data-all-chrome="tight"] .zn-batch-bar { padding: 2px 5px; margin: 0 5px 3px; gap: 3px; }
+.zentral-notes-sheet[data-all-chrome="compact"] .zn-calendar-pane-head,
+.zentral-notes-sheet[data-all-chrome="tight"] .zn-calendar-pane-head { padding: 4px 7px; gap: 4px; }
+.zentral-notes-sheet[data-view="list"][data-short-window="true"] .zn-foot { padding: 1px 8px; }
 
 /* ---- slot sheet (docked band / gap between the panels): only the top (and, in a gap, bottom) edge resizes ----- */
 .zentral-notes-sheet[data-slot]:not([data-slot=""]) .zn-rz:not([data-h="n"]):not([data-h="s"]) { display: none; }
@@ -993,6 +1556,22 @@
 }
 .zentral-notes-sheet .zn-find-input:focus { outline: none; border-color: var(--zn-accent); }
 .zentral-notes-sheet .zn-find-count { font-size: 0.9em; white-space: nowrap; }
+/* OW-22: the off-screen pair sits beside the ordinary next/previous and reads as the same family of control, one step
+   quieter — a toggle-like `zn-find-btn` rather than an icon button, so it is clear these are not the same key. */
+.zentral-notes-sheet .zn-find-off {
+  padding: 1px 5px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.1;
+  cursor: pointer;
+}
+.zentral-notes-sheet .zn-find-off:not(:disabled):hover { background: var(--zn-hover); border-color: var(--zn-line); }
+.zentral-notes-sheet .zn-find-off:disabled { opacity: 0.35; cursor: default; }
+.zentral-notes-sheet .zn-find-off:focus-visible { outline: 2px solid var(--zn-accent); outline-offset: 1px; }
 .zentral-notes-sheet .zn-find-prev svg { transform: rotate(180deg); }
 .zentral-notes-sheet .zn-find .zn-btn:disabled { opacity: 0.35; cursor: default; }
 .zentral-notes-sheet .zn-find-others {
@@ -1009,6 +1588,59 @@
 .zentral-notes-sheet .zn-find-others:disabled { text-decoration: none; cursor: default; }
 .zentral-notes-sheet .zn-find-others:not(:disabled):hover { background: var(--zn-hover); color: var(--zn-text); }
 .zentral-notes-sheet .zn-find-others[hidden] { display: none; }
+/* ---- replace (OW-21): a folded second row, so finding stays one line and replacing is a deliberate step ---- */
+.zentral-notes-sheet .zn-find-row {
+  display: flex;
+  align-items: center;
+  gap: 4px 6px;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+}
+.zentral-notes-sheet .zn-find-replace-row {
+  display: flex;
+  align-items: center;
+  gap: 4px 6px;
+  flex: 1 1 100%;
+  padding-top: 2px;
+}
+.zentral-notes-sheet .zn-find-replace-row[hidden] { display: none; }
+.zentral-notes-sheet .zn-find-replace-input {
+  flex: 1 1 110px;
+  min-width: 80px;
+  padding: 3px 6px;
+  border: 1px solid var(--zn-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--zn-text);
+  font: inherit;
+}
+.zentral-notes-sheet .zn-find-replace-input:focus { outline: none; border-color: var(--zn-accent); }
+/* The toggle reads as part of the bar, not as a loud button: it is a door, not a commit. */
+.zentral-notes-sheet .zn-find-replace-toggle { opacity: 0.75; }
+.zentral-notes-sheet .zn-find-replace-toggle[aria-expanded="true"] { opacity: 1; background: var(--zn-hover); color: var(--zn-text); }
+.zentral-notes-sheet .zn-find-replace-one,
+.zentral-notes-sheet .zn-find-replace-all {
+  padding: 2px 8px;
+  border: 1px solid var(--zn-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--zn-text);
+  font: inherit;
+  font-size: 0.9em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.zentral-notes-sheet .zn-find-replace-one:not(:disabled):hover,
+.zentral-notes-sheet .zn-find-replace-all:not(:disabled):hover { background: var(--zn-hover); }
+.zentral-notes-sheet .zn-find-replace-one:disabled,
+.zentral-notes-sheet .zn-find-replace-all:disabled { opacity: 0.35; cursor: default; }
+.zentral-notes-sheet .zn-find-replace-note {
+  font-size: 0.9em;
+  color: var(--zn-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ---- pasted pictures (P2) ------------------------------------------------------ */
 .zentral-notes-sheet .zn-read .zn-pic { display: inline-block; max-width: 100%; }
@@ -1026,6 +1658,33 @@
   border-radius: 6px;
   color: var(--zn-muted);
 }
+
+/* ---- local note transclusions (T1.13) ------------------------------------------- */
+.zentral-notes-sheet .zn-read .zn-embed {
+  display: block;
+  max-width: 100%;
+  margin: 0.65em 0;
+  padding: 0.55em 0.7em;
+  border: 1px solid var(--zn-line);
+  border-inline-start: 3px solid color-mix(in srgb, var(--zn-accent) 55%, var(--zn-line));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--zn-panel) 82%, transparent);
+}
+.zentral-notes-sheet .zn-read .zn-embed-source {
+  margin-bottom: 0.35em;
+  color: var(--zn-muted);
+  font-size: 0.82em;
+  font-weight: 600;
+}
+.zentral-notes-sheet .zn-read .zn-embed-body > :first-child { margin-top: 0; }
+.zentral-notes-sheet .zn-read .zn-embed-body > :last-child { margin-bottom: 0; }
+.zentral-notes-sheet .zn-read .zn-embed-message {
+  color: var(--zn-muted);
+  font-size: 0.9em;
+  font-style: italic;
+}
+.zentral-notes-sheet .zn-read .zn-embed-image { padding: 0.25em; text-align: center; }
+.zentral-notes-sheet .zn-read .zn-embed-img { display: inline-block; max-width: 100%; height: auto; border-radius: 5px; }
 
 /* ---- reminder chip (P2) ---------------------------------------------------------- */
 .zentral-notes-sheet .zn-remind {
@@ -1045,6 +1704,9 @@
 .zentral-notes-sheet .zn-remind[hidden] { display: none; }
 .zentral-notes-sheet .zn-remind:hover { background: var(--zn-hover); color: var(--zn-text); }
 .zentral-notes-sheet .zn-remind.is-due { border-color: var(--zn-accent); color: var(--zn-text); }
+.zentral-notes-sheet .zn-category-color { display: flex; flex-direction: column; gap: 6px; }
+.zentral-notes-sheet .zn-category-rule { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.zentral-notes-sheet .zn-category-rule .zn-select { min-width: 88px; }
 
 /* links between notes: same look as links; a missing target is struck through, a trashed one is dimmed */
 .zentral-notes-sheet .zn-read .zn-notelink { cursor: pointer; }
@@ -1053,6 +1715,13 @@
 .zentral-notes-sheet .zn-noteset { display: flex; flex-direction: column; gap: 1px; max-height: 240px; overflow-y: auto; margin: 6px 0; }
 .zentral-notes-sheet .zn-noteset .zn-menu-item { width: 100%; text-align: left; }
 .zentral-notes-sheet .zn-menu-head { opacity: 0.6; cursor: default; font-weight: 600; }
+/* A slider inside a menu (the calendar size, OW-03): the slider and its value in one row, the button for the
+   automatic value below. The value has a fixed width, so the menu does not change its width while the slider moves. */
+.zentral-notes-sheet .zn-menu-slider { display: flex; flex-direction: column; gap: 6px; padding: 2px 8px 6px; }
+.zentral-notes-sheet .zn-menu-slider-row { display: flex; align-items: center; gap: 8px; }
+.zentral-notes-sheet .zn-menu-slider-row .zn-range { flex: 1 1 130px; min-width: 110px; height: 12px; }
+.zentral-notes-sheet .zn-menu-slider-row .zn-quick-value { flex: 0 0 auto; width: 6.2em; text-align: right; font-size: .9em; }
+.zentral-notes-sheet .zn-menu-slider-fit { align-self: flex-start; }
 .zentral-notes-sheet .zn-menu-group > span { flex: 1 1 auto; }
 .zentral-notes-sheet .zn-menu-group > svg:last-child { opacity: 0.6; }
 .zentral-notes-sheet .zn-menu-back { opacity: 0.8; }
@@ -1062,12 +1731,127 @@
 .zentral-notes-sheet .zn-fn { font-size: 0.75em; line-height: 0; }
 .zentral-notes-sheet .zn-fnref, .zentral-notes-sheet .zn-fnback { cursor: pointer; }
 .zentral-notes-sheet .zn-footnotes { margin: 0.4em 0 0.4em 1.4em; padding: 0; font-size: 0.92em; opacity: 0.9; }
+/* floating table of contents button (T1.8): stays in the corner of the text area at any scroll position */
+.zentral-notes-sheet .zn-tocpill {
+  position: absolute;
+  top: 6px;
+  right: 14px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--zn-line);
+  border-radius: 999px;
+  color: var(--zn-text);
+  background: color-mix(in srgb, var(--zn-surface) 85%, transparent);
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.zentral-notes-sheet .zn-tocpill:hover,
+.zentral-notes-sheet .zn-tocpill:focus-visible { opacity: 1; }
+.zentral-notes-sheet .zn-tocpill[hidden] { display: none; }
+
+
+/* T1.9: live, docked heading outline. The panel occupies a real side column and
+   never overlays the editor or read pane. */
+.zentral-notes-sheet .zn-body[data-outline-open="true"] {
+  --zn-outline-width: clamp(156px, 23%, 250px);
+  flex-direction: row;
+}
+.zentral-notes-sheet .zn-body[data-outline-open="true"] .zn-tocpill {
+  right: calc(var(--zn-outline-width) + 14px);
+}
+.zentral-notes-sheet .zn-body[data-outline-open="true"] > .zn-editor,
+.zentral-notes-sheet .zn-body[data-outline-open="true"] > .zn-read,
+.zentral-notes-sheet .zn-body[data-outline-open="true"] > .zn-all-layout {
+  flex: 1 1 0;
+  width: 0;
+}
+.zentral-notes-sheet .zn-outline-panel {
+  display: flex;
+  flex: 0 0 var(--zn-outline-width, clamp(156px, 23%, 250px));
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  max-width: 280px;
+  overflow: hidden;
+  border-left: 1px solid var(--zn-line);
+  background: var(--zn-surface);
+}
+.zentral-notes-sheet .zn-outline-panel[hidden] { display: none !important; }
+.zentral-notes-sheet .zn-outline-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 2px 6px 2px 10px;
+  border-bottom: 1px solid var(--zn-line);
+  color: var(--zn-text);
+  font-size: 0.88em;
+}
+.zentral-notes-sheet .zn-outline-close { flex: 0 0 auto; width: 25px; height: 25px; }
+.zentral-notes-sheet .zn-outline-items {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+}
+.zentral-notes-sheet .zn-outline-item {
+  display: block;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 5px 7px 5px calc(7px + (var(--zn-outline-level, 1) - 1) * 11px);
+  border: 0;
+  border-radius: 5px;
+  color: var(--zn-text);
+  background: transparent;
+  font: inherit;
+  font-size: 0.88em;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.zentral-notes-sheet .zn-outline-item:hover { background: color-mix(in srgb, var(--zn-text) 8%, transparent); }
+.zentral-notes-sheet .zn-outline-item.is-current {
+  color: var(--zn-accent);
+  background: color-mix(in srgb, var(--zn-accent) 13%, transparent);
+  font-weight: 650;
+}
+.zentral-notes-sheet .zn-outline-item:focus-visible { outline: 2px solid var(--zn-accent); outline-offset: -2px; }
+.zentral-notes-sheet .zn-outline-empty,
+.zentral-notes-sheet .zn-outline-more {
+  margin: 6px 4px;
+  color: var(--zn-muted);
+  font-size: 0.82em;
+  line-height: 1.4;
+}
+.zentral-notes-sheet .zn-outline-more { text-align: center; }
+@media (max-width: 520px) {
+  .zentral-notes-sheet .zn-body[data-outline-open="true"] { --zn-outline-width: 142px; }
+  .zentral-notes-sheet .zn-body[data-outline-open="true"] > .zn-editor,
+  .zentral-notes-sheet .zn-body[data-outline-open="true"] > .zn-read { min-width: 0; }
+}
 .zentral-notes-sheet .zn-wikibar { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px; border-bottom: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
 .zentral-notes-sheet .zn-wikibar[hidden], .zentral-notes-sheet .zn-linked[hidden] { display: none; }
 .zentral-notes-sheet .zn-wiki-item { font: inherit; font-size: 0.9em; padding: 2px 8px; border-radius: 999px; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); background: transparent; color: inherit; cursor: pointer; }
 .zentral-notes-sheet .zn-wiki-item.is-on { background: color-mix(in srgb, currentColor 16%, transparent); }
 .zentral-notes-sheet .zn-linked { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 8px; border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent); font-size: 0.9em; }
 .zentral-notes-sheet .zn-linked-label { opacity: 0.65; margin-right: 4px; }
+.zentral-notes-sheet .zn-linked-mention { border-style: dashed; }
+.zentral-notes-sheet .zn-linked-more { color: var(--zn-muted); font-size: 0.82em; padding: 2px 4px; }
 .zentral-notes-sheet .zn-pick-head { font: inherit; margin-left: 4px; padding: 0 6px; border-radius: 4px; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); background: transparent; color: inherit; cursor: pointer; }
 .zentral-notes-sheet .zn-hist-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 3px 0; }
 .zentral-notes-sheet .zn-hist-when { flex: 1 1 12em; }
@@ -1076,6 +1860,31 @@
 
 /* Zen sidebar experiment: while the right-click target is one of our note tabs, every native item is hidden (never removed). */
 :root[zentral-notes-ctx="item"] #tabContextMenu > :not([zentral-notes-own]) { display: none !important; }
+
+/* Native Zen folder operations would mutate only virtual sidebar projections.
+   Hide those specific actions while a Notes folder menu is open; preserve
+   unrelated extensions' items and never mutate native menu state. */
+:root[zentral-notes-folder-ctx="true"] #zenFolderActions > :is(
+  #context_zenFolderRename, #context_zenFolderUnpack, #context_zenFolderUnloadAll,
+  #context_zenFolderNewSubfolder, #context_zenFolderDelete, #context_zenFolderToSpace,
+  #context_zenFolderChangeIcon, #context_zenShareFolder, #context_zenChangeFolderSpace
+) { display: none !important; }
+:root[zentral-notes-folder-ctx="true"] #zenFolderActions > :is(
+  #context_zenFolderChangeIcon, #context_zenFolderNewSubfolder, #context_zenShareFolder
+) + menuseparator { display: none !important; }
+
+/* Agenda day folders are virtual projections too. Keep other mods' items. */
+:root[zentral-agenda-folder-ctx="true"] #zenFolderActions > :is(
+  #context_zenFolderRename, #context_zenFolderUnpack, #context_zenFolderUnloadAll,
+  #context_zenFolderNewSubfolder, #context_zenFolderDelete, #context_zenFolderToSpace,
+  #context_zenFolderChangeIcon, #context_zenShareFolder, #context_zenChangeFolderSpace
+) { display: none !important; }
+:root[zentral-agenda-folder-ctx="true"] #zenFolderActions > :is(
+  #context_zenFolderChangeIcon, #context_zenFolderNewSubfolder, #context_zenShareFolder
+) + menuseparator { display: none !important; }
+
+/* Agenda pseudo-tabs cannot use native tab operations; show their owned menu. */
+:root[zentral-agenda-ctx="item"] #tabContextMenu > :not([zentral-agenda-own]) { display: none !important; }
 
 /* Reminder dialog: live "Will ring at ..." line (Cycle F #15) */
 .zentral-notes-sheet .zn-remind-preview { margin: 4px 2px 8px; font-size: 0.9em; opacity: 0.85; }
@@ -1320,11 +2129,27 @@
 .zentral-notes-sheet .zn-frow[data-color] .zn-item-title { color: var(--zn-frow-label, inherit); }
 .zentral-notes-sheet .zn-frow[data-color] .zn-item-time { color: var(--zn-frow-accent, var(--zn-fc)); }
 .zentral-notes-sheet .zn-frow[data-color]:hover { background: var(--zn-frow-hover, color-mix(in srgb, var(--zn-fc) 18%, transparent)); }
+.zentral-notes-sheet .zn-frow[data-color].is-current,
+.zentral-notes-sheet .zn-frow[data-color][aria-selected="true"] { background: var(--zn-frow-selected, color-mix(in srgb, var(--zn-fc) 24%, transparent)); }
+.zentral-notes-sheet .zn-frow[data-color][aria-disabled="true"] { background: var(--zn-frow-disabled-bg, transparent); color: var(--zn-frow-disabled-fg, var(--zn-muted)); border-inline-start-color: var(--zn-frow-disabled-outline, var(--zn-line)); }
+.zentral-notes-sheet .zn-frow[data-color][aria-disabled="true"] .zn-item-title,
+.zentral-notes-sheet .zn-frow[data-color][aria-disabled="true"] .zn-item-time { color: var(--zn-frow-disabled-fg, var(--zn-muted)); }
 .zentral-notes-sheet .zn-frow-emoji { font-size: 13px; line-height: 14px; }
 .zentral-notes-sheet .zn-fstyle-colors { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .zentral-notes-sheet .zn-fstyle-presets { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 10px; }
 .zentral-notes-sheet .zn-fstyle-group-label { margin-top: 4px; font-size: 11px; font-weight: 700; opacity: .75; }
-.zentral-notes-sheet .zn-fstyle-presets .zn-chip { border: 1px solid color-mix(in srgb, currentColor 22%, transparent); }
+.zentral-notes-sheet .zn-fstyle-presets .zn-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--zn-pal-bg, transparent); color: var(--zn-pal-fg, var(--zn-text)); border: 1px solid var(--zn-pal-outline, color-mix(in srgb, currentColor 22%, transparent)); }
+.zentral-notes-sheet .zn-fstyle-presets .zn-chip:hover { background: var(--zn-pal-hover, var(--zn-hover)); color: var(--zn-pal-hover-fg, var(--zn-pal-fg, var(--zn-text))); }
+.zentral-notes-sheet .zn-fstyle-presets .zn-chip.is-on { background: var(--zn-pal-selected-bg, color-mix(in srgb, var(--zn-accent) 22%, transparent)); color: var(--zn-pal-selected-fg, var(--zn-text)); border-color: var(--zn-pal-selected-outline, var(--zn-accent)); box-shadow: inset 0 0 0 1px var(--zn-pal-selected-outline, var(--zn-accent)); }
+.zentral-notes-sheet .zn-fstyle-presets .zn-chip:disabled { background: var(--zn-pal-disabled-bg, transparent); color: var(--zn-pal-disabled-fg, var(--zn-muted)); border-color: var(--zn-pal-disabled-outline, var(--zn-line)); }
+.zentral-notes-sheet .zn-fstyle-preset-swatch { flex: 0 0 14px; width: 14px; height: 11px; border-radius: 3px; border: 1px solid var(--zn-pal-outline, currentColor); box-sizing: border-box; }
+.zentral-notes-sheet .zn-fstyle-preview { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 10px; padding: 8px; border: 1px solid var(--zn-line); border-radius: 8px; background: var(--zn-surface); }
+.zentral-notes-sheet .zn-fstyle-preview-row { cursor: default; }
+.zentral-notes-sheet .zn-fstyle-preview-states { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; }
+.zentral-notes-sheet .zn-fstyle-state-pill { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--zn-frow-stroke, var(--zn-line)); color: var(--zn-frow-label, var(--zn-text)); }
+.zentral-notes-sheet .zn-fstyle-state-pill[data-state="hover"] { background: var(--zn-frow-hover, var(--zn-hover)); }
+.zentral-notes-sheet .zn-fstyle-state-pill[data-state="selected"] { background: var(--zn-frow-selected, color-mix(in srgb, var(--zn-accent) 20%, transparent)); border-color: var(--zn-frow-accent, var(--zn-accent)); font-weight: 600; }
+.zentral-notes-sheet .zn-fstyle-state-pill[data-state="disabled"] { background: var(--zn-frow-disabled-bg, transparent); color: var(--zn-frow-disabled-fg, var(--zn-muted)); border-color: var(--zn-frow-disabled-outline, var(--zn-line)); }
 .zentral-notes-sheet .zn-fstyle-part { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 8px 0; }
 .zentral-notes-sheet .zn-fstyle-part > span:first-child { flex: 1 1 140px; font-size: 12px; }
 .zentral-notes-sheet .zn-fstyle-opacity { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; flex: 1 1 100%; min-width: 0; }
@@ -1341,12 +2166,14 @@
 .zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color="teal"] { --zn-fc: #2ec4b6; }
 .zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color="gray"] { --zn-fc: #9aa0a6; }
 
-/* ---- Custom colors (T3.6): data-color="custom" + the color in --zn-cc (set inline by the script, always a validated #rrggbb) ---- */
+/* ---- Custom colors (T3.6 / T3.6a): data-color="custom" + --zn-cc + surface-resolved --zn-pal-* ---- */
 .zentral-notes-sheet[data-color="custom"] { --zn-note: var(--zn-cc); }
-.zentral-notes-sheet .zn-dot[data-color="custom"] { background: var(--zn-cc); border-color: var(--zn-cc); }
+.zentral-notes-sheet .zn-dot[data-color]:not([data-color="none"]) { border-color: var(--zn-pal-outline, currentColor); }
+.zentral-notes-sheet .zn-dot[data-color="custom"] { background: var(--zn-cc); border-color: var(--zn-pal-outline, var(--zn-cc)); }
 .zentral-notes-sheet .zn-hl-dot[data-color="custom"] { background: var(--zn-cc); }
-.zentral-notes-sheet .zn-hl[data-color="custom"] { background: color-mix(in srgb, var(--zn-cc) 45%, transparent); }
-.zentral-notes-sheet .zn-item[data-color="custom"] .zn-item-bar { background: var(--zn-cc); }
+.zentral-notes-sheet .zn-hl[data-color] { background: var(--zn-pal-hl-bg, color-mix(in srgb, #ffd54a 45%, transparent)); color: var(--zn-pal-hl-fg, inherit); }
+.zentral-notes-sheet .zn-hl[data-color="custom"] { background: var(--zn-pal-hl-bg, color-mix(in srgb, var(--zn-cc) 45%, transparent)); color: var(--zn-pal-hl-fg, inherit); }
+.zentral-notes-sheet .zn-item[data-color]:not([data-color="none"]) .zn-item-bar { background: var(--zn-pal-outline, var(--zn-cc, var(--zn-accent))); }
 .zentral-notes-sheet .zn-swatch[data-color="custom"] { background: var(--zn-cc); }
 .zentral-notes-sheet .zn-frow[data-color="custom"] .zn-frow-icon { color: var(--zn-cc); }
 .zentral-notes-sheet .zn-swatches-custom { margin-top: 4px; }
@@ -1355,7 +2182,12 @@
 .zentral-notes-sheet .zn-color-picker-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .zentral-notes-sheet .zn-color-input { width: 36px; height: 28px; padding: 0; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 6px; background: transparent; cursor: pointer; }
 .zentral-notes-sheet .zn-hex-field { width: 92px; font-family: monospace; }
-.zentral-notes-sheet .zn-quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.zentral-notes-sheet .zn-palette-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--zn-line); border-radius: 8px; background: var(--zn-surface); font-size: 11px; }
+.zentral-notes-sheet .zn-palette-preview-pill { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--zn-pal-outline, var(--zn-line)); background: var(--zn-pal-bg, transparent); color: var(--zn-pal-fg, var(--zn-text)); }
+.zentral-notes-sheet .zn-palette-preview-pill[data-state="hover"] { background: var(--zn-pal-hover, var(--zn-hover)); color: var(--zn-pal-hover-fg, var(--zn-pal-fg, var(--zn-text))); }
+.zentral-notes-sheet .zn-palette-preview-pill[data-state="selected"] { background: var(--zn-pal-selected-bg, transparent); color: var(--zn-pal-selected-fg, var(--zn-text)); border-color: var(--zn-pal-selected-outline, var(--zn-accent)); font-weight: 600; }
+.zentral-notes-sheet .zn-palette-preview-pill[data-state="disabled"] { background: var(--zn-pal-disabled-bg, transparent); color: var(--zn-pal-disabled-fg, var(--zn-muted)); border-color: var(--zn-pal-disabled-outline, var(--zn-line)); }
+.zentral-notes-sheet .zn-palette-preview-reminder { pointer-events: none; cursor: default; }
 
 /* ---- Emoji icon of a Notes folder in the Zen sidebar: drawn by CSS from the folder's attribute, so it does not depend on Zen's
    icon SVG internals (sub-folders showed none). The SVG <text> the script also adds is hidden to avoid a double icon. ---- */
@@ -1430,5 +2262,1586 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-fstyle-warn:empty { display: none; }
 .zentral-notes-sheet .zn-fstyle-warn { font-size: 11px; opacity: .85; }
 .zentral-notes-sheet .zn-rootrow { display: flex; align-items: center; gap: 8px; padding: 5px 8px; margin: 2px 0 4px; border-radius: 8px; cursor: pointer; }
+.zentral-notes-sheet .zn-rootrow[data-color] { background: var(--zn-frow-tint, transparent); border-inline-start: 2px solid var(--zn-frow-accent, transparent); color: var(--zn-frow-label, inherit); }
+.zentral-notes-sheet .zn-rootrow[data-color]:hover { background: var(--zn-frow-hover, var(--zn-hover)); }
 .zentral-notes-sheet .zn-rootrow .zn-frow-icon { color: var(--zn-frow-stroke, currentColor); }
 .zentral-notes-sheet .zn-rootrow .zn-rootrow-name { flex: 1; min-width: 0; font-weight: 700; font-size: 12px; letter-spacing: .04em; }
+
+/* Mini calendar (date picker, roadmap T2.2) + OW-10 compact composer schedule board and analog/digital Clock */
+.zentral-notes-sheet .zn-cal { margin: 4px 0 8px; padding: 6px; border: 1px solid var(--zn-line); border-radius: 8px; }
+.zentral-notes-sheet .zn-cal.is-compact { margin: 0; padding: 4px 5px; font-size: 0.85em; }
+.zentral-notes-sheet .zn-cal-date-targets { display: flex; gap: 4px; margin-bottom: 4px; }
+.zentral-notes-sheet .zn-cal-head { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.zentral-notes-sheet .zn-cal.is-compact .zn-cal-head { gap: 2px; margin-bottom: 2px; }
+.zentral-notes-sheet .zn-cal-title { flex: 1; text-align: center; font-weight: 600; text-transform: capitalize; }
+.zentral-notes-sheet .zn-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; outline: none; }
+.zentral-notes-sheet .zn-cal-grid.has-week-numbers { grid-template-columns: 1.9em repeat(7, minmax(0, 1fr)); }
+.zentral-notes-sheet .zn-cal.is-compact .zn-cal-grid { gap: 1px; }
+.zentral-notes-sheet .zn-cal-dow { text-align: center; font-size: 0.75em; color: var(--zn-muted); padding: 2px 0; }
+.zentral-notes-sheet .zn-cal.is-compact .zn-cal-dow { padding: 1px 0; font-size: 0.7em; }
+.zentral-notes-sheet .zn-cal-day { position: relative; min-width: 0; aspect-ratio: 1; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--zn-text); font: inherit; cursor: pointer; }
+.zentral-notes-sheet .zn-cal.is-compact .zn-cal-day { aspect-ratio: auto; height: 22px; min-height: 20px; border-radius: 5px; font-size: 0.9em; }
+.zentral-notes-sheet .zn-cal-day:hover { background: var(--zn-hover); }
+.zentral-notes-sheet .zn-cal-day.is-out { color: var(--zn-muted); }
+.zentral-notes-sheet .zn-cal-day.is-today { border-color: var(--zn-accent); }
+.zentral-notes-sheet .zn-cal-day.is-picked { background: color-mix(in srgb, var(--zn-accent) 28%, transparent); }
+.zentral-notes-sheet .zn-cal-grid:focus-visible .zn-cal-day.is-cursor, .zentral-notes-sheet .zn-cal-day.is-cursor:focus-visible { outline: 2px solid var(--zn-accent); outline-offset: -2px; }
+.zentral-notes-sheet .zn-cal-dot { position: absolute; left: 50%; bottom: 3px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--zn-accent); }
+.zentral-notes-sheet .zn-cal.is-compact .zn-cal-dot { bottom: 1px; width: 3px; height: 3px; margin-left: -1.5px; }
+.zentral-notes-sheet .zn-cal-compose-schedule-board { display: grid; grid-template-columns: minmax(12em, 14.5em) minmax(13.5em, 1fr); gap: 8px; align-items: start; margin: 4px 0 8px; }
+.zentral-notes-sheet .zn-cal-compose-schedule-board[data-all-day="true"] { grid-template-columns: minmax(12em, 16em); }
+.zentral-notes-sheet .zn-cal-clock { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 8px; padding: 6px 7px; border: 1px solid var(--zn-line); border-radius: 8px; min-width: 0; }
+.zentral-notes-sheet .zn-cal-compose-schedule-board .zn-cal-clock { margin: 0; }
+.zentral-notes-sheet .zn-cal-clock[hidden] { display: none; }
+.zentral-notes-sheet .zn-cal-clock-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px; }
+.zentral-notes-sheet .zn-cal-clock-targets, .zentral-notes-sheet .zn-cal-clock-modes, .zentral-notes-sheet .zn-cal-clock-periods { display: inline-flex; align-items: center; gap: 3px; }
+.zentral-notes-sheet .zn-cal-clock-targets[hidden], .zentral-notes-sheet .zn-cal-clock-periods[hidden], .zentral-notes-sheet .zn-cal-clock-analog[hidden], .zentral-notes-sheet .zn-cal-clock-digital[hidden] { display: none; }
+.zentral-notes-sheet .zn-cal-clock-analog { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.zentral-notes-sheet .zn-cal-clock-readout { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
+.zentral-notes-sheet .zn-cal-clock-slider { appearance: none; min-width: 2.1em; padding: 1px 5px; border: 1px solid var(--zn-line); border-radius: 5px; background: transparent; color: var(--zn-text); font: inherit; font-weight: 600; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-clock-slider.is-active { border-color: var(--zn-accent); background: color-mix(in srgb, var(--zn-accent) 20%, transparent); }
+.zentral-notes-sheet .zn-cal-clock-dial { position: relative; width: 140px; height: 140px; border-radius: 50%; border: 1px solid var(--zn-line); background: var(--zn-hover); touch-action: none; user-select: none; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-clock-nums { position: absolute; inset: 0; }
+.zentral-notes-sheet .zn-cal-clock-num { position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px; padding: 0; border: none; border-radius: 50%; background: transparent; color: var(--zn-text); font: inherit; font-size: 10.5px; line-height: 20px; text-align: center; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-clock-num.is-inner { font-size: 9.5px; color: var(--zn-muted); }
+.zentral-notes-sheet .zn-cal-clock-num.is-on { background: var(--zn-accent); color: #fff; font-weight: 600; }
+.zentral-notes-sheet .zn-cal-clock-hand { position: absolute; left: 50%; bottom: 50%; width: 2px; margin-left: -1px; transform-origin: 50% 100%; transform: rotate(var(--zn-clock-angle, 0deg)); border-radius: 2px; background: color-mix(in srgb, var(--zn-accent) 45%, var(--zn-muted)); pointer-events: none; }
+.zentral-notes-sheet .zn-cal-clock-hand.is-hour { height: 42px; }
+.zentral-notes-sheet .zn-cal-clock-hand.is-hour.is-inner { height: 27px; }
+.zentral-notes-sheet .zn-cal-clock-hand.is-minute { height: 50px; }
+.zentral-notes-sheet .zn-cal-clock-hand.is-active { background: var(--zn-accent); width: 2.5px; }
+.zentral-notes-sheet .zn-cal-clock-pin { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: var(--zn-accent); pointer-events: none; }
+.zentral-notes-sheet .zn-cal-clock-digital { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.zentral-notes-sheet .zn-cal-clock-set { display: inline-flex; flex: 1 1 130px; align-items: center; gap: 4px; min-width: 0; color: var(--zn-muted); font-size: 0.85em; }
+.zentral-notes-sheet .zn-cal-clock-set > span:first-child { flex: 0 0 auto; min-width: 34px; }
+.zentral-notes-sheet .zn-cal-clock-set .zn-select { flex: 1 1 44px; width: 44px; min-width: 0; padding: 4px 3px; text-align: center; }
+@media (max-width: 560px) {
+  .zentral-notes-sheet .zn-cal-compose-schedule-board { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* T2.4a: All notes tree/calendar workspace. JS selects side-by-side, stacked or tabs from the
+   measured sheet rectangle and remembers the user's split share independently per orientation. */
+.zentral-notes-sheet .zn-all-toolbar .zn-calendar-tab[aria-selected="true"] { color: var(--zn-text); border-color: var(--zn-accent); background: color-mix(in srgb, var(--zn-accent) 16%, transparent); }
+.zentral-notes-sheet[data-all-notes-active="false"] .zn-all-toolbar { display: none; }
+.zentral-notes-sheet[data-all-notes-active="false"] .zn-calendar-pane,
+.zentral-notes-sheet[data-all-notes-active="false"] .zn-calendar-splitter { display: none !important; }
+.zentral-notes-sheet[data-all-notes-active="false"] .zn-tree-pane { flex: 1 1 auto !important; }
+
+/* OW-59: what a note or a date has linked. One row per item, the words on the left, the two actions on the right. */
+.zentral-notes-sheet .zn-linked-items { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.zentral-notes-sheet .zn-linked-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 320px; overflow: auto; }
+.zentral-notes-sheet .zn-linked-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px; border-bottom: 1px solid var(--zn-line); min-width: 0; }
+.zentral-notes-sheet .zn-linked-text { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.zentral-notes-sheet .zn-linked-meta { font-size: 11px; opacity: 0.7; }
+.zentral-notes-sheet .zn-linked-actions { display: flex; flex: 0 0 auto; gap: 4px; }
+
+/* T2.4b: month, forward-days and agenda calendar views. */
+.zentral-notes-sheet .zn-calendar-pane-head { flex: 0 0 auto; }
+.zentral-notes-sheet .zn-calendar-controls { display: flex; flex: 0 0 auto; align-items: center; flex-wrap: wrap; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--zn-line); }
+.zentral-notes-sheet .zn-calendar-controls[hidden] { display: none !important; }
+.zentral-notes-sheet .zn-calendar-controls-toggle { position: relative; flex: 0 0 auto; }
+.zentral-notes-sheet .zn-calendar-controls-dot { position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 999px; background: var(--zn-accent); pointer-events: none; }
+.zentral-notes-sheet .zn-calendar-controls-dot[hidden] { display: none !important; }
+/* OW-39: Keep work-free days distinct without washing out events, text, or selection.
+   OW-55: the colour and strength of each are the owner's (--zentral-notes-ov-*-tint); the fallback here is the
+   tint this rule shipped with, so a sheet that never opened the setting looks exactly as before. These are resting
+   tints only: selection, hover and the holiday edge keep their own tokens. */
+.zentral-notes-sheet .zn-cal-month-cell.is-workfree,
+.zentral-notes-sheet .zn-cal-time-day-head.is-workfree,
+.zentral-notes-sheet .zn-cal-time-allday-cell.is-workfree,
+.zentral-notes-sheet .zn-cal-time-column.is-workfree,
+.zentral-notes-sheet .zn-cal-day-group.is-workfree,
+.zentral-notes-sheet .zn-cal-agenda-row.is-workfree {
+  background: var(--zentral-notes-ov-free-tint, color-mix(in srgb, #78a9c8 4%, transparent));
+}
+.zentral-notes-sheet .zn-cal-month-cell.is-weekend,
+.zentral-notes-sheet .zn-cal-time-day-head.is-weekend,
+.zentral-notes-sheet .zn-cal-time-allday-cell.is-weekend,
+.zentral-notes-sheet .zn-cal-time-column.is-weekend,
+.zentral-notes-sheet .zn-cal-day-group.is-weekend,
+.zentral-notes-sheet .zn-cal-agenda-row.is-weekend {
+  background: var(--zentral-notes-ov-weekend-tint, color-mix(in srgb, #6ca8ff 10%, transparent));
+}
+.zentral-notes-sheet .zn-cal-month-cell.is-holiday,
+.zentral-notes-sheet .zn-cal-time-day-head.is-holiday,
+.zentral-notes-sheet .zn-cal-time-allday-cell.is-holiday,
+.zentral-notes-sheet .zn-cal-time-column.is-holiday,
+.zentral-notes-sheet .zn-cal-day-group.is-holiday,
+.zentral-notes-sheet .zn-cal-agenda-row.is-holiday {
+  background: var(--zentral-notes-ov-holiday-tint, color-mix(in srgb, #f0b85b 13%, transparent));
+}
+/* OW-45: a trading Sunday or an election day is marked, but it is a working day: no work-free tint. */
+.zentral-notes-sheet .zn-cal-month-cell.is-trading-sunday,
+.zentral-notes-sheet .zn-cal-picker-day.is-trading-sunday,
+.zentral-notes-sheet .zn-cal-time-day-head.is-trading-sunday,
+.zentral-notes-sheet .zn-cal-day-group.is-trading-sunday,
+.zentral-notes-sheet .zn-cal-agenda-row.is-trading-sunday,
+.zentral-notes-sheet .zn-cal-month-cell.is-election-day,
+.zentral-notes-sheet .zn-cal-picker-day.is-election-day,
+.zentral-notes-sheet .zn-cal-time-day-head.is-election-day,
+.zentral-notes-sheet .zn-cal-day-group.is-election-day,
+.zentral-notes-sheet .zn-cal-agenda-row.is-election-day {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--zn-accent, #6ca8ff) 35%, transparent);
+}
+.zentral-notes-sheet .zn-cal-holidays-coverage-row {
+  margin: 2px 0 0;
+  font-size: 0.92em;
+  opacity: 0.8;
+}
+/* OW-44: the same day is a holiday in more than one chosen set — a second accent edge, still one tint. */
+.zentral-notes-sheet .zn-cal-month-cell.is-multi-holiday,
+.zentral-notes-sheet .zn-cal-picker-day.is-multi-holiday {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #f0b85b 55%, transparent);
+}
+.zentral-notes-sheet .zn-cal-holiday-pill.is-multi-holiday,
+.zentral-notes-sheet .zn-cal-month-holiday.is-multi-holiday {
+  color: color-mix(in srgb, #f0b85b 70%, currentColor);
+}
+.zentral-notes-sheet .zn-cal-month-cell.is-personal-off,
+.zentral-notes-sheet .zn-cal-time-day-head.is-personal-off,
+.zentral-notes-sheet .zn-cal-time-allday-cell.is-personal-off,
+.zentral-notes-sheet .zn-cal-time-column.is-personal-off,
+.zentral-notes-sheet .zn-cal-day-group.is-personal-off,
+.zentral-notes-sheet .zn-cal-agenda-row.is-personal-off {
+  background: color-mix(in srgb, #b48bea 12%, transparent);
+}
+/* T2.13a: a holiday that came from a subscribed calendar file. It is NOT a local holiday: a neutral, cool grey edge and
+   no tint, so a synced holiday week can never look like a day off this calendar decided on. Deliberately quiet — an
+   imported holiday is information, not a rule. */
+.zentral-notes-sheet .zn-cal-month-cell.is-imported-holiday,
+.zentral-notes-sheet .zn-cal-time-day-head.is-imported-holiday,
+.zentral-notes-sheet .zn-cal-time-allday-cell.is-imported-holiday,
+.zentral-notes-sheet .zn-cal-time-column.is-imported-holiday,
+.zentral-notes-sheet .zn-cal-day-group.is-imported-holiday,
+.zentral-notes-sheet .zn-cal-agenda-row.is-imported-holiday {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 18%, transparent);
+}
+.zentral-notes-sheet .zn-cal-month-mark.is-imported-holiday,
+.zentral-notes-sheet .zn-cal-item.is-imported-holiday {
+  opacity: 0.82;
+  border-left-style: dashed;
+}
+.zentral-notes-sheet .zn-cal-picker-day.is-workfree {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #78a9c8 36%, transparent);
+  background: color-mix(in srgb, #78a9c8 7%, transparent);
+}
+.zentral-notes-sheet .zn-cal-picker-day.is-weekend {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #6ca8ff 58%, transparent);
+  background: color-mix(in srgb, #6ca8ff 13%, transparent);
+}
+.zentral-notes-sheet .zn-cal-picker-day.is-holiday {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #f0b85b 78%, transparent);
+  background: color-mix(in srgb, #f0b85b 17%, transparent);
+}
+.zentral-notes-sheet .zn-cal-picker-day.is-personal-off {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #b48bea 70%, transparent);
+  background: color-mix(in srgb, #b48bea 16%, transparent);
+}
+.zentral-notes-sheet .zn-cal-month-holiday {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  max-width: calc(100% - 28px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  line-height: 1.25;
+  padding: 0 3px;
+  border-radius: 3px;
+  color: color-mix(in srgb, #f0b85b 92%, var(--zn-text));
+  background: color-mix(in srgb, #f0b85b 23%, transparent);
+  pointer-events: none;
+}
+.zentral-notes-sheet .zn-cal-holiday-pill {
+  display: inline-block;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: .72em;
+  font-weight: 600;
+  color: color-mix(in srgb, #f0b85b 92%, var(--zn-text));
+  background: color-mix(in srgb, #f0b85b 24%, transparent);
+}
+.zentral-notes-sheet .zn-cal-holidays-section { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.zentral-notes-sheet .zn-cal-holidays-heading { font-size: .92em; }
+.zentral-notes-sheet .zn-cal-holidays-region-status { margin: 2px 0; padding: 6px 8px; border-left: 2px solid color-mix(in srgb, var(--zn-accent) 65%, transparent); border-radius: 0 5px 5px 0; color: var(--zn-muted); background: color-mix(in srgb, var(--zn-accent) 7%, transparent); font-size: .86em; }
+.zentral-notes-sheet .zn-cal-holidays-personal-list { display: flex; flex-direction: column; gap: 4px; max-height: 150px; overflow: auto; }
+.zentral-notes-sheet .zn-cal-holidays-personal-row { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border: 1px solid var(--zn-line); border-radius: 6px; font-size: .88em; }
+.zentral-notes-sheet .zn-cal-holidays-personal-label { color: var(--zn-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zentral-notes-sheet .zn-cal-holidays-add-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.zentral-notes-sheet .zn-cal-holidays-add-row .zn-cal-holidays-date { flex: 0 1 115px; min-width: 100px; }
+.zentral-notes-sheet .zn-cal-holidays-add-row .zn-cal-holidays-label { flex: 1 1 130px; min-width: 110px; }
+.zentral-notes-sheet .zn-cal-holidays-err { margin: 2px 0 0; color: #ff6b6b; font-size: .85em; }
+.zentral-notes-sheet .zn-calendar-controls .zn-chip { flex: 0 1 auto; max-width: 100%; min-width: 0; padding: 4px 7px; white-space: nowrap; }
+.zentral-notes-sheet .zn-calendar-view-select { min-width: 90px; }
+.zentral-notes-sheet .zn-calendar-kind-filter,
+.zentral-notes-sheet .zn-calendar-category-filter { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.zentral-notes-sheet .zn-calendar-snap-select[hidden],
+.zentral-notes-sheet .zn-calendar-days-select[hidden] { display: none !important; }
+.zentral-notes-sheet .zn-calendar-pane-content { flex: 1 1 auto; display: block; min-height: 0; overflow: auto; padding: 8px; text-align: left; scrollbar-width: thin; }
+.zentral-notes-sheet .zn-cal-month-wrap { display: flex; flex-direction: column; min-height: 0; }
+.zentral-notes-sheet .zn-cal-month-dows,
+.zentral-notes-sheet .zn-cal-month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.zentral-notes-sheet .zn-cal-month-dows.has-week-numbers,
+.zentral-notes-sheet .zn-cal-month-grid.has-week-numbers { grid-template-columns: 2.1em repeat(7, minmax(0, 1fr)); }
+.zentral-notes-sheet .zn-cal-week-col-head,
+.zentral-notes-sheet .zn-cal-week-num { display: flex; align-items: center; justify-content: center; min-width: 0; padding: 1px 2px; color: var(--zn-muted); font-size: .72em; font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; user-select: none; }
+.zentral-notes-sheet .zn-cal-month-grid > .zn-cal-week-num { border-right: 1px solid color-mix(in srgb, var(--zn-line) 70%, transparent); }
+.zentral-notes-sheet .zn-cal-month-dows { flex: 0 0 auto; margin-bottom: 3px; }
+.zentral-notes-sheet .zn-cal-month-dows > span { padding: 3px 2px; text-align: center; color: var(--zn-muted); font-size: .76em; font-weight: 650; }
+/* OW-03: the height of the six weeks. A cell never grows with what is in it; it shows as many items as it holds
+   (monthCellLines in the calendar module), so the weeks are as high as the rules below say and no higher.
+   Fitted (data-fit="true" on the pane content): the content is a column in which the weeks share what the day names
+   and the list of the selected day leave. A week is never under 44px (279px = six weeks and five gaps), and never
+   under what the date and one line of an item need at a large text size (12em + 84px for the six); then the content
+   scrolls. The grid has a basis of 0, not of its content: with its content as the basis it could not get lower than
+   what was drawn into it for a higher pane. The list of the selected day takes 40% at most (110px in a pane so low
+   that this is less), gives way before the content has to scroll (down to 4.6em: its heading and one item) and
+   scrolls by itself. The column starts at the top and its items are as wide as it is: the pane content centres what
+   it holds while it is empty (the rule near the panes), and what is centred and too high cannot be scrolled to its
+   top.
+   A chosen size (--zn-cal-month-row): weeks of that many px, and the content scrolls as it always did. */
+.zentral-notes-sheet .zn-cal-month-grid { grid-template-rows: repeat(6, var(--zn-cal-month-row, 58px)); }
+.zentral-notes-sheet .zn-calendar-view[data-view="month"][data-fit="true"] { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 0; }
+.zentral-notes-sheet .zn-calendar-view[data-view="month"][data-fit="true"] > .zn-cal-month-wrap { flex: 1 1 0; min-height: auto; }
+.zentral-notes-sheet .zn-calendar-view[data-view="month"][data-fit="true"] .zn-cal-month-grid { flex: 1 1 0; min-height: max(279px, calc(12em + 84px)); grid-template-rows: repeat(6, minmax(0, 1fr)); }
+.zentral-notes-sheet .zn-calendar-view[data-view="month"][data-fit="true"] > .zn-cal-month-selection { flex: 0 1 auto; min-height: 4.6em; max-height: max(40%, 110px); overflow: auto; scrollbar-width: thin; }
+.zentral-notes-sheet .zn-cal-month-cell { position: relative; display: flex; min-width: 0; min-height: 0; flex-direction: column; gap: 2px; overflow: hidden; padding: 3px; border: 1px solid var(--zn-line); border-radius: 6px; background: color-mix(in srgb, var(--zn-hover) 12%, transparent); }
+.zentral-notes-sheet .zn-cal-month-cell.is-out { opacity: .48; }
+.zentral-notes-sheet .zn-cal-month-cell.is-selected { border-color: var(--zn-accent); background: color-mix(in srgb, var(--zn-accent) 10%, transparent); }
+.zentral-notes-sheet .zn-cal-month-date { align-self: flex-start; min-width: 23px; padding: 1px 4px; border: 0; border-radius: 5px; background: transparent; color: var(--zn-text); font: inherit; font-size: .82em; text-align: center; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-month-date:hover { background: var(--zn-hover); }
+.zentral-notes-sheet .zn-cal-month-cell.is-selected .zn-cal-month-date { background: var(--zn-accent); color: var(--zn-accent-on-fill, white); }
+/* Pair text with our default accent; a person's explicit accent keeps the existing behavior. */
+:root[zentral-notes-theme="recommended"]:not([zentral-notes-ov~="accent"]) .zentral-notes-sheet .zn-cal-month-cell.is-selected .zn-cal-month-date { color: light-dark(#ffffff, #101c30); }
+.zentral-notes-sheet .zn-cal-month-allday { color: var(--zn-muted); font-size: .63em; line-height: 1; white-space: nowrap; }
+.zentral-notes-sheet .zn-cal-month-items { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.zentral-notes-sheet .zn-cal-month-mark { display: block; min-width: 0; overflow: hidden; padding: 1px 3px; border: 0; border-left: 2px solid var(--zn-cal-item-outline, var(--zn-cal-item-color, var(--zn-accent))); border-radius: 3px; background: var(--zn-cal-item-bg, color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 16%, transparent)); color: var(--zn-cal-item-fg, var(--zn-text)); font: inherit; font-size: .65em; line-height: 1.25; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-month-mark:hover,
+.zentral-notes-sheet .zn-cal-month-mark:focus-visible { background: var(--zn-cal-item-hover, var(--zn-hover)); outline: 1px solid var(--zn-cal-item-outline, var(--zn-accent)); outline-offset: -1px; }
+.zentral-notes-sheet .zn-cal-month-mark.is-reminder::before { content: "● "; color: var(--zn-cal-item-outline, var(--zn-cal-item-color, var(--zn-accent))); }
+.zentral-notes-sheet .zn-cal-month-more { color: var(--zn-muted); font-size: .62em; }
+.zentral-notes-sheet .zn-cal-month-weather { position: absolute; top: 3px; right: 5px; color: var(--zn-muted); font-size: .78em; line-height: 1; pointer-events: none; }
+.zentral-notes-sheet .zn-cal-month-cell:has(.zn-cal-month-reminder-dot) .zn-cal-month-weather { right: 15px; }
+.zentral-notes-sheet .zn-cal-month-reminder-dot { position: absolute; top: 4px; right: 5px; color: var(--zn-accent); font-size: .55em; }
+.zentral-notes-sheet .zn-cal-day-group { min-width: 0; margin: 4px 0 9px; padding: 7px; border: 1px solid var(--zn-line); border-radius: 8px; }
+.zentral-notes-sheet .zn-cal-day-group.is-selected { border-color: color-mix(in srgb, var(--zn-accent) 70%, var(--zn-line)); }
+.zentral-notes-sheet .zn-cal-day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.zentral-notes-sheet .zn-cal-day-head strong { color: var(--zn-text); font-size: .9em; }
+.zentral-notes-sheet .zn-cal-day-head > span { color: var(--zn-muted); font-size: .72em; white-space: nowrap; }
+.zentral-notes-sheet .zn-cal-all-day-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 3px 0 5px; padding: 4px; border-radius: 5px; background: color-mix(in srgb, var(--zn-accent) 9%, transparent); }
+.zentral-notes-sheet .zn-cal-all-day-label { flex: 0 0 auto; color: var(--zn-muted); font-size: .7em; font-weight: 650; }
+.zentral-notes-sheet .zn-cal-day-items { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.zentral-notes-sheet .zn-cal-item { display: flex; min-width: 0; flex-wrap: wrap; align-items: baseline; gap: 4px 7px; padding: 4px 6px; border: 0; border-left: 3px solid var(--zn-cal-item-outline, var(--zn-cal-item-color, var(--zn-accent))); border-radius: 4px; background: var(--zn-cal-item-bg, color-mix(in srgb, var(--zn-cal-item-color, var(--zn-hover)) 10%, transparent)); color: var(--zn-cal-item-fg, var(--zn-text)); font: inherit; text-align: left; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-item:hover,
+.zentral-notes-sheet .zn-cal-item:focus-visible { background: var(--zn-cal-item-hover, color-mix(in srgb, var(--zn-cal-item-color, var(--zn-hover)) 19%, transparent)); outline: 1px solid var(--zn-cal-item-outline, var(--zn-accent)); outline-offset: -1px; }
+.zentral-notes-sheet .zn-cal-item.is-selected,
+.zentral-notes-sheet .zn-cal-item[aria-selected="true"] { background: var(--zn-cal-item-selected-bg, color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 24%, transparent)); color: var(--zn-cal-item-selected-fg, var(--zn-text)); border-left-color: var(--zn-cal-item-selected-outline, var(--zn-accent)); }
+.zentral-notes-sheet .zn-cal-item.is-reminder .zn-cal-item-time::before { content: "● "; color: var(--zn-cal-item-outline, var(--zn-cal-item-color, var(--zn-accent))); }
+.zentral-notes-sheet .zn-cal-item-time { flex: 0 0 auto; color: var(--zn-cal-item-muted, var(--zn-muted)); font-size: .75em; font-variant-numeric: tabular-nums; }
+.zentral-notes-sheet .zn-cal-item-title { min-width: 0; flex: 1 1 auto; font-size: .84em; overflow-wrap: anywhere; }
+.zentral-notes-sheet .zn-cal-item-category { color: var(--zn-cal-item-muted, var(--zn-muted)); font-size: .68em; }
+.zentral-notes-sheet .zn-cal-item-note { flex: 1 0 100%; min-width: 0; overflow: hidden; color: var(--zn-cal-item-muted, var(--zn-muted)); font-size: .72em; text-overflow: ellipsis; white-space: nowrap; }
+/* T2.4c1: week/day 24-hour time grid. All dimensions are compact and scroll inside the calendar pane. */
+.zentral-notes-sheet .zn-cal-time-view { display: flex; min-width: 0; min-height: 0; height: 100%; flex-direction: column; gap: 3px; }
+.zentral-notes-sheet .zn-cal-time-head,
+.zentral-notes-sheet .zn-cal-time-allday-row,
+.zentral-notes-sheet .zn-cal-time-grid-row { display: grid; min-width: 0; }
+/* Equal native gutters align headers and all-day cells with the scrolling timeline,
+   whether scrollbars are classic or overlay and whether all-day items overflow. */
+.zentral-notes-sheet .zn-cal-time-head { flex: 0 0 auto; align-items: stretch; overflow: hidden; scrollbar-gutter: stable; scrollbar-width: thin; }
+.zentral-notes-sheet .zn-cal-time-corner { border-bottom: 1px solid var(--zn-line); }
+.zentral-notes-sheet .zn-cal-time-day-head { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 2px; border: 0; border-bottom: 1px solid var(--zn-line); background: transparent; color: var(--zn-text); font: inherit; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-time-day-head.is-today { border-bottom: 2px solid var(--zn-accent); background: color-mix(in srgb, var(--zn-accent) 12%, transparent); }
+.zentral-notes-sheet .zn-cal-time-day-head.is-today strong { color: var(--zn-accent); }
+.zentral-notes-sheet .zn-cal-time-day-head strong { font-size: .78em; }
+/* OW-96: the weather line above the weekday. Small but readable: the glyph is text-sized rather than a 10px speck, and
+   the temperature beside it is tabular so the columns line up when a row of seven days is compared at a glance. */
+.zentral-notes-sheet .zn-cal-weather { display: inline-flex; min-width: 0; align-items: baseline; gap: 3px; line-height: 1; color: var(--zn-muted); font-size: .68em; }
+.zentral-notes-sheet .zn-cal-weather-icon { font-size: 1.15em; line-height: 1; opacity: .9; }
+.zentral-notes-sheet .zn-cal-weather-temp { font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* In a narrow column (48 days stacked, a small pane) the temperature is what goes: the glyph still says the weather,
+   and a clipped "-3°C" would read as a wrong number rather than a missing one. */
+.zentral-notes-sheet .zn-cal-time-day-head.is-narrow .zn-cal-weather-temp { display: none; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-weather { font-size: .62em; gap: 2px; }
+
+.zentral-notes-sheet .zn-cal-time-day-head > span { color: var(--zn-muted); font-size: .7em; }
+.zentral-notes-sheet .zn-cal-time-allday-row { flex: 0 0 auto; align-items: stretch; max-height: 112px; overflow: auto; scrollbar-gutter: stable; scrollbar-width: thin; border-bottom: 1px solid var(--zn-line); }
+.zentral-notes-sheet .zn-cal-time-all-label { align-self: start; padding: 5px 2px 2px 0; color: var(--zn-muted); font-size: .63em; }
+.zentral-notes-sheet .zn-cal-time-allday-cell { display: flex; min-width: 0; min-height: 22px; flex-direction: column; gap: 2px; padding: 2px; border-left: 1px solid var(--zn-line); }
+.zentral-notes-sheet .zn-cal-time-allday-cell.is-today { background: color-mix(in srgb, var(--zn-accent) 7%, transparent); }
+.zentral-notes-sheet .zn-cal-time-allday-cell .zn-cal-item { padding: 2px 3px; font-size: .66em; }
+/* The timeline takes what the header and the all-day row leave, and never less than two and a half of the smallest
+   hours (3.5em; fitMinHourPx is 1.4 of the text size). In a pane too low for that (a large text, a full all-day row)
+   it used to be 0 px high and the hours could not be reached; now the pane content scrolls to it. */
+.zentral-notes-sheet .zn-cal-time-scroll { flex: 1 1 auto; min-height: 3.5em; overflow: auto; scrollbar-gutter: stable; scrollbar-width: thin; }
+/* OW-03: the hours are fitted to the timeline and there is nothing to scroll. No scrollbar can show, also not for the
+   one frame in which the pane is already lower and the hours are not drawn again yet. */
+.zentral-notes-sheet .zn-cal-time-scroll[data-fitted="true"] { overflow-y: hidden; }
+/* --zn-cal-hours: how many hours the grid shows (24, or the chosen hours widened for what is in view; set on .zn-cal-time-view). */
+.zentral-notes-sheet .zn-cal-time-grid-row { min-height: calc(var(--zn-cal-hours, 24) * var(--zn-cal-hour-height, 54px)); align-items: stretch; grid-template-columns: 42px minmax(0, 1fr); }
+.zentral-notes-sheet .zn-cal-hour-gutter { display: flex; flex-direction: column; padding-top: 2px; }
+.zentral-notes-sheet .zn-cal-hour-label { box-sizing: border-box; height: var(--zn-cal-hour-height, 54px); flex: 0 0 var(--zn-cal-hour-height, 54px); padding: 0 3px 0 0; transform: translateY(-.45em); color: var(--zn-muted); font-size: .62em; font-variant-numeric: tabular-nums; text-align: right; }
+.zentral-notes-sheet .zn-cal-hour-label:first-child { transform: none; }
+.zentral-notes-sheet .zn-cal-time-columns { grid-column: 2 / -1; display: grid; min-width: 0; width: 100%; }
+.zentral-notes-sheet .zn-cal-time-column { min-width: 0; border-left: 1px solid var(--zn-line); }
+/* The grid divides the available height, not the intrinsic heights of its two timetables. */
+.zentral-notes-sheet .zn-cal-time-view[data-rows="2"] { display: grid; grid-template-rows: repeat(2, minmax(0, 1fr)); }
+.zentral-notes-sheet .zn-cal-time-band { display: flex; flex-direction: column; min-height: 0; min-width: 0; gap: 3px; overflow: auto; }
+
+.zentral-notes-sheet .zn-cal-time-column.is-today { background: color-mix(in srgb, var(--zn-accent) 5%, transparent); }
+.zentral-notes-sheet .zn-cal-time-track { position: relative; min-width: 0; background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--zn-cal-hour-height, 54px) - 1px), var(--zn-line) calc(var(--zn-cal-hour-height, 54px) - 1px), var(--zn-line) var(--zn-cal-hour-height, 54px)); }
+.zentral-notes-sheet .zn-cal-time-hour-line { position: absolute; right: 0; left: 0; height: 1px; border-top: 1px solid color-mix(in srgb, var(--zn-line) 55%, transparent); pointer-events: none; }
+.zentral-notes-sheet .zn-cal-now-line { position: absolute; z-index: 5; left: 0; right: 0; height: 2px; background: #ff5b5b; pointer-events: none; }
+.zentral-notes-sheet .zn-cal-now-dot { position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: #ff5b5b; }
+.zentral-notes-sheet .zn-cal-today-badge { display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 999px; background: color-mix(in srgb, var(--zn-accent) 22%, transparent); color: var(--zn-accent); font-size: .72em; font-weight: 650; }
+.zentral-notes-sheet .zn-cal-day-group.is-today { border-color: var(--zn-accent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--zn-accent) 45%, transparent); }
+.zentral-notes-sheet .zn-cal-agenda-row.is-today .zn-cal-agenda-date { color: var(--zn-accent); font-weight: 650; }
+.zentral-notes-sheet .zn-cal-off-hours { position: absolute; z-index: 0; right: 0; left: 0; background: color-mix(in srgb, var(--zn-hover) 16%, transparent); pointer-events: none; }
+.zentral-notes-sheet .zn-cal-off-hours.is-all-day { top: 0; bottom: 0; }
+/* Hours beyond the chosen ones, shown because a day in view has something there: hatched, a dashed line where the
+ * chosen hours begin or end, their labels in the accent colour, and one line of text above the timeline. */
+.zentral-notes-sheet .zn-cal-hours-extra { position: absolute; z-index: 0; right: 0; left: 0; background: repeating-linear-gradient(135deg, transparent 0, transparent 6px, color-mix(in srgb, var(--zn-accent) 8%, transparent) 6px, color-mix(in srgb, var(--zn-accent) 8%, transparent) 12px); pointer-events: none; }
+.zentral-notes-sheet .zn-cal-hours-extra.is-top { border-bottom: 1px dashed color-mix(in srgb, var(--zn-accent) 60%, transparent); }
+.zentral-notes-sheet .zn-cal-hours-extra.is-bottom { border-top: 1px dashed color-mix(in srgb, var(--zn-accent) 60%, transparent); }
+.zentral-notes-sheet .zn-cal-hour-label.is-extended { color: var(--zn-accent); font-style: italic; }
+.zentral-notes-sheet .zn-cal-hour-label.is-dst-repeated { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.05; }
+.zentral-notes-sheet .zn-cal-hour-dst-tag { font-size: .82em; opacity: .78; color: var(--zn-accent); }
+.zentral-notes-sheet .zn-cal-dst-gap { position: absolute; right: 0; left: 0; pointer-events: none; background: repeating-linear-gradient(135deg, transparent 0, transparent 5px, color-mix(in srgb, var(--zn-muted) 16%, transparent) 5px, color-mix(in srgb, var(--zn-muted) 16%, transparent) 10px); border-top: 1px dashed color-mix(in srgb, var(--zn-muted) 42%, transparent); border-bottom: 1px dashed color-mix(in srgb, var(--zn-muted) 42%, transparent); }
+.zentral-notes-sheet .zn-cal-dst-gap.is-spacer { opacity: .55; }
+.zentral-notes-sheet .zn-cal-dst-band { position: absolute; right: 0; left: 0; pointer-events: none; background: color-mix(in srgb, var(--zn-accent) 6%, transparent); }
+.zentral-notes-sheet .zn-cal-dst-band.is-repeated-2 { background: color-mix(in srgb, var(--zn-accent) 11%, transparent); border-top: 1px dashed color-mix(in srgb, var(--zn-accent) 55%, transparent); }
+.zentral-notes-sheet .zn-cal-dst-divider.is-spring { position: absolute; right: 0; left: 0; height: 0; border-top: 2px dashed color-mix(in srgb, var(--zn-accent) 70%, transparent); pointer-events: none; }
+.zentral-notes-sheet .zn-cal-hours-hint { flex: 0 0 auto; min-width: 0; overflow: hidden; padding: 2px 8px 2px 45px; border-bottom: 1px solid var(--zn-line); color: var(--zn-muted); font-size: .7em; text-overflow: ellipsis; white-space: nowrap; }
+/* The current time lies before / after the hours shown: no line, but a dotted mark on that edge of today's column
+ * with a small arrow that points to where the time is (up = earlier, down = later). It has a tooltip, so it takes the
+ * pointer; it is 3px high. */
+.zentral-notes-sheet .zn-cal-now-edge { position: absolute; z-index: 5; right: 0; left: 0; height: 0; border-top: 3px dotted #ff5b5b; }
+.zentral-notes-sheet .zn-cal-now-edge.is-before { top: 0; }
+.zentral-notes-sheet .zn-cal-now-edge.is-after { bottom: 0; }
+.zentral-notes-sheet .zn-cal-now-edge::before { content: ""; position: absolute; left: -5px; width: 0; height: 0; border: 5px solid transparent; pointer-events: none; }
+.zentral-notes-sheet .zn-cal-now-edge.is-before::before { top: 0; border-top-width: 0; border-bottom-color: #ff5b5b; }
+.zentral-notes-sheet .zn-cal-now-edge.is-after::before { bottom: 3px; border-bottom-width: 0; border-top-color: #ff5b5b; }
+.zentral-notes-sheet .zn-cal-hours-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.zentral-notes-sheet .zn-cal-busy-range { position: absolute; z-index: 1; right: 0; left: 0; border-top: 1px solid color-mix(in srgb, var(--zn-accent) 16%, transparent); background: color-mix(in srgb, var(--zn-accent) 6%, transparent); pointer-events: none; }
+.zentral-notes-sheet .zn-cal-time-event { position: absolute; box-sizing: border-box; min-width: 0; overflow: hidden; display: flex; flex-direction: column; flex-wrap: nowrap; align-items: flex-start; justify-content: flex-start; gap: 1px; padding: 2px 4px; border: 1px solid color-mix(in srgb, var(--zn-cal-item-outline, var(--zn-cal-item-color, var(--zn-accent))) 48%, var(--zn-line)); border-left: 3px solid var(--zn-cal-item-outline, var(--zn-cal-item-color, var(--zn-accent))); border-radius: 4px; background: var(--zn-cal-item-bg, color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 24%, var(--zn-surface))); color: var(--zn-cal-item-fg, var(--zn-text)); font-family: inherit; font-size: .68em; line-height: 1.15; }
+.zentral-notes-sheet .zn-cal-time-event:hover,
+.zentral-notes-sheet .zn-cal-time-event:focus-visible { background: var(--zn-cal-item-hover, color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 30%, var(--zn-surface))); }
+.zentral-notes-sheet .zn-cal-time-event .zn-cal-item-time { font-size: .66em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.zentral-notes-sheet .zn-cal-time-event .zn-cal-item-title { min-width: 0; width: 100%; overflow: hidden; font-size: .78em; line-height: 1.15; white-space: nowrap; text-overflow: ellipsis; overflow-wrap: normal; }
+.zentral-notes-sheet .zn-cal-time-event .zn-cal-item-category,
+.zentral-notes-sheet .zn-cal-time-event .zn-cal-item-note { display: none; }
+.zentral-notes-sheet .zn-cal-time-reminder { position: absolute; box-sizing: border-box; min-width: 0; overflow: hidden; display: flex; flex-wrap: nowrap; align-items: center; gap: 3px; padding: 1px 4px; border: 1px solid color-mix(in srgb, var(--zn-cal-item-outline, var(--zn-cal-item-color, var(--zn-accent))) 52%, var(--zn-line)); border-left: 3px solid var(--zn-cal-item-outline, var(--zn-cal-item-color, var(--zn-accent))); border-radius: 4px; background: var(--zn-cal-item-bg, color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 26%, var(--zn-surface))); color: var(--zn-cal-item-fg, var(--zn-text)); font-family: inherit; font-size: .64em; line-height: 1.2; white-space: nowrap; }
+.zentral-notes-sheet .zn-cal-time-reminder:hover,
+.zentral-notes-sheet .zn-cal-time-reminder:focus-visible { background: var(--zn-cal-item-hover, color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 32%, var(--zn-surface))); }
+.zentral-notes-sheet .zn-cal-time-reminder .zn-cal-item-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zentral-notes-sheet .zn-cal-time-reminder .zn-cal-item-category,
+.zentral-notes-sheet .zn-cal-time-reminder .zn-cal-item-note { display: none; }
+.zentral-notes-sheet .zn-cal-time-view.is-day .zn-cal-time-event { font-size: .76em; }
+/* OW-03: an event too low for its time above its title (the script measures what the two lines need and sets
+   .is-short) shows the title alone, in the middle of the box. With the hours fitted to the pane an hour is often
+   under 22px, and the box showed the time and the upper half of the title. */
+.zentral-notes-sheet .zn-cal-time-event.is-short { justify-content: center; padding-top: 0; padding-bottom: 0; }
+.zentral-notes-sheet .zn-cal-time-event.is-short .zn-cal-item-time { display: none; }
+.zentral-notes-sheet .zn-cal-time-event.is-short .zn-cal-item-title { flex: 0 0 auto; }
+@media (max-width: 600px) {
+  .zentral-notes-sheet .zn-cal-time-view.is-week .zn-cal-time-day-head strong { font-size: .68em; }
+  .zentral-notes-sheet .zn-cal-time-view.is-week .zn-cal-time-day-head > span { font-size: .62em; }
+  .zentral-notes-sheet .zn-cal-time-view.is-week .zn-cal-time-event { padding: 1px; font-size: .58em; }
+  .zentral-notes-sheet .zn-cal-time-view.is-week .zn-cal-time-reminder { padding: 1px; font-size: .54em; }
+}
+.zentral-notes-sheet .zn-cal-empty-day { margin: 4px 0; color: var(--zn-muted); font-size: .8em; }
+/* T2.4c3: free-slot finder results remain compact and scroll inside the Notes dialog. */
+.zentral-notes-sheet .zn-cal-free-options { display: grid; gap: 5px; }
+.zentral-notes-sheet .zn-cal-free-check { display: flex; align-items: center; gap: 8px; }
+.zentral-notes-sheet .zn-cal-free-check input { flex: 0 0 auto; }
+.zentral-notes-sheet .zn-cal-free-results { display: flex; max-height: min(300px, 34vh); min-height: 0; flex-direction: column; gap: 4px; overflow: auto; padding: 2px 0; }
+.zentral-notes-sheet .zn-cal-free-slot { display: block; width: 100%; padding: 6px 8px; border: 1px solid var(--zn-line); border-radius: 5px; background: color-mix(in srgb, var(--zn-accent) 8%, var(--zn-panel)); color: var(--zn-text); font: inherit; font-size: .82em; text-align: left; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-free-slot:hover { border-color: var(--zn-accent); background: color-mix(in srgb, var(--zn-accent) 16%, var(--zn-panel)); }
+/* T2.4c2: full hover/focus card shared by Month, Upcoming, Agenda and Week/Day items. */
+.zentral-notes-sheet .zn-cal-hover-card { position: fixed; z-index: 70; box-sizing: border-box; width: min(360px, calc(100vw - 16px)); max-height: min(280px, calc(100vh - 16px)); overflow: auto; padding: 10px 12px; border: 1px solid var(--zn-line); border-radius: 8px; background: var(--zn-panel); color: var(--zn-text); box-shadow: 0 8px 28px color-mix(in srgb, #000 28%, transparent); pointer-events: none; }
+.zentral-notes-sheet .zn-cal-hover-title { display: block; margin-bottom: 4px; font-size: .95em; }
+.zentral-notes-sheet .zn-cal-hover-meta,
+.zentral-notes-sheet .zn-cal-hover-source { color: var(--zn-muted); font-size: .76em; }
+.zentral-notes-sheet .zn-cal-hover-description,
+.zentral-notes-sheet .zn-cal-hover-note { margin: 6px 0 0; font-size: .82em; white-space: pre-wrap; overflow-wrap: anywhere; }
+.zentral-notes-sheet .zn-cal-hover-note { padding-top: 6px; border-top: 1px solid var(--zn-line); }
+
+.zentral-notes-sheet .zn-cal-agenda-row { display: grid; grid-template-columns: minmax(90px, 135px) minmax(0, 1fr); gap: 6px; align-items: start; margin-bottom: 4px; }
+.zentral-notes-sheet .zn-cal-agenda-date { padding: 5px 2px; color: var(--zn-muted); font-size: .76em; }
+.zentral-notes-sheet .zn-cal-compact-list,
+.zentral-notes-sheet .zn-cal-upcoming-list,
+.zentral-notes-sheet .zn-cal-agenda-list { min-width: 0; }
+.zentral-notes-sheet .zn-calendar-pane-content[data-compact="true"] .zn-cal-day-group { margin-bottom: 7px; }
+@media (max-width: 560px) {
+  .zentral-notes-sheet .zn-calendar-controls .zn-chip { font-size: .78em; }
+  .zentral-notes-sheet .zn-calendar-controls .zn-calendar-category-filter { max-width: 130px; }
+  .zentral-notes-sheet .zn-cal-month-cell { padding: 2px; }
+  .zentral-notes-sheet .zn-cal-month-mark { font-size: .58em; }
+  .zentral-notes-sheet .zn-cal-agenda-row { grid-template-columns: minmax(0, 1fr); gap: 1px; }
+}
+
+/* OW-09: tiny Month fallback is a date-only heat map. It deliberately has no event marks or item text in a cell. */
+.zentral-notes-sheet .zn-cal-picker-wrap { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1 1 auto; flex-direction: column; }
+.zentral-notes-sheet .zn-cal-picker-grid { flex: 1 1 auto; min-height: 0; grid-template-rows: repeat(6, minmax(24px, 1fr)); }
+.zentral-notes-sheet .zn-cal-picker-day {
+  min-width: 0; min-height: 24px; padding: 2px; border: 1px solid var(--zn-line); border-radius: 6px;
+  background: color-mix(in srgb, var(--zn-hover) 10%, var(--zn-surface)); color: var(--zn-text);
+  font: inherit; font-size: .86em; font-weight: 600; text-align: center; cursor: pointer;
+}
+.zentral-notes-sheet .zn-cal-picker-day.is-heat-1 { background: color-mix(in srgb, var(--zn-cal-picker-tint-safe, var(--zn-cal-picker-tint, var(--zn-accent))) 12%, var(--zn-surface)); }
+.zentral-notes-sheet .zn-cal-picker-day.is-heat-2 { background: color-mix(in srgb, var(--zn-cal-picker-tint-safe, var(--zn-cal-picker-tint, var(--zn-accent))) 20%, var(--zn-surface)); }
+.zentral-notes-sheet .zn-cal-picker-day.is-heat-3 { background: color-mix(in srgb, var(--zn-cal-picker-tint-safe, var(--zn-cal-picker-tint, var(--zn-accent))) 28%, var(--zn-surface)); }
+.zentral-notes-sheet .zn-cal-picker-day.is-out { opacity: .48; }
+.zentral-notes-sheet .zn-cal-picker-day.is-selected { border-color: var(--zn-accent); box-shadow: inset 0 0 0 1px var(--zn-accent); }
+.zentral-notes-sheet .zn-cal-picker-day.is-cursor:focus-visible { outline: 2px solid var(--zn-accent); outline-offset: -2px; }
+.zentral-notes-sheet .zn-cal-picker-day.is-today:not(.is-selected) { border-style: dashed; }
+.zentral-notes-sheet .zn-calendar-view[data-picker="true"] { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 4px; }
+.zentral-notes-sheet .zn-calendar-view[data-picker="true"] > .zn-cal-picker-wrap { flex: 0 1 auto; min-height: 0; }
+.zentral-notes-sheet .zn-calendar-view[data-picker="true"] > .zn-cal-picker-selection { flex: 1 1 auto; min-height: 3.5em; max-height: 42%; overflow: auto; scrollbar-width: thin; }
+
+/* The three looks (paddings and text sizes): comfortable, compact, extra-compact. Which one is drawn follows the size
+   of the view (OW-03; calendarScaleDensity in the calendar module): data-density on the pane content for the lists,
+   the list of a selected day and the header of Week and Day; on .zn-cal-month-wrap for the cells of the Month grid,
+   which take the look of the height their weeks have. The heights themselves are not set here: an hour is
+   --zn-cal-hour-height, a week of Month is fitted or --zn-cal-month-row. */
+.zentral-notes-sheet .zn-cal-month-wrap[data-density="compact"] .zn-cal-month-cell { padding: 2px; }
+.zentral-notes-sheet .zn-cal-month-wrap[data-density="compact"] .zn-cal-month-mark { font-size: .63em; }
+.zentral-notes-sheet .zn-cal-month-wrap[data-density="compact"] .zn-cal-month-date { font-size: .8em; }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-day-head strong { font-size: .88em; }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-day-group { margin-bottom: 5px; padding: 5px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-day-items { gap: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-item:not(.zn-cal-time-event):not(.zn-cal-time-reminder) { padding: 3px 5px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-agenda-row { margin-bottom: 2px; }
+.zentral-notes-sheet .zn-cal-month-wrap[data-density="extra-compact"] .zn-cal-month-cell { gap: 1px; padding: 2px; }
+.zentral-notes-sheet .zn-cal-month-wrap[data-density="extra-compact"] .zn-cal-month-mark { font-size: .61em; }
+.zentral-notes-sheet .zn-cal-month-wrap[data-density="extra-compact"] .zn-cal-month-date { font-size: .78em; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-day-head strong { font-size: .84em; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-day-group { margin-bottom: 3px; padding: 3px 4px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-day-head { margin-bottom: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-all-day-strip { margin: 2px 0; padding: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-day-items { gap: 1px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-item:not(.zn-cal-time-event):not(.zn-cal-time-reminder) { gap: 2px 5px; padding: 2px 4px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-agenda-row { gap: 2px; margin-bottom: 1px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-agenda-date { padding: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-time-day-head { padding: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-time-allday-cell { min-height: 18px; padding: 1px; }
+.zentral-notes-sheet .zn-cal-month-cell.is-today { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--zn-accent) 60%, transparent); }
+
+/* Foreign front matter (T1.5): tags and aliases of other apps as a pill row above the read view */
+.zentral-notes-sheet .zn-read .zn-front { display: flex; flex-wrap: wrap; gap: 0.3em 0.4em; margin: 0 0 0.7em; padding: 0; }
+.zentral-notes-sheet .zn-read .zn-front .zn-pill { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0.05em 0.6em; border-radius: 999px; font-size: 0.85em; line-height: 1.5; color: var(--zn-text); background: color-mix(in srgb, var(--zn-text) 10%, transparent); border: 1px solid color-mix(in srgb, var(--zn-text) 22%, transparent); }
+.zentral-notes-sheet .zn-read .zn-front .zn-pill-alias { font-style: italic; background: transparent; }
+
+/* T2.7a + T3.6a: lifecycle state uses surface-derived muted/disabled tokens so done/dismissed items stay readable. */
+.zn-cal-item.is-done,
+.zn-cal-item.is-dismissed { background: var(--zn-cal-item-disabled-bg, transparent); color: var(--zn-cal-item-disabled-fg, var(--zn-muted)); border-left-color: var(--zn-cal-item-disabled-outline, var(--zn-line)); }
+.zn-cal-item.is-done .zn-cal-item-title,
+.zn-cal-item.is-dismissed .zn-cal-item-title { text-decoration: line-through; color: var(--zn-cal-item-disabled-fg, var(--zn-muted)); }
+.zn-cal-item.is-done :is(.zn-cal-item-time, .zn-cal-item-category, .zn-cal-item-note),
+.zn-cal-item.is-dismissed :is(.zn-cal-item-time, .zn-cal-item-category, .zn-cal-item-note),
+.zn-cal-item.is-done.is-reminder .zn-cal-item-time::before,
+.zn-cal-item.is-dismissed.is-reminder .zn-cal-item-time::before { color: var(--zn-cal-item-disabled-fg, var(--zn-muted)); }
+.zn-cal-month-mark.is-done,
+.zn-cal-month-mark.is-dismissed { background: var(--zn-cal-item-disabled-bg, transparent); color: var(--zn-cal-item-disabled-fg, var(--zn-muted)); border-left-color: var(--zn-cal-item-disabled-outline, var(--zn-line)); text-decoration: line-through; }
+.zn-cal-month-mark.is-done.is-reminder::before,
+.zn-cal-month-mark.is-dismissed.is-reminder::before { color: var(--zn-cal-item-disabled-fg, var(--zn-muted)); }
+.zn-reminder-history-info { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 3px; }
+.zn-reminder-history-when { color: var(--zen-colors-tertiary); font-size: .9em; }
+
+/* T2.3f: full calendar item composer. Keep every control operable in narrow sheets. */
+.zentral-notes-sheet .zn-dialog-card.zn-cal-compose-card {
+  width: min(46em, 100%);
+  min-width: min(28em, 100%);
+  max-width: 100%;
+  max-height: min(92%, 58em);
+  overflow: auto;
+}
+.zentral-notes-sheet .zn-cal-compose-kind-row { grid-template-columns: minmax(7em, 1fr) minmax(10em, 2fr); align-items: center; }
+.zentral-notes-sheet .zn-cal-compose-check { display: flex; align-items: center; gap: 8px; }
+.zentral-notes-sheet .zn-cal-compose-date-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
+.zentral-notes-sheet .zn-cal-compose-date-row .zn-field-row { min-width: 0; }
+.zentral-notes-sheet .zn-cal-compose-date-row .zn-field { width: 100%; box-sizing: border-box; }
+.zentral-notes-sheet .zn-cal-compose-clock-host:empty { display: none; }
+.zentral-notes-sheet .zn-cal-compose-color-row { display: flex; align-items: center; gap: 8px; margin: 5px 0 10px; color: var(--zn-muted); font-size: .85em; }
+.zentral-notes-sheet .zn-cal-compose-color { width: 1em; height: 1em; flex: none; border: 1px solid var(--zn-line); border-radius: 50%; }
+.zentral-notes-sheet .zn-cal-compose-color-input { width: 26px; height: 22px; padding: 1px; flex: none; border: 1px solid var(--zn-line); border-radius: 5px; background: transparent; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-compose-color-inherit { flex: none; padding: 2px 7px; font-size: .9em; }
+.zentral-notes-sheet .zn-cal-compose-color-inherit:disabled { opacity: .55; cursor: default; }
+.zentral-notes-sheet .zn-cal-compose-section { min-width: 0; }
+.zentral-notes-sheet .zn-cal-compose-alerts { margin-top: 14px; }
+.zentral-notes-sheet .zn-cal-compose-status[data-error="true"] { color: #ff6b6b; }
+.zentral-notes-sheet .zn-cal-reminder-choices { display: grid; gap: 6px; max-height: 20em; overflow: auto; }
+.zentral-notes-sheet .zn-cal-reminder-choices .zn-chip { text-align: left; white-space: normal; }
+.zentral-notes-sheet .zn-quick-reminder { flex: none; }
+@media (max-width: 520px) {
+  .zentral-notes-sheet .zn-dialog-card.zn-cal-compose-card { min-width: 0; width: 100%; padding: 10px; }
+  .zentral-notes-sheet .zn-cal-compose-date-row { grid-template-columns: minmax(0, 1fr); }
+  .zentral-notes-sheet .zn-cal-compose-date-row > .zn-chip { justify-self: start; }
+  .zentral-notes-sheet .zn-cal-compose-date-row.zn-entry-row { grid-template-areas: "caption" "field" "hint" "button"; }
+}
+
+/* T2.7c: compact per-stage sound and quiet-hour controls. */
+.zentral-notes-sheet .zn-cal-alert-editor { display: grid; gap: 9px; min-width: 0; }
+.zentral-notes-sheet .zn-cal-alert-rule { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; padding: 8px; border: 1px solid var(--zn-line); border-radius: 8px; }
+.zentral-notes-sheet .zn-cal-alert-rule > label { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.zentral-notes-sheet .zn-cal-alert-rule > label:first-child,
+.zentral-notes-sheet .zn-cal-alert-rule > label.zn-cal-alert-select-row { justify-content: space-between; }
+.zentral-notes-sheet .zn-cal-alert-rule .zn-select { max-width: 12em; }
+.zentral-notes-sheet .zn-cal-alert-allow { display: flex; flex-wrap: wrap; gap: 8px 14px; padding-inline-start: 22px; color: var(--zn-muted); font-size: .9em; }
+.zentral-notes-sheet .zn-cal-alert-allow label { display: inline-flex; align-items: center; gap: 4px; }
+.zentral-notes-sheet .zn-cal-alert-days { display: flex; flex-wrap: wrap; gap: 8px 12px; }
+.zentral-notes-sheet .zn-cal-alert-days label { display: inline-flex; align-items: center; gap: 4px; }
+.zentral-notes-sheet .zn-cal-note-alert-row { display: flex; justify-content: flex-end; margin: -4px 0 6px; }
+
+/* Virtual Zen Agenda folder and occurrence tabs. */
+/* SB6.9: a day with items already behind it shows what is left of it ("2/5"); a day where nothing ended yet keeps the
+   plain count, which is the same number either way. */
+zen-folder[bgalazka-notes-agenda-day]::after {
+  content: attr(bgalazka-notes-agenda-count);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4em;
+  margin-inline-start: .45em;
+  padding: 0 .35em;
+  border-radius: 999px;
+  font-size: .78em;
+  line-height: 1.5;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+/* SB6.9: the folder is folded by Zen's own `collapsed` setter (the browser owns the animation); this only dims the
+   label a little so a folded Agenda reads as deliberately quiet rather than as an empty one. */
+zen-folder[bgalazka-notes-agenda-folder][bgalazka-notes-agenda-folded] > .zen-folder-label,
+zen-folder[bgalazka-notes-agenda-folder][bgalazka-notes-agenda-folded] {
+  font-style: italic;
+}
+zen-folder[bgalazka-notes-agenda-folder][bgalazka-notes-agenda-folded="quiet"]::after {
+  content: "\1F319";
+  margin-inline-start: .35em;
+  opacity: .7;
+}
+
+zen-folder[bgalazka-notes-agenda-day][bgalazka-notes-agenda-left]::after {
+  content: attr(bgalazka-notes-agenda-left) "/" attr(bgalazka-notes-agenda-count);
+  background: color-mix(in srgb, currentColor 22%, transparent);
+}
+tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
+
+/* ---- privacy-aware media embeds (T1.15) ------------------------------------------- */
+.zentral-notes-sheet .zn-read .zn-video-embed,
+.zentral-notes-sheet .zn-read .zn-local-video {
+  display: block;
+  width: min(100%, 760px);
+  max-width: 100%;
+  margin: 0.65em 0;
+  overflow: hidden;
+  border: 1px solid var(--zn-line);
+  border-radius: 8px;
+  background: #080808;
+  color: #f7f7f7;
+}
+.zentral-notes-sheet .zn-read .zn-video-poster {
+  display: flex;
+  width: 100%;
+  min-height: 112px;
+  aspect-ratio: 16 / 9;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 14px;
+  border: 0;
+  background: radial-gradient(ellipse at center, #303030, #090909 72%);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.zentral-notes-sheet .zn-read .zn-video-poster:focus-visible { outline: 2px solid var(--zn-accent); outline-offset: -3px; }
+.zentral-notes-sheet .zn-read .zn-video-play { display: grid; width: 42px; height: 30px; place-items: center; border-radius: 9px; background: #d71920; color: white; font-size: 16px; }
+.zentral-notes-sheet .zn-read .zn-video-poster-title { max-width: 100%; overflow-wrap: anywhere; font-weight: 650; }
+.zentral-notes-sheet .zn-read .zn-video-poster-hint { color: #c6c6c6; font-size: 0.78em; }
+.zentral-notes-sheet .zn-read .zn-video-frame { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; background: #000; }
+.zentral-notes-sheet .zn-read .zn-video-player { display: block; max-width: 100%; max-height: 70vh; border-radius: 7px; background: #000; }
+.zentral-notes-sheet .zn-read .zn-video-status { display: block; padding: 12px; color: #c6c6c6; font-size: 0.88em; }
+
+/* T1.16: local file drops are download-only; they never become active document content. */
+.zn-file-asset { color: var(--zn-muted, currentColor); font-size: .92em; }
+.zn-file-asset-link { display: inline-flex; align-items: center; gap: .35em; color: var(--zn-link, var(--zen-primary-color)); text-decoration: underline; text-underline-offset: .15em; cursor: pointer; overflow-wrap: anywhere; }
+.zn-file-asset-link:hover { text-decoration-thickness: 2px; }
+.zn-editor.zn-file-drop-target { outline: 2px dashed var(--zn-accent, var(--zen-primary-color)); outline-offset: -3px; background: color-mix(in srgb, var(--zn-accent, var(--zen-primary-color)) 7%, transparent); }
+
+/* B3.3.50-4: one manual top-layer stack; actions wrap instead of clipping. */
+.zn-reminder-stack {
+  position: fixed;
+  inset: 12px 12px auto auto;
+  margin: 0;
+  padding: 0;
+  width: min(380px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  border: 0;
+  background: transparent;
+  color: #f7f7fc;
+  z-index: 2147483646;
+  font: menu;
+}
+.zn-reminder-stack[hidden] { display: none !important; }
+.zn-reminder-stack:has(.zn-reminder-card[data-stage="due"]),
+.zn-reminder-stack:has(.zn-reminder-card[data-layout="large"]) {
+  width: min(440px, calc(100vw - 24px));
+}
+.zn-reminder-stack:has(.zn-reminder-card[data-layout="centred"]) {
+  right: 50%;
+  transform: translateX(50%);
+  width: min(520px, calc(100vw - 24px));
+}
+.zn-reminder-stack[data-overlay="true"] {
+  inset: 0;
+  right: 0;
+  transform: none;
+  width: 100vw;
+  max-width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+}
+.zn-reminder-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: rgb(10 14 22 / 64%);
+  pointer-events: auto;
+}
+.zn-reminder-stack[data-overlay="true"] > :is(.zn-reminder-card, .zn-reminder-more) {
+  position: relative;
+  z-index: 1;
+  width: min(520px, calc(100vw - 32px));
+}
+.zn-reminder-card {
+  box-sizing: border-box;
+  margin: 0 0 8px;
+  padding: 12px;
+  border: 1px solid #8395b8;
+  border-radius: 10px;
+  background: #222936;
+  box-shadow: 0 6px 22px #0008;
+  overflow-wrap: anywhere;
+}
+.zn-reminder-card[data-stage="pre"] { background: rgb(34 41 54 / 92%); border-color: #8395b8; }
+.zn-reminder-card[data-stage="due"],
+.zn-reminder-card[data-layout="large"] {
+  padding: 16px 18px;
+  background: #25354b;
+  border: 2px solid #9bbcf0;
+  border-left: 5px solid #7fb2ff;
+  box-shadow: 0 10px 28px #000a;
+  animation: zn-reminder-due-accent 2.6s ease-in-out infinite alternate;
+}
+.zn-reminder-card[data-stage="followup"] {
+  padding: 16px;
+  background: #3c2632;
+  border: 3px solid #ffb7a8;
+  animation: zn-reminder-calm-accent 3s ease-in-out infinite alternate;
+}
+.zn-reminder-card[data-layout="corner"] { padding: 12px; animation: none; }
+.zn-reminder-card[data-layout="centred"] { padding: 20px 22px; border-radius: 12px; box-shadow: 0 18px 48px #000c; }
+@keyframes zn-reminder-due-accent {
+  from { border-color: #7fb2ff; box-shadow: 0 10px 28px #000a, 0 0 0 0 rgb(127 178 255 / 0%); }
+  to { border-color: #d4e4ff; box-shadow: 0 10px 28px #000a, 0 0 0 3px rgb(155 188 240 / 28%); }
+}
+@keyframes zn-reminder-calm-accent { from { border-color: #ffb7a8; } to { border-color: #ffdea8; } }
+@media (prefers-reduced-motion: reduce) {
+  .zn-reminder-card[data-stage="due"],
+  .zn-reminder-card[data-layout="large"],
+  .zn-reminder-card[data-layout="centred"],
+  .zn-reminder-card[data-stage="followup"] { animation: none; }
+}
+.zn-reminder-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.zn-reminder-stage { font-weight: 700; font-size: .85em; margin-bottom: 4px; }
+.zn-reminder-head .zn-reminder-stage { margin-bottom: 0; }
+.zn-reminder-card[data-stage="due"] .zn-reminder-stage,
+.zn-reminder-card[data-layout="large"] .zn-reminder-stage,
+.zn-reminder-card[data-layout="centred"] .zn-reminder-stage { font-size: .92em; letter-spacing: .02em; }
+.zn-reminder-countdown {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid #9bbcf0;
+  background: #2f4363;
+  color: #ffffff;
+  font-size: .78em;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.zn-reminder-title { font-weight: 600; line-height: 1.35; }
+.zn-reminder-card[data-stage="due"] .zn-reminder-title,
+.zn-reminder-card[data-layout="large"] .zn-reminder-title { font-size: 1.08em; font-weight: 700; line-height: 1.4; }
+.zn-reminder-card[data-layout="centred"] .zn-reminder-title { font-size: 1.18em; font-weight: 700; line-height: 1.4; }
+.zn-reminder-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.zn-reminder-card[data-stage="due"] .zn-reminder-actions,
+.zn-reminder-card[data-layout="large"] .zn-reminder-actions { gap: 8px; margin-top: 12px; }
+.zn-reminder-card[data-layout="centred"] .zn-reminder-actions { gap: 10px; margin-top: 16px; }
+.zn-reminder-actions button {
+  flex: 0 1 auto;
+  max-width: 100%;
+  padding: 5px 9px;
+  border: 1px solid #aebbd0;
+  border-radius: 6px;
+  background: #34445c;
+  color: #fff;
+  font: inherit;
+  white-space: normal;
+  cursor: pointer;
+}
+.zn-reminder-card[data-stage="due"] .zn-reminder-actions button,
+.zn-reminder-card[data-layout="large"] .zn-reminder-actions button { padding: 6px 11px; font-weight: 600; }
+.zn-reminder-card[data-layout="centred"] .zn-reminder-actions button { padding: 10px 16px; min-height: 40px; font-size: 1em; font-weight: 700; border-radius: 8px; }
+.zn-reminder-actions button.zn-reminder-action-primary { background: #3f5d8a; border-color: #c8dcff; color: #ffffff; }
+.zn-reminder-actions button.zn-reminder-action-primary:hover { background: #4f72a8; }
+.zn-reminder-actions button:focus-visible,
+.zn-reminder-more:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.zn-reminder-actions button:hover,
+.zn-reminder-more:hover { background: #4b6283; }
+.zn-reminder-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border: 1px solid #9bbcf0;
+  border-radius: 8px;
+  background: #222936;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px #0006;
+}
+
+/* Keyboard entry points for calendar day context menus. */
+.zentral-notes-sheet :is(.zn-cal-month-cell, .zn-cal-day-group, .zn-cal-time-allday-cell, .zn-cal-time-track):focus-visible { outline: 2px solid var(--zn-accent); outline-offset: -2px; }
+
+/* Calendar drag previews never intercept pointer input or hide event controls. */
+.zentral-notes-sheet .zn-calendar-undo-move[hidden] { display: none !important; }
+.zentral-notes-sheet :is(.zn-cal-time-event, .zn-cal-time-reminder, .zn-cal-time-allday-cell .zn-cal-item).is-movable { cursor: grab; touch-action: none; }
+.zentral-notes-sheet :is(.zn-cal-time-event, .zn-cal-time-reminder, .zn-cal-time-allday-cell .zn-cal-item).is-dragging { cursor: grabbing; opacity: .55; }
+.zentral-notes-sheet .zn-cal-drag-preview { position: absolute; z-index: 6; left: 0; right: 0; padding: 2px 4px; border-top: 2px solid var(--zn-accent); background: var(--zn-surface); color: var(--zn-text); font-size: .7em; pointer-events: none; }
+.zentral-notes-sheet .zn-cal-drag-preview.is-note-drop { border-radius: 4px; box-shadow: 0 2px 6px rgba(0, 0, 0, .18); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* OW-82: a drag over empty space says what releasing will do. It sits over the sheet, follows nothing (the pointer
+   already says where you are), and never eats a pointer event. */
+.zentral-notes-sheet .zn-cal-drag-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 8;
+  padding: 4px 10px;
+  border: 1px dashed color-mix(in srgb, #ff6b6b 70%, transparent);
+  border-radius: 999px;
+  background: var(--zn-surface);
+  color: var(--zn-text);
+  font-size: .78em;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.zentral-notes-sheet :is(.zn-cal-month-cell, .zn-cal-picker-day, .zn-cal-time-allday-cell, .zn-cal-time-track).is-note-drop { outline: 2px dashed var(--zn-accent); outline-offset: -2px; background: color-mix(in srgb, var(--zn-accent) 16%, transparent); }
+.zentral-notes-sheet .zn-cal-time-allday-cell { position: relative; }
+
+.zentral-notes-sheet .zn-cal-resize-handle { position: absolute; z-index: 4; box-sizing: border-box; height: 8px; min-width: 0; padding: 0; border: 0; border-radius: 3px; background: transparent; cursor: ns-resize; touch-action: none; }
+.zentral-notes-sheet .zn-cal-resize-handle:hover, .zentral-notes-sheet .zn-cal-resize-handle:focus-visible { background: var(--zn-accent); outline: 2px solid var(--zn-accent); outline-offset: 1px; }
+
+/* ---- T3.1: open, but the notes are still being read (or their folder is away) ---------------------------
+   Nothing in the sheet acts until the notes are there (setBusy in ZentralNotes.uc.js). Show it: the toolbar and the
+   content are dimmed and the pointer says "wait". The header (Close), the status line and the resize grips are left
+   as they are, and the sheet is NOT made click-through: Close and Esc must keep working. */
+.zentral-notes-sheet[data-loading] { cursor: progress; }
+.zentral-notes-sheet[data-loading] > .zn-tools,
+.zentral-notes-sheet[data-loading] > .zn-body { opacity: 0.55; }
+
+/* T3.4a: RSS-style top-layer hover preview cards for Notes & Agenda Zen sidebar pseudo-tabs.
+ * Works both inside the full pack and standalone (without the core runtime). */
+.zn-sidebar-hover-card {
+  position: fixed;
+  inset: auto;
+  right: auto;
+  bottom: auto;
+  margin: 0;
+  height: auto;
+  box-sizing: border-box;
+  width: var(--bgalazka-look-rss-card-width, 340px);
+  min-width: 240px;
+  max-width: min(400px, calc(100vw - 12px));
+  max-height: min(65vh, calc(100vh - 12px));
+  overflow-y: auto;
+  padding: 11px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 10px;
+  background: var(--zen-colors-primary, #25252e);
+  color: var(--zen-colors-text, #f7f7fc);
+  box-shadow: 0 8px 26px rgb(0 0 0 / 38%);
+  font: menu;
+  font-size: 12.5px;
+  line-height: 1.4;
+  pointer-events: auto;
+  z-index: 2147483646;
+}
+.zn-sidebar-hover-card[hidden],
+.zn-sidebar-hover-card [hidden] { display: none !important; }
+.zn-sidebar-hover-card .zn-hc-folder {
+  font-size: 11px;
+  opacity: 0.72;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.zn-sidebar-hover-card .zn-hc-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.zn-sidebar-hover-card .zn-hc-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  flex: 1 1 auto;
+}
+.zn-sidebar-hover-card .zn-hc-status {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+.zn-sidebar-hover-card .zn-hc-status[data-status="overdue"] {
+  background: color-mix(in srgb, #e5534b 28%, transparent);
+  color: #ff9c96;
+}
+.zn-sidebar-hover-card .zn-hc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 11.5px;
+  opacity: 0.88;
+}
+.zn-sidebar-hover-card .zn-hc-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 11%, transparent);
+  font-size: 11px;
+}
+.zn-sidebar-hover-card .zn-hc-cat-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.zn-sidebar-hover-card .zn-hc-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.zn-sidebar-hover-card .zn-hc-pill {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  opacity: 0.9;
+}
+.zn-sidebar-hover-card .zn-hc-source {
+  align-self: flex-start;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--zen-primary-color, #8fb8ff);
+  font: inherit;
+  font-size: 11.5px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.zn-sidebar-hover-card .zn-hc-source-trashed {
+  align-self: flex-start;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  background: color-mix(in srgb, #f59e0b 18%, transparent);
+  color: color-mix(in srgb, #f59e0b 82%, currentColor);
+  overflow-wrap: anywhere;
+}
+.zn-sidebar-hover-card .zn-hc-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  opacity: 0.86;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+.zn-sidebar-hover-card .zn-hc-reminder {
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--zen-primary-color, #6ca0ff) 18%, transparent);
+}
+.zn-sidebar-hover-card .zn-hc-reminder[data-overdue="true"] {
+  background: color-mix(in srgb, #e5534b 24%, transparent);
+  color: #ffb1ac;
+}
+.zn-sidebar-hover-card .zn-hc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+.zn-sidebar-hover-card .zn-hc-btn {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 11.5px;
+  padding: 4px 9px;
+  cursor: pointer;
+}
+.zn-sidebar-hover-card .zn-hc-btn:hover,
+.zn-sidebar-hover-card .zn-hc-btn:focus-visible {
+  background: color-mix(in srgb, currentColor 18%, transparent);
+}
+.zn-sidebar-hover-card .zn-hc-btn-primary {
+  background: color-mix(in srgb, var(--zen-primary-color, #6ca0ff) 28%, transparent);
+  border-color: color-mix(in srgb, var(--zen-primary-color, #6ca0ff) 48%, transparent);
+  font-weight: 600;
+}
+
+/* SB6.3: compact top-layer Undo toast for headless Zen Agenda quick actions. */
+.zn-agenda-toast {
+  position: fixed;
+  inset: auto 16px 16px auto;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 9px 12px;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: 9px;
+  background: var(--zen-colors-primary, #222531);
+  color: var(--zen-colors-text, #f7f7fc);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 38%);
+  font: menu;
+  z-index: 2147483646;
+}
+.zn-agenda-toast[hidden] { display: none !important; }
+.zn-agenda-toast-msg { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.zn-agenda-toast-undo,
+.zn-agenda-toast-close {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.zn-agenda-toast-undo[hidden] { display: none !important; }
+.zn-agenda-toast-close { padding: 3px 8px; font-weight: 500; border-color: transparent; background: transparent; }
+.zn-agenda-toast-undo:hover,
+.zn-agenda-toast-close:hover { background: color-mix(in srgb, currentColor 20%, transparent); }
+.zn-agenda-toast-undo:focus-visible,
+.zn-agenda-toast-close:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* ---- T3.2 Tree multi-selection ---------------------------------------------------- */
+.zentral-notes-sheet .zn-batch-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  margin: 0 6px 4px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--zn-accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--zn-accent) 34%, transparent);
+  font-size: 12px;
+}
+.zentral-notes-sheet .zn-batch-bar[hidden] { display: none !important; }
+.zentral-notes-sheet .zn-batch-count { font-weight: 600; padding: 0 4px; white-space: nowrap; }
+.zentral-notes-sheet .zn-batch-btn { padding: 2px 7px; font-size: 11.5px; }
+.zentral-notes-sheet .zn-batch-clear { width: 22px; height: 22px; }
+.zentral-notes-sheet .zn-item.is-selected {
+  background: color-mix(in srgb, var(--zn-accent) 22%, transparent);
+  box-shadow: inset 2px 0 0 var(--zn-accent);
+}
+.zentral-notes-sheet .zn-frow[data-color].is-selected {
+  background: var(--zn-frow-selected, color-mix(in srgb, var(--zn-fc) 26%, transparent));
+  box-shadow: inset 2px 0 0 var(--zn-accent);
+}
+
+/* T2.6: Calendar Big Picture viewport popup. (The header-right container itself is styled once, at the head rules near
+   the top of the sheet, where OW-74 gives it flex: 0 0 auto so the period name never pushes the controls out.) */
+.zentral-notes-sheet .zn-calendar-bigpicture-btn {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+}
+.zentral-notes-sheet .zn-cal-bigpicture-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 14px;
+  text-align: center;
+  color: var(--zn-muted);
+}
+/* The tree's placeholder is an empty box holding the column's width, not the calendar's "return here" card. */
+.zentral-notes-sheet .zn-tree-pane.zn-cal-bigpicture-placeholder {
+  min-height: 40px;
+  border: 1px dashed var(--zn-line);
+  border-radius: var(--zn-radius, 8px);
+  background: color-mix(in srgb, var(--zn-hover) 14%, transparent);
+}
+.zentral-notes-sheet .zn-cal-bigpicture-placeholder-text {
+  font-size: 0.9em;
+}
+.zentral-notes-sheet .zn-cal-bigpicture-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483645;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, #000 48%, transparent);
+  color: var(--zn-text);
+  font: inherit;
+  pointer-events: auto;
+}
+.zentral-notes-sheet .zn-cal-bigpicture-backdrop[popover][data-top-layer="true"] {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  background: color-mix(in srgb, #000 48%, transparent);
+  color: var(--zn-text);
+}
+.zentral-notes-sheet .zn-cal-bigpicture-card {
+  position: fixed;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-width: min(320px, calc(100vw - 16px));
+  min-height: min(240px, calc(100vh - 16px));
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow: hidden;
+  border: 1px solid var(--zn-line);
+  border-radius: calc(var(--zn-radius, 10px) + 2px);
+  background:
+    linear-gradient(var(--zn-surface), var(--zn-surface)),
+    var(--zn-backing);
+  color: var(--zn-text);
+  box-shadow: 0 20px 60px color-mix(in srgb, #000 50%, transparent);
+  outline: none;
+}
+.zentral-notes-sheet .zn-cal-bigpicture-bar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--zn-line);
+  background: color-mix(in srgb, var(--zn-hover) 26%, transparent);
+}
+.zentral-notes-sheet .zn-cal-bigpicture-title {
+  font-size: 0.94em;
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.zentral-notes-sheet .zn-cal-bigpicture-sizes {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px;
+  border: 1px solid var(--zn-line);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--zn-surface) 80%, transparent);
+}
+.zentral-notes-sheet .zn-cal-bigpicture-size {
+  padding: 2px 7px;
+  font-size: 0.8em;
+  font-variant-numeric: tabular-nums;
+  border-color: transparent;
+}
+.zentral-notes-sheet .zn-cal-bigpicture-size.is-on {
+  border-color: var(--zn-accent);
+  background: color-mix(in srgb, var(--zn-accent) 20%, transparent);
+  color: var(--zn-text);
+}
+.zentral-notes-sheet .zn-cal-bigpicture-close {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+}
+.zentral-notes-sheet .zn-cal-bigpicture-stage {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.zentral-notes-sheet .zn-cal-bigpicture-stage > .zn-calendar-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  background: transparent;
+}
+/* OW-80: the Notes tree on the left edge of the Big Picture card. It is the same node as the docked sheet's tree, so
+   it keeps every function; only the box around it is new. The share is the calendar's own tree share, so the splitter
+   value the person already set applies here too. */
+.zentral-notes-sheet .zn-cal-bigpicture-tree-slot {
+  display: flex;
+  flex: 0 0 var(--zn-calendar-tree-share, 36%);
+  min-width: 0;
+  min-height: 0;
+  max-width: 62%;
+  container-type: inline-size;
+  border-right: 1px solid var(--zn-line);
+  overflow: hidden;
+}
+.zentral-notes-sheet .zn-cal-bigpicture-tree-slot[hidden] { display: none; }
+.zentral-notes-sheet .zn-cal-bigpicture-tree-slot > .zn-tree-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  /* The docked pane's own share is the slot's job now; left as-is it would fight the slot. */
+  flex-basis: auto;
+}
+/* Under the tabs layout the docked tree is hidden by a rule that follows the tree node around. In the card the tree is
+   a real column with its own toggle, so that rule must not reach it (OW-80). */
+.zentral-notes-sheet[data-big-picture="true"] .zn-cal-bigpicture-tree-slot > .zn-tree-pane { display: flex !important; }
+/* Non-popover fallback: keep menus and calendar dialogs above the Big Picture card via DOM order at the same layer. */
+.zentral-notes-sheet[data-big-picture="true"] .zn-menu:not([popover]),
+.zentral-notes-sheet[data-big-picture="true"] .zn-dialog:not([popover]) {
+  position: fixed;
+  z-index: 2147483645;
+}
+
+/* SB6.5: Agenda Doctor diagnostic & repair dialog */
+.zentral-notes-sheet .zn-doctor-card {
+  width: min(560px, 92vw);
+  max-height: min(82vh, 660px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.zentral-notes-sheet .zn-doctor-banner {
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--zn-line);
+  background: color-mix(in srgb, var(--zn-hover) 32%, transparent);
+  font-size: 0.9em;
+  font-weight: 600;
+}
+.zentral-notes-sheet .zn-doctor-banner[data-state="ok"] {
+  border-color: color-mix(in srgb, #2e9e5b 45%, var(--zn-line));
+  background: color-mix(in srgb, #2e9e5b 14%, transparent);
+}
+.zentral-notes-sheet .zn-doctor-banner[data-state="warn"] {
+  border-color: color-mix(in srgb, #d9822b 50%, var(--zn-line));
+  background: color-mix(in srgb, #d9822b 15%, transparent);
+}
+.zentral-notes-sheet .zn-doctor-banner[data-state="error"] {
+  border-color: color-mix(in srgb, #d94c4c 55%, var(--zn-line));
+  background: color-mix(in srgb, #d94c4c 16%, transparent);
+}
+.zentral-notes-sheet .zn-doctor-notice {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--zn-accent) 45%, var(--zn-line));
+  background: color-mix(in srgb, var(--zn-accent) 14%, transparent);
+  font-size: 0.85em;
+}
+.zentral-notes-sheet .zn-doctor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+}
+.zentral-notes-sheet .zn-doctor-sec {
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--zn-line);
+  background: color-mix(in srgb, var(--zn-surface) 84%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.zentral-notes-sheet .zn-doctor-sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.88em;
+}
+.zentral-notes-sheet .zn-doctor-badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.82em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--zn-line);
+  background: color-mix(in srgb, var(--zn-hover) 35%, transparent);
+}
+.zentral-notes-sheet .zn-doctor-badge.is-ok {
+  border-color: color-mix(in srgb, #2e9e5b 45%, var(--zn-line));
+  background: color-mix(in srgb, #2e9e5b 14%, transparent);
+}
+.zentral-notes-sheet .zn-doctor-badge.is-warn {
+  border-color: color-mix(in srgb, #d9822b 50%, var(--zn-line));
+  background: color-mix(in srgb, #d9822b 16%, transparent);
+}
+.zentral-notes-sheet .zn-doctor-badge.is-error {
+  border-color: color-mix(in srgb, #d94c4c 55%, var(--zn-line));
+  background: color-mix(in srgb, #d94c4c 18%, transparent);
+}
+.zentral-notes-sheet .zn-doctor-hint {
+  margin: 0;
+  font-size: 0.8em;
+  color: var(--zn-muted);
+}
+.zentral-notes-sheet .zn-doctor-list {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.82em;
+}
+.zentral-notes-sheet .zn-doctor-list li {
+  overflow-wrap: anywhere;
+}
+.zentral-notes-sheet .zn-doctor-more,
+.zentral-notes-sheet .zn-doctor-none {
+  font-size: 0.8em;
+  color: var(--zn-muted);
+}
+
+/* T2.11: Folder hidden from Zen NOTES sidebar badge in All notes tree */
+.zentral-notes-sheet .zn-frow .zn-item-main {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.zentral-notes-sheet .zn-frow-zen-badge {
+  flex: 0 20 auto;
+  min-width: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 5px;
+  border-radius: 999px;
+  border: 1px solid var(--zn-line);
+  background: color-mix(in srgb, var(--zn-hover) 32%, transparent);
+  color: var(--zn-muted);
+  font-size: 0.74em;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.zentral-notes-sheet .zn-frow-zen-badge.is-inherited {
+  border-style: dashed;
+}
+
+/* T2.11a: Per-note Calendar-only badge, editor pill, and Birthday preset list */
+.zentral-notes-sheet .zn-item-cal-only,
+.zentral-notes-sheet .zn-cal-only-chip {
+  border-color: color-mix(in srgb, var(--zn-accent) 45%, var(--zn-line));
+  background: color-mix(in srgb, var(--zn-accent) 12%, transparent);
+  color: var(--zn-muted);
+}
+.zentral-notes-sheet .zn-cal-only-chip {
+  flex: 0 0 auto;
+}
+.zentral-notes-sheet .zn-cal-only-chip:hover {
+  background: color-mix(in srgb, var(--zn-accent) 20%, transparent);
+  color: inherit;
+}
+.zentral-notes-sheet .zn-bday-add-row {
+  justify-content: flex-start;
+  margin-top: 2px;
+}
+.zentral-notes-sheet .zn-bday-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--zn-line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--zn-hover) 24%, transparent);
+}
+.zentral-notes-sheet .zn-bday-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.9em;
+}
+.zentral-notes-sheet .zn-bday-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zentral-notes-sheet .zn-bday-remove {
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  font-size: 0.82em;
+}
+
+/* OW-120: owner Browser Console diagnostic (2026-11-18/19). The run was named
+ * "collapsed-broken" but `context.sidebarState` was `expanded`; the regression is
+ * NOT Zen-wide collapsed-sidebar CSS. Computed geometry from that JSON:
+ *   Notes root header 12x18 centred at x=2464, note tab 26x22 with 14px inline-start,
+ *   labelContainer 0x22 / label 211.8x18.7; Agenda tab 142x22 with opacity 0.69 and
+ *   filter grayscale(1), iconImage opacity 0.5; root attrs carry
+ *   bgalazka-arc-gray-unloaded="true" / bgalazka-arc-fade-unloaded="true".
+ * OW-116's `filter`/`opacity` rules only matched zen-folder[bgalazka-notes-folder].
+ * Agenda rows live under bgalazka-notes-agenda-folder / -day, so Arc 2.0's pending
+ * grayscale and the compact pinned row geometry survived there. These rules are
+ * scoped to the three Notes/Agenda folder markers and the two placeholder markers;
+ * they do not use the compact switch, zen-sidebar-expanded, zen-compact-mode, a
+ * blanket [pending] selector, visibility:hidden, display:none, zero width/height or
+ * zero font-size. OW-116's colour/opacity-only rules remain below, unchanged. */
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]),
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]),
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]),
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]),
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]),
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) {
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+}
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending],
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending],
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending],
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending],
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending],
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] {
+  filter: none !important;
+  opacity: 1 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin-inline: 0 !important;
+  margin-block: var(--bgalazka-look-tabbar-row-gap, 0px) !important;
+  flex: 0 0 auto !important;
+  align-self: stretch !important;
+  justify-content: flex-start !important;
+  box-sizing: border-box !important;
+  pointer-events: auto !important;
+}
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content {
+  filter: none !important;
+  opacity: 1 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  flex: 0 0 auto !important;
+  justify-content: flex-start !important;
+  box-sizing: border-box !important;
+  pointer-events: auto !important;
+}
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack {
+  filter: none !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-image,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-image,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-image,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-image,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-image,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-image {
+  filter: none !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-pending,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-pending,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-pending,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-pending,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-pending,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-pending {
+  filter: none !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-label-container {
+  filter: none !important;
+  opacity: 1 !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  flex: 1 1 auto !important;
+  overflow: hidden !important;
+  contain: none !important;
+  justify-content: flex-start !important;
+  align-items: flex-start !important;
+  box-sizing: border-box !important;
+  pointer-events: auto !important;
+}
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-label-container > .tab-label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-label-container > .tab-label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-label-container > .tab-label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-label-container > .tab-label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-label-container > .tab-label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-label-container > .tab-label {
+  filter: none !important;
+  opacity: 1 !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  flex: 1 1 auto !important;
+  display: block !important;
+  visibility: visible !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  text-align: start !important;
+  box-sizing: border-box !important;
+  pointer-events: auto !important;
+}
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]) > .tab-group-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]) > .tab-group-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]) > .tab-group-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]) > .tab-group-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]) > .tab-group-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) > .tab-group-label-container {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  flex: 1 1 auto !important;
+  align-self: stretch !important;
+  justify-content: flex-start !important;
+  margin-inline: 0 !important;
+  box-sizing: border-box !important;
+  pointer-events: auto !important;
+}
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]) > .tab-group-label-container > label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]) > .tab-group-label-container > label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]) > .tab-group-label-container > label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]) > .tab-group-label-container > label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]) > .tab-group-label-container > label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) > .tab-group-label-container > label {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  flex: 1 1 auto !important;
+  text-align: start !important;
+  box-sizing: border-box !important;
+}
+
+/* OW-116: clear only colour and opacity for parked Notes/Agenda rows. Compact tabs keep their own
+ * sizing and clipping; these selectors touch no layout properties and use no grouped pseudo-class.
+ * The tab row, its content box, favicon, label container and native title each get the same
+ * narrow treatment, so a browser-side pending rewrite cannot gray or fade either visual road. */
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-item][pending],
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content,
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-agenda-item][pending],
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content {
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-image,
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-image {
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-label-container,
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-label-container {
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-label-container > .tab-label,
+:root #tabbrowser-tabs zen-folder[bgalazka-notes-folder] tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-label-container > .tab-label {
+  filter: none !important;
+  opacity: 1 !important;
+}

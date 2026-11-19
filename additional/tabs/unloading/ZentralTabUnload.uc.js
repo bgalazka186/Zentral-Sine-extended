@@ -88,6 +88,54 @@
       let normalTabMmbGesture = null;
       let normalTabMmbFallbackTimer = null;
 
+      // Notes and Agenda entries are inert about:blank placeholders. Selecting
+      // one as the successor of an ordinary tab being unloaded is unsafe:
+      // their TabSelect guards immediately bounce back to the tab being unloaded.
+      // Match explicit markers first, then only the live/current pseudo URL (not
+      // a tab's historical SessionStore entries or display label).
+      function isNotesAgendaEntryTab(tab) {
+        if (!tab) return false;
+        let url = "";
+        try { url = tab.linkedBrowser?.currentURI?.spec || ""; } catch (_) {}
+        // A live ordinary URL is authoritative: old pseudo markers/expandos
+        // must not make a reused web tab permanently ineligible for unloading.
+        if (url && url !== "about:blank") {
+          if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(url)) return true;
+          try {
+            tab.removeAttribute("bgalazka-notes-item");
+            tab.removeAttribute("bgalazka-notes-agenda-item");
+            if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(tab._zentralNotesUrl || "")) delete tab._zentralNotesUrl;
+          } catch (_) {}
+          return false;
+        }
+        if (!url || url === "about:blank") {
+          let sessionUrl = "";
+          try {
+            const state = JSON.parse(window.SessionStore?.getTabState?.(tab) || "{}");
+            const entries = Array.isArray(state.entries) ? state.entries : [];
+            const index = entries.length
+              ? Math.max(0, Math.min(entries.length - 1, (Number(state.index) || 1) - 1))
+              : -1;
+            sessionUrl = index >= 0 ? String(entries[index]?.url || "") : "";
+          } catch (_) {}
+          if (sessionUrl) {
+            if (sessionUrl !== "about:blank" && /^about:blank#zn-(?:note:|new:|agenda-)/.test(sessionUrl)) return true;
+            try {
+              tab.removeAttribute("bgalazka-notes-item");
+              tab.removeAttribute("bgalazka-notes-agenda-item");
+              if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(tab._zentralNotesUrl || "")) delete tab._zentralNotesUrl;
+            } catch (_) {}
+            return false;
+          }
+        }
+        if (tab.hasAttribute("bgalazka-notes-item") ||
+            tab.hasAttribute("bgalazka-notes-agenda-item")) return true;
+        if (!url || url === "about:blank") {
+          try { url = tab._zentralNotesUrl || url; } catch (_) {}
+        }
+        return /^about:blank#zn-(?:note:|new:|agenda-)/.test(url);
+      }
+
       function getNormalTabFromMiddleClickEvent(event) {
         const target = event?.target;
         if (!target?.closest) return null;
@@ -102,7 +150,7 @@
           tab.hasAttribute("zen-empty-tab") ||
           tab.hasAttribute("bgalazka-addon-host") ||
           tab.hasAttribute("bgalazka-addon-host-fallback") ||
-          tab.hasAttribute("bgalazka-notes-item") ||
+          isNotesAgendaEntryTab(tab) ||
           tab.closest(
             "#bgalazka-zentral-addon-hosts, [bgalazka-addon-host-folder='true']",
           )
@@ -112,7 +160,13 @@
         return tab;
       }
 
+      // OW-91 (plan B4.1): the predicates live in one place now — `loader/ZentralTabPolicy.js`, which this module's
+      // standalone build embeds verbatim. The local names stay, because the handlers below read like the behaviour
+      // they implement, and a caller of the policy is what this module is.
+      const tabPolicy = () => window.ZentralTabPolicy || null;
       function isNormalTabAlreadyUnloaded(tab) {
+        const policy = tabPolicy();
+        if (policy) return policy.isUnloadable_AlreadyUnloaded(tab);
         return !!(
           !tab?.linkedPanel ||
           tab.hasAttribute("pending") ||
@@ -133,13 +187,15 @@
         return !!tab?.hasAttribute?.("bgalazka-notes-item");
       }
       function isSuccessorCandidate(tab, current) {
+        const policy = tabPolicy();
+        if (policy) return policy.isSuccessorCandidate(tab, current);
         return !!(
           tab !== current &&
           tab?.isConnected &&
           !tab.closing &&
           !tab.hidden &&
           !isAddonHostTab(tab) &&
-          !isNotesEntryTab(tab) &&
+          !isNotesAgendaEntryTab(tab) &&
           tab.linkedPanel
         );
       }
@@ -158,7 +214,7 @@
         return (
           gBrowser.selectedTab !== tab &&
           !isAddonHostTab(gBrowser.selectedTab) &&
-          !isNotesEntryTab(gBrowser.selectedTab)
+          !isNotesAgendaEntryTab(gBrowser.selectedTab)
         );
       }
 

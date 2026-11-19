@@ -10,26 +10,31 @@ const source = fs.readFileSync(path.resolve(__dirname, "../additional/notes/Zent
 
 const dom = require("./helpers/fake-dom.cjs")();
 const { El, Ev, document, raf } = dom;
+El.prototype.ownerDocument = document; // browsers expose ownerDocument on every real element; needed for menu positioning.
 const win = {
   document, ZentralRuntime: { register() {} }, __zentralNotesTestSeam: {},
+  __zentralNotesLangTables: { en: require("../additional/notes/i18n/en.js"), pl: require("../additional/notes/i18n/pl.js") },
   requestAnimationFrame: (fn) => raf.push(fn), cancelAnimationFrame() {},
   setTimeout, clearTimeout, innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {},
 };
 win.window = win;
-vm.runInNewContext(source, { window: win, document, Event: Ev, globalThis: { Services: {} }, ChromeUtils: {}, console, URL, Date, JSON, Math, Promise, RegExp, Number, Map, Set, setTimeout, clearTimeout, navigator: { platform: "Linux" } });
+vm.runInNewContext(source, { window: win, document, Event: Ev, globalThis: { Services: {} }, ChromeUtils: {}, console, URL, Date, JSON, Math, Promise, RegExp, Number, Map, Set, setTimeout, clearTimeout, queueMicrotask, navigator: { platform: "Linux" } });
 const c = win.__zentralNotesTestSeam.core;
 const flushRaf = async () => { for (let i = 0; i < 4; i++) { raf.splice(0).forEach((f) => f()); await new Promise((r) => setImmediate(r)); } };
 
 
 // ---- fixtures ------------------------------------------------------------------------
-const files = new Map();
+const files = new Map(), dirs = new Set(["/n"]);
 const io = {
   join: (...p) => p.join("/"), filename: (p) => p.split("/").pop(),
   readUTF8: async (p) => { if (!files.has(p)) throw new Error("nf"); return files.get(p).text; },
   writeUTF8: async (p, t) => files.set(p, { text: t, mtime: Date.now() }),
-  remove: async (p) => files.delete(p), exists: async (p) => files.has(p),
-  children: async (d) => [...files.keys()].filter((k) => k.startsWith(d + "/")),
-  stat: async (p) => ({ lastModified: files.get(p)?.mtime || 0 }), restrict: async () => {},
+  remove: async (p) => { if (!files.has(p)) throw new Error("nf"); files.delete(p); }, exists: async (p) => files.has(p) || dirs.has(p),
+  children: async (d) => [...new Set([...dirs, ...files.keys()])].filter((k) => k.startsWith(d + "/") && !k.slice(d.length + 1).includes("/")),
+  stat: async (p) => files.has(p) ? { type: "regular", size: files.get(p)?.bytes?.length || 0, lastModified: files.get(p)?.mtime || 0 } : { type: "directory", size: 0, lastModified: 0 }, restrict: async () => {},
+  makeDir: async (p) => { for (let x = p; x && x !== "/"; x = x.slice(0, x.lastIndexOf("/")) || "/") dirs.add(x); },
+  writeBytes: async (p, bytes) => { if (files.has(p)) throw new Error("exists"); const d = p.slice(0, p.lastIndexOf("/")); dirs.add(d); files.set(p, { bytes: new Uint8Array(bytes), mtime: Date.now() }); },
+  readBytes: async (p) => { if (!files.get(p)?.bytes) throw new Error("nf"); return new Uint8Array(files.get(p).bytes); },
 };
 const store = c.createStore({ io, notify() {}, windowId: "t", getDir: async () => "/n", getMaxSaveMs: () => 5000, setTimer: setTimeout, clearTimer: clearTimeout });
 const envCalls = [];
@@ -219,6 +224,110 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     const img = read.all().find((e) => e.tag === "img");
     assert.equal(img.getAttribute("src"), "https://example.org/c.png");
     assert.equal(read.all().filter((e) => e._classes.has("zn-link")).length, 1);
+  });
+
+  await test("OW-20: Markdown and HTML tables have individually keyboard-focusable scroll regions", async () => {
+    const ta = q(sheetA, ".zn-editor"), read = q(sheetA, ".zn-read");
+    type(ta, "| Wide | Table |\n| --- | --- |\n| left | right |\n\n> | Quoted | Table |\n> | --- | --- |\n> | long | value |\n\n<table><tr><th>HTML</th><th>Table</th></tr><tr><td>left</td><td>right</td></tr></table>");
+    await new Promise((r) => setTimeout(r, 400)); await flushRaf();
+    const wrappers = read.querySelectorAll(".zn-table-wrap"); assert.equal(wrappers.length, 3);
+    for (const wrapper of wrappers) {
+      assert.equal(wrapper.getAttribute("tabindex"), "0"); assert.equal(wrapper.getAttribute("role"), "region");
+      assert.match(wrapper.getAttribute("aria-label"), /table.*scroll/i); assert.ok(wrapper.querySelector("table"));
+    }
+    assert.ok(wrappers.some(wrapper => wrapper.closest("blockquote")), "nested table uses the same constrained scrollport");
+  });
+
+  await test("YouTube embeds are click-to-load and use only the privacy-enhanced host", async () => {
+    const ta = q(sheetA, ".zn-editor"), read = q(sheetA, ".zn-read");
+    type(ta, "![Course clip](https://youtu.be/dQw4w9WgXcQ)");
+    await new Promise((r) => setTimeout(r, 400)); await flushRaf();
+    const poster = read.all().find((e) => e._classes.has("zn-video-poster"));
+    assert.ok(poster, "a local poster prompt is rendered");
+    assert.equal(read.all().filter((e) => e.tag === "iframe").length, 0, "no YouTube request before click");
+    assert.equal(read.all().filter((e) => e.tag === "img").length, 0, "no remote thumbnail request");
+    poster.click();
+    const frame = read.all().find((e) => e.tag === "iframe");
+    assert.ok(frame);
+    assert.equal(frame.getAttribute("src"), "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1");
+    assert.equal(frame.getAttribute("loading"), "lazy");
+    assert.equal(frame.getAttribute("referrerpolicy"), "strict-origin-when-cross-origin");
+    assert.match(frame.getAttribute("sandbox"), /allow-scripts/);
+    assert.equal(frame.getAttribute("allowfullscreen"), "");
+  });
+
+  await test("local video transclusion creates a native player from the note assets folder", async () => {
+    const ta = q(sheetA, ".zn-editor"), read = q(sheetA, ".zn-read");
+    const requests = [];
+    env.loadAsset = async (rel) => { requests.push(rel); return { url: "blob:zentral-test-video" }; };
+    type(ta, "![[training.webm]]");
+    await new Promise((r) => setTimeout(r, 400)); await flushRaf();
+    const player = read.all().find((e) => e.tag === "video");
+    assert.ok(player, "local embed renders a native video element");
+    assert.equal(player.getAttribute("src"), "blob:zentral-test-video");
+    assert.equal(player.getAttribute("controls"), "");
+    assert.equal(player.getAttribute("preload"), "metadata");
+    assert.equal(player.getAttribute("playsinline"), "");
+    assert.equal(requests.length, 1);
+    assert.match(requests[0], /^assets\/[A-Za-z0-9_-]+\/training\.webm$/);
+    env.loadAsset = undefined;
+  });
+
+  await test("local video loader failures become a stable placeholder instead of escaping render", async () => {
+    const ta = q(sheetA, ".zn-editor"), read = q(sheetA, ".zn-read");
+    env.loadAsset = () => { throw new Error("simulated adapter failure"); };
+    type(ta, "![[broken.mp4]]");
+    await new Promise((r) => setTimeout(r, 400)); await flushRaf();
+    const status = read.all().find((e) => e._classes.has("zn-video-status"));
+    assert.ok(status);
+    assert.match(status.textContent, /Could not read local video/);
+    env.loadAsset = undefined;
+  });
+
+  await test("file drop saves collision-safe attachments at the caret and renders download-only links", async () => {
+    const ta = q(sheetA, ".zn-editor"), read = q(sheetA, ".zn-read");
+    const loaded = [];
+    env.loadAsset = async (rel) => { loaded.push(rel); return { url: "blob:zentral-test-file" }; };
+    type(ta, "lead tail");
+    ta.setSelectionRange(5, 5);
+    const makeFile = (name, values = [1, 2, 3]) => {
+      const bytes = Uint8Array.from(values);
+      return { name, size: bytes.length, arrayBuffer: async () => bytes.buffer };
+    };
+    const plainDrag = new Ev("dragover", { bubbles: true, dataTransfer: { types: ["text/plain"], files: [] } });
+    ta.dispatchEvent(plainDrag);
+    assert.equal(plainDrag.defaultPrevented, false, "plain-text drags keep native behavior");
+    const drag = new Ev("dragover", { bubbles: true, dataTransfer: { types: ["Files"], files: [] } });
+    ta.dispatchEvent(drag);
+    assert.equal(drag.defaultPrevented, true);
+    assert.ok(ta.classList.contains("zn-file-drop-target"));
+    ta.dispatchEvent(new Ev("dragleave", { bubbles: true }));
+    assert.equal(ta.classList.contains("zn-file-drop-target"), false);
+    const rejectedDrop = new Ev("drop", { bubbles: true, dataTransfer: { types: ["Files"], files: [] } });
+    ta.dispatchEvent(rejectedDrop);
+    assert.equal(rejectedDrop.defaultPrevented, true, "empty/directory-like file drops cannot navigate the tab");
+    const filesToDrop = [makeFile("Project Plan.pdf"), makeFile("Project Plan.pdf")];
+    const drop = new Ev("drop", { bubbles: true, dataTransfer: { files: filesToDrop } });
+    ta.dispatchEvent(drop);
+    assert.equal(drop.defaultPrevented, true);
+    await new Promise((r) => setTimeout(r, 450)); await flushRaf();
+    const noteId = store.list().find((n) => n.body === ta.value || n.id === store.state.active)?.id || store.state.active;
+    assert.match(ta.value, /^lead \[Project-Plan\.pdf\]\(assets\//);
+    assert.match(ta.value, /\[Project-Plan-2\.pdf\]\(assets\//);
+    assert.match(ta.value, /\)tail$/);
+    assert.ok(ta.value.includes("assets/" + noteId + "/Project-Plan.pdf"));
+    const links = read.all().filter((e) => e._classes.has("zn-file-asset-link"));
+    assert.equal(links.length, 2);
+    assert.equal(links[0].getAttribute("href"), "blob:zentral-test-file");
+    assert.equal(links[0].getAttribute("download"), "Project-Plan.pdf");
+    assert.equal(loaded.length, 2);
+    assert.ok(loaded.every((rel) => rel.startsWith("assets/" + noteId + "/")));
+    type(ta, "[Open plan](assets/" + noteId + "/Project-Plan.pdf)");
+    await new Promise((r) => setTimeout(r, 400)); await flushRaf();
+    const customLabel = read.all().find((e) => e._classes.has("zn-file-asset-link"));
+    assert.ok(customLabel);
+    assert.equal(customLabel.textContent, "Open plan", "Markdown link labels remain readable while the target stays a download");
+    env.loadAsset = undefined;
   });
 
   await test("the horizontal rule button inserts a rule set off by blank lines", async () => {
@@ -445,6 +554,20 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     prefs.delete(c.PREF.PASTE_LINK);
   });
 
+  await test("OW-19: pasted collapsed table replaces the selection only when it becomes a table", async () => {
+    const raw = "| Order | ID | Task || --: | :-- | :-- || 25 | `ID` | Example |";
+    const fixed = "| Order | ID | Task |\n| --: | :-- | :-- |\n| 25 | `ID` | Example |";
+    let ta = prep(sheetA, "before\nreplace\nafter", 7, 14);
+    const paste = (text) => { const e = new Ev("paste", { clipboardData: { getData: type => type === "text/plain" ? text : "" } }); ta.dispatchEvent(e); return e; };
+    assert.ok(paste(raw).defaultPrevented); assert.equal(ta.value, "before\n" + fixed + "\nafter");
+    assert.equal(ta.selectionStart, 7 + fixed.length); assert.equal(ta.selectionEnd, ta.selectionStart);
+    assert.equal(c.parseBlocks(ta.value).find(b => b.type === "table").rows.length, 1);
+    ta = prep(sheetA, "```\nreplace\n```", 4, 11); assert.equal(paste(raw).defaultPrevented, false, "pasting inside a fence is left native");
+    ta = prep(sheetA, "prefix replace suffix", 7, 14); assert.equal(paste(raw).defaultPrevented, false, "partial-line paste is not a table");
+    ta = prep(sheetA, "", 0, 0); assert.equal(paste("a || b").defaultPrevented, false, "ordinary text uses native paste");
+    ta.readOnly = true; assert.equal(paste(raw).defaultPrevented, false, "read-only notes are never edited"); ta.readOnly = false;
+  });
+
   await test("B2 table creator inserts the picked size", async () => {
     const ta = prep(sheetA, "", 0, 0);
     key(ta, "y", { ctrlKey: true, shiftKey: true, code: "KeyY" });
@@ -468,10 +591,12 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     click(byLabel(sheetA, "Quick settings"));
     assert.ok(dialogOf(sheetA));
     const row = (label) => sheetA.root.all().find((e) => e._classes.has("zn-quick-row") && e.children[0].textContent === label);
+    // The controls of one setting are one group (minus, value, plus): the label, then the controls in order.
+    const parts = (r) => r.children.flatMap((k) => (k._classes.has("zn-ctl") ? k.children : [k]));
     click(row("Select and copy text in read view").children[1]);
     assert.equal(prefs.get(c.PREF.READ_COPY), true);
     assert.ok(!row("Text over === or --- is a heading"), "set-once options are not in the quick menu");
-    click(row("Text size").children[3]);
+    click(parts(row("Text size"))[3]);
     assert.equal(prefs.get(c.PREF.FONT_SIZE), 14);
     click(chipNamed(sheetA, "All settings\u2026"));
     const srow = (label) => sheetA.root.all().find((e) => e._classes.has("zn-set-row") && e.children[0].textContent === label);
@@ -479,7 +604,7 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(prefs.get(c.PREF.SETEXT), true);
     click(chipNamed(sheetA, "Keyboard shortcuts\u2026"));
     const krow = (label) => sheetA.root.all().find((e) => e._classes.has("zn-quick-row") && e.children[0].textContent === label);
-    const btn = krow("Strikethrough").children[1];
+    const btn = parts(krow("Strikethrough"))[1];
     click(btn);
     const press = (k, extra) => key(sheetA.root.all().find((e) => e._classes.has("zn-keybtn") && e.textContent === "Press keys\u2026"), k, extra);
     press("b", { ctrlKey: true, code: "KeyB" });
@@ -498,15 +623,16 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     click(chipNamed(sheetA, "All settings\u2026"));
     click(chipNamed(sheetA, "Appearance"));
     const srow = (label) => sheetA.root.all().find((e) => e._classes.has("zn-set-row") && e.children[0].textContent === label);
+    const parts = (r) => r.children.flatMap((k) => (k._classes.has("zn-ctl") ? k.children : [k]));
     const radius = srow("Corner radius");
-    const range = radius.children[1];
+    const range = parts(radius)[1];
     range.value = "23";
     range.dispatchEvent(new Ev("input", { bubbles: true }));
     assert.equal(prefs.get(c.PREF.LOOK_RADIUS), 23, "any value, not a preset");
-    click(radius.children[3]);
+    click(parts(radius)[3]);
     assert.equal(prefs.get(c.PREF.LOOK_RADIUS), -1, "Theme clears it");
     const bgRow = srow("Background");
-    click(bgRow.children[1]);
+    click(parts(bgRow)[1]);
     const panel = bgRow.parent.children.find((e) => e._classes.has("zn-cpanel"));
     assert.equal(panel.hidden, false);
     const hex = panel.children.find((e) => e._classes.has("zn-hex"));
@@ -517,6 +643,55 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(prefs.get(c.PREF.LOOK_BG), "");
     click(chipNamed(sheetA, "Done"));
     assert.equal(dialogOf(sheetA), null);
+  });
+
+  await test("T1.17 checker reports attachments and only deletes an orphan after confirmation", async () => {
+    const active = store.get(store.latestId());
+    store.update(active.id, "![[cover.png]]", "test");
+    const folder = "/n/assets/" + active.id;
+    await io.makeDir(folder);
+    await io.writeBytes(folder + "/cover.png", Uint8Array.from([1]));
+    await io.writeBytes(folder + "/orphan.dat", Uint8Array.from([2]));
+    click(byLabel(sheetA, "More"));
+    let menu = sheetA.root.querySelector(".zn-menu");
+    assert.ok(menu);
+    click(menu.all().find((e) => e._classes.has("zn-menu-group") && e.textContent === "Import & export"));
+    menu = sheetA.root.querySelector(".zn-menu");
+    const action = menu.all().find((e) => e._classes.has("zn-menu-item") && e.textContent === "Check attached files…");
+    assert.ok(action, "integrity checker is discoverable under Import & export");
+    click(action);
+    await new Promise((resolve) => setImmediate(resolve));
+    const orphanRow = dialogOf(sheetA).all().find((e) => e._classes.has("zn-labels-row") && e.all().some((child) => child._classes.has("zn-labels-name") && child.textContent === "assets/" + active.id + "/orphan.dat"));
+    assert.ok(orphanRow, "the orphan is listed with its exact per-note path");
+    click(orphanRow.all().find((e) => e._classes.has("zn-chip") && e.textContent === "Delete…"));
+    assert.equal(dialogOf(sheetA).querySelector(".zn-dialog-card").children[0].textContent, "Delete unreferenced file?");
+    assert.equal(await io.exists(folder + "/orphan.dat"), true, "opening the confirmation does not delete anything");
+    click(chipNamed(sheetA, "Delete permanently"));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(await io.exists(folder + "/orphan.dat"), false, "explicit confirmation deletes the orphan");
+    assert.equal(await io.exists(folder + "/cover.png"), true, "a referenced image is retained");
+    assert.ok(!dialogOf(sheetA).all().some((e) => e._classes.has("zn-labels-name") && e.textContent === "assets/" + active.id + "/orphan.dat"), "the deleted orphan disappears from the refreshed report");
+    click(chipNamed(sheetA, "Close"));
+  });
+
+  await test("T1.17 checker never reports a permission-denied scan as a clean vault", async () => {
+    const children = io.children;
+    io.children = async (folder) => {
+      if (folder === "/n/assets") throw new Error("permission denied");
+      return children(folder);
+    };
+    click(byLabel(sheetA, "More"));
+    let menu = sheetA.root.querySelector(".zn-menu");
+    click(menu.all().find((e) => e._classes.has("zn-menu-group") && e.textContent === "Import & export"));
+    menu = sheetA.root.querySelector(".zn-menu");
+    click(menu.all().find((e) => e._classes.has("zn-menu-item") && e.textContent === "Check attached files…"));
+    await new Promise((resolve) => setImmediate(resolve));
+    const rows = dialogOf(sheetA);
+    assert.match(rows.textContent, /Could not scan the attached-files folder/);
+    assert.doesNotMatch(rows.textContent, /No missing attached files|No unreferenced files/);
+    assert.equal(rows.all().some((e) => e._classes.has("zn-chip") && e.textContent === "Delete…"), false, "a failed/incomplete scan never exposes cleanup actions");
+    click(chipNamed(sheetA, "Close"));
+    io.children = children;
   });
 
   sheetA.destroy(); sheetB.destroy();

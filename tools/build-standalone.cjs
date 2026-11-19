@@ -4,9 +4,10 @@
  * Output goes NEXT TO the source so Sine can be pointed at the module folder:
  *   <dir>/theme.json, <dir>/preferences.json, <dir>/<output>.uc.js, <dir>/standalone.lock.json
  *
- * Usage: node tools/build-standalone.cjs [--check] [--bump]
- *   --check  build in memory, fail if committed files differ (CI / pre-commit)
- *   --bump   if content changed but version did not, raise the patch version
+ * Usage: node tools/build-standalone.cjs [--check] [--bump|--keep-version]
+ *   --check        build in memory, fail if committed files differ (CI / pre-commit)
+ *   --bump         if content changed but version did not, raise the patch version
+ *   --keep-version regenerate output and content lock without changing the declared version (development branches)
  *
  * Rules enforced:
  *  - content changed => version must change (Sine updates by version);
@@ -20,6 +21,8 @@ const fs = require("node:fs"),
   vm = require("node:vm");
 const root = path.resolve(__dirname, ".."),
   args = new Set(process.argv.slice(2));
+if (args.has("--bump") && args.has("--keep-version"))
+  throw new Error("--bump and --keep-version are mutually exclusive");
 const SHIM = path.join(root, "loader/standalone/ZentralStandaloneShim.js"),
   RUNTIME = path.join(root, "loader/ZentralRuntime.js");
 const SIDEBAR_FUNCTIONS = [
@@ -36,10 +39,13 @@ const PROVIDED = new Set([
   "nativeSidebarElement",
   "nativeSidebarRect",
   "nativeSidebarSide",
+  "createSidebarHoverCard",
   "getPref",
   "standalone",
   "sidebarLayoutRepair",
   "compactHoverStatus",
+  // OW-94: the pause switch (plan B7.1), provided by the standalone shim with the full pack's contract.
+  "performance",
 ]);
 
 function walk(dir) {
@@ -148,10 +154,21 @@ function build(manifestFile) {
   for (const asset of m.assets || [])
     if (!fs.existsSync(path.join(dir, asset)))
       throw new Error(`${m.id}: asset ${asset} must exist next to the module`);
+  // `sharedSources` are repo files OUTSIDE the module folder that the entry depends on (OW-91: the tab policy both
+  // unloaders use). They are embedded source, not assets: they run inside the same wrapper, before the entry.
+  const shared = (m.sharedSources || []).map((file) => {
+    const abs = path.join(root, file);
+    if (!fs.existsSync(abs)) throw new Error(`${m.id}: shared source ${file} does not exist`);
+    const text = fs.readFileSync(abs, "utf8");
+    if (/\bquerySelector|\bdocument\./.test(text) && /module\.exports|require\(/.test(text))
+      throw new Error(`${m.id}: shared source ${file} looks like Node code`);
+    return { file, text };
+  });
   for (const [file, text] of [
     [m.entry, source],
     ...Object.entries(included),
     ...extras.map((e) => [e.file, e.text]),
+    ...shared.map((x) => [x.file, x.text]),
   ]) {
     if (/ZentralModuleLoader/.test(text))
       throw new Error(`${m.id}: ${file} still names the full pack's module loader`);
@@ -162,7 +179,7 @@ function build(manifestFile) {
       throw new Error(`${m.id}: ${file} does not parse as an embedded source: ${error.message}`);
     }
   }
-  const allSources = [source, ...Object.values(included), ...extras.map((e) => e.text)];
+  const allSources = [source, ...Object.values(included), ...extras.map((e) => e.text), ...shared.map((x) => x.text)];
   const allText = allSources.join("\n");
   // Members a module only touches when the full pack is present (guarded in
   // the source). Declared per manifest so every exception is visible.
@@ -181,7 +198,9 @@ function build(manifestFile) {
     throw new Error(
       `${m.id}: depends on the module loader; declare "loader" with include/texts, or keep it full-pack only (see docs/SINE-MODULAR-INSTALL.md).`,
     );
-  if (/window\.Zentral\b/.test(allText))
+  // `window.Zentral` is the full pack's UI namespace. A module may touch it only when every use is guarded and the
+  // manifest says so; otherwise this is a real dependency on a pack that is not installed.
+  if (/window\.Zentral\b/.test(allText) && !fullOnly.has("Zentral"))
     throw new Error(`${m.id}: reads window.Zentral (the full pack's UI namespace); not standalone-ready.`);
   if (/\b(shared|services)\b\s*[,}]\s*(?:=\s*\{\})?\s*\)\s*\{/.test(allText))
     throw new Error(
@@ -196,6 +215,8 @@ function build(manifestFile) {
   let shim = fs.readFileSync(SHIM, "utf8");
   if (!shim.includes("/*__SIDEBAR_FUNCTIONS__*/"))
     throw new Error("Shim is missing the sidebar marker");
+  if (!shim.includes("/*__HOVER_CARD_FUNCTIONS__*/"))
+    throw new Error("Shim is missing the hover-card marker");
   if (!shim.includes("/*__SCOPE_FUNCTIONS__*/"))
     throw new Error("Shim is missing the scope marker");
   if (!shim.includes("/*__NUMERIC_FUNCTIONS__*/"))
@@ -204,6 +225,9 @@ function build(manifestFile) {
     extractFunction(runtimeSource, "createNumericPrefSync"),
   );
   shim = shim.replace("/*__SIDEBAR_FUNCTIONS__*/", () => sidebar);
+  shim = shim.replace("/*__HOVER_CARD_FUNCTIONS__*/", () =>
+    extractFunction(runtimeSource, "createSidebarHoverCard"),
+  );
   shim = shim.replace("/*__SCOPE_FUNCTIONS__*/", () => scopeFns);
   // Version comes from the manifest at build time; the shim only reports it.
 
@@ -267,6 +291,9 @@ function build(manifestFile) {
   ]);
   for (const pref of new Set(allSources.flatMap((text) => [...text.matchAll(PREF_PATTERN)].map((x) => x[1])))) {
     if (pref.endsWith(".")) continue; // a prefix used to build keys, not a pref
+    // A FILE NAME is not a pref. `ui.` is a real pref prefix, and a file called `ui.json` (ST7.3: the calendar view
+    // file) looks exactly like one. Only a bare name with a known data extension is skipped; a pref never ends in one.
+    if (/^[A-Za-z][A-Za-z0-9_.-]*\.(?:json|jsonl|tmp|md|txt)$/.test(pref)) continue;
     if (allowedPrefs.has(pref)) continue;
     const elsewhere = owners.get(pref);
     throw new Error(
@@ -321,7 +348,7 @@ function build(manifestFile) {
       .split("__FEATURE_VERSION__")
       .join(version)
       .replace("/*__NUMERIC_ITEMS__*/ []", () => JSON.stringify(numericItems)) +
-    `\n${loaderPart}${wrapPart}${source}\n})();\n`;
+    `\n${loaderPart}${wrapPart}${shared.map((x) => `// ---- shared: ${x.file}\n${x.text}\n`).join("")}${source}\n})();\n`;
   const lockFile = path.join(dir, "standalone.lock.json");
   const lock = fs.existsSync(lockFile)
     ? JSON.parse(fs.readFileSync(lockFile, "utf8"))
@@ -331,15 +358,20 @@ function build(manifestFile) {
   const contentHash = sha(bundleFor("0.0.0") + css + json(prefs) + assetText);
   let version = m.version;
   if (lock && lock.hash !== contentHash && lock.version === version) {
-    if (!args.has("--bump"))
-      throw new Error(
-        `${m.id}: content changed but version is still ${version}. ` +
-          `Raise "version" in ${path.relative(root, manifestFile)} (or run with --bump), otherwise Sine will not update users.`,
-      );
-    const [a, b, c] = version.split(".").map(Number);
-    version = `${a}.${b}.${c + 1}`;
-    m.version = version;
-    fs.writeFileSync(manifestFile, json(m));
+    // Development branches may deliberately keep the package version fixed while
+    // regenerating its bundle. Sine's version-based update detection is therefore
+    // unchanged; this opt-in is reserved for branches whose owner has locked it.
+    if (!args.has("--keep-version")) {
+      if (!args.has("--bump"))
+        throw new Error(
+          `${m.id}: content changed but version is still ${version}. ` +
+            `Raise "version" in ${path.relative(root, manifestFile)} (or run with --bump or --keep-version), otherwise Sine will not update users.`,
+        );
+      const [a, b, c] = version.split(".").map(Number);
+      version = `${a}.${b}.${c + 1}`;
+      m.version = version;
+      fs.writeFileSync(manifestFile, json(m));
+    }
   }
   const theme = {
     id: m.themeId,

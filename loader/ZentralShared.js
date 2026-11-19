@@ -230,7 +230,7 @@
           [Constants.Diagnostics.PREF_LOGGER_ENABLED]: false,
           [Constants.Diagnostics.PREF_LOGGER_PATH]: "",
           [Constants.Diagnostics.PREF_LOGGER_FULL]: true,
-          [Constants.Diagnostics.PREF_LOGGER_CORE]: true,
+          [Constants.Diagnostics.PREF_LOGGER_CORE]: false,
           [Constants.Diagnostics.PREF_LOGGER_TABS]: false,
           [Constants.Diagnostics.PREF_LOGGER_APPS]: false,
           [Constants.Diagnostics.PREF_LOGGER_MENUS]: false,

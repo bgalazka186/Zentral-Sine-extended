@@ -26,20 +26,31 @@ const test = (name, fn) => { fn(); passed++; console.log("ok -", name); };
 test("z-heights_map.md is up to date", () => {
   cp.execFileSync(process.execPath, [path.join(root, "tools/build-z-map.cjs"), "--check"], { stdio: "pipe" });
 });
+// OW-79: the generated language registry must match the i18n/ directory, or a new language silently misses the menu.
+test("the i18n registry is up to date", () => {
+  cp.execFileSync(process.execPath, [path.join(root, "tools/build-languages.cjs"), "--check"], { stdio: "pipe" });
+});
 test("normal layers: settings > RSS card > Notes card > Big Preview fallback > panel parts", () => {
   assert.ok(settings > rss, "settings window above RSS card");
   assert.ok(rss > notes && notes > big, "RSS card > Notes card > Big Preview");
   assert.ok(big > pillShield && pillShield >= edge && edge > panelRoot, "Big Preview > pill/edge helpers > panel root");
 });
-test("RSS card is a top-layer popover that re-enters the top layer on every show", () => {
-  const js = fs.readFileSync(path.join(root, "additional/rss/ZentralRssDisplay.uc.js"), "utf8");
-  assert.match(js, /setAttribute\("popover", "manual"\)/);
-  assert.match(js, /c\.hidden = false;\s*raiseCard\(c\);/, "raised right after it becomes visible");
-  assert.match(js, /hidePopover\(\);\s*\n?\s*c\.showPopover\(\)/, "hide+show moves it above earlier popovers");
-  assert.match(js, /dropCard\(card\)/, "leaves the top layer when hidden");
-  const css = fs.readFileSync(path.join(root, "additional/rss/ZentralRssDisplay.css"), "utf8");
-  for (const reset of [/inset:\s*auto/, /margin:\s*0/, /height:\s*auto/])
-    assert.match(css, reset, "popover defaults are reset: " + reset);
+test("RSS, Notes, and Agenda hover cards share the top-layer popover engine that re-enters on every show", () => {
+  const engine = fs.readFileSync(path.join(root, "loader/ZentralRuntime.js"), "utf8");
+  assert.match(engine, /function createSidebarHoverCard\(/);
+  assert.match(engine, /setAttribute\("popover", "manual"\)/);
+  assert.match(engine, /c\.hidden = false;\s*\n?\s*raiseCard\(c\);/, "raised right after it becomes visible");
+  assert.match(engine, /c\.hidePopover\?\.\(\);[\s\S]{0,120}c\.showPopover\(\);/, "hide+show moves it above earlier popovers");
+  assert.match(engine, /dropCard\(node\)/, "leaves the top layer when hidden");
+  const rssJs = fs.readFileSync(path.join(root, "additional/rss/ZentralRssDisplay.uc.js"), "utf8");
+  const notesJs = fs.readFileSync(path.join(root, "additional/notes/ZentralNotes.uc.js"), "utf8");
+  assert.match(rssJs, /createSidebarHoverCard/, "RSS uses the shared hover card engine");
+  assert.match(notesJs, /createSidebarHoverCard/, "Notes & Agenda use the shared hover card engine");
+  for (const cssFile of ["additional/rss/ZentralRssDisplay.css", "additional/notes/ZentralNotes.css"]) {
+    const css = fs.readFileSync(path.join(root, cssFile), "utf8");
+    for (const reset of [/inset:\s*auto/, /margin:\s*0/, /height:\s*auto/])
+      assert.match(css, reset, cssFile + " resets popover default: " + reset);
+  }
 });
 test("Big Preview is the other top-layer user (so ordering depends on show time)", () => {
   const js = fs.readFileSync(path.join(root, "additional/video/controllers/ZentralVideoEnlarge.js"), "utf8");

@@ -313,6 +313,19 @@ const seq = (n) => { let i = 0; return () => ((i++ * 7 + n) % 36) / 36; };
     c.dedupeNotesRoots(document, { removeTab: (t) => t.remove() }); assert.equal(document.querySelectorAll('zen-folder[bgalazka-notes-folder="true"]').length, 1, "idempotent");
     z.ws.remove();
   });
+  await test("ST7.1: released restored roots never reclaim or destroy foreign empty subfolders", () => {
+    const z = sb(), mark = { "bgalazka-notes-folder": "true" };
+    const first = z.folder("NOTES", { id: "primary-notes", attrs: mark });
+    const dup = z.folder("NOTES", { id: "bgalazka-zentral-notes", attrs: mark });
+    const foreign = z.folder("Keep empty", { parent: dup.querySelector(":scope > .tab-group-container") });
+    c.dedupeNotesRoots(document, { removeTab: (t) => t.remove() });
+    assert.ok(first.isConnected && dup.isConnected && foreign.isConnected, "foreign empty folder is never deleted");
+    assert.equal(dup.hasAttribute("bgalazka-notes-folder"), false); assert.notEqual(dup.id, "bgalazka-zentral-notes", "released root cannot be re-adopted by its old reserved id");
+    const sub = z.folder("Owned", { id: "bgalazka-zentral-notes-sub_abc", parent: first.querySelector(":scope > .tab-group-container"), attrs: { "bgalazka-notes-subfolder": "f:abc" } });
+    const nested = z.folder("User empty", { parent: sub.querySelector(":scope > .tab-group-container") });
+    c.retireNotesFolder(sub, (t) => t.remove()); assert.ok(sub.isConnected && nested.isConnected); assert.notEqual(sub.id, "bgalazka-zentral-notes-sub_abc");
+    z.ws.remove();
+  });
   await test("planRootDedupe: pure decision; nothing to do with one or no root", () => {
     eq(J(c.planRootDedupe([])), { adopt: -1, remove: [], release: [] }); eq(J(c.planRootDedupe([{ ours: 1, foreign: 0 }])), { adopt: 0, remove: [], release: [] });
     eq(J(c.planRootDedupe([{ ours: 1, foreign: 5 }, { ours: 2, foreign: 0 }, { ours: 0, foreign: 1 }, { ours: 0, foreign: 0 }])), { adopt: 0, remove: [1, 3], release: [2] });

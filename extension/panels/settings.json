@@ -472,6 +472,12 @@
       "defaultValue": "Ctrl+Shift+Comma"
     },
     {
+      "property": "zen.workspace.bgalazka.app_shortcuts",
+      "label": "Custom app & panel shortcuts (JSON)",
+      "type": "string",
+      "defaultValue": "{}"
+    },
+    {
       "property": "zen.workspace.bgalazka.panel_black_opacity",
       "label": "Black panel backing opacity (0–100)",
       "type": "input",
@@ -826,6 +832,11 @@
     "zen.workspace.bgalazka.keybind.open_settings": {
       "category": "shortcuts",
       "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.app_shortcuts": {
+      "category": "shortcuts",
+      "section": "App & panel shortcuts",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.panel_black_opacity": {

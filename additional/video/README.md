@@ -32,9 +32,19 @@ Send this folder for a change confined to its behavior. Include the specific out
 
 Full installation uses root `theme.json` and `preferences.json`, plus `loader/`; Sine loads `loader/Zentral.uc.js`; a stale main registration can forward through `JS/Zentral.uc.js`. Per-feature settings.json is metadata, not an activation script.
 
+## Install as a standalone Sine feature
+
+In Sine, add this folder as a mod using:
+
+`https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/video`
+
+Enable `sine.allow-unsafe-js` and restart Zen after the first install. Sine pulls later updates from this folder and exposes the feature's settings in Sine preferences. When the full pack is also installed, Zentral Extended owns the feature and the standalone copy stays inactive.
+
 ## Actor loading and failure recovery
 
 The actor resource alias resolves the installed Sine chrome path to its file or JAR location before registration. A separate resolved actor identity avoids reusing an older failed module cache. Registration failures remain visible in video diagnostics.
+
+**OW-113:** the preview publishes `window.__zentralVideoSourceTab` as a live, read-only getter over its own `current` source state (also available as `ZentralVideoPreview.sourceTab()`). It returns the ordinary tab behind the selected video source, or `null` for no source, a panel-only source or a stale tab, and is deleted on `destroy()`. Boost reads it before unloading anything, so a paused/muted source does not blank the sidebar preview.
 
 Definite actor query failures stop automatic actor discovery for that document. Navigation creates a fresh document and allows another attempt; explicitly running video diagnostics also retries. Timeouts and document-destruction cancellations do not disable the actor. This recovery adds no polling or retry timers. Requests from an obsolete scan or navigated document cannot publish sources or overwrite discovery diagnostics.
 

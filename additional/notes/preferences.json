@@ -48,10 +48,10 @@
   },
   {
     "property": "zen.workspace.zentral.notes.push_panel_percent_text",
-    "label": "Push page in a panel: share of the panel height the Notes sheet takes (%, 20–80) [20 to 80 %]",
+    "label": "Notes share of one web panel (%, 20–80); between two panels starts at 40% [20 to 80 %]",
     "type": "string",
-    "defaultValue": "45",
-    "placeholder": "45"
+    "defaultValue": "50",
+    "placeholder": "50"
   },
   {
     "property": "zen.workspace.zentral.notes.reveal_height_px_text",
@@ -178,7 +178,7 @@
     "defaultValue": "zentral",
     "options": [
       {
-        "label": "Zentral – follows the Zen look",
+        "label": "Zentral – follows the browser's appearance theme (default)",
         "value": "zentral"
       },
       {
@@ -378,6 +378,50 @@
     "label": "Lines and card border color (six-digit #RRGGBB, empty = theme)",
     "type": "string",
     "defaultValue": ""
+  },
+  {
+    "type": "text",
+    "label": "**Notes appearance · Days off**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_weekend_tint",
+    "label": "Notes calendar Weekend tint (six-digit #RRGGBB, empty = the shipped tint)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_weekend_strength_text",
+    "label": "Notes calendar Weekend tint visibility (percent, 0-60; -1 = the shipped tint) [-1 to 60 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_holiday_tint",
+    "label": "Notes calendar Holiday tint (six-digit #RRGGBB, empty = the shipped tint)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_holiday_strength_text",
+    "label": "Notes calendar Holiday tint visibility (percent, 0-60; -1 = the shipped tint) [-1 to 60 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_free_tint",
+    "label": "Notes calendar Other free days tint (six-digit #RRGGBB, empty = the shipped tint)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_free_strength_text",
+    "label": "Notes calendar Other free days tint visibility (percent, 0-60; -1 = the shipped tint) [-1 to 60 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
   },
   {
     "type": "text",
@@ -607,15 +651,31 @@
   },
   {
     "property": "zen.workspace.zentral.notes.hidden_tools",
-    "label": "Hidden editor buttons and shortcuts (set in Notes → Quick settings → Toolbar buttons; empty = all shown)",
+    "label": "Hidden editor buttons and shortcuts (set in Notes → Quick settings → Toolbar buttons; default hides the table of contents button; empty = all shown)",
     "type": "string",
-    "defaultValue": ""
+    "defaultValue": "outline"
   },
   {
     "property": "zen.workspace.zentral.notes.folder",
     "label": "Notes folder (absolute path; empty = zentral-notes inside your profile)",
     "type": "string",
     "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.space_mode",
+    "label": "Zen spaces: keep Notes and Agenda shared across all spaces or separate per space",
+    "type": "dropdown",
+    "defaultValue": "shared",
+    "options": [
+      {
+        "label": "Shared across all spaces (default)",
+        "value": "shared"
+      },
+      {
+        "label": "Separate per Zen space",
+        "value": "space"
+      }
+    ]
   },
   {
     "property": "zen.workspace.zentral.notes.hub_descriptions",
@@ -666,6 +726,26 @@
       }
     ],
     "property": "zen.workspace.zentral.notes.default_view"
+  },
+  {
+    "label": "Floating table of contents button in a note",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "options": [
+      {
+        "label": "Auto (notes with 3 or more headings)",
+        "value": "auto"
+      },
+      {
+        "label": "Always (notes with a heading)",
+        "value": "always"
+      },
+      {
+        "label": "Off",
+        "value": "off"
+      }
+    ],
+    "property": "zen.workspace.zentral.notes.toc_pill"
   },
   {
     "property": "zen.workspace.zentral.notes.markdown_flavor",
@@ -860,6 +940,78 @@
     ]
   },
   {
+    "property": "zen.workspace.zentral.notes.date_display_format",
+    "label": "Date display format (calendar, agenda, date chips and Notes by date)",
+    "type": "dropdown",
+    "defaultValue": "DD-MM-YYYY",
+    "options": [
+      {
+        "label": "Day-Month-Year (14-11-2026)",
+        "value": "DD-MM-YYYY"
+      },
+      {
+        "label": "Year-Month-Day (2026-11-14)",
+        "value": "YYYY-MM-DD"
+      },
+      {
+        "label": "Month/Day/Year (11/14/2026)",
+        "value": "MM/DD/YYYY"
+      },
+      {
+        "label": "Day.Month.Year (14.11.2026)",
+        "value": "DD.MM.YYYY"
+      },
+      {
+        "label": "Day/Month/Year (14/11/2026)",
+        "value": "DD/MM/YYYY"
+      },
+      {
+        "label": "Long localized date",
+        "value": "long"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.calendar_weather_week",
+    "label": "Calendar week view: weather symbol and temperature above the day name",
+    "type": "bool",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.calendar_weather_month",
+    "label": "Calendar month view: weather symbol in the day cell (off by default: a month cell has little room)",
+    "type": "bool",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.archive_daily_notes",
+    "label": "Keep compressed copies of past date notes; never auto-trash them",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.language",
+    "label": "Notes language",
+    "type": "dropdown",
+    "defaultValue": "en",
+    "options": [
+      {
+        "label": "English",
+        "value": "en"
+      },
+      {
+        "label": "Polski",
+        "value": "pl"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.language_accept_all",
+    "label": "Accept date words from other languages",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
     "property": "zen.workspace.zentral.notes.history_enabled",
     "label": "Keep earlier versions of each note (history/<note id>/ in the notes folder)",
     "type": "checkbox",
@@ -892,6 +1044,24 @@
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.missed_reminder_days",
+    "label": "Missed reminder digest look-back",
+    "type": "number",
+    "defaultValue": 7,
+    "min": 1,
+    "max": 31,
+    "unit": "days"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.reminder_history_days",
+    "label": "Keep reminder alert history for",
+    "type": "number",
+    "defaultValue": 30,
+    "min": 1,
+    "max": 3650,
+    "unit": "days"
   },
   {
     "label": "Find in a note: how matches are shown",
@@ -960,6 +1130,129 @@
     "type": "checkbox",
     "defaultValue": true,
     "property": "zen.workspace.zentral.notes.zen_folder_top"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_folder",
+    "label": "Show a live Agenda folder in Zen's Pinned tabs",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_position",
+    "label": "Place the Agenda folder relative to NOTES",
+    "type": "dropdown",
+    "defaultValue": "above",
+    "options": [
+      {
+        "label": "Above NOTES",
+        "value": "above"
+      },
+      {
+        "label": "Below NOTES",
+        "value": "below"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_days",
+    "label": "Agenda shows Today + next N days",
+    "type": "number",
+    "defaultValue": 4,
+    "min": 1,
+    "max": 31,
+    "unit": "days"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_overdue",
+    "label": "Show overdue reminders in the Zen Agenda",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_overdue_days",
+    "label": "Agenda overdue look-back",
+    "type": "number",
+    "defaultValue": 7,
+    "min": 1,
+    "max": 31,
+    "unit": "days"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_overdue_cap",
+    "label": "Maximum overdue reminders before More",
+    "type": "number",
+    "defaultValue": 10,
+    "min": 1,
+    "max": 100,
+    "unit": "items"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_hide_trashed",
+    "label": "Hide Agenda items whose source note is in Trash",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_max_items",
+    "label": "Max items in sidebar",
+    "type": "number",
+    "defaultValue": 40,
+    "min": 1,
+    "max": 200,
+    "unit": "items"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_close_action",
+    "label": "Closing an Agenda tab",
+    "type": "dropdown",
+    "defaultValue": "hide-today",
+    "options": [
+      {
+        "label": "Hide that item for today (default)",
+        "value": "hide-today"
+      },
+      {
+        "label": "Dismiss the reminder; hide an event for today",
+        "value": "dismiss"
+      },
+      {
+        "label": "Let it come back right away",
+        "value": "reappear"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_fold_quiet",
+    "label": "Fold the Agenda folder during quiet hours",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_fold_quiet_start",
+    "label": "Quiet hours start (HH:MM)",
+    "type": "string",
+    "defaultValue": "22:00"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_fold_quiet_end",
+    "label": "Quiet hours end (HH:MM)",
+    "type": "string",
+    "defaultValue": "07:00"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_fold_due_hours",
+    "label": "Fold when nothing is due within (hours; 0 = only when nothing is left)",
+    "type": "number",
+    "defaultValue": 0,
+    "min": 0,
+    "max": 168,
+    "unit": "hours"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.park_pseudo_tabs",
+    "label": "Keep sidebar note/agenda placeholders unloaded (saves memory)",
+    "type": "checkbox",
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.notes.debug_perf",

@@ -5,7 +5,7 @@ Colorful Folders gives ordinary Zen sidebar folders independent colors and one s
 ## Install
 
 - **With Zentral Extended:** enable **Load Colorful folders** in Modules & CSS Files. The loader owns the feature and waits for the registration pass; the source does not start itself at evaluation time.
-- **Standalone with Sine:** add this folder as its own mod. Its generated `ZentralColorfulFolders.standalone.uc.js` checks for the full runtime and stands aside when Zentral is installed, so both installations cannot run two painters at once.
+- **Standalone with Sine:** add this folder as a mod using `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/folders`, enable `sine.allow-unsafe-js` in Sine, then restart Zen. Sine installs updates from this folder. When the full pack is also installed, its copy owns the feature and the standalone copy stays inactive.
 
 ## Simple and Detailed
 

@@ -7,8 +7,9 @@
  *   creation/unload, collaborates with CornerPanels, PanelStyles and SecondaryViews. Container-service
  *   fallback is intentional.
  * Ownership / failure: Tracks host records until native tab removal succeeds; failed removal must retain
- *   ownership and restore the browser. Visible rendering is separate from loaded-page notification/audio
- *   activity. Cleanup registers with ctx.
+ *   ownership and restore the browser. Native tabbrowser guards (getBrowserContainer, getPanel, discardBrowser,
+ *   _endRemoveTab, capture TabClose) prevent native teardown from walking 3 parentNode hops into #zen-app-panel-root.
+ *   Visible rendering is separate from loaded-page notification/audio activity. Cleanup registers with ctx.
  * Registration: browser-integrations
  * Loaded/created by: loader/ZentralCatalog.js
  * Published lazy ctx API: ADDON_HOST_FOLDER_LABEL; MOBILE_UA_STRING; addonHostByAppId; addonHostByTab;
@@ -851,6 +852,10 @@
     const ADDON_HOST_FOLDER_LABEL = "Zentral Add-on Hosts";
     const addonHostByAppId = new Map();
     const addonHostByTab = new WeakMap();
+    // Remember each host browser's original native tab stack even after TabClose
+    // drops the live bridge record, so gBrowser.getPanel/getBrowserContainer can
+    // never walk 3 parentNode hops from #zen-app-panel-slider to #zen-app-panel-root.
+    const addonHostOriginalStackByBrowser = new WeakMap();
     let addonHostFolder = null;
     let addonFolderRepairTimer = null;
     let repairingAddonFolder = false;
@@ -868,6 +873,329 @@
     function isAddonHostFolderVisible() {
       return ctx.getPref(ctx.BGALAZKA_EXT_PREFS.SHOW_ADDON_HOST_FOLDER, false);
     }
+
+    function isHideAddonHostsCtrlTabEnabled() {
+      const pref =
+        ctx.BGALAZKA_EXT_PREFS?.HIDE_ADDON_HOSTS_CTRL_TAB ||
+        "zen.workspace.bgalazka.hide_addon_hosts_ctrl_tab";
+      return ctx.getPref(pref, true);
+    }
+
+    // Shared, reference-counted Ctrl+Tab filter registry coordinated with Notes
+    // (and standalone installs) via Symbol.for("zentral/ctrl-tab-filter/v1").
+    // Never mutates gBrowser.tabs or host tab linkedBrowsers, keeping real
+    // Firefox WebExtension tabIds 100% intact.
+    const CTRL_TAB_FILTER_KEY = Symbol.for("zentral/ctrl-tab-filter/v1");
+    function registerCtrlTabFilter(win, id, predicate) {
+      if (!win || !id || typeof predicate !== "function") {
+        return { prune: () => 0, refresh: () => {}, dispose: () => {} };
+      }
+      let state = win[CTRL_TAB_FILTER_KEY];
+      if (!state) {
+        const filters = new Map();
+        const undos = [];
+        let ctrlTabInstalled = false;
+        let advanceInstalled = false;
+
+        const shouldHide = (tab) => {
+          if (!tab) return false;
+          for (const fn of filters.values()) {
+            try {
+              if (fn(tab)) return true;
+            } catch (_) {}
+          }
+          return false;
+        };
+
+        const readBoolPref = (name, fallback) => {
+          try {
+            const prefs =
+              win.Services?.prefs ||
+              (typeof Services !== "undefined" ? Services.prefs : null);
+            return prefs?.getBoolPref
+              ? prefs.getBoolPref(name, fallback)
+              : fallback;
+          } catch (_) {
+            return fallback;
+          }
+        };
+
+        const wrapDescriptor = (obj, prop, makeDescriptor) => {
+          if (!obj) return false;
+          const own = Object.getOwnPropertyDescriptor(obj, prop);
+          if (own?.configurable === false) return false;
+          let owner = obj;
+          let desc = null;
+          while (
+            owner &&
+            !(desc = Object.getOwnPropertyDescriptor(owner, prop))
+          ) {
+            owner = Object.getPrototypeOf(owner);
+          }
+          if (!desc) return false;
+          const next = makeDescriptor(desc);
+          if (!next) return false;
+          try {
+            Object.defineProperty(obj, prop, next);
+          } catch (_) {
+            return false;
+          }
+          undos.push(() => {
+            try {
+              const cur = Object.getOwnPropertyDescriptor(obj, prop);
+              if (next.get && cur?.get !== next.get) return;
+              if (next.value && cur?.value !== next.value) return;
+              if (own) Object.defineProperty(obj, prop, own);
+              else delete obj[prop];
+            } catch (_) {}
+          });
+          return true;
+        };
+
+        const ensureInstalled = () => {
+          const ct = win.ctrlTab;
+          if (ct && !ctrlTabInstalled) {
+            ctrlTabInstalled = true;
+            wrapDescriptor(ct, "tabList", (desc) => {
+              if (typeof desc.get !== "function") return null;
+              return {
+                configurable: true,
+                enumerable: desc.enumerable,
+                get() {
+                  const raw = desc.get.call(this);
+                  return Array.isArray(raw)
+                    ? raw.filter((tab) => !shouldHide(tab))
+                    : raw;
+                },
+                set: desc.set,
+              };
+            });
+            for (const methodName of [
+              "start",
+              "open",
+              "setupGUI",
+              "updatePreviews",
+            ]) {
+              wrapDescriptor(ct, methodName, (desc) => {
+                if (typeof desc.value !== "function") return null;
+                const orig = desc.value;
+                return {
+                  configurable: true,
+                  enumerable: desc.enumerable,
+                  writable: true,
+                  value: function (...args) {
+                    if (Array.isArray(this._tabList)) {
+                      this._tabList = this._tabList.filter(
+                        (tab) => !shouldHide(tab),
+                      );
+                    }
+                    if (methodName === "open" || methodName === "start") {
+                      const rawList = Array.isArray(this.recentlyUsedTabs)
+                        ? this.recentlyUsedTabs.filter(
+                            (tab) => tab && !tab.hidden && !tab.closing,
+                          )
+                        : null;
+                      const filtered = Array.isArray(this.tabList)
+                        ? this.tabList
+                        : null;
+                      if (
+                        filtered &&
+                        filtered.length < 2 &&
+                        rawList &&
+                        rawList.some((tab) => shouldHide(tab))
+                      ) {
+                        return;
+                      }
+                    }
+                    const out = orig.apply(this, args);
+                    if (Array.isArray(this._tabList)) {
+                      this._tabList = this._tabList.filter(
+                        (tab) => !shouldHide(tab),
+                      );
+                    }
+                    return out;
+                  },
+                };
+              });
+            }
+            wrapDescriptor(ct, "pick", (desc) => {
+              if (typeof desc.value !== "function") return null;
+              const orig = desc.value;
+              return {
+                configurable: true,
+                enumerable: desc.enumerable,
+                writable: true,
+                value: function (aPreview, ...rest) {
+                  const targetTab = aPreview?._tab || null;
+                  if (targetTab && shouldHide(targetTab)) {
+                    if (typeof this.close === "function") this.close();
+                    return;
+                  }
+                  return orig.call(this, aPreview, ...rest);
+                },
+              };
+            });
+          }
+
+          const tc = win.gBrowser?.tabContainer;
+          if (tc && !advanceInstalled) {
+            advanceInstalled = true;
+            wrapDescriptor(tc, "advanceSelectedTab", (desc) => {
+              if (typeof desc.value !== "function") return null;
+              const orig = desc.value;
+              return {
+                configurable: true,
+                enumerable: desc.enumerable,
+                writable: true,
+                value: function (aDir, aWrap, ...rest) {
+                  const dir = Number(aDir);
+                  if (!dir || !Number.isFinite(dir) || !filters.size) {
+                    return orig.call(this, aDir, aWrap, ...rest);
+                  }
+                  const rawTabs = Array.from(
+                    win.gBrowser?.visibleTabs || win.gBrowser?.tabs || [],
+                  );
+                  if (!rawTabs.length || !rawTabs.some((tab) => shouldHide(tab))) {
+                    return orig.call(this, aDir, aWrap, ...rest);
+                  }
+                  const current =
+                    win.gBrowser?.selectedTab || this.selectedItem || null;
+                  const curIdx = rawTabs.indexOf(current);
+                  if (curIdx < 0) return orig.call(this, aDir, aWrap, ...rest);
+                  const step = dir > 0 ? 1 : -1;
+                  const steps = Math.max(1, Math.abs(Math.trunc(dir)));
+                  const ignoreEssentials = readBoolPref(
+                    "zen.tabs.ctrl-tab.ignore-essential-tabs",
+                    false,
+                  );
+                  const ignorePending = readBoolPref(
+                    "zen.tabs.ctrl-tab.ignore-pending-tabs",
+                    false,
+                  );
+                  const isBaseNavigable = (t) =>
+                    !!(
+                      t &&
+                      t.isConnected !== false &&
+                      !t.hidden &&
+                      !t.closing &&
+                      !t.hasAttribute?.("zen-empty-tab") &&
+                      !(ignoreEssentials && t.hasAttribute?.("zen-essential")) &&
+                      !(
+                        ignorePending &&
+                        (t.hasAttribute?.("pending") || t.discarded)
+                      )
+                    );
+                  const findNext = (fromIdx, skipHidden) => {
+                    let idx = fromIdx;
+                    for (let visited = 0; visited < rawTabs.length; visited++) {
+                      idx += step;
+                      if (idx < 0 || idx >= rawTabs.length) {
+                        if (!aWrap) return null;
+                        idx = (idx + rawTabs.length) % rawTabs.length;
+                      }
+                      if (idx === curIdx) return null;
+                      const cand = rawTabs[idx];
+                      if (!isBaseNavigable(cand)) continue;
+                      if (skipHidden && shouldHide(cand)) continue;
+                      return { tab: cand, index: idx };
+                    }
+                    return null;
+                  };
+                  if (steps === 1) {
+                    const immediate = findNext(curIdx, false);
+                    if (!immediate) return;
+                    if (!shouldHide(immediate.tab)) {
+                      return orig.call(this, aDir, aWrap, ...rest);
+                    }
+                  }
+                  let cursor = curIdx;
+                  let target = null;
+                  for (let s = 0; s < steps; s++) {
+                    const next = findNext(cursor, true);
+                    if (!next) break;
+                    target = next.tab;
+                    cursor = next.index;
+                  }
+                  if (target && target !== current && win.gBrowser) {
+                    win.gBrowser.selectedTab = target;
+                  }
+                },
+              };
+            });
+          }
+        };
+
+        const pruneRecentlyUsed = (predicateFn) => {
+          const list = win.ctrlTab?.recentlyUsedTabs;
+          if (!Array.isArray(list)) return 0;
+          let removed = 0;
+          for (let i = list.length - 1; i >= 0; i--) {
+            let match = false;
+            try {
+              match = !!predicateFn(list[i]);
+            } catch (_) {}
+            if (match) {
+              list.splice(i, 1);
+              removed++;
+            }
+          }
+          return removed;
+        };
+
+        state = {
+          version: 1,
+          filters,
+          shouldHide,
+          ensureInstalled,
+          pruneRecentlyUsed,
+          teardownIfEmpty() {
+            if (filters.size > 0) return;
+            while (undos.length) {
+              try {
+                undos.pop()();
+              } catch (_) {}
+            }
+            ctrlTabInstalled = false;
+            advanceInstalled = false;
+            if (win[CTRL_TAB_FILTER_KEY] === state) {
+              try {
+                delete win[CTRL_TAB_FILTER_KEY];
+              } catch (_) {
+                win[CTRL_TAB_FILTER_KEY] = undefined;
+              }
+            }
+          },
+        };
+        win[CTRL_TAB_FILTER_KEY] = state;
+      }
+
+      state.filters.set(id, predicate);
+      state.ensureInstalled();
+      let disposed = false;
+      return {
+        prune(fn = predicate) {
+          return state.pruneRecentlyUsed(fn);
+        },
+        refresh() {
+          state.ensureInstalled();
+        },
+        dispose() {
+          if (disposed) return;
+          disposed = true;
+          if (state.filters.get(id) === predicate) state.filters.delete(id);
+          state.teardownIfEmpty();
+        },
+      };
+    }
+
+    const addonHostCtrlTabFilter = registerCtrlTabFilter(
+      window,
+      "zentral-addon-hosts",
+      (tab) => isHideAddonHostsCtrlTabEnabled() && isAddonHostTab(tab),
+    );
+    ctx.registerCleanup(() => {
+      addonHostCtrlTabFilter.dispose();
+    });
 
     function updateAddonHostInspection() {
       const status = document.getElementById("zs-addon-host-inspection");
@@ -1091,6 +1419,11 @@
         };
         addonHostByAppId.set(appId, record);
         addonHostByTab.set(tab, record);
+        addonHostOriginalStackByBrowser.set(browser, {
+          tab,
+          originalParent,
+          originalNextSibling,
+        });
         record.onProgressReady=()=>{
           if(record.progressRepairTimer)ctx.clearTimeout(record.progressRepairTimer);
           record.progressRepairTimer=ctx.setTimeout(()=>{
@@ -1129,6 +1462,63 @@
       }
     }
 
+    function isZentralPanelShellNode(node) {
+      const id = node?.id;
+      return (
+        id === "zen-app-panel-root" ||
+        id === "zen-app-panel-clip" ||
+        id === "zen-app-panel-slider" ||
+        id === "bgalazka-super-panel"
+      );
+    }
+
+    function getHostStackForBrowser(browser) {
+      if (!browser) return null;
+      const tab = browser._bgalazkaAddonHostTab;
+      const live = tab && addonHostByTab.get(tab);
+      if (live) return live;
+      return addonHostOriginalStackByBrowser.get(browser) || null;
+    }
+
+    function resolveSafeBrowserContainer(browser, host) {
+      const container = host?.originalParent?.parentNode;
+      if (container && !isZentralPanelShellNode(container)) return container;
+      const tab = host?.tab || browser?._bgalazkaAddonHostTab;
+      const panel = tab?.linkedPanel && document.getElementById(tab.linkedPanel);
+      const inner = panel?.querySelector?.(".browserContainer");
+      if (inner && !isZentralPanelShellNode(inner)) return inner;
+      return null;
+    }
+
+    function resolveSafeTabPanel(browser, host) {
+      const fromStack = host?.originalParent?.parentNode?.parentNode;
+      if (fromStack && !isZentralPanelShellNode(fromStack)) return fromStack;
+      const tab = host?.tab || browser?._bgalazkaAddonHostTab;
+      const fromLinkedPanel =
+        tab?.linkedPanel && document.getElementById(tab.linkedPanel);
+      if (fromLinkedPanel && !isZentralPanelShellNode(fromLinkedPanel))
+        return fromLinkedPanel;
+      return null;
+    }
+
+    function evacuateBrowserFromZentralPanel(browser, host = null) {
+      if (!browser || !browser.closest?.("#zen-app-panel-root")) return;
+      const originalParent = host?.originalParent;
+      if (
+        originalParent &&
+        !isZentralPanelShellNode(originalParent) &&
+        !originalParent.closest?.("#zen-app-panel-root")
+      ) {
+        try {
+          originalParent.appendChild(browser);
+          return;
+        } catch (_) {}
+      }
+      try {
+        browser.remove();
+      } catch (_) {}
+    }
+
     function moveAddonHostBrowser(record, parent, before = null) {
       const browser = record.browser;
       if (browser.parentNode === parent) return;
@@ -1137,7 +1527,13 @@
       // tabbrowser filter to that new owner once, without a polling/retry loop.
       const oldProgress = browser.webProgress;
       const filter = gBrowser._tabFilters?.get(record.tab);
+      const sameRoot =
+        typeof parent.getRootNode === "function" &&
+        typeof browser.getRootNode === "function"
+          ? parent.getRootNode() === browser.getRootNode()
+          : true;
       if (
+        sameRoot &&
         typeof parent.moveBefore === "function" &&
         typeof browser.connectedMoveCallback === "function"
       ) {
@@ -1237,13 +1633,35 @@
 
     function removeEmptyAddonHostFolder() {
       const folder = findAddonHostFolder();
-      if (!folder || addonHostByAppId.size) return;
+      if (!folder || !folder.isConnected || addonHostByAppId.size) return;
+      const realTabs = Array.from(
+        folder.tabs || folder.querySelectorAll?.("tab") || [],
+      ).filter(
+        (tab) =>
+          tab &&
+          tab.isConnected &&
+          !tab.closing &&
+          !tab.hasAttribute?.("zen-empty-tab"),
+      );
+      if (realTabs.length) return;
       addonHostFolder = null;
+      const hasEmptyPlaceholder = !!(
+        folder._emptyTab?.isConnected ||
+        folder.emptyTab?.isConnected ||
+        folder.querySelector?.("tab[zen-empty-tab]")
+      );
+      if (!hasEmptyPlaceholder) {
+        // ZenFolder.delete() expects an internal empty placeholder tab and can
+        // throw in ZenWindowSync when it is already absent.
+        try {
+          folder.remove?.();
+        } catch (_) {}
+        return;
+      }
       try {
         // Zen's folder owns an internal about:blank placeholder. delete() is the
         // correct API because it cleans that placeholder and folder state too.
-        const maybePromise = folder.delete?.();
-        maybePromise?.catch?.(() => {});
+        Promise.resolve(folder.delete?.()).catch(() => {});
       } catch (_) {}
     }
 
@@ -1330,13 +1748,29 @@
             (essential?.app.preload && essential.tab.isConnected) ||
             window.Zentral?.Apps?.isAppPreloadEnabled?.(browser._bgalazkaAppId)
           );
+          const gameModeOn = Boolean(window.ZentralBoost?.gameModeState?.().on);
+          const audible = Boolean(
+            essential?.tab?.soundPlaying || browser.audioPlaying,
+          );
           const host = addonHostByAppId.get(browser._bgalazkaAppId);
           if (host?.adoptedByZentral && host.browser === browser) {
             // The native tab switcher must not override Zentral's policy for
             // a reparented browser. This protection does not require painting.
-            browser.zenModeActive = visible || notifications;
+            browser.zenModeActive =
+              visible || (gameModeOn ? audible : notifications);
           }
-          const active = visible || notifications;
+          // OW-93 (plan B6): a record whose background mode is `throttled` keeps its document ACTIVE only while it is
+          // visible. Hidden, it goes inactive and stops painting, so Gecko throttles its timers and animations (that is
+          // the 35 % of a core a non-notification page can burn while invisible) while the browser stays loaded — its
+          // sockets, title events and badge callbacks keep working. `live` records are exactly as they were, and
+          // `asleep-allowed` is about unloading, not about activity, so it takes the same path as `live` here.
+          // While Game Mode is active, hidden non-audible panels stay inactive even if `notifications` is true.
+          const throttled = essential?.backgroundMode === "throttled";
+          const active = gameModeOn
+            ? visible || audible
+            : throttled
+              ? visible
+              : visible || notifications;
           if (browser.docShellIsActive !== active)
             browser.docShellIsActive = active;
           // docShellIsActive=true also enables layers. Turn them back off for
@@ -1603,6 +2037,7 @@
     function installAddonHostSelectionGuards() {
       if (addonHostSelectionGuardsInstalled) return true;
       const undo = [];
+      let guardsActive = true;
       const guardSetter = (object, name, tabForValue) => {
         const own = Object.getOwnPropertyDescriptor(object, name);
         let owner = object;
@@ -1621,6 +2056,7 @@
           throw new Error(`Cannot guard native ${name} selection`);
         }
         const guardedSet = function (value) {
+          if (!guardsActive) return descriptor.set.call(this, value);
           const tab = tabForValue.call(this, value);
           if (!isAddonHostTab(tab)) return descriptor.set.call(this, value);
           // This also applies during bridge teardown, while marked tabs still
@@ -1648,13 +2084,134 @@
           else delete object[name];
         });
       };
+      const guardMethod = (object, name, wrap) => {
+        if (!object) return;
+        const own = Object.getOwnPropertyDescriptor(object, name);
+        let owner = object;
+        let descriptor;
+        while (
+          owner &&
+          !(descriptor = Object.getOwnPropertyDescriptor(owner, name))
+        ) {
+          owner = Object.getPrototypeOf(owner);
+        }
+        if (
+          typeof descriptor?.value !== "function" ||
+          own?.configurable === false
+        ) {
+          return;
+        }
+        const orig = descriptor.value;
+        const wrapped = wrap(orig);
+        Object.defineProperty(object, name, {
+          configurable: true,
+          enumerable: descriptor.enumerable,
+          writable: true,
+          value: wrapped,
+        });
+        undo.push(() => {
+          if (Object.getOwnPropertyDescriptor(object, name)?.value !== wrapped)
+            return;
+          if (own) Object.defineProperty(object, name, own);
+          else delete object[name];
+        });
+      };
       try {
         guardSetter(gBrowser, "selectedTab", (value) => value);
         guardSetter(gBrowser.tabContainer, "selectedItem", (value) => value);
         guardSetter(gBrowser.tabContainer, "selectedIndex", function (value) {
           return this.getItemAtIndex(value);
         });
+        // Native tabbrowser teardown (discardBrowser / _endRemoveTab) walks
+        // browser.parentNode.parentNode.parentNode via getBrowserContainer /
+        // getPanel and calls .remove() on it. For a browser adopted into
+        // #zen-app-panel-slider, 3 hops up is #zen-app-panel-root itself.
+        // Guard these lookups and lifecycle transitions so native teardown
+        // always resolves the host tab's real tabpanel and never detaches
+        // Zentral's panel root.
+        guardMethod(
+          gBrowser,
+          "getBrowserContainer",
+          (orig) =>
+            function (aBrowser) {
+              if (!guardsActive) return orig.call(this, aBrowser);
+              const browser = aBrowser || this.selectedBrowser;
+              const host = getHostStackForBrowser(browser);
+              if (host && browser?.parentNode !== host.originalParent) {
+                const container = resolveSafeBrowserContainer(browser, host);
+                if (container) return container;
+              }
+              const result = orig.call(this, aBrowser);
+              if (isZentralPanelShellNode(result)) {
+                const container = resolveSafeBrowserContainer(browser, host);
+                if (container) return container;
+              }
+              return result;
+            },
+        );
+        guardMethod(
+          gBrowser,
+          "getPanel",
+          (orig) =>
+            function (aBrowser) {
+              if (!guardsActive) return orig.call(this, aBrowser);
+              const browser = aBrowser || this.selectedBrowser;
+              const host = getHostStackForBrowser(browser);
+              if (host && browser?.parentNode !== host.originalParent) {
+                const panel = resolveSafeTabPanel(browser, host);
+                if (panel) return panel;
+              }
+              const result = orig.call(this, aBrowser);
+              if (isZentralPanelShellNode(result)) {
+                return resolveSafeTabPanel(browser, host);
+              }
+              return result;
+            },
+        );
+        guardMethod(
+          gBrowser,
+          "discardBrowser",
+          (orig) =>
+            function (aTab, aForceDiscard, ...rest) {
+              if (!guardsActive)
+                return orig.call(this, aTab, aForceDiscard, ...rest);
+              const record = aTab && addonHostByTab.get(aTab);
+              if (record && !record.removing) {
+                if (!aForceDiscard) return false;
+                detachExternalHostTab(record);
+              } else if (
+                aTab?.linkedBrowser?.closest?.("#zen-app-panel-root")
+              ) {
+                evacuateBrowserFromZentralPanel(
+                  aTab.linkedBrowser,
+                  getHostStackForBrowser(aTab.linkedBrowser),
+                );
+              }
+              return orig.call(this, aTab, aForceDiscard, ...rest);
+            },
+        );
+        guardMethod(
+          gBrowser,
+          "_endRemoveTab",
+          (orig) =>
+            function (aTab, ...rest) {
+              if (!guardsActive) return orig.call(this, aTab, ...rest);
+              const record = aTab && addonHostByTab.get(aTab);
+              if (record && !record.removing) {
+                detachExternalHostTab(record);
+              } else if (
+                aTab?.linkedBrowser?.closest?.("#zen-app-panel-root")
+              ) {
+                evacuateBrowserFromZentralPanel(
+                  aTab.linkedBrowser,
+                  getHostStackForBrowser(aTab.linkedBrowser),
+                );
+              }
+              return orig.call(this, aTab, ...rest);
+            },
+        );
       } catch (error) {
+        guardsActive = false;
         undo.reverse().forEach((restore) => restore());
         console.warn(
           "[BgalazkaExtension] Real Tab IDs disabled for this panel: selection guard unavailable",
@@ -1664,6 +2221,7 @@
       }
       addonHostSelectionGuardsInstalled = true;
       removeAddonHostSelectionGuards = () => {
+        guardsActive = false;
         undo.reverse().forEach((restore) => restore());
         addonHostSelectionGuardsInstalled = false;
         removeAddonHostSelectionGuards = null;
@@ -1775,10 +2333,20 @@
       if (record.removing || addonHostByAppId.get(record.appId) !== record)
         return;
 
-      // This path means the user/Zen closed the backing tab directly. Let the
-      // tab close finish first, then ask Zentral to unload the matching private
-      // Map entry/browser. Our own programmatic teardown removes the Map record
-      // before removeTab(), so it never enters this branch.
+      // This path means the user/Zen closed the backing tab directly. Restore
+      // the linkedBrowser before native teardown can walk its parent chain,
+      // then ask Zentral to unload the matching private Map entry/browser.
+      detachExternalHostTab(record);
+    };
+
+    function detachExternalHostTab(record) {
+      if (
+        !record ||
+        record.removing ||
+        addonHostByAppId.get(record.appId) !== record
+      )
+        return;
+      record.removing = true;
       try {
         restoreAddonHostBrowserToTab(record);
       } catch (error) {
@@ -1786,19 +2354,31 @@
           "[Zentral] Could not restore closing host browser:",
           error,
         );
+        evacuateBrowserFromZentralPanel(record.browser, record);
+      } finally {
+        record.removing = false;
       }
-      if(record.progressRepairTimer)ctx.clearTimeout(record.progressRepairTimer);
-      record.browser.removeEventListener("XULFrameLoaderCreated",record.onProgressReady);
+      if (record.progressRepairTimer)
+        ctx.clearTimeout(record.progressRepairTimer);
+      record.browser?.removeEventListener(
+        "XULFrameLoaderCreated",
+        record.onProgressReady,
+      );
       addonHostByTab.delete(record.tab);
       addonHostByAppId.delete(record.appId);
-      record.browser.zenModeActive = false;
+      if (record.browser) {
+        record.browser.zenModeActive = false;
+        record.browser._bgalazkaAddonHostBrowser = false;
+        record.browser._bgalazkaAddonHostTab = null;
+        delete record.browser._zentralMoveTo;
+      }
       ctx.setTimeout(() => {
         try {
           window.Zentral?.Apps?.closeApp?.(record.appId);
         } catch (_) {}
         removeEmptyAddonHostFolder();
       }, 0);
-    };
+    }
 
     const addonHostTabDiscardedHandler = (event) => {
       const tab = event.target;
@@ -1811,17 +2391,17 @@
       repairAddonHostSelectionAfterTransition(tab);
     };
 
-    // Capture TabSelect so a real panel-host tab is redirected before normal
-    // bubbling listeners can treat its reparented browser as the active page.
+    // Capture TabSelect and TabClose so a real panel-host tab is redirected or
+    // restored before native/bubbling teardown can touch its reparented browser.
     window.addEventListener("TabSelect", addonHostTabSelectHandler, true);
-    window.addEventListener("TabClose", addonHostTabCloseHandler);
+    window.addEventListener("TabClose", addonHostTabCloseHandler, true);
     window.addEventListener(
       "TabBrowserDiscarded",
       addonHostTabDiscardedHandler,
     );
     ctx.registerCleanup(() => {
       window.removeEventListener("TabSelect", addonHostTabSelectHandler, true);
-      window.removeEventListener("TabClose", addonHostTabCloseHandler);
+      window.removeEventListener("TabClose", addonHostTabCloseHandler, true);
       window.removeEventListener(
         "TabBrowserDiscarded",
         addonHostTabDiscardedHandler,
@@ -2138,6 +2718,75 @@
 
     ctx.retryPanelTask("mobile-menu", () =>
       ctx.safeCall(ensureMobileUaMenuItem, "ensureMobileUaMenuItem"),
+    );
+
+    // ---- OW-91 (plan B4.3): the background mode of an Essential panel ------------------------------------------
+    // Three modes on the tile's own menu: Live (unchanged), Throttled (unchanged for now — it is a promise the person
+    // makes, and nothing in this build throttles), and Allow sleep (Boost's deep pass may put this panel to rest). The
+    // value rides the record itself and is saved by `saveEssentialSettings`, so it survives a restart with the rest of
+    // the app's settings and Boost reads exactly what the person set here.
+    const BG_MODES = [
+      ["live", "Background mode: Live"],
+      ["throttled", "Background mode: Throttled"],
+      ["asleep-allowed", "Background mode: Allow sleep"],
+    ];
+    function ensureBackgroundModeMenu() {
+      const popup = document.getElementById("zen-apps-sidebar-tile-context");
+      if (!popup) return false;
+      const anchor =
+        popup.querySelector("#zen-apps-sidebar-mobile-ua-item") ||
+        popup.querySelector("#zen-apps-sidebar-preload-item");
+      if (!anchor) return false;
+      if (popup.querySelector("#zentral-panel-background-mode-menu")) return true;
+      const menu = document.createXULElement("menu");
+      menu.id = "zentral-panel-background-mode-menu";
+      menu.setAttribute("label", "Background mode");
+      const sub = document.createXULElement("menupopup");
+      sub.id = "zentral-panel-background-mode-popup";
+      const items = new Map();
+      for (const [mode, label] of BG_MODES) {
+        const item = document.createXULElement("menuitem");
+        item.id = "zentral-panel-background-mode-" + mode;
+        item.setAttribute("label", label);
+        item.setAttribute("type", "radio");
+        item.setAttribute("name", "zentral-panel-background-mode");
+        item.addEventListener("command", () => {
+          const appId = popup.dataset.activeAppId;
+          const record = appId ? ctx.essentialPanels.get(appId) : null;
+          if (!record) return;
+          record.backgroundMode = mode;
+          ctx.saveEssentialSettings(record);
+          // OW-93: the switch applies now, not on the next panel open. A record that just became `throttled` goes
+          // inactive on the spot if it is hidden; one that went back to `live` is reactivated by the same pass.
+          ctx.syncAppPanelBrowserActivity?.();
+          for (const [value, el] of items) {
+            if (value === mode) el.setAttribute("checked", "true");
+            else el.removeAttribute("checked");
+          }
+        });
+        items.set(mode, item);
+        sub.appendChild(item);
+      }
+      menu.appendChild(sub);
+      anchor.insertAdjacentElement("afterend", menu);
+      // Same contract as the native rows: the active app decides visibility and the checked mode, read live so a
+      // Boost deep pass that changed something is visible the next time the menu opens.
+      popup.addEventListener("popupshowing", () => {
+        const appId = popup.dataset.activeAppId || "";
+        // Only Essential records have this mode; a plain app tile has no record to store it on.
+        const record = appId ? ctx.essentialPanels.get(appId) : null;
+        menu.hidden = !record;
+        if (!record) return;
+        const current = record.backgroundMode || "live";
+        for (const [value, el] of items) {
+          if (value === current) el.setAttribute("checked", "true");
+          else el.removeAttribute("checked");
+        }
+      });
+      return true;
+    }
+    ctx.retryPanelTask("background-mode-menu", () =>
+      ctx.safeCall(ensureBackgroundModeMenu, "ensureBackgroundModeMenu"),
     );
   });
 })();

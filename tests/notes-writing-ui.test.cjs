@@ -8,7 +8,7 @@ const source = fs.readFileSync(path.resolve(__dirname, "../additional/notes/Zent
 const css = fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.css"), "utf8");
 const dom = require("./helpers/fake-dom.cjs")();
 const { Ev, El, document, raf } = dom;
-const win = { document, ZentralRuntime: { register() {} }, __zentralNotesTestSeam: {}, requestAnimationFrame: (fn) => raf.push(fn), cancelAnimationFrame() {}, setTimeout, clearTimeout, innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {} };
+const win = { document, ZentralRuntime: { register() {} }, __zentralNotesTestSeam: {}, __zentralNotesLangTables: { en: require("../additional/notes/i18n/en.js"), pl: require("../additional/notes/i18n/pl.js") }, requestAnimationFrame: (fn) => raf.push(fn), cancelAnimationFrame() {}, setTimeout, clearTimeout, innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {} };
 win.window = win;
 vm.runInNewContext(source, { window: win, document, Event: Ev, globalThis: { Services: {} }, ChromeUtils: {}, console, URL, Date, JSON, Math, Promise, RegExp, Number, Map, Set, setTimeout, clearTimeout, navigator: { platform: "Linux" }, Uint8Array, queueMicrotask });
 const c = win.__zentralNotesTestSeam.core;
@@ -38,8 +38,11 @@ const WRITING_UI = {
   calloutImportant: { at: "insert", via: "Callout", label: "Important" }, calloutCaution: { at: "insert", via: "Callout", label: "Caution" }, calloutInfo: { at: "insert", via: "Callout", label: "Info" },
   pastePicture: { at: "insert", label: "Paste picture from clipboard" }, pictureOptions: { at: "insert", label: "Picture options" },
   footnote: { at: "insert", via: "Blocks and notes", label: "Footnote" }, hubList: { at: "insert", via: "Blocks and notes", label: "Hub list of notes" },
+  // T3.5: the two extended kinds the picker gained. The UI path is the same one every callout has: More > Callout,
+  // plus a hold on the Quote button. Naming it here is what keeps "an action exists" and "a person can reach it" equal.
+  calloutBingo: { at: "insert", via: "Callout", label: "Bingo" }, calloutPoll: { at: "insert", via: "Callout", label: "Poll" },
   dateToday: { at: "more", via: "Links & dates", label: "Notes by date" }, dateTomorrow: { at: "more", via: "Links & dates", label: "Notes by date" }, dateNext: { at: "more", via: "Links & dates", label: "Notes by date" }, dateList: { at: "more", via: "Links & dates", label: "Notes by date" },
-  history: { at: "more", label: "Version history" }, outline: bar("Table of contents"),
+  history: { at: "more", label: "Version history" }, calendarReminder: bar("Create reminder"), outline: bar("Table of contents"),
   find: { at: "more", label: "Find in notes" }, remind: { at: "more", label: "Remind me" }, newNote: { at: "more", label: "New note" },
   list: { at: "head", label: "All notes" }, mode: bar("Read"), split: bar("Split view"), settings: bar("Quick settings"),
   recent: { at: "list", label: "Recent" }, notePin: { at: "head", label: "Pin note to the top" }, keepOpen: { at: "head", label: "Kept open" },

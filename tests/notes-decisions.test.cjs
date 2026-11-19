@@ -24,7 +24,8 @@ test("standalone card is a popover only while focused, and never a popover insid
   assert.match(js, /function raise\(\) \{\s*if \(adapter\.position !== "fixed"/, "only the fixed (standalone) host can enter the top layer");
   assert.match(js, /function drop\(\) \{[\s\S]*?removeAttribute\("popover"\)/, "dropping removes the attribute so the card stays visible");
   assert.match(js, /onOutsidePress = [\s\S]*?drop\(\);/, "any press outside the card leaves the top layer");
-  assert.equal((js.match(/showPopover\(\)/g) || []).length, 2, "two places enter the top layer: the card and (after it) its pill, which would otherwise hide behind it");
+  const raise = js.slice(js.indexOf("function raise() {"), js.indexOf("function drop() {"));
+  assert.equal((raise.match(/showPopover\(\)/g) || []).length, 2, "the card and its pill enter the top layer together");
 });
 test("C2.1: docked card remembers its own geometry; heading levels differ; toolbar icon uses a rule with context properties", () => {
   assert.match(js, /GEO_KEYS = Object\.freeze\(\["panel", "float", "dock"\]\)/, "dock has a geometry slot");

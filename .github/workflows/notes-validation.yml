@@ -1,0 +1,58 @@
+name: Notes regression validation
+
+on:
+  push:
+    branches: [beta, "arena/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Rebuild standalone packages and preferences
+        run: |
+          if [ "$GITHUB_REF_NAME" = "beta" ]; then
+            node tools/build-standalone.cjs --keep-version
+          else
+            node tools/build-standalone.cjs --bump
+          fi
+          node tools/sync-version.cjs
+          node tools/build-standalone.cjs
+          node tools/build-preferences.cjs
+          node tools/build-z-map.cjs
+          node tools/build-standalone.cjs --check
+      - name: Run the UI4.7 multi-window regression first
+        run: node tests/notes-multiwindow.test.cjs
+      - name: Run regression suite
+        run: node tests/run-all.cjs
+      - name: Measure the responsive Month picker in headless Chromium
+        if: contains(github.event.head_commit.message, 'OW-09')
+        run: |
+          mkdir -p /tmp/ch
+          cd /tmp/ch && npm install @sparticuz/chromium puppeteer-core
+          cd "$GITHUB_WORKSPACE"
+          AWS_EXECUTION_ENV=AWS_Lambda_nodejs22.x NODE_PATH=/tmp/ch/node_modules node tools/audit-notes-calendar-fit.cjs --picker --fonts 13,28 --widths 620 --heights 330,420,720 --scrollbars 0,17
+      - name: Check patch formatting
+        run: git diff --check
+      - name: Commit generated standalone files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "chore: rebuild standalone Notes package [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+      - name: Run calendar, Agenda and reminder time-zone matrix
+        run: node tests/run-all.cjs --tz

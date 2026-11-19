@@ -52,7 +52,7 @@
   "A27": ["n", "n", "y", "H", "PICK"],
   "A28": ["n", "n", "y", "N", "OFF"],
   "A29": ["n", "n", "n", "H", "ON+guard"],
-  "A30": ["n", "y", "n", "N", "ON"],
+  "A30": ["n", "y", "n", "H", "ON"],
   "A31": ["n", "y", "n", "H", "ON+guard"],
   "A32": ["y", "y", "n", "H", "ON"],
   "A33": ["y", "y", "y", "H", "ON"],
@@ -152,6 +152,8 @@
   "F23": ["n", "y", "n", "H", "ON"],
   "F24": ["n", "x", "n", "H", "ON+guard"],
   "F25": ["y", "y", "n", "H", "ON"],
+  "F26": ["n", "x", "n", "H", "ON"],
+  "F27": ["n", "x", "n", "H", "ON"],
   "G01": ["y", "y", "p", "H", "ON"],
   "G02": ["y", "y", "n", "H", "ON"],
   "G03": ["y", "y", "n", "H", "ON"],
@@ -188,7 +190,7 @@
   "I10": ["y", "y", "n", "P", "OFF"],
   "J01": ["y", "y", "n", "H", "ON"],
   "J02": ["y", "y", "n", "H", "ON"],
-  "J03": ["n", "y", "n", "N", "ON"],
+  "J03": ["n", "y", "n", "H", "ON"],
   "J04": ["y", "y", "n", "H", "ON"],
   "J05": ["y", "y", "y", "H", "ON"],
   "J06": ["y", "y", "n", "P", "ON"],
@@ -371,8 +373,9 @@
     example: ["example", "F18"],
     quote: ["quote", "F19"], cite: ["quote", "F19"],
     hint: ["tip", "F20"], attention: ["warning", "F20"],
+    bingo: ["bingo", "F26"], poll: ["poll", "F27"],
   });
-  const CALLOUT_LOOKS = Object.freeze(["note", "tip", "important", "warning", "caution", "info", "abstract", "todo", "success", "question", "failure", "danger", "bug", "example", "quote"]);
+  const CALLOUT_LOOKS = Object.freeze(["note", "tip", "important", "warning", "caution", "info", "abstract", "todo", "success", "question", "failure", "danger", "bug", "example", "quote", "bingo", "poll"]);
   // "[!Summary]" -> { kind: "abstract", type: "summary", known: true }. An unknown type is a "note" look that keeps
   // its own name as the title (Obsidian does the same); null when the mode does not read callouts of that type.
   function calloutKind(raw, g) {

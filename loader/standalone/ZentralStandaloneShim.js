@@ -45,6 +45,7 @@ const __zentralShim = (function () {
   /*__NUMERIC_FUNCTIONS__*/
   const numericItems = /*__NUMERIC_ITEMS__*/ [];
   /*__SIDEBAR_FUNCTIONS__*/
+  /*__HOVER_CARD_FUNCTIONS__*/
   /*__SCOPE_FUNCTIONS__*/
   const unloadHandlers = new Set();
   const runUnload = () => {
@@ -80,9 +81,14 @@ const __zentralShim = (function () {
     for (let round = 0; round < 4 && !stopped; round++) {
       const pending = [];
       for (const read of [
+        () => window.SessionStore?.promiseInitialized,
         () => window.SessionStore?.promiseAllWindowsRestored,
+        () => window.delayedStartupPromise,
         () => window.gZenWorkspaces?.promiseInitialized,
         () => window.gZenStartup?.promiseInitialized,
+        () => window.gZenPinnedTabManager?.promiseInitialized,
+        () => window.gZenSessionStore?.promiseInitialized,
+        () => window.gZenWindowSync?.promiseInitialized,
       ]) {
         try {
           const promise = read();
@@ -98,12 +104,94 @@ const __zentralShim = (function () {
     }
   }
   const features = (window.__zentralStandalone ||= {});
+  // OW-94 (plan B7.1): the pause switch. The full pack publishes the same contract under `ZentralRuntime.performance`;
+  // a standalone module asks for it here. With no full pack there is nothing else to pause, so the switch is honest
+  // about being alone: `listenerCount()` is 0 and setting it simply notifies whoever subscribed.
+  const performanceSwitch = (() => {
+    let paused = false;
+    const listeners = new Set();
+    const snapshot = () => ({ paused, changes: 0, lastChangeAt: 0 });
+    const setPaused = (next) => {
+      const target = Boolean(next);
+      if (target === paused) return snapshot();
+      paused = target;
+      for (const fn of [...listeners]) {
+        try {
+          fn(paused, snapshot());
+        } catch (error) {
+          try {
+            console.warn("[Zentral standalone] pause listener failed", error);
+          } catch (_) {}
+        }
+      }
+      return snapshot();
+    };
+    const subscribe = (fn) => {
+      if (typeof fn !== "function") return () => {};
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    };
+    return {
+      isPaused: () => paused,
+      setPaused,
+      toggle: () => setPaused(!paused),
+      subscribe,
+      onChange: subscribe,
+      snapshot,
+      listenerCount: () => listeners.size,
+      reset() {},
+    };
+  })();
+
   const shim = {
     standalone: true,
+    performance: performanceSwitch,
     getPref,
+    readStartupPanel() {
+      try {
+        const raw = getPref("zen.workspace.bgalazka.open_at_startup", "null");
+        if (typeof raw !== "string") return null;
+        const value = JSON.parse(raw);
+        return value &&
+          typeof value.id === "string" &&
+          value.id.length > 0 &&
+          ["single", "triple"].includes(value.mode)
+          ? { id: value.id, mode: value.mode }
+          : null;
+      } catch (_) {
+        return null;
+      }
+    },
+    whenNativeReady(fn) {
+      if (typeof fn !== "function") return () => {};
+      let cancelled = false;
+      const dispose = () => {
+        cancelled = true;
+      };
+      unloadHandlers.add(dispose);
+      Promise.resolve(nativeReady()).then(
+        () => {
+          unloadHandlers.delete(dispose);
+          if (cancelled || stopped) return;
+          try {
+            fn();
+          } catch (error) {
+            console.warn("[Zentral standalone] native-ready callback failed", error);
+          }
+        },
+        () => {
+          unloadHandlers.delete(dispose);
+        },
+      );
+      return () => {
+        cancelled = true;
+        unloadHandlers.delete(dispose);
+      };
+    },
     nativeSidebarElement,
     nativeSidebarRect,
     nativeSidebarSide,
+    createSidebarHoverCard,
     sidebarLayoutRepair: null,
     compactHoverStatus: null,
     registerSettingsHook: () => () => {},

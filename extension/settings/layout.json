@@ -219,6 +219,34 @@
       "icon": "rss"
     },
     {
+      "id": "widgets",
+      "label": "Sidebar Widgets",
+      "group": "Apps & Tabs",
+      "owner": "widgets",
+      "description": "New-tab-page-style widgets placed in the free area of the Zen sidebar without touching the sidebar video player or crowding tabs, folders, and Essentials.",
+      "sections": [
+        {
+          "label": "Sidebar widgets"
+        },
+        {
+          "label": "Clock & Date"
+        },
+        {
+          "label": "Weather"
+        },
+        {
+          "label": "Boost"
+        },
+        {
+          "label": "Appearance"
+        },
+        {
+          "label": "Layout & visibility"
+        }
+      ],
+      "icon": "grid"
+    },
+    {
       "id": "panel-layout",
       "label": "Panel Layout",
       "group": "Panels",
@@ -315,6 +343,25 @@
       "icon": "power"
     },
     {
+      "id": "boost",
+      "label": "Memory Boost",
+      "group": "Performance",
+      "owner": "boost",
+      "icon": "sliders",
+      "description": "Read browser RAM on demand and give memory back without closing anything.",
+      "sections": [
+        {
+          "label": "Memory"
+        },
+        {
+          "label": "Limiter"
+        },
+        {
+          "label": "Game Mode"
+        }
+      ]
+    },
+    {
       "id": "shortcuts",
       "label": "Keyboard & Mouse",
       "group": "Panels",
@@ -322,6 +369,9 @@
       "sections": [
         {
           "label": "Insta Peek"
+        },
+        {
+          "label": "App & panel shortcuts"
         },
         {
           "label": "Panel shortcuts & mouse actions"
@@ -376,6 +426,10 @@
         {
           "label": "Colors & backing",
           "icon": "palette"
+        },
+        {
+          "label": "Days off",
+          "icon": "calendar"
         }
       ]
     },
@@ -934,6 +988,71 @@
     "zen.workspace.bgalazka.rss.card_replace_tooltip",
     {
       "type": "text",
+      "label": "**Sidebar Widgets · Sidebar widgets**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.widgets.enabled",
+    "zen.workspace.zentral.widgets.disabled_ids",
+    "zen.workspace.zentral.widgets.language",
+    {
+      "type": "text",
+      "label": "**Sidebar Widgets · Clock & Date**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.widgets.clock.enabled",
+    "zen.workspace.zentral.widgets.clock.format",
+    "zen.workspace.zentral.widgets.clock.show_seconds",
+    "zen.workspace.zentral.widgets.clock.show_zone",
+    "zen.workspace.zentral.widgets.clock.quick_note",
+    "zen.workspace.zentral.widgets.date.enabled",
+    "zen.workspace.zentral.widgets.date.format",
+    "zen.workspace.zentral.widgets.date.show_year",
+    "zen.workspace.zentral.widgets.date.show_week_number",
+    "zen.workspace.zentral.widgets.timer.click_stopwatch",
+    "zen.workspace.zentral.widgets.clock.mode",
+    "zen.workspace.zentral.widgets.timer.end_sound",
+    "zen.workspace.zentral.widgets.timer.end_notice",
+    {
+      "type": "text",
+      "label": "**Sidebar Widgets · Weather**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.widgets.weather.enabled",
+    "zen.workspace.zentral.widgets.weather.place",
+    "zen.workspace.zentral.widgets.weather.latitude",
+    "zen.workspace.zentral.widgets.weather.longitude",
+    "zen.workspace.zentral.widgets.weather.units",
+    "zen.workspace.zentral.widgets.weather.places",
+    "zen.workspace.zentral.widgets.weather.default_view",
+    "zen.workspace.zentral.widgets.weather.refresh_minutes",
+    {
+      "type": "text",
+      "label": "**Sidebar Widgets · Boost**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.widgets.boost.enabled",
+    {
+      "type": "text",
+      "label": "**Sidebar Widgets · Appearance**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.widgets.appearance.background",
+    "zen.workspace.zentral.widgets.appearance.text",
+    {
+      "type": "text",
+      "label": "**Sidebar Widgets · Layout & visibility**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.widgets.max_height_share",
+    "zen.workspace.zentral.widgets.min_free_height",
+    "zen.workspace.zentral.widgets.min_sidebar_width",
+    "zen.workspace.zentral.widgets.tabs_reserve_px",
+    "zen.workspace.zentral.widgets.order",
+    "zen.workspace.zentral.widgets.space_priority",
+    "zen.workspace.zentral.widgets.space_scroll",
+    "zen.workspace.zentral.widgets.pause_when_hidden",
+    {
+      "type": "text",
       "label": "**Panels**",
       "size": "22px"
     },
@@ -1034,10 +1153,52 @@
     "zen.workspace.bgalazka.smart_sleep",
     {
       "type": "text",
+      "label": "**Performance**",
+      "size": "22px"
+    },
+    {
+      "type": "text",
+      "label": "**Memory Boost · Memory**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.boost.enabled",
+    "zen.workspace.zentral.boost.startup_trim",
+    "zen.workspace.zentral.boost.unload_pinned",
+    "zen.workspace.zentral.boost.shortcut",
+    {
+      "type": "text",
+      "label": "**Memory Boost · Limiter**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.boost.limit_enabled",
+    "zen.workspace.zentral.boost.limit_mb",
+    "zen.workspace.zentral.boost.limit_mode",
+    "zen.workspace.zentral.boost.limit_cooldown_s",
+    "zen.workspace.zentral.boost.limit_target_pct",
+    {
+      "type": "text",
+      "label": "**Memory Boost · Game Mode**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.boost.game_mode",
+    "zen.workspace.zentral.boost.stronger_saver",
+    {
+      "type": "text",
+      "label": "**Panels**",
+      "size": "22px"
+    },
+    {
+      "type": "text",
       "label": "**Keyboard & Mouse · Insta Peek**",
       "size": "16px"
     },
     "zen.workspace.apps.insta_peek.shortcut",
+    {
+      "type": "text",
+      "label": "**Keyboard & Mouse · App & panel shortcuts**",
+      "size": "16px"
+    },
+    "zen.workspace.bgalazka.app_shortcuts",
     {
       "type": "text",
       "label": "**Keyboard & Mouse · Panel shortcuts & mouse actions**",
@@ -1073,6 +1234,7 @@
     "zen.workspace.zentral.notes.shortcut",
     "zen.workspace.zentral.notes.autosave_seconds",
     "zen.workspace.zentral.notes.folder",
+    "zen.workspace.zentral.notes.space_mode",
     "zen.workspace.zentral.notes.dock_sidebar",
     "zen.workspace.zentral.notes.avoid_sidebar",
     "zen.workspace.zentral.notes.wrap_lines",
@@ -1102,6 +1264,11 @@
     "zen.workspace.zentral.notes.backlinks_panel",
     "zen.workspace.zentral.notes.hidden_tools_menu",
     "zen.workspace.zentral.notes.date_notes_mode",
+    "zen.workspace.zentral.notes.date_display_format",
+    "zen.workspace.zentral.notes.calendar_weather_week",
+    "zen.workspace.zentral.notes.calendar_weather_month",
+    "zen.workspace.zentral.notes.language",
+    "zen.workspace.zentral.notes.language_accept_all",
     "zen.workspace.zentral.notes.default_view",
     "zen.workspace.zentral.notes.card_autohide",
     "zen.workspace.zentral.notes.card_window_entry_reveal",
@@ -1118,6 +1285,7 @@
     "zen.workspace.zentral.notes.zen_root_color",
     "zen.workspace.zentral.notes.zen_root_icon",
     "zen.workspace.zentral.notes.custom_colors",
+    "zen.workspace.zentral.notes.toc_pill",
     {
       "type": "text",
       "label": "**Notes · Capture**",
@@ -1150,10 +1318,14 @@
       "label": "**Notes · Performance**",
       "size": "16px"
     },
+    "zen.workspace.zentral.notes.missed_reminder_days",
+    "zen.workspace.zentral.notes.reminder_history_days",
     "zen.workspace.zentral.notes.find_highlight",
     "zen.workspace.zentral.notes.trash_auto_empty_days",
+    "zen.workspace.zentral.notes.archive_daily_notes",
     "zen.workspace.zentral.notes.spellcheck",
     "zen.workspace.zentral.notes.spellcheck_max_chars",
+    "zen.workspace.zentral.notes.park_pseudo_tabs",
     {
       "type": "text",
       "label": "**Notes · Experiments (off by default)**",
@@ -1163,6 +1335,19 @@
     "zen.workspace.zentral.notes.zen_folder_new_button",
     "zen.workspace.zentral.notes.zen_folder_top",
     "zen.workspace.zentral.notes.debug_perf",
+    "zen.workspace.zentral.notes.agenda_folder",
+    "zen.workspace.zentral.notes.agenda_position",
+    "zen.workspace.zentral.notes.agenda_days",
+    "zen.workspace.zentral.notes.agenda_overdue",
+    "zen.workspace.zentral.notes.agenda_overdue_days",
+    "zen.workspace.zentral.notes.agenda_overdue_cap",
+    "zen.workspace.zentral.notes.agenda_hide_trashed",
+    "zen.workspace.zentral.notes.agenda_max_items",
+    "zen.workspace.zentral.notes.agenda_close_action",
+    "zen.workspace.zentral.notes.agenda_fold_quiet",
+    "zen.workspace.zentral.notes.agenda_fold_quiet_start",
+    "zen.workspace.zentral.notes.agenda_fold_quiet_end",
+    "zen.workspace.zentral.notes.agenda_fold_due_hours",
     {
       "type": "text",
       "label": "**Notes appearance · Size & shape**",
@@ -1203,6 +1388,17 @@
     "zen.workspace.zentral.notes.look_text",
     "zen.workspace.zentral.notes.look_accent",
     "zen.workspace.zentral.notes.look_line",
+    {
+      "type": "text",
+      "label": "**Notes appearance · Days off**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.notes.look_weekend_tint",
+    "zen.workspace.zentral.notes.look_weekend_strength",
+    "zen.workspace.zentral.notes.look_holiday_tint",
+    "zen.workspace.zentral.notes.look_holiday_strength",
+    "zen.workspace.zentral.notes.look_free_tint",
+    "zen.workspace.zentral.notes.look_free_strength",
     {
       "type": "text",
       "label": "**Video**",
@@ -1352,6 +1548,7 @@
       "size": "16px"
     },
     "zen.workspace.bgalazka.addon_tab_id_bridge",
+    "zen.workspace.bgalazka.hide_addon_hosts_ctrl_tab",
     "zen.workspace.bgalazka.zen_internet_panel_css",
     "zen.workspace.bgalazka.show_addon_host_folder",
     "zen.workspace.zentral.compat.external_tab_groups",

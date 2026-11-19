@@ -81,6 +81,10 @@
         file: "additional/rss/settings.json",
       },
       {
+        owner: "widgets",
+        file: "additional/widgets/settings.json",
+      },
+      {
         owner: "notes",
         file: "additional/notes/settings.json",
       },

@@ -632,3 +632,101 @@
 #zentral-settings-modal .zs-organized-content .zs-matrix-badge {
   color: var(--zl-text, #e4e4e7) !important;
 }
+
+/* Custom per-app keyboard shortcuts list inside Keyboard & Mouse (T3.10). */
+#zentral-settings-modal .zs-app-shortcuts-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  background: color-mix(in srgb, currentColor 3%, transparent);
+}
+
+#zentral-settings-modal .zs-app-shortcuts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#zentral-settings-modal .zs-app-shortcut-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, currentColor 4%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+}
+
+#zentral-settings-modal .zs-app-shortcut-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+#zentral-settings-modal .zs-app-shortcut-name {
+  font-size: 13px;
+  font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#zentral-settings-modal .zs-app-shortcut-meta {
+  font-size: 11.5px;
+  opacity: 0.68;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#zentral-settings-modal .zs-app-shortcut-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+#zentral-settings-modal .zs-app-shortcut-btn {
+  padding: 5px 10px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  color: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+#zentral-settings-modal .zs-app-shortcut-btn:hover {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+#zentral-settings-modal .zs-app-shortcut-btn[data-assigned="true"] {
+  border-color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 50%,
+    transparent
+  );
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 14%,
+    transparent
+  );
+}
+
+#zentral-settings-modal .zs-app-shortcut-remove {
+  color: #f87171;
+  border-color: color-mix(in srgb, #ef4444 35%, transparent);
+}
+
+#zentral-settings-modal .zs-app-shortcuts-empty {
+  font-size: 12px;
+  opacity: 0.72;
+  padding: 6px 2px;
+}
+

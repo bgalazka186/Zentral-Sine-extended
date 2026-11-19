@@ -1,120 +1,863 @@
-# ZentralNotes — Master TODO & Feature Tracks
+# ZentralNotes — Master TODO & Roadmap
 
-> **AI Agent Execution Rules:**
+> **Read this first.** This file contains ONLY work that is still to do, in the order it should be done. Every finished (`DONE`) row lives in `docs/LEGACY_done_rows.md` and `docs/LEGACY_notes_roadmap.md`; never look there for work. Rebuilt 2026-11-14 from the old roadmap, two source-code audits (2026-11-13) and the owner's 2026-11-14 list.
 >
-> 1. **Single Source of Truth:** Update this file in-place when completing an item. Do not pad tables with trailing spaces. Escape literal pipes inside cells as `\|`.
-> 2. **Two Execution Modes:**
->    - **By Global Priority (`# 1..35`):** Follow the `#` column when asked for the highest-impact items overall.
->    - **By Feature Track (`T1.1..T4.5`):** Follow the `Track ID` sequence within a table when working on a thematic block. Items inside each track are strictly ordered by technical dependency ($X$ before $Y$) so parsers and data models are finalized before converters, UI views, or exporters are built.
-> 3. **Recently Completed & Removed from Backlog:**
->    - `S6 B5 / B2` (Card right-edge clipping & layout) — resolved and verified in commit `9c5f67c35a791fe08bebb6c7c8cae7376c571836`.
->    - `Cycle G #5` (armed toolbar buttons), `Cycle H #6b` (stable folder uid), `S6 W2` (folder colour / emoji) and `S6 W1` (coloured note favicons) — done in the chunk after 3.2.0; details in the handoff. Not tried in a real Zen: see the handoff.
+> 1. **Do tasks in the order of the Master Order table**, top to bottom; a task's `Depends on` must be `DONE` (removed from this file) first. The blocks below follow the same order.
+> 2. **Each task is a block** (`####`) with Problem, Plan (ordered sub-steps), Tests. Carried-over tasks keep their original wording under 'Current state' / 'Full specification'.
+> 3. **When a task is finished: delete its block and its table row, renumber nothing (IDs are stable), append the finished row to `docs/LEGACY_done_rows.md`, and report it in the NEXT SESSION HANDOFF.** Partial work: keep the block, change `Status` to `PARTIAL` and write `DONE:` / `LEFT:`.
+> 4. Owner decisions are binding (see 'Ground rules' and 'Track 2 design rules').
 
-- `T3.6` (custom colours with a colour picker and saved quick colours; per-note spell-check toggle already existed as the `spellcheck` pref) — done in 3.2.3, see the handoff.
-- 3.2.0 (2026-11-08): merge conflict markers in the 4 version/hash files fixed; `Outline` renamed **Table of contents** and given its own toolbar button; More menu regrouped (Labels, Templates, Links & dates, Window, Settings & help); Markdown mode in Quick settings and its own Settings tab; Insert caret menu gained underline, spoiler, hidden comment, line break, inline/block math, collapsible section, date/time, all 15 callout kinds, foldable callouts; checklist hold menu offers the Obsidian task states; code block language list has Diff; `docs/MARKDOWN_FLAVORS.md` has a _GUI in Notes_ column; demo notes rebuilt from it (6 notes).
+### ID prefixes
 
----
+| Prefix                   | Meaning                                               |
+| :----------------------- | :---------------------------------------------------- |
+| `F0.x`                   | Test/measurement foundation                           |
+| `H1.x`                   | Hardening: loops, data loss, alert storms             |
+| `PF2.x`                  | Performance                                           |
+| `TM3.x`                  | Time correctness (wake, DST, overdue, missed)         |
+| `UI4.x`                  | Interaction safety (click, drag, keyboard, re-render) |
+| `OW-xx`                  | Owner request or bug report (stable IDs)              |
+| `SB6.x`                  | Zen sidebar polish                                    |
+| `ST7.x`                  | Structural changes                                    |
+| `T1.x`..`T4.x`, `B3.3.x` | Carried over from the previous roadmap                |
+| `DOC-x`                  | Documentation that disagrees with the code            |
 
 ## Ground rules
 
-Finished work and the long history live in `docs/LEGACY_notes_roadmap.md` (frozen). Row references like "Cycle G #26" or "S6 W4" point into that file.
+Finished work and the long history live in `docs/LEGACY_notes_roadmap.md` and `docs/LEGACY_done_rows.md` (both frozen; the second holds every row that was DONE on 2026-11-14). Row references like "Cycle G #26" or "S6 W4" point into that file.
 
 - Ordered by **impact on the daily user experience**, biggest first; inside a similar impact the cheaper item goes first. Re-order when the owner's priorities change.
 - Everything that was listed as "verify in a real Zen" is **assumed to work** (owner decision, 2026-11-04). Do not re-add live-check items; only add one when a new Zen-only change cannot be reasoned about.
 - Effort: S = under one session slice, M = one session, L = several sessions or a new subsystem.
 - Never build: cloud sync inside the mod (owner: NO until the whole mod is finished); a sandboxed iframe with user JS (unsafe in chrome context); the Zen-native "Notes" folder as a Sync-excluded object (blocked, `docs/NOTES-ZEN-FOLDER-BLOCKER.md`).
 - Never build (added 2026-11-07, security): raw HTML from a note reaching the chrome document (`<script>`, `<style>`, `<iframe>`, `<object>`, `<embed>`, `<video src>` or any attribute copied from the note: K12, B23); embeds from any host other than YouTube (and only through the player in row 22); code that runs inside a note (Templater-style `<% %>`, N10); text-expander words such as `;date` (N11); opening a dropped file from inside Notes (show it in the folder instead).
+- Dropped on 2026-11-16, do not re-add: `T3.11` (live checks and low-value polish), `T4.4` (its premise was wrong: `stretched()` and `SLOT.quad` are live code), `AU-B2` (folded into `T3.4a`).
 - Dropped on 2026-11-07, do not re-add without the owner: "panel-like options for standalone Notes: push page, reveal on hover over the top edge" (the card already has them since 3.1.28); "Open in new container on the Notes folder" (edge case, our tabs already hide the native items); "footer-counter debounce knob" (breaks the rule that a setting exists only where a person can notice a difference).
 - Effort and impact columns: S = under one session slice, M = one session, L = several sessions or a new subsystem.
 
----
+### Status legend (every row's Implementation Plan starts with one of these words)
 
-## Quick Index — Tracks & Dependency Flow
+| Word      | Meaning                                                     | What the AI does                                                         |
+| :-------- | :---------------------------------------------------------- | :----------------------------------------------------------------------- |
+| `DONE`    | Code, tests and handoff note exist in this repository.      | Nothing. Do not redo; only re-open if a test fails.                      |
+| `PARTIAL` | A pure/tested part exists; the named `LEFT:` part does not. | Implement only the `LEFT:` part.                                         |
+| `OPEN`    | Specified, approved by the owner, not started.              | Implement exactly as written; follow the dependency list.                |
+| `PARKED`  | Idea, **not approved**.                                     | **Do not implement.** Only the owner can promote it (see _Parking lot_). |
 
-- **Track 1 (`T1.1–T1.19`): Syntax, Knowledge Base, Media & Import/Export** — Complete all parser rules, dual-mode ToC, Wiki-links, and asset handling _before_ building the syntax-mismatch checker (`T1.18`) and Obsidian/ZIP converters (`T1.19`).
-- **Track 2 (`T2.1–T2.4`): Dates, Adaptive 3-Tier Reminders, Categorized Event Lists & Calendar** — Build interactive `@date` chips and right-click Daily Note actions (`T2.1`), Daily Note lifecycle & 30d/48h retention (`T2.2`), Adaptive 3-Tier Notification & Zero-Syntax Categorized Event Lists (`T2.3`), and finally the Calendar Grid & Upcoming view (`T2.4`).
-- **Track 3 (`T3.1–T3.11`): Zen Browser UI, Editor UX & Appearance** — Fix second-panel startup (`T3.1`) first (folder UIDs, folder colours/icons, note favicons and armed toolbar buttons are done), then build tree multi-select, Zen tab drag-and-drop and folder context menu, toolbar UX, themes, and Split View.
-- **Track 4 (`T4.1–T4.5`): Final Verification, Performance & Release Hygiene** — Execute after Tracks 1–3 are feature-complete, starting with the comprehensive `Markdown & Extended Syntax Feature Showcase` verification note (`T4.1`).
+### Rules for the AI that executes this plan (read before every task)
 
----
+These apply to every row. They come from past regressions; each rule was checked against this code base (vanilla JS in a Firefox/Zen chrome window, no React, no Remark, no bundler).
 
-## Track 1: Syntax, Knowledge Base, Media & Import/Export
+1. **One row per chunk, dependencies first.** Do the lowest open row whose `Depends on` rows are `DONE`. If a row says `LEFT:`, do not touch what is `DONE`. Never start `T2.13` (ICS) before every other Track 2 row is `DONE`.
+2. **Pure function first.** Write the logic as a pure function in `additional/notes/calendar/ZentralNotesCalendar.js` (or the existing pure parts), export it through the module `api` (and `__zentralNotesTestSeam.core` for `ZentralNotes.uc.js` code), write the failing test, then the code, then the UI wiring. Test file name pattern: `tests/notes-<topic>.test.cjs`; copy the style of `tests/notes-calendar-category.test.cjs`.
+3. **Date keys are local and immutable.** The key of a day is the local `YYYY-MM-DD` made with `localDateKey(ms)` / `ymd(date)` from the calendar module. NEVER `toISOString().slice(0, 10)` for a day key (UTC shifts the day near midnight; a test fails if one appears). NEVER use a formatted display string (`14-11-2026`, `Reminders for 14-11-2026`) as an id, key, file name or lookup; format only when drawing (`formatDateKey`, `dateNoteTitle`). Existing date notes are found by their ISO title (`DATE_TITLE_RE`); changing how a title looks needs a migration plus a lookup that still finds old notes.
+   3a. **Marker preservation.** Never strip or rewrite hidden markers when parsing or saving a note: `%%zn-item-id:...%%` (line identity), `%%not-date%%`-style ignore marks, `%%calendar%%` sections, front matter, and `<!-- r-id: UUID -->` comments if a note contains them. Removing one detaches the line from its stored item, calendar note, moved time or reminder.
+4. **Never mutate stored objects in place.** `store.items`, `meta`, note objects: copy, change the copy, hand it to the store method. UI lists re-render from a fresh array.
+5. **Context menus.** Every right-click handler calls `e.preventDefault()` and `e.stopPropagation()`; every menu closes on outside click, Escape, action, cancel, view switch and sheet destroy, and removes its listeners/timers (see `T2.12c1`). No MutationObservers, no global disabled-state normalizers, no document-wide polling.
+6. **Listeners and timers** are created through the scope helpers (`listen`, `setTimeout`, `own`) or registered for cleanup before fallible work; after an `await`, check the scope is still active. This mod uses no `BroadcastChannel` or `WebSocket`; do not add one.
+7. **Conflicts: last write wins.** Two edits of one record (calendar editor and note text, two windows) resolve with `lwwPick(local, remote)` (newer `updated`, then higher `rev`); do not invent vector clocks. Millisecond `updated` is the only clock.
+8. **Do not add a setting** that nobody can notice a difference from. A new setting follows "How to add a feature (short)" below, including `tools/organize-layout-order.cjs`, `tools/build-preferences.cjs` and the drift checks.
+9. **Security rules in "Never build" stay absolute** (no raw HTML from notes, no code execution in notes, no remote embeds except YouTube).
+10. **Finish every chunk the same way:** run the release loop, run `node tests/run-all.cjs`, update this file (rows, handoff, version), commit the changes to Git (owner now uses Git-based AIs; do NOT create or present ZIPs unless the owner asks in chat).
 
-_Dependency chain: Core Markdown & Chat Paste (`T1.1–T1.7`)_ $\rightarrow$ _Dual-Mode ToC & Wiki-Link Graph (`T1.8–T1.14`)_ $\rightarrow$ _Media & Assets (`T1.15–T1.17`)_ $\rightarrow$ _Export Validation & Obsidian/ZIP Converters (`T1.18–T1.19`)._
-
-| #   | Track ID | Ref            | Item                                                                                                                | Impact   | Effort | Implementation Plan & Dependencies                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| :-- | :------- | :------------- | :------------------------------------------------------------------------------------------------------------------ | :------- | :----- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `T1.1`   | `E13–M04`      | Lists & blockquotes: lazy continuation + fenced code blocks inside list items                                       | High     | M      | Update block parser so multi-line paragraphs and fenced code blocks indented inside `- ` / `1. ` / `> ` stay bound to the parent list item or blockquote without breaking numbering when pasting from AI chats.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| 2   | `T1.2`   | `B02–N08`      | Minor Markdown syntax fixes & date/time insertion shortcuts                                                         | High     | S      | Fix edge-case inline emphasis/strikethrough collisions, support `~sub~` / `^sup^` and double-backtick inline code, make sure all text is readable(there is no case where there is black text on dark background, maybe create some kind of contrast rule) (date and time insertion is done in 3.2.0: Insert caret ▸ Date and time, assignable keys, `{{date}}` / `@today` typing shortcuts).                                                                                                                                                                                                                                                                                                                                   |
-| 5   | `T1.3`   | `A30`          | Inline footnotes `^[footnote text]`                                                                                 | Med-High | S      | Parse `^[...]` inline markers alongside standard `[^1]` references; auto-number and render collapsible footnote definitions at note bottom with bidirectional jump links.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| 6   | `T1.4`   | `K07–K10`      | Pasted HTML blocks from web pages & AI chats                                                                        | High     | M      | Sanitize and normalize pasted rich HTML/DOM fragments (`<details>`, `<summary>`, `<kbd>`, `<sub>`, `<sup>`, tables, code wrappers) into clean Markdown or safe pass-through HTML blocks without stripping structure.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| 7   | `T1.5`   | `C15–M23`      | Foreign YAML front-matter hiding & preservation (`tags:`, `aliases:`, custom keys)                                  | Med-High | S-M    | Preserve non-Zentral YAML keys intact on save; hide raw YAML block in reading/live mode while surfacing `tags` and `aliases` as compact metadata pills under the header.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| 18  | `T1.6`   | `Cycle H #25b` | Interactive callout variants (`[!bingo]`, `[!poll]`)                                                                | Med      | M      | Extend callout renderer (supporting `> [!type]` and foldable `> [!type]-`) with clickable grid cells for `[!bingo]` and vote/tally toggle bars for `[!poll]`, persisting state back to the Markdown block.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| 23  | `T1.7`   | `I06`          | Multi-line LaTeX environments (`align`, `bmatrix`, `pmatrix`, `cases`, `gather`)                                    | Med      | S-M    | Ensure display math `$$...$$` tokenizer preserves `\\` line breaks and `&` alignment tabs inside `\begin{...}...\end{...}` blocks before passing to the math renderer.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| 3   | `T1.8`   | `NEW (ToC)`    | Dual-mode Table of Contents: Sticky/Floating UI Widget + Auto-Updating Physical Markdown Block                      | High     | M      | Reuse `headingOffset` scanner to provide two modes: **(1) Always-accessible UI Widget:** a collapsible, sticky/floating ToC pill/bar accessible at any scroll position in the note without cluttering raw text; **(2) Portable Markdown Block:** **quick create:** a toolbar/menu action (next to the existing Table of contents button) that inserts the block with one click either **under the title (start of the note)** or **at the end of the note**, plus a `[[TOC]]`/`[TOC]` token; it writes and auto-updates a physical `## Table of Contents` section (using numbered GFM slug links `1. [Section Title](#section-title)` wrapped in `---` dividers) so exported notes remain fully navigable in external viewers. |
-| 8   | `T1.9`   | `Cycle F #27`  | Docked `outline_panel` (live heading tree)                                                                          | High     | M      | Build a collapsible side/docked outline panel sharing the `T1.8` heading tree model, highlighting the currently scrolled section and supporting click-to-scroll.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| 4   | `T1.10`  | `C03–C09`      | Extended Wiki-links: folder paths, `#Heading` targets & `\| alias` display text                                     | High     | M      | Parse `[[path/to/Note#Heading \| Custom Alias]]`; resolve relative/folder paths, display only `Custom Alias` in rendered view, and scroll to `#Heading` via `headingOffset` on open.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| 12  | `T1.11`  | `Cycle G #13`  | Automatic "Add link back" under target heading                                                                      | Med-High | S-M    | Depends on `T1.10`. When creating or following a `[[Note#Heading]]` link, offer a one-click action (or configurable auto-rule) to append a reciprocal backlink under the target heading in the destination note.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| 13  | `T1.12`  | `Priority 3`   | `[[` autocomplete popup, Backlinks panel & Unlinked mentions scanner                                                | High     | M-L    | Depends on `T1.5` (`aliases`) and `T1.10`. Trigger fuzzy picker on `[[` (matching note titles, aliases, and `#headings` after `#`). Add Backlinks drawer listing linked and unlinked text mentions with one-click link conversion.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| 19  | `T1.13`  | `C05–C11`      | Block IDs (`^abc123`) & note/section/block transclusion (`![[Note#Heading]]`, `![[Note#^id]]`, `![[img.png\|450]]`) | Med-High | M-L    | Depends on `T1.10`. Support trailing `^block-id` anchors on paragraphs/lists/callouts, render embedded live previews for `![[...]]` with cycle-detection guard, and support `\|width` image sizing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| 27  | `T1.14`  | `Cycle G #37`  | Inline `#tag` index & front-matter `tags:` unification                                                              | Med      | M      | Depends on `T1.5`. Index inline `#tag` and `#nested/category/tag` tokens (excluding headings and URLs/hex colors) alongside YAML `tags:` into a unified tag filter registry.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| 21  | `T1.15`  | `S6 W8`        | Privacy-enhanced YouTube embed player & local video playback                                                        | Med      | S-M    | Convert `![](https://youtu.be/...)` or `![[video.mp4]]` into lazy-loaded `youtube-nocookie.com` iframe (with click-to-load poster) or native HTML5 `<video>` player from `assets/`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| 22  | `T1.16`  | `S6 W12`       | Drag-and-drop arbitrary files into `assets/` folder                                                                 | Med-High | S-M    | Handle external file drop onto editor: copy file into workspace `assets/` directory with collision-safe filename and insert `![[filename]]` or `[filename](assets/filename)` at cursor.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| 26  | `T1.17`  | `Cycle G #36`  | Missing & orphaned `assets/` integrity checker                                                                      | Low-Med  | S      | Depends on `T1.13` and `T1.16`. Scan all notes for `assets/` references; report broken links (missing files) and unreferenced files in `assets/` with optional cleanup action.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| 16  | `T1.18`  | `Decision 3`   | Export syntax-mismatch warning dialog                                                                               | Med-High | S      | Depends on `T1.1–T1.16`. Before exporting a note to standard Markdown, scan for Zentral-specific extensions (interactive callouts, custom reminders, transclusions) and prompt user: _Keep raw syntax_, _Convert to portable Markdown_ (including physical ToC from `T1.8`), or _Cancel_.                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| 17  | `T1.19`  | `Cycle G #38`  | Full ZIP backup & Obsidian Vault Import/Export converter                                                            | High     | M-L    | **Must run last in Track 1.** Bundle notes + `assets/` into ZIP; implement bidirectional Obsidian vault folder import/export mapping YAML front-matter, `[[Note#Heading\|alias]]`, `![[embeds]]`, callouts, and tags in a single complete pass.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+11. **Tests before changes.** No change to the Zen sidebar projections without a harness test (`F0.1`), no change to a hot path (projection, scheduler, recurrence, history) without a budget test in the production call shape (`F0.2`). Record before/after numbers in the handoff.
+12. **Performance rules.** Never scan all records or all items per occurrence (use indexes, see `PF2.1`); never run heavy work directly in a handler that fires on every store event (debounce, filter by event kind and id); never deep-copy with JSON round trips in loops.
+13. **Sidebar safety.** Touch only tabs/folders that carry our attributes; ignore events caused by our own operations; reconcile must be idempotent (a second run on an unchanged store performs zero DOM operations); a foreign tab/folder inside a managed folder is moved out, never destroyed.
+14. **Alerts.** One alert per stage per occurrence and schedule; never fire several stages in one pass (`H1.5`); alerts must survive sleep/clock changes (`TM3.1`).
+15. **Owner rule reversal 2026-11-14.** In Month view a click selects the day; it does not open Day view (`OW-06`). Do not re-add the old behaviour from old rows or tests.
+16. **Never hand a DOM element to `assert.equal` / `assert.deepEqual`.** When such an assertion fails, Node renders both fake DOM trees into the message and the test file never ends. Compare elements with `===` inside `assert.ok(...)` and assert on ids, labels or counts. `tests/run-all.cjs` stops a file after 5 minutes (`ZENTRAL_TEST_TIMEOUT_MS`) and reports it as failed; while writing a new test file, run it under `timeout 60 node …`.
+17. **Sidebar projection & pseudo-tab regression guards (retained from `ST7.1`/`OW-18`).** Always materialize `querySelectorAll()` (`[...list]`) before calling Array methods (`NodeList` has no `.filter`/`.map`); bind NOTES/Agenda click and select handlers before fallible workspace projection sync; keep storage/data ownership separate from sidebar projection DOM movement (`syncSharedWorkspace`); exclude Notes/Agenda pseudo-tabs from normal-tab unload successors using live URI/SessionStore predicates (never cached labels/stale expandos); allow dragging ordinary web tabs out of managed folders; activate Agenda pseudo-tabs on stationary unmodified left `mouseup` with single-fire delayed-click suppression.
+18. **Real Zen sidebar DOM guardrails (retained from `OW-40`).** Never short-circuit onto `document.getElementById("vertical-tabs") || ...` or `#sidebar-box` without filtering out `display: none` / `0×0` Firefox stubs — in Zen `1.24.1b+`, `#vertical-tabs` and `#sidebar-box` remain in the DOM as hidden `0×0` boxes while real tabs live under `#navigator-toolbox` → `#TabsToolbar-customization-target` → `#tabbrowser-tabs` → `zen-workspace[active]` (with off-screen inactive workspaces and `.zen-workspace-empty-space`). Any sidebar layout, anchoring, or hover change must be tested against `tests/helpers/real-zen-sidebar-dom.cjs` and keep `tests/zen-sidebar-dom-guardrails.test.cjs` green.
 
 ---
 
-## Track 2: Dates, Adaptive 3-Tier Reminders, Categorized Event Lists & Calendar
+## Master Order (all remaining work)
 
-_Dependency chain: Interactive Date Chips & Right-Click Scheduling (`T2.1`)_ $\rightarrow$ _Daily Note Lifecycle & Retention (`T2.2`)_ $\rightarrow$ _Adaptive 3-Tier Escalation & UI-Categorized Event Lists (`T2.3`)_ $\rightarrow$ _Calendar Grid & Upcoming View (`T2.4`)._
+Order = impact first (High to Low); inside the same impact the cheapest effort first (S to L); a row never comes before a row it depends on. Impact and effort: S = under one session slice, M = one session, L = several sessions.
 
-| #   | Track ID | Ref           | Item                                                                                                 | Impact   | Effort | Implementation Plan & Dependencies                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| :-- | :------- | :------------ | :--------------------------------------------------------------------------------------------------- | :------- | :----- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 9   | `T2.1`   | `L07`         | Interactive date chips (`@today`, `@+3d`, `@YYYY-MM-DD`) & Right-Click (PPM) Daily Note scheduling   | High     | M      | Render relative and ISO dates as interactive chips. **Left-click:** open popover to jump to/create that date's Daily Note or configure an inline reminder. **Right-click (PPM) context menu on any date:** quick actions to _(a) Add to reminder on that day_, _(b) Add day before in `## Tomorrow` section_, or _(c) Both_. Selecting an option automatically creates/updates the target Daily Note with the item text and a backlink (`[[Source Note#Heading]]`) so it pops up on schedule.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| 14  | `T2.2`   | `Date notes`  | Daily Notes dedicated list, Day-Plan startup trigger & Automated Trash/Backup Lifecycle              | Med-High | M      | Depends on `T2.1`. Provide a dedicated filter/sort view for Daily Notes. **Startup Day-Plan Trigger:** 1–2 minutes after Zen Browser / Notes panel initialization (once startup load settles), automatically surface today's Daily Note / scheduled items (including the `## Tomorrow` preview prepared the day before). **Automated Lifecycle:** Past Daily Notes automatically move to Trash the next day, remain in Trash for 30 days (standard trash retention), and then persist only in the 48-hour rolling backup before permanent deletion. there should be option to change trash next day policy in settings to "always archive never trash" so it keeps "compressed backup" in seperate archive folder                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| 10  | `T2.3`   | `Cycle G #14` | Multi-Reminder Engine, Adaptive 3-Tier Notification Escalation & Zero-Syntax Categorized Event Lists | High     | L      | Depends on `T2.1–T2.2`. Support multiple reminders per note with `#Heading` jump targets and three core capabilities:<br>**1. Adaptive 3-Tier Escalation (all timings user-adjustable or disableable per item/category):**<br>• _Tier 1 (Gentle Pre-Alert):_ Auto-scales lead time based on horizon (e.g., $T - 1\text{ min}$ for a 15-min break vs. up to max $T - 10\text{ min}$ for next-day/far appointments) with subtle badge + optional soft chime.<br>• _Tier 2 (Urgent Alert at $T_0$):_ Fires exactly at $T_0$ with prominent tab/icon pulse + distinct audio cue so time-sensitive events (e.g., 22:45 token reset) are noticed on time.<br>• _Tier 3 (Persistent Action-Required Alert):_ Fires shortly after $T_0$ (e.g., $T + 30\text{–}60\text{ s}$, configurable) as a persistent banner/drawer that does not auto-dismiss until the user clicks _Open at heading_, _Snooze (+5/+15m)_, or _Dismiss_.<br>**2. Day-Plan Mode ("Remind on that day when active"):** Uses the `T2.2` 1–2 min post-startup trigger instead of fixed clock alarms.<br>**3. UI-Configured Categorized Event Lists (Minimal manual typing):** Add a header UI control on any note/section allowing the user to select/create a Category (e.g., _Birthdays_, _Deadlines_, _Subscriptions_) and set its notification rule (_Silent / Calendar-only_, _Day-Plan_, _Day-Before + Day-Of_, or _3-Tier Alert_). Under that heading, the user simply writes a plain list of dates, titles, and optional descriptions (e.g., `- 10-08 Jan Kowalski — team lead`) with zero manual tag typing. Store structured metadata cleanly for future Google Calendar sync. |
-| 20  | `T2.4`   | `Cycle H #16` | Calendar Grid View & Categorized Upcoming Events Sidebar                                             | Med-High | M-L    | Depends on `T2.1–T2.3`. Render a monthly/weekly Calendar Grid and an Upcoming Events side list. Display color-coded dots/badges distinguishing Daily Notes (`T2.2`), active reminders (`T2.3`), and silent/recurring categorized events (e.g., upcoming coworker birthdays on Aug 10) with click-to-jump and category filtering.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Order | ID          | Status    | Impact              | Effort | Depends on        | Task                                                                                                     |
+| ----: | :---------- | :-------- | :------------------ | :----- | :---------------- | :------------------------------------------------------------------------------------------------------- |
+|    36 | `T2.13`     | `DONE`    | Med                 | M      | all other Track 2 | ICS export/import and Google-sync groundwork (always last in Track 2)                                    |
+
+|    88 | `OW-63`     | `DONE`    | High                | M      | 3.3.297           | Stopwatch face: clicking the running stopwatch does not go back to the clock, and on a narrow widget its text fields push the buttons out of view |
+|    89 | `OW-64`     | `DONE`    | Med                 | M      | 3.3.299           | One language selector for every widget, following the Notes language until the person overrides it |
+|    90 | `OW-62`     | `DONE`    | High                | S-M    | 3.3.298           | An imported .ics reminder still cannot be deleted: recreate the missing note instead of refusing |
+|    91 | `OW-65`     | `DONE`    | High                | S      | 3.3.301           | Clock card: quick note under the clock by default, the stopwatch/countdown panel under it on a click, the clock no longer drawn above it, and "Wyzeruj" no longer clipped |
+|    92 | `OW-66`     | `OPEN`    | Med                 | S      | —                 | The live Zen check the owner still owes `OW-58`–`OW-65`, `OW-73`–`OW-76` and `OW-80`–`OW-86`: each shipped fix confirmed in the real sidebar (no code work) |
+|    93 | `OW-67`     | `DONE`    | High                | S      | —                 | Widgets stay blank after the sidebar is revealed when "pause when hidden" is off: nothing repaints an unpaused widget whose state changed while hidden |
+|    94 | `OW-68`     | `DONE`    | High                | S      | —                 | Clock quick note must stay ONE line, and the Save button wins the space (the field gives ground, never the button) |
+|    95 | `OW-69`     | `DONE`    | High                | S      | —                 | The quick note is optional again: one switch that hides it, remembering the choice |
+|    96 | `OW-70`     | `DONE`    | High                | M      | —                 | Status widget: no battery on a desktop and no memory reading on this build — find out why, and make "this machine has no battery" quiet rather than a broken card |
+|    97 | `OW-71`     | `DONE`    | Med                 | M      | —                 | Let the person order the widgets top to bottom (drag and keyboard), persisted, with the order surviving restarts |
+|    98 | `OW-72`     | `DONE`    | Med                 | M      | —                 | Let the person pick the widgets' appearance (colours/contrast) so the cards stay readable in every theme |
+|    99 | `OW-73`     | `DONE`    | High                | S      | —                 | All-notes toolbar: "Recent" and the Split view / Folder tree / Hide calendar buttons fit on one line but wrap to two |
+|   100 | `OW-74`     | `DONE`    | High                | M      | —                 | With the calendar control strip hidden the basic controls must still be reachable, sitting right of the calendar name and left of the long month name, and outranking the name |
+|   101 | `OW-75`     | `DONE`    | Med                 | M      | —                 | Re-see every calendar menu — they are unreadable: regroup by how often each option is used, move the "create … from calendar" extras under Notes "+" |
+|   102 | `OW-76`     | `DONE`    | Med                 | M      | —                 | Calendar and notes must copy the style of Zentral's appearance themes by default, with extra customisation only if the person opts in |
+|   103 | `OW-77`     | `DONE`    | Med                 | M      | —                 | A visual audit of every calendar/notes menu in real Chromium (the fit-audit harness) so "unreadable" is measured, not argued, and stays measured |
+|   104 | `OW-78`     | `DONE`    | Med                 | S      | —                 | One theme-resolution path: the CSS `--zn-*` variables and the JS resolver must agree, so `zentral` cannot mean two different palettes |
+|   105 | `OW-79`     | `DONE`    | Low-Med             | M      | —                 | More languages without code: a language file must be droppable in, and a missing translation must never show a raw key like `cal.todayBtn` |
+|   106 | `OW-80`     | `DONE`    | High                | L      | —                 | Big Picture: the Notes tree must be there too, on the left edge, with all of its functions — including drag of a note into the calendar to create an item |
+|   107 | `OW-81`     | `DONE`    | Med                 | S      | —                 | Quick settings: choose whether dragging a note into the calendar creates an event or a reminder by default |
+|   108 | `OW-82`     | `DONE`    | High                | M      | —                 | Dragging a calendar item onto empty space asks before deleting it, with a "don't ask for 5 minutes" button — in All notes AND Big Picture |
+|   109 | `OW-83`     | `DONE`    | Med                 | S      | —                 | The calendar's `‹` / `›` chevrons are small bare glyphs, not bordered pills the size of the buttons beside them |
+|   110 | `OW-84`     | `DONE`    | Low                 | S      | —                 | The Notes `+` menu must not offer the same creation twice ("New reminder" and "Create timed reminder…" opened the same composer) |
+|   111 | `OW-85`     | `DONE`    | High                | M      | —                 | Correction to OW-73: revert it (it targeted the Notes rows) and put the split-view / folder-tree / hide-calendar buttons in the bar under the title, above the search, where they cannot be cut by the window edge |
+|   112 | `OW-86`     | `DONE`    | Med                 | M      | —                 | In the Big Picture tree a click selects (Shift/Ctrl as in the docked tree), a double click opens, and dropping several selected notes on one day asks what the drop should make |
+|   113 | `OW-87`     | `DONE`    | Low                 | S      | —                 | The logger's core category must default to off in the repository, so a fresh install does not turn on a debug stream the owner already switched off locally |
+|   114 | `OW-88`     | `DONE`    | High                | M      | —                 | Notes and Agenda sidebar placeholders each hold a whole content process (about 11 extra processes, half a gigabyte): keep them unloaded and every visible behaviour identical |
+|   115 | `OW-89`     | `DONE`    | High                | M      | OW-88             | Boost, part one: read total browser RAM on demand, free memory losslessly, trim once after startup |
+|   116 | `OW-90`     | `DONE`    | Med                 | M      | OW-89             | Boost, part two: the sidebar card and its menu (replaces the Status card) |
+|   117 | `OW-91`     | `DONE`    | Med                 | L      | OW-89             | Boost, part three: unload what is not in use (normal tabs and opt-in panels), with one Restore |
+|   118 | `OW-92`     | `DONE`    | Med                 | M      | OW-89             | Boost, part four: a RAM limiter with a soft and a hard mode, one-shot timers only |
+|   119 | `OW-93`     | `DONE`    | Med                 | M      | OW-91             | Background mode per essential panel (live / throttled / allow sleep), so a hidden arena.ai is throttled instead of burning a core |
+|   120 | `OW-94`     | `DONE`    | Med                 | L      | OW-91             | Game Mode: pause every feature's timers and keep only audible tabs and the video source active, with a stronger saver behind a second switch |
+|   121 | `OW-95`     | `DONE`    | High                | M      | —                 | Weather card: more than three places, and a click that cycles Today / Tomorrow / Week instead of swapping two halves. Long press goes to the next place, a hold (or Escape) comes back to Today and the first place |
+|   122 | `OW-96`     | `DONE`    | High                | L      | —                 | Calendar: a small weather symbol and temperature above the weekday name in Week view (Month view an option, off by default), a Week view that goes up to 48 days and stacks them in two rows of 24 when the pane allows, and a refresh trust that decays with how far a day is |
+|   123 | `OW-97`     | `DONE`    | High                | S      | —                 | All notes: the calendar's "Go to today" and month/week buttons must be GLYPHS (calendar + dot, chevron), never words, and the header must give up its room in this order — the title first, then the long date range, then nothing — so settings and Big Picture can never be pushed out of the window. The notes tree is a pixel WIDTH the user sets and the calendar takes what is left, so stretching the window moves only the calendar |
+|   124 | `OW-98`     | `DONE`    | High                | M      | —                 | Zen sidebar: a normal tab's right-click menu wins over ours on rows where a note or a reminder lives (a note inside a Zen folder is the reported case). Find out which path actually takes the event and make ours win only on our own rows, never on a plain tab |
+|   125 | `OW-99`     | `DONE`    | Med                 | M      | OW-98             | "Scan all performance improvements for bugs and issues": one pass over every perf claim in the tree (the widget scheduler, the calendar fit loop, the Notes store writes, the Boost/RAM paths, the sidebar listeners) looking for the same class of bug the OW-96 `prefBool` mistake was — a guard that cannot be true, a listener that is never removed, a timer that is never cleared |
+|   126 | `OW-100`    | `DONE`    | Med                 | S      | —                 | Widgets: dragging elements inside a card does nothing — either make it reorder something real or take the drag away, so the cursor and the affordance stop promising a move that never happens |
+|   127 | `OW-101`    | `DONE`    | High                | S      | —                 | Notes: while writing, the note's most top bar is glued to the bottom of the space it has and is partly hidden behind the tool strip. It must sit in the middle of the space available to it |
+|   128 | `OW-102`    | `DONE`    | High                | M      | —                 | Calendar: creating more than one event at once does not work — the second creation is lost, refused or overwrites the first. Find where the composer's state or the store write is shared between two creations |
+|   129 | `OW-103`    | `DONE`    | High                | M      | —                 | Switching the Zentral web panel throws the person out of All notes / the calendar view: the view is reset on switch instead of being kept (or restored) where it was |
+|   130 | `OW-104`    | `DONE`    | Med                 | S      | —                 | All notes / calendar: the three-dot menu on the top bar still acts on the last open note, which is confusing — it must either act on the calendar view that is showing, or say plainly which note it belongs to (and be disabled when none is open) |
+|   131 | `OW-105`    | `DONE`    | High                | S      | —                 | Widgets: explicit colour values forced in settings must be applied to every widget card and its controls |
+|   132 | `OW-106`    | `DONE`    | High                | S      | —                 | Notes / Calendar: opening the feature defaults to the All notes screen, not the last note opened |
+|   133 | `OW-107`    | `DONE`    | High                | S-M    | —                 | Weather: audit what location data leaves the browser, where it is sent, and what permissions/consent are involved; document the actual behaviour and close any unnecessary exposure |
+|   134 | `OW-123`    | `OPEN`    | High                | M      | OW-122            | After restart sometimes notes duplicate: duplicates have no title but do have a favicon and appear right under the Notes folder. Distinct from OW-122's inner-stack post-restart investigation; targeted outer-tab evidence required |
+|   135 | `OW-124`    | `DONE`    | High                | M      | OW-116, OW-120    | Notes titles in the Zen sidebar can duplicate: a note named `Problemy` renders `ProblemyProblemy`. One-road label repair shipped statically; live EN/PL titles remain an OWNER GATE |
+|   136 | `OW-125`    | `OPEN`    | Med                 | S      | OW-122            | Zen `1.24.3b` compatibility audit: Firefox 160.0.1, security fixes, Boost/controls, Spaces Sync containers, copy URL of selected tabs, new-window performance, single-toolbar zoom toast. Audit report shipped; live gates remain |
+|   137 | `OW-126`    | `OPEN`    | Med                 | M      | —                 | Twilight `1.25t` readiness: Little Zen window and Zen's own settings window. Audit settings/window assumptions and mods; no code change until a tagged build exposes the actual DOM |
+|   138 | `OW-127`    | `DONE`    | Med                 | L      | —                 | Widget space priority: configurable order in which widgets give up space, and whether a widget may be reached by scroll or never. Needs settings, preferences, tests and readable responsive behavior. Implemented statically with two text prefs; live narrow sidebar OWNER GATE |
+|   139 | `OW-128`    | `DONE`    | High                | L      | OW-107            | Weather Today view rain timing: fix “tomorrow” when rain is today; support `today`, `jutro`/`tomorrow`, `pojutrze`, `in ~45/30/15 min`, `9–15`, heavy rain and `all day`, readable at all widths/heights. Owner chose Option A; pure/static rain timing ships, live text/layout OWNER GATE |
+|   140 | `OW-129`    | `DONE`    | Med                 | M      | OW-65, OW-69      | Clock quick note hidden by default; a small chevron at the clock widget's bottom-right corner opens it. Implemented statically; live click/labels OWNER GATE |
+|   141 | `OW-130`    | `DONE`    | Med                 | M      | —                 | All pill menus' `toggle panel autohide`: mouse-up applies hide once, hold preserves the old toggle behavior; do not interfere with hold. Implemented statically with a 550 ms classifier; live gesture OWNER GATE |
+|   142 | `OW-131`    | `DONE`    | Med                 | M      | —                 | `create reminder...` view: color picker for reminder/event color, inherits category color but allows another color while keeping the category. Implemented statically as an item override; live composer OWNER GATE |
+|   143 | `OW-132`    | `DONE`    | Low                 | S      | OW-131            | DEMO notes must demo per-note/reminder colors so each demo entry can be colored on its own. Implemented statically with stable distinct installer colors; live Help-folder colors OWNER GATE |
+
 
 ---
 
-## Track 3: Zen Browser UI, Editor UX & Appearance
+## Task blocks (same order as the Master Order)
 
-_Dependency chain: Panel Startup (`T3.1`)_ $\rightarrow$ _Tree & Zen Tab Bar Integration (`T3.2–T3.4`)_ $\rightarrow$ _Editor Toolbar UX, Themes & Split View (`T3.5–T3.8`)._
+### RAM plan (`OW-87`–`OW-94`) — source: `docs/PLAN_CODING_AGENT.md`
 
-| #   | Track ID | Ref           | Item                                                                                                                                      | Impact   | Effort | Implementation Plan & Dependencies                                                                                                                                                                                                                                       |
-| :-- | :------- | :------------ | :---------------------------------------------------------------------------------------------------------------------------------------- | :------- | :----- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 11  | `T3.1`   | `S6 B3`       | Fix second panel startup initialization bug, adjust settings and quick settings so buttons do not obscure eachother even with bigger font | High     | S-M    | Resolve race condition when opening a second Zen window/panel on startup so state listeners, styles, and note trees initialize deterministically without blank/unresponsive UI, change settings in notes app so they dont obscure eachother if user selected bigger font |
-| 15  | `T3.2`   | `Cycle G #9`  | Multi-select notes & folders in tree view                                                                                                 | Med-High | M      | Support `Shift+Click` (range) and `Ctrl/Cmd+Click` (toggle) in the note tree for batch move, batch category/tag assignment, batch export, and batch move to Trash.                                                                                    |
-| 24  | `T3.3`   | `S6 W11`      | Drag-and-drop note tabs within Zen sidebar                                                                                                | Med      | M      | Hook into Zen sidebar drag events so reordering or dropping a note tab into a folder updates the underlying Notes tree order/parent folder smoothly.                                                                                                                     |
-| 25  | `T3.4`   | `S6 W6`       | Context menu on Notes folders in Zen tab bar                                                                                              | Med      | S-M    | Needs the folder uid and colour/icon fields that now exist (`store.folderUid`, `store.setFolderStyle`). Attach Notes-specific actions to Zen tab-bar folder right-click menus. DONE: _New note in this folder_ (Notes controller, `onFolderMenuShowing`) and colors/icon through the Colorful Folders menu. LEFT: _Change Folder Color/Icon_ for a Notes-only install (no Colorful Folders), _New subfolder_, _Export Folder_, _Delete_ (their dialogs live in the sheet scope; expose them through the sheet API first).                                                                                       |
-| 28  | `T3.5`   | `Cycle F #11` | Split Callout toolbar button (quick insert + type/fold picker)                                                                            | Med      | S      | Replace single callout button with a split button: primary click inserts the default/last-used callout; dropdown chevron opens a picker for `[!note]`, `[!tip]`, `[!warning]`, `[!danger]`, `[!faq]-`, `[!bingo]`, `[!poll]`.                                            |
-| 29  | `T3.8`   | `Cycle C`     | Split View as an equal-sized companion window/pane                                                                                        | Med      | M      | Allow opening a second note side-by-side in an equal-dimension split pane (or synchronized companion panel) for reference reading and cross-note editing.                                                                                                                |
-| 35  | `T3.9`   | `NEW (widgets)` | Tab bar widgets (weather, clock, more) in the free space at the bottom of the Zen sidebar, standalone and in the full mod | Med | L | Own standalone module (`additional/widgets`, loaded by the Zentral loader or alone through Sine; no load race). First study how new-tab-page widgets work and mimic it. Must NOT interact with the sidebar video player (the free area shrinks when it plays: about 179x426 free, about 179x301 while a 16:9 player shows; width and height vary, widgets must not assume a ratio) and must always leave room for tabs, folders, Essentials and other Zen elements (settings: max share of the free height, hide when smaller than a minimum). Performance: no permanent polling, refresh per widget on a user interval (settings), pause while the window or the sidebar is hidden, cache the last value. Deliverables: widget list worth having (clock, weather, date, timer, quick note, RSS headline, battery, system load, ...), one settings section, a per-widget on/off and order. |
-| 36  | `T3.10`  | `NEW (keybinds)` | Custom keyboard shortcut for opening a particular Zentral app or panel | Med | S-M | Right-click an app/panel (for example an Instagram panel) > "Add custom keyboard shortcut"; prompt records the combination (at least 2 keys, no single key, refuse combinations that collide with Zen/Firefox or another Zentral shortcut) and stores it per app. The shortcut reveals the app if hidden and hides it if shown. Show and remove the shortcut in the same context menu and in settings. Reuse the Notes assignable-keys code where possible. |
-| 37  | `T3.11`  | `Colorful Folders` | Colorful Folders live checks and polish | Med | S | Not run in a real Zen: accent line, soft tint and hover rules (written against `zen-folder > .tab-group-label-container / .tab-group-container`; if one still does nothing, take a DOM dump of a folder), draggable editor at both sidebar edges, Notes-first and Colorful-first startup, per-level defaults in Zen and All notes, collection spread. Polish: show a live preview in the editor, drag-reorder saved quick themes, export/import of quick themes, per-folder (not global) Simple/Detailed. |
+The owner measured his own browser (2026-11-18) and wrote the plan himself with an AI: the whole window including
+every Zentral script and DOM is about 49 MB, so **the code is not the problem and nothing here refactors for size**.
+What costs RAM is (a) about eleven Notes/Agenda placeholder tabs, each holding a content process of 43–51 MB, and
+(b) real heavy pages (Messenger ≈0.9 GB, arena.ai ≈0.9 GB, WhatsApp ≈0.75 GB, an idle YouTube ≈1.1 GB) which the mod
+can only unload or throttle on demand. The full task text, owner gates and the do-not list live in that file; these
+blocks are the roadmap-sized version of it. Order is fixed: `OW-87` → `OW-88` → `OW-89` → `OW-90` → `OW-91` → `OW-92`
+→ `OW-93` → `OW-94`. Every row keeps the plan's kill-switch rule (default ON = new behaviour, off = exactly today),
+adds `tests/<id>.test.cjs`, and writes one line into `docs/perf-results.md` with effect "not measured".
+
+#### `OW-87` — The core logger category is off in the repository too
+
+**Status:** `DONE` (3.3.315) · **Impact:** Low · **Effort:** S · **Source:** `docs/PLAN_CODING_AGENT.md` task B0
+
+**Problem:** the owner already switched `zen.workspace.zentral.debug.core` off on his machine, but the repository shipped
+it as `true` in `additional/diagnostics/settings.json`, in the settings preset `extension/settings/recommended.json`
+and in `ZentralShared`'s fallback table, so every fresh install turned a debug stream back on — and the settings dialog
+hard-set it to `true` on save.
+
+**Done at 3.3.315** — the default is `false` in the schema, the preset and Core's fallback table (so `preferences.json`
+rebuilt to `false` as well); the logger's `isModuleEnabled` no longer short-circuits `core` to `true`, so the category
+follows its own pref like every other one — without that, the owner's local `false` and the new switch would both have
+been decorative; and the settings row is a real switch that loads from and saves to the pref instead of a checked,
+`disabled` control that re-forced `true` on every save. `zen.workspace.zentral.modules.logger.enabled` is untouched, by
+the plan's own instruction. `tests/ow-87-debug-core-default.test.cjs` (6 tests) pins all four places, and
+`tests/diagnostics-logger.test.cjs` grew the two cases that prove core is now switch-governed.
+
+#### `OW-88` — Notes/Agenda placeholders must not hold a content process
+
+**Status:** `DONE` (3.3.317) · **Impact:** High · **Effort:** M · **Source:** `docs/PLAN_CODING_AGENT.md` task B1
+
+**Done at 3.3.317** — implemented exactly as written below, plus the three defects the tests found on the way.
+
+`parkPseudoTab(tab)` discards a placeholder and returns the reason it did not (`pref-off`, `disconnected`, `off`,
+`already-pending`, `selected`, `busy`, `not-a-placeholder`, `no-discard`, `failed`), so the guard table is testable
+rather than implied. It is called from a deferred task for every tab `zenNewTab`/`agendaNewTab` finished marking and
+pinning, for every placeholder `onPseudoTabRestored` sees, and right after both deferred hand-backs in `onZenSelect`.
+The discard opens the existing `zenEventsIgnored()` quiet window, so the `TabBrowserDiscarded` it causes cannot start a
+projection repair run.
+
+Three things the first draft got wrong, each now pinned by a test: (a) one coalesced timer parked only the LAST of the
+tabs a projection run created — a queue drained by one task parks all of them (twenty placeholders → twenty discards);
+(b) a click answers with an activation that is still running, so the first parking attempt legitimately says `busy` and
+the row stayed loaded — there is now a bounded retry (three tries, 2.5 s apart, no polling); (c) parking at 0 ms/400 ms
+collided with the existing 0 ms interaction tasks and turned six passing Notes tests red — the parking delays are
+1200 ms and 2500 ms, deliberately away from every delay the sheet already uses (0/16/50/60/300/500/1000/6000/6500/
+90000), because a test that fires one timer by its delay must not hit ours.
+
+Pref `zen.workspace.zentral.notes.park_pseudo_tabs` (default on) is declared in `additional/notes/settings.json`, the
+layout order, the standalone list and the in-app list (a **Memory** heading, translated in `en` and `pl`), and it is
+read live. `tests/ow-88-park-pseudo-tabs.test.cjs` (8 tests) drives the guards, the kill switch, the click path, a
+restored placeholder, the quiet window, the bounded retry and an Agenda row. Full suite 247/247.
+
+**OWNER GATE (three checks, in the real sidebar):** (1) opening a note and an agenda item from the sidebar still works;
+(2) labels and icons stay; (3) About:Memory or D1 shows the number of `web` processes down from about 11 to 1–2. If
+anything breaks, the fix is to switch the kill-switch pref off (old behaviour exactly), not to patch around it.
+
+**Problem:** `about:blank#zn-note:<id>` and `about:blank#zn-agenda-<key>` are created as live tabs, so each one loads a
+content process (~50 MB) for a page that only exists to be a sidebar row.
+
+**Plan (symbols in `additional/notes/ZentralNotes.uc.js`):** `parkPseudoTab(tab)` = `discardBrowser(tab, true)` in
+`try/catch`, skipped when the tab is disconnected, selected, `zenBusy`, already `pending`, or not a placeholder; called
+from a scope `setTimeout(…, 0)` after `addManagedPseudoTab`'s callers finish marking/pinning, after
+`onPseudoTabRestored`, and right after the deferred hand-back in `onZenSelect`/`activateZenTab`; wrapped in the
+existing `zenEventsIgnored()` quiet window. Pref `zen.workspace.zentral.notes.park_pseudo_tabs` (default `true`) in the
+Notes settings Advanced section: "Keep sidebar note/agenda placeholders unloaded (saves memory)".
+Never touch a real note tab or a non-placeholder tab; never re-select inside Zen's own `TabSelect` dispatch.
+
+**Tests:** 20 placeholders → 20 discards after the creator returns; selected/busy/pending/disconnected skipped;
+kill-switch off → zero calls; a click still opens the note, hands selection back, then parks again; the existing
+Notes tests pass unchanged. **Owner gate:** a note and an agenda item still open from the sidebar, labels/icons stay,
+`about:memory` / D1 shows `web` processes down from ~11 to 1–2.
+
+#### `OW-89` — Boost core: memory meter, Level 1, post-startup trim — `DONE` (3.3.318)
+
+**Shipped:** `additional/boost/` (`ZentralBoost.uc.js`, `settings.json`, `standalone.json`, `README.md`, generated
+standalone set), catalog entry `boost` beside `tab-unload`, category `boost` · section `Memory` in the Sine settings
+page (after `startup`). `memoryMB()` = parent + every child `memory`, MB, `null` when the build cannot answer, one
+warning and the meter turns itself off while "free memory" keeps working; `runLevel1()` = reporter manager
+`minimizeMemoryUsage({run})` → `forceGC()` → `forceCC()` (each in `try/catch`, `by` reports `minimize` or
+`gc-cc-only`) → after reading 3 s later, `{beforeMB, afterMB, freedMB, by}`, one run at a time, nothing closed or
+unloaded; the post-startup trim = one Level 1 per browser start, after session restore, 90 s without input, nothing
+audible/playing, through `requestIdleCallback`, with a 6-minute hard ceiling and one one-shot timer that input
+re-arms. Sampling only while someone holds it (`startSampling`/`stopSampling`, 2 s, two users max), no `setInterval`
+anywhere. Prefs `zen.workspace.zentral.boost.enabled` and `...boost.startup_trim` (both `true`, read live).
+`destroy()` cancels every timer, listener and idle callback and removes `window.ZentralBoost`.
+**Tests:** `tests/ow-89-boost-core.test.cjs` (14) runs the real module in a fake chrome window. **Deviations:** the
+startup barrier is the session-restore promise plus the runtime's own native-ready ordering, because the standalone
+shim does not provide `whenNativeReady` (`build-standalone.cjs` rejects it by name). **Open for the owner:** one live
+check — RAM number matches about:memory, one trim at startup, `state()` shows `trimDone` (kill switch = pref off).
+
+**Plan:** new module `additional/boost/` (id `boost`), same file set as `additional/tabs/unloading/`, catalog entry
+beside `tab-unload`. `memoryMB()` sums `memory` over the parent and all `children` of
+`ChromeUtils.requestProcInfo()`, sampled only on demand (popup open: 2 s; limiter: per `OW-92`). Level 1 =
+`minimizeMemoryUsage()` on the reporter manager, then `forceGC()`, `forceCC()` in `try/catch`, returning
+`{beforeMB, afterMB, freedMB}` measured ~3 s later — nothing is closed, unloaded or reloaded. Post-startup trim runs
+Level 1 once per browser start, after session restore and the Startup module, 90 s without user input and no audible
+media, through one `setTimeout` chain plus `requestIdleCallback` — never polling. Pref
+`zen.workspace.zentral.boost.startup_trim` (default `true`). Public API `window.ZentralBoost` with `runLevel1()`,
+`memoryMB()`, `onChange(cb)`.
+
+**Tests:** Level 1 calls the manager once and returns the measured numbers; the trim runs once, never while media
+plays or input is recent; the kill-switch is respected; destroy cancels pending timers.
+
+#### `OW-90` — The Boost widget replaces the Status widget — `DONE` (3.3.320)
+
+**Shipped:** widget `boost` in `additional/widgets/ZentralWidgets.uc.js` beside the Clock and Date cards, and the
+`status` card **removed** (registration, prefs `status.enabled`/`show_battery`/`show_memory`, its pure helpers, its CSS
+and its settings section are all gone). The compact card shows the reading as `512 MB` / `1.4 GB` with a dash when the
+build cannot measure; a click runs `runLevel1()` and toasts `Freed X MB` (4 s, `role="status"`, theme-aware, the
+module's own `widgetToast` element), refusing a second run while one is in flight; the arrow opens a menu that expands
+the card inline (no `z-index`, keeping the shell's normal-flow rule) with **Free memory (light)** working and **deep** /
+**Restore** greyed with tooltips until OW-91. The card reads nothing from the platform itself — `additional/boost/` owns
+the reading — and hears values through `onChange`, so it has no cadence of its own (`refreshMs: 0`). Pref
+`zen.workspace.zentral.widgets.boost.enabled` (default `true`), section **Boost** (was **Status**), the tray's
+`pause_when_hidden` applies as for every card, a missing module leaves a dash and an inert card, and a legacy
+`status.enabled` owner is carried over to Boost once (`adoptLegacyStatusCard`, declared in `externalPrefs`).
+Destroy unsubscribes from the module. The shared toast moved 5 s → 4 s (the plan's number for this card).
+**Tests:** `tests/widgets-status.test.cjs` rewritten as the Boost card's rules (10), new
+`tests/widgets-boost-card.test.cjs` (7, live: click → `runLevel1` once, toast, menu, greyed entries, Escape/outside
+close, unsubscribe on destroy, missing module, no Status card), `tests/widgets-language.test.cjs` (Boost's words in
+both languages), `tests/widgets-owner-reports.test.cjs` (OW-70/OW-71 follow the card that now exists).
+**Owner gate:** the card is visible with a real number, a click frees memory and toasts it, and the old Status card is
+gone (kill switch = the pref above).
+
+**Plan:** register widget `boost` in `additional/widgets/ZentralWidgets.uc.js` and **remove the `status` widget**
+(the owner's words: it replaces it) — the memory reading moves into Boost, the battery reading is dropped with the
+card, since a desktop has none (`OW-70`). Compact tile "Boost" with the last RAM number (updates only while the
+popup is open), left click runs Level 1 and toasts "Freed X MB", right click/arrow opens "Free memory (light)" plus
+greyed entries for `OW-91`/`OW-92`. A self-contained toast (4 s, accessible, theme-aware, no cross-module
+dependency). Pref `zen.workspace.zentral.widgets.boost.enabled` (default `true`); honours the tray's
+`pause_when_hidden`; works with the tray absent (API + shortcut only, documented in the module README).
+
+**Tests:** `registerWidget` called once and never for `status`; a click calls `runLevel1`; popup open/close
+starts/stops the 2 s sampler; destruction stops it.
+
+#### `OW-91` — Unload what is not in use, with Restore — `DONE` (3.3.322)
+
+**Shipped:** the shared table is `loader/ZentralTabPolicy.js` (loaded by the runtime, embedded verbatim into the two
+standalone builds through the new `sharedSources` manifest key). It answers `isUnloadable(tab, ctx)` with a **named
+reason** for every never-rule — selected, addon host, Notes/Agenda placeholder, hidden panel host, audible, sharing,
+picture-in-picture, video-preview source, already pending/discarded/dormant, pinned and Essential unless
+`boost.keep_pinned` — plus `isSuccessorCandidate` and `byOldestFirst`. `TabUnload` now calls it (behaviour unchanged,
+its own tests untouched). `runLevel2()` = Level 1's free-memory work plus eligible tabs oldest-first plus the panel
+records whose own mode is `asleep-allowed`, through `explicitUnloadTabs` with the `discardBrowser` fallback, never
+closing anything and never moving the selection. `undoState` (cap 50) + `restore()`: panels wake immediately, tabs
+reload on click, the record dies with the session. Panel records carry `backgroundMode` (`live` default, `throttled`,
+`asleep-allowed`) saved through `saveEssentialSettings` and restored with the record; the tile's own context menu
+grows a **Background mode** submenu. The widget's deep and Restore entries are real now (Restore is greyed exactly
+when nothing is asleep, deep exactly when the policy is missing). The shortcut (`boost.shortcut`, empty by default,
+two keys minimum, read live) runs the light pass only. A standalone build declares `fullPackOnly: ["Zentral"]` for
+the guarded panel layer (tabs only, no panels).
+**Tests:** `tests/ow-91-boost-deep.test.cjs` (14): the policy table row by row, ordering, Level 2 against a fake
+browser, pinned opt-in, panel modes + Restore, missing policy, undo cap, shortcut parsing and firing.
+**Owner gate:** a deep run from the widget menu puts old tabs to sleep, Restore wakes the panels, the tile menu's
+three modes stick across a restart, and nothing audible or selected is ever touched.
+
+**Plan:** extract `isNormalTabAlreadyUnloaded` / `isSuccessorCandidate` / host-tab exclusion from
+`additional/tabs/unloading/ZentralTabUnload.uc.js` into a shared `ZentralTabPolicy.isUnloadable(tab, ctx)` used by
+both modules (TabUnload's behaviour unchanged). Never unload: the selected tab, a Zentral host tab, a playing tab
+(`soundPlaying`), a sharing tab (`_sharingState`), a picture-in-picture tab, the video preview's source tab, an
+already `pending` tab; pinned/essential only when `zen.workspace.zentral.boost.keep_pinned` (default `false`).
+Essential-panel records get `backgroundMode` (`live` default | `throttled` | `asleep-allowed`) saved with the app
+settings; Level 2 = Level 1 + eligible tabs oldest-`lastAccessed` first + sleeping only `asleep-allowed` records via
+`explicitUnloadTabs`, waking through `loadEssentialInBackground(record, true)`. `undoState` (cap 50) feeds a
+"Restore" entry and the toast after a deep run. Menu entries "Free memory (deep)" / "Restore"; shortcut pref
+`zen.workspace.zentral.boost.shortcut` (default empty) following `extension/panels/interaction/ZentralAppShortcuts.js`.
+
+**Tests:** the policy table for every never rule; Level 2 never touches selected/audible/PiP/video-source; the three
+background modes; Restore wakes exactly what was slept; TabUnload tests unchanged.
+
+#### `OW-92` — The RAM limiter — `DONE` (3.3.323)
+
+**Shipped:** `decideLimiter()` is a pure function of the numbers (hysteresis: slow 60 s cadence, 10 s above 70 % of
+the limit; cooldown; soft vs hard; no-reading; junk settings fall back to 4096 MB / soft / 60 s / 85 %). The live
+chain is one one-shot timer re-armed per tick, started and stopped by its pref, gone on `destroy`; a hard run calls
+the OW-91 deep pass in batches of three, re-samples after each, stops at `limit_mb × target_pct / 100` or when
+nothing eligible is left, and is bounded to 12 rounds so a page that refuses to sleep cannot spin it. Still above the
+limit with nothing eligible: at most one line per ten minutes. Prefs `limit_enabled` (false), `limit_mb` (4096),
+`limit_mode` (soft), `limit_cooldown_s` (60), `limit_target_pct` (85) in a new **Limiter** section; the widget toasts
+a soft notice, a finished hard run and the nag through `onLimiterEvent`. The README states plainly that a real
+per-process memory cap is impossible from browser-window JS — the limiter works by putting tabs and panels to sleep.
+**Tests:** `tests/ow-92-boost-limiter.test.cjs` (11: the state table, the live chain, soft vs hard, batching and the
+bound, re-arm, destroy, every pref declared, the README's honesty) + the widget's limiter toast in
+`tests/widgets-boost-card.test.cjs`.
+**Owner gate:** switch the limiter on with a low limit and watch a soft notice, then a hard run in batches, then the
+cooldown holding; nothing audible or selected is ever unloaded.
+
+**Plan:** prefs `zen.workspace.zentral.boost.limit_enabled` (`false`), `limit_mb` (4096), `limit_mode` (`soft` |
+`hard`), `limit_cooldown_s` (60), `limit_target_pct` (85). One-shot timers only: sample every 60 s, every 10 s above
+70 % of the limit; above the limit `soft` toasts with "Free now", `hard` runs Level 2 in batches of three tabs,
+re-samples, stops at `limit_mb * target_pct / 100` or when nothing is eligible, then one result toast; never inside
+the cooldown; still above with nothing eligible = one toast per 10 minutes. The README says plainly that a real
+per-process cap is impossible from JS.
+
+**Tests:** the state machine — hysteresis, cooldown, no repeat, soft vs hard, nothing eligible.
+
+#### `OW-93` — Background mode `throttled` for essential panels — `DONE` (3.3.323)
+
+**Shipped:** the `throttled` mode finally has behaviour. In `syncAppPanelBrowserActivity`
+(`extension/panels/browsers/ZentralBrowserIntegrations.uc.js`) a record whose `backgroundMode` is `throttled` is active
+only while it is visible: hidden it gets `docShellIsActive = false` and `renderLayers = false`, so Gecko throttles its
+timers and animations while the browser stays loaded (sockets, title/badge events still work). `live` records — and
+every record written before this setting, and `asleep-allowed` records — keep exactly today's `visible || notifications`
+rule. The preload path in `ZentralCornerPanels.uc.js` no longer forces such a record active, and the tile menu's mode
+switch calls `syncAppPanelBrowserActivity()` so a change applies on the spot rather than at the next panel open.
+**Tests:** `tests/ow-93-panel-throttle.test.cjs` (8): `syncAppPanelBrowserActivity` lifted from the shipped file and run
+against fake browsers — live unchanged (including a hidden preload), throttled inactive/active by visibility, hidden
+throttled preload throttled, `asleep-allowed` treated as live, records without a mode, the preload guard, immediate
+apply, and save/restore of the value.
+**OWNER GATE:** the owner sets arena.ai to `throttled` first; Messenger/WhatsApp stay `live` unless the owner tests and
+agrees.
+
+**Plan:** preloaded panel browsers are kept `docShellIsActive = true` in `syncAppPanelBrowserActivity`
+(`extension/panels/browsers/ZentralBrowserIntegrations.uc.js`) and the corner-tile equivalent, which is why a hidden
+arena.ai burns about 35 % of a core. For records with `backgroundMode === "throttled"`: while the panel is hidden,
+`docShellIsActive = false` and `renderLayers = false`; restored when shown. The browser stays loaded, so sockets and
+title/badge events keep working. `live` records keep exactly today's behaviour.
+
+**Tests:** `live` unchanged; `throttled` inactive while hidden and active while shown; a runtime mode switch applies
+immediately. **Owner gate:** the owner sets arena.ai to `throttled` first; Messenger and WhatsApp stay `live` until he
+tests and agrees.
+
+#### `OW-94` — Game Mode and the pause state — `DONE` (3.3.324)
+
+**Shipped:** `loader/ZentralPerformanceSwitch.js` is the pause switch, published as `ZentralRuntime.performance`
+(`isPaused`, `setPaused`, `toggle`, `subscribe`/`onChange`, `snapshot`), created before the runtime object that
+publishes it and also provided by the standalone shim. Five repeating features subscribe and skip work while paused:
+the video preview's discovery interval (`scanIntervalMs()` returns 0, which the file already read as "no interval"),
+the widget scheduler (a second `held` flag, kept apart from the sidebar-fold setting so ending a game cannot un-pause a
+folded sidebar), the RSS scan, Notes' minute wake (resumed with `check("wake")`, which fires what came due) and the
+panel fallback poll. Game Mode (`zen.workspace.zentral.boost.game_mode`) is a toggle that runs Level 2, pauses every
+subscriber, and sets `docShellIsActive = false` + `renderLayers = false` on every tab and panel browser except an
+audible tab, the video preview's source tab and the selected tab. "Stronger saver"
+(`zen.workspace.zentral.boost.stronger_saver`, OFF) runs the deep pass with every panel mode opened up, so `live`
+records (WhatsApp, Messenger) are slept and land in `undoState` for Restore. Turning it off puts back what it changed,
+reactivates the selected tab, and lets the rest reload lazily; destroying the window while on runs the same off-path.
+**Also fixed here:** `window.Zentral.Panels` was **never published** by the runtime, so every panel step in Boost
+(`runLevel2`'s panel half, `setBackgroundMode`, Restore's `loadEssentialInBackground`) had been silently doing
+nothing — a getter on `window.Zentral` now returns the live `panelContext`. Also: the switch creation first landed
+*after* the runtime literal that reads it, which is a temporal-dead-zone error at startup; the test that caught it is
+the one asserting creation order.
+**Tests:** `tests/ow-94-game-mode.test.cjs` (12) — the switch on its own, the runtime wiring, one row per subscribing
+feature, the video pause path proving it touches no playback call, Notes' resume, the exemptions, Stronger saver's
+single open-modes caller, restore-selected-only, and the two prefs; `tests/ow-94-game-mode-run.test.cjs` (7) — the
+module booted against a fake `gBrowser`, proving an idle tab goes inactive while a podcast does not, off restores it,
+the switch paused and resumed, the pref-at-start path, teardown, and the API.
+**OWNER GATE:** play a video in the sidebar preview, switch Game Mode on, confirm the video keeps playing and the
+podcast tab keeps playing; then switch it off and confirm the selected tab is active again.
+
+**Plan:**
+
+**Plan:** `ZentralRuntime.performance = { paused, setPaused(bool), onChange(cb) }`; paused features skip work and
+re-arm on resume (video preview timers, widget refresh, RSS scan, Notes minute wake, panel fallback poll) through the
+scope helpers. Level 3 "Game Mode" = Level 2 + pause + `docShellIsActive = false` / `renderLayers = false` on every
+kept browser except audible tabs and the Big Picture video source. A separate "Stronger saver" toggle also sleeps
+`live`/`throttled` records (WhatsApp, Messenger) and is **off** by default; when on it fills `undoState` so Restore
+brings them back. Turning Game Mode off resumes and restores activity for the selected tab only; everything else
+reloads lazily. Kill-switch pref `zen.workspace.zentral.boost.game_mode` is the toggle itself.
+
+**Tests:** pause propagates to each subscribed feature; exempt tabs stay active; toggle off restores; Restore after
+Stronger saver wakes records. **Owner gate:** a video played in the sidebar preview still plays with Game Mode on.
+
+#### `T2.13a` — Holidays and the future Google Calendar sync/import
+
+**Status:** `DONE` (3.3.310) · **Impact:** Med · **Effort:** S-M · **Depends on:** OW-44, T2.13 · **Source:** owner 2026-11-17
+
+**Problem:** the owner's question — Google Calendar shows its own holiday calendars and today we do not know what would happen if a review of `T2.13` (ICS/Google groundwork) starts importing them.
+
+**Plan (do this in order):**
+1. Decide and write down (in the archived row, not in code first): **holiday sets stay local and are never imported**. A Google holiday calendar arrives as an ordinary read-only calendar of events; imported holiday events keep their own `uid`/`etag` and are never merged into a local set, because a local set is rule-computed and a set's year can be edited in `HOLIDAY_TABLE` (`OW-45`).
+2. `toGoogle`/`fromGoogle` keep holiday entries out of the item store; no holiday data is written to a synced item's `extendedProperties` (`fromGoogle` already only reads `zentral_*` private fields).
+3. When `T2.13` is implemented, imported all-day events whose source calendar is a known holiday feed are shown with a neutral "imported holiday" look instead of tinting the day as a work-free day, so a synced holiday week never silently changes work-free shading.
+4. The settings dialog gets one line saying holidays are local and never synced.
+
+**Tests / done when:** an imported holiday-like all-day event does not become a local holiday, `isWorkFree` is unchanged by it, and the local holiday sets still work with the import off.
+
+**Done at 3.3.310** — the owner unblocked this row himself ("`T2.13a` is not blocked, go on work in loop"). All four
+plan steps, in the order the plan asked for:
+
+1. **Holiday sets stay local, and it is structural, not a promise.** `isWorkFree(day, prefs, lang)` takes prefs only —
+   it has no parameter through which an item could arrive, so an imported event cannot reach the work-free answer even
+   by accident. The test states this as the signature (`isWorkFree.length === 2`) so a future "just one more argument"
+   fails loudly instead of quietly.
+2. **A feed is recognised by the file, not by the event text.** `holidayFeedName` / `holidayFeedOf` read the file's
+   `X-WR-CALNAME` (Google names its feeds "Holidays in Poland"; the URL form `…#holiday@group…` is matched too). The
+   over-marking direction is deliberate: a calendar called "Holiday planning" is marked imported, which is quiet, while
+   under-marking would be a silent day off.
+3. **The look is imported, never work-free.** `markImportedHoliday` writes `x.icsHolidayFeed` + `x.icsHolidayName` on
+   **all-day, non-reminder `.ics` items only**; `importedHolidayAttrs` turns that into the `is-imported-holiday` class
+   and a `data-imported-holiday` naming the feed. The CSS paints it with a neutral `currentColor` edge and a dashed
+   item border — it is asserted **not** to appear in the work-free or holiday tint rules, so a subscribed holiday week
+   can never look like a day off this calendar decided on. Both the item button (Week/Day/Agenda) and the Month cell
+   carry it.
+4. **Two places say so in words.** The import card gains a line naming the feed and explaining that its days arrive as
+   ordinary events; the holidays settings dialog gains `cal.holidays.importedNote` — "these holidays are local to Notes
+   and are never synced". Both strings exist in en and pl, and the test fails if either key goes missing.
+
+**No etag churn:** the two marks are kept by `cleanItem` only when present and only on `src: "ics"` items, so a file
+that is not a holiday feed imports byte-identically to before, and a store that never saw one serialises and hashes
+exactly as it did.
+
+**Tests:** `tests/notes-calendar-imported-holidays.test.cjs` (14). The live one drives a real sheet (fake DOM, real
+store, real module) through the actual `planIcsImport` → `store.items.upsert` → render path and asserts the mark lands
+on `2026-11-01` and `2026-11-11` and on no other cell — verified by deliberately disabling the render call and watching
+the test fail (1 negative check, not a claim). The harness the holiday tests share was extracted to
+`tests/helpers/holiday-harness.cjs` so `notes-calendar-holidays.test.cjs` and this file cannot drift apart.
+
+#### `T2.13` — ICS export/import and Google-sync groundwork (always last in Track 2)
+
+**Status:** `DONE` (3.3.309) · **Impact:** Med · **Effort:** M · **Source:** carried over from the previous roadmap (unchanged requirement)
+
+**Current state and what is LEFT:** **DO NOT BEGIN UNTIL EVERY OTHER TRACK 2 ROW IS `DONE`.** Local `.ics` export/import with stable `uid` / `etag` / `updated`, `syncState`, and RRULE serialization.
+
+**Progress:** the **import** half shipped ahead of this row as the owner's `OW-53` (3.3.280): `parseIcs` / `icsToItem` /
+`planIcsImport` in the calendar module, with stable `x.icsUid`, `EXDATE` and the `RRULE` subset, and a card in Calendar →
+Tools. **Finished at 3.3.309** — the three things that were LEFT, each verified rather than assumed:
+
+1. **The writer.** `icsFromItems(items, {now, name, uidFor, prodId})` in the calendar module emits a full `VCALENDAR`
+   (`VERSION`, `PRODID`, `CALSCALE`, `METHOD`, `X-WR-CALNAME`), one `VEVENT` per item with `UID`, `DTSTAMP`, `CREATED`,
+   `DTSTART`/`DTEND`, `SUMMARY`, `DESCRIPTION`, `LOCATION`, `STATUS`, `RRULE`/`EXDATE` verbatim from the reader's own
+   subset, and a `VALARM` for a reminder. Lines are CRLF and folded at **75 UTF-8 octets** — folding counts octets, not
+   characters, so a 4-octet emoji is never cut in half (pinned). `DTSTART;TZID=` is written in the item's own zone and
+   the wall clock is derived through `Intl`, so the instant round-trips: 09:00Z in `Europe/Warsaw` goes out as
+   `20261118T100000` and comes back as 09:00Z. All-day uses `DTEND;VALUE=DATE` one day **after** the last day, which is
+   what the reader expects. A timed event with no end gets the default duration. **Identity is the point:** an item's
+   own `x.icsUid` is reused, and an item that never came from a file gets `<id>@zentral-notes` — never the clock, so the
+   same item exported twice has the same UID and a re-import updates instead of duplicating. A cancelled import
+   (`x.icsCancelled`) is filtered out **in the writer**, not in the card, so no caller can resurrect a cancelled event.
+2. **`syncState` per item.** `x.syncedEtag` (the etag the other side holds) plus `x.syncedDeleted` give
+   `syncStateOf(item)` → `new` / `changed` / `clean` / `deleted`; `markSynced(item, remoteEtag)` and
+   `markSyncedDeleted(item)` write that bookkeeping; `syncPlan(items)` groups a whole calendar and counts what a pass has
+   to push. Both fields are kept by `cleanItem` **only when present**, by the same rule as item colour, so an item that
+   never synced serialises and hashes exactly as before — no etag churn (pinned). Nothing in this layer touches a
+   network: it is what a sync reads, not the sync.
+3. **The round-trip fixture.** `tests/notes-ics-export.test.cjs` (12 assertions) takes the **OW-53 import fixture** —
+   Google-shaped, folded, escaped, with a `TZID` event, an all-day event, a weekly `RRULE` + `EXDATE`, a `VALARM` and a
+   cancelled event — imports it, exports it, imports that back, and asserts the two calendars agree on every field that
+   carries meaning (start instant, end, summary, description, location, recurrence, reminder, calendar name). It also
+   asserts the strong form of "a second import updates": feeding the exported file back against the items it came from
+   yields **3 updates, 0 adds**. `tests/notes-ics-export-card.test.cjs` drives the card itself with the real sheet code
+   and the real calendar module (fake DOM, not a re-implementation): the row opens from Calendar → Tools, the card names
+   `Everything (3)` with a cancelled import left out of the count, opening it writes nothing, and pressing Export saves
+   one file through the host whose text imports back to those same three events. Well-formedness is checked over the whole file: no bare `LF`, no line over 76 octets,
+   `BEGIN:VEVENT`/`END:VEVENT` balanced.
+
+**The card and the seam:** Calendar → Tools → *Export calendar (.ics)…* opens the `zn-dialog-card` pattern with an
+"Everything (n) / This year (n)" chip pair, and only the Export button writes; the file goes through `env.saveIcs`, the
+same save picker as every other export, so a host (and a test) answers without a dialog. `cal.ics.export*` strings exist
+in **en and pl**, and the test fails if either key is missing — no raw key can reach a person.
+
+**Honest limits:** there is no network sync and no OAuth — the "Google-sync groundwork" is exactly the shape and the
+bookkeeping (`toGoogle`/`fromGoogle` already existed; `syncState` is new). `TZID` is resolved through `Intl`, so a zone
+whose rules differ between the platform's tzdata and Google's may disagree on a historical instant. `VALARM` is written
+for the first reminder only. `T2.13a` (holiday feeds, `OW-44`) follows this row and is DONE at 3.3.310.
+
+**Full specification (original row):** **OPEN — DO NOT BEGIN UNTIL EVERY OTHER T2 TASK IS COMPLETE.** Depends on all Track 2 item model, recurrence, reminder and calendar UI work. Export/import `.ics` locally (no network); stable `uid` / `etag` / `updated`, `syncState` per item, RRULE serialization and fixture coverage.
+
+#### `T3.3` — Drag-and-drop note tabs within Zen sidebar
+
+**Status:** `PARTIAL` · **Impact:** Med · **Effort:** M · **Source:** carried over from the previous roadmap
+
+**Current state and what is LEFT:** DONE (3.3.251): a note has its own place in its folder (`order` in the note's front
+matter, `cleanNoteOrder` / `noteOrderBetween` / `compareNotes`, `store.setNoteOrder`), the tree draws hand-placed notes
+first in that order and the rest by last change, `noteDropTarget` and `noteTabDropPlan` turn a drop onto a folder row,
+a note row or the root into exactly one store change, and the existing Zen drag guard still keeps a managed tab from
+being taken out of the tree. Verified in `tests/notes-note-tab-order.test.cjs` (198/198 suite).
+
+LEFT (only this): the gesture. Zen starts the tab drag itself, so the sidebar hook must read the drop position from
+the live tab elements (`dragstart` / `dragover` / `drop` on `zen-folder` and `tab`), map the DOM row to a tree key and
+call `store.setNoteOrder` / `store.setFolder` through `noteTabDropPlan`. Not written here because the exact DOM Zen
+uses while a tab is being dragged cannot be reproduced in the fake sidebar; it needs the real window.
+
+#### `T4.3a`..`T4.3c` — Modularize `ZentralNotes.uc.js` (split of T4.3)
+
+**Status:** `a`/`b`/`c` DONE · **Impact:** Med · **Effort:** M each · **Source:** previous roadmap
+
+`a` DONE (T4.3a): `additional/notes/calendar/ZentralNotesCalendarUI.js` owns the calendar UI's pure geometry, label, colour, fit, week-span, holiday and drag decisions; `ZentralNotes.uc.js` loads it as `notes-calendar-ui`, delegates through `CALENDAR_UI`, keeps a compatibility shim for minimal hosts, and embeds it in the standalone bundle. The test seam is unchanged and gains `CALENDAR_UI_PART` / `CALENDAR_UI`. `tests/notes-calendar-ui-part.test.cjs` is red on the old tree and green on the new one.
+
+`b` DONE (T4.3b): `additional/notes/parser/ZentralNotesParserGraph.js` owns 20 pure parser / wiki-graph / import-export decisions (note links, fences, titles, folders, backlinks, export names/text, backup paths and manifests). `ZentralNotes.uc.js` loads it as `notes-parser`, binds host helpers through `createParserGraph`, delegates through `PARSER_UI` and keeps the original inline bodies when the part is absent. The core seam gains `PARSER_PART` / `PARSER_UI`; `tests/notes-parser-graph-part.test.cjs` is red on the old tree and green on the new one.
+
+`c` DONE (T4.3c): `additional/notes/zen/ZentralNotesZenSidebar.js` owns 21 pure Zen-sidebar UI decisions (tree projection/diff, folder ids, adoption, favicons, URL parsing, cleanup/drop plans, session payload filtering) behind `createZenSidebar(deps, config)`. `ZentralNotes.uc.js` remains the single build/loader entry, loads the part once, delegates through `ZEN_UI`, keeps the original inline bodies when absent and publishes `ZEN_SIDEBAR_PART` / `ZEN_UI` on the unchanged core seam. `tests/notes-zen-sidebar-part.test.cjs` is red on the old tree and green on the new one. After each step all tests and the standalone build passed unchanged.
+
+#### `ST7.3` — Move calendar UI state out of notes metadata
+
+**Status:** `DONE` (3.3.295) · **Impact:** Low-Med · **Effort:** S · **Depends on:** none · **Source:** Audit R2 P5
+
+**Problem:** `setMeta` rewrites the whole meta file (folders, up to 5000 note agenda overrides) 600 ms after every view/cursor/size/filter change (one write 600 ms after the last change: a drag of the Size slider is one write).
+
+**Plan (do in this order):**
+
+1. Store `calendarView`, `calendarCursor`, scale/range, filters in a small separate file or prefs; migrate once.
+
+**Tests / done when:** Migration test; no meta write on Prev/Next.
+
+#### `OW-63` — Stopwatch face: click returns to the clock, and a narrow widget keeps its buttons
+
+**Status:** `DONE` (3.3.297) · **Impact:** High · **Effort:** M · **Depends on:** OW-60 · **Source:** Owner report (2026-11-17)
+
+**Problem (owner's words):** "clicking on stopwatch doesnt revert it to clock and text field elements of it do not adjust for buttons to be visible in lower width scenarios". OW-60 made the two faces replace each other and put the timer controls on the timer face, but the timer face only leaves by an explicit control, and its number inputs have fixed widths that overflow before the buttons wrap.
+
+**Plan (in this order):**
+
+1. A click on the timer face that is not on a button or a field goes back to the clock face (the same "click the face" gesture OW-60 gave the clock, in the other direction).
+2. The timer face becomes a grid that wraps: the fields take what is left and the buttons move to a second row instead of being pushed out. No fixed pixel widths on the fields; `min-width: 0` so they can shrink.
+3. Check the narrowest sidebar width and the text-size setting.
+
+**Tests / done when:** A fake-DOM test clicks the timer face and asserts the clock is shown; a layout test asserts no control exceeds the card at 200 px; settings for text size do not overflow it.
+
+#### `OW-64` — One language selector for every widget, following Notes until overridden
+
+**Status:** `DONE` (3.3.299) · **Impact:** Med · **Effort:** M · **Depends on:** — · **Source:** Owner request (2026-11-17)
+
+**Problem (owner's words):** "build language selector for all widgets, it should sync with notes language untill user decides that it should not". Only Notes has a language today (`notesLang`), and each other widget is English/Polish by its own rule.
+
+**Plan (in this order):**
+
+1. One pref, `widget_language` (`auto` = follow Notes, else `en`/`pl`), through the whole chain (schema, settings meta, layout, standalone) so it appears in the dialog.
+2. Every widget's `t()` resolves through it: `auto` asks Notes, an explicit value wins and is remembered as the person's choice.
+3. The selector shows "follow Notes" as its own state, and changing the Notes language changes every widget that is still on `auto`.
+
+**Tests / done when:** `auto` follows a Notes language change; an explicit choice survives a Notes change; the pref is in the dialog.
+
+#### `OW-62` — An imported .ics reminder that cannot be deleted: recreate its note
+
+**Status:** `DONE` (3.3.298) · **Impact:** High · **Effort:** S-M · **Depends on:** OW-58 · **Source:** Owner report (2026-11-17)
+
+**Problem (owner's words):** "i still can not delete reminder that was created by ics import, make safeguard for it that will at least try to create such note if it needs one and its not avalible". OW-58 made an item without a note deletable in principle; an imported item still refuses when its linked note is missing rather than making the note it says the person should edit.
+
+**Plan (in this order):**
+
+1. Find the refusal path (the item menu says "delete it in its linked note" when `noteId` is set but the note is not in the store).
+2. When a note is needed and absent, create it (the same way the item's link would have) and then carry out the action — delete, unlink or edit — instead of stopping.
+3. If the note cannot be created, the fallback is the OW-58 path: delete the item itself, saying so.
+
+**Tests / done when:** An imported item whose note is missing can be deleted, and the note is created on the way; the menu never says "edit it in its note" about a note that does not exist.
+
+#### `ST7.4` — Render Agenda rows without real tabs (research)
+
+**Status:** `DONE` (research report) · **Impact:** Low-Med (long term) · **Effort:** L · **Depends on:** ST7.1 · **Source:** Audit R1 D6
+
+**Problem:** Every item is a real pinned `about:blank` tab, which is the root of the session/sync/tab-cycling edge cases.
+
+**Plan (do in this order):**
+
+1. Investigate whether Zen's folder DOM can host non-tab rows with the same hover/drag behaviour; prototype behind a flag; abandon if Zen internals fight it.
+
+**Tests / done when:** Prototype report. DONE: `docs/st7-4-agenda-rows-research.md` documents the current tab-based architecture, a flag-gated non-tab row prototype design (`zen.workspace.zentral.notes.agenda_dom_rows`, proposal only), the hover/drag/session contracts, the live-Zen owner gate and the static abandon decision. No runtime prototype, pref or code path was shipped; no live Zen/Sine runtime was available, so no visual, drag or session-restore effect is claimed. `tests/st7-4-agenda-rows-research.test.cjs` pins the report and its verification limits.
+
+#### `OW-77` — Measure every calendar and notes menu, in a real browser, and keep the numbers
+
+**Status:** `DONE` (3.3.314) · **Impact:** Med · **Effort:** M · **Depends on:** OW-75 · **Source:** Owner decision (2026-11-18), "go for it, going to be useful in the future, you can get all zentral elements there"
+
+**Problem:** OW-75 was decided by measuring the menus by hand in the headless-Chromium harness of
+`tools/audit-notes-calendar-fit.cjs` (the Tools menu was 18 rows, 568 px at 13 px text and 619 px with a scrollbar at
+20 px). Those numbers are in this file's history, not in a check anyone can run tomorrow. The owner's complaint was
+"unreadable", which is measurable: rows too tall or too short for the text size, labels clipped, a menu taller than the
+window it opens into, a menu that covers its own trigger, or a submenu that loses the level you came from. None of that
+is in the suite, because a fake DOM has no layout.
+
+**Plan (in this order):**
+
+1. Add `tools/audit-notes-menus.cjs`, modelled on the calendar-fit audit (same page, same real sheet, nothing mocked
+   but the disk): open every Notes and calendar menu — View, Size, Snap, Days, Kind, Category, Tools and all of its
+   groups, `+` and its calendar group, the item context menu, the note menu, the outline and find menus — at 2 text
+   sizes, 2 sheet sizes and 2 scrollbar kinds.
+2. Report, per menu: row height against the text size, label/row clipping, menu height against the window, whether a
+   submenu keeps a Back row and keeps the trigger reachable, and focus order. Fail on a real defect; print the numbers.
+3. Record the baseline in `docs/` so a regression is a diff, not a memory.
+4. Keep it out of the suite (it needs a browser) but list it next to the other audits in the README/housekeeping notes,
+   with the `NODE_PATH` recipe the other audits use.
+
+**Tests / done when:** The tool runs at 0 findings on the current build, every calendar menu appears in its output with a
+row height and a verdict, and the recipe is documented so the next session can re-run it.
+
+**Done at 3.3.314.** `tools/audit-notes-menus.cjs` opens the real sheet in a headless Chromium (nothing mocked but the
+disk) and opens **11 menus**: calendar View, Size, Snap, Days, Kind filter, Category filter, Tools, the month cell and the
+calendar item context menus; the notes `+` menu and a note row. It also opens every group row inside each of them and
+comes back through its Back row. Grid: 3 text sizes (13/20/28 px) × 2 sheet widths (1100/620) × 2 sheet heights
+(560/720) × both scrollbar kinds = **264 measurements, 0 findings**, 16 cells "not applicable" (a 620 px sheet draws
+Month as the date-only picker, so there are no cells or marks to right-click — counted apart, never as a defect).
+
+**What it measures, per menu:** a row shorter than its own label (`row-tight`), a row over 2.6× the text size for one
+line (`row-tall`), a label wider than its box with no ellipsis (`label-clipped`), a menu taller than the window and not
+scrollable (`menu-too-tall`), a menu whose box leaves the window (`menu-off-window`), a group level with no Back row
+(`group-no-back`), a group that loses its parent level (`group-loses`), an empty menu, and a page error.
+
+**The numbers are kept.** `docs/MENU_BASELINE.md` is generated with `--baseline` (one row per measurement: rows, menu
+height, verdict) and `--compare docs/MENU_BASELINE.md` fails when any menu height moves by more than `--tolerance` px.
+At 13 px text the calendar Tools menu is 196 px (6 rows, 29.5 px each) and the `+` menu 196 px (6 rows); the largest is
+the month cell menu at 10 rows, growing from 343.5 px at 13 px text to 591 px at 28 px.
+
+**The tool was proved to catch defects, not just to pass.** Giving every menu row a 6 px height produced **67**
+`row-tight` findings across all 11 menus; raising the rows' padding from 5 px to 18 px moved **226 of 264** baseline rows
+and made `--compare` exit 1 with named menus (Tools 331 → 448 px, `+` 331 → 487 px). Both were reverted; the 0-finding
+run above is on the real stylesheet.
+
+**A real bug the tool found in itself, and one in the report:** the first version removed the open menu node by hand
+between measurements, which left the sheet's own menu variable pointing at a detached element, so the next `fill` threw
+"the node to be removed is no longer a child of this node" — it now closes menus the way a person does, with a
+pointerdown outside. And skipped cells were still averaged into their menu's height range with an uninitialised value,
+which made a 300 px menu look like it ran to 720 px; they are now excluded.
+
+**Not in the suite**, deliberately: it needs a browser. The recipe is in the tool's header and in
+`additional/notes/README.md` beside the other audits (`mkdir /tmp/ch && npm i @sparticuz/chromium puppeteer-core`, then
+`AWS_EXECUTION_ENV=AWS_Lambda_nodejs22.x NODE_PATH=/tmp/ch/node_modules node tools/audit-notes-menus.cjs`).
+
+**Honest limits:** measured in Blink; Zen draws with Gecko, which differs by a line's height and a glyph's width — the
+verdicts are written for that ("tight" only when a label is actually cut, not when it is near the edge). Quick settings
+opens a card, not a menu (`openCard` + `fitCard`), so it is measured by the settings-layout audit, not here.
+
+#### `OW-78` — One palette: the CSS variables and the JS resolver must agree
+
+**Status:** `DONE` (3.3.311) · **Impact:** Med · **Effort:** S · **Depends on:** OW-76 · **Source:** Owner decision (2026-11-18), "okey, plan it as to do after those few adjustments"
+
+**Problem:** After OW-76 the sheet has two ways to arrive at a surface. The JS resolver (`resolveThemeSurface`) reads
+`--zen-colors-base` / `--zen-colors-text` / `--zen-colors-border` / `--zen-primary-color`, applies contrast guarantees
+and writes `--zn-surface-resolved` / `--zn-text-resolved` / `--zn-accent-safe`. The stylesheet separately defines
+`--zn-surface: var(--bgalazka-look-toolbar-surface, var(--bgalazka-look-surface, #1e1e24))` and
+`--zn-text: var(--bgalazka-look-text, #e9e9f0)`. So a rule that reads `--zn-surface` can still show the RSS card's
+colour while a rule that reads `--zn-surface-resolved` shows Zen's — the same sheet in two palettes, which is exactly
+the "how do the themes interact" complaint. It works today only because the resolved tokens are set inline and win.
+
+**Plan (in this order):**
+
+1. Make the stylesheet's own defaults read the resolved tokens first (`var(--zn-surface-resolved, ...zen tokens...)`)
+   and keep the RSS variables as the last fallback only.
+2. Delete any remaining hardcoded `#1e1e24` / `#e9e9f0` defaults that a theme should be able to move, or move them into
+   the resolver's documented fallback so there is one source.
+3. Add a check that the two paths cannot disagree again: a test that sets host tokens and asserts both the computed
+   `--zn-surface` and the JS `surface` are the same colour.
+4. Document the chain in one place (the CSS header comment) so the next person does not re-add an RSS token first.
+
+**Tests / done when:** With `--zen-colors-base` set, the computed `--zn-surface`, `--zn-panel` and `--zn-surface-resolved`
+are all that colour; with the tokens removed the documented fallback appears in all three; a test fails if the stylesheet
+starts reading a non-resolved source first.
+
+**Done at 3.3.311** — and the row earned its keep by finding a real bug, not just a reordering.
+
+**The chain, now read from one end in every rule that sets it:** `--zn-surface: var(--zn-surface-resolved, var(--zen-colors-base, var(--bgalazka-look-…, #1e1e24)))`
+and the same shape for `--zn-text`. All four theme rules (`recommended`, `light`, `dark`, `paper`) gained the resolved
+token as their first rung; the fixed themes' own hexes stay as the second rung, so a sheet whose JS never ran still
+paints exactly as before. The RSS card's `--bgalazka-look-*` set is now the **last** rung and is documented as such —
+in the CSS header comment beside the tokens, which names this row and points at `resolveThemeSurface`.
+
+**The bug it found:** `resolveThemeSurface` ended its text chain with `isLight ? "#1c1c22" : "#e9e9f0"` — a hardcoded
+pair that only matched two of the four themes. `paper`'s stylesheet text is `#3b3226` and `light`'s is `#1d1d22`, so the
+moment the resolved token started winning (step 1 of this plan), **the paper theme's text would have jumped from warm
+brown to near-black and the light theme's by one step**, silently. The resolver now reads `base.text` — the theme's own
+entry, already resolved for the scheme. Every theme now agrees with its stylesheet hex: light `#fbfbfd`/`#1d1d22`,
+dark `#17171c`/`#e9e9f0`, paper `#f4ecd8`/`#3b3226`, zentral `#1e1e24`/`#e9e9f0`, recommended `#1f1f24`/`#eeeeee`.
+
+**The one deliberate exception, written down:** an explicit override the person chose (`--zentral-notes-ov-bg` /
+`-ov-text`) still opens its chain directly. A colour the owner picked is the last word and must not be mediated by the
+resolver; the test allows exactly those two names and asserts there is no third.
+
+**Tests:** `tests/notes-one-palette.test.cjs` (10). Static: the order of every `--zn-surface`/`--zn-text` chain in the
+whole file, and that no rule opens with a foreign palette. Agreement: the resolver's per-theme fallback equals the
+stylesheet's hex for every theme. Live: a real sheet, read back from its inline custom properties, with the theme it
+says it is on resolved by the same function. Verified by negative check — restoring the hardcoded pair fails 1 of 10.
+
+#### `OW-79` — More languages, and never a raw key on screen
+
+**Status:** `DONE` (3.3.313) · **Impact:** Low-Med · **Effort:** M · **Depends on:** — · **Source:** Owner decision (2026-11-18), "you can prepare us for more languages"
+
+**Problem:** Adding a language is meant to be a data file (`additional/notes/i18n/en.js`, `pl.js`), but a real browser
+run of the harness showed the sheet drawing literal keys — `cal.todayBtn` appeared as the Today button's text — when no
+language table was registered for the active language. In production that means any build or host that misses a table,
+or a new language file that is not complete yet, shows a person `cal.todayBtn` instead of "Go to today". The i18n test
+suite passes because it always registers both tables.
+
+**Plan (in this order):**
+
+1. Make `t()` fall back per key, not per table: a missing key in the chosen language falls through to English, and a key
+   missing everywhere shows the English default (never the raw dotted key). Log the gap once so a developer sees it.
+2. A test that builds the sheet with only one language registered, and with a deliberately incomplete table, asserting
+   no rendered text matches `/^[a-z]+(\.[a-zA-Z]+)+$/` (a dotted key) anywhere in the sheet.
+3. A test that a fully-formed language file discovered in `i18n/` is picked up by the language menu without touching JS.
+4. Document "how to add a language" in `docs/`: the file shape, the plural categories, the date words, and how to check
+   it with the audit tool.
+
+**Tests / done when:** An incomplete language shows English for the missing keys and never a key name; a new file needs
+only to exist to appear in the menu; the suite covers both.
+
+**Done at 3.3.313** — and the third item on the list turned out to be the real work; the first two were half-done already.
+
+1. **Per-key fallback was already there; the raw key was the hole.** `translate` fell through to English per key, but its
+   last resort was `k` — the dotted key itself, which is exactly what a person saw. It now: falls through per key to
+   English (an **empty string** in a table counts as missing too, so a blank line in a translation file cannot blank a
+   label), and when no table has the key at all it draws **readable words** from the key's last segment
+   (`cal.todayBtn` → `Today btn`), never the dotted form. The gap is reported **once per key and language** through
+   `reportTranslationGap` — a `console.warn`, a `translationGaps()` list and an `onTranslationGap` subscription — because
+   the sheet draws constantly and a warning per draw would be noise nobody reads.
+   **Found and fixed while doing this:** two places in the sheet asked "is there a translation?" by comparing
+   `t(key) === key`. Once `t()` stopped returning keys, that test became always-true and every settings option would have
+   shown the readable form of its own key. Both now ask `hasTranslation(key)`, which is the question they meant.
+2. **A new language is now genuinely a data file.** Before, it took three edits in two JS files: one `loadOptional` line
+   per language, `NOTES_LANGUAGES = ["en","pl"]` in the core, and a hardcoded `[["en","English"],["pl","Polski"]]` in the
+   settings menu — and the menu was the one nobody remembered. `tools/build-languages.cjs` now generates
+   `i18n/registry.js` from the **directory**; the sheet loads the registry then each language it names; the menu is
+   built by `notesLanguageChoices()` from `notesLanguages()`, i.e. from what actually registered. The core's
+   `NOTES_LANGUAGES` survives as a floor, not a gate. `build-languages.cjs --check` runs in the suite (beside the z-map
+   check), so a forgotten step fails in CI rather than in a user's browser.
+   **Proven, not asserted:** `i18n/de.js` was added — a real German table (weekdays, months, relative words, counted
+   offsets, ordinals) with only a handful of interface strings translated. It appeared in the registry, in the menu
+   (`Deutsch (German) — 879 missing`), and its date words parse (`heute`, `übermorgen`, `25. dezember`, `in 3 tagen`,
+   `vor 2 wochen`). The menu is honest about an incomplete language instead of pretending.
+   **A shape change fell out of it:** three options make `choiceIsDropdown` true, so the language row is now a dropdown
+   rather than a chip pair. `notes-i18n-ui` accepts either shape.
+3. **The docs.** `docs/ADDING_A_LANGUAGE.md` — the file shape, the tables a language needs beyond `strings` (with the
+   German example for each), the plural categories, the registry tool, how to check it, and what to do about keys no
+   table has. `i18n/en.js`'s own header points at it, because that is the file a translator actually opens.
+
+**Tests:** `tests/notes-more-languages.test.cjs` (11): per-key fallback, readable words for an unknown key, a blank
+counting as missing, the gap listener, registry currency, "nothing in the JS names `de`", the menu's honesty, German
+date parsing, and two live-sheet runs — one with the incomplete table registered, one with **no** table at all —
+asserting no rendered text matches `/^[a-z][A-Za-z0-9]*(\.[A-Za-z0-9_]+)+$/`. Verified by negative check: restoring
+`template = k` fails 2 of 11.
 
 ---
 
-## Track 4: Final Verification, Performance & Release Hygiene
+## Owner requests added 2026-11-18 (Extended 3.4.0)
 
-_Execute after Tracks 1–3 are complete._
 
-| #   | Track ID | Ref            | Item                                                                                    | Impact   | Effort | Implementation Plan & Dependencies                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| :-- | :------- | :------------- | :-------------------------------------------------------------------------------------- | :------- | :----- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 30  | `T4.1`   | `Cycle F #3`   | Owner's comprehensive verification note (`Markdown & Extended Syntax Feature Showcase`) | High     | S      | Bundle/update the built-in showcase note covering all 12 verification sections: (1) Inline styles, `==highlight==`, `<kbd>`, `~sub~`/`^sup^`, dividers; (2) H1–H6 hierarchy & auto-updated `## Table of Contents`; (3) Multi-paragraph & nested blockquotes; (4) Obsidian callouts including foldable `[!faq]-`; (5) Unordered, ordered & interactive task lists (`[x]`, `[?]`, `[ ]`); (6) Aligned GFM tables with escaped pipes `\|`; (7) Highlighted code blocks (JS, Python, Rust, JSON); (8) Inline `$...$` & block `$$...$$` LaTeX matrices/equations; (9) Wikilinks (`[[Note\|Alias]]`, `#Heading`, `^block-id`), nested `#tags`, and `![[embeds\|450]]`; (10) Standard `[^1]` & inline `^[...]` footnotes; (11) Native HTML `<details>` accordions; (12) Mermaid diagrams (`flowchart`, `gitGraph`). |
-| 31  | `T4.2`   | `Cycle G #17`  | Performance audit & active timer/listener registry table                                | Med-High | M      | Profile parser, reminder scheduler, and DOM observers; document all active `setInterval`/`setTimeout`/event listeners in a central registry to guarantee zero memory leaks on panel close.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| 32  | `T4.3`   | `Cycle G #22a` | Modularize `ZentralNotes.uc.js` into maintainable sub-modules                           | Med      | M-L    | Split monolithic `ZentralNotes.uc.js` into clean domain modules (Parser, WikiGraph, Reminders/Calendar, ZenUI, ImportExport) with a single build/loader entry point.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| 33  | `T4.4`   | `Debts`        | Dead code removal (`stretched()`, legacy `quad` helpers)                                | Low      | S      | Remove unused legacy layout functions (`stretched()`, obsolete `quad` math/positioning helpers) confirmed dead after `T4.1` verification.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| 34  | `T4.5`   | `Debts`        | Standalone modules version alignment & release hygiene                                  | Low      | S      | Synchronize version strings, headers, and changelogs across all standalone and bundled scripts prior to release tag.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+#### `OW-105` — Respect explicit widget colour settings
+
+**Problem:** The widgets ignore colour values when a specific colour is forced through Settings. A saved explicit choice must take precedence over theme-derived fallback values.
+
+**Plan (in this order):**
+
+1. Trace the setting-to-render path for all widget cards and distinguish an unset value from an explicit valid colour.
+2. Fix the smallest shared resolver/paint path so explicit values are applied consistently without changing automatic theme behaviour or unrelated app colours.
+3. Add regression tests for explicit colours, unset colours, invalid values and live setting changes; cover all widget types that share the path.
+
+**Tests / done when:** Explicit settings are visible on every supported widget after opening, repainting and changing theme; automatic colours still work when no override is set.
+
+#### `OW-106` — Open Notes and Calendar on All notes
+
+**Problem:** Opening Notes/Calendar resumes the last opened note, but the requested default landing place is the All notes screen.
+
+**Plan (in this order):**
+
+1. Trace startup/open routing and the persisted last-note state. Keep explicit navigation to a note working.
+2. Make a fresh feature open and the default Notes/Calendar entry route land on All notes rather than replaying the last note.
+3. Add tests covering a previously opened note, repeated open/close, a direct note link/reminder open, and switching between Notes and Calendar.
+
+**Tests / done when:** The default open shows All notes every time; intentional navigation to a particular note still opens that note and does not get redirected.
+
+#### `OW-107` — Weather location privacy and security audit
+
+**Problem:** The owner needs a precise account of what weather location data is shared, with which service, on what trigger, and whether it is retained or reused.
+
+**Plan (in this order):**
+
+1. Trace place entry, geocoding, request construction, refresh, cache, diagnostics and error logging; identify every field sent and every network destination.
+2. Verify that coordinates are resolved only from the user's explicit place choice, not silently read from browser/device geolocation; check request headers, credentials, referrer, redirects and third-party exposure.
+3. Fix any unnecessary data exposure or unsafe handling. Keep the feature functional and explain any unavoidable provider-visible data in the README/settings copy.
+4. Add tests that pin the request host, payload, headers, geocoding and refresh behaviour, including that no device location permission/API is invoked unexpectedly.
+
+**Tests / done when:** A code-backed security report states exactly what data is sent, to whom and when; tests prevent silent geolocation or unintended extra disclosure.
+
+---
+
+## Boost audit findings added 2026-11-18 (owner's F1–F5)
+
+The owner ran a second agent over an **older** Boost patch and asked that none of these be trusted (or dismissed as
+"already tweaked") without a test against the code that is in this repository now. Each row below keeps the finding's
+own wording; the tests are written first, run against the current code, and the fix lands only where the current code
+still has the defect. Version stays `3.4.0`, build chain uses `--keep-version`, `docs/perf-results.md` gets one
+line per shipped row. All five are `OW-*` code tasks, so rule 1 puts them ahead of `T4.3a`.
+
+
+## Track 2 design rules (owner decisions, still binding)
+
+_Re-planned 2026-11-11 from the owner's wishes. The All notes view becomes an adjustable split: folder tree and calendar side-by-side in a wide window, stacked in a tall/narrow window. Dependency flow: calendar core and persistent item store (`T2.1`, `T2.3a`)_ $\rightarrow$ _date parser and shared date controls (`T2.12a–c`, `T2.2a`)_ $\rightarrow$ _date chips and Notes by date (`T2.2b–c`)_ $\rightarrow$ _item editors and safety prompts (`T2.3b–h`), duplicate-line identity follow-up (`T2.3a1`)_ $\rightarrow$ _calendar layout and views (`T2.4a–b`)_ $\rightarrow$ _calendar correctness audit (`T2.4b-audit`)_ $\rightarrow$ _week/day views (`T2.4c`)_ $\rightarrow$ _drag/resize/create (`T2.5`)_ $\rightarrow$ _Big Picture (`T2.6`)_ $\rightarrow$ _alerts (`T2.7a–c`)_ $\rightarrow$ _Agenda/Daily unification (`T2.8–9`)_ $\rightarrow$ _holidays and folder exclusion (`T2.10–11`)_ $\rightarrow$ _ICS groundwork (`T2.13`, always last)._
+
+**Rules for the whole track (owner, 2026-11-11):**
+
+- No Google sync now, but every stored item uses Google Calendar's field names and meanings (`id`, `summary`, `description`, `start` / `end` as `date` or `dateTime`, `status`, `updated`, `etag`, `recurrence`, `reminders.overrides`), plus our own `x` fields (`noteId`, `heading`, `category`, `kind`), so a later sync only has to map ids. Times are stored as UTC milliseconds plus an `allDay` flag; all-day items use an exclusive end date as Google does.
+- An item has a **kind**: `event` (start and end; many may overlap and every one must stay visible and readable, details on hover) or `reminder` (a start and NO end; shown as a marker on its day and in the days-forward list, readable on hover).
+- One note may hold **any number of items and any number of independent reminders**. Multiple reminders on the same note are a core requirement, not a one-reminder-per-note limitation: each reminder has its own date/time and, when implemented in `T2.7`, its own recurrence, alert settings, snooze, Done and Dismissed state. The calendar and Agenda folder show every item/reminder separately. The legacy single `remind` field is surfaced as one additional read-only compatibility reminder during the transition; it must never cap the number of new reminders.
+- **Accepted by the owner (2026-11-11): reminder history.** Done and Dismissed are different outcomes. Provide one central, chronological **Reminder history** list exposed as a single virtual history note/list (not one generated note per reminder); every state change appends an entry containing reminder identity, linked source note, action and an exact timestamp. Clicking **Done** adds a visible entry such as _Marked done at 14:32_; **Dismiss** is recorded separately and must not imply completion. Clicking a history entry opens its source note at the relevant heading/item. Reopening, rescheduling and snoozing append further entries rather than overwriting old history. Recurring reminders record state/history per occurrence so completing one occurrence does not complete the series. Keep this state separate from Google event `status` (`confirmed`/`tentative`/`cancelled`).
+- **Accepted by the owner (2026-11-11): configurable sound and quiet hours.** Quiet hours are **OFF by default** and must not change existing alert behavior until the user enables them. When enabled, the user can define a time window and days, including windows that cross midnight. Sound intensity is configurable for each alert stage, with defaults and overrides at global, category, note and individual-reminder level (precedence: reminder > note > category > global). Support at least _silent_, _quiet_, _normal_ and _loud_ sound levels. During quiet hours, the allowed sound levels/stages can also be configured globally or overridden for a particular note/reminder/category; examples: one note allows only _loud_, another allows _quiet_ and _normal_. Visual alerts and due times remain accurate; blocked sounds are suppressed rather than shifting reminder times or playing a catch-up burst when quiet hours end.
+- Every item may have its own **calendar note** (free text). Calendar notes are never listed in the sidebar folder tree and never in the Zen NOTES folder.
+- The calendar can be tiny in a narrow panel: it must stay usable at small sizes (list fallback), with a setting for "how many days forward" and a month view.
+- Calendar interactions must be complete from both the calendar and Agenda: left-clicking a day in Month SELECTS the day and shows its list (changed 2026-11-14, `OW-06`); Day view opens from the date badge, double-click, context menu or keyboard; right-clicking a day or item opens a context menu with actions relevant to that target. Clicking a reminder/event in Calendar or Agenda opens its linked source note at the saved heading; Agenda items also have the same contextual actions.
+- A linked reminder inherits the source note color and updates when that note color changes; use category color only as the fallback for unlinked/manual items. An explicit per-item color override may be offered, but must be intentional and visible in the editor.
+- Calendar creation must support timed events, all-day events, timed reminders and all-day reminders. Do not model a full-day reminder as a timed reminder at midnight. The default reminder composer opens with its date/calendar preview, shared Clock controls and the full settings form (title, kind/all-day, color, category, linked note, description/calendar note, timezone, recurrence, and per-reminder alert settings); creation must not require writing a marker line manually.
+- Calendar UI must offer denser sizing than the current default: a fit-to-pane default with a size slider (`OW-03`, built in 3.3.176; it replaced the old Comfortable / Compact / Extra compact steps, which remain as the three looks and as the spacing of the two lists), with responsive reductions to cell padding, row heights, labels and markers while keeping keyboard/context actions accessible; very narrow panes still use the existing list fallback.
+- Calendar-only notes (e.g. a Birthday note) must be creatable or markable so they never appear as ordinary tabs in the Zen NOTES folder, while remaining available in All notes, search, links and Calendar. This is a per-note option in addition to inherited per-folder exclusion.
+- Agenda tab visibility is per item/reminder: an entry appears in the Zen tabbar Agenda only inside its configured display window, then disappears outside it; support every reminder, not only events. The Agenda container itself hides when no entries are currently eligible. Display-window timing is separate from alert/snooze timing and has global/category/note defaults with per-item overrides.
+- Mimic the hover card of `additional/rss` for item details (both inside the Notes sheet and on Zen sidebar Notes/Agenda tabs, see `T3.4a`); mimic the Big Picture mode of `additional/video` for the popup. Read both before building.
+- Destructive actions must respect linked reminders: a note with one or more reminders must not be silently trashed or permanently deleted. The reminder-aware confirmation task below applies to every entry point, including Zen sidebar tabs and bulk Trash actions.
+
+Accepted by the owner (2026-11-11), now part of the plan: working-hours shading (`workRange`, `cleanWork` core; UI in `T2.4c`), recurring items (`expandItem` / `expandRange`, DAILY/WEEKLY+BYDAY/MONTHLY/YEARLY, INTERVAL, COUNT, UNTIL; editor in `T2.3d`), all-day strip (`allDayOf` core; UI in `T2.4b`), free-slot finder (`freeSlots` core; UI in `T2.4c`), per-item time zone (`x.tz`, `clockIn`; editor in `T2.3c`), print/export of a week (`weekText` core; menu/print in `T2.4c`), custom category colours (`T3.6` / `T2.3b`).
+**Approved owner requirements (2026-11-11):** reminder lifecycle/history (`T2.7a`) and configurable sound profiles/quiet hours (`T2.7c`) are committed scope, not optional ideas.
+
+---
+
+## Parking lot — PARKED ideas (not approved; do NOT implement)
+
+_From the owner's second roadmap (2026-11-12). Only the owner can promote a row; promoting means moving it into a Track with an `OPEN` plan. Notes for the future implementer are kept so nothing is researched twice._
+
+| Ref  | Proposal                                                                                                  | Utility | Effort | Notes (checked against this code base)                                                                                                                                                                                               |
+| :--- | :-------------------------------------------------------------------------------------------------------- | :------ | :----- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `P1` | Natural-language task creation (`- [ ] Call Sarah tomorrow at 4pm` becomes a reminder for tomorrow 16:00) | High    | High   | `parseDateText` / `parseLine` already understand relative words and times in calendar lists; the missing part is doing it outside a `%%calendar%%` section. Must stay offline and must not become a text expander (see Never build). |
+| `P2` | Sub-task nesting in Agenda items                                                                          | Med     | High   | Needs parent/child fields in the item model and in the `zn-item-id` line identity; conflicts with the Google-shaped item rule unless kept in `x`.                                                                                    |
+| `P3` | Auto-rollover of overdue tasks into Today                                                                 | High    | Med    | Needs `T2.7a` states first. Must never move a Done/Dismissed item; must never silently change the stored start time (show it, do not rewrite it).                                                                                    |
+| `P4` | Drag-and-drop reordering of Agenda items in the Zen sidebar / dragging between day nodes to reschedule    | High    | High   | Overlaps `T3.3` (tab drag) and `T2.5e` (occurrence semantics). Do after both.                                                                                                                                                        |
+| `P5` | Voice memos in date notes with transcription                                                              | Med     | High   | Needs microphone permission handling in the chrome window and an offline transcriber; no network calls allowed. Probably never.                                                                                                      |
 
 ---
 
 ## Housekeeping notes (not counted)
 
 - S6 W5 is closed. Owner decision 2026-11-06: the seamless hand-over of the Notes card with a Zentral panel is NOT wanted; sharing more old panel keys stays optional polish.
-
 - B1 (middle-click unload) is fixed in code since 3.1.19; W3 (table cell checkboxes) and W9 (`default_view`) are done. If B1 ever returns, log which tab is selected after the click (suspect Zen's `explicitUnloadTabs`).
 - A table cell only knows `[ ]` / `[x]`; `<br>` in a cell is a line break everywhere (was literal text).
 - With the sidebar order mirrored, every autosave of a note moves its tab to the top of its folder (sorted by last change like the tree); add a pref for a stable order if that annoys.
@@ -125,15 +868,239 @@ _Execute after Tracks 1–3 are complete._
 
 1. Add the pref: schema in `additional/notes/settings.json` (+ `layout` entry), list in `additional/notes/standalone.json`, constant in `PREF` and a row in the in-app settings list of `ZentralNotes.uc.js`; run `node tools/organize-layout-order.cjs`, `node tools/build-preferences.cjs`, `node tools/check-default-drift.cjs`. Copy the pattern of `default_view` or `tree_order` (grep it).
 2. Pure function first, exported through `__zentralNotesTestSeam`, fixture test red, then implement. Parser changes go in `parseBlocks` / the inline parser; keep `exportHtml` and `exportText` in step.
-3. Release loop: `node tools/build-standalone.cjs --bump`, `node tools/build-preferences.cjs`, `node tools/build-z-map.cjs`, `node tools/build-standalone.cjs --check`, then `for t in tests/*.test.cjs; do node $t || echo FAIL $t; done`.
+3. Release loop: `node tools/build-standalone.cjs --bump`, `node tools/sync-version.cjs`, `node tools/build-standalone.cjs`, `node tools/build-preferences.cjs`, `node tools/build-z-map.cjs`, `node tools/build-standalone.cjs --check`, then `node tests/run-all.cjs`. The second and third commands keep the main mod and every standalone module on one version.
 
-## NEXT SESSION HANDOFF (main + all standalone modules 3.3.0; edit in place, keep it short)
+---
 
-**Rule for every AI session: before you finish, update (1) the State line, (2) the tables above (remove what you finished), (3) Known debts, (4) the version in this heading. Do not append a new handoff block.**
+## Owner backlog 2026-11-18 (`OW-123`–`OW-132`)
 
-State: 3.3.0 main pack and all standalone modules (2026-11-10). This release completes the folder-color regression repair: Notes restores the exact native inline Zen background tokens when header/tab tints are disabled, and the two tint layers are independently marked and styled. The RMB Folder Colors menu no longer installs a MutationObserver or repeatedly queries computed styles; each generated menupopup repairs only its own generated submenu launchers on `popupshown`, while leaving actionable menuitems to Zen's native lifecycle. Copy-to-subfolders remains enabled and copies the parent's effective look or clears stale child overrides if no source exists. Accent hover changes only the derived color of the native 2px inset and curved `.tab-group-line`; its transparent hit strip remains visually transparent. Notes' folder-style dialog stays inside narrow panels and scrolls/wraps its opacity controls. Every built-in style collection contains at least five looks, with depth-specific collection choices remaining distinct. Source and standalone bundles are rebuilt together.
+These ten rows are owner-reported work. `OW-123` remains evidence-gated until
+the outer duplicate-tab attributes are supplied; `OW-124` has a static one-road
+label repair. Owner chose Option A for `OW-128`, and `OW-127` / `OW-129`–`OW-132`
+are statically implemented with pure helpers and RED→GREEN suites. Live behavior
+remains an OWNER GATE; the compatibility rows are static audits only.
 
-Verification: Colorful Folders core 19/19; folder tree/menu/hover 28/28; Notes folder/style 28/28; Notes tree 8/8; Notes UI 25/25; Notes window 24/24; quick settings 4/4; panel bridge 4/4; numeric preferences 11/11; standalone lifecycle/package 84/84. `build-z-map`, default-drift, settings/catalog consistency, standalone freshness and changed-source syntax checks pass. The full 39-file sweep was interrupted by the outer command time limit after `notes-p2-ui` printed 13/13 passing assertions. Two unrelated pre-existing tests still fail on stale expectations: `notes-cycle-g` looks for an obsolete panel selector, and `notes-zenfolder` requires a stale source section to exceed 500 characters. `notes-bars` passed when reached in the sweep.
+#### `OW-123` — Restart duplicates under the Notes folder
 
-Known debts: no live Zen instance is available in this workspace. Live Firefox/Zen confirmation remains necessary for the native XUL submenu launcher colors, actual accent-line hover/collapse target, exact Zen background restoration, and narrow Notes-panel layout. Automated coverage uses fixture DOM/XUL implementations. Do not reintroduce menu MutationObservers or global disabled-state normalizers.
-Next pick: live Zen/Firefox verification of RMB theme categories, line hover/collapse, background switch restoration, and Notes picker layout.
+**Status:** `OPEN` · **Impact:** High · **Effort:** M · **Depends on:** `OW-122`
+
+**Problem:** after restart sometimes notes duplicate; the duplicates have no
+title but do have a favicon and appear right under the Notes folder. This is
+distinct from OW-122's two stray inner-stack pseudo-tabs.
+
+**Plan:** request only the outer attributes of the duplicate `<tab>` elements
+(`id`, `label`, `image`, `pending`, `pinned`, `bgalazka-notes-*`), their parent
+folder id, `.tab-label` value/text and the canonical
+`_zenPinnedInitialState.entry.url`. Do not ask for a full JSON dump. Then write
+a RED harness test for the observed duplicate key and add a narrow dedupe that
+never deletes a real owner tab or a labelled projection entry.
+
+**Tests:** `tests/ow-123-ow-132-backlog.test.cjs` pins the specification and the
+targeted-evidence rule; the product regression must be added after the owner's
+short paste. OWNER GATE: live restart and duplicate disappearance.
+
+#### `OW-124` — Duplicated sidebar titles
+
+**Status:** `DONE` (static) · **Impact:** High · **Effort:** M · **Depends on:** `OW-116`, `OW-120`
+
+**Problem:** a note named `Problemy` can render `ProblemyProblemy` in the Zen
+sidebar.
+
+**Plan:** inspect the three label roads (`label` attribute,
+`bgalazka-notes-label`, native `.tab-label` value/text) for one affected row.
+Do not guess which road duplicates. Add a pure label-healing test that proves
+idempotence for `Problemy` before changing projection / discard healing.
+
+**Implemented statically:** supplied two-label XUL shape is pinned by
+`tests/ow-124-duplicated-sidebar-title.test.cjs`; `cleanSidebarLabelRoads()` keeps
+Zen's native `text=label` road, removes the legacy XUL `value` road, and heals
+pending rewrites idempotently. No outer duplicate-tab road was guessed; `OW-123`
+remains evidence-gated. OWNER GATE: live EN/PL titles.
+
+**Tests:** specification pinned in `tests/ow-123-ow-132-backlog.test.cjs`;
+product RED/GREEN test after targeted evidence. OWNER GATE: live EN/PL titles.
+
+#### `OW-125` — Zen 1.24.3b compatibility audit
+
+**Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Depends on:** `OW-122`
+
+**Problem:** Zen updated `1.24.2b` → `1.24.3b`; check whether mods need changes.
+
+**Done statically:** `docs/zen-1243b-compat-audit.md` maps the release notes to
+Zentral source. The Spaces Sync gap is fixed by `OW-122`; no other static mod
+change is required. No `--bump` / `sync-version`.
+
+**Tests:** `tests/zen-1243b-compat.test.cjs` pins the release facts, upstream
+paths, source greps and no-preferences-window assumption. OWNER GATE: live
+cold start, second window, selected-tab copy, single-toolbar zoom toast,
+Boost/split-view/glance behavior.
+
+#### `OW-126` — Twilight 1.25t readiness
+
+**Status:** `DONE` (static) · **Impact:** Med · **Effort:** M
+
+**Problem:** Twilight adds Little Zen and Zen's own settings window; check
+settings/window assumptions and mods.
+
+**Done statically:** `docs/zen-125t-compat-audit.md` records that Zentral
+already owns its settings shell and does not open Firefox's preferences page,
+and identifies the `navigator:browser` / `Services.focus.activeWindow` window
+assumptions. No `1.25t` tag exists yet, so no code guard is guessed.
+
+**Tests:** `tests/zen-125t-compat.test.cjs` pins the audit and targeted live
+facts to request. OWNER GATE: actual Little Zen window type/hosts and settings
+entry points.
+
+#### `OW-127` — Widget space priority and scroll access
+
+**Status:** `DONE` (static) · **Impact:** Med · **Effort:** L
+
+**Problem:** configurable order in which widgets give up space, and whether a
+given widget can be accessible with scroll or never.
+
+**Plan:** add a pure priority resolver and settings/preferences rows first;
+preserve current widget order as the default. Scroll access must be readable
+and must not add height to the collapsed sidebar. No guess about which widget
+the owner wants pinned.
+
+**Implemented statically:** `cleanWidgetSpacePolicy`, `planWidgetSpace`,
+`space_priority` / `space_scroll` schema rows and tray `data-zw-space-*`
+markers are covered by `tests/ow-127-widget-space-priority.test.cjs` (6 passed).
+No widget is chosen as pinned by default and no collapsed height is added.
+
+**Tests:** `tests/ow-123-ow-132-backlog.test.cjs` pins the settings/tests/responsive
+contract; product tests after the preference schema is added. OWNER GATE: live
+narrow sidebar and scroll behavior.
+
+#### `OW-128` — Weather rain timing
+
+**Status:** `DONE` (static) · **Impact:** High · **Effort:** L · **Depends on:** `OW-107`
+
+**Problem:** Today view says “tomorrow” even when rain is due today. Desired:
+`today`, `jutro`/`tomorrow`, `pojutrze`, `in ~45/30/15 min`, `9–15`, heavy
+rain, `all day`, readable at all widths/heights.
+
+**Plan:** Owner chose **Option A** — hourly plus optional 15-minute near-term
+with hourly fallback — in `docs/weather-rain-options.md`. Implement a pure
+next-rain helper, RED test, localized short/long strings, responsive CSS and
+the exact `--keep-version` chain/full suite. The one-request refresh policy and
+seven-day daily fallback stay intact; missing 15-minute data falls back to
+hourly, then daily.
+
+**Implemented statically:** `readWeatherRainSeries`, `weatherRainPlan`,
+`weatherRainText`, EN/PL phrase tables, `rainLines` with short/long spans and
+bounded outlook scrolling now live in the widgets source/CSS.
+
+**Tests:** `tests/weather-rain-options.test.cjs` pins the API facts, all four
+options and the owner's choice; `tests/ow-128-weather-rain-timing.test.cjs`
+is RED on the old daily-only contract and GREEN here (8 passed).
+OWNER GATE: live text, timing, localization and layout.
+
+#### `OW-129` — Clock quick note chevron
+
+**Status:** `DONE` (static) · **Impact:** Med · **Effort:** M · **Depends on:** `OW-65`, `OW-69`
+
+**Problem:** quick note is shown by default; owner wants it hidden until a small
+bottom-right chevron on the clock widget is clicked.
+
+**Plan:** change the default to hidden, add an accessible chevron button with a
+bounded scope listener, preserve the existing quick-note opener and OW-69
+one-line/Save-button rules, and keep the card height unchanged.
+
+**Implemented statically:** `clockQuickNoteVisibility` and the accessible
+absolute chevron are covered by `tests/ow-129-clock-quick-note-chevron.test.cjs`
+(5 passed). OW-69's switch and OW-68's one-line row remain intact.
+
+**Tests:** specification pinned; product RED/GREEN with the fake widgets harness
+before implementation. OWNER GATE: live click, EN/PL label and narrow card.
+
+#### `OW-130` — Pill menu autohide: click vs hold
+
+**Status:** `DONE` (static) · **Impact:** Med · **Effort:** M
+
+**Problem:** all pill menus' `toggle panel autohide` button should apply hide
+once on mouse-up, while hold keeps the old toggle behavior.
+
+**Plan:** split pointer-up and hold paths; do not fire the hold action on a
+short click and do not block the existing long-press gesture. Add a pure
+gesture classifier and harness test for short/long/cancelled presses.
+
+**Implemented statically:** marker-bounded `classifyPillAutohideGesture`,
+550 ms hold, hide-once/toggle split, delegated listeners and cleanup are covered
+by `tests/ow-130-pill-autohide-gesture.test.cjs` (4 passed). The existing
+Triple/Super-pin gesture is untouched.
+
+**Tests:** specification pinned; product RED/GREEN before implementation.
+OWNER GATE: live click, hold and Escape/cancel.
+
+#### `OW-131` — Reminder/event color picker
+
+**Status:** `OPEN` · **Impact:** Med · **Effort:** M
+
+**Problem:** `create reminder...` view needs a color picker that inherits the
+category color but allows another color while keeping the category.
+
+**Plan:** add a pure color-resolution helper (`custom ?? category ?? default`),
+expose it through the composer seam, store the override without mutating the
+category, and keep linked-note recoloring behavior from OW-120 tests intact.
+
+**Implemented statically:** `resolveCalendarItemColor`, composer color input /
+Inherit control, EN/PL keys and CSS are covered by
+`tests/ow-131-ow-132-note-colors.test.cjs` (5 passed). The override is stored on
+the item only; the category is preserved.
+
+**Tests:** specification pinned; product RED/GREEN before implementation.
+OWNER GATE: live composer, category persistence and calendar colors.
+
+#### `OW-132` — Colored DEMO notes
+
+**Status:** `DONE` (static) · **Impact:** Low · **Effort:** S · **Depends on:** `OW-131`
+
+**Problem:** DEMO notes should demo each note/reminder being colored on its own.
+
+**Plan:** assign a stable per-demo color to each `DEMO_NOTES` entry and have the
+installer pass it through `ensureNote`; do not change existing installed demo
+notes on reinstall. Add a fixture test for distinct colors and idempotence.
+
+**Implemented statically:** `DEMO_NOTE_COLORS` and `demoNoteColorPlan` are
+covered by `tests/ow-131-ow-132-note-colors.test.cjs` (5 passed). The installer
+skips existing ids and never recolours an edited demo note.
+
+**Tests:** specification pinned; product RED/GREEN before implementation.
+OWNER GATE: live Help folder colors.
+
+---
+
+## NEXT SESSION HANDOFF (version 3.4.0, edit in place, keep it short)
+
+**Rule for every AI session: update State, Completed this session, Known debts, Next action and version here in place. Keep the project version at 3.4.0 until the owner explicitly says otherwise.**
+
+<<<<<<< HEAD
+State: **3.4.0**. `OW-122` is DONE: fresh Notes uses full available card height, a 50% single-panel slot and a 40% between-panel slot; saved sizes and the one-panel preference remain in force. Fake-DOM and Triple View startup tests pass; real Zen geometry remains an OWNER GATE. `OW-123` static audit is DONE: five findings plus candidates and verification limits are in `docs/ow-123-standalone-ownership-audit.md`; no findings were fixed. Big Picture layout fixes are on the test branch. Prerequisites `OW-108`–`OW-110` (through `0090091`, merged here as `c86d4b6`) are included. All five owner Boost-audit findings F1–F5 (`OW-111`–`OW-115`), `T4.3a`–`T4.3c`, the `ST7.4` prototype report, the four-bug owner fix set (`OW-116`–`OW-118`), the corrective compact-tabs/runtime-syntax fix `OW-119`, the diagnostic-first Notes/Agenda visual fix `OW-120` and the four-proposition Boost UX fix `OW-121` are DONE (see `docs/LEGACY_done_rows.md`, `docs/bugfix-2026-11-18.md`, `docs/ow-120-owner-diagnosis.md` and `docs/ow-121-boost-ux.md`). `OW-117` resize performance and `OW-118` Boost RAM reporting are owner-accepted as fixed. The earlier `04be3bae` DONE claim is superseded by `OW-119`; `OW-116`'s visual result was not accepted and is addressed by `OW-120`'s narrow fix, still an OWNER GATE. The previous auto loop remains complete; `OW-66` is the owner's live-Zen check with no code work and every `PARKED` item remains intentionally skipped.
+
+Completed this session: fixed the zero-width Big Picture notes tree and split 29–56 day weeks into equal-height timetables.
+
+Previously: added F1–F5 to the roadmap, then shipped `OW-111`..`OW-115`, `T4.3a`, `T4.3b`, `T4.3c` and the `ST7.4` research report, each with tests RED on the previous HEAD and GREEN after the fix, the `--keep-version` chain, full suite (`276/276` after the ninth new suite) and `git diff --check`. F1: record tabs now obey `backgroundMode` in Level 2/limiter/Game Mode. F2: `keep_pinned` → `unload_pinned` with one-time migration and a one-release fallback, no default change. F3: the video preview publishes a live `__zentralVideoSourceTab` getter over `deps.current`, removed on destroy. F4: `tools/audit-pending-placeholder-css.cjs` + `tests/ow-114-pending-placeholder-css.test.cjs` + `docs/ow-114-pending-css-audit.md` are the screenshot-free audit; eight narrow Notes/Agenda overrides at `additional/tabs/ZentralTabDensity.css:937` restore opacity/filter/layout. F5: `runLevel2()` now returns `skippedCounts` for every named reason while keeping the bounded `skipped` sample; `boost.state()` publishes `lastSkipped` and `{pinned, unpinned}` loaded-tab counts; the Boost popup added one disabled, localized explanation row after a deep pass with skips, with the counts in its tooltip (OW-121 later folds that row into the Deep card tooltip to keep the popup one row high). `tests/ow-115-boost-skipped.test.cjs` covers both widget languages, the real deep-pass result and no new pref. T4.3a: `additional/notes/calendar/ZentralNotesCalendarUI.js` is a new `notes-calendar-ui` part embedded in the standalone bundle; the monolith delegates 23 calendar UI decisions through `CALENDAR_UI`, keeps a compatibility shim, and still exposes the old core seam plus `CALENDAR_UI_PART` / `CALENDAR_UI`. `tests/notes-calendar-ui-part.test.cjs` covers the API, manifest order, delegation, seam and missing-part fallback. T4.3b: `additional/notes/parser/ZentralNotesParserGraph.js` is a new `notes-parser` part with 20 pure parser/wiki-graph/import-export decisions and a `createParserGraph(deps)` factory; 20 monolith functions delegate through `PARSER_UI` when the part is present and keep their original inline bodies when it is absent. `tests/notes-parser-graph-part.test.cjs` covers the API, manifest order, delegation, seam and missing-part fallback. T4.3c: `additional/notes/zen/ZentralNotesZenSidebar.js` is a new `notes-zen-sidebar` part with 21 pure Zen-sidebar UI decisions and a `createZenSidebar(deps, config)` factory; 21 monolith functions delegate through `ZEN_UI` when present and keep inline fallback bodies when absent. `ZentralNotes.uc.js` remains the single build/loader entry: one catalog entry, one manifest `entry`/`output`, one Sine script, one `loadPart` and one `include` row for the part. `tests/notes-zen-sidebar-part.test.cjs` covers the API, factory, single build entry, delegation, seam and missing-part fallback. ST7.4: `docs/st7-4-agenda-rows-research.md` is the prototype report. It documents the real-tab Agenda projection, a proposed flag-gated non-tab row design (`zen.workspace.zentral.notes.agenda_dom_rows`, not shipped), the hover/drag/session contracts, the live-Zen owner gate and the static abandon decision; no runtime prototype, pref, timer or listener was added. `tests/st7-4-agenda-rows-research.test.cjs` pins the report, its Git visibility and its verification limits. `docs/perf-results.md` has one line per task. Corrective `OW-119`: restored the compact-tabs stylesheet and generated compact-hover bundle byte-for-byte, moved OW-116's `filter`/`opacity` rules into Notes CSS, removed the duplicate panels `const docRoot` `SyntaxError`, regenerated the OW-114 audit with `visual` rules separate, and added `tests/ow-119-compact-tabs-look-regression.test.cjs` (RED on `04be3bae` for both causes, GREEN here). Diagnostic-first `OW-120`: the owner ran `owner-sidebar-console-diagnostics.md` and attached a 5.46 MB Browser Console JSON; `docs/ow-120-owner-diagnosis.md` records the expanded-state geometry (12 px centred Notes header, 26 px note row / 0 px label container, Agenda `opacity: 0.69` / `filter: grayscale(1)`). The fix adds a narrow, high-specificity OW-120 block in `additional/notes/ZentralNotes.css` for the three owned Notes/Agenda folder markers and the two `[pending]` placeholder markers; the OW-116 block, compact-tabs CSS and compact-hover bundles are unchanged. `tools/audit-pending-placeholder-css.cjs` now reports 42 separate `placeholder-layout` rules; `tests/ow-120-agenda-folder-scope.test.cjs` is RED on the old CSS and GREEN here. The owner deleted that temporary diagnostic from GitHub after running it (`13755e4`, "delete temp file"); it is intentionally not re-added. The first diagnostic capped matched rules at 120, so exact third-party custom-sheet selectors remain unresolved and no extra follow-up is shipped. Boost UX `OW-121`: all four owner propositions are implemented in one 26 px popup row (Light / Deep / Game / Restore), with a shared light clean before every deep pass, deterministic en/pl tooltips and a one-line skipped-tabs suffix in the existing toast; no added card height, pref, timer, listener or DOM row. `docs/ow-121-boost-ux.md` and `tests/ow-121-boost-ux.test.cjs` cover it.
+=======
+State: **3.4.0 on beta**. Prerequisites `OW-108`–`OW-110` (through `0090091`, merged here as `c86d4b6`) are included. All five owner Boost-audit findings F1–F5 (`OW-111`–`OW-115`), `T4.3a`–`T4.3c`, the `ST7.4` prototype report, the four-bug owner fix set (`OW-116`–`OW-118`), the corrective compact-tabs/runtime-syntax fix `OW-119`, the diagnostic-first Notes/Agenda visual fix `OW-120`, the four-proposition Boost UX fix `OW-121` and the post-restart Spaces Sync pseudo-tab isolation fix `OW-122` are DONE; owner chose weather **Option A**; `OW-124` and `OW-127`–`OW-132` are statically DONE with pure helpers/RED→GREEN suites, the post-batch regression sweep is DONE with four fixes and one new six-test suite, `OW-123` remains evidence-gated, and `OW-125` / `OW-126` are static audits only (see `docs/LEGACY_done_rows.md`, `docs/bugfix-2026-11-18.md`, `docs/ow-120-owner-diagnosis.md`, `docs/ow-121-boost-ux.md` and `docs/ow-122-restart-pseudo-tabs.md`). `OW-117` resize performance and `OW-118` Boost RAM reporting are owner-accepted as fixed. The earlier `04be3bae` DONE claim is superseded by `OW-119`; `OW-116`'s visual result was not accepted and is addressed by `OW-120`'s narrow fix, still an OWNER GATE. The previous auto loop remains complete; `OW-66` is the owner's live-Zen check with no code work and every `PARKED` item remains intentionally skipped.
+
+Completed this session: added F1–F5 to the roadmap, then shipped `OW-111`..`OW-115`, `T4.3a`, `T4.3b`, `T4.3c` and the `ST7.4` research report, each with tests RED on the previous HEAD and GREEN after the fix, the `--keep-version` chain, full suite (`276/276` after the ninth new suite) and `git diff --check`. F1: record tabs now obey `backgroundMode` in Level 2/limiter/Game Mode. F2: `keep_pinned` → `unload_pinned` with one-time migration and a one-release fallback, no default change. F3: the video preview publishes a live `__zentralVideoSourceTab` getter over `deps.current`, removed on destroy. F4: `tools/audit-pending-placeholder-css.cjs` + `tests/ow-114-pending-placeholder-css.test.cjs` + `docs/ow-114-pending-css-audit.md` are the screenshot-free audit; eight narrow Notes/Agenda overrides at `additional/tabs/ZentralTabDensity.css:937` restore opacity/filter/layout. F5: `runLevel2()` now returns `skippedCounts` for every named reason while keeping the bounded `skipped` sample; `boost.state()` publishes `lastSkipped` and `{pinned, unpinned}` loaded-tab counts; the Boost popup added one disabled, localized explanation row after a deep pass with skips, with the counts in its tooltip (OW-121 later folds that row into the Deep card tooltip to keep the popup one row high). `tests/ow-115-boost-skipped.test.cjs` covers both widget languages, the real deep-pass result and no new pref. T4.3a: `additional/notes/calendar/ZentralNotesCalendarUI.js` is a new `notes-calendar-ui` part embedded in the standalone bundle; the monolith delegates 23 calendar UI decisions through `CALENDAR_UI`, keeps a compatibility shim, and still exposes the old core seam plus `CALENDAR_UI_PART` / `CALENDAR_UI`. `tests/notes-calendar-ui-part.test.cjs` covers the API, manifest order, delegation, seam and missing-part fallback. T4.3b: `additional/notes/parser/ZentralNotesParserGraph.js` is a new `notes-parser` part with 20 pure parser/wiki-graph/import-export decisions and a `createParserGraph(deps)` factory; 20 monolith functions delegate through `PARSER_UI` when the part is present and keep their original inline bodies when it is absent. `tests/notes-parser-graph-part.test.cjs` covers the API, manifest order, delegation, seam and missing-part fallback. T4.3c: `additional/notes/zen/ZentralNotesZenSidebar.js` is a new `notes-zen-sidebar` part with 21 pure Zen-sidebar UI decisions and a `createZenSidebar(deps, config)` factory; 21 monolith functions delegate through `ZEN_UI` when present and keep inline fallback bodies when absent. `ZentralNotes.uc.js` remains the single build/loader entry: one catalog entry, one manifest `entry`/`output`, one Sine script, one `loadPart` and one `include` row for the part. `tests/notes-zen-sidebar-part.test.cjs` covers the API, factory, single build entry, delegation, seam and missing-part fallback. ST7.4: `docs/st7-4-agenda-rows-research.md` is the prototype report. It documents the real-tab Agenda projection, a proposed flag-gated non-tab row design (`zen.workspace.zentral.notes.agenda_dom_rows`, not shipped), the hover/drag/session contracts, the live-Zen owner gate and the static abandon decision; no runtime prototype, pref, timer or listener was added. `tests/st7-4-agenda-rows-research.test.cjs` pins the report, its Git visibility and its verification limits. `docs/perf-results.md` has one line per task. Corrective `OW-119`: restored the compact-tabs stylesheet and generated compact-hover bundle byte-for-byte, moved OW-116's `filter`/`opacity` rules into Notes CSS, removed the duplicate panels `const docRoot` `SyntaxError`, regenerated the OW-114 audit with `visual` rules separate, and added `tests/ow-119-compact-tabs-look-regression.test.cjs` (RED on `04be3bae` for both causes, GREEN here). Diagnostic-first `OW-120`: the owner ran `owner-sidebar-console-diagnostics.md` and attached a 5.46 MB Browser Console JSON; `docs/ow-120-owner-diagnosis.md` records the expanded-state geometry (12 px centred Notes header, 26 px note row / 0 px label container, Agenda `opacity: 0.69` / `filter: grayscale(1)`). The fix adds a narrow, high-specificity OW-120 block in `additional/notes/ZentralNotes.css` for the three owned Notes/Agenda folder markers and the two `[pending]` placeholder markers; the OW-116 block, compact-tabs CSS and compact-hover bundles are unchanged. `tools/audit-pending-placeholder-css.cjs` now reports 42 separate `placeholder-layout` rules; `tests/ow-120-agenda-folder-scope.test.cjs` is RED on the old CSS and GREEN here. The owner deleted that temporary diagnostic from GitHub after running it (`13755e4`, "delete temp file"); it is intentionally not re-added. The first diagnostic capped matched rules at 120, so exact third-party custom-sheet selectors remain unresolved and no extra follow-up is shipped. Boost UX `OW-121`: all four owner propositions are implemented in one 26 px popup row (Light / Deep / Game / Restore), with a shared light clean before every deep pass, deterministic en/pl tooltips and a one-line skipped-tabs suffix in the existing toast; no added card height, pref, timer, listener or DOM row. `docs/ow-121-boost-ux.md` and `tests/ow-121-boost-ux.test.cjs` cover it. Restart/Spaces Sync `OW-122`: the owner reported two untitled favicon-only pending pinned tabs after a Zen 1.24.3b restart. Upstream tag `1.24.3b` was verified to assign `zenSyncId` to every opened tab, collect blank stand-ins that have one, persist `_zenPinnedInitialState`, project pinned `about:blank#zn-*` seeds through the `Spaces` engine and re-materialize them as lazy pinned tabs with static data-URI icons. Local shields now wrap `ZenWindowSync`, `ZenSessionStore.getSidebarData()`, `ZenSpacesSyncModel.projections()` and `ZenSpacesSyncApplier.applyBatch()`; the sync-finish allowlist includes `Spaces`; stray pending pseudo-tabs are swept at startup, sync finish, restore and delayed boot. `tests/ow-122-restart-pseudo-tabs.test.cjs` is RED on `f4b6a51` and GREEN here (8 passed); `docs/ow-122-restart-pseudo-tabs.md` carries the full evidence chain. Backlog setup `OW-123`–`OW-132`: added the ten owner rows/blocks, `tests/ow-123-ow-132-backlog.test.cjs`, `tests/zen-1243b-compat.test.cjs`, `tests/zen-125t-compat.test.cjs`, `tests/weather-rain-options.test.cjs`, and the reports `docs/zen-1243b-compat-audit.md`, `docs/zen-125t-compat-audit.md`, `docs/weather-rain-options.md`. Zen 1.24.3b needs no static mod change beyond `OW-122`; Twilight 1.25t has no tagged build yet, so no window guard is guessed. Weather implementation is deliberately gated on the owner's Open-Meteo option; `OW-123`/`OW-124` are gated on short targeted live tab attributes, not a full dump. No product fix for those gated items is claimed. Post-batch regression sweep: `tests/ow-127-ow-132-regression-sweep.test.cjs` (6 passed) found and pinned four cross-feature regressions (daily rain intensity, orphan quick-note opener, stale pill click latch and nested inherited-colour preview); the exact `--keep-version` chain, regenerated standalone/locks, 16 targeted suites and docs-inclusive full suite `294/294 passed; 0 failed` are green.
+>>>>>>> c9a40c9f63370ac412ebec7b7a750cb1114f2c92
+
+**Approved backlog implementation (this session):** owner chose weather Option A, `paste_rows`, and all five non-gated fixes. `OW-124` pins the supplied two-label XUL row and removes the legacy XUL `value` road; `OW-127` adds two space-policy prefs and pure planning; `OW-128` adds one-request hourly + bounded 15-minute rain timing with hourly/daily fallback and EN/PL phrases; `OW-129` hides the quick note behind an accessible chevron; `OW-130` splits short hide-once from the 550 ms hold toggle; `OW-131` adds a composer item-color override/inherit control; `OW-132` colors only newly installed DEMO notes. Six new/updated RED→GREEN suites, the new six-test cross-feature regression sweep and the revised weather/options/backlog/compat/quick-note/composer specs are green. The sweep fixed four batched regressions: daily `precipitation_hours` was misread as mm/h heavy rain, an orphaned quick-note Save left the chevron row open with stale text, cancelled pill gestures could swallow the next click, and the composer showed a nested `Inherit` sentence inside its concise colour preview. Exact `--keep-version` chain is `CHAIN_GREEN` (12 packages, `601 Sine preferences`, z-map `42/72/3`), generated standalone/locks and the CSS audit are rebuilt by their tools, and the docs-inclusive full suite is `294/294 passed; 0 failed`. No live click, restart, visual, timing, gesture, composer or Help-folder color result is claimed.
+
+**Owner four-bug set (2026-11-18) + `OW-120` diagnostic follow-up:** `OW-117` resize performance and `OW-118` Boost RAM reporting are owner-accepted as fixed. `OW-119` corrected the rejected `04be3bae` compact-tabs/panels regression. `OW-116` heals both label roads and favicons but its visible result was not accepted; the owner Browser Console JSON showed that its CSS and the OW-114 compact overrides only matched `zen-folder[bgalazka-notes-folder]`, while Agenda rows live under `bgalazka-notes-agenda-folder` / `-day`. `OW-120` therefore adds narrow Notes/Agenda-folder-scoped `filter`/`opacity` and geometry rules without changing Zen's collapsed/expanded sidebar behavior, ordinary compact tabs or the compact-tabs stylesheet. Details: `docs/bugfix-2026-11-18.md` and `docs/ow-120-owner-diagnosis.md`. `tests/ow-116-pending-placeholder-visuals.test.cjs`, `tests/ow-117-notes-resize-coalescing.test.cjs`, `tests/ow-118-boost-procinfo-bytes.test.cjs`, `tests/ow-119-compact-tabs-look-regression.test.cjs` and `tests/ow-120-agenda-folder-scope.test.cjs` cover the source; exact `--keep-version` chain is `CHAIN_GREEN`; the earlier docs-inclusive full suite was `293/293 passed; 0 failed` and the current regression-sweep-inclusive suite is `294/294 passed; 0 failed`, `0 TODO failing: none` (details in `docs/bugfix-2026-11-18.md`, `docs/ow-121-boost-ux.md` and `docs/ow-122-restart-pseudo-tabs.md`). Live Notes/Agenda visuals, compact-tabs appearance, real resize/frame-rate performance and live RAM measurement are OWNER GATEs, not claimed.
+
+**OW-114 CSS audit report (screenshot-free; full table in `docs/ow-114-pending-css-audit.md`):** after `OW-120`, 87 candidate rules in `additional` + `extension` CSS mention `[pending]` / `[pending="true"]` (17 original candidates, 10 Notes-owned OW-116 visual selector rows and 42 OW-120 `placeholder-layout` selector rows). Four OUR compact-density rules MATCH a pinned parked placeholder and hide/collapse it or its folder: `additional/tabs/ZentralTabDensity.css:357` (collapsed child tab: height/opacity/pointer-events/overflow), `additional/tabs/ZentralTabDensity.css:371` (its `.tab-content`), `additional/tabs/ZentralTabDensity.css:388` (nested folder with no "loaded" pinned tab), `additional/tabs/ZentralTabDensity.css:488` (folder whose header Zen zeroed and no "loaded" pinned tab). Five `extension/appearance/ZentralAppearance.css` candidates at `:300`, `:307`, `:316`, `:323`, `:323` do NOT match: they require a LOADED Essential-panel tile/launcher inside the pending tab, which a Notes/Agenda placeholder never has. Eight original narrow override selectors at `additional/tabs/ZentralTabDensity.css:937` restore the row/folder look; the stylesheet ends at `:983` and is byte-for-byte the pre-regression compact-tabs file. Ten `OW-116` visual selector rows in `additional/notes/ZentralNotes.css` reset only opacity/filter and are reported as `visual`, never as compact overrides. The generated audit lists 8 overrides, 10 visual rules and 42 OW-120 `placeholder-layout` rules; the OW-120 rules are never counted as compact-density matches. `zentral/groups/styles/ZentralGroupsInjected.css` already resets `filter: none` for a pending folder tab, but it is outside the audited trees and covers only the filter.
+
+**Third-party / OWNER GATE:** `arc-grayscale-unloaded-tabs = true` and `browser.tabs.fadeOutUnloadedTabs = true` are Arc 2.0 / Zen mod styles, not rules in this repository. `OW-120` now overrides their computed `filter` / `opacity` on owned Notes/Agenda placeholders, but the exact third-party selectors were truncated by the first diagnostic's 120-rule cap. The owner deleted the temporary diagnostic file after running it; no custom-sheet follow-up is shipped or re-added. No live Zen/Sine runtime or screenshot is available here. OWNER GATE: compare Notes folder alignment, Notes/Agenda titles, Agenda favicon colour, grayscale/opacity and spacing with compact mode, a collapsed folder and the space indicator; also verify ordinary compact tabs keep their clipping, icon visibility and row sizing after `OW-119`. `docs/ow-114-pending-css-audit.md` and `docs/ow-120-owner-diagnosis.md` carry the same caveat; do not present the visual result as verified until the owner checks it.
+
+<<<<<<< HEAD
+Known debts: calendar geometry reproduced in headless Chromium, not yet checked in Zen. no live Zen/Sine runtime is available in this session; repository tests and CI must be used where possible, and live-only claims must not be presented as verified. The `OW-120` visual OWNER GATE (Notes folder alignment, Notes/Agenda titles, Agenda favicon colour, grayscale/opacity and spacing with compact mode, a collapsed folder and the space indicator) and the `OW-119` live compact-tabs OWNER GATE remain open; `OW-117` resize performance and `OW-118` Boost RAM reporting are owner-accepted as fixed, while real frame-rate and live `about:processes` measurements are still not claimed. Third-party Arc/Zen selectors remain outside this repository; OW-120 overrides only their computed effect on owned placeholders. `ST7.4` research is DONE but its proposed non-tab row implementation is abandoned statically: a future live-Zen spike would still have to prove folder hosting, drag, hover, session and workspace behaviour before reopening it. Boost dropdown, deep-clean/light-clean behavior and boost-level descriptions were implemented in `OW-121`; live Boost popup height/appearance is now the remaining Boost OWNER GATE.
+
+Next action: get owner approval before any fixes to `OW-123` findings; the static audit is not a full live feature-removal matrix. In Zen verify the three fresh Notes starting heights and saved resizing; then open Big Picture after dragging the docked tree splitter; toggle the tree and compare 28, 29 and 56 days. Then continue the owner live-Zen/Sine checks for `OW-120` (Notes folder alignment, Notes/Agenda titles, Agenda favicon colour, grayscale/opacity and spacing), `OW-119` (ordinary compact-tabs look) and `OW-121` (Boost popup still fits one row, compact labels, tooltips and deep result line), then re-confirm the already owner-accepted `OW-117` resize feel and `OW-118` Boost RAM reading if desired; after `OW-121`, no further approved code work is open here. If exact third-party Arc 2.0 / Sine selectors are ever needed, request a new owner-approved diagnostic; the old temporary file is not re-added. Owner live-Zen `OW-66` and every `PARKED` item remain skipped. Keep the version at 3.4.0; never `--bump` or `sync-version`; no ZIP.
+=======
+Known debts: no live Zen/Sine runtime is available in this session; repository tests and CI must be used where possible, and live-only claims must not be presented as verified. The `OW-120` visual OWNER GATE (Notes folder alignment, Notes/Agenda titles, Agenda favicon colour, grayscale/opacity and spacing with compact mode, a collapsed folder and the space indicator) and the `OW-119` live compact-tabs OWNER GATE remain open; `OW-117` resize performance and `OW-118` Boost RAM reporting are owner-accepted as fixed, while real frame-rate and live `about:processes` measurements are still not claimed. Third-party Arc/Zen selectors remain outside this repository; OW-120 overrides only their computed effect on owned placeholders. `ST7.4` research is DONE but its proposed non-tab row implementation is abandoned statically: a future live-Zen spike would still have to prove folder hosting, drag, hover, session and workspace behaviour before reopening it. Boost dropdown, deep-clean/light-clean behavior and boost-level descriptions were implemented in `OW-121`; live Boost popup height/appearance is now the remaining Boost OWNER GATE. `OW-122` adds a live post-restart OWNER GATE: confirm the two untitled favicon-only seeds do not return with Spaces Sync signed in, clicking any remaining pseudo-tab still opens Notes/Agenda, and ordinary pinned tabs, folders, compact tabs and multi-window tabs are unchanged. Exact stale-record count on the owner's Firefox Account was not available here. The new static fixes add live OWNER GATEs for `OW-124` sidebar titles, `OW-127` narrow-sidebar space/scroll, `OW-128` rain timing/layout, `OW-129` chevron click, `OW-130` pill click/hold/cancel, `OW-131` composer category persistence and `OW-132` Help-folder colors; `OW-123` remains blocked until the outer duplicate-tab attributes are supplied. The static post-batch regression sweep is DONE; it does not replace any live OWNER GATE.
+
+Next action: the static regression sweep is complete; no new static regression work is pending. Owner supplies only the short outer-tab attributes for `OW-123` if that evidence-gated fix should proceed; no weather option needs choosing because Option A is already shipped. Then owner live-Zen/Sine checks for `OW-122` (restart with Spaces Sync signed in; no two untitled favicon-only seeds; click behavior unchanged), `OW-120` (Notes folder alignment, Notes/Agenda titles, Agenda favicon colour, grayscale/opacity and spacing), `OW-119` (ordinary compact-tabs look), `OW-121` (Boost popup still fits one row, compact labels, tooltips and deep result line), `OW-124` (EN/PL titles), `OW-127` (narrow-sidebar space/scroll), `OW-128` (rain timing, localization and layout), `OW-129` (chevron click), `OW-130` (short click / 550 ms hold / Escape), `OW-131` (composer color and category persistence) and `OW-132` (Help-folder colors); re-confirm the already owner-accepted `OW-117` resize feel and `OW-118` Boost RAM reading if desired. `OW-125` / `OW-126` remain static audits until tagged/live Zen facts are available. If exact third-party Arc 2.0 / Sine selectors are ever needed, request a new owner-approved diagnostic; the old temporary file is not re-added. Owner live-Zen `OW-66` and every `PARKED` item remain skipped. Keep the version at 3.4.0; never `--bump` or change the version. `tools/sync-version.cjs` is only the exact chain's no-op 3.4.0 check; no ZIP or `.git` archive.
+>>>>>>> c9a40c9f63370ac412ebec7b7a750cb1114f2c92

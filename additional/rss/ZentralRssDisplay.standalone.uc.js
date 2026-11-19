@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral RSS Display
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.0
+// @version 3.4.0
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.0, the numeric-preference list and
+ * Placeholders replaced by the build: 3.4.0, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.0";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.4.0";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -226,6 +226,439 @@ function nativeSidebarSide() {
         ? "right"
         : "left";
     }
+  function createSidebarHoverCard(options) {
+    options = options || {};
+    const win = options.window || window;
+    const doc = options.document || win.document;
+    const id = String(options.id || "bgalazka-sidebar-hover-card");
+    const className = String(options.className || "");
+    const role = options.role ?? "";
+    const ariaLabel = String(options.ariaLabel || "");
+    const describeTarget = options.describeTarget !== false;
+    const defaultWidth = Number(options.defaultWidth) > 0 ? Number(options.defaultWidth) : 320;
+    const defaultHeight = Number(options.defaultHeight) > 0 ? Number(options.defaultHeight) : 80;
+    const isEnabled = typeof options.isEnabled === "function" ? options.isEnabled : () => true;
+    const matchTarget = typeof options.matchTarget === "function" ? options.matchTarget : () => null;
+    const isValid = typeof options.isValid === "function" ? options.isValid : (t) => !!t && t.isConnected !== false;
+    const getShowDelay = typeof options.getShowDelay === "function" ? options.getShowDelay : () => 350;
+    const getHideDelay = typeof options.getHideDelay === "function" ? options.getHideDelay : () => 150;
+    const getSide = typeof options.getSide === "function" ? options.getSide : () => "auto";
+    const getGap = typeof options.getGap === "function" ? options.getGap : () => 6;
+    const getBounds = typeof options.getBounds === "function"
+      ? options.getBounds
+      : () => {
+          const rt = win.ZentralRuntime || win.__zentralStandaloneRuntime;
+          try { return rt?.sidebarSafeBounds?.() || null; } catch (_) { return null; }
+        };
+    const render = typeof options.render === "function" ? options.render : () => {};
+    const onCreate = typeof options.onCreate === "function" ? options.onCreate : null;
+    const onShow = typeof options.onShow === "function" ? options.onShow : null;
+    const onHide = typeof options.onHide === "function" ? options.onHide : null;
+    const suppressTooltipWhenClosed = !!options.suppressTooltipWhenClosed;
+    const shouldSuppressTooltip = typeof options.shouldSuppressTooltip === "function" ? options.shouldSuppressTooltip : () => true;
+    const setTimer = typeof options.setTimer === "function" ? options.setTimer : (fn, ms) => win.setTimeout(fn, ms);
+    const clearTimer = typeof options.clearTimer === "function" ? options.clearTimer : (t) => win.clearTimeout(t);
+    const raf = typeof options.raf === "function"
+      ? options.raf
+      : (fn) => (typeof win.requestAnimationFrame === "function" ? win.requestAnimationFrame(fn) : setTimer(fn, 16));
+    const cancelRaf = typeof options.cancelRaf === "function"
+      ? options.cancelRaf
+      : (t) => (typeof win.cancelAnimationFrame === "function" ? win.cancelAnimationFrame(t) : clearTimer(t));
+
+    let node = null;
+    let target = null;
+    let pending = null;
+    let showTimer = null;
+    let hideTimer = null;
+    let retargetFrame = null;
+    let observer = null;
+    let observedParent = null;
+    let lastXY = null;
+    let destroyed = false;
+
+    const getHost = () => {
+      let host = win.__zentralSidebarCardHost;
+      if (!host || typeof host.activate !== "function") {
+        const members = new Set();
+        host = {
+          active: null,
+          members,
+          register(ctrl) { members.add(ctrl); },
+          unregister(ctrl) {
+            members.delete(ctrl);
+            if (host.active === ctrl) host.active = null;
+            if (!members.size && win.__zentralSidebarCardHost === host) {
+              try { delete win.__zentralSidebarCardHost; } catch (_) { win.__zentralSidebarCardHost = undefined; }
+            }
+          },
+          activate(ctrl) {
+            if (host.active && host.active !== ctrl) {
+              try { host.active.hide(); } catch (_) {}
+            }
+            host.active = ctrl;
+          },
+          deactivate(ctrl) {
+            if (host.active === ctrl) host.active = null;
+          },
+        };
+        win.__zentralSidebarCardHost = host;
+      }
+      return host;
+    };
+
+    const clearShow = () => {
+      if (showTimer !== null) { clearTimer(showTimer); showTimer = null; }
+      pending = null;
+    };
+    const clearHide = () => {
+      if (hideTimer !== null) { clearTimer(hideTimer); hideTimer = null; }
+    };
+    const clearRetarget = () => {
+      if (retargetFrame !== null) { cancelRaf(retargetFrame); retargetFrame = null; }
+    };
+    const cancelTimers = () => { clearShow(); clearHide(); clearRetarget(); };
+
+    const disconnectObserver = () => {
+      if (observer) {
+        try { observer.disconnect(); } catch (_) {}
+      }
+      observedParent = null;
+    };
+    const connectObserver = (t) => {
+      const parent = t?.parentNode || t?.parentElement || null;
+      if (!parent) { disconnectObserver(); return; }
+      if (observer && observedParent === parent) return;
+      disconnectObserver();
+      if (typeof MutationObserver !== "function") return;
+      try {
+        if (!observer) {
+          observer = new MutationObserver(() => {
+            if (target && !isValid(target)) hide();
+          });
+        }
+        observer.observe(parent, { childList: true });
+        observedParent = parent;
+      } catch (_) {}
+    };
+
+    const detachDescription = () => {
+      if (!describeTarget || !target) return;
+      try {
+        const words = (target.getAttribute("aria-describedby") || "").split(/\s+/).filter((w) => w && w !== id);
+        if (words.length) target.setAttribute("aria-describedby", words.join(" "));
+        else target.removeAttribute("aria-describedby");
+      } catch (_) {}
+    };
+    const attachDescription = (t) => {
+      if (!describeTarget || !t) return;
+      try {
+        const words = (t.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean);
+        if (!words.includes(id)) {
+          words.push(id);
+          t.setAttribute("aria-describedby", words.join(" "));
+        }
+      } catch (_) {}
+    };
+
+    // Re-enter the browser top layer on every show so this card sits above
+    // earlier popovers (Big Preview, Zentral panels). Without popover support
+    // (or if showPopover throws), drop the attribute so fixed z-index applies.
+    function raiseCard(c) {
+      if (!c || typeof c.showPopover !== "function") return;
+      try {
+        let open = false;
+        try { open = !!c.matches?.(":popover-open"); } catch (_) {}
+        if (open) c.hidePopover?.();
+        else { try { c.hidePopover?.(); } catch (_) {} }
+        c.showPopover();
+      } catch (_) {
+        try { c.removeAttribute("popover"); } catch (_) {}
+      }
+    }
+    function dropCard(c) {
+      if (!c) return;
+      try {
+        let open = true;
+        try { if (typeof c.matches === "function") open = !!c.matches(":popover-open"); } catch (_) {}
+        if (open) c.hidePopover?.();
+      } catch (_) {}
+    }
+
+    function ensureNode() {
+      if (node) return node;
+      node = typeof doc.createElementNS === "function"
+        ? doc.createElementNS("http://www.w3.org/1999/xhtml", "div")
+        : doc.createElement("div");
+      node.id = id;
+      if (className) node.setAttribute("class", className);
+      if (role) node.setAttribute("role", role);
+      if (ariaLabel) node.setAttribute("aria-label", ariaLabel);
+      node.setAttribute("popover", "manual");
+      node.hidden = true;
+      node.addEventListener("mouseenter", clearHide);
+      node.addEventListener("mouseleave", () => {
+        if (!target || node?.contains?.(doc.activeElement) || target?.contains?.(doc.activeElement)) return;
+        scheduleHide();
+      });
+      if (onCreate) onCreate(node, api);
+      doc.documentElement.append(node);
+      return node;
+    }
+
+    function position() {
+      if (!node || node.hidden || !target || !isValid(target)) {
+        if (target) hide();
+        return;
+      }
+      const tr = target.getBoundingClientRect();
+      const r = typeof node.getBoundingClientRect === "function" ? node.getBoundingClientRect() : null;
+      const vw = Number(win.innerWidth) || 1200;
+      const vh = Number(win.innerHeight) || 800;
+      const width = Math.min(vw - 8, (r && r.width) || node.offsetWidth || defaultWidth);
+      const height = Math.min(vh - 8, (r && r.height) || node.offsetHeight || defaultHeight);
+      const rawGap = Number(getGap());
+      const gap = Number.isFinite(rawGap) ? Math.max(0, Math.min(32, rawGap)) : 6;
+      const sidePref = getSide();
+      const sideEl = doc.getElementById?.("navigator-toolbox");
+      const sr = sideEl?.getBoundingClientRect?.();
+      const autoRight = sr && sr.width > 0
+        ? sr.left > vw / 2
+        : (tr.left + tr.right) / 2 > vw / 2;
+      const placeLeft = sidePref === "left" ? true : sidePref === "right" ? false : autoRight;
+      let left = placeLeft ? tr.left - width - gap : tr.right + gap;
+      const bounds = getBounds();
+      if (bounds && Number.isFinite(bounds.left) && Number.isFinite(bounds.right)) {
+        left = placeLeft ? Math.min(left, bounds.right - width) : Math.max(left, bounds.left);
+      }
+      if (left < 4 && tr.right + gap + width <= vw - 4) left = tr.right + gap;
+      if (left + width > vw - 4 && tr.left - gap - width >= 4) left = tr.left - gap - width;
+      node.style.left = Math.max(4, Math.min(left, vw - width - 4)) + "px";
+      node.style.top = Math.max(4, Math.min(tr.top, vh - height - 4)) + "px";
+    }
+
+    function hide() {
+      cancelTimers();
+      disconnectObserver();
+      detachDescription();
+      const prevTarget = target;
+      target = null;
+      if (node) {
+        dropCard(node);
+        node.hidden = true;
+      }
+      host.deactivate(api);
+      if (prevTarget && onHide) onHide(prevTarget, node);
+    }
+
+    function scheduleHide(delay) {
+      clearShow();
+      clearHide();
+      const raw = delay === undefined ? Number(getHideDelay()) : Number(delay);
+      const ms = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 0;
+      if (ms <= 0) {
+        hide();
+        return;
+      }
+      hideTimer = setTimer(() => {
+        hideTimer = null;
+        hide();
+      }, ms);
+    }
+
+    function show(tab) {
+      if (destroyed) return false;
+      cancelTimers();
+      if (!isEnabled() || !tab || !isValid(tab)) {
+        hide();
+        return false;
+      }
+      const c = ensureNode();
+      host.activate(api);
+      if (target !== tab) {
+        detachDescription();
+        target = tab;
+      }
+      attachDescription(tab);
+      connectObserver(tab);
+      render(c, tab, api);
+      c.hidden = false;
+      raiseCard(c);
+      position();
+      if (onShow) onShow(tab, c);
+      return true;
+    }
+
+    function scheduleShow(tab) {
+      if (destroyed || !isEnabled() || !tab || !isValid(tab)) return;
+      const raw = Number(getShowDelay());
+      const delay = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 0;
+      if (delay <= 0) {
+        clearShow();
+        show(tab);
+        return;
+      }
+      if (showTimer !== null && pending === tab) return;
+      clearShow();
+      pending = tab;
+      showTimer = setTimer(() => {
+        const next = pending;
+        showTimer = null;
+        pending = null;
+        if (!destroyed && isEnabled() && next && isValid(next)) show(next);
+      }, delay);
+    }
+
+    function retarget(tab, { viaPointer = false, nextTarget = null, allowPointer = true } = {}) {
+      if (destroyed) return;
+      clearHide();
+      clearShow();
+      clearRetarget();
+      const resolveNext = () => (typeof nextTarget === "function" ? nextTarget() : nextTarget);
+      if (viaPointer && allowPointer && lastXY && typeof doc.elementFromPoint === "function") {
+        const [x, y] = lastXY;
+        retargetFrame = raf(() => {
+          retargetFrame = null;
+          if (destroyed || !isEnabled()) { hide(); return; }
+          let under = null;
+          try { under = matchTarget(doc.elementFromPoint(x, y)); } catch (_) {}
+          if (under && isValid(under)) { show(under); return; }
+          const next = resolveNext();
+          if (next && isValid(next)) show(next);
+          else hide();
+        });
+        return;
+      }
+      const next = resolveNext();
+      if (next && isValid(next)) show(next);
+      else hide();
+    }
+
+    const over = (event) => {
+      if (destroyed || !isEnabled()) return;
+      if (Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
+        lastXY = [event.clientX, event.clientY];
+      }
+      if (node?.contains?.(event?.target)) {
+        clearHide();
+        return;
+      }
+      const tab = matchTarget(event?.target);
+      if (tab && isValid(tab)) {
+        if (target === tab && node && !node.hidden) {
+          clearHide();
+          return;
+        }
+        clearHide();
+        scheduleShow(tab);
+        return;
+      }
+      if (node && !node.hidden && !node.contains?.(event?.target) && (!target || !target.contains?.(event?.target))) {
+        scheduleHide();
+      }
+    };
+
+    const out = (event) => {
+      if (destroyed) return;
+      const related = event?.relatedTarget;
+      if (node?.contains?.(event?.target)) {
+        if (related && (node.contains?.(related) || target?.contains?.(related))) return;
+        if (node.contains?.(doc.activeElement) || target?.contains?.(doc.activeElement)) return;
+        scheduleHide();
+        return;
+      }
+      const tab = matchTarget(event?.target);
+      if (!tab) return;
+      if (related && (tab.contains?.(related) || node?.contains?.(related))) return;
+      if (pending === tab) clearShow();
+      if (target !== tab) return;
+      if (tab.contains?.(doc.activeElement) || node?.contains?.(doc.activeElement)) return;
+      scheduleHide();
+    };
+
+    const move = (event) => {
+      if (Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
+        lastXY = [event.clientX, event.clientY];
+      }
+    };
+
+    const focus = (event) => {
+      if (destroyed || !isEnabled()) return;
+      const tab = matchTarget(event?.target);
+      if (tab && isValid(tab)) show(tab);
+    };
+
+    const blur = (event) => {
+      if (destroyed || !target) return;
+      const related = event?.relatedTarget;
+      if (related && (target.contains?.(related) || node?.contains?.(related))) return;
+      const fromTarget = matchTarget(event?.target) === target;
+      const fromNode = !!node?.contains?.(event?.target);
+      if (fromTarget || fromNode) hide();
+    };
+
+    const key = (event) => {
+      if (destroyed || event?.key !== "Escape" || !isEnabled()) return;
+      if (!node || node.hidden || !target) return;
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      hide();
+    };
+
+    const popup = (event) => {
+      if (destroyed || !isEnabled() || event?.target?.id !== "tabbrowser-tab-tooltip") return;
+      if (!shouldSuppressTooltip()) return;
+      const tab = matchTarget(event?.target?.triggerNode);
+      if (!tab || !isValid(tab)) return;
+      if (suppressTooltipWhenClosed || (tab === target && node && !node.hidden)) {
+        event.preventDefault();
+      }
+    };
+
+    const api = {
+      ensureNode,
+      getNode: () => node,
+      getTarget: () => target,
+      isOpen: () => !!(node && !node.hidden && target),
+      show,
+      scheduleShow,
+      hide,
+      scheduleHide,
+      cancelTimers,
+      position,
+      retarget,
+      over,
+      out,
+      move,
+      focus,
+      blur,
+      key,
+      popup,
+      removed(tab) {
+        if (tab && (tab === target || tab === pending)) hide();
+      },
+      updated(tab) {
+        if (tab && tab === target && node && !node.hidden) show(tab);
+      },
+      refresh() {
+        if (target && node && !node.hidden) show(target);
+      },
+      destroy() {
+        if (destroyed) return;
+        destroyed = true;
+        hide();
+        host.unregister(api);
+        observer = null;
+        if (node) {
+          try { node.remove(); } catch (_) {}
+          node = null;
+        }
+        lastXY = null;
+      },
+    };
+    const host = getHost();
+    host.register(api);
+    return api;
+  }
   function createFeatureScope(owner) {
     let active = true;
     const cleanups = new Set(),
@@ -505,9 +938,14 @@ function nativeSidebarSide() {
     for (let round = 0; round < 4 && !stopped; round++) {
       const pending = [];
       for (const read of [
+        () => window.SessionStore?.promiseInitialized,
         () => window.SessionStore?.promiseAllWindowsRestored,
+        () => window.delayedStartupPromise,
         () => window.gZenWorkspaces?.promiseInitialized,
         () => window.gZenStartup?.promiseInitialized,
+        () => window.gZenPinnedTabManager?.promiseInitialized,
+        () => window.gZenSessionStore?.promiseInitialized,
+        () => window.gZenWindowSync?.promiseInitialized,
       ]) {
         try {
           const promise = read();
@@ -523,12 +961,94 @@ function nativeSidebarSide() {
     }
   }
   const features = (window.__zentralStandalone ||= {});
+  // OW-94 (plan B7.1): the pause switch. The full pack publishes the same contract under `ZentralRuntime.performance`;
+  // a standalone module asks for it here. With no full pack there is nothing else to pause, so the switch is honest
+  // about being alone: `listenerCount()` is 0 and setting it simply notifies whoever subscribed.
+  const performanceSwitch = (() => {
+    let paused = false;
+    const listeners = new Set();
+    const snapshot = () => ({ paused, changes: 0, lastChangeAt: 0 });
+    const setPaused = (next) => {
+      const target = Boolean(next);
+      if (target === paused) return snapshot();
+      paused = target;
+      for (const fn of [...listeners]) {
+        try {
+          fn(paused, snapshot());
+        } catch (error) {
+          try {
+            console.warn("[Zentral standalone] pause listener failed", error);
+          } catch (_) {}
+        }
+      }
+      return snapshot();
+    };
+    const subscribe = (fn) => {
+      if (typeof fn !== "function") return () => {};
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    };
+    return {
+      isPaused: () => paused,
+      setPaused,
+      toggle: () => setPaused(!paused),
+      subscribe,
+      onChange: subscribe,
+      snapshot,
+      listenerCount: () => listeners.size,
+      reset() {},
+    };
+  })();
+
   const shim = {
     standalone: true,
+    performance: performanceSwitch,
     getPref,
+    readStartupPanel() {
+      try {
+        const raw = getPref("zen.workspace.bgalazka.open_at_startup", "null");
+        if (typeof raw !== "string") return null;
+        const value = JSON.parse(raw);
+        return value &&
+          typeof value.id === "string" &&
+          value.id.length > 0 &&
+          ["single", "triple"].includes(value.mode)
+          ? { id: value.id, mode: value.mode }
+          : null;
+      } catch (_) {
+        return null;
+      }
+    },
+    whenNativeReady(fn) {
+      if (typeof fn !== "function") return () => {};
+      let cancelled = false;
+      const dispose = () => {
+        cancelled = true;
+      };
+      unloadHandlers.add(dispose);
+      Promise.resolve(nativeReady()).then(
+        () => {
+          unloadHandlers.delete(dispose);
+          if (cancelled || stopped) return;
+          try {
+            fn();
+          } catch (error) {
+            console.warn("[Zentral standalone] native-ready callback failed", error);
+          }
+        },
+        () => {
+          unloadHandlers.delete(dispose);
+        },
+      );
+      return () => {
+        cancelled = true;
+        unloadHandlers.delete(dispose);
+      };
+    },
     nativeSidebarElement,
     nativeSidebarRect,
     nativeSidebarSide,
+    createSidebarHoverCard,
     sidebarLayoutRepair: null,
     compactHoverStatus: null,
     registerSettingsHook: () => () => {},
@@ -683,10 +1203,53 @@ function nativeSidebarSide() {
       if (window.gBrowserInit?.delayedStartupFinished) run();
     }
   }
+  // A reader binding belongs to exactly one native tab strip.
+  function readerBindingAction(enabled, current, next) {
+    if (!enabled || !next) return current ? "unbind" : "keep";
+    if (!current) return "bind";
+    return current === next ? "keep" : "replace";
+  }
+  // Small pure helpers the card's behaviour is built from, exported for the suite: a clamped delay, a known side,
+  // and a URL that is only a URL when the platform agrees.
+  // The bounds the running card uses (see CARD_DELAY_LIMITS in start()); kept here so the seam has no inner state.
+  const CARD_DELAY_BOUNDS = Object.freeze({ hover: [0, 2000], hide: [0, 5000] });
+  function clampCardDelay(name, raw) {
+    const [min, max] = CARD_DELAY_BOUNDS[name] || [0, 0];
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return null;
+    return Math.max(min, Math.min(max, Math.round(value)));
+  }
+  function cleanReaderSide(value) {
+    return ["auto", "left", "right"].includes(value) ? value : "auto";
+  }
+  function cleanCardGap(raw) {
+    const value = parseFloat(raw);
+    return Number.isFinite(value) ? Math.max(0, Math.min(32, value)) : 6;
+  }
+  function urlsInText(text, hrefOf) {
+    const re = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+    const out = [];
+    let match;
+    while ((match = re.exec(String(text ?? "")))) {
+      const href = typeof hrefOf === "function" ? hrefOf(match[0]) : "";
+      if (href) out.push(href);
+    }
+    return out;
+  }
+  if (window.__zentralRssTestSeam) {
+    window.__zentralRssTestSeam.readerBindingAction = readerBindingAction;
+    window.__zentralRssTestSeam.clampCardDelay = clampCardDelay;
+    window.__zentralRssTestSeam.cleanReaderSide = cleanReaderSide;
+    window.__zentralRssTestSeam.cleanCardGap = cleanCardGap;
+    window.__zentralRssTestSeam.urlsInText = urlsInText;
+    window.__zentralRssTestSeam.LIMITS = CARD_DELAY_BOUNDS;
+  }
   (function () {
-    function start({ lifecycle } = {}) {
+    function start({ lifecycle, runtime: hostRuntime } = {}) {
       const cleanups = [];
       const registerCleanup = (fn) => cleanups.push(fn);
+      const getRuntime = () =>
+        hostRuntime || window.ZentralRuntime || window.__zentralStandaloneRuntime || null;
       const getPref = (key, fallback) =>
         Services.prefs.getBoolPref(key, fallback);
       // Colors are optional overrides: an unset (or invalid) value keeps the
@@ -735,6 +1298,10 @@ function nativeSidebarSide() {
       });
       const rssMarkedFolders = new Set();
       let rssScanTimer = null;
+      // OW-94 (plan B7.1): the shared pause switch. Absent in a standalone build with no full pack around it, and a
+      // missing switch means "not paused", which is exactly the behaviour from before.
+      const rssPerformance = window.ZentralRuntime?.performance || null;
+      const performancePaused = () => Boolean(rssPerformance?.isPaused?.());
       let rssObserver = null,
         rssObservedContainer = null,
         nativeBinding = null;
@@ -819,16 +1386,11 @@ function nativeSidebarSide() {
       }
 
       // ---- Reader card -------------------------------------------------
-      // Own hover card for live-folder articles. Replaces the native tab
-      // tooltip (only for those tabs) and continues with the next article
-      // after a dismiss, so no extra mouse movement is needed.
-      let card = null,
-        cardTab = null,
-        hideTimer = null,
-        showTimer = null,
-        showTab = null,
-        lastXY = null,
-        readerBound = false;
+      // Own hover card for live-folder articles, backed by the shared
+      // createSidebarHoverCard engine (full pack + standalone). Replaces the
+      // native tab tooltip (only for those tabs) and continues with the next
+      // article after a dismiss, so no extra mouse movement is needed.
+      let readerContainer = null;
       const itemTab = (el) => {
         const tab = el?.closest?.("tab, .tabbrowser-tab");
         if (!tab) return null;
@@ -842,15 +1404,6 @@ function nativeSidebarSide() {
         } catch (_) {
           return "";
         }
-      };
-      const cancelHide = () => {
-        clearTimeout(hideTimer);
-        hideTimer = null;
-      };
-      const cancelShow = () => {
-        clearTimeout(showTimer);
-        showTimer = null;
-        showTab = null;
       };
       const cardDelay = (name, key) => {
         const [min, max] = CARD_DELAY_LIMITS[name];
@@ -876,43 +1429,22 @@ function nativeSidebarSide() {
       };
       // The card's look is owned by the Look custom properties on the root
       // element. Only the behavior switches are applied here.
-      function applyCardParts() {
-        if (!card) return;
-        card.querySelector(".rc-folder").hidden = !getPref(
-          EXT_PREFS.RSS_CARD_SHOW_FOLDER,
-          true,
-        );
-        card.querySelector(".rc-url").hidden = !getPref(
-          EXT_PREFS.RSS_CARD_SHOW_URL,
-          true,
-        );
-        card.querySelector(".rc-actions").hidden = !getPref(
-          EXT_PREFS.RSS_CARD_SHOW_BUTTONS,
-          true,
-        );
-        card.dataset.side = readerSide();
+      function applyCardParts(node) {
+        const target = node || rssCard?.getNode?.();
+        if (!target) return;
+        const folderEl = target.querySelector(".rc-folder");
+        const urlEl = target.querySelector(".rc-url");
+        const actionsEl = target.querySelector(".rc-actions");
+        if (folderEl) folderEl.hidden = !getPref(EXT_PREFS.RSS_CARD_SHOW_FOLDER, true);
+        if (urlEl) urlEl.hidden = !getPref(EXT_PREFS.RSS_CARD_SHOW_URL, true);
+        if (actionsEl) actionsEl.hidden = !getPref(EXT_PREFS.RSS_CARD_SHOW_BUTTONS, true);
+        target.dataset.side = readerSide();
       }
       // A behavior change only restyles the open card; it never triggers a
       // folder refresh.
       function applyCardStyle() {
         applyCardParts();
-        if (card && cardTab && !card.hidden) showCard(cardTab);
-      }
-      // Big Preview (and other popovers) live in the browser's top layer, which no
-      // z-index can outrank. The card is therefore a manual popover too, and every
-      // show re-enters the top layer, because a later popover sits above an earlier
-      // one. Without popover support the z-index in the stylesheet still applies.
-      function raiseCard(c) {
-        if (typeof c.showPopover !== "function") return;
-        try {
-          if (c.matches(":popover-open")) c.hidePopover();
-          c.showPopover();
-        } catch (_) {}
-      }
-      function dropCard(c) {
-        try {
-          if (c?.matches(":popover-open")) c.hidePopover();
-        } catch (_) {}
+        rssCard?.refresh?.();
       }
       const URL_RE = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
       const HTML_HINT_RE =
@@ -1052,70 +1584,6 @@ function nativeSidebarSide() {
           appendLinkifiedText(container, doc.body?.textContent || "", baseUrl);
         }
       }
-      function hideCard(delay = 0) {
-        cancelShow();
-        cancelHide();
-        hideTimer = setTimeout(
-          () => {
-            hideTimer = null;
-            if (card) {
-              card.hidden = true;
-              dropCard(card);
-            }
-            cardTab = null;
-          },
-          Math.max(0, delay),
-        );
-      }
-      function ensureCard() {
-        if (card) return card;
-        card = document.createElement("div");
-        card.id = "bgalazka-rss-card";
-        card.setAttribute("popover", "manual");
-        card.hidden = true;
-        card.innerHTML =
-          '<div class="rc-folder"></div><div class="rc-text"></div>' +
-          '<div class="rc-url"></div><div class="rc-actions">' +
-          '<button data-a="open">Open</button>' +
-          '<button data-a="dismiss">Dismiss</button>' +
-          '<button data-a="all">Dismiss all</button></div>';
-        card.addEventListener("mouseenter", cancelHide);
-        card.addEventListener("mouseleave", () => hideCard(hideDelay()));
-        card.addEventListener("click", (e) => {
-          const a = e.target.closest("button")?.dataset.a;
-          if (!a || !cardTab) return;
-          const tab = cardTab;
-          if (a === "open") {
-            gBrowser.selectedTab = tab;
-            hideCard();
-          } else if (a === "dismiss") dismiss(tab, false);
-          else if (a === "all") {
-            const folder = tab.closest("zen-folder");
-            const tabs = folder
-              ? [...folder.querySelectorAll("tab, .tabbrowser-tab")].filter(
-                  (t) => itemTab(t) && !t.hasAttribute("zen-empty-tab"),
-                )
-              : [tab];
-            if (
-              getPref(EXT_PREFS.RSS_CARD_CONFIRM_ALL, false) &&
-              !window.confirm(
-                "Dismiss all " +
-                  tabs.length +
-                  " article" +
-                  (tabs.length === 1 ? "" : "s") +
-                  " in this folder?",
-              )
-            )
-              return;
-            hideCard();
-            tabs.forEach((t) => gBrowser.removeTab(t, { animate: false }));
-          }
-        });
-        document.documentElement.appendChild(card);
-        applyCardParts();
-        registerCleanup(() => card?.remove());
-        return card;
-      }
       // The article that follows the dismissed one inside the same folder.
       function nextArticle(folder, tab) {
         if (!folder) return null;
@@ -1197,43 +1665,97 @@ function nativeSidebarSide() {
         }
         return best;
       }
-      function showCard(tab) {
-        if (!tab) return;
-        const c = ensureCard();
-        cancelHide();
-        cancelShow();
-        cardTab = tab;
-        const folder = tab.closest("zen-folder");
-        c.querySelector(".rc-folder").textContent =
-          folder?.label || folder?.getAttribute("label") || "";
-        const url = tabUrl(tab);
-        const rcText = c.querySelector(".rc-text");
-        rcText.className = "rc-text";
-        renderRichText(rcText, getFullTabText(tab), url);
-        c.querySelector(".rc-url").textContent = url;
-        applyCardParts();
-        c.hidden = false;
-        raiseCard(c);
-        const side = document.getElementById("navigator-toolbox");
-        const sr = side?.getBoundingClientRect();
-        const tr = tab.getBoundingClientRect();
-        const w = c.offsetWidth,
-          h = c.offsetHeight;
-        const onRight = sr && sr.left > window.innerWidth / 2;
-        const sidePref = readerSide();
-        const placeLeft =
-          sidePref === "left" ? true : sidePref === "right" ? false : onRight;
-        const gap = cardGap();
-        let left = placeLeft ? tr.left - w - gap : tr.right + gap;
-        // Fall back to the other side when the chosen one has no room.
-        if (left < 4) {
-          const flipped = tr.right + gap;
-          if (flipped + w <= window.innerWidth - 4) left = flipped;
-        }
-        c.style.left =
-          Math.max(4, Math.min(left, window.innerWidth - w - 4)) + "px";
-        c.style.top =
-          Math.max(4, Math.min(tr.top, window.innerHeight - h - 4)) + "px";
+      let rssCard = null;
+      function ensureRssCard() {
+        if (rssCard) return rssCard;
+        const factory = getRuntime()?.createSidebarHoverCard;
+        if (typeof factory !== "function") return null;
+        rssCard = factory({
+          id: "bgalazka-rss-card",
+          describeTarget: false,
+          defaultWidth: 340,
+          defaultHeight: 120,
+          isEnabled: () => !disposed && readerOn(),
+          matchTarget: itemTab,
+          isValid: (tab) => !disposed && readerOn() && !!tab && tab.isConnected !== false && !!itemTab(tab),
+          getShowDelay: hoverDelay,
+          getHideDelay: hideDelay,
+          getSide: readerSide,
+          getGap: cardGap,
+          suppressTooltipWhenClosed: true,
+          shouldSuppressTooltip: () => getPref(EXT_PREFS.RSS_CARD_REPLACE_TOOLTIP, true),
+          onCreate(c, ctrl) {
+            const makeEl = (tag, cls, text) => {
+              const el = document.createElement(tag);
+              if (cls) el.className = cls;
+              if (text) el.textContent = text;
+              return el;
+            };
+            const folderEl = makeEl("div", "rc-folder");
+            const textEl = makeEl("div", "rc-text");
+            const urlEl = makeEl("div", "rc-url");
+            const actionsEl = makeEl("div", "rc-actions");
+            for (const [action, label] of [
+              ["open", "Open"],
+              ["dismiss", "Dismiss"],
+              ["all", "Dismiss all"],
+            ]) {
+              const btn = makeEl("button", "", label);
+              btn.setAttribute("data-a", action);
+              btn.dataset.a = action;
+              actionsEl.append(btn);
+            }
+            c.append(folderEl, textEl, urlEl, actionsEl);
+            c.addEventListener("click", (e) => {
+              const btn = e.target.closest?.("button");
+              const a = btn?.getAttribute?.("data-a") || btn?.dataset?.a;
+              const tab = ctrl.getTarget();
+              if (!a || !tab) return;
+              if (a === "open") {
+                window.gBrowser.selectedTab = tab;
+                ctrl.hide();
+              } else if (a === "dismiss") dismiss(tab, false);
+              else if (a === "all") {
+                const folder = tab.closest("zen-folder");
+                const tabs = folder
+                  ? [...folder.querySelectorAll("tab, .tabbrowser-tab")].filter(
+                      (t) => itemTab(t) && !t.hasAttribute("zen-empty-tab"),
+                    )
+                  : [tab];
+                if (
+                  getPref(EXT_PREFS.RSS_CARD_CONFIRM_ALL, false) &&
+                  !window.confirm(
+                    "Dismiss all " +
+                      tabs.length +
+                      " article" +
+                      (tabs.length === 1 ? "" : "s") +
+                      " in this folder?",
+                  )
+                )
+                  return;
+                ctrl.hide();
+                tabs.forEach((t) => window.gBrowser.removeTab(t, { animate: false }));
+              }
+            });
+            applyCardParts(c);
+          },
+          render(c, tab) {
+            const folder = tab.closest("zen-folder");
+            const folderEl = c.querySelector(".rc-folder");
+            if (folderEl) folderEl.textContent = folder?.label || folder?.getAttribute("label") || "";
+            const url = tabUrl(tab);
+            const rcText = c.querySelector(".rc-text");
+            if (rcText) {
+              rcText.className = "rc-text";
+              renderRichText(rcText, getFullTabText(tab), url);
+            }
+            const urlEl = c.querySelector(".rc-url");
+            if (urlEl) urlEl.textContent = url;
+            applyCardParts(c);
+          },
+        });
+        registerCleanup(() => { rssCard?.destroy(); rssCard = null; });
+        return rssCard;
       }
       // A dismiss never hides the card first: it continues with the next
       // article, so the reader sees no flash of a closed card.
@@ -1241,57 +1763,17 @@ function nativeSidebarSide() {
         if (!tab) return;
         const folder = tab.closest("zen-folder");
         const next = nextArticle(folder, tab);
-        gBrowser.removeTab(tab, { animate: false });
-        if (
-          viaPointer &&
-          getPref(EXT_PREFS.RSS_CARD_RETARGET, true) &&
-          lastXY
-        ) {
-          // The list shifts under a still pointer: re-target the item that
-          // moved under it. The card stays open while that happens.
-          window.requestAnimationFrame(() => {
-            if (!readerOn()) return;
-            const under = itemTab(document.elementFromPoint(...lastXY));
-            if (under) showCard(under);
-            else if (next?.isConnected) showCard(next);
-            else hideCard();
-          });
-          return;
-        }
-        if (next) {
-          showCard(next);
-          return;
-        }
-        hideCard();
+        window.gBrowser.removeTab(tab, { animate: false });
+        const ctrl = ensureRssCard();
+        if (!ctrl) return;
+        ctrl.retarget(tab, {
+          viaPointer: !!viaPointer,
+          allowPointer: getPref(EXT_PREFS.RSS_CARD_RETARGET, true),
+          nextTarget: next,
+        });
       }
-      const onOver = (e) => {
-        if (!readerOn()) return;
-        lastXY = [e.clientX, e.clientY];
-        const tab = itemTab(e.target);
-        if (tab) {
-          scheduleShow(tab);
-          return;
-        }
-        if (card && !card.hidden && !card.contains(e.target))
-          hideCard(hideDelay());
-      };
-      const scheduleShow = (tab) => {
-        const delay = hoverDelay();
-        if (delay <= 0) {
-          cancelShow();
-          showCard(tab);
-          return;
-        }
-        if (showTimer !== null && showTab === tab) return;
-        cancelShow();
-        showTab = tab;
-        showTimer = setTimeout(() => {
-          showTimer = null;
-          showTab = null;
-          if (readerOn()) showCard(tab);
-        }, delay);
-      };
-      const onMove = (e) => (lastXY = [e.clientX, e.clientY]);
+      const onOver = (e) => { ensureRssCard()?.over(e); };
+      const onMove = (e) => { ensureRssCard()?.move(e); };
       const onAux = (e) => {
         if (e.button !== 1 || !readerOn()) return;
         if (!getPref(EXT_PREFS.RSS_CARD_MMB_DISMISS, true)) return;
@@ -1301,41 +1783,41 @@ function nativeSidebarSide() {
         e.stopPropagation();
         dismiss(tab, true);
       };
-      const onPopup = (e) => {
-        if (!readerOn() || e.target.id !== "tabbrowser-tab-tooltip") return;
-        if (!getPref(EXT_PREFS.RSS_CARD_REPLACE_TOOLTIP, true)) return;
-        if (itemTab(e.target.triggerNode)) e.preventDefault();
-      };
-      const onKeyDown = (e) => {
-        if (e.key !== "Escape" || !readerOn()) return;
-        if (!card || card.hidden) return;
-        e.preventDefault();
-        e.stopPropagation();
-        hideCard();
-      };
-      const onContainerLeave = () => hideCard(hideDelay());
+      const onPopup = (e) => { ensureRssCard()?.popup(e); };
+      const onKeyDown = (e) => { ensureRssCard()?.key(e); };
+      const onContainerLeave = () => { rssCard?.scheduleHide?.(); };
+      function unbindReader() {
+        const container = readerContainer;
+        if (!container) return;
+        readerContainer = null;
+        container.removeEventListener("mouseover", onOver);
+        container.removeEventListener("mousemove", onMove);
+        container.removeEventListener("auxclick", onAux, true);
+        container.removeEventListener("mouseleave", onContainerLeave);
+        window.removeEventListener("popupshowing", onPopup, true);
+        window.removeEventListener("keydown", onKeyDown);
+      }
+      function resetReaderCard() {
+        rssCard?.hide?.();
+      }
+      registerCleanup(() => { unbindReader(); resetReaderCard(); });
       function syncReader() {
-        const container = window.gBrowser?.tabContainer;
-        // Appearance preferences reach the card through the same refresh path
-        // as the folder state, so a change applies without a restart.
+        const container = window.gBrowser?.tabContainer || null;
         applyCardStyle();
-        if (readerOn() && container && !readerBound) {
-          readerBound = true;
+        const action = readerBindingAction(readerOn(), readerContainer, container);
+        if (action === "unbind" || action === "replace") {
+          unbindReader();
+          resetReaderCard();
+        }
+        if (action === "bind" || action === "replace") {
+          readerContainer = container;
           container.addEventListener("mouseover", onOver);
           container.addEventListener("mousemove", onMove);
           container.addEventListener("auxclick", onAux, true);
           container.addEventListener("mouseleave", onContainerLeave);
           window.addEventListener("popupshowing", onPopup, true);
           window.addEventListener("keydown", onKeyDown);
-          registerCleanup(() => {
-            container.removeEventListener("mouseover", onOver);
-            container.removeEventListener("mousemove", onMove);
-            container.removeEventListener("auxclick", onAux, true);
-            container.removeEventListener("mouseleave", onContainerLeave);
-            window.removeEventListener("popupshowing", onPopup, true);
-            window.removeEventListener("keydown", onKeyDown);
-          });
-        } else if (!readerOn()) hideCard();
+        }
       }
       function syncRssFolderDisplay() {
         if (disposed) return;
@@ -1364,6 +1846,13 @@ function nativeSidebarSide() {
           if (rssScanTimer !== null) clearTimeout(rssScanTimer);
           rssScanTimer = null;
         }
+        // OW-94: a paused pass does not scan. Folders change while a person is not gaming too, so the observer stays
+        // attached and the scan that follows the resume picks up everything it missed — this only skips the work.
+        if (performancePaused()) {
+          if (rssScanTimer !== null) clearTimeout(rssScanTimer);
+          rssScanTimer = null;
+          return;
+        }
         safeScanRssFolders();
         if (!rssObserver && container) {
           rssObservedContainer = container;
@@ -1371,6 +1860,7 @@ function nativeSidebarSide() {
             if (disposed || !rssEnabled() || rssScanTimer !== null) return;
             rssScanTimer = setTimeout(() => {
               rssScanTimer = null;
+              if (performancePaused()) return;
               safeScanRssFolders();
             }, 100);
           });
@@ -1481,6 +1971,15 @@ function nativeSidebarSide() {
         );
       });
       syncRssFolderDisplay();
+
+      // OW-94: resume runs the scan the paused window skipped. Registered with the module's own cleanups, and a
+      // switch that is missing entirely simply has no listener to add.
+      if (rssPerformance?.subscribe) {
+        const unsubscribe = rssPerformance.subscribe((paused) => {
+          if (!paused && !disposed) syncRssFolderDisplay();
+        });
+        if (unsubscribe) cleanups.push(() => unsubscribe());
+      }
 
       const api = {
         refresh: syncRssFolderDisplay,

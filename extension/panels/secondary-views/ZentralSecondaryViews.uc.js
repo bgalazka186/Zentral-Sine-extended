@@ -49,6 +49,7 @@
         handleFrame: null,
         pair: null,
         secondURL: null,
+        notesOpen: null,
       };
       ctx.secondarySnapshot = () => ({
         mode: state.mode,
@@ -103,17 +104,39 @@
           return [];
         }
       }
-      function resolvePairApp(pair, id) {
+      function hasStoredEssentialTab(id) {
+        if (!id || !id.startsWith("bgalazka-essential-")) return false;
+        const tabs =
+          window.gZenWorkspaces?.allStoredTabs ?? window.gBrowser?.tabs ?? [];
+        const ss = window.SessionStore;
+        for (const tab of tabs) {
+          if (!tab?.isConnected || tab.closing) continue;
+          try {
+            const raw = ss?.getCustomTabValue?.(tab, "bgalazka-panel-settings");
+            if (raw && JSON.parse(raw)?.panelId === id) return true;
+          } catch (_) {}
+        }
+        return false;
+      }
+      function resolvePairApp(pair, id, { promoteMissing = true } = {}) {
         const tabRecord = ctx.essentialPanels.get(id);
         if (tabRecord?.tab.isConnected) return tabRecord.app;
         const normal = savedNormalApps().find((app) => app.id === id);
         if (normal) return normal;
-        // A tab may have closed while this window was shut down. Create its
-        // dedicated launcher from the saved metadata without creating a browser.
-        const snapshot = pair.apps[id];
-        if (!id.startsWith("bgalazka-essential-") || !snapshot?.url)
-          return null;
+        const snapshot = pair.apps?.[id];
+        if (!snapshot?.url) return null;
         const app = { ...snapshot, id, workspaceId: "all" };
+        // During cold startup (without ZentralStartup waking sleeping Essential tabs) or while
+        // the tab still exists in session restore, use the saved snapshot directly without
+        // duplicating it into the normal Apps grid.
+        if (
+          !promoteMissing ||
+          !id.startsWith("bgalazka-essential-") ||
+          hasStoredEssentialTab(id)
+        )
+          return app;
+        // A tab closed while this window was shut down: create its dedicated launcher from the
+        // saved metadata without creating a browser.
         Services.prefs.setStringPref(
           "zen.workspace.apps.sidebar.apps",
           JSON.stringify([...savedNormalApps(), app]),
@@ -173,9 +196,9 @@
         ctx.attachZenInternetPanelBrowser(browser);
         ctx.updateZenCssBrowser(browser);
       }
-      function showPair(pair) {
-        const top = resolvePairApp(pair, pair.top);
-        const bottom = resolvePairApp(pair, pair.bottom);
+      function showPair(pair, opts = {}) {
+        const top = resolvePairApp(pair, pair.top, opts);
+        const bottom = resolvePairApp(pair, pair.bottom, opts);
         if (!top || !bottom) return false;
         if (state.mode) leaveMode();
         origOpen.call(apps, top);
@@ -197,6 +220,16 @@
         rememberPair();
         [pair.top, pair.bottom] = [pair.bottom, pair.top];
         ctx.saveLinkedTriplePairs();
+        // Notes between the panels: the gap's upper part (taken from the upper panel) becomes the lower part,
+        // so the panels trade places at exactly the sizes they had and Notes stays where it is.
+        const gapNow = notesGap(),
+          upNow = notesGapUp();
+        if (gapNow > 0 && upNow >= 0)
+          document.documentElement.style.setProperty(
+            "--zentral-notes-gap-up",
+            `${Math.round(gapNow - upNow)}px`,
+          );
+        state.notesOpen = null; // refreshed by the fit below; a stale pre-swap record must never be committed
         const oldFirst = state.first,
           oldSecond = state.second;
         // discardSecond only removes chrome in Triple View; both live browsers
@@ -215,9 +248,14 @@
         markTiles();
         ctx.updateWebToolbarState();
         fitSecondaryBrowsers();
+        // Notes follows the swap (its band sits above the divider, which just moved).
+        try {
+          document.dispatchEvent(new Event("zentral-triple-swapped"));
+        } catch (_) {}
         ctx.requestPanelActivity();
         refreshViewZenCss(state.first);
         refreshViewZenCss(state.second);
+        scheduleSecondaryGeometryFit();
       }
       const markTiles = () =>
         document
@@ -245,10 +283,21 @@
         const v = parseFloat(document.documentElement.style.getPropertyValue("--zentral-notes-gap-up"));
         return notesGap() > 0 && Number.isFinite(v) && v >= 0 ? Math.min(v, notesGap()) : -1;
       }
+      // Pure: how small a web panel may get. Without Notes: 160 px, or a quarter of the two when that is less.
+      // While Notes holds the gap: 120 px, or a quarter of what the two share WITHOUT Notes (`usable + gap`) when
+      // that is less. The second floor must not depend on the gap. It used to be a quarter of `usable`, which
+      // changes with every px of the gap: a panel resting on its floor then moved whenever Notes was resized, and
+      // the edge of Notes that was NOT being dragged moved with it (OW-26). Notes keeps the same floor
+      // (gapPageFloor in additional/notes/ZentralNotes.uc.js; tests/notes-triple-view-startup.test.cjs compares
+      // the two). A gap that leaves less than two floors (the panel just shrank): the panels halve what is left.
+      function tripleFloor({ usable, gap = 0 }) {
+        if (!(gap > 0)) return Math.min(160, usable * 0.25);
+        return Math.max(0, Math.min(120, (usable + gap) / 4, usable / 2));
+      }
       // Pure: heights of the two web panels. `usable` already excludes the gap; the panels would share
       // `usable + gap` without Notes. up < 0 = proportional gap. U + L always equals `usable`.
       function tripleHeights({ usable, gap = 0, share = 0.5, up = -1 }) {
-        const min = Math.min(160, usable * 0.25);
+        const min = tripleFloor({ usable, gap });
         const s = Number.isFinite(share) ? share : 0.5;
         const raw = up >= 0 && gap > 0 ? (usable + gap) * s - Math.min(up, gap) : usable * s;
         const top = Math.max(min, Math.min(usable - min, raw));
@@ -256,9 +305,38 @@
       }
       // Pure inverse for a divider drag: the share that puts the upper panel at `topPx`.
       function tripleShareFor({ usable, gap = 0, topPx, up = -1 }) {
-        const min = Math.min(160, usable * 0.25);
+        const min = tripleFloor({ usable, gap });
         const top = Math.max(min, Math.min(usable - min, topPx));
         return up >= 0 && gap > 0 ? (top + Math.min(up, gap)) / (usable + gap) : top / usable;
+      }
+      // Pure: the part of the gap the upper panel really gave, given the height it ended up with. Equal to the
+      // `up` Notes asked for unless a floor held one of the panels.
+      function tripleGapUp({ usable, gap = 0, share = 0.5, top }) {
+        const s = Number.isFinite(share) ? share : 0.5;
+        return Math.max(0, Math.min(gap, (usable + gap) * s - top));
+      }
+      // Pure: does the band of Notes lie where a band that has just been opened would lie? A new band is centred
+      // on the divider (Notes takes Math.round(gap / 2) from the upper panel) and is off centre only as far as a
+      // floor pushes it. `top` = the upper panel's height now. Also true for a band whose edge was dragged back to
+      // that place: the two cannot be told apart and need not be. One px either way is the same place: the swap
+      // mirrors the upper part of a band of an odd height to the other half (172 of 345 instead of 173), and the
+      // split a floor allowed is reported in whole px.
+      function tripleBandAsOpened({ usable, gap = 0, share = 0.5, top }) {
+        if (!(gap > 0) || !Number.isFinite(top)) return true;
+        return Math.abs(tripleHeights({ usable, gap, share, up: Math.round(gap / 2) }).top - top) < 1.5;
+      }
+      // Pure: the share that puts the divider in the MIDDLE of the Notes band that is closing. `top` = the upper
+      // panel's height while Notes was open, `gap` = the band's height, `total` = both panels plus the band. Both
+      // panels then take back half of it, whatever the edges had been dragged to. No band = unchanged. Only for
+      // a band that does not lie where it was opened (tripleBandAsOpened; see onNotesGap for why).
+      // The middle is a whole px, rounded the way Notes divides a new band (Math.round(px / 2) in its bar
+      // adapter), so a band that closes and opens again takes from the upper panel exactly what the close gave
+      // back to it. With the exact half, a band of an odd height moved the divider half a px up at every close
+      // and reopen. A panel that slides away and returns with Notes open is one such pair, and the split is
+      // saved each time: it crept until the upper panel stood on its floor (OW-26).
+      function tripleShareAfterNotes({ top, gap, total, share = 0.5 }) {
+        if (!(gap > 0) || !(total > 0) || !Number.isFinite(top)) return share;
+        return Math.max(0.05, Math.min(0.95, (top + Math.round(gap / 2)) / total));
       }
       function fitSecondaryBrowsers() {
         // Keep the live XUL <browser> elements under layout control. Writing
@@ -275,15 +353,32 @@
         if (!rect) return;
         const toolbar = document.getElementById("zen-app-panel-toolbar");
         // V4-R2: Notes between the panels opens a gap at the divider; both panels share what is left.
+        const gap = notesGap();
         const usable =
           rect.height -
           (toolbar?.offsetHeight || 0) -
           state.shell.offsetHeight -
           state.divider.offsetHeight -
-          notesGap() -
+          gap -
           panel.clientTop * 2;
         if (usable <= 0) return;
-        const { top } = tripleHeights({ usable, gap: notesGap(), share: state.share, up: notesGapUp() });
+        // What closing Notes needs later (the band is gone by then): the upper panel's height, the band and the
+        // whole stack while it was open.
+        const up = notesGapUp();
+        const { top } = tripleHeights({ usable, gap, share: state.share, up });
+        // Notes asked for a split one panel cannot give (an uneven pair, a panel that shrank, a start-up that
+        // re-centres the band on a divider saved for another split): publish the split that was applied. The
+        // variable is the truth both sides read (the swap already mirrors it); left at the wish, the next edge
+        // drag of Notes started from a split that was not on screen and moved the opposite edge.
+        if (gap > 0 && up >= 0) {
+          const applied = Math.round(tripleGapUp({ usable, gap, share: state.share, top }));
+          if (applied !== Math.round(up))
+            document.documentElement.style.setProperty("--zentral-notes-gap-up", `${applied}px`);
+        }
+        state.notesOpen =
+          gap > 0
+            ? { top, gap, total: usable + gap, asOpened: tripleBandAsOpened({ usable, gap, share: state.share, top }) }
+            : null;
         const topValue = `${Math.round(top)}px`,
           bottomValue = `${Math.round(usable - top)}px`;
         if (panel.style.getPropertyValue("--bgalazka-top-share") !== topValue)
@@ -308,6 +403,30 @@
           state.dividerHandle.style.height = `${line.height + 3 + lead}px`;
         });
       }
+      // A cold startup or a freshly-created second browser can report transient zero/stale
+      // chrome heights before the flex layout settles: fit again after a frame and once more a
+      // little later. (This was added in the belief that a missing fit was why Notes' gap grips
+      // misbehaved until the panels were swapped. It was not: see tripleFloor and the split written
+      // back in fitSecondaryBrowsers, OW-26. The follow-up stays for the transient heights.)
+      // var, not let: a startup restore can request a pair before this line has run, and a let would then
+      // throw from its temporal dead zone. A hoisted undefined is harmless to cancelAnimationFrame / clearTimeout.
+      var secondaryFitFrame = null;
+      var secondaryFitTimer = null;
+      function scheduleSecondaryGeometryFit() {
+        if (state.mode !== "triple" || !state.second?.isConnected) return;
+        if (secondaryFitFrame != null) cancelAnimationFrame(secondaryFitFrame);
+        secondaryFitFrame = requestAnimationFrame(() => {
+          secondaryFitFrame = null;
+          fitSecondaryBrowsers();
+        });
+        if (secondaryFitTimer != null) ctx.clearTimeout(secondaryFitTimer);
+        secondaryFitTimer = ctx.setTimeout(() => {
+          secondaryFitTimer = null;
+          fitSecondaryBrowsers();
+        }, 280);
+      }
+      ctx.scheduleSecondaryGeometryFit = scheduleSecondaryGeometryFit;
+
       // Resume can leave secondary geometry/activity stale without a resize.
       // Coalesce native lifecycle signals; one delayed pass covers restored layout.
       let resumeFrame = null;
@@ -337,7 +456,23 @@
           }, 250);
       };
       // Notes (bottom bar of Triple View) opens / closes its gap at the divider: fit both panels again.
-      const onNotesGap = () => fitSecondaryBrowsers();
+      // A band that lay where it was opened goes away without a trace: each panel takes back what it gave and
+      // the saved split is the one from before (owner 2026-11-15). Until 3.3.173 the divider went to the middle of
+      // every band. For a pair too uneven to centre the band (one panel on its floor) that replaced the saved
+      // split: 30 / 70 came back as 41 / 59, at the first start-up whose panel slid away with Notes open.
+      // A band that lies elsewhere (an edge of Notes was dragged, or the divider was dragged away from a band a
+      // floor had pushed off centre) still ends with the divider in its middle. Its place is not remembered, the
+      // next band is centred on the divider, so this is what brings Notes back where it was.
+      const onNotesGap = () => {
+        const was = state.notesOpen;
+        if (was && notesGap() === 0 && state.mode === "triple") {
+          if (!was.asOpened) state.share = tripleShareAfterNotes({ ...was, share: state.share });
+          state.notesOpen = null;
+          if (state.pair && state.second) rememberPair();
+        }
+        fitSecondaryBrowsers();
+        scheduleSecondaryGeometryFit();
+      };
       document.addEventListener("zentral-notes-reserve", onNotesGap);
       ctx.registerCleanup(() => document.removeEventListener("zentral-notes-reserve", onNotesGap));
       window.addEventListener("activate", resumeSecondaryView);
@@ -351,13 +486,22 @@
         Services.obs.removeObserver(resumeSecondaryView, "wake_notification");
         if (resumeFrame !== null) cancelAnimationFrame(resumeFrame);
         if (resumeTimer !== null) ctx.clearTimeout(resumeTimer);
-        resumeFrame = resumeTimer = null;
+        if (secondaryFitFrame !== null) cancelAnimationFrame(secondaryFitFrame);
+        if (secondaryFitTimer !== null) ctx.clearTimeout(secondaryFitTimer);
+        resumeFrame = resumeTimer = secondaryFitFrame = secondaryFitTimer = null;
+        delete ctx.scheduleSecondaryGeometryFit;
       });
       function moveBrowser(browser, parent) {
         if (browser.parentNode === parent) return;
+        const sameRoot =
+          typeof parent.getRootNode === "function" &&
+          typeof browser.getRootNode === "function"
+            ? parent.getRootNode() === browser.getRootNode()
+            : true;
         if (typeof browser._zentralMoveTo === "function")
           browser._zentralMoveTo(parent);
         else if (
+          sameRoot &&
           typeof parent.moveBefore === "function" &&
           typeof browser.connectedMoveCallback === "function"
         )
@@ -367,6 +511,10 @@
       function discardSecond() {
         state.geometryObserver?.disconnect();
         state.geometryObserver = null;
+        state.hoverObserver?.disconnect();
+        state.hoverObserver = null;
+        state.slideCleanup?.();
+        state.slideCleanup = null;
         if (state.handleFrame) cancelAnimationFrame(state.handleFrame);
         state.handleFrame = null;
         state.dividerHandle?.remove();
@@ -424,6 +572,7 @@
         const mode = state.mode;
         if (mode === "triple") rememberPair();
         discardSecond();
+        state.notesOpen = null;
         state.mode = null;
         state.first = null;
         state.pair = null;
@@ -660,6 +809,34 @@
           state.geometryObserver.observe(bar);
           const toolbar = document.getElementById("zen-app-panel-toolbar");
           if (toolbar) state.geometryObserver.observe(toolbar);
+          const HoverObserver =
+            typeof MutationObserver === "function"
+              ? MutationObserver
+              : window.MutationObserver;
+          if (HoverObserver) {
+            state.hoverObserver = new HoverObserver(() => {
+              if (!ui.hasAttribute("bgalazka-hover-panel-hidden"))
+                scheduleSecondaryGeometryFit();
+            });
+            state.hoverObserver.observe(ui, {
+              attributes: true,
+              attributeFilter: ["bgalazka-hover-panel-hidden"],
+            });
+          }
+          const panelRoot = root();
+          if (panelRoot) {
+            const onPanelSlideEnd = (event) => {
+              if (
+                event.target === panelRoot &&
+                event.propertyName === "transform" &&
+                !ui.hasAttribute("bgalazka-hover-panel-hidden")
+              )
+                fitSecondaryBrowsers();
+            };
+            panelRoot.addEventListener("transitionend", onPanelSlideEnd);
+            state.slideCleanup = () =>
+              panelRoot.removeEventListener("transitionend", onPanelSlideEnd);
+          }
           let shield = null;
           let grabOffset = 0;
           let pointerId = null;
@@ -968,6 +1145,7 @@
           linkCurrentPair(firstApp, app);
         }
         markTiles();
+        if (state.mode === "triple") scheduleSecondaryGeometryFit();
         return true;
       }
       // Startup can request one panel even when it belongs to a saved Triple View pair.
@@ -994,7 +1172,9 @@
           const old = loaded.get(id);
           const source =
             ctx.essentialPanels.get(id)?.app ||
-            savedNormalApps().find((a) => a.id === id);
+            savedNormalApps().find((a) => a.id === id) ||
+            state.pair?.apps?.[id] ||
+            ctx.linkedPairFor?.(id)?.apps?.[id];
           if (!old || !source) continue;
           const app = {
             ...source,
@@ -1051,6 +1231,76 @@
         delete ctx.syncSecondaryToolbarPreferences;
       });
       ctx.openStartupSinglePanel = (app) => origOpen.call(apps, app);
+      ctx.openStartupTriplePair = (id) => {
+        const pair = id && ctx.linkedPairFor?.(id);
+        return pair ? showPair(pair, { promoteMissing: false }) : false;
+      };
+      // Self-sufficient Triple View startup restore (OW-30): works without ZentralStartup
+      // and even when no outer coordinator runs the startup loop (uses loader/ZentralRuntime).
+      let cancelSelfStartup = null;
+      if (
+        !ctx.startupPanelCoordinator &&
+        typeof window.ZentralRuntime?.whenNativeReady === "function"
+      ) {
+        const readStartup = () => {
+          if (typeof window.ZentralRuntime?.readStartupPanel === "function")
+            return window.ZentralRuntime.readStartupPanel();
+          try {
+            const value = JSON.parse(
+              ctx.getPref("zen.workspace.bgalazka.open_at_startup", "null"),
+            );
+            return value &&
+              typeof value.id === "string" &&
+              value.id.length > 0 &&
+              ["single", "triple"].includes(value.mode)
+              ? value
+              : null;
+          } catch (_) {
+            return null;
+          }
+        };
+        const initialSelection = readStartup();
+        if (initialSelection?.mode === "triple") {
+          const hoverPref =
+            ctx.BGALAZKA_EXT_PREFS?.HOVER_REVEAL_PANEL ||
+            "zen.workspace.bgalazka.hover_reveal_panel";
+          if (typeof ctx.setPref === "function") ctx.setPref(hoverPref, true);
+          else {
+            try {
+              Services.prefs.setBoolPref(hoverPref, true);
+            } catch (_) {}
+          }
+          let attempted = false;
+          const trySelfRestore = () => {
+            const sel = readStartup();
+            if (
+              !sel ||
+              sel.mode !== "triple" ||
+              !ctx.getPref("zen.workspace.apps.sidebar.enabled", true)
+            )
+              return true;
+            if (!attempted && root()?.hasAttribute("open")) return true;
+            const pair = ctx.linkedPairFor?.(sel.id);
+            if (!pair) return true;
+            attempted = true;
+            const already =
+              root()?.hasAttribute("open") &&
+              ui.getAttribute("bgalazka-triple-view") === "true" &&
+              ctx
+                .getAllAppBrowsers()
+                .some((b) => b.isConnected && b._bgalazkaAppId === sel.id);
+            if (!already && !ctx.openStartupTriplePair(sel.id)) return false;
+            const opened =
+              root()?.hasAttribute("open") &&
+              ui.getAttribute("bgalazka-triple-view") === "true";
+            if (opened) ctx.onStartupPanelOpened?.();
+            return opened;
+          };
+          cancelSelfStartup = window.ZentralRuntime.whenNativeReady(() => {
+            ctx.retryPanelTask?.("secondary-startup-triple", trySelfRestore);
+          });
+        }
+      }
       apps.openPanel = function (app) {
         const pair = app?.id && ctx.linkedPairFor(app.id);
         if (pair) {
@@ -1193,7 +1443,10 @@
         window.removeEventListener("pointercancel", cancelPending, true);
         window.removeEventListener("blur", cancelPending);
         window.removeEventListener("click", onClick, true);
+        cancelSelfStartup?.();
+        ctx.cancelPanelRetry?.("secondary-startup-triple");
         delete ctx.openStartupSinglePanel;
+        delete ctx.openStartupTriplePair;
         apps.openPanel = origOpen;
         apps.closePanel = origClose;
         apps.closeApp = origCloseApp;

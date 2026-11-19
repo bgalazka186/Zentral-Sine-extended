@@ -4,7 +4,7 @@
 const assert = require("node:assert/strict"), fs = require("node:fs"), path = require("node:path"), vm = require("node:vm");
 const source = fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.uc.js"), "utf8");
 const dom = require("./helpers/fake-dom.cjs")();
-const win = { document: dom.document, ZentralRuntime: { register() {} }, __zentralNotesTestSeam: {}, requestAnimationFrame() {}, cancelAnimationFrame() {}, setTimeout, clearTimeout, innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {} };
+const win = { __zentralNotesParts: { "notes-calendar": require("../additional/notes/calendar/ZentralNotesCalendar.js") }, document: dom.document, ZentralRuntime: { register() {} }, __zentralNotesTestSeam: {}, requestAnimationFrame() {}, cancelAnimationFrame() {}, setTimeout, clearTimeout, innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {} };
 win.window = win;
 vm.runInNewContext(source, { window: win, document: dom.document, Event: dom.Ev, globalThis: { Services: {} }, ChromeUtils: {}, console, URL, Date, JSON, Math, Promise, RegExp, Number, Map, Set, setTimeout, clearTimeout, navigator: { platform: "Linux" }, Uint8Array });
 const c = win.__zentralNotesTestSeam.core;
@@ -157,6 +157,15 @@ test("assets: store saves, persists, re-reads and removes pictures; refuses bad 
   const back = await store.readAsset(saved.rel);
   assert.equal(back.mime, "image/png");
   assert.deepEqual([...back.bytes], [...PNG]);
+  const MP4 = Uint8Array.from([0, 0, 0, 16, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0, 0, 0, 0]);
+  const videoRel = "assets/" + n.id + "/clip.mp4";
+  io.files.set("/n/" + videoRel, { bytes: MP4, mtime: Date.now() });
+  const videoBack = await store.readAsset(videoRel);
+  assert.equal(videoBack.mime, "video/mp4", "known local video containers are served to the native player");
+  assert.deepEqual([...videoBack.bytes], [...MP4]);
+  const mismatchRel = "assets/" + n.id + "/not-webm.webm";
+  io.files.set("/n/" + mismatchRel, { bytes: MP4, mtime: Date.now() });
+  assert.equal(await store.readAsset(mismatchRel), null, "file extension cannot override the container signature");
   assert.equal(await store.readAsset("assets/../meta.json"), null);
   assert.equal(await store.readAsset("assets/" + n.id + "/nope.png"), null);
   assert.equal((await store.saveAsset(n.id, Uint8Array.from(Buffer.from("MZ......payload...")), "image/png")).reason, "type");
@@ -282,6 +291,39 @@ test("reminders: overdue at startup fires once, restart does not repeat it", asy
   assert.deepEqual(J(fired), [[n.id]], "restart after the alert: no repeat");
   s2.destroy();
 });
+test("calendar reminders: scheduler expands stored occurrences, records alerts and suppresses duplicate notification", async () => {
+  const { clk, store, sched, fired } = await remStore();
+  const start = T0 + 5 * 60000;
+  const item = store.items.upsert({ id: "calendar-live-reminder", summary: "Calendar reminder", start: { dateTime: new Date(start).toISOString() }, x: { kind: "reminder", src: "manual" } });
+  assert.ok(item);
+  await store.items.flush();
+  await sched.start(); await settle();
+  assert.deepEqual(J(clk.delays()), [4 * 60000], "adaptive Tier 1 lead schedules the pre-alert before the due stage");
+  await clk.advance(5 * 60000); await settle();
+  assert.equal(fired.length, 2, "pre-alert and due stages are delivered independently");
+  assert.ok(fired.every((batch) => batch.some((id) => id.includes("calendar-live-reminder"))), "calendar stages are sent to the notification callback");
+  const history = store.items.history.list({ itemId: item.id, occurrenceId: item.id });
+  assert.deepEqual(J(history.filter((record) => record.action === "alerted").map((record) => record.stage).sort()), ["due", "pre"], "each stage is recorded before dispatch");
+  assert.equal(store.items.history.stateFor(item.id, item.id), "pending", "alert audit does not complete the reminder");
+  await sched.reschedule(); await settle();
+  assert.equal(fired.length, 2, "the same scheduled occurrence stages are never announced twice");
+  sched.destroy();
+});
+test("calendar reminders: recurrence expansion schedules the next matching occurrence", async () => {
+  const { clk, store, sched, fired } = await remStore();
+  const item = store.items.upsert({ id: "calendar-daily", summary: "Daily calendar reminder", start: { dateTime: new Date(T0 + 5 * 60000).toISOString() }, recurrence: ["RRULE:FREQ=DAILY;COUNT=2"], x: { kind: "reminder", src: "manual" } });
+  await store.items.flush();
+  await sched.start(); await settle();
+  await clk.advance(5 * 60000); await settle();
+  assert.equal(fired.length, 2, "the first occurrence delivers pre and due stages");
+  assert.equal(store.items.history.list({ itemId: item.id }).filter((record) => record.action === "alerted").length, 2);
+  assert.ok(clk.active >= 1, "the follow-up and next recurrence are scheduled after the first stages");
+  await clk.advance(24 * 60 * 60 * 1000); await settle();
+  assert.equal(fired.length, 5, "follow-up for occurrence one and pre/due for occurrence two alert independently");
+  assert.equal(store.items.history.list({ itemId: item.id }).filter((record) => record.action === "alerted").length, 5);
+  sched.destroy();
+});
+
 test("reminders: a second window that already announced it keeps this one silent", async () => {
   const io = fakeIO(), clk = clock(T0);
   const w1 = mkStore(io, clk, { windowId: "w1" }), w2 = mkStore(io, clk, { windowId: "w2" });

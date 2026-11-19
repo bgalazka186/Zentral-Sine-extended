@@ -89,7 +89,7 @@ const note = (id, body, extra = {}) => ({ id, body, folder: "", updated: 1_700_0
     assert.deepEqual(J(c.journalDays(j2.body)), ["2026-11-03", "2026-11-04"]);
   });
   await test("[[ completion: trigger only inside an open [[, completion eats the closing ]] and strips |", () => {
-    assert.deepEqual(J(c.wikiTrigger("see [[Pla", 9)), { start: 4, query: "Pla" });
+    assert.deepEqual(J(c.wikiTrigger("see [[Pla", 9)), { start: 4, query: "Pla", title: "Pla", heading: null }); // T1.10 added title and heading
     assert.equal(c.wikiTrigger("see [[Plan]] x", 14), null);
     assert.equal(c.wikiTrigger("[ [x", 4), null);
     const t = c.wikiTrigger("see [[Pla]] z", 9);
@@ -241,6 +241,15 @@ const note = (id, body, extra = {}) => ({ id, body, folder: "", updated: 1_700_0
     assert.ok(store.get(other.id));
     for (const e of api.log) assert.ok(/^(add|remove|relabel|move|url|mark|adopt|removeAll)$/.test(e[0]));
   });
+  await test("zen controller: a blocked managed move does not spin an immediate retry", async () => {
+    timers.length = 0;
+    const z = await zenSetup({}, "all"); z.store.addFolder("Work"); const n = z.store.create("Moved", "work"); z.zen.runNow();
+    const entry = z.api.items.get("n:" + n.id); entry.parent = "wrong-parent";
+    z.api.move = () => false;
+    z.zen.runNow(); assert.equal(timers.length, 0, "failed move waits for a later event, not a tight timer loop");
+    z.api.move = (key) => z.api.items.delete(key); z.zen.runNow(); assert.equal(timers.length, 1, "successful move schedules its rebuild");
+    flushT(); z.zen.destroy();
+  });
   await test("zen controller: whole mode, nested folders and the flat fallback when nesting is refused", async () => {
     const { store, api, zen } = await zenSetup({}, "all");
     store.addFolder("Work"); store.create("Task", "work");
@@ -352,9 +361,9 @@ const note = (id, body, extra = {}) => ({ id, body, folder: "", updated: 1_700_0
     assert.match(js, /"auxclick"/, "middle click is intercepted on our tabs");
     assert.match(js, /\.tab-close-button, \.tab-reset-button/, "close / reset buttons on our tabs do not open anything");
     assert.match(js, /if \(!marked && !\(ev\.type === "SSTabRestored" && zenLooksOurs\(tab\)\)\) return;/, "unmarked tabs are ignored");
-    assert.match(js, /if \(!n \|\| n\.trashed\) \{ zen\.touch\(\); return null; \}/, "a stale entry opens nothing");
+    assert.match(js, /if \(!n \|\| n\.trashed\) \{ zen\.touch\(0\); return null; \}/, "a stale entry opens nothing and requests immediate cleanup");
     assert.match(js, /if \(!root\.contains\(t\)\) zenRemoveTab\(t\)/, "marked tabs outside the NOTES folder are closed");
-    assert.match(js, /spec\.startsWith\(ZEN_URL_PREFIX\) \? spec : tab\._zentralNotesUrl/, "a discarded tab keeps its address");
+    assert.match(js, /spec\.startsWith\(ZEN_URL_PREFIX\).*about:blank#zn-agenda-/s, "live pseudo-URLs are preferred and remembered URLs cover discarded tabs");
   });
   await test("perf sampler: records nothing while off, counts and maxima while on", () => {
     let on = false, t = 0;

@@ -46,10 +46,17 @@ function makeZenSidebar({ El, document }) {
   const pinned = mk("vbox", "zen-workspace-tabs-section zen-workspace-pinned-tabs-section");
   ws.append(scroll); scroll.append(pinned); document.body.append(ws);
   // a tab: tab > stack.tab-stack > hbox.tab-content > stack.tab-icon-stack > img.tab-icon-image
+  // plus Zen's native label node. Firefox/Zen own the `label` attribute and the
+  // `.tab-label` textContent through `text=label`; OW-124 removed the second XUL
+  // `value` road, so the harness now starts from the native one-road shape.
   const tab = (label, attrs = {}) => {
     const t = mk("tab", "tabbrowser-tab", { label, pinned: "true", ...attrs });
+    const content = mk("hbox", "tab-content");
     const img = mk("img", "tab-icon-image", { src: "data:image/x-icon;base64,AAAA" });
-    t.append(mk("stack", "tab-stack")); t.querySelector(".tab-stack").append(mk("hbox", "tab-content")); t.querySelector(".tab-content").append(mk("stack", "tab-icon-stack")); t.querySelector(".tab-icon-stack").append(img);
+    const iconStack = mk("stack", "tab-icon-stack"), labelContainer = mk("hbox", "tab-label-container");
+    const labelNode = mk("label", "tab-label"); labelNode.textContent = label;
+    iconStack.append(img); labelContainer.append(labelNode); content.append(iconStack, labelContainer);
+    t.append(mk("stack", "tab-stack")); t.querySelector(".tab-stack").append(content);
     return t;
   };
   // A folder with Zen's real inner structure, copied from a runtime dump of a Zen window (labels and ids are made up).
@@ -126,7 +133,21 @@ class El {
   _adopt(n) { if (n.parent) n.parent.children.splice(n.parent.children.indexOf(n), 1); n.parent = this; return n; }
   append(...kids) { for (const k of kids) this.children.push(this._adopt(typeof k === "string" ? Object.assign(new El("#text"), { _text: k }) : k)); }
   appendChild(k) { this.append(k); return k; }
-  replaceChildren(...kids) { this.children.forEach((c) => (c.parent = null)); this.children = []; this.append(...kids); }
+  // A real browser blurs a node the moment it leaves the document, and the page sees that as a `focusout` whose
+  // relatedTarget is null. Two long-standing group menus (Settings > Labels, the calendar's grouped Tools menu) were
+  // closing themselves because of it while the fake DOM, which kept the focus on a detached node, said everything was
+  // fine. The harness therefore releases the focus too (OW-75).
+  // The browser reports the blur after the current task, not inside it; the deferred report keeps the whole new level
+  // in place before `focusout` arrives, which is exactly the ordering that used to close the menu.
+  replaceChildren(...kids) {
+    const lost = this.all().some((n) => n === state.activeElement);
+    this.children.forEach((c) => (c.parent = null)); this.children = []; this.append(...kids);
+    if (lost) {
+      const gone = state.activeElement;
+      state.activeElement = null;
+      queueMicrotask(() => gone?.dispatchEvent?.(new Ev("focusout", { bubbles: true, relatedTarget: null })));
+    }
+  }
   remove() { if (this.parent) { this.parent.children.splice(this.parent.children.indexOf(this), 1); this.parent = null; } }
   get textContent() { return this.children.length ? this.children.map((c) => c.textContent).join("") : this._text; }
   set textContent(v) { this.children.forEach((c) => (c.parent = null)); this.children = []; this._text = String(v); }
@@ -147,12 +168,20 @@ class El {
   removeEventListener(type, fn) { this.listeners = this.listeners.filter((l) => !(l.type === type && l.fn === fn)); }
   dispatchEvent(ev) {
     ev.target = ev.target || this;
+    // A real event reaches the window as well: capture listeners there run first, before the target's own. Window
+    // listeners are registered through the host (`fake-zen-browser.cjs`), which owns the listener list.
+    const propagate = (phase) => {
+      try { globalThis.__fakeWindowPropagate?.(ev, phase); } catch (_) {}
+    };
+    propagate("capture");
+    if (ev.immediateStopped) return !ev.defaultPrevented;
     const path = []; for (let x = this; x; x = x.parent) path.unshift(x);
     for (const n of path) { for (const l of [...n.listeners]) if (l.type === ev.type && l.capture) l.fn(ev); if (ev.stopped) return true; }
     for (const n of [...path].reverse()) {
       for (const l of [...n.listeners]) if (l.type === ev.type && !l.capture) l.fn(ev);
       if (ev.stopped || (n === this && !ev.bubbles && !["keydown", "click", "mousedown", "pointerdown"].includes(ev.type))) break;
     }
+    if (!ev.immediateStopped) propagate("bubble");
     return !ev.defaultPrevented;
   }
   click() { this.dispatchEvent(new Ev("click", { bubbles: true })); }
@@ -164,6 +193,10 @@ class El {
   getClientRects() { return [{}]; }
   get offsetParent() { return null; }
   get isConnected() { let x = this; while (x.parent) x = x.parent; return x === document.documentElement; }
+  // Real popups expose their open state; tests dismiss a menu by hiding it, exactly as Escape or a click outside does.
+  get state() { return this.attrs.get("state") ?? "closed"; }
+  openPopupAtScreen() { this.setAttribute("state", "open"); }
+  hidePopup() { if (this.state === "open") { this.setAttribute("state", "closed"); this.dispatchEvent(new Ev("popuphidden")); } }
   get id() { return this.attrs.get("id") ?? ""; }
   set id(v) { this.attrs.set("id", String(v)); }
   get firstChild() { return this.children[0] || null; }
@@ -181,6 +214,11 @@ const document = {
   getElementById: (id) => document.documentElement.all().find((e) => e.id === id) || null,
   querySelectorAll: (sel) => document.documentElement.querySelectorAll(sel),
   body: null,
+  // Document-level listeners (the secondary views and Notes talk through document events).
+  _listeners: [],
+  addEventListener(type, fn) { document._listeners.push({ type, fn }); },
+  removeEventListener(type, fn) { document._listeners = document._listeners.filter((l) => !(l.type === type && l.fn === fn)); },
+  dispatchEvent(ev) { for (const l of [...document._listeners]) if (l.type === ev.type) l.fn(ev); return true; },
 };
 document.body = new El("body");
 document.documentElement.append(document.body);

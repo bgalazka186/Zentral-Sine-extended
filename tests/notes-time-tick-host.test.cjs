@@ -1,0 +1,28 @@
+"use strict";
+const assert = require("node:assert/strict");
+const { createFakeZen } = require("./helpers/fake-zen-browser.cjs");
+(async () => {
+  const host = createFakeZen({ prefs: { "zen.workspace.zentral.notes.agenda_folder": true } });
+  const { agendaController, reminders } = host.seam;
+  let earlyRuns = 0; const initialRefresh = agendaController.refreshClock;
+  agendaController.refreshClock = () => { earlyRuns++; return initialRefresh(); };
+  host.obs.notifyObservers(null, "wake_notification"); assert.equal(earlyRuns, 0, "wake before store open cannot erase restored Agenda state");
+  agendaController.refreshClock = initialRefresh;
+  await host.seam.ensureStore();
+  assert.ok(host.fireTimer(4000), "startup starts the real reminder scheduler");
+  await new Promise((r) => setImmediate(r));
+  let agenda = 0, reminder = 0, wake = 0;
+  const agendaOriginal = agendaController.refreshClock, reminderOriginal = reminders.reschedule, wakeOriginal = reminders.wake;
+  agendaController.refreshClock = () => { agenda++; return agendaOriginal(); };
+  reminders.reschedule = () => { reminder++; return reminderOriginal(); };
+  reminders.wake = () => { wake++; return wakeOriginal(); };
+  host.obs.notifyObservers(null, "wake_notification");
+  await new Promise((r) => setImmediate(r));
+  assert.equal(agenda, 1); assert.equal(wake, 1); assert.equal(reminder, 0);
+  host.emit("focus", host.window); assert.equal(agenda, 2); assert.equal(reminder, 1);
+  host.document.dispatchEvent(new host.Ev("visibilitychange")); assert.equal(agenda, 3); assert.equal(reminder, 2);
+  assert.equal(host.observers.get("wake_notification").size, 1);
+  await host.destroy(); assert.equal(host.observers.get("wake_notification").size, 0);
+  host.obs.notifyObservers(null, "wake_notification"); host.emit("focus", host.window); assert.equal(agenda, 3);
+  console.log("shared clock real host wake and teardown passed");
+})().catch((error) => { console.error(error); process.exitCode = 1; });

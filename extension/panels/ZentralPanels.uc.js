@@ -11,10 +11,11 @@
  *   notification activity independently of input/render visibility.
  * Registration: panels
  * Loaded/created by: loader/ZentralCatalog.js
- * Direct local resource paths: extension/panels/interaction/ZentralPanelAudio.js; extension/panels/interaction/ZentralPanelHover.js;
- *   extension/panels/interaction/ZentralPanelInput.js; extension/panels/interaction/ZentralPanelPopupRouting.js
- * Constructed factory IDs: panel-popup-routing; panels/ZentralPanelAudio; panels/ZentralPanelHover;
- *   panels/ZentralPanelInput
+ * Direct local resource paths: extension/panels/interaction/ZentralAppShortcuts.js; extension/panels/interaction/ZentralPanelAudio.js;
+ *   extension/panels/interaction/ZentralPanelHover.js; extension/panels/interaction/ZentralPanelInput.js;
+ *   extension/panels/interaction/ZentralPanelPopupRouting.js
+ * Constructed factory IDs: panel-popup-routing; panels/ZentralAppShortcuts; panels/ZentralPanelAudio;
+ *   panels/ZentralPanelHover; panels/ZentralPanelInput
  * Published lazy ctx API: BGALAZKA_EXT_PREFS; EXT_KEYBIND_ACTIONS; EXT_KEYBIND_DEFAULTS; EXT_PREFS;
  *   PREF_ICONS; PROFILE_DEFAULTS; applyAttributes; cleanupFns; clearInterval; clearTimeout;
  *   computeOppositeDockingSafeMaxWidth; ensureNativeAudioButton; ensurePillAllSidesResizeButton;
@@ -315,6 +316,8 @@
         PANEL_INPUT_SHIELD: "zen.workspace.bgalazka.panel_input_shield",
         ADDON_TAB_ID_BRIDGE: "zen.workspace.bgalazka.addon_tab_id_bridge",
         SHOW_ADDON_HOST_FOLDER: "zen.workspace.bgalazka.show_addon_host_folder",
+        HIDE_ADDON_HOSTS_CTRL_TAB:
+          "zen.workspace.bgalazka.hide_addon_hosts_ctrl_tab",
         ZEN_INTERNET_PANEL_CSS: "zen.workspace.bgalazka.zen_internet_panel_css",
         SHOW_TRIPLE_STYLE_REPAIR:
           "zen.workspace.bgalazka.show_triple_style_repair",
@@ -382,6 +385,7 @@
         KEYBIND_ZOOM_OUT: "zen.workspace.bgalazka.keybind.zoom_out",
         KEYBIND_ZOOM_RESET: "zen.workspace.bgalazka.keybind.zoom_reset",
         KEYBIND_OPEN_SETTINGS: "zen.workspace.bgalazka.keybind.open_settings",
+        APP_SHORTCUTS: "zen.workspace.bgalazka.app_shortcuts",
       };
 
       const ATTR_MAP = [
@@ -491,6 +495,7 @@
         [EXT_PREFS.ALL_TAB_PANELS]: true,
         [EXT_PREFS.PANEL_INPUT_SHIELD]: true,
         [EXT_PREFS.ADDON_TAB_ID_BRIDGE]: true,
+        [EXT_PREFS.HIDE_ADDON_HOSTS_CTRL_TAB]: true,
         [EXT_PREFS.SMART_SLEEP]: true,
         [EXT_PREFS.AUDIO_INDICATOR]: true,
         "zen.workspace.bgalazka.push_page": true,
@@ -1421,6 +1426,8 @@
         // genuine tabId. See architecture note 27 and the bridge implementation.
         ADDON_TAB_ID_BRIDGE: "zen.workspace.bgalazka.addon_tab_id_bridge",
         SHOW_ADDON_HOST_FOLDER: "zen.workspace.bgalazka.show_addon_host_folder",
+        HIDE_ADDON_HOSTS_CTRL_TAB:
+          "zen.workspace.bgalazka.hide_addon_hosts_ctrl_tab",
         ZEN_INTERNET_PANEL_CSS: "zen.workspace.bgalazka.zen_internet_panel_css",
         SHOW_TRIPLE_STYLE_REPAIR:
           "zen.workspace.bgalazka.show_triple_style_repair",
@@ -1463,6 +1470,7 @@
         KEYBIND_ZOOM_OUT: "zen.workspace.bgalazka.keybind.zoom_out",
         KEYBIND_ZOOM_RESET: "zen.workspace.bgalazka.keybind.zoom_reset",
         KEYBIND_OPEN_SETTINGS: "zen.workspace.bgalazka.keybind.open_settings",
+        APP_SHORTCUTS: "zen.workspace.bgalazka.app_shortcuts",
       };
       if (typeof EXT_PREFS !== "undefined") {
         Object.assign(EXT_PREFS, BGALAZKA_EXT_PREFS);
@@ -1770,6 +1778,14 @@
       function syncPanelPushState() {
         ensurePillDualViewButton();
         ensurePillHoverRevealButton();
+        // OW-117: resize and mutation bursts call this repeatedly. Write an attribute only when
+        // its value actually changed, so a resize with unchanged push state is a read-only pass.
+        const setAttrIfChanged = (el, name, value) => {
+          if (!el) return;
+          const next = String(value);
+          if (el.getAttribute(name) !== next) el.setAttribute(name, next);
+        };
+        const docRoot = document.documentElement;
         const root = document.getElementById("zen-app-panel-root");
         const pill = document.getElementById("zen-app-panel-pill");
         const pinBtn = pill?.querySelector(".zen-app-btn[data-pinned]");
@@ -1785,24 +1801,21 @@
           : getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, true);
         const dualViewActive = requestedPush && !ctx.floating?.isDetached?.();
         const pushChanged =
-          document.documentElement.getAttribute("bgalazka-push-page") !==
-          String(dualViewActive);
+          docRoot.getAttribute("bgalazka-push-page") !== String(dualViewActive);
         const tripleChanged = lastSyncedTripleMode !== triple;
         lastSyncedTripleMode = triple;
-        document.documentElement.setAttribute(
-          "bgalazka-push-page",
-          String(dualViewActive),
-        );
+        if (pushChanged) docRoot.setAttribute("bgalazka-push-page", String(dualViewActive));
         const pushBtn = document.getElementById("zen-app-dual-view-btn");
         if (pushBtn) {
-          pushBtn.setAttribute("data-active", String(dualViewActive));
-          pushBtn.title = ctx.floating?.isDetached?.()
+          setAttrIfChanged(pushBtn, "data-active", String(dualViewActive));
+          const title = ctx.floating?.isDetached?.()
             ? "Page push is unavailable while detached. Push the panel 15 px into an edge to dock it. Hold: toggle Triple View."
             : triple
               ? "Click: toggle webpage push in Triple View. Hold: exit Triple View."
               : "Click: toggle webpage push. Hold: toggle Triple View.";
-          pushBtn.setAttribute("aria-label", pushBtn.title);
-          pushBtn.setAttribute("aria-pressed", String(dualViewActive));
+          if (pushBtn.title !== title) pushBtn.title = title;
+          setAttrIfChanged(pushBtn, "aria-label", title);
+          setAttrIfChanged(pushBtn, "aria-pressed", String(dualViewActive));
         }
         syncHoverPanelAvailability();
         // Dual and Triple View act as an effective pin without changing the
@@ -1825,7 +1838,6 @@
           parseInt(root?.style?.width, 10) ||
           350;
 
-        const docRoot = document.documentElement;
         const widthValue = `${Math.round(width)}px`;
         if (
           docRoot.style.getPropertyValue("--bgalazka-panel-width") !==
@@ -2215,6 +2227,7 @@
 
       const extensionKeybindHandler = (e) => {
         if (e.defaultPrevented || e.repeat) return;
+        if (ctx.appShortcuts?.isPromptOpen?.()) return;
         if (
           document.activeElement?.closest?.(
             "#zentral-video-preview[data-enlarged]",
@@ -2246,6 +2259,21 @@
       registerCleanup(() =>
         window.removeEventListener("keydown", extensionKeybindHandler, true),
       );
+
+      // Custom per-app / per-panel keyboard shortcuts (T3.10).
+      window.ZentralModuleLoader.load(
+        "extension/panels/interaction/ZentralAppShortcuts.js",
+        { owner: "panels" },
+      );
+      window.ZentralModuleLoader.create("panels/ZentralAppShortcuts", {
+        BGALAZKA_EXT_PREFS,
+        EXT_KEYBIND_ACTIONS,
+        EXT_KEYBIND_DEFAULTS,
+        ctx,
+        getPref,
+        setPref,
+        registerCleanup,
+      });
 
       window.ZentralRuntime.runPart("extension-settings");
 
@@ -2382,6 +2410,10 @@
         const active =
           ctx.periodicFallbackPollingEnabled() &&
           !extensionDisposed &&
+          // OW-94 (plan B7.1): no fallback poll while Game Mode holds every timer. `syncPanelFallbackPolling` is also
+          // called from the pause subscription below, so ending a game re-arms it immediately rather than at the next
+          // panel event.
+          !window.ZentralRuntime?.performance?.isPaused?.() &&
           panelMaintenanceVisible();
         if (active && panelStatusTimer && panelStatusTimer.delay === delay)
           return;
@@ -2391,7 +2423,12 @@
           : null;
       }
       syncPanelFallbackPolling();
+      // OW-94: pause/re-arm with the shared switch.
+      const unsubscribePerformance = window.ZentralRuntime?.performance?.subscribe?.(() => syncPanelFallbackPolling()) || null;
       registerCleanup(() => {
+        try {
+          unsubscribePerformance?.();
+        } catch (_) {}
         if (panelStatusTimer) clearInterval(panelStatusTimer.id);
         panelStatusTimer = null;
         for (const controller of panelMediaListeners.values())
@@ -2791,9 +2828,12 @@
         safeCall(hookAppsInstance, "hookAppsInstance"),
       );
 
-      // SessionStore may restore last session's host tabs and Zen folder before
-      // this script starts. They do not belong to this window's live bridge.
+      // SessionStore / Zen pinned-folder storage may restore last session's
+      // host tabs and Zen folder asynchronously during cold startup. They do
+      // not belong to this window's live bridge.
+      let restoredHostPruneTimer = null;
       function pruneRestoredAddonHosts() {
+        if (extensionDisposed) return;
         const folder =
           ctx.findAddonHostFolder() ||
           [...document.querySelectorAll("zen-folder")].find(
@@ -2804,11 +2844,17 @@
           ctx.addonHostFolder = folder;
           ctx.keepAddonHostFolderCollapsed(folder);
         }
-        for (const tab of [
+        const candidates = new Set([
           ...(window.gZenWorkspaces?.allStoredTabs ??
             window.gBrowser?.tabs ??
             []),
-        ]) {
+          ...(folder?.tabs ?? []),
+        ]);
+        for (const tab of candidates) {
+          if (!tab?.isConnected || tab.closing) continue;
+          // Never remove Zen's internal empty-folder placeholder tab: deleting
+          // it corrupts ZenFolder.delete() and throws in ZenWindowSync.
+          if (tab.hasAttribute("zen-empty-tab")) continue;
           if (ctx.addonHostByTab.get(tab)) continue;
           if (
             tab.hasAttribute("bgalazka-addon-host") ||
@@ -2831,18 +2877,55 @@
         }
         if (!ctx.addonHostByAppId.size) ctx.removeEmptyAddonHostFolder();
       }
+      const scheduleRestoredHostPrune = () => {
+        if (extensionDisposed || restoredHostPruneTimer !== null) return;
+        restoredHostPruneTimer = setTimeout(() => {
+          restoredHostPruneTimer = null;
+          pruneRestoredAddonHosts();
+        }, 0);
+      };
+      const onRestoredHostTab = (event) => {
+        const tab = event.target;
+        if (
+          !tab ||
+          tab.localName !== "tab" ||
+          tab.hasAttribute("zen-empty-tab") ||
+          ctx.addonHostByTab.get(tab)
+        )
+          return;
+        const folder = tab.group;
+        if (
+          tab.hasAttribute("bgalazka-addon-host") ||
+          tab.hasAttribute("bgalazka-addon-host-fallback") ||
+          folder?.id === "bgalazka-zentral-addon-hosts" ||
+          folder?.getAttribute?.("label") === ctx.ADDON_HOST_FOLDER_LABEL
+        ) {
+          scheduleRestoredHostPrune();
+        }
+      };
       pruneRestoredAddonHosts();
       const restoredHostObserver = { observe: pruneRestoredAddonHosts };
       Services.obs.addObserver(
         restoredHostObserver,
         "sessionstore-windows-restored",
       );
-      registerCleanup(() =>
+      window.addEventListener("SSTabRestored", onRestoredHostTab);
+      const cancelNativeHostPrune =
+        typeof ZentralRuntime?.whenNativeReady === "function"
+          ? ZentralRuntime.whenNativeReady(pruneRestoredAddonHosts)
+          : null;
+      registerCleanup(() => {
+        if (restoredHostPruneTimer !== null) {
+          clearTimeout(restoredHostPruneTimer);
+          restoredHostPruneTimer = null;
+        }
+        cancelNativeHostPrune?.();
+        window.removeEventListener("SSTabRestored", onRestoredHostTab);
         Services.obs.removeObserver(
           restoredHostObserver,
           "sessionstore-windows-restored",
-        ),
-      );
+        );
+      });
 
       // Hot-reload/startup normalization: if the opt-in bridge was already on
       // and a standalone panel browser predates this extension instance, unload it
@@ -3266,7 +3349,9 @@
             .getAllAppBrowsers()
             .find((b) => b._bgalazkaAppId === id);
           const app =
-            ctx.essentialPanels.get(id)?.app || saved.find((a) => a.id === id);
+            ctx.essentialPanels.get(id)?.app ||
+            saved.find((a) => a.id === id) ||
+            ctx.linkedPairFor?.(id)?.apps?.[id];
           if (!old || !app) continue;
           const next = {
             ...app,
@@ -3298,6 +3383,12 @@
         }
         ctx.syncAppPanelBrowserActivity?.();
       };
+      // Mark ownership before resuming secondary-views so its self-sufficient startup
+      // fallback does not double-open when ZentralPanels coordinates startup itself.
+      ctx.startupPanelCoordinator = true;
+      registerCleanup(() => {
+        delete ctx.startupPanelCoordinator;
+      });
       window.ZentralRuntime.runPart("secondary-views");
       let featureSyncTimer = null;
       let lastBridgeState = getPref(
@@ -3423,13 +3514,17 @@
         delete ctx.syncSidebarLayout;
       });
 
-      // Startup opening is independent of each app's background preload flag.
+      // Startup opening is independent of each app's background preload flag
+      // and independent of the optional ZentralStartup mod (OW-30).
       const startupPanelPref = "zen.workspace.bgalazka.open_at_startup";
       const readStartupPanel = () => {
+        if (typeof ZentralRuntime?.readStartupPanel === "function")
+          return ZentralRuntime.readStartupPanel();
         try {
           const value = JSON.parse(getPref(startupPanelPref, "null"));
           return value &&
             typeof value.id === "string" &&
+            value.id.length > 0 &&
             ["single", "triple"].includes(value.mode)
             ? value
             : null;
@@ -3444,12 +3539,15 @@
           const saved = JSON.parse(
             getPref("zen.workspace.apps.sidebar.apps", "[]"),
           );
-          return Array.isArray(saved)
+          const normal = Array.isArray(saved)
             ? saved.find((app) => app.id === id)
             : null;
-        } catch (_) {
-          return null;
-        }
+          if (normal) return normal;
+        } catch (_) {}
+        // Sleeping Essential tabs do not need ZentralStartup to wake them: recover the
+        // saved snapshot from the linked Triple View pair so launch works immediately.
+        const snapshot = ctx.linkedPairFor?.(id)?.apps?.[id];
+        return snapshot?.url ? { ...snapshot, id, workspaceId: "all" } : null;
       };
       const onStartupMenu = (event) => {
         const popup = event.target;
@@ -3519,7 +3617,8 @@
           const unavailable =
             mode !== "off" &&
             mode === "triple" &&
-            (!ctx.linkedPairFor(id) || !ctx.openStartupSinglePanel);
+            (!ctx.linkedPairFor(id) ||
+              (!ctx.openStartupTriplePair && !ctx.openStartupSinglePanel));
           item.disabled = !!unavailable;
           if (unavailable) item.setAttribute("disabled", "true");
           else item.removeAttribute("disabled");
@@ -3563,12 +3662,17 @@
           if (!app) return false;
           if (selection.mode === "triple" && !ctx.linkedPairFor(selection.id))
             return true;
-          if (selection.mode === "triple" && !ctx.openStartupSinglePanel)
+          if (
+            selection.mode === "triple" &&
+            !ctx.openStartupTriplePair &&
+            !ctx.openStartupSinglePanel
+          )
             return false;
           try {
             if (selection.mode === "triple") {
-              // Use the panel API rather than a toggle-only tile click:
-              // a retry must not close a partially opened startup panel.
+              // Use the secondary-views startup opener rather than a toggle-only tile click:
+              // a retry must not close a partially opened startup panel and sleeping Essential
+              // tabs must not be duplicated into sidebar.apps.
               const alreadyOpened =
                 root.hasAttribute("open") &&
                 document.documentElement.getAttribute(
@@ -3582,7 +3686,11 @@
                       browser._bgalazkaAppId === selection.id,
                   );
               startupAttempted = true;
-              if (!alreadyOpened) apps.openPanel(app);
+              if (!alreadyOpened) {
+                if (typeof ctx.openStartupTriplePair === "function")
+                  ctx.openStartupTriplePair(selection.id);
+                else apps.openPanel(app);
+              }
               if (
                 document.documentElement.getAttribute(
                   "bgalazka-triple-view",
@@ -3658,18 +3766,34 @@
         // fixed delay. Opening host tabs before that point races SessionStore
         // and the native tab switcher's viewport/activity changes. Wait once
         // for actual readiness, independently of optional repair settings.
-        (async () => {
+        const onNativeReady = () => {
+          if (startupCancelled || extensionDisposed) return;
+          startupReady = true;
           try {
-            await ZentralRuntime.nativeReady;
-            if (startupCancelled || extensionDisposed) return;
-            startupReady = true;
-            ctx.requestTileSync(0);
-            onRestore();
-          } catch (error) {
-            stopWatchingStartup();
-            console.warn("[Zentral] Startup panel readiness failed", error);
-          }
-        })();
+            pruneRestoredAddonHosts();
+          } catch (_) {}
+          // Sync once synchronously so sleeping Essential tabs linked in a Triple View pair
+          // are visible on the very first attempt even without ZentralStartup.
+          try {
+            ctx.syncCornerTiles?.();
+          } catch (_) {}
+          ctx.requestTileSync(0);
+          onRestore();
+        };
+        if (typeof ZentralRuntime?.whenNativeReady === "function") {
+          const cancelWait = ZentralRuntime.whenNativeReady(onNativeReady);
+          registerCleanup(cancelWait);
+        } else {
+          (async () => {
+            try {
+              await ZentralRuntime?.nativeReady;
+              onNativeReady();
+            } catch (error) {
+              stopWatchingStartup();
+              console.warn("[Zentral] Startup panel readiness failed", error);
+            }
+          })();
+        }
       }
 
       /* ==========================================================================

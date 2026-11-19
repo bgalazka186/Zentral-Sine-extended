@@ -77,10 +77,13 @@ test("journal section + capture: the line lands at the end of that day's section
 
 test("pseudo Triple View CSS exists and the seed/new-button prefs are in the schema", () => {
   const css = fs.readFileSync(path.join(__dirname, "../extension/panels/browsers/ZentralBrowserIntegrations.css"), "utf8");
-  assert.match(css, /bgalazka-notes-pseudo="true"\]\[bgalazka-quad-view="true"\] #zen-app-panel-slider/);
+  assert.match(css, /bgalazka-notes-pseudo="true"\]\[bgalazka-quad-view="true"\]\s+#zen-app-panel-slider/);
   const s = JSON.parse(fs.readFileSync(path.join(__dirname, "../additional/notes/settings.json"), "utf8")).schema;
   const get = (k) => s.find((x) => x.property === "zen.workspace.zentral.notes." + k);
   assert.equal(get("zen_folder_new_button").defaultValue, false);
+  assert.equal(get("agenda_folder").defaultValue, false, "virtual Agenda is opt-in");
+  assert.equal(get("agenda_position").defaultValue, "above");
+  assert.equal(get("agenda_days").defaultValue, 4);
   assert.equal(get("quick_capture_format").defaultValue, "bullet-time");
 });
 const N = (id, body, extra = {}) => ({ id, body, updated: 1, trashed: 0, ...extra });
@@ -107,8 +110,10 @@ test("unlinkBroken keeps the words, only outside code", () => {
 test("Zen safeguards: every Zen-side handler is scoped to our own tabs; teardown exists", () => {
   const js = fs.readFileSync(path.join(__dirname, "../additional/notes/ZentralNotes.uc.js"), "utf8");
   assert.match(js, /const isOurTab = /);
-  assert.match(js, /if \(!tab \|\| !isOurTab\(tab\)\) return;/, "mouse handler");
-  assert.match(js, /if \(!isOurTab\(tab\)\) \{[^}]*return;\s*\}\s*const prev = ev\.detail\?\.previousTab;/, "TabSelect handler");
+  assert.match(js, /if \(!tab \|\| !\(tab\.hasAttribute\?\.\(NOTES_ATTR\) \|\| zenLooksOurs\(tab\)\)\) return;/, "mouse handler recognizes moved and restored pseudo-tabs");
+  assert.match(js, /if \(!isOurTab\(tab\) && \(tab\?\.hasAttribute\?\.\(NOTES_ATTR\) \|\| zenLooksOurs\(tab\)\)\)/, "TabSelect handler handles misplaced pseudo-tabs");
+  assert.match(js, /if \(!isOurTab\(tab\)\) return;/, "ordinary tabs remain unaffected");
+  assert.match(js, /zen\.schedule\(0\)/, "misplaced pseudo-tabs request immediate reconciliation");
   assert.match(js, /window\.setTimeout\(\(\) => \{\s*zenSelectTimer = 0;/, "re-selection is deferred, never inside TabSelect");
   assert.match(js, /if \(zenMode\(\) === "off"\) zenTeardown\(\);/);
   assert.match(js, /document\.querySelectorAll\?\.\("tab\[" \+ NOTES_ATTR \+ "\]"\)/, "removeAll sweeps marked tabs anywhere");
@@ -120,7 +125,7 @@ test("applyTemplate: date/time/title filled, first {{cursor}} is the caret, unkn
   assert.equal(r.caret, "# My thing\n2026-11-03 09:05\n- ".length);
   assert.equal(c.applyTemplate("plain", {}).caret, 5, "no cursor token = caret at the end of the first part");
   assert.equal(c.templateNeedsTitle("# {{title}}"), true);
-  assert.equal(c.templateNeedsTitle(c.BUILTIN_TEMPLATES[1].body), false, "Daily needs no title");
+  assert.equal(c.BUILTIN_TEMPLATES.some((template) => template.id === "zn-tpl-daily"), false, "the legacy Daily template is replaced by the Agenda folder");
 });
 
 test("templateChoices: user templates first, built-ins until a note with the same id exists", () => {

@@ -1,0 +1,101 @@
+{
+  "id": "widgets",
+  "themeId": "zentral-widgets",
+  "name": "Zentral Sidebar Widgets",
+  "description": "New-tab-page-style sidebar widgets with automatic free-area sizing, video-player avoidance, pause-when-hidden, and cached values. Standalone part of Zentral Extended.",
+  "version": "3.4.0",
+  "entry": "ZentralWidgets.uc.js",
+  "output": "ZentralWidgets.standalone.uc.js",
+  "settings": "settings.json",
+  "css": "ZentralWidgets.css",
+  "fullPackOnly": [
+    "services"
+  ],
+  "tags": [
+    "widgets",
+    "sidebar",
+    "zen"
+  ],
+  "preferenceOrder": [
+    {
+      "type": "text",
+      "label": "**Sidebar widgets**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.widgets.enabled",
+    "zen.workspace.zentral.widgets.disabled_ids",
+    {
+      "type": "text",
+      "label": "**Clock & Date**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.widgets.clock.enabled",
+    "zen.workspace.zentral.widgets.clock.format",
+    "zen.workspace.zentral.widgets.clock.show_seconds",
+    "zen.workspace.zentral.widgets.clock.show_zone",
+    "zen.workspace.zentral.widgets.clock.quick_note",
+    "zen.workspace.zentral.widgets.date.enabled",
+    "zen.workspace.zentral.widgets.date.format",
+    "zen.workspace.zentral.widgets.date.show_year",
+    "zen.workspace.zentral.widgets.date.show_week_number",
+    {
+      "type": "text",
+      "label": "**Weather**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.widgets.weather.enabled",
+    "zen.workspace.zentral.widgets.weather.place",
+    "zen.workspace.zentral.widgets.weather.latitude",
+    "zen.workspace.zentral.widgets.weather.longitude",
+    "zen.workspace.zentral.widgets.weather.units",
+    "zen.workspace.zentral.widgets.weather.places",
+    "zen.workspace.zentral.widgets.weather.default_view",
+    "zen.workspace.zentral.widgets.weather.refresh_minutes",
+    {
+      "type": "text",
+      "label": "**Timer & quick note**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.widgets.timer.click_stopwatch",
+    "zen.workspace.zentral.widgets.clock.mode",
+    "zen.workspace.zentral.widgets.timer.end_sound",
+    "zen.workspace.zentral.widgets.timer.end_notice",
+    {
+      "type": "text",
+      "label": "**Boost**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.widgets.boost.enabled",
+    "zen.workspace.zentral.widgets.language",
+    "zen.workspace.zentral.notes.language",
+    {
+      "type": "text",
+      "label": "**Layout & visibility**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.widgets.max_height_share",
+    "zen.workspace.zentral.widgets.min_free_height",
+    "zen.workspace.zentral.widgets.min_sidebar_width",
+    "zen.workspace.zentral.widgets.tabs_reserve_px",
+    "zen.workspace.zentral.widgets.order",
+    "zen.workspace.zentral.widgets.space_priority",
+    "zen.workspace.zentral.widgets.space_scroll",
+    "zen.workspace.zentral.widgets.appearance.background",
+    "zen.workspace.zentral.widgets.appearance.text",
+    "zen.workspace.zentral.widgets.pause_when_hidden"
+  ],
+  "externalPrefs": [
+    "zen.workspace.zentral.widgets.timer.enabled",
+    "zen.workspace.zentral.widgets.status.enabled",
+    "zen.workspace.zentral.widgets.weather.view"
+  ],
+  "externalPrefsReason": "OW-60 reads the retired standalone Timer card pref once, to put that owner on the Clock's timer face. OW-90 reads the retired Status card's enabled pref once, to carry that owner's choice over to Boost. OW-109 stores the user's active weather view selection independently from weather.default_view without adding a duplicate control to Settings.",
+  "borrowedSettings": [
+    {
+      "from": "additional/notes/settings.json",
+      "properties": [
+        "zen.workspace.zentral.notes.language"
+      ]
+    }
+  ]
+}

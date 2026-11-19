@@ -101,7 +101,6 @@
 
         function isModuleEnabled(moduleName) {
           if (!isLoggerEnabled()) return false;
-          if (moduleName === "core") return true;
 
           try {
             // If "Full Log" is active, all modules are enabled
@@ -374,6 +373,21 @@
           },
         };
 
+        // A seam for the suites: the classification, the ring buffer and the redaction are the parts a test can own
+        // without a live console.
+        if (window.__zentralLoggerTestSeam) {
+          Object.assign(window.__zentralLoggerTestSeam, {
+            MAX_ENTRIES,
+            ringBuffer,
+            record,
+            redactSensitive,
+            classifyModuleFromTag,
+            isModuleEnabled,
+            generateLogString,
+            clear: () => ZentralLogger.clear(),
+            entries: () => ZentralLogger.entries,
+          });
+        }
         window.ZentralLogger = ZentralLogger;
         window.ZenzeiLogger = ZentralLogger; // Backward compatibility alias
         window.ZenTabPeekLogger = ZentralLogger; // Backward compatibility alias

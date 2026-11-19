@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Tab Unload
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.0
+// @version 3.4.0
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.0, the numeric-preference list and
+ * Placeholders replaced by the build: 3.4.0, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.0";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.4.0";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -226,6 +226,439 @@ function nativeSidebarSide() {
         ? "right"
         : "left";
     }
+  function createSidebarHoverCard(options) {
+    options = options || {};
+    const win = options.window || window;
+    const doc = options.document || win.document;
+    const id = String(options.id || "bgalazka-sidebar-hover-card");
+    const className = String(options.className || "");
+    const role = options.role ?? "";
+    const ariaLabel = String(options.ariaLabel || "");
+    const describeTarget = options.describeTarget !== false;
+    const defaultWidth = Number(options.defaultWidth) > 0 ? Number(options.defaultWidth) : 320;
+    const defaultHeight = Number(options.defaultHeight) > 0 ? Number(options.defaultHeight) : 80;
+    const isEnabled = typeof options.isEnabled === "function" ? options.isEnabled : () => true;
+    const matchTarget = typeof options.matchTarget === "function" ? options.matchTarget : () => null;
+    const isValid = typeof options.isValid === "function" ? options.isValid : (t) => !!t && t.isConnected !== false;
+    const getShowDelay = typeof options.getShowDelay === "function" ? options.getShowDelay : () => 350;
+    const getHideDelay = typeof options.getHideDelay === "function" ? options.getHideDelay : () => 150;
+    const getSide = typeof options.getSide === "function" ? options.getSide : () => "auto";
+    const getGap = typeof options.getGap === "function" ? options.getGap : () => 6;
+    const getBounds = typeof options.getBounds === "function"
+      ? options.getBounds
+      : () => {
+          const rt = win.ZentralRuntime || win.__zentralStandaloneRuntime;
+          try { return rt?.sidebarSafeBounds?.() || null; } catch (_) { return null; }
+        };
+    const render = typeof options.render === "function" ? options.render : () => {};
+    const onCreate = typeof options.onCreate === "function" ? options.onCreate : null;
+    const onShow = typeof options.onShow === "function" ? options.onShow : null;
+    const onHide = typeof options.onHide === "function" ? options.onHide : null;
+    const suppressTooltipWhenClosed = !!options.suppressTooltipWhenClosed;
+    const shouldSuppressTooltip = typeof options.shouldSuppressTooltip === "function" ? options.shouldSuppressTooltip : () => true;
+    const setTimer = typeof options.setTimer === "function" ? options.setTimer : (fn, ms) => win.setTimeout(fn, ms);
+    const clearTimer = typeof options.clearTimer === "function" ? options.clearTimer : (t) => win.clearTimeout(t);
+    const raf = typeof options.raf === "function"
+      ? options.raf
+      : (fn) => (typeof win.requestAnimationFrame === "function" ? win.requestAnimationFrame(fn) : setTimer(fn, 16));
+    const cancelRaf = typeof options.cancelRaf === "function"
+      ? options.cancelRaf
+      : (t) => (typeof win.cancelAnimationFrame === "function" ? win.cancelAnimationFrame(t) : clearTimer(t));
+
+    let node = null;
+    let target = null;
+    let pending = null;
+    let showTimer = null;
+    let hideTimer = null;
+    let retargetFrame = null;
+    let observer = null;
+    let observedParent = null;
+    let lastXY = null;
+    let destroyed = false;
+
+    const getHost = () => {
+      let host = win.__zentralSidebarCardHost;
+      if (!host || typeof host.activate !== "function") {
+        const members = new Set();
+        host = {
+          active: null,
+          members,
+          register(ctrl) { members.add(ctrl); },
+          unregister(ctrl) {
+            members.delete(ctrl);
+            if (host.active === ctrl) host.active = null;
+            if (!members.size && win.__zentralSidebarCardHost === host) {
+              try { delete win.__zentralSidebarCardHost; } catch (_) { win.__zentralSidebarCardHost = undefined; }
+            }
+          },
+          activate(ctrl) {
+            if (host.active && host.active !== ctrl) {
+              try { host.active.hide(); } catch (_) {}
+            }
+            host.active = ctrl;
+          },
+          deactivate(ctrl) {
+            if (host.active === ctrl) host.active = null;
+          },
+        };
+        win.__zentralSidebarCardHost = host;
+      }
+      return host;
+    };
+
+    const clearShow = () => {
+      if (showTimer !== null) { clearTimer(showTimer); showTimer = null; }
+      pending = null;
+    };
+    const clearHide = () => {
+      if (hideTimer !== null) { clearTimer(hideTimer); hideTimer = null; }
+    };
+    const clearRetarget = () => {
+      if (retargetFrame !== null) { cancelRaf(retargetFrame); retargetFrame = null; }
+    };
+    const cancelTimers = () => { clearShow(); clearHide(); clearRetarget(); };
+
+    const disconnectObserver = () => {
+      if (observer) {
+        try { observer.disconnect(); } catch (_) {}
+      }
+      observedParent = null;
+    };
+    const connectObserver = (t) => {
+      const parent = t?.parentNode || t?.parentElement || null;
+      if (!parent) { disconnectObserver(); return; }
+      if (observer && observedParent === parent) return;
+      disconnectObserver();
+      if (typeof MutationObserver !== "function") return;
+      try {
+        if (!observer) {
+          observer = new MutationObserver(() => {
+            if (target && !isValid(target)) hide();
+          });
+        }
+        observer.observe(parent, { childList: true });
+        observedParent = parent;
+      } catch (_) {}
+    };
+
+    const detachDescription = () => {
+      if (!describeTarget || !target) return;
+      try {
+        const words = (target.getAttribute("aria-describedby") || "").split(/\s+/).filter((w) => w && w !== id);
+        if (words.length) target.setAttribute("aria-describedby", words.join(" "));
+        else target.removeAttribute("aria-describedby");
+      } catch (_) {}
+    };
+    const attachDescription = (t) => {
+      if (!describeTarget || !t) return;
+      try {
+        const words = (t.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean);
+        if (!words.includes(id)) {
+          words.push(id);
+          t.setAttribute("aria-describedby", words.join(" "));
+        }
+      } catch (_) {}
+    };
+
+    // Re-enter the browser top layer on every show so this card sits above
+    // earlier popovers (Big Preview, Zentral panels). Without popover support
+    // (or if showPopover throws), drop the attribute so fixed z-index applies.
+    function raiseCard(c) {
+      if (!c || typeof c.showPopover !== "function") return;
+      try {
+        let open = false;
+        try { open = !!c.matches?.(":popover-open"); } catch (_) {}
+        if (open) c.hidePopover?.();
+        else { try { c.hidePopover?.(); } catch (_) {} }
+        c.showPopover();
+      } catch (_) {
+        try { c.removeAttribute("popover"); } catch (_) {}
+      }
+    }
+    function dropCard(c) {
+      if (!c) return;
+      try {
+        let open = true;
+        try { if (typeof c.matches === "function") open = !!c.matches(":popover-open"); } catch (_) {}
+        if (open) c.hidePopover?.();
+      } catch (_) {}
+    }
+
+    function ensureNode() {
+      if (node) return node;
+      node = typeof doc.createElementNS === "function"
+        ? doc.createElementNS("http://www.w3.org/1999/xhtml", "div")
+        : doc.createElement("div");
+      node.id = id;
+      if (className) node.setAttribute("class", className);
+      if (role) node.setAttribute("role", role);
+      if (ariaLabel) node.setAttribute("aria-label", ariaLabel);
+      node.setAttribute("popover", "manual");
+      node.hidden = true;
+      node.addEventListener("mouseenter", clearHide);
+      node.addEventListener("mouseleave", () => {
+        if (!target || node?.contains?.(doc.activeElement) || target?.contains?.(doc.activeElement)) return;
+        scheduleHide();
+      });
+      if (onCreate) onCreate(node, api);
+      doc.documentElement.append(node);
+      return node;
+    }
+
+    function position() {
+      if (!node || node.hidden || !target || !isValid(target)) {
+        if (target) hide();
+        return;
+      }
+      const tr = target.getBoundingClientRect();
+      const r = typeof node.getBoundingClientRect === "function" ? node.getBoundingClientRect() : null;
+      const vw = Number(win.innerWidth) || 1200;
+      const vh = Number(win.innerHeight) || 800;
+      const width = Math.min(vw - 8, (r && r.width) || node.offsetWidth || defaultWidth);
+      const height = Math.min(vh - 8, (r && r.height) || node.offsetHeight || defaultHeight);
+      const rawGap = Number(getGap());
+      const gap = Number.isFinite(rawGap) ? Math.max(0, Math.min(32, rawGap)) : 6;
+      const sidePref = getSide();
+      const sideEl = doc.getElementById?.("navigator-toolbox");
+      const sr = sideEl?.getBoundingClientRect?.();
+      const autoRight = sr && sr.width > 0
+        ? sr.left > vw / 2
+        : (tr.left + tr.right) / 2 > vw / 2;
+      const placeLeft = sidePref === "left" ? true : sidePref === "right" ? false : autoRight;
+      let left = placeLeft ? tr.left - width - gap : tr.right + gap;
+      const bounds = getBounds();
+      if (bounds && Number.isFinite(bounds.left) && Number.isFinite(bounds.right)) {
+        left = placeLeft ? Math.min(left, bounds.right - width) : Math.max(left, bounds.left);
+      }
+      if (left < 4 && tr.right + gap + width <= vw - 4) left = tr.right + gap;
+      if (left + width > vw - 4 && tr.left - gap - width >= 4) left = tr.left - gap - width;
+      node.style.left = Math.max(4, Math.min(left, vw - width - 4)) + "px";
+      node.style.top = Math.max(4, Math.min(tr.top, vh - height - 4)) + "px";
+    }
+
+    function hide() {
+      cancelTimers();
+      disconnectObserver();
+      detachDescription();
+      const prevTarget = target;
+      target = null;
+      if (node) {
+        dropCard(node);
+        node.hidden = true;
+      }
+      host.deactivate(api);
+      if (prevTarget && onHide) onHide(prevTarget, node);
+    }
+
+    function scheduleHide(delay) {
+      clearShow();
+      clearHide();
+      const raw = delay === undefined ? Number(getHideDelay()) : Number(delay);
+      const ms = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 0;
+      if (ms <= 0) {
+        hide();
+        return;
+      }
+      hideTimer = setTimer(() => {
+        hideTimer = null;
+        hide();
+      }, ms);
+    }
+
+    function show(tab) {
+      if (destroyed) return false;
+      cancelTimers();
+      if (!isEnabled() || !tab || !isValid(tab)) {
+        hide();
+        return false;
+      }
+      const c = ensureNode();
+      host.activate(api);
+      if (target !== tab) {
+        detachDescription();
+        target = tab;
+      }
+      attachDescription(tab);
+      connectObserver(tab);
+      render(c, tab, api);
+      c.hidden = false;
+      raiseCard(c);
+      position();
+      if (onShow) onShow(tab, c);
+      return true;
+    }
+
+    function scheduleShow(tab) {
+      if (destroyed || !isEnabled() || !tab || !isValid(tab)) return;
+      const raw = Number(getShowDelay());
+      const delay = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 0;
+      if (delay <= 0) {
+        clearShow();
+        show(tab);
+        return;
+      }
+      if (showTimer !== null && pending === tab) return;
+      clearShow();
+      pending = tab;
+      showTimer = setTimer(() => {
+        const next = pending;
+        showTimer = null;
+        pending = null;
+        if (!destroyed && isEnabled() && next && isValid(next)) show(next);
+      }, delay);
+    }
+
+    function retarget(tab, { viaPointer = false, nextTarget = null, allowPointer = true } = {}) {
+      if (destroyed) return;
+      clearHide();
+      clearShow();
+      clearRetarget();
+      const resolveNext = () => (typeof nextTarget === "function" ? nextTarget() : nextTarget);
+      if (viaPointer && allowPointer && lastXY && typeof doc.elementFromPoint === "function") {
+        const [x, y] = lastXY;
+        retargetFrame = raf(() => {
+          retargetFrame = null;
+          if (destroyed || !isEnabled()) { hide(); return; }
+          let under = null;
+          try { under = matchTarget(doc.elementFromPoint(x, y)); } catch (_) {}
+          if (under && isValid(under)) { show(under); return; }
+          const next = resolveNext();
+          if (next && isValid(next)) show(next);
+          else hide();
+        });
+        return;
+      }
+      const next = resolveNext();
+      if (next && isValid(next)) show(next);
+      else hide();
+    }
+
+    const over = (event) => {
+      if (destroyed || !isEnabled()) return;
+      if (Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
+        lastXY = [event.clientX, event.clientY];
+      }
+      if (node?.contains?.(event?.target)) {
+        clearHide();
+        return;
+      }
+      const tab = matchTarget(event?.target);
+      if (tab && isValid(tab)) {
+        if (target === tab && node && !node.hidden) {
+          clearHide();
+          return;
+        }
+        clearHide();
+        scheduleShow(tab);
+        return;
+      }
+      if (node && !node.hidden && !node.contains?.(event?.target) && (!target || !target.contains?.(event?.target))) {
+        scheduleHide();
+      }
+    };
+
+    const out = (event) => {
+      if (destroyed) return;
+      const related = event?.relatedTarget;
+      if (node?.contains?.(event?.target)) {
+        if (related && (node.contains?.(related) || target?.contains?.(related))) return;
+        if (node.contains?.(doc.activeElement) || target?.contains?.(doc.activeElement)) return;
+        scheduleHide();
+        return;
+      }
+      const tab = matchTarget(event?.target);
+      if (!tab) return;
+      if (related && (tab.contains?.(related) || node?.contains?.(related))) return;
+      if (pending === tab) clearShow();
+      if (target !== tab) return;
+      if (tab.contains?.(doc.activeElement) || node?.contains?.(doc.activeElement)) return;
+      scheduleHide();
+    };
+
+    const move = (event) => {
+      if (Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
+        lastXY = [event.clientX, event.clientY];
+      }
+    };
+
+    const focus = (event) => {
+      if (destroyed || !isEnabled()) return;
+      const tab = matchTarget(event?.target);
+      if (tab && isValid(tab)) show(tab);
+    };
+
+    const blur = (event) => {
+      if (destroyed || !target) return;
+      const related = event?.relatedTarget;
+      if (related && (target.contains?.(related) || node?.contains?.(related))) return;
+      const fromTarget = matchTarget(event?.target) === target;
+      const fromNode = !!node?.contains?.(event?.target);
+      if (fromTarget || fromNode) hide();
+    };
+
+    const key = (event) => {
+      if (destroyed || event?.key !== "Escape" || !isEnabled()) return;
+      if (!node || node.hidden || !target) return;
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      hide();
+    };
+
+    const popup = (event) => {
+      if (destroyed || !isEnabled() || event?.target?.id !== "tabbrowser-tab-tooltip") return;
+      if (!shouldSuppressTooltip()) return;
+      const tab = matchTarget(event?.target?.triggerNode);
+      if (!tab || !isValid(tab)) return;
+      if (suppressTooltipWhenClosed || (tab === target && node && !node.hidden)) {
+        event.preventDefault();
+      }
+    };
+
+    const api = {
+      ensureNode,
+      getNode: () => node,
+      getTarget: () => target,
+      isOpen: () => !!(node && !node.hidden && target),
+      show,
+      scheduleShow,
+      hide,
+      scheduleHide,
+      cancelTimers,
+      position,
+      retarget,
+      over,
+      out,
+      move,
+      focus,
+      blur,
+      key,
+      popup,
+      removed(tab) {
+        if (tab && (tab === target || tab === pending)) hide();
+      },
+      updated(tab) {
+        if (tab && tab === target && node && !node.hidden) show(tab);
+      },
+      refresh() {
+        if (target && node && !node.hidden) show(target);
+      },
+      destroy() {
+        if (destroyed) return;
+        destroyed = true;
+        hide();
+        host.unregister(api);
+        observer = null;
+        if (node) {
+          try { node.remove(); } catch (_) {}
+          node = null;
+        }
+        lastXY = null;
+      },
+    };
+    const host = getHost();
+    host.register(api);
+    return api;
+  }
   function createFeatureScope(owner) {
     let active = true;
     const cleanups = new Set(),
@@ -505,9 +938,14 @@ function nativeSidebarSide() {
     for (let round = 0; round < 4 && !stopped; round++) {
       const pending = [];
       for (const read of [
+        () => window.SessionStore?.promiseInitialized,
         () => window.SessionStore?.promiseAllWindowsRestored,
+        () => window.delayedStartupPromise,
         () => window.gZenWorkspaces?.promiseInitialized,
         () => window.gZenStartup?.promiseInitialized,
+        () => window.gZenPinnedTabManager?.promiseInitialized,
+        () => window.gZenSessionStore?.promiseInitialized,
+        () => window.gZenWindowSync?.promiseInitialized,
       ]) {
         try {
           const promise = read();
@@ -523,12 +961,94 @@ function nativeSidebarSide() {
     }
   }
   const features = (window.__zentralStandalone ||= {});
+  // OW-94 (plan B7.1): the pause switch. The full pack publishes the same contract under `ZentralRuntime.performance`;
+  // a standalone module asks for it here. With no full pack there is nothing else to pause, so the switch is honest
+  // about being alone: `listenerCount()` is 0 and setting it simply notifies whoever subscribed.
+  const performanceSwitch = (() => {
+    let paused = false;
+    const listeners = new Set();
+    const snapshot = () => ({ paused, changes: 0, lastChangeAt: 0 });
+    const setPaused = (next) => {
+      const target = Boolean(next);
+      if (target === paused) return snapshot();
+      paused = target;
+      for (const fn of [...listeners]) {
+        try {
+          fn(paused, snapshot());
+        } catch (error) {
+          try {
+            console.warn("[Zentral standalone] pause listener failed", error);
+          } catch (_) {}
+        }
+      }
+      return snapshot();
+    };
+    const subscribe = (fn) => {
+      if (typeof fn !== "function") return () => {};
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    };
+    return {
+      isPaused: () => paused,
+      setPaused,
+      toggle: () => setPaused(!paused),
+      subscribe,
+      onChange: subscribe,
+      snapshot,
+      listenerCount: () => listeners.size,
+      reset() {},
+    };
+  })();
+
   const shim = {
     standalone: true,
+    performance: performanceSwitch,
     getPref,
+    readStartupPanel() {
+      try {
+        const raw = getPref("zen.workspace.bgalazka.open_at_startup", "null");
+        if (typeof raw !== "string") return null;
+        const value = JSON.parse(raw);
+        return value &&
+          typeof value.id === "string" &&
+          value.id.length > 0 &&
+          ["single", "triple"].includes(value.mode)
+          ? { id: value.id, mode: value.mode }
+          : null;
+      } catch (_) {
+        return null;
+      }
+    },
+    whenNativeReady(fn) {
+      if (typeof fn !== "function") return () => {};
+      let cancelled = false;
+      const dispose = () => {
+        cancelled = true;
+      };
+      unloadHandlers.add(dispose);
+      Promise.resolve(nativeReady()).then(
+        () => {
+          unloadHandlers.delete(dispose);
+          if (cancelled || stopped) return;
+          try {
+            fn();
+          } catch (error) {
+            console.warn("[Zentral standalone] native-ready callback failed", error);
+          }
+        },
+        () => {
+          unloadHandlers.delete(dispose);
+        },
+      );
+      return () => {
+        cancelled = true;
+        unloadHandlers.delete(dispose);
+      };
+    },
     nativeSidebarElement,
     nativeSidebarRect,
     nativeSidebarSide,
+    createSidebarHoverCard,
     sidebarLayoutRepair: null,
     compactHoverStatus: null,
     registerSettingsHook: () => () => {},
@@ -612,6 +1132,206 @@ function nativeSidebarSide() {
   };
   window.__zentralStandaloneRuntime = shim;
   return shim;
+})();
+
+// ---- shared: loader/ZentralTabPolicy.js
+// <Zentral> shared tab policy: one answer to "may this tab be unloaded?", asked by every module that unloads.
+// <owner>Every module that unloads a tab: additional/tabs/unloading/ZentralTabUnload.uc.js and
+//   additional/boost/ZentralBoost.uc.js, both of which embed this file (standalone) or load it (full pack).
+// <contract>Pure predicates over a tab and a context. Nothing here touches prefs, DOM or the tabbrowser: callers pass
+//   what they read, so the table is testable and a change to one caller's rules is a change here for everybody.
+// <cleanup>None. No listeners, no timers, no state.
+//
+// OW-91 (plan B4.1): TabUnload and Boost both need to know which tabs are safe to unload. Keeping two copies was how
+// "never unload the selected tab" became true in one module and forgotten in the other, so the rules live here once.
+// The reason string is part of the contract: a caller shows it (`boost.state()`), a test asserts it, and a future
+// caller can tell "audible" from "selected" without re-deriving the tab's state.
+(function () {
+  "use strict";
+
+  const NEVER = "never";
+  const ALLOWED = "allowed";
+
+  // The reasons, in the order a person would care about them: the loud/visible ones first.
+  const REASONS = Object.freeze({
+    noTab: "no-tab",
+    closing: "closing",
+    notConnected: "not-connected",
+    selected: "selected",
+    pending: "pending",
+    discarded: "discarded",
+    dormant: "dormant",
+    addonHost: "addon-host",
+    notesPlaceholder: "notes-placeholder",
+    hidden: "hidden-panel",
+    essential: "essential-live",
+    pinned: "pinned-kept",
+    // OW-111 (owner audit F1): a tab that backs an Essential-panel record is owned by the record's own
+    // `backgroundMode`, never by a generic tab sweep. The mode is the person's explicit consent.
+    panelRecord: "panel-record",
+    audible: "audible",
+    sharing: "sharing",
+    pictureInPicture: "picture-in-picture",
+    videoSource: "video-source",
+    private: "private-tab",
+    noPanel: "no-panel",
+  });
+
+  const URL_OF = (tab) => {
+    try {
+      return String(tab?.linkedBrowser?.currentURI?.spec || tab?._zentralNotesUrl || "");
+    } catch (_) {
+      return "";
+    }
+  };
+
+  // A tab that is already asleep: nothing to unload, and unloading it again would only reset its session state.
+  function isUnloadable_AlreadyUnloaded(tab) {
+    if (!tab) return false;
+    return (
+      !tab.linkedPanel ||
+      tab.hasAttribute("pending") ||
+      tab.hasAttribute("discarded") ||
+      (tab.hasAttribute("zen-dormant") && tab.getAttribute("zen-dormant") !== "false")
+    );
+  }
+
+  // Notes and Agenda sidebar entries are inert about:blank placeholders: selecting one hands the selection straight
+  // back to the tab being unloaded, and unloading one throws away a row that is not a page. Matched on the live URL,
+  // then on the session entry, then on the legacy markers — the order TabUnload already used.
+  function isNotesAgendaPlaceholder(tab, sessionUrl = "") {
+    if (!tab) return false;
+    const url = URL_OF(tab);
+    if (url && url !== "about:blank") return /^about:blank#zn-(?:note:|new:|agenda-)/.test(url);
+    const fromSession = String(sessionUrl || "");
+    if (fromSession && fromSession !== "about:blank") return /^about:blank#zn-(?:note:|new:|agenda-)/.test(fromSession);
+    if (tab.hasAttribute?.("bgalazka-notes-item") || tab.hasAttribute?.("bgalazka-notes-agenda-item")) return true;
+    return /^about:blank#zn-(?:note:|new:|agenda-)/.test(String(tab._zentralNotesUrl || url || ""));
+  }
+
+  function isAddonHostTab(tab) {
+    return !!tab?.matches?.("[bgalazka-addon-host], [bgalazka-addon-host-fallback]");
+  }
+
+  // Picture-in-picture: the tab's browser is inside a PiP window, so unloading it would blank that window.
+  function isPictureInPicture(tab) {
+    try {
+      return Boolean(tab?.linkedBrowser?.isPictureInPicture || tab?._pipState?.active || tab?.pictureInPicture);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Camera/microphone/screen sharing. `_sharingState` is an object with `camera`/`microphone`/`screen` when sharing.
+  function isSharing(tab) {
+    const state = tab?._sharingState;
+    if (!state) return false;
+    if (typeof state !== "object") return Boolean(state);
+    return Boolean(state.camera || state.microphone || state.screen || state.devices);
+  }
+
+  function isAudible(tab) {
+    try {
+      return Boolean(tab?.soundPlaying || tab?.linkedBrowser?.audioPlaybackActive || tab?.linkedBrowser?.soundPlaying);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
+   * The policy table. Every "never" is a fact about the tab or about what the person is doing right now; every input
+   * is an argument, so the answer can be computed for a tab that is not mounted in a window (that is how it is tested).
+   *
+   * @param {object} tab     the tab element
+   * @param {object} ctx     everything the caller knows and this file cannot read:
+   *   - `keepPinned`      (bool) may pinned/essential tabs be unloaded at all?
+   *   - `videoSourceTab`  the tab the video preview currently shows (unloading it would blank the preview)
+   *   - `sessionUrl`      the tab's session entry URL, for a placeholder whose live URL is about:blank
+   *   - `isHostTab`       the caller's own host-tab test (Zentral's hidden panel tabs), when it has one
+   *   - `selectedTab`     the window's selected tab, when the caller is not in a window that owns `gBrowser`
+   *   - `isPanelRecord`   (bool) this tab backs an Essential-panel record (Boost's deep pass knows the record set)
+   *   - `panelConsent`    (bool) the record's mode (or Stronger saver) explicitly allows sleeping it, which
+   *                       waives ONLY the pinned/Essential rule. Every other never-rule still applies.
+   *                       Callers that pass neither input (TabUnload) get exactly the old answers.
+   * @returns {{allowed: boolean, reason: string}}
+   */
+  function isUnloadable(tab, ctx = {}) {
+    const decide = (allowed, reason) => ({ allowed, reason });
+    if (!tab) return decide(false, REASONS.noTab);
+    if (tab.closing) return decide(false, REASONS.closing);
+    if (tab.isConnected === false && ctx.requireConnected !== false) return decide(false, REASONS.notConnected);
+    // The calm answer first: a tab that is already asleep is not a candidate, and not an error either.
+    if (isUnloadable_AlreadyUnloaded(tab)) {
+      if (tab.hasAttribute?.("pending")) return decide(false, REASONS.pending);
+      if (tab.hasAttribute?.("discarded")) return decide(false, REASONS.discarded);
+      if (tab.hasAttribute?.("zen-dormant")) return decide(false, REASONS.dormant);
+      return decide(false, REASONS.noPanel);
+    }
+    const selected = ctx.selectedTab !== undefined ? ctx.selectedTab : ctx.gBrowser?.selectedTab;
+    if (selected === tab) return decide(false, REASONS.selected);
+    if (isAddonHostTab(tab) || ctx.isHostTab?.(tab)) return decide(false, REASONS.addonHost);
+    if (isNotesAgendaPlaceholder(tab, ctx.sessionUrl)) return decide(false, REASONS.notesPlaceholder);
+    if (tab.hidden) return decide(false, REASONS.hidden);
+    if (isPictureInPicture(tab)) return decide(false, REASONS.pictureInPicture);
+    if (isSharing(tab)) return decide(false, REASONS.sharing);
+    if (isAudible(tab)) return decide(false, REASONS.audible);
+    if (ctx.videoSourceTab && ctx.videoSourceTab === tab) return decide(false, REASONS.videoSource);
+    // OW-111: a panel-record tab belongs to the record's own mode, not to a generic tab sweep. Without the mode's
+    // consent it is refused with its own named reason, so a `keepPinned` pref can never make Boost's TAB loop
+    // unload a `live` WhatsApp/Messenger record. `panelConsent` is the person's explicit `asleep-allowed` (or the
+    // Stronger-saver switch), and waives ONLY the pinned/Essential rule below — audible/selected/PiP/etc. already
+    // had their say above. TabUnload passes neither input, so its behaviour is exactly unchanged.
+    if (ctx.isPanelRecord && !ctx.panelConsent) return decide(false, REASONS.panelRecord);
+    // Pinned and Essentials are the person's own shortlist: unloadable only when they said so.
+    if ((tab.pinned || tab.hasAttribute?.("zen-essential")) && !ctx.keepPinned && !ctx.panelConsent) {
+      return decide(false, tab.hasAttribute?.("zen-essential") ? REASONS.essential : REASONS.pinned);
+    }
+    if (ctx.isPrivate && ctx.isPrivate(tab)) return decide(false, REASONS.private);
+    return decide(true, ALLOWED);
+  }
+
+  // The successor rules, kept with the policy because they answer the same question one step earlier: which tab may
+  // hold the selection while another one goes to sleep. Shared so a deep run can find a safe successor for the tab it
+  // is about to unload without growing a second copy of the "never" list.
+  function isSuccessorCandidate(tab, current, ctx = {}) {
+    if (!tab || tab === current) return false;
+    if (tab.isConnected === false || tab.closing || tab.hidden) return false;
+    if (isAddonHostTab(tab)) return false;
+    if (isNotesAgendaPlaceholder(tab, ctx.sessionUrl)) return false;
+    return Boolean(tab.linkedPanel);
+  }
+
+  // One oldest-first order for a deep run: the tabs nobody has touched for longest go first, and a tab with no
+  // `lastAccessed` sorts as the oldest, because that is what "we do not know, so it is not fresh" means.
+  function byOldestFirst(a, b) {
+    const left = Number(a?.lastAccessed);
+    const right = Number(b?.lastAccessed);
+    const aKnown = Number.isFinite(left);
+    const bKnown = Number.isFinite(right);
+    if (!aKnown && !bKnown) return 0;
+    if (!aKnown) return -1;
+    if (!bKnown) return 1;
+    return left - right;
+  }
+
+  const api = Object.freeze({
+    REASONS,
+    NEVER,
+    ALLOWED,
+    isUnloadable_AlreadyUnloaded,
+    isNotesAgendaPlaceholder,
+    isAddonHostTab,
+    isPictureInPicture,
+    isSharing,
+    isAudible,
+    isUnloadable,
+    isSuccessorCandidate,
+    byOldestFirst,
+  });
+
+  // The table is published on the window under one name. Both callers read that name, so the standalone builds (which
+  // embed this file verbatim) and the full pack reach the same object.
+  window.ZentralTabPolicy = api;
 })();
 
 /*
@@ -704,6 +1424,54 @@ function nativeSidebarSide() {
       let normalTabMmbGesture = null;
       let normalTabMmbFallbackTimer = null;
 
+      // Notes and Agenda entries are inert about:blank placeholders. Selecting
+      // one as the successor of an ordinary tab being unloaded is unsafe:
+      // their TabSelect guards immediately bounce back to the tab being unloaded.
+      // Match explicit markers first, then only the live/current pseudo URL (not
+      // a tab's historical SessionStore entries or display label).
+      function isNotesAgendaEntryTab(tab) {
+        if (!tab) return false;
+        let url = "";
+        try { url = tab.linkedBrowser?.currentURI?.spec || ""; } catch (_) {}
+        // A live ordinary URL is authoritative: old pseudo markers/expandos
+        // must not make a reused web tab permanently ineligible for unloading.
+        if (url && url !== "about:blank") {
+          if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(url)) return true;
+          try {
+            tab.removeAttribute("bgalazka-notes-item");
+            tab.removeAttribute("bgalazka-notes-agenda-item");
+            if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(tab._zentralNotesUrl || "")) delete tab._zentralNotesUrl;
+          } catch (_) {}
+          return false;
+        }
+        if (!url || url === "about:blank") {
+          let sessionUrl = "";
+          try {
+            const state = JSON.parse(window.SessionStore?.getTabState?.(tab) || "{}");
+            const entries = Array.isArray(state.entries) ? state.entries : [];
+            const index = entries.length
+              ? Math.max(0, Math.min(entries.length - 1, (Number(state.index) || 1) - 1))
+              : -1;
+            sessionUrl = index >= 0 ? String(entries[index]?.url || "") : "";
+          } catch (_) {}
+          if (sessionUrl) {
+            if (sessionUrl !== "about:blank" && /^about:blank#zn-(?:note:|new:|agenda-)/.test(sessionUrl)) return true;
+            try {
+              tab.removeAttribute("bgalazka-notes-item");
+              tab.removeAttribute("bgalazka-notes-agenda-item");
+              if (/^about:blank#zn-(?:note:|new:|agenda-)/.test(tab._zentralNotesUrl || "")) delete tab._zentralNotesUrl;
+            } catch (_) {}
+            return false;
+          }
+        }
+        if (tab.hasAttribute("bgalazka-notes-item") ||
+            tab.hasAttribute("bgalazka-notes-agenda-item")) return true;
+        if (!url || url === "about:blank") {
+          try { url = tab._zentralNotesUrl || url; } catch (_) {}
+        }
+        return /^about:blank#zn-(?:note:|new:|agenda-)/.test(url);
+      }
+
       function getNormalTabFromMiddleClickEvent(event) {
         const target = event?.target;
         if (!target?.closest) return null;
@@ -718,7 +1486,7 @@ function nativeSidebarSide() {
           tab.hasAttribute("zen-empty-tab") ||
           tab.hasAttribute("bgalazka-addon-host") ||
           tab.hasAttribute("bgalazka-addon-host-fallback") ||
-          tab.hasAttribute("bgalazka-notes-item") ||
+          isNotesAgendaEntryTab(tab) ||
           tab.closest(
             "#bgalazka-zentral-addon-hosts, [bgalazka-addon-host-folder='true']",
           )
@@ -728,7 +1496,13 @@ function nativeSidebarSide() {
         return tab;
       }
 
+      // OW-91 (plan B4.1): the predicates live in one place now — `loader/ZentralTabPolicy.js`, which this module's
+      // standalone build embeds verbatim. The local names stay, because the handlers below read like the behaviour
+      // they implement, and a caller of the policy is what this module is.
+      const tabPolicy = () => window.ZentralTabPolicy || null;
       function isNormalTabAlreadyUnloaded(tab) {
+        const policy = tabPolicy();
+        if (policy) return policy.isUnloadable_AlreadyUnloaded(tab);
         return !!(
           !tab?.linkedPanel ||
           tab.hasAttribute("pending") ||
@@ -749,13 +1523,15 @@ function nativeSidebarSide() {
         return !!tab?.hasAttribute?.("bgalazka-notes-item");
       }
       function isSuccessorCandidate(tab, current) {
+        const policy = tabPolicy();
+        if (policy) return policy.isSuccessorCandidate(tab, current);
         return !!(
           tab !== current &&
           tab?.isConnected &&
           !tab.closing &&
           !tab.hidden &&
           !isAddonHostTab(tab) &&
-          !isNotesEntryTab(tab) &&
+          !isNotesAgendaEntryTab(tab) &&
           tab.linkedPanel
         );
       }
@@ -774,7 +1550,7 @@ function nativeSidebarSide() {
         return (
           gBrowser.selectedTab !== tab &&
           !isAddonHostTab(gBrowser.selectedTab) &&
-          !isNotesEntryTab(gBrowser.selectedTab)
+          !isNotesAgendaEntryTab(gBrowser.selectedTab)
         );
       }
 

@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Video Preview
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.0
+// @version 3.4.0
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.0, the numeric-preference list and
+ * Placeholders replaced by the build: 3.4.0, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.0";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.4.0";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -227,6 +227,439 @@ function nativeSidebarSide() {
         ? "right"
         : "left";
     }
+  function createSidebarHoverCard(options) {
+    options = options || {};
+    const win = options.window || window;
+    const doc = options.document || win.document;
+    const id = String(options.id || "bgalazka-sidebar-hover-card");
+    const className = String(options.className || "");
+    const role = options.role ?? "";
+    const ariaLabel = String(options.ariaLabel || "");
+    const describeTarget = options.describeTarget !== false;
+    const defaultWidth = Number(options.defaultWidth) > 0 ? Number(options.defaultWidth) : 320;
+    const defaultHeight = Number(options.defaultHeight) > 0 ? Number(options.defaultHeight) : 80;
+    const isEnabled = typeof options.isEnabled === "function" ? options.isEnabled : () => true;
+    const matchTarget = typeof options.matchTarget === "function" ? options.matchTarget : () => null;
+    const isValid = typeof options.isValid === "function" ? options.isValid : (t) => !!t && t.isConnected !== false;
+    const getShowDelay = typeof options.getShowDelay === "function" ? options.getShowDelay : () => 350;
+    const getHideDelay = typeof options.getHideDelay === "function" ? options.getHideDelay : () => 150;
+    const getSide = typeof options.getSide === "function" ? options.getSide : () => "auto";
+    const getGap = typeof options.getGap === "function" ? options.getGap : () => 6;
+    const getBounds = typeof options.getBounds === "function"
+      ? options.getBounds
+      : () => {
+          const rt = win.ZentralRuntime || win.__zentralStandaloneRuntime;
+          try { return rt?.sidebarSafeBounds?.() || null; } catch (_) { return null; }
+        };
+    const render = typeof options.render === "function" ? options.render : () => {};
+    const onCreate = typeof options.onCreate === "function" ? options.onCreate : null;
+    const onShow = typeof options.onShow === "function" ? options.onShow : null;
+    const onHide = typeof options.onHide === "function" ? options.onHide : null;
+    const suppressTooltipWhenClosed = !!options.suppressTooltipWhenClosed;
+    const shouldSuppressTooltip = typeof options.shouldSuppressTooltip === "function" ? options.shouldSuppressTooltip : () => true;
+    const setTimer = typeof options.setTimer === "function" ? options.setTimer : (fn, ms) => win.setTimeout(fn, ms);
+    const clearTimer = typeof options.clearTimer === "function" ? options.clearTimer : (t) => win.clearTimeout(t);
+    const raf = typeof options.raf === "function"
+      ? options.raf
+      : (fn) => (typeof win.requestAnimationFrame === "function" ? win.requestAnimationFrame(fn) : setTimer(fn, 16));
+    const cancelRaf = typeof options.cancelRaf === "function"
+      ? options.cancelRaf
+      : (t) => (typeof win.cancelAnimationFrame === "function" ? win.cancelAnimationFrame(t) : clearTimer(t));
+
+    let node = null;
+    let target = null;
+    let pending = null;
+    let showTimer = null;
+    let hideTimer = null;
+    let retargetFrame = null;
+    let observer = null;
+    let observedParent = null;
+    let lastXY = null;
+    let destroyed = false;
+
+    const getHost = () => {
+      let host = win.__zentralSidebarCardHost;
+      if (!host || typeof host.activate !== "function") {
+        const members = new Set();
+        host = {
+          active: null,
+          members,
+          register(ctrl) { members.add(ctrl); },
+          unregister(ctrl) {
+            members.delete(ctrl);
+            if (host.active === ctrl) host.active = null;
+            if (!members.size && win.__zentralSidebarCardHost === host) {
+              try { delete win.__zentralSidebarCardHost; } catch (_) { win.__zentralSidebarCardHost = undefined; }
+            }
+          },
+          activate(ctrl) {
+            if (host.active && host.active !== ctrl) {
+              try { host.active.hide(); } catch (_) {}
+            }
+            host.active = ctrl;
+          },
+          deactivate(ctrl) {
+            if (host.active === ctrl) host.active = null;
+          },
+        };
+        win.__zentralSidebarCardHost = host;
+      }
+      return host;
+    };
+
+    const clearShow = () => {
+      if (showTimer !== null) { clearTimer(showTimer); showTimer = null; }
+      pending = null;
+    };
+    const clearHide = () => {
+      if (hideTimer !== null) { clearTimer(hideTimer); hideTimer = null; }
+    };
+    const clearRetarget = () => {
+      if (retargetFrame !== null) { cancelRaf(retargetFrame); retargetFrame = null; }
+    };
+    const cancelTimers = () => { clearShow(); clearHide(); clearRetarget(); };
+
+    const disconnectObserver = () => {
+      if (observer) {
+        try { observer.disconnect(); } catch (_) {}
+      }
+      observedParent = null;
+    };
+    const connectObserver = (t) => {
+      const parent = t?.parentNode || t?.parentElement || null;
+      if (!parent) { disconnectObserver(); return; }
+      if (observer && observedParent === parent) return;
+      disconnectObserver();
+      if (typeof MutationObserver !== "function") return;
+      try {
+        if (!observer) {
+          observer = new MutationObserver(() => {
+            if (target && !isValid(target)) hide();
+          });
+        }
+        observer.observe(parent, { childList: true });
+        observedParent = parent;
+      } catch (_) {}
+    };
+
+    const detachDescription = () => {
+      if (!describeTarget || !target) return;
+      try {
+        const words = (target.getAttribute("aria-describedby") || "").split(/\s+/).filter((w) => w && w !== id);
+        if (words.length) target.setAttribute("aria-describedby", words.join(" "));
+        else target.removeAttribute("aria-describedby");
+      } catch (_) {}
+    };
+    const attachDescription = (t) => {
+      if (!describeTarget || !t) return;
+      try {
+        const words = (t.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean);
+        if (!words.includes(id)) {
+          words.push(id);
+          t.setAttribute("aria-describedby", words.join(" "));
+        }
+      } catch (_) {}
+    };
+
+    // Re-enter the browser top layer on every show so this card sits above
+    // earlier popovers (Big Preview, Zentral panels). Without popover support
+    // (or if showPopover throws), drop the attribute so fixed z-index applies.
+    function raiseCard(c) {
+      if (!c || typeof c.showPopover !== "function") return;
+      try {
+        let open = false;
+        try { open = !!c.matches?.(":popover-open"); } catch (_) {}
+        if (open) c.hidePopover?.();
+        else { try { c.hidePopover?.(); } catch (_) {} }
+        c.showPopover();
+      } catch (_) {
+        try { c.removeAttribute("popover"); } catch (_) {}
+      }
+    }
+    function dropCard(c) {
+      if (!c) return;
+      try {
+        let open = true;
+        try { if (typeof c.matches === "function") open = !!c.matches(":popover-open"); } catch (_) {}
+        if (open) c.hidePopover?.();
+      } catch (_) {}
+    }
+
+    function ensureNode() {
+      if (node) return node;
+      node = typeof doc.createElementNS === "function"
+        ? doc.createElementNS("http://www.w3.org/1999/xhtml", "div")
+        : doc.createElement("div");
+      node.id = id;
+      if (className) node.setAttribute("class", className);
+      if (role) node.setAttribute("role", role);
+      if (ariaLabel) node.setAttribute("aria-label", ariaLabel);
+      node.setAttribute("popover", "manual");
+      node.hidden = true;
+      node.addEventListener("mouseenter", clearHide);
+      node.addEventListener("mouseleave", () => {
+        if (!target || node?.contains?.(doc.activeElement) || target?.contains?.(doc.activeElement)) return;
+        scheduleHide();
+      });
+      if (onCreate) onCreate(node, api);
+      doc.documentElement.append(node);
+      return node;
+    }
+
+    function position() {
+      if (!node || node.hidden || !target || !isValid(target)) {
+        if (target) hide();
+        return;
+      }
+      const tr = target.getBoundingClientRect();
+      const r = typeof node.getBoundingClientRect === "function" ? node.getBoundingClientRect() : null;
+      const vw = Number(win.innerWidth) || 1200;
+      const vh = Number(win.innerHeight) || 800;
+      const width = Math.min(vw - 8, (r && r.width) || node.offsetWidth || defaultWidth);
+      const height = Math.min(vh - 8, (r && r.height) || node.offsetHeight || defaultHeight);
+      const rawGap = Number(getGap());
+      const gap = Number.isFinite(rawGap) ? Math.max(0, Math.min(32, rawGap)) : 6;
+      const sidePref = getSide();
+      const sideEl = doc.getElementById?.("navigator-toolbox");
+      const sr = sideEl?.getBoundingClientRect?.();
+      const autoRight = sr && sr.width > 0
+        ? sr.left > vw / 2
+        : (tr.left + tr.right) / 2 > vw / 2;
+      const placeLeft = sidePref === "left" ? true : sidePref === "right" ? false : autoRight;
+      let left = placeLeft ? tr.left - width - gap : tr.right + gap;
+      const bounds = getBounds();
+      if (bounds && Number.isFinite(bounds.left) && Number.isFinite(bounds.right)) {
+        left = placeLeft ? Math.min(left, bounds.right - width) : Math.max(left, bounds.left);
+      }
+      if (left < 4 && tr.right + gap + width <= vw - 4) left = tr.right + gap;
+      if (left + width > vw - 4 && tr.left - gap - width >= 4) left = tr.left - gap - width;
+      node.style.left = Math.max(4, Math.min(left, vw - width - 4)) + "px";
+      node.style.top = Math.max(4, Math.min(tr.top, vh - height - 4)) + "px";
+    }
+
+    function hide() {
+      cancelTimers();
+      disconnectObserver();
+      detachDescription();
+      const prevTarget = target;
+      target = null;
+      if (node) {
+        dropCard(node);
+        node.hidden = true;
+      }
+      host.deactivate(api);
+      if (prevTarget && onHide) onHide(prevTarget, node);
+    }
+
+    function scheduleHide(delay) {
+      clearShow();
+      clearHide();
+      const raw = delay === undefined ? Number(getHideDelay()) : Number(delay);
+      const ms = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 0;
+      if (ms <= 0) {
+        hide();
+        return;
+      }
+      hideTimer = setTimer(() => {
+        hideTimer = null;
+        hide();
+      }, ms);
+    }
+
+    function show(tab) {
+      if (destroyed) return false;
+      cancelTimers();
+      if (!isEnabled() || !tab || !isValid(tab)) {
+        hide();
+        return false;
+      }
+      const c = ensureNode();
+      host.activate(api);
+      if (target !== tab) {
+        detachDescription();
+        target = tab;
+      }
+      attachDescription(tab);
+      connectObserver(tab);
+      render(c, tab, api);
+      c.hidden = false;
+      raiseCard(c);
+      position();
+      if (onShow) onShow(tab, c);
+      return true;
+    }
+
+    function scheduleShow(tab) {
+      if (destroyed || !isEnabled() || !tab || !isValid(tab)) return;
+      const raw = Number(getShowDelay());
+      const delay = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 0;
+      if (delay <= 0) {
+        clearShow();
+        show(tab);
+        return;
+      }
+      if (showTimer !== null && pending === tab) return;
+      clearShow();
+      pending = tab;
+      showTimer = setTimer(() => {
+        const next = pending;
+        showTimer = null;
+        pending = null;
+        if (!destroyed && isEnabled() && next && isValid(next)) show(next);
+      }, delay);
+    }
+
+    function retarget(tab, { viaPointer = false, nextTarget = null, allowPointer = true } = {}) {
+      if (destroyed) return;
+      clearHide();
+      clearShow();
+      clearRetarget();
+      const resolveNext = () => (typeof nextTarget === "function" ? nextTarget() : nextTarget);
+      if (viaPointer && allowPointer && lastXY && typeof doc.elementFromPoint === "function") {
+        const [x, y] = lastXY;
+        retargetFrame = raf(() => {
+          retargetFrame = null;
+          if (destroyed || !isEnabled()) { hide(); return; }
+          let under = null;
+          try { under = matchTarget(doc.elementFromPoint(x, y)); } catch (_) {}
+          if (under && isValid(under)) { show(under); return; }
+          const next = resolveNext();
+          if (next && isValid(next)) show(next);
+          else hide();
+        });
+        return;
+      }
+      const next = resolveNext();
+      if (next && isValid(next)) show(next);
+      else hide();
+    }
+
+    const over = (event) => {
+      if (destroyed || !isEnabled()) return;
+      if (Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
+        lastXY = [event.clientX, event.clientY];
+      }
+      if (node?.contains?.(event?.target)) {
+        clearHide();
+        return;
+      }
+      const tab = matchTarget(event?.target);
+      if (tab && isValid(tab)) {
+        if (target === tab && node && !node.hidden) {
+          clearHide();
+          return;
+        }
+        clearHide();
+        scheduleShow(tab);
+        return;
+      }
+      if (node && !node.hidden && !node.contains?.(event?.target) && (!target || !target.contains?.(event?.target))) {
+        scheduleHide();
+      }
+    };
+
+    const out = (event) => {
+      if (destroyed) return;
+      const related = event?.relatedTarget;
+      if (node?.contains?.(event?.target)) {
+        if (related && (node.contains?.(related) || target?.contains?.(related))) return;
+        if (node.contains?.(doc.activeElement) || target?.contains?.(doc.activeElement)) return;
+        scheduleHide();
+        return;
+      }
+      const tab = matchTarget(event?.target);
+      if (!tab) return;
+      if (related && (tab.contains?.(related) || node?.contains?.(related))) return;
+      if (pending === tab) clearShow();
+      if (target !== tab) return;
+      if (tab.contains?.(doc.activeElement) || node?.contains?.(doc.activeElement)) return;
+      scheduleHide();
+    };
+
+    const move = (event) => {
+      if (Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
+        lastXY = [event.clientX, event.clientY];
+      }
+    };
+
+    const focus = (event) => {
+      if (destroyed || !isEnabled()) return;
+      const tab = matchTarget(event?.target);
+      if (tab && isValid(tab)) show(tab);
+    };
+
+    const blur = (event) => {
+      if (destroyed || !target) return;
+      const related = event?.relatedTarget;
+      if (related && (target.contains?.(related) || node?.contains?.(related))) return;
+      const fromTarget = matchTarget(event?.target) === target;
+      const fromNode = !!node?.contains?.(event?.target);
+      if (fromTarget || fromNode) hide();
+    };
+
+    const key = (event) => {
+      if (destroyed || event?.key !== "Escape" || !isEnabled()) return;
+      if (!node || node.hidden || !target) return;
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      hide();
+    };
+
+    const popup = (event) => {
+      if (destroyed || !isEnabled() || event?.target?.id !== "tabbrowser-tab-tooltip") return;
+      if (!shouldSuppressTooltip()) return;
+      const tab = matchTarget(event?.target?.triggerNode);
+      if (!tab || !isValid(tab)) return;
+      if (suppressTooltipWhenClosed || (tab === target && node && !node.hidden)) {
+        event.preventDefault();
+      }
+    };
+
+    const api = {
+      ensureNode,
+      getNode: () => node,
+      getTarget: () => target,
+      isOpen: () => !!(node && !node.hidden && target),
+      show,
+      scheduleShow,
+      hide,
+      scheduleHide,
+      cancelTimers,
+      position,
+      retarget,
+      over,
+      out,
+      move,
+      focus,
+      blur,
+      key,
+      popup,
+      removed(tab) {
+        if (tab && (tab === target || tab === pending)) hide();
+      },
+      updated(tab) {
+        if (tab && tab === target && node && !node.hidden) show(tab);
+      },
+      refresh() {
+        if (target && node && !node.hidden) show(target);
+      },
+      destroy() {
+        if (destroyed) return;
+        destroyed = true;
+        hide();
+        host.unregister(api);
+        observer = null;
+        if (node) {
+          try { node.remove(); } catch (_) {}
+          node = null;
+        }
+        lastXY = null;
+      },
+    };
+    const host = getHost();
+    host.register(api);
+    return api;
+  }
   function createFeatureScope(owner) {
     let active = true;
     const cleanups = new Set(),
@@ -506,9 +939,14 @@ function nativeSidebarSide() {
     for (let round = 0; round < 4 && !stopped; round++) {
       const pending = [];
       for (const read of [
+        () => window.SessionStore?.promiseInitialized,
         () => window.SessionStore?.promiseAllWindowsRestored,
+        () => window.delayedStartupPromise,
         () => window.gZenWorkspaces?.promiseInitialized,
         () => window.gZenStartup?.promiseInitialized,
+        () => window.gZenPinnedTabManager?.promiseInitialized,
+        () => window.gZenSessionStore?.promiseInitialized,
+        () => window.gZenWindowSync?.promiseInitialized,
       ]) {
         try {
           const promise = read();
@@ -524,12 +962,94 @@ function nativeSidebarSide() {
     }
   }
   const features = (window.__zentralStandalone ||= {});
+  // OW-94 (plan B7.1): the pause switch. The full pack publishes the same contract under `ZentralRuntime.performance`;
+  // a standalone module asks for it here. With no full pack there is nothing else to pause, so the switch is honest
+  // about being alone: `listenerCount()` is 0 and setting it simply notifies whoever subscribed.
+  const performanceSwitch = (() => {
+    let paused = false;
+    const listeners = new Set();
+    const snapshot = () => ({ paused, changes: 0, lastChangeAt: 0 });
+    const setPaused = (next) => {
+      const target = Boolean(next);
+      if (target === paused) return snapshot();
+      paused = target;
+      for (const fn of [...listeners]) {
+        try {
+          fn(paused, snapshot());
+        } catch (error) {
+          try {
+            console.warn("[Zentral standalone] pause listener failed", error);
+          } catch (_) {}
+        }
+      }
+      return snapshot();
+    };
+    const subscribe = (fn) => {
+      if (typeof fn !== "function") return () => {};
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    };
+    return {
+      isPaused: () => paused,
+      setPaused,
+      toggle: () => setPaused(!paused),
+      subscribe,
+      onChange: subscribe,
+      snapshot,
+      listenerCount: () => listeners.size,
+      reset() {},
+    };
+  })();
+
   const shim = {
     standalone: true,
+    performance: performanceSwitch,
     getPref,
+    readStartupPanel() {
+      try {
+        const raw = getPref("zen.workspace.bgalazka.open_at_startup", "null");
+        if (typeof raw !== "string") return null;
+        const value = JSON.parse(raw);
+        return value &&
+          typeof value.id === "string" &&
+          value.id.length > 0 &&
+          ["single", "triple"].includes(value.mode)
+          ? { id: value.id, mode: value.mode }
+          : null;
+      } catch (_) {
+        return null;
+      }
+    },
+    whenNativeReady(fn) {
+      if (typeof fn !== "function") return () => {};
+      let cancelled = false;
+      const dispose = () => {
+        cancelled = true;
+      };
+      unloadHandlers.add(dispose);
+      Promise.resolve(nativeReady()).then(
+        () => {
+          unloadHandlers.delete(dispose);
+          if (cancelled || stopped) return;
+          try {
+            fn();
+          } catch (error) {
+            console.warn("[Zentral standalone] native-ready callback failed", error);
+          }
+        },
+        () => {
+          unloadHandlers.delete(dispose);
+        },
+      );
+      return () => {
+        cancelled = true;
+        unloadHandlers.delete(dispose);
+      };
+    },
     nativeSidebarElement,
     nativeSidebarRect,
     nativeSidebarSide,
+    createSidebarHoverCard,
     sidebarLayoutRepair: null,
     compactHoverStatus: null,
     registerSettingsHook: () => () => {},
@@ -9709,7 +10229,13 @@ __zentralShim.register = function (def) {
           "zen.workspace.zentral.video_preview.canvas_stream_fps";
         const SCAN_INTERVALS = [0, 5000, 15000, 30000, 60000, 120000];
         const CAPTION_INTERVALS = [250, 500, 750, 1500, 3000];
+        // OW-94 (plan B7.1): while Game Mode holds the timers, discovery has no interval. `restartDiscoveryTimer`
+        // already reads 0 as "no interval" and -1 as "event/manual-only session", so the whole session lifecycle keeps
+        // working: the preview still paints its current frame, it just stops scanning for new ones.
+        // This must NOT stop the video playing: nothing here pauses media, tears down a receiver, or detaches a
+        // rendering surface (plan B7's owner gate is exactly that a podcast keeps playing).
         function scanIntervalMs() {
+          if (videoPerformancePaused()) return 0;
           const value = readInt(SCAN_INTERVAL_PREF, 5000);
           return SCAN_INTERVALS.includes(value) ? value : 5000;
         }
@@ -9975,6 +10501,24 @@ __zentralShim.register = function (def) {
         let queuedFullScan = false;
         let sources = [];
         let current = null;
+        // OW-113: Boost asks for the tab behind the sidebar's selected video source before it unloads anything.
+        // `current` is the module state every controller already writes (`deps.current = source`), so a getter over
+        // it needs no second writer, no listener and no polling. A panel-only source has no ordinary tab, and a
+        // disconnected/closing tab is not a live source. Destroy removes the getter (see below).
+        const sourceTabGetter = () => {
+          const sourceTab = current?.tab;
+          return sourceTab && sourceTab.isConnected !== false && !sourceTab.closing
+            ? sourceTab
+            : null;
+        };
+        let sourceTabGetterInstalled = false;
+        try {
+          Object.defineProperty(window, "__zentralVideoSourceTab", {
+            configurable: true,
+            get: sourceTabGetter,
+          });
+          sourceTabGetterInstalled = true;
+        } catch (_) {}
         let box = null;
         let canvas = null;
         let caption = null;
@@ -9990,6 +10534,8 @@ __zentralShim.register = function (def) {
         let sourceList = null;
         let sourceCapabilities = null;
         let controlBar = null;
+        const videoPerformance = window.ZentralRuntime?.performance || null;
+        const videoPerformancePaused = () => Boolean(videoPerformance?.isPaused?.());
         let scanTimer = null;
         let frameTimer = null;
         let paintTimerMs = 0;
@@ -10585,6 +11131,22 @@ __zentralShim.register = function (def) {
         window.addEventListener("scroll", onVisibilityWake, true);
         function destroy() {
           if (disposed) return;
+          // OW-113: never leave a stale source tab published after this window's preview is gone. Only delete the
+          // property if it is still OUR getter — a newer instance may have replaced it.
+          if (sourceTabGetterInstalled) {
+            try {
+              const descriptor = Object.getOwnPropertyDescriptor(
+                window,
+                "__zentralVideoSourceTab",
+              );
+              if (descriptor?.get === sourceTabGetter)
+                delete window.__zentralVideoSourceTab;
+            } catch (_) {}
+            sourceTabGetterInstalled = false;
+          }
+          try {
+            unsubscribePerformance?.();
+          } catch (_) {}
           cancelResize(true);
           disposed = true;
           if (visibilityWakeFrame !== null)
@@ -10657,9 +11219,31 @@ __zentralShim.register = function (def) {
           document.getElementById("zs-panel-extension-video-dev")?.remove();
           delete window.ZentralVideoPreview;
         }
+        // A seam for the suites: the capture-rate rules are the part a test can own without a real video element.
+        if (window.__zentralVideoTestSeam) {
+          Object.assign(window.__zentralVideoTestSeam, {
+            CAPTURE_RATES: [...CAPTURE_RATES],
+            captureRateTenths,
+            captureIntervalMs,
+            captureRateDescription,
+            captureWidth,
+            // OW-113: let a suite drive the very state the controllers write (`deps.current = source`).
+            setVideoSource: (source) => {
+              current = source || null;
+            },
+            RENDER_MODES: [...RENDER_MODES],
+            LIVE_MODES: [...LIVE_MODES],
+            renderCandidates,
+            methodName,
+            healthIntervalMs,
+            visibilityIntervalMs,
+          });
+        }
         window.ZentralVideoPreview = {
           destroy,
           refresh: scan,
+          // OW-113: the same live getter Boost reads from the window, useful for diagnostics too.
+          sourceTab: sourceTabGetter,
           diagnostics: () => ({
             ...diagnostics,
             build: BUILD,
@@ -10709,6 +11293,15 @@ __zentralShim.register = function (def) {
         };
         hookSettings();
         syncCompactVisibility();
+        // OW-94: the shared pause switch drives the discovery/caption/visibility intervals through `scanIntervalMs`.
+        // Restarting all three on a change is the same path a pref change takes, so there is nothing new to get wrong.
+        const unsubscribePerformance = videoPerformance?.subscribe?.(() => {
+          try {
+            restartVisibilityTimer();
+            restartCaptionTimer();
+            restartDiscoveryTimer();
+          } catch (_) {}
+        }) || null;
         window.addEventListener("unload", destroy, { once: true });
         if (typeof ZentralRuntime?.registerHostUnload === "function")
           ZentralRuntime.registerHostUnload(destroy);

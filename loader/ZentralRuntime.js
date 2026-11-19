@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Zentral Core and Settings
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.0
+// @version 3.4.0
 // ==/UserScript==
 /*
  * ZENTRAL FILE GUIDE - loader/ZentralRuntime.js
@@ -38,7 +38,7 @@
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
-  const VERSION = "3.3.0";
+  const VERSION = "3.4.0";
   // Sine installs this package under theme.json's id. Resolve from the
   // executing script so local folders and installed copies use their own files.
   // Keep this universal: never hard-code a mod id, folder name, or profile path.
@@ -337,6 +337,447 @@
     };
   }
 
+  // Shared top-layer sidebar hover card engine used by RSS, Notes, and Agenda
+  // (full pack and standalone builds alike). Self-contained on purpose so
+  // tools/build-standalone.cjs copies it verbatim into ZentralStandaloneShim.js.
+  // Coordinates across every open card in the window (including standalone RSS
+  // + standalone Notes installed together without the core mod) via
+  // window.__zentralSidebarCardHost, re-enters the top layer on every show, and
+  // observes ONLY the active target's direct parent while visible (AU-B2).
+  function createSidebarHoverCard(options) {
+    options = options || {};
+    const win = options.window || window;
+    const doc = options.document || win.document;
+    const id = String(options.id || "bgalazka-sidebar-hover-card");
+    const className = String(options.className || "");
+    const role = options.role ?? "";
+    const ariaLabel = String(options.ariaLabel || "");
+    const describeTarget = options.describeTarget !== false;
+    const defaultWidth = Number(options.defaultWidth) > 0 ? Number(options.defaultWidth) : 320;
+    const defaultHeight = Number(options.defaultHeight) > 0 ? Number(options.defaultHeight) : 80;
+    const isEnabled = typeof options.isEnabled === "function" ? options.isEnabled : () => true;
+    const matchTarget = typeof options.matchTarget === "function" ? options.matchTarget : () => null;
+    const isValid = typeof options.isValid === "function" ? options.isValid : (t) => !!t && t.isConnected !== false;
+    const getShowDelay = typeof options.getShowDelay === "function" ? options.getShowDelay : () => 350;
+    const getHideDelay = typeof options.getHideDelay === "function" ? options.getHideDelay : () => 150;
+    const getSide = typeof options.getSide === "function" ? options.getSide : () => "auto";
+    const getGap = typeof options.getGap === "function" ? options.getGap : () => 6;
+    const getBounds = typeof options.getBounds === "function"
+      ? options.getBounds
+      : () => {
+          const rt = win.ZentralRuntime || win.__zentralStandaloneRuntime;
+          try { return rt?.sidebarSafeBounds?.() || null; } catch (_) { return null; }
+        };
+    const render = typeof options.render === "function" ? options.render : () => {};
+    const onCreate = typeof options.onCreate === "function" ? options.onCreate : null;
+    const onShow = typeof options.onShow === "function" ? options.onShow : null;
+    const onHide = typeof options.onHide === "function" ? options.onHide : null;
+    const suppressTooltipWhenClosed = !!options.suppressTooltipWhenClosed;
+    const shouldSuppressTooltip = typeof options.shouldSuppressTooltip === "function" ? options.shouldSuppressTooltip : () => true;
+    const setTimer = typeof options.setTimer === "function" ? options.setTimer : (fn, ms) => win.setTimeout(fn, ms);
+    const clearTimer = typeof options.clearTimer === "function" ? options.clearTimer : (t) => win.clearTimeout(t);
+    const raf = typeof options.raf === "function"
+      ? options.raf
+      : (fn) => (typeof win.requestAnimationFrame === "function" ? win.requestAnimationFrame(fn) : setTimer(fn, 16));
+    const cancelRaf = typeof options.cancelRaf === "function"
+      ? options.cancelRaf
+      : (t) => (typeof win.cancelAnimationFrame === "function" ? win.cancelAnimationFrame(t) : clearTimer(t));
+
+    let node = null;
+    let target = null;
+    let pending = null;
+    let showTimer = null;
+    let hideTimer = null;
+    let retargetFrame = null;
+    let observer = null;
+    let observedParent = null;
+    let lastXY = null;
+    let destroyed = false;
+
+    const getHost = () => {
+      let host = win.__zentralSidebarCardHost;
+      if (!host || typeof host.activate !== "function") {
+        const members = new Set();
+        host = {
+          active: null,
+          members,
+          register(ctrl) { members.add(ctrl); },
+          unregister(ctrl) {
+            members.delete(ctrl);
+            if (host.active === ctrl) host.active = null;
+            if (!members.size && win.__zentralSidebarCardHost === host) {
+              try { delete win.__zentralSidebarCardHost; } catch (_) { win.__zentralSidebarCardHost = undefined; }
+            }
+          },
+          activate(ctrl) {
+            if (host.active && host.active !== ctrl) {
+              try { host.active.hide(); } catch (_) {}
+            }
+            host.active = ctrl;
+          },
+          deactivate(ctrl) {
+            if (host.active === ctrl) host.active = null;
+          },
+        };
+        win.__zentralSidebarCardHost = host;
+      }
+      return host;
+    };
+
+    const clearShow = () => {
+      if (showTimer !== null) { clearTimer(showTimer); showTimer = null; }
+      pending = null;
+    };
+    const clearHide = () => {
+      if (hideTimer !== null) { clearTimer(hideTimer); hideTimer = null; }
+    };
+    const clearRetarget = () => {
+      if (retargetFrame !== null) { cancelRaf(retargetFrame); retargetFrame = null; }
+    };
+    const cancelTimers = () => { clearShow(); clearHide(); clearRetarget(); };
+
+    const disconnectObserver = () => {
+      if (observer) {
+        try { observer.disconnect(); } catch (_) {}
+      }
+      observedParent = null;
+    };
+    const connectObserver = (t) => {
+      const parent = t?.parentNode || t?.parentElement || null;
+      if (!parent) { disconnectObserver(); return; }
+      if (observer && observedParent === parent) return;
+      disconnectObserver();
+      if (typeof MutationObserver !== "function") return;
+      try {
+        if (!observer) {
+          observer = new MutationObserver(() => {
+            if (target && !isValid(target)) hide();
+          });
+        }
+        observer.observe(parent, { childList: true });
+        observedParent = parent;
+      } catch (_) {}
+    };
+
+    const detachDescription = () => {
+      if (!describeTarget || !target) return;
+      try {
+        const words = (target.getAttribute("aria-describedby") || "").split(/\s+/).filter((w) => w && w !== id);
+        if (words.length) target.setAttribute("aria-describedby", words.join(" "));
+        else target.removeAttribute("aria-describedby");
+      } catch (_) {}
+    };
+    const attachDescription = (t) => {
+      if (!describeTarget || !t) return;
+      try {
+        const words = (t.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean);
+        if (!words.includes(id)) {
+          words.push(id);
+          t.setAttribute("aria-describedby", words.join(" "));
+        }
+      } catch (_) {}
+    };
+
+    // Re-enter the browser top layer on every show so this card sits above
+    // earlier popovers (Big Preview, Zentral panels). Without popover support
+    // (or if showPopover throws), drop the attribute so fixed z-index applies.
+    function raiseCard(c) {
+      if (!c || typeof c.showPopover !== "function") return;
+      try {
+        let open = false;
+        try { open = !!c.matches?.(":popover-open"); } catch (_) {}
+        if (open) c.hidePopover?.();
+        else { try { c.hidePopover?.(); } catch (_) {} }
+        c.showPopover();
+      } catch (_) {
+        try { c.removeAttribute("popover"); } catch (_) {}
+      }
+    }
+    function dropCard(c) {
+      if (!c) return;
+      try {
+        let open = true;
+        try { if (typeof c.matches === "function") open = !!c.matches(":popover-open"); } catch (_) {}
+        if (open) c.hidePopover?.();
+      } catch (_) {}
+    }
+
+    function ensureNode() {
+      if (node) return node;
+      node = typeof doc.createElementNS === "function"
+        ? doc.createElementNS("http://www.w3.org/1999/xhtml", "div")
+        : doc.createElement("div");
+      node.id = id;
+      if (className) node.setAttribute("class", className);
+      if (role) node.setAttribute("role", role);
+      if (ariaLabel) node.setAttribute("aria-label", ariaLabel);
+      node.setAttribute("popover", "manual");
+      node.hidden = true;
+      node.addEventListener("mouseenter", clearHide);
+      node.addEventListener("mouseleave", () => {
+        if (!target || node?.contains?.(doc.activeElement) || target?.contains?.(doc.activeElement)) return;
+        scheduleHide();
+      });
+      if (onCreate) onCreate(node, api);
+      doc.documentElement.append(node);
+      return node;
+    }
+
+    function position() {
+      if (!node || node.hidden || !target || !isValid(target)) {
+        if (target) hide();
+        return;
+      }
+      const tr = target.getBoundingClientRect();
+      const r = typeof node.getBoundingClientRect === "function" ? node.getBoundingClientRect() : null;
+      const vw = Number(win.innerWidth) || 1200;
+      const vh = Number(win.innerHeight) || 800;
+      const width = Math.min(vw - 8, (r && r.width) || node.offsetWidth || defaultWidth);
+      const height = Math.min(vh - 8, (r && r.height) || node.offsetHeight || defaultHeight);
+      const rawGap = Number(getGap());
+      const gap = Number.isFinite(rawGap) ? Math.max(0, Math.min(32, rawGap)) : 6;
+      const sidePref = getSide();
+      const sideEl = doc.getElementById?.("navigator-toolbox");
+      const sr = sideEl?.getBoundingClientRect?.();
+      const autoRight = sr && sr.width > 0
+        ? sr.left > vw / 2
+        : (tr.left + tr.right) / 2 > vw / 2;
+      const placeLeft = sidePref === "left" ? true : sidePref === "right" ? false : autoRight;
+      let left = placeLeft ? tr.left - width - gap : tr.right + gap;
+      const bounds = getBounds();
+      if (bounds && Number.isFinite(bounds.left) && Number.isFinite(bounds.right)) {
+        left = placeLeft ? Math.min(left, bounds.right - width) : Math.max(left, bounds.left);
+      }
+      if (left < 4 && tr.right + gap + width <= vw - 4) left = tr.right + gap;
+      if (left + width > vw - 4 && tr.left - gap - width >= 4) left = tr.left - gap - width;
+      node.style.left = Math.max(4, Math.min(left, vw - width - 4)) + "px";
+      node.style.top = Math.max(4, Math.min(tr.top, vh - height - 4)) + "px";
+    }
+
+    function hide() {
+      cancelTimers();
+      disconnectObserver();
+      detachDescription();
+      const prevTarget = target;
+      target = null;
+      if (node) {
+        dropCard(node);
+        node.hidden = true;
+      }
+      host.deactivate(api);
+      if (prevTarget && onHide) onHide(prevTarget, node);
+    }
+
+    function scheduleHide(delay) {
+      clearShow();
+      clearHide();
+      const raw = delay === undefined ? Number(getHideDelay()) : Number(delay);
+      const ms = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 0;
+      if (ms <= 0) {
+        hide();
+        return;
+      }
+      hideTimer = setTimer(() => {
+        hideTimer = null;
+        hide();
+      }, ms);
+    }
+
+    function show(tab) {
+      if (destroyed) return false;
+      cancelTimers();
+      if (!isEnabled() || !tab || !isValid(tab)) {
+        hide();
+        return false;
+      }
+      const c = ensureNode();
+      host.activate(api);
+      if (target !== tab) {
+        detachDescription();
+        target = tab;
+      }
+      attachDescription(tab);
+      connectObserver(tab);
+      render(c, tab, api);
+      c.hidden = false;
+      raiseCard(c);
+      position();
+      if (onShow) onShow(tab, c);
+      return true;
+    }
+
+    function scheduleShow(tab) {
+      if (destroyed || !isEnabled() || !tab || !isValid(tab)) return;
+      const raw = Number(getShowDelay());
+      const delay = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 0;
+      if (delay <= 0) {
+        clearShow();
+        show(tab);
+        return;
+      }
+      if (showTimer !== null && pending === tab) return;
+      clearShow();
+      pending = tab;
+      showTimer = setTimer(() => {
+        const next = pending;
+        showTimer = null;
+        pending = null;
+        if (!destroyed && isEnabled() && next && isValid(next)) show(next);
+      }, delay);
+    }
+
+    function retarget(tab, { viaPointer = false, nextTarget = null, allowPointer = true } = {}) {
+      if (destroyed) return;
+      clearHide();
+      clearShow();
+      clearRetarget();
+      const resolveNext = () => (typeof nextTarget === "function" ? nextTarget() : nextTarget);
+      if (viaPointer && allowPointer && lastXY && typeof doc.elementFromPoint === "function") {
+        const [x, y] = lastXY;
+        retargetFrame = raf(() => {
+          retargetFrame = null;
+          if (destroyed || !isEnabled()) { hide(); return; }
+          let under = null;
+          try { under = matchTarget(doc.elementFromPoint(x, y)); } catch (_) {}
+          if (under && isValid(under)) { show(under); return; }
+          const next = resolveNext();
+          if (next && isValid(next)) show(next);
+          else hide();
+        });
+        return;
+      }
+      const next = resolveNext();
+      if (next && isValid(next)) show(next);
+      else hide();
+    }
+
+    const over = (event) => {
+      if (destroyed || !isEnabled()) return;
+      if (Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
+        lastXY = [event.clientX, event.clientY];
+      }
+      if (node?.contains?.(event?.target)) {
+        clearHide();
+        return;
+      }
+      const tab = matchTarget(event?.target);
+      if (tab && isValid(tab)) {
+        if (target === tab && node && !node.hidden) {
+          clearHide();
+          return;
+        }
+        clearHide();
+        scheduleShow(tab);
+        return;
+      }
+      if (node && !node.hidden && !node.contains?.(event?.target) && (!target || !target.contains?.(event?.target))) {
+        scheduleHide();
+      }
+    };
+
+    const out = (event) => {
+      if (destroyed) return;
+      const related = event?.relatedTarget;
+      if (node?.contains?.(event?.target)) {
+        if (related && (node.contains?.(related) || target?.contains?.(related))) return;
+        if (node.contains?.(doc.activeElement) || target?.contains?.(doc.activeElement)) return;
+        scheduleHide();
+        return;
+      }
+      const tab = matchTarget(event?.target);
+      if (!tab) return;
+      if (related && (tab.contains?.(related) || node?.contains?.(related))) return;
+      if (pending === tab) clearShow();
+      if (target !== tab) return;
+      if (tab.contains?.(doc.activeElement) || node?.contains?.(doc.activeElement)) return;
+      scheduleHide();
+    };
+
+    const move = (event) => {
+      if (Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
+        lastXY = [event.clientX, event.clientY];
+      }
+    };
+
+    const focus = (event) => {
+      if (destroyed || !isEnabled()) return;
+      const tab = matchTarget(event?.target);
+      if (tab && isValid(tab)) show(tab);
+    };
+
+    const blur = (event) => {
+      if (destroyed || !target) return;
+      const related = event?.relatedTarget;
+      if (related && (target.contains?.(related) || node?.contains?.(related))) return;
+      const fromTarget = matchTarget(event?.target) === target;
+      const fromNode = !!node?.contains?.(event?.target);
+      if (fromTarget || fromNode) hide();
+    };
+
+    const key = (event) => {
+      if (destroyed || event?.key !== "Escape" || !isEnabled()) return;
+      if (!node || node.hidden || !target) return;
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      hide();
+    };
+
+    const popup = (event) => {
+      if (destroyed || !isEnabled() || event?.target?.id !== "tabbrowser-tab-tooltip") return;
+      if (!shouldSuppressTooltip()) return;
+      const tab = matchTarget(event?.target?.triggerNode);
+      if (!tab || !isValid(tab)) return;
+      if (suppressTooltipWhenClosed || (tab === target && node && !node.hidden)) {
+        event.preventDefault();
+      }
+    };
+
+    const api = {
+      ensureNode,
+      getNode: () => node,
+      getTarget: () => target,
+      isOpen: () => !!(node && !node.hidden && target),
+      show,
+      scheduleShow,
+      hide,
+      scheduleHide,
+      cancelTimers,
+      position,
+      retarget,
+      over,
+      out,
+      move,
+      focus,
+      blur,
+      key,
+      popup,
+      removed(tab) {
+        if (tab && (tab === target || tab === pending)) hide();
+      },
+      updated(tab) {
+        if (tab && tab === target && node && !node.hidden) show(tab);
+      },
+      refresh() {
+        if (target && node && !node.hidden) show(target);
+      },
+      destroy() {
+        if (destroyed) return;
+        destroyed = true;
+        hide();
+        host.unregister(api);
+        observer = null;
+        if (node) {
+          try { node.remove(); } catch (_) {}
+          node = null;
+        }
+        lastXY = null;
+      },
+    };
+    const host = getHost();
+    host.register(api);
+    return api;
+  }
+
   // CORE LIFECYCLE CONTRACT (for future contributors/AI): keep this generic.
   // Features declare dependencies in the catalog and register synchronously.
   // init receives one owned scope; register cleanup BEFORE fallible/async work.
@@ -594,12 +1035,66 @@
   }
   // END CORE LIFECYCLE CONTRACT
   const featureScopes = new Map();
+  // The switch module publishes `window.ZentralPerformanceSwitch` at load time (far above in this file); this factory
+  // fails softly if an old copy of the module ever loads without it, because a window that refuses to boot over a
+  // pause switch would be a worse bug than not having one.
+  // The switch module publishes `window.ZentralPerformanceSwitch` when it loads. It is loaded here, before the runtime
+  // object that publishes the result; if a stub loader or an old copy leaves it out, the tiny fallback below keeps the
+  // same contract so a window never refuses to boot over a pause switch.
+  function createPerformanceSwitch() {
+    try {
+      moduleLoader.load("loader/ZentralPerformanceSwitch.js");
+    } catch (error) {
+      console.warn("[Zentral] loader/ZentralPerformanceSwitch.js did not load", error);
+    }
+    const factory = window.ZentralPerformanceSwitch?.create;
+    if (typeof factory === "function") return factory();
+    let paused = false;
+    const listeners = new Set();
+    const snapshot = () => ({ paused });
+    const setPaused = (next) => {
+      const target = Boolean(next);
+      if (target === paused) return snapshot();
+      paused = target;
+      for (const fn of [...listeners]) {
+        try {
+          fn(paused, snapshot());
+        } catch (_) {}
+      }
+      return snapshot();
+    };
+    const subscribe = (fn) => {
+      if (typeof fn !== "function") return () => {};
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    };
+    return {
+      isPaused: () => paused,
+      setPaused,
+      toggle: () => setPaused(!paused),
+      subscribe,
+      onChange: subscribe,
+      snapshot,
+      listenerCount: () => listeners.size,
+      reset() {},
+    };
+  }
+
+  // OW-94 (plan B7.1): the pause switch, created before the runtime object because that object publishes it eagerly.
+  // The module is loaded further down (with the other shared components); this only keeps the binding in scope above
+  // its first use, which is the runtime literal immediately below.
+  const performanceSwitch = createPerformanceSwitch();
+
   const runtime = (window.ZentralRuntime = {
     version: VERSION,
     rootURI: ROOT,
     hooks,
     registerHostUnload,
+    createSidebarHoverCard,
     services: { platform: Services },
+    // B7/OW-94 (plan B7.1): `{ isPaused, setPaused, toggle, subscribe, onChange, snapshot }`. A repeating feature calls
+    // `subscribe` and skips its work while `isPaused()`; nothing here knows what a game is.
+    performance: performanceSwitch,
     shared: null,
     panelContext: null,
     setAvailable(id, value) {
@@ -736,6 +1231,46 @@
     // window uses it so its exact-number boxes accept what the Sine text fields accept.
     numericRange(key) {
       return numericRanges.get(key) || null;
+    },
+    // Shared panel start-up contract (OW-30): lives in the loader so restoring a saved
+    // panel or Triple View pair at launch never depends on the optional ZentralStartup mod.
+    readStartupPanel() {
+      try {
+        const raw = getPref("zen.workspace.bgalazka.open_at_startup", "null");
+        if (typeof raw !== "string") return null;
+        const value = JSON.parse(raw);
+        return value &&
+          typeof value.id === "string" &&
+          value.id.length > 0 &&
+          ["single", "triple"].includes(value.mode)
+          ? { id: value.id, mode: value.mode }
+          : null;
+      } catch (_) {
+        return null;
+      }
+    },
+    whenNativeReady(fn) {
+      if (typeof fn !== "function") return () => {};
+      let cancelled = false;
+      const dispose = () => {
+        cancelled = true;
+      };
+      disposers.push(dispose);
+      Promise.resolve(runtime.nativeReady).then(
+        () => {
+          if (cancelled || stopped) return;
+          try {
+            fn();
+          } catch (error) {
+            console.warn("[Zentral] Native-ready callback failed", error);
+          }
+        },
+        (error) => {
+          if (!cancelled && !stopped)
+            console.warn("[Zentral] Native readiness failed", error);
+        },
+      );
+      return dispose;
     },
     snapshot() {
       return {
@@ -1457,6 +1992,8 @@
     return segment;
   }
   runtime.ensureSettingsSection = ensureSettingsSection;
+  // UI4.9: one formatter for every slider's "value unit" phrase, shared by the settings rows.
+  runtime.formatSchemaValue = formatSchemaValue;
   function ensureSettingsCategory(modal, id) {
     const definition = SETTINGS_ORGANIZATION.categories.find(
       (category) => category.id === id,
@@ -1617,6 +2154,18 @@
   // get a slider / colour picker and a Reset button. The "off" value (numeric.min for a slider, "" for a
   // colour) means "no override", so the module keeps its own default there. Sine shows the same pref as
   // a plain text box; both write the same preference.
+  // UI4.9: a value and its unit read as one phrase, and the phrase needs a space: "7 days", not "7days". The two
+  // exceptions are the ones typography keeps tight — a percentage and a pixel count are read as one token.
+  const TIGHT_UNITS = Object.freeze(["%", "px"]);
+  function formatSchemaValue(value, unit) {
+    const text = String(value ?? "").trim();
+    if (!text) return "";
+    const suffix = String(unit ?? "").trim();
+    if (!suffix) return text;
+    if (TIGHT_UNITS.includes(suffix)) return text + suffix;
+    return text + " " + suffix;
+  }
+
   function createSchemaControlRow(item, row) {
     const key = item.property;
     row.classList.add("zs-schema-control");
@@ -1659,7 +2208,7 @@
       const isOff = isSlider ? !(Number(value) > off) : !/^#[0-9a-f]{6}$/i.test(String(value));
       if (isSlider) {
         if (!isOff) input.value = String(value);
-        readout.textContent = isOff ? "Default" : value + unit;
+        readout.textContent = isOff ? "Default" : formatSchemaValue(value, unit);
       } else if (!isOff) input.value = String(value).toLowerCase();
       row.dataset.schemaOff = isOff ? "true" : "false";
       reset.disabled = isOff;
@@ -2376,6 +2925,12 @@
   );
 
   moduleLoader.load("loader/ZentralShared.js");
+  // OW-91: one tab policy for every module that unloads a tab (TabUnload and Boost). It is a plain component, so a
+  // feature that needs it reads `window.ZentralTabPolicy` (standalone builds embed the same file verbatim).
+  moduleLoader.load("loader/ZentralTabPolicy.js");
+  // OW-94: the pause switch every repeating feature subscribes to. Loaded here so the object exists before any feature
+  // registers, and published on the runtime below under the plan's own name (`ZentralRuntime.performance`).
+
   const {
     Constants,
     Core,
@@ -2419,6 +2974,14 @@
   };
   disposers.push(() => Settings.destroy());
   window.Zentral = { Core, Settings };
+  // B7/OW-94: the panel layer, for a module that is not a part whose context it is (Boost reads it to put panel
+  // records to sleep and to set their background mode). It is populated when the `panels` feature activates, so a
+  // getter is the only honest shape: a value copied here would be `null` forever, which is what a reader saw before.
+  Object.defineProperty(window.Zentral, "Panels", {
+    configurable: true,
+    enumerable: true,
+    get: () => runtime.panelContext || null,
+  });
   window.ZentralSettingsInstance = Settings;
   runtime.shared = {
     Constants,
@@ -2807,9 +3370,14 @@
     for (let round = 0; round < 4 && !stopped; round++) {
       const pending = [];
       for (const read of [
+        () => (window.SessionStore || session)?.promiseInitialized,
         () => (window.SessionStore || session)?.promiseAllWindowsRestored,
+        () => window.delayedStartupPromise,
         () => window.gZenWorkspaces?.promiseInitialized,
         () => window.gZenStartup?.promiseInitialized,
+        () => window.gZenPinnedTabManager?.promiseInitialized,
+        () => window.gZenSessionStore?.promiseInitialized,
+        () => window.gZenWindowSync?.promiseInitialized,
       ]) {
         try {
           const promise = read();

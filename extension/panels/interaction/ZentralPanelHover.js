@@ -56,6 +56,10 @@
       let hoverRevealLedgeBounds = null;
       const HIDDEN_PANEL_REVEAL_DEFAULT_MS = 160;
       const HIDDEN_PANEL_REVEAL_DEFAULT_WIDTH_PX = 1;
+      // OW-130: short mouse-up hides once; a completed 550 ms hold keeps the old
+      // autohide toggle. The existing Triple/Super-pin long press is untouched.
+      const PILL_AUTOHIDE_HOLD_MS = 550;
+      const PILL_AUTOHIDE_SELECTOR = "#zen-app-hover-reveal-btn";
       let hoverResizing = false;
       let hoverHoldUntil = 0;
       let hoverTypingUntil = 0;
@@ -531,9 +535,12 @@
             if (root?.contains(document.activeElement))
               gBrowser.selectedBrowser?.focus();
             ctx.syncAppPanelBrowserActivity?.();
-          } else if (enabled) {
-            apps?.startPositionTracking?.();
-            ctx.requestPanelActivity?.();
+          } else {
+            if (enabled) {
+              apps?.startPositionTracking?.();
+              ctx.requestPanelActivity?.();
+            }
+            ctx.scheduleSecondaryGeometryFit?.();
           }
           syncPanelFallbackPolling();
         }
@@ -623,8 +630,13 @@
         // compact mode, so check that first (same approach as ZentralLibraryResize).
         const sidebar = window.ZentralRuntime?.nativeSidebarElement?.();
         if (sidebar?.hasAttribute("zen-has-hover")) return true;
+        if (sidebar?.matches?.(":hover")) return true;
         // Fall back to direct :hover for non-compact / visible sidebars.
+        // Include #tabbrowser-tabs and #navigator-toolbox because Zen 1.24.1b+
+        // keeps Firefox's #vertical-tabs stub hidden (display: none).
         return !!(
+          document.getElementById("navigator-toolbox")?.matches(":hover") ||
+          document.getElementById("tabbrowser-tabs")?.matches(":hover") ||
           document.getElementById("sidebar-box")?.matches(":hover") ||
           document.getElementById("sidebar-container")?.matches(":hover") ||
           document.getElementById("vertical-tabs")?.matches(":hover")
@@ -698,7 +710,7 @@
         // sidebar hover surface is a continuous hover session with the panel.
         if (event?.relatedTarget) {
           const sidebar = event.relatedTarget.closest?.(
-            "#sidebar-box, #sidebar-container, #vertical-tabs, #sidebar",
+            "#navigator-toolbox, #tabbrowser-tabs, #sidebar-box, #sidebar-container, #vertical-tabs, #sidebar",
           );
           if (sidebar) return;
         }
@@ -736,6 +748,131 @@
           ),
         );
       };
+      function classifyPillAutohideGesture(opts = {}) {
+        // An absent timestamp is not 0/Unix epoch: it is not a press at all.
+        const downAt = typeof opts.downAt === "number" ? opts.downAt : NaN;
+        const upAt = typeof opts.upAt === "number" ? opts.upAt : NaN;
+        const requestedHold = Number(opts.holdMs);
+        const holdMs = Number.isFinite(requestedHold) && requestedHold >= 0
+          ? requestedHold
+          : 550;
+        const valid = Number.isFinite(downAt) && Number.isFinite(upAt) && !opts.moved && !opts.cancelled && upAt >= downAt;
+        const pressedMs = valid ? Math.max(0, Math.round(upAt - downAt)) : 0;
+        const held = valid && pressedMs >= holdMs;
+        const action = !valid ? "none" : held ? "toggle" : "hide-once";
+        return { action, held, pressedMs };
+      }
+      // <<OW-130 GESTURE END>>
+      let pillAutohidePress = null;
+      let pillAutohideConsumedClick = false;
+      function hidePanelOnce() {
+        clearHoverHide();
+        setHoverPanelHidden(true);
+      }
+      function toggleAutohidePref() {
+        const next = !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false);
+        setPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, next);
+        // Enabling leaves the currently visible panel alone; the next pointer
+        // exit toward the webpage decides when to hide it.
+        syncHoverPanelAvailability();
+      }
+      function clearPillAutohidePress() {
+        const press = pillAutohidePress;
+        pillAutohidePress = null;
+        if (!press) return;
+        press.target.removeAttribute("data-hold-active");
+        if (press.timer != null) clearTimeout(press.timer);
+      }
+      function pillAutohideTarget(event) {
+        const target = event?.target?.closest?.(PILL_AUTOHIDE_SELECTOR);
+        return target || null;
+      }
+      const onPillAutohideDown = (event) => {
+        if (event.button !== 0 || event.isTrusted === false) return;
+        const target = pillAutohideTarget(event);
+        if (!target) return;
+        clearPillAutohidePress();
+        const press = { downAt: Date.now(), target, moved: false, cancelled: false, held: false, timer: null };
+        pillAutohidePress = press;
+        press.timer = setTimeout(() => {
+          if (pillAutohidePress !== press) return;
+          press.held = true;
+          press.target.setAttribute("data-hold-active", "true");
+        }, PILL_AUTOHIDE_HOLD_MS);
+      };
+      const onPillAutohideMove = (event) => {
+        const press = pillAutohidePress;
+        if (!press || !event.isTrusted && event.type === "mousemove") return;
+        if (!event.target?.closest?.(PILL_AUTOHIDE_SELECTOR)) {
+          onPillAutohideCancel();
+          return;
+        }
+        press.moved = true;
+        onPillAutohideCancel();
+      };
+      const onPillAutohideCancel = () => {
+        if (pillAutohidePress) pillAutohidePress.cancelled = true;
+        clearPillAutohidePress();
+        pillAutohideConsumedClick = false;
+      };
+      const onPillAutohideUp = (event) => {
+        const press = pillAutohidePress;
+        if (!press) {
+          pillAutohideConsumedClick = false;
+          return;
+        }
+        if (!event.target?.closest?.(PILL_AUTOHIDE_SELECTOR)) {
+          onPillAutohideCancel();
+          return;
+        }
+        const verdict = classifyPillAutohideGesture({
+          downAt: press.downAt,
+          upAt: Date.now(),
+          moved: press.moved,
+          cancelled: press.cancelled || event.button !== 0,
+          holdMs: PILL_AUTOHIDE_HOLD_MS,
+        });
+        const held = press.held || verdict.held;
+        clearPillAutohidePress();
+        if (verdict.action === "none") {
+          pillAutohideConsumedClick = false;
+          return;
+        }
+        pillAutohideConsumedClick = true;
+        if (held || verdict.action === "toggle") toggleAutohidePref();
+        else hidePanelOnce();
+      };
+      const onPillAutohideClick = (event) => {
+        if (!pillAutohideTarget(event)) return;
+        if (pillAutohideConsumedClick) {
+          pillAutohideConsumedClick = false;
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation?.();
+        }
+      };
+      const onPillAutohideKeyDown = (event) => {
+        if (event.key === "Escape" || event.key === "Esc") onPillAutohideCancel();
+      };
+      const removePillAutohideListeners = () => {
+        document.removeEventListener("mousedown", onPillAutohideDown, true);
+        window.removeEventListener("mouseup", onPillAutohideUp, true);
+        document.removeEventListener("mousemove", onPillAutohideMove, true);
+        window.removeEventListener("pointercancel", onPillAutohideCancel, true);
+        window.removeEventListener("blur", onPillAutohideCancel, true);
+        document.removeEventListener("click", onPillAutohideClick, true);
+        window.removeEventListener("keydown", onPillAutohideKeyDown, true);
+        clearPillAutohidePress();
+        pillAutohideConsumedClick = false;
+      };
+      document.addEventListener("mousedown", onPillAutohideDown, true);
+      window.addEventListener("mouseup", onPillAutohideUp, true);
+      document.addEventListener("mousemove", onPillAutohideMove, true);
+      window.addEventListener("pointercancel", onPillAutohideCancel, true);
+      window.addEventListener("blur", onPillAutohideCancel, true);
+      document.addEventListener("click", onPillAutohideClick, true);
+      window.addEventListener("keydown", onPillAutohideKeyDown, true);
+
       function ensurePillHoverRevealButton() {
         const pill = document.getElementById("zen-app-panel-pill");
         const root = document.getElementById("zen-app-panel-root");
@@ -775,15 +912,6 @@
           if (anchor?.parentNode)
             anchor.parentNode.insertBefore(btn, anchor.nextSibling);
           else pill.appendChild(btn);
-          btn.addEventListener("click", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            const next = !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false);
-            setPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, next);
-            // Enabling leaves the currently visible panel alone; the next
-            // pointer exit toward the webpage decides when to hide it.
-            syncHoverPanelAvailability();
-          });
         }
         syncHoverPanelAvailability();
         btn.setAttribute("aria-pressed", btn.dataset.active);
@@ -1289,6 +1417,8 @@
         releasePanelEntry();
       };
       registerCleanup(() => {
+        removePillAutohideListeners();
+        clearPillAutohidePress();
         panelEntryAllowed = false;
         panelEntryListening = false;
         window.removeEventListener("mouseover", onPanelNativeWindowEntry, true);
@@ -1319,6 +1449,7 @@
       syncPanelWindowEntry();
 
       return {
+        classifyPillAutohideGesture,
         clearHoverHide,
         ensureAutohidePanelPinned,
         ensurePillHoverRevealButton,

@@ -87,7 +87,7 @@ async function test(name, fn) {
     assert.equal(c.remindPreview(c.parseRemindInput("2026-11-05", "09:00"), now), "Will ring at 2026-11-05 09:00 (in 40 h 29 min)");
     assert.equal(c.remindPreview(c.parseRemindInput("2026-11-20", "09:00"), now), "Will ring at 2026-11-20 09:00 (in 17 days)");
     assert.equal(c.remindPreview(c.parseRemindInput("2026-11-03", "16:00"), now), "That time has already passed");
-    assert.match(c.remindPreview(0, now), /YYYY-MM-DD/);
+    assert.equal(c.remindPreview(0, now), "Enter a date (14, 14.11 or 2026-11-02) and a time (16, 830 or 9am)", "what can be typed since OW-24");
     assert.equal(c.REMIND_STEP_MS, 60000);
     assert.equal(c.cleanRemind(at + 4000), at, "seconds are dropped");
   });
@@ -172,15 +172,16 @@ async function test(name, fn) {
     assert.deepEqual(JSON.parse(JSON.stringify(c.labelSummary(notes))), [{ label: "Work", count: 2 }, { label: "Ideas", count: 1 }, { label: "Zed", count: 1 }]);
     assert.deepEqual(JSON.parse(JSON.stringify(c.labelSummary([]))), []);
   });
-  await test("demo notes (#3): valid fixed ids, every [[link]] points at another demo note, all render and export", () => {
+  await test("demo notes (#3, T4.1): valid fixed ids, every [[link]] points at another demo note, all render and export", () => {
     const demos = Array.from(c.DEMO_NOTES);
-    assert.equal(demos.length, 6);
-    assert.equal(new Set(demos.map((d) => d.id)).size, 6, "ids are unique");
+    assert.equal(demos.length, 9, "T2.11b2 added the two teaching notes");
+    assert.equal(new Set(demos.map((d) => d.id)).size, 9, "ids are unique");
     const titles = demos.map((d) => c.demoTitle(d));
-    assert.deepEqual(titles, ["Notes syntax tour", "Linking notes demo", "Callouts and reminders", "Markdown flavors showcase", "Typing shortcuts and where things are", "Torture test (placeholder)"]);
+    assert.deepEqual(titles, ["Notes syntax tour", "Where is a function?", "Calendar and Agenda tour", "Linking notes demo", "Callouts and reminders", "Markdown flavors showcase", "Typing shortcuts and where things are", "Torture test (placeholder)", "Markdown & Extended Syntax Feature Showcase"]);
+    const noteObjects = demos.map((d, i) => ({ id: d.id, body: d.body, folder: c.DEMO_FOLDER, updated: 1000 + i }));
+    assert.deepEqual(JSON.parse(JSON.stringify(c.findBrokenLinks(noteObjects, [{ id: c.DEMO_FOLDER, label: "Help" }]))), [], "all demo wikilinks resolve");
     for (const d of demos) {
       assert.match(d.id, /^[A-Za-z0-9_][A-Za-z0-9_ .-]{0,120}$/, d.id + " passes the note id rule");
-      for (const m of d.body.replace(/`[^`\n]*`/g, "").matchAll(/\[\[([^\]\n]+)\]\]/g)) assert.ok(titles.includes(m[1]) || /^embed$/.test(m[1]) || /^Note#Heading$/.test(m[1]), `${d.id}: [[${m[1]}]] has no demo target`);
       assert.doesNotThrow(() => c.parseBlocks(d.body), d.id);
       assert.match(c.exportHtml(d.body), /<h1[ >]/, d.id + " exports");
     }
