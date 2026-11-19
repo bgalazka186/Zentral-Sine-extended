@@ -147,7 +147,7 @@ bundle and lock are rebuilt with `--keep-version`, never hand-edited.
   `599 Sine preferences (142 with free numeric entry)`, z-map `42/72/3`,
   `Standalone packages are up to date`, `defaults agree`,
   `catalog checks passed`.
-- Docs-inclusive full suite: `283/283 passed; 0 failed` (`318.2 s` combined
+- Docs-inclusive full suite: `287/287 passed; 0 failed` (`320.5 s` combined
   runtime / `118 s` wall), `0 TODO failing: none`,
   `DOCS_INCLUSIVE_SUITE_EXIT=0`, `git diff --check` clean.
 - Version remains **3.4.0**; no `--bump`, `sync-version`, ZIP or `.git`

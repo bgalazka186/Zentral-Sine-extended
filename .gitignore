@@ -30,6 +30,9 @@ docs/*
 !docs/ow-120-owner-diagnosis.md
 !docs/ow-121-boost-ux.md
 !docs/ow-122-restart-pseudo-tabs.md
+!docs/weather-rain-options.md
+!docs/zen-1243b-compat-audit.md
+!docs/zen-125t-compat-audit.md
 patches/
 zentral/upstream/
 
