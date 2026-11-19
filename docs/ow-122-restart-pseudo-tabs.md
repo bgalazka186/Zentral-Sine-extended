@@ -150,8 +150,14 @@ bundle and lock are rebuilt with `--keep-version`, never hand-edited.
 - Docs-inclusive full suite: `287/287 passed; 0 failed` (`320.5 s` combined
   runtime / `118 s` wall), `0 TODO failing: none`,
   `DOCS_INCLUSIVE_SUITE_EXIT=0`, `git diff --check` clean.
-- Version remains **3.4.0**; no `--bump`, `sync-version`, ZIP or `.git`
-  archive.
+- Version remains **3.4.0**; no `--bump` or version change.
+  `tools/sync-version.cjs` is only the exact chain's no-op 3.4.0 check. No ZIP
+  or `.git` archive.
+
+*Historical snapshot:* the `599 Sine preferences` and `287/287` figures above
+belong to the OW-122 cycle. Later `OW-127` added two prefs (`601`) and the
+post-batch regression sweep raised the docs-inclusive suite to `294/294`; see
+`docs/bugfix-2026-11-18.md`.
 
 ## OWNER GATE
 

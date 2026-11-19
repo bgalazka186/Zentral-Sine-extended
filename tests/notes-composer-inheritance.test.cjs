@@ -279,7 +279,7 @@ async function test(name, fn) {
     assert.equal(inheritText("Days after item to keep in Agenda"), "Inherit (2 days, from category Work)");
     assert.equal(inheritText("pre sound level"), "Inherit (Silent, from category Work)");
     assert.equal(inheritText("due sound level"), "Inherit (Normal, from global defaults)");
-    assert.match(colorLabel.textContent, /Inherit \(category Work colour: #4a90e2\)/);
+    assert.match(colorLabel.textContent, /Effective item colour: #4a90e2/);
     assert.match(notifyInherit.textContent, /from category Work/);
     assert.match(notifyInherit.textContent, /7 min/);
     assert.match(card.textContent, /Inherit \(quiet, loud, from category Work\)/);
@@ -294,7 +294,7 @@ async function test(name, fn) {
     assert.match(colorLabel.textContent, /Custom item colour: #ff0000/);
     colorInheritBtn.dispatchEvent(new Ev("click", { bubbles: true }));
     await flush();
-    assert.match(colorLabel.textContent, /Effective item colour: Inherit \(category Work colour: #4a90e2\)/);
+    assert.match(colorLabel.textContent, /Effective item colour: #4a90e2/);
 
     // Switch category -> Personal (live update!)
     catSelect.value = "Personal";
@@ -303,7 +303,7 @@ async function test(name, fn) {
 
     assert.equal(inheritText("Agenda inclusion"), "Inherit (Hide from Agenda, from category Personal)");
     assert.equal(inheritText("Days before item to show in Agenda"), "Inherit (1 day, from global defaults)");
-    assert.match(colorLabel.textContent, /Inherit \(category Personal colour: #d36aa6\)/);
+    assert.match(colorLabel.textContent, /Effective item colour: #d36aa6/);
     assert.match(notifyInherit.textContent, /from category Personal/);
 
     // Switch category back to Work and link Sprint Plan note (note layer beats category layer live!)
@@ -318,7 +318,7 @@ async function test(name, fn) {
     assert.equal(inheritText("Days after item to keep in Agenda"), "Inherit (2 days, from category Work)");
     assert.equal(inheritText("pre sound level"), "Inherit (Loud, from note Sprint Plan)");
     assert.match(card.textContent, /Inherit \(normal, from note Sprint Plan\)/);
-    assert.match(colorLabel.textContent, /Inherit \(note Sprint Plan colour: green #4cc38a\)/);
+    assert.match(colorLabel.textContent, /Effective item colour: green #4cc38a/);
 
     // Switch linked note to Plain Inbox (color: none) -> colour falls back to category Work, agenda leadDays falls back to category Work
     noteSelect.value = plainNote.id;
@@ -326,7 +326,7 @@ async function test(name, fn) {
     await flush();
 
     assert.equal(inheritText("Days before item to show in Agenda"), "Inherit (3 days, from category Work)");
-    assert.match(colorLabel.textContent, /Inherit \(category Work colour: #4a90e2\)/);
+    assert.match(colorLabel.textContent, /Effective item colour: #4a90e2/);
 
     // Save reminder with Inherit left selected -> sparse persistence (no agendaWindow or sound overrides written)
     card.querySelector('[aria-label="Title"]').value = "Check inherited save";

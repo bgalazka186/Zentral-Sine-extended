@@ -3856,7 +3856,9 @@ function nativeSidebarSide() {
         const wet = nextWetDay(days, 0, lang);
         if (!wet) return { source: "daily", onsetMinutes: 0, dayOffset: 0, window: "", allDay: false, heavy: false, noRain: true, short: "", long: "", text: "" };
         const day = days[wet.index] || {};
-        const heavy = WEATHER_HEAVY_RAIN_CODES.includes(Number(wet.code)) || isHeavyRainSample({ code: wet.code, precipitation: day.precipitationHours });
+        // Daily `precipitation_hours` is a duration, not an mm/h intensity.
+        // Only WMO 65/67/82 can honestly claim heavy rain on the daily fallback.
+        const heavy = WEATHER_HEAVY_RAIN_CODES.includes(Number(wet.code));
         const allDay = weatherRainNumber(day.precipitationHours) >= 8;
         const dailyPlan = { source: "daily", onsetMinutes: 999, dayOffset: wet.index, window: "", allDay, heavy, noRain: false };
         const text = weatherRainText(dailyPlan, lang);
@@ -5667,7 +5669,12 @@ function nativeSidebarSide() {
           const saveClockNote = () => {
             const text = String(clockNoteField.value || "").trim();
             const opener = resolveCalendarOpener(window);
-            if (!opener || typeof opener.openQuickNote !== "function") return;
+            if (!opener || typeof opener.openQuickNote !== "function") {
+              clockNoteField.value = "";
+              quickNoteOpen = false;
+              syncClockNote();
+              return;
+            }
             try { opener.openQuickNote(text); } catch (_) {}
             clockNoteField.value = "";
             quickNoteOpen = false;

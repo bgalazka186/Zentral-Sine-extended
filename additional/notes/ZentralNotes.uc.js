@@ -22185,7 +22185,7 @@
           colorLabel.textContent = t(resolvedColor.override
             ? "compose.color.custom"
             : resolvedColor.inherited ? "compose.color.effective" : "compose.color.none",
-            { label: resolvedColor.override ? resolvedColor.effectiveHex : (cDesc.label || resolvedColor.effective) });
+            { label: resolvedColor.override ? resolvedColor.effectiveHex : (cDesc.valueLabel || resolvedColor.effective) });
           colorInheritBtn.disabled = !resolvedColor.override;
           colorInheritBtn.setAttribute("aria-pressed", resolvedColor.override ? "true" : "false");
         }

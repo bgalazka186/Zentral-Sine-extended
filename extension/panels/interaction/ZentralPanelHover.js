@@ -804,19 +804,27 @@
         const press = pillAutohidePress;
         if (!press || !event.isTrusted && event.type === "mousemove") return;
         if (!event.target?.closest?.(PILL_AUTOHIDE_SELECTOR)) {
-          clearPillAutohidePress();
+          onPillAutohideCancel();
           return;
         }
         press.moved = true;
-        clearPillAutohidePress();
+        onPillAutohideCancel();
       };
       const onPillAutohideCancel = () => {
         if (pillAutohidePress) pillAutohidePress.cancelled = true;
         clearPillAutohidePress();
+        pillAutohideConsumedClick = false;
       };
       const onPillAutohideUp = (event) => {
         const press = pillAutohidePress;
-        if (!press || !event.target?.closest?.(PILL_AUTOHIDE_SELECTOR)) return;
+        if (!press) {
+          pillAutohideConsumedClick = false;
+          return;
+        }
+        if (!event.target?.closest?.(PILL_AUTOHIDE_SELECTOR)) {
+          onPillAutohideCancel();
+          return;
+        }
         const verdict = classifyPillAutohideGesture({
           downAt: press.downAt,
           upAt: Date.now(),
@@ -826,7 +834,10 @@
         });
         const held = press.held || verdict.held;
         clearPillAutohidePress();
-        if (verdict.action === "none") return;
+        if (verdict.action === "none") {
+          pillAutohideConsumedClick = false;
+          return;
+        }
         pillAutohideConsumedClick = true;
         if (held || verdict.action === "toggle") toggleAutohidePref();
         else hidePanelOnce();
@@ -852,6 +863,7 @@
         document.removeEventListener("click", onPillAutohideClick, true);
         window.removeEventListener("keydown", onPillAutohideKeyDown, true);
         clearPillAutohidePress();
+        pillAutohideConsumedClick = false;
       };
       document.addEventListener("mousedown", onPillAutohideDown, true);
       window.addEventListener("mouseup", onPillAutohideUp, true);

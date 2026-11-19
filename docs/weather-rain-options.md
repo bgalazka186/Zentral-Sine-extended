@@ -86,11 +86,15 @@ short/long rain lines for EN/PL, including `pojutrze`, `~15/30/45 min`,
 wraps or scrolls the outlook instead of clipping it.
 
 `tests/ow-128-weather-rain-timing.test.cjs` is RED on the daily-only source and
-GREEN here (8 passed). The exact `--keep-version` chain is `CHAIN_GREEN`
-(12 packages, `601 Sine preferences`) and the docs-inclusive full suite is
-`293/293 passed; 0 failed` (`323.3 s` combined / `120 s` wall). No live
-Zen/Sine runtime, screenshot, click or visual result is claimed: live timing,
-localization and narrow-card layout remain an OWNER GATE.
+GREEN here (8 passed). A post-batch regression found that the daily fallback
+mistook `precipitation_hours` (a duration) for mm/h intensity. It now marks
+heavy rain only from WMO 65 / 67 / 82, while eight or more precipitation hours
+still produce the all-day phrase; `tests/ow-127-ow-132-regression-sweep.test.cjs`
+pins both the nine-hour WMO 61 light-rain case and the WMO 65 heavy-code case.
+The exact `--keep-version` chain is `CHAIN_GREEN` (12 packages, `601 Sine
+preferences`) and the docs-inclusive full suite is `294/294 passed; 0 failed`.
+No live Zen/Sine runtime, screenshot, click or visual result is claimed: live
+timing, localization and narrow-card layout remain an OWNER GATE.
 
 ## Additional proposals (optional, not implemented)
 

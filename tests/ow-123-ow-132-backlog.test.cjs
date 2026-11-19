@@ -107,7 +107,8 @@ try {
 
   test("8. version and release-loop constraints remain pinned", () => {
     assert.equal(require("../theme.json").version, "3.4.0");
-    assert.match(flatTodo, /Keep the version at 3\.4\.0; never `--bump` or `sync-version`; no ZIP/);
+    assert.match(flatTodo, /Keep the version at 3\.4\.0; never `--bump` or change the version/);
+    assert.match(flatTodo, /tools\/sync-version\.cjs` is only the exact chain's no-op 3\.4\.0 check/);
     assert.match(flatTodo, /No `--bump` \/ `sync-version`/);
   });
 

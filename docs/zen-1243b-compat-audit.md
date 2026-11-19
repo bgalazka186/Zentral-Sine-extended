@@ -63,8 +63,10 @@ live Zen/Sine runtime is available here.
 - Root `theme.json` remains `3.4.0`; generated standalone bundles are rebuilt
   with `--keep-version`.
 - Exact `--keep-version` chain is `CHAIN_GREEN` (12 packages, `601 Sine
-  preferences`) and the docs-inclusive full suite is `293/293 passed; 0 failed`
-  (`323.3 s` combined / `120 s` wall); see `docs/bugfix-2026-11-18.md`.
+  preferences`) and the docs-inclusive full suite is `294/294 passed; 0 failed`;
+  see `docs/bugfix-2026-11-18.md`. The new cross-feature regression sweep adds
+  six static/fake-DOM checks and fixes four batched regressions without changing
+  the Zen 1.24.3b compatibility conclusion.
 - `OW-128`'s Option A source has no hard-coded `Rain tomorrow` English outlook;
   `weatherRainPlan`, `pojutrze` and the bounded rain series are covered
   statically. No live weather rendering is claimed here.

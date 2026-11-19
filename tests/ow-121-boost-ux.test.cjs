@@ -181,7 +181,8 @@ test("per-task report, perf, legacy, handoff and both READMEs record OW-121", ()
   assert.match(read("additional/boost/ZentralBoost.standalone.uc.js"), /lightClean/);
   assert.match(read("additional/widgets/ZentralWidgets.standalone.uc.js"), /boost\.levelLight/);
   assert.match(read("loader/Zentral.uc.js"), /3\.4\.0/);
-  assert.match(read("docs/bugfix-2026-11-18.md"), /no `--bump` or `sync-version`/);
+  assert.match(read("docs/bugfix-2026-11-18.md"), /no `--bump` and no version change/);
+  assert.match(read("docs/bugfix-2026-11-18.md"), /tools\/sync-version\.cjs/);
 });
 
 /* ---------------- helpers ---------------- */
