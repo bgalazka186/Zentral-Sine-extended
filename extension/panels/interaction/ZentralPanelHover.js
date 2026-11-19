@@ -21,7 +21,8 @@
  * Literal DOM event subscriptions: blur; click; contextmenu; focusin; focusout; keydown; mousedown;
  *   mouseup; pointercancel; pointerdown; pointerenter; pointerleave; pointermove; pointerout; pointerover;
  *   pointerup; popuphidden; popupshowing; resize; zentral-notes-request-reveal (document; Notes asks for an
- *   autohidden panel to come back before it docks its sheet inside it)
+ *   autohidden panel to come back before it docks its sheet inside it). The pill autohide recognizer uses only
+ *   pointerdown/move/up/cancel plus click, with a real movement threshold.
  *
  * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
  * contracts from this source, not a promise that every collaborator is enabled at runtime.
@@ -56,10 +57,16 @@
       let hoverRevealLedgeBounds = null;
       const HIDDEN_PANEL_REVEAL_DEFAULT_MS = 160;
       const HIDDEN_PANEL_REVEAL_DEFAULT_WIDTH_PX = 1;
-      // OW-130: short mouse-up hides once; a completed 550 ms hold keeps the old
-      // autohide toggle. The existing Triple/Super-pin long press is untouched.
+      // OW-130 / 3.4.1: a short pointer-up hides once, even when the saved
+      // autohide preference is off; a completed 550 ms hold toggles that
+      // preference. Pointer jitter inside this radius does not cancel either
+      // gesture. The existing Triple/Super-pin long press is untouched.
       const PILL_AUTOHIDE_HOLD_MS = 550;
+      const PILL_AUTOHIDE_MOVE_TOLERANCE_PX = 8;
       const PILL_AUTOHIDE_SELECTOR = "#zen-app-hover-reveal-btn";
+      const PILL_AUTOHIDE_HIDDEN_ONCE_ATTR = "bgalazka-hover-panel-hidden-once";
+      const hoverPanelHiddenOnce = () =>
+        document.documentElement.hasAttribute(PILL_AUTOHIDE_HIDDEN_ONCE_ATTR);
       let hoverResizing = false;
       let hoverHoldUntil = 0;
       let hoverTypingUntil = 0;
@@ -397,7 +404,8 @@
             surface.matches(":hover") &&
             document.hasFocus() &&
             hoverPanelAvailable() &&
-            getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false)
+            (getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) ||
+              hoverPanelHiddenOnce())
           ) {
             // Revealing removes the strip from hit testing. Preserve its ledge
             // until a real pointer movement leaves it, rather than treating the
@@ -465,7 +473,11 @@
         hoverHideTimer = null;
       }
       function extendHoverResizeHold() {
-        if (!getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false)) return;
+        if (
+          !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) &&
+          !hoverPanelHiddenOnce()
+        )
+          return;
         hoverResizing = true;
         hoverHoldUntil = Date.now() + 3200;
         clearHoverHide();
@@ -507,17 +519,34 @@
           root.contains(document.activeElement)
         );
       }
-      function setHoverPanelHidden(hidden) {
+      function setHoverPanelHidden(hidden, opts = {}) {
         clearHoverReveal();
         const root = document.getElementById("zen-app-panel-root");
-        const enabled =
+        const available =
           hoverPanelAvailable() &&
-          getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) === true &&
           root?.hasAttribute("open") &&
           !root.hasAttribute("closing");
-        const shouldHide = !!(enabled && hidden);
-        if (!enabled || shouldHide) releasePanelOutsideTracking();
-        if (!enabled || shouldHide) hoverRevealLedgeBounds = null;
+        const autohideEnabled =
+          available &&
+          getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) === true;
+        // A deliberate short press is a one-shot hide: it must not depend on
+        // the saved preference. The marker also keeps the hidden panel's CSS
+        // and hover-reveal edge active until the panel is brought back.
+        const once = !!opts.once;
+        const oneShot = once && !!hidden && available;
+        const hideAllowed = autohideEnabled || oneShot;
+        const shouldHide = !!(hideAllowed && hidden);
+        const hiddenOnce = shouldHide && oneShot;
+        document.documentElement.toggleAttribute(
+          PILL_AUTOHIDE_HIDDEN_ONCE_ATTR,
+          hiddenOnce,
+        );
+        document.documentElement.toggleAttribute(
+          "bgalazka-hover-panel-enabled",
+          autohideEnabled || hiddenOnce,
+        );
+        if (!hideAllowed || shouldHide) releasePanelOutsideTracking();
+        if (!hideAllowed || shouldHide) hoverRevealLedgeBounds = null;
         const hiddenChanged =
           document.documentElement.hasAttribute(
             "bgalazka-hover-panel-hidden",
@@ -536,7 +565,7 @@
               gBrowser.selectedBrowser?.focus();
             ctx.syncAppPanelBrowserActivity?.();
           } else {
-            if (enabled) {
+            if (autohideEnabled) {
               apps?.startPositionTracking?.();
               ctx.requestPanelActivity?.();
             }
@@ -573,30 +602,28 @@
       function syncHoverPanelAvailability() {
         ensureAutohidePanelPinned();
         const available = hoverPanelAvailable();
+        const autohideEnabled =
+          getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) === true;
+        const hiddenOnce = hoverPanelHiddenOnce();
         const btn = document.getElementById("zen-app-hover-reveal-btn");
         if (btn) {
           btn.hidden = getPref(BGALAZKA_EXT_PREFS.HIDE_HOVER_REVEAL_BTN, false);
           btn.disabled = false;
-          btn.title = "Toggle panel autohide";
+          btn.title =
+            "Toggle panel autohide (click: hide once; hold: on/off)";
           btn.setAttribute("aria-label", btn.title);
           btn.removeAttribute("data-hold-active");
-          btn.setAttribute(
-            "data-active",
-            getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false)
-              ? "true"
-              : "false",
-          );
+          btn.setAttribute("data-active", autohideEnabled ? "true" : "false");
           btn.setAttribute("aria-pressed", btn.dataset.active);
+          btn.setAttribute("data-once-hidden", hiddenOnce ? "true" : "false");
         }
         document.documentElement.toggleAttribute(
           "bgalazka-hover-panel-enabled",
-          available &&
-            getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) === true,
+          available && (autohideEnabled || hiddenOnce),
         );
-        if (
-          !available ||
-          !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false)
-        ) {
+        // Turning the preference off reveals an ordinary autohidden panel. A
+        // deliberate one-shot hide stays hidden until its reveal edge is used.
+        if (!available || (!autohideEnabled && !hiddenOnce)) {
           releasePanelOutsideTracking();
           clearHoverHide();
           setHoverPanelHidden(false);
@@ -653,7 +680,8 @@
       const onAppsBarPanelPointerOver = (event) => {
         if (
           !appsBarHoverSurface(event) ||
-          !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false)
+          (!getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) &&
+            !hoverPanelHiddenOnce())
         )
           return;
         const root = document.getElementById("zen-app-panel-root");
@@ -753,27 +781,60 @@
         const downAt = typeof opts.downAt === "number" ? opts.downAt : NaN;
         const upAt = typeof opts.upAt === "number" ? opts.upAt : NaN;
         const requestedHold = Number(opts.holdMs);
-        const holdMs = Number.isFinite(requestedHold) && requestedHold >= 0
-          ? requestedHold
-          : 550;
-        const valid = Number.isFinite(downAt) && Number.isFinite(upAt) && !opts.moved && !opts.cancelled && upAt >= downAt;
+        const holdMs =
+          Number.isFinite(requestedHold) && requestedHold >= 0
+            ? requestedHold
+            : 550;
+        const valid =
+          Number.isFinite(downAt) &&
+          Number.isFinite(upAt) &&
+          !opts.moved &&
+          !opts.cancelled &&
+          upAt >= downAt;
         const pressedMs = valid ? Math.max(0, Math.round(upAt - downAt)) : 0;
         const held = valid && pressedMs >= holdMs;
         const action = !valid ? "none" : held ? "toggle" : "hide-once";
         return { action, held, pressedMs };
       }
+      function pillPointerMovement(opts = {}) {
+        const finite = (value) =>
+          typeof value === "number" && Number.isFinite(value);
+        const startX = finite(opts.startX) ? opts.startX : NaN;
+        const startY = finite(opts.startY) ? opts.startY : NaN;
+        const x = finite(opts.x) ? opts.x : NaN;
+        const y = finite(opts.y) ? opts.y : NaN;
+        const tolerancePx =
+          finite(opts.tolerancePx) && opts.tolerancePx >= 0
+            ? opts.tolerancePx
+            : 8;
+        const hasCoords = finite(startX) && finite(startY) && finite(x) && finite(y);
+        const distancePx = hasCoords ? Math.hypot(x - startX, y - startY) : 0;
+        return {
+          moved: hasCoords && distancePx > tolerancePx,
+          distancePx: Math.round(distancePx * 100) / 100,
+        };
+      }
       // <<OW-130 GESTURE END>>
+      let lastAutohidePref =
+        getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) === true;
       let pillAutohidePress = null;
       let pillAutohideConsumedClick = false;
+      let pillAutohideSuppressClick = false;
+      const pillPointerMatches = (press, event) =>
+        press.pointerId == null ||
+        event?.pointerId == null ||
+        press.pointerId === event.pointerId;
       function hidePanelOnce() {
         clearHoverHide();
-        setHoverPanelHidden(true);
+        setHoverPanelHidden(true, { once: true });
       }
       function toggleAutohidePref() {
         const next = !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false);
+        lastAutohidePref = next;
         setPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, next);
-        // Enabling leaves the currently visible panel alone; the next pointer
-        // exit toward the webpage decides when to hide it.
+        // Disabling the preference brings the panel back. Enabling leaves a
+        // one-shot hidden panel hidden; the next genuine pointer exit owns it.
+        if (!next) setHoverPanelHidden(false);
         syncHoverPanelAvailability();
       }
       function clearPillAutohidePress() {
@@ -792,7 +853,26 @@
         const target = pillAutohideTarget(event);
         if (!target) return;
         clearPillAutohidePress();
-        const press = { downAt: Date.now(), target, moved: false, cancelled: false, held: false, timer: null };
+        pillAutohideConsumedClick = false;
+        pillAutohideSuppressClick = false;
+        const press = {
+          downAt: Date.now(),
+          target,
+          pointerId:
+            typeof event.pointerId === "number" ? event.pointerId : null,
+          startX:
+            typeof event.clientX === "number" && Number.isFinite(event.clientX)
+              ? event.clientX
+              : null,
+          startY:
+            typeof event.clientY === "number" && Number.isFinite(event.clientY)
+              ? event.clientY
+              : null,
+          moved: false,
+          cancelled: false,
+          held: false,
+          timer: null,
+        };
         pillAutohidePress = press;
         press.timer = setTimeout(() => {
           if (pillAutohidePress !== press) return;
@@ -800,20 +880,29 @@
           press.target.setAttribute("data-hold-active", "true");
         }, PILL_AUTOHIDE_HOLD_MS);
       };
-      const onPillAutohideMove = (event) => {
+      const onPillAutohideCancel = (event) => {
         const press = pillAutohidePress;
-        if (!press || !event.isTrusted && event.type === "mousemove") return;
-        if (!event.target?.closest?.(PILL_AUTOHIDE_SELECTOR)) {
-          onPillAutohideCancel();
-          return;
-        }
-        press.moved = true;
-        onPillAutohideCancel();
-      };
-      const onPillAutohideCancel = () => {
-        if (pillAutohidePress) pillAutohidePress.cancelled = true;
+        if (press && !pillPointerMatches(press, event)) return;
+        const hadPress = !!press;
+        if (press) press.cancelled = true;
         clearPillAutohidePress();
         pillAutohideConsumedClick = false;
+        pillAutohideSuppressClick = hadPress;
+      };
+      const onPillAutohideMove = (event) => {
+        const press = pillAutohidePress;
+        if (!press || !pillPointerMatches(press, event)) return;
+        // A zero-delta or sub-threshold pointermove is jitter, not a drag.
+        const movement = pillPointerMovement({
+          startX: press.startX,
+          startY: press.startY,
+          x: event.clientX,
+          y: event.clientY,
+          tolerancePx: PILL_AUTOHIDE_MOVE_TOLERANCE_PX,
+        });
+        if (!movement.moved) return;
+        press.moved = true;
+        onPillAutohideCancel(event);
       };
       const onPillAutohideUp = (event) => {
         const press = pillAutohidePress;
@@ -821,21 +910,32 @@
           pillAutohideConsumedClick = false;
           return;
         }
-        if (!event.target?.closest?.(PILL_AUTOHIDE_SELECTOR)) {
-          onPillAutohideCancel();
+        if (!pillPointerMatches(press, event)) return;
+        if (!pillAutohideTarget(event)) {
+          onPillAutohideCancel(event);
           return;
         }
+        const release = pillPointerMovement({
+          startX: press.startX,
+          startY: press.startY,
+          x: event.clientX,
+          y: event.clientY,
+          tolerancePx: PILL_AUTOHIDE_MOVE_TOLERANCE_PX,
+        });
         const verdict = classifyPillAutohideGesture({
           downAt: press.downAt,
           upAt: Date.now(),
-          moved: press.moved,
-          cancelled: press.cancelled || event.button !== 0,
+          moved: press.moved || release.moved,
+          cancelled:
+            press.cancelled ||
+            (typeof event.button === "number" && event.button !== 0),
           holdMs: PILL_AUTOHIDE_HOLD_MS,
         });
         const held = press.held || verdict.held;
         clearPillAutohidePress();
         if (verdict.action === "none") {
           pillAutohideConsumedClick = false;
+          pillAutohideSuppressClick = true;
           return;
         }
         pillAutohideConsumedClick = true;
@@ -843,31 +943,45 @@
         else hidePanelOnce();
       };
       const onPillAutohideClick = (event) => {
-        if (!pillAutohideTarget(event)) return;
-        if (pillAutohideConsumedClick) {
+        if (!pillAutohideTarget(event)) {
           pillAutohideConsumedClick = false;
+          pillAutohideSuppressClick = false;
+          return;
+        }
+        if (pillAutohideConsumedClick || pillAutohideSuppressClick) {
+          pillAutohideConsumedClick = false;
+          pillAutohideSuppressClick = false;
           event.preventDefault();
           event.stopPropagation();
           event.stopImmediatePropagation?.();
+          return;
         }
+        // A plain click, keyboard activation or a synthetic click without a
+        // pointerdown/up pair is the one-shot hide.
+        hidePanelOnce();
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation?.();
       };
       const onPillAutohideKeyDown = (event) => {
-        if (event.key === "Escape" || event.key === "Esc") onPillAutohideCancel();
+        if (event.key === "Escape" || event.key === "Esc")
+          onPillAutohideCancel(event);
       };
       const removePillAutohideListeners = () => {
-        document.removeEventListener("mousedown", onPillAutohideDown, true);
-        window.removeEventListener("mouseup", onPillAutohideUp, true);
-        document.removeEventListener("mousemove", onPillAutohideMove, true);
+        document.removeEventListener("pointerdown", onPillAutohideDown, true);
+        window.removeEventListener("pointerup", onPillAutohideUp, true);
+        window.removeEventListener("pointermove", onPillAutohideMove, true);
         window.removeEventListener("pointercancel", onPillAutohideCancel, true);
         window.removeEventListener("blur", onPillAutohideCancel, true);
         document.removeEventListener("click", onPillAutohideClick, true);
         window.removeEventListener("keydown", onPillAutohideKeyDown, true);
         clearPillAutohidePress();
         pillAutohideConsumedClick = false;
+        pillAutohideSuppressClick = false;
       };
-      document.addEventListener("mousedown", onPillAutohideDown, true);
-      window.addEventListener("mouseup", onPillAutohideUp, true);
-      document.addEventListener("mousemove", onPillAutohideMove, true);
+      document.addEventListener("pointerdown", onPillAutohideDown, true);
+      window.addEventListener("pointerup", onPillAutohideUp, true);
+      window.addEventListener("pointermove", onPillAutohideMove, true);
       window.addEventListener("pointercancel", onPillAutohideCancel, true);
       window.addEventListener("blur", onPillAutohideCancel, true);
       document.addEventListener("click", onPillAutohideClick, true);
@@ -1023,7 +1137,8 @@
       };
       const onHoverPopupShowing = (event) => {
         if (
-          !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) ||
+          (!getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) &&
+            !hoverPanelHiddenOnce()) ||
           !document
             .getElementById("zen-app-panel-root")
             ?.hasAttribute("open") ||
@@ -1105,6 +1220,12 @@
         );
       }
       const onHoverPrefChange = () => {
+        const enabled =
+          getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) === true;
+        // A preference turned off from Settings reveals the panel even when a
+        // one-shot hide marker is present; enabling it preserves that hide.
+        if (lastAutohidePref && !enabled) setHoverPanelHidden(false);
+        lastAutohidePref = enabled;
         clearHoverReveal();
         hoverRevealLedgeBounds = null;
         syncHoverPanelAvailability();
@@ -1179,6 +1300,9 @@
           "bgalazka-hover-panel-enabled",
         );
         document.documentElement.removeAttribute("bgalazka-hover-panel-hidden");
+        document.documentElement.removeAttribute(
+          PILL_AUTOHIDE_HIDDEN_ONCE_ATTR,
+        );
         window.Zentral?.Apps?.syncPanelAutohideVisibility?.();
       });
 

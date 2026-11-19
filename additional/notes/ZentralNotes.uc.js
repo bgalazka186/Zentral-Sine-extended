@@ -15,7 +15,8 @@
  * Layout: store (files) -> pure core (format, markdown, edit helpers) -> sheet UI -> bar/host bindings.
  * Registration: notes
  * Loaded/created by: loader/ZentralCatalog.js
- * Literal DOM event subscriptions: unload
+ * Literal DOM event subscriptions: unload; pointerdown; pointermove; pointerup; pointercancel; click; keydown; blur.
+ *   The standalone card pill's autohide recognizer is pointer-based with an 8 px movement threshold.
  *
  * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
  * contracts from this source, not a promise that every collaborator is enabled at runtime.
@@ -7864,6 +7865,210 @@
         },
       };
     }
+    // 3.4.1: the pill autohide gesture is pointer-based and movement-thresholded.
+    // A short press hides once even when the saved preference is off; a 550 ms
+    // hold toggles the preference. This is pure so both the full pack and the
+    // standalone bundle can be tested without a live Gecko pointer.
+    const PILL_AUTOHIDE_HOLD_MS = 550;
+    const PILL_AUTOHIDE_MOVE_TOLERANCE_PX = 8;
+    const PANEL_HIDDEN_ONCE_ATTR = "bgalazka-hover-panel-hidden-once";
+    function zentralPanelHidden(root) {
+      return (
+        !!root?.hasAttribute?.("bgalazka-hover-panel-hidden") &&
+        (root.hasAttribute("bgalazka-hover-panel-enabled") ||
+          root.hasAttribute(PANEL_HIDDEN_ONCE_ATTR))
+      );
+    }
+    function classifyPillAutohideGesture(opts = {}) {
+      const downAt = typeof opts.downAt === "number" ? opts.downAt : NaN;
+      const upAt = typeof opts.upAt === "number" ? opts.upAt : NaN;
+      const requestedHold = Number(opts.holdMs);
+      const holdMs =
+        Number.isFinite(requestedHold) && requestedHold >= 0
+          ? requestedHold
+          : PILL_AUTOHIDE_HOLD_MS;
+      const valid =
+        Number.isFinite(downAt) &&
+        Number.isFinite(upAt) &&
+        !opts.moved &&
+        !opts.cancelled &&
+        upAt >= downAt;
+      const pressedMs = valid ? Math.max(0, Math.round(upAt - downAt)) : 0;
+      const held = valid && pressedMs >= holdMs;
+      return { action: !valid ? "none" : held ? "toggle" : "hide-once", held, pressedMs };
+    }
+    function pillPointerMovement(opts = {}) {
+      const finite = (value) => typeof value === "number" && Number.isFinite(value);
+      const startX = finite(opts.startX) ? opts.startX : NaN;
+      const startY = finite(opts.startY) ? opts.startY : NaN;
+      const x = finite(opts.x) ? opts.x : NaN;
+      const y = finite(opts.y) ? opts.y : NaN;
+      const tolerancePx =
+        finite(opts.tolerancePx) && opts.tolerancePx >= 0
+          ? opts.tolerancePx
+          : PILL_AUTOHIDE_MOVE_TOLERANCE_PX;
+      const hasCoords = finite(startX) && finite(startY) && finite(x) && finite(y);
+      const distancePx = hasCoords ? Math.hypot(x - startX, y - startY) : 0;
+      return {
+        moved: hasCoords && distancePx > tolerancePx,
+        distancePx: Math.round(distancePx * 100) / 100,
+      };
+    }
+    function createPillAutohideGesture({
+      ms = PILL_AUTOHIDE_HOLD_MS,
+      tolerancePx = PILL_AUTOHIDE_MOVE_TOLERANCE_PX,
+      now = () => Date.now(),
+      setTimer = () => 0,
+      clearTimer = () => {},
+      setHoldActive = () => {},
+      onHideOnce = () => {},
+      onToggle = () => {},
+    } = {}) {
+      let press = null;
+      let consumedClick = false;
+      let suppressClick = false;
+      const samePointer = (event) =>
+        press?.pointerId == null ||
+        event?.pointerId == null ||
+        press.pointerId === event.pointerId;
+      const clearPress = () => {
+        const active = press;
+        press = null;
+        if (!active) return;
+        if (active.timer != null) clearTimer(active.timer);
+        setHoldActive(false);
+      };
+      const cancel = (event) => {
+        if (press && !samePointer(event)) return;
+        const hadPress = !!press;
+        if (press) press.cancelled = true;
+        clearPress();
+        consumedClick = false;
+        suppressClick = hadPress;
+      };
+      return {
+        down(event) {
+          if (
+            event?.isTrusted === false ||
+            (typeof event?.button === "number" && event.button !== 0)
+          )
+            return;
+          clearPress();
+          consumedClick = false;
+          suppressClick = false;
+          const active = {
+            downAt: now(),
+            pointerId:
+              typeof event?.pointerId === "number" ? event.pointerId : null,
+            startX:
+              typeof event?.clientX === "number" && Number.isFinite(event.clientX)
+                ? event.clientX
+                : null,
+            startY:
+              typeof event?.clientY === "number" && Number.isFinite(event.clientY)
+                ? event.clientY
+                : null,
+            moved: false,
+            cancelled: false,
+            held: false,
+            timer: null,
+          };
+          press = active;
+          active.timer = setTimer(() => {
+            if (press !== active) return;
+            active.held = true;
+            setHoldActive(true);
+          }, ms);
+        },
+        move(event) {
+          if (!press || !samePointer(event)) return;
+          const movement = pillPointerMovement({
+            startX: press.startX,
+            startY: press.startY,
+            x: event?.clientX,
+            y: event?.clientY,
+            tolerancePx,
+          });
+          if (!movement.moved) return;
+          press.moved = true;
+          cancel(event);
+        },
+        up(event) {
+          if (!press) {
+            consumedClick = false;
+            return;
+          }
+          if (!samePointer(event)) return;
+          const active = press;
+          const release = pillPointerMovement({
+            startX: active.startX,
+            startY: active.startY,
+            x: event?.clientX,
+            y: event?.clientY,
+            tolerancePx,
+          });
+          const verdict = classifyPillAutohideGesture({
+            downAt: active.downAt,
+            upAt: now(),
+            moved: active.moved || release.moved,
+            cancelled:
+              active.cancelled ||
+              (typeof event?.button === "number" && event.button !== 0),
+            holdMs: ms,
+          });
+          const held = active.held || verdict.held;
+          clearPress();
+          if (verdict.action === "none") {
+            consumedClick = false;
+            suppressClick = true;
+            return;
+          }
+          consumedClick = true;
+          if (held || verdict.action === "toggle") onToggle();
+          else onHideOnce();
+        },
+        click(event) {
+          if (consumedClick) {
+            consumedClick = false;
+            event?.preventDefault?.();
+            event?.stopPropagation?.();
+            event?.stopImmediatePropagation?.();
+            return false;
+          }
+          if (suppressClick) {
+            suppressClick = false;
+            event?.preventDefault?.();
+            event?.stopPropagation?.();
+            event?.stopImmediatePropagation?.();
+            return false;
+          }
+          // A plain click (including assistive activation and a synthetic test
+          // click without pointerdown/up) is the one-shot hide. A completed
+          // pointer gesture consumed its click above.
+          onHideOnce();
+          event?.preventDefault?.();
+          event?.stopPropagation?.();
+          event?.stopImmediatePropagation?.();
+          return false;
+        },
+        cancel,
+        destroy() {
+          clearPress();
+          consumedClick = false;
+          suppressClick = false;
+        },
+        get press() {
+          return press;
+        },
+        get consumedClick() {
+          return consumedClick;
+        },
+        get suppressClick() {
+          return suppressClick;
+        },
+      };
+    }
+
     // Most recently opened note first, no duplicates, at most `max`.
     const pushRecent = (list, id, max = MAX_RECENT) => [id, ...(list || []).filter((x) => x !== id)].slice(0, max);
     const cleanRecent = (raw) =>
@@ -16622,6 +16827,8 @@
         alignDelim, buildImage, insertImageMd, pastedWebAddress, CODE_LANGS, CALLOUT_KINDS, CALLOUT_FOLDABLE, calloutMemory, calloutId, insertCallout,
         HIDEABLE_TOOLS, parseHidden, serializeHidden, applyTreeSelection, resolveTreeSelection, cleanBatchTag, appendTagToBody,
         normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, clearOfRect, sideOf, createHoldAction,
+        PILL_AUTOHIDE_HOLD_MS, PILL_AUTOHIDE_MOVE_TOLERANCE_PX, PANEL_HIDDEN_ONCE_ATTR, zentralPanelHidden,
+        classifyPillAutohideGesture, pillPointerMovement, createPillAutohideGesture,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, cleanSlotPx, cleanCardPx, cleanCardShare, resolveSlotHeight, resolveCardHeight, hasStartupPanelPref, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, gapPageFloor, gapMaxPx, clampGapPx, GAP_PANEL_MIN_PX, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
@@ -17383,6 +17590,7 @@
       let dialog = null; // export notice
       let activeDatePicker = null; // one shared calendar popup per Notes sheet
       let collapsed = false; // hover mode: open but folded away; only the thin real strip stays in layout
+      let hiddenOnceCard = false; // 3.4.1: a click hides this card once without changing card_autohide
       let revealEl = null;
       let panelHiddenObserver = null;
       let panelHiddenObserverOff = null;
@@ -30265,9 +30473,12 @@
       // dock / detach), larger, autohide (docked only), close. A separate element beside the card (the card
       // clips its own children), placed on the side that has room.
       const cardFree = () => !!adapter.cardMode && adapter.geoKey === "float";
+      const canHideCardOnce = () => !!dockedSide() && store.meta.size !== "span";
       let pillEl = null;
       const pillBtn = {};
       let holdMove = null;
+      let pillHideGesture = null;
+      const pillHideOffs = [];
       let pillOffLive = null; // live vertical place while the handle is dragged (percent, -50..50)
       let pillSideLock = ""; // keeps the pill's side steady during a gesture
       let lastRect = null; // the card's last placed rectangle (the pill is re-placed from it)
@@ -30319,7 +30530,7 @@
         const pin = mk("pin", "pin", "Keep open");
         const push = mk("push", "push", "Push the page aside");
         const move = mk("move", "move", "Move / resize");
-        const hide = mk("hide", "hide", "Autohide");
+        const hide = mk("hide", "hide", "Toggle card autohide (click: hide once; hold: on/off)");
         const size = mk("size", "expand", "Fill the whole area");
         // Grabber: drag sideways to resize the card, up or down to slide the pill along it.
         const grab = h("div", { class: "zn-pill-grab", title: "Drag sideways to resize; up or down to move this bar", "aria-label": "Resize or move the bar" });
@@ -30346,13 +30557,69 @@
           syncPill();
           scheduleLayout();
         });
-        listen(hide, "click", () => {
-          if (!dockedSide()) return flash("Autohide needs the card docked to an edge: drag it past the edge or hold the move button", 3500);
-          setPref(PREF.CARD_AUTOHIDE, !getPref(PREF.CARD_AUTOHIDE, false));
+        const hideCardOnce = () => {
+          if (!canHideCardOnce())
+            return flash(
+              "Hide once needs the card docked at an edge: drag it past the edge or hold the move button",
+              3500,
+            );
+          hiddenOnceCard = true;
+          collapse();
+          syncPill();
+          scheduleLayout();
+        };
+        const toggleCardAutohide = () => {
+          if (!canHideCardOnce())
+            return flash(
+              "Autohide needs the card docked at an edge: drag it past the edge or hold the move button",
+              3500,
+            );
+          const next = !getPref(PREF.CARD_AUTOHIDE, false);
+          hiddenOnceCard = false;
+          if (collapsed) expand(false);
+          setPref(PREF.CARD_AUTOHIDE, next);
           syncPill();
           scheduleLayout();
           armGrace();
+        };
+        pillHideGesture = createPillAutohideGesture({
+          setTimer: (fn, ms) => resources.setTimeout("pill-hide-hold", fn, ms),
+          clearTimer: (id) => resources.clearTimeout(id),
+          setHoldActive: (active) => {
+            if (active) hide.setAttribute("data-hold-active", "true");
+            else hide.removeAttribute("data-hold-active");
+          },
+          onHideOnce: hideCardOnce,
+          onToggle: toggleCardAutohide,
         });
+        pillHideOffs.push(
+          listen(hide, "pointerdown", (e) => pillHideGesture.down(e), true),
+        );
+        pillHideOffs.push(
+          listen(hide, "click", (e) => pillHideGesture.click(e), true),
+        );
+        pillHideOffs.push(
+          listen(window, "pointermove", (e) => pillHideGesture.move(e), true),
+        );
+        pillHideOffs.push(
+          listen(window, "pointerup", (e) => pillHideGesture.up(e), true),
+        );
+        pillHideOffs.push(
+          listen(window, "pointercancel", (e) => pillHideGesture.cancel(e), true),
+        );
+        pillHideOffs.push(
+          listen(window, "blur", (e) => pillHideGesture.cancel(e), true),
+        );
+        pillHideOffs.push(
+          listen(
+            window,
+            "keydown",
+            (e) => {
+              if (e.key === "Escape" || e.key === "Esc") pillHideGesture.cancel(e);
+            },
+            true,
+          ),
+        );
         listen(size, "click", () => toggleSpan());
         listen(close2, "click", () => close());
         // Pin = keep open (the header's pin): it stays when something outside is clicked.
@@ -30405,7 +30672,18 @@
         set("move", { on: root.dataset.handles === "all", title: "Move / resize: click toggles all-side handles; drag moves the card (past an edge it docks); hold to dock / detach" });
         set("size", { on: big, title: big ? "Back to the normal size" : "Fill the whole area" });
         pillBtn.size.replaceChildren(panelIcon(big ? "collapse" : "expand"));
-        set("hide", { on: !!docked && !!getPref(PREF.CARD_AUTOHIDE, false), off: !docked, title: docked ? "Autohide: hide at the edge, show on hover" : "Autohide is unavailable while the card is detached. Dock it first." });
+        const canHide = canHideCardOnce();
+        set("hide", {
+          on: canHide && !!getPref(PREF.CARD_AUTOHIDE, false),
+          off: !canHide,
+          title: canHide
+            ? "Toggle card autohide (click: hide once; hold: on/off)"
+            : "Autohide is unavailable while the card is detached or enlarged. Dock it at its normal size first.",
+        });
+        if (pillBtn.hide) {
+          if (hiddenOnceCard) pillBtn.hide.setAttribute("data-once-hidden", "true");
+          else pillBtn.hide.removeAttribute("data-once-hidden");
+        }
         const kept = keptOpen();
         const autoKept = kept && store.meta.pinned === false;
         set("pin", { on: kept, off: autoKept, title: autoKept ? "Autohide keeps the card open when something outside is clicked (it acts as pinned)." : kept ? "Pinned: stays open when something outside is clicked. Click to unpin." : "Click to pin: keep the card open when something outside is clicked." });
@@ -30441,6 +30719,11 @@
       }
       function dropPill() {
         holdMove?.cancel?.();
+        pillHideGesture?.destroy();
+        pillHideGesture = null;
+        for (const off of pillHideOffs.splice(0)) {
+          try { off(); } catch (_) {}
+        }
         pillOffLive = null;
         pillSideLock = "";
         pillEl?.remove();
@@ -30454,7 +30737,12 @@
       // focus is inside, a menu or dialog is open, a drag runs or the pointer is down.
       // Autohide: a panel-hosted sheet in hover mode, or a card docked to an edge with card_autohide on.
       function cardHides() {
-        return !!adapter.cardMode && !!cleanCardDock(store.meta.cardDock) && !!getPref(PREF.CARD_AUTOHIDE, false) && store.meta.size !== "span";
+        return (
+          !!adapter.cardMode &&
+          !!cleanCardDock(store.meta.cardDock) &&
+          store.meta.size !== "span" &&
+          (hiddenOnceCard || !!getPref(PREF.CARD_AUTOHIDE, false))
+        );
       }
       // The card counts as pinned while it autohides: a card folded away cannot be seen, so closing it for a click
       // elsewhere would only be confusing (the panel does the same). The saved pin comes back when autohide is off.
@@ -30608,7 +30896,11 @@
         panelHiddenObserver = new MutationObserver(syncParentPanelHidden);
         panelHiddenObserver.observe(document.documentElement, {
           attributes: true,
-          attributeFilter: ["bgalazka-hover-panel-enabled", "bgalazka-hover-panel-hidden"],
+          attributeFilter: [
+            "bgalazka-hover-panel-enabled",
+            "bgalazka-hover-panel-hidden",
+            PANEL_HIDDEN_ONCE_ATTR,
+          ],
         });
         panelHiddenObserverOff = resources.observer("sheet:parentPanelMO", "MutationObserver", () => panelHiddenObserver?.disconnect());
         syncParentPanelHidden();
@@ -30719,6 +31011,7 @@
       function expand(fromHover) {
         window.clearTimeout(openTimer);
         openTimer = 0;
+        hiddenOnceCard = false;
         if (!collapsed) return;
         collapsed = false;
         delete root.dataset.collapsed;
@@ -31030,6 +31323,7 @@
         dragNoteId = "";
         calendarMoveUndo = null;
         collapsed = false;
+        hiddenOnceCard = false;
         unwatchParentPanelHidden();
         delete root.dataset.collapsed;
         dropReveal();
@@ -31658,8 +31952,7 @@
         },
         // True while the Zentral panel is slid away by its own "hide when not hovered" (its bars stay in the DOM).
         panelHidden() {
-          const r = document.documentElement;
-          return r.hasAttribute("bgalazka-hover-panel-enabled") && r.hasAttribute("bgalazka-hover-panel-hidden");
+          return zentralPanelHidden(document.documentElement);
         },
         setActive(on, { strip = false } = {}) {
           if (!on) {
@@ -36935,8 +37228,7 @@
       // the user cannot see it: the shortcut then opens the standalone (floating) sheet as if no
       // panel were open.
       function panelsHidden() {
-        const r = document.documentElement;
-        return r.hasAttribute("bgalazka-hover-panel-enabled") && r.hasAttribute("bgalazka-hover-panel-hidden");
+        return zentralPanelHidden(document.documentElement);
       }
       // (The old "reveal strip" along the top of a panel is gone: hover reveal now lives in the hidden sheet's own
       // band and in the Zentral panel's hover zone, and a second hover system made a second Notes appear, S6 B2.)

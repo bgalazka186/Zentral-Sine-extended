@@ -19,11 +19,13 @@ const read = (rel) => fs.readFileSync(path.join(REPO, rel), "utf8");
 const DENSITY = "additional/tabs/ZentralTabDensity.css";
 const NOTES_CSS = "additional/notes/ZentralNotes.css";
 // Byte-for-byte snapshot of the compact-tabs feature immediately BEFORE the rejected
-// 04be3bae patch. A legitimate future compact-tabs change must update this guard on purpose.
+// 04be3bae patch. The generated standalone bundle hash was refreshed for the explicit
+// 3.4.1 version bump only; the compact-tabs source and density CSS remain unchanged.
+// A legitimate future compact-tabs change must update this guard on purpose.
 const COMPACT_SNAPSHOT = {
   "additional/tabs/ZentralTabDensity.css": "5b5fb92e063fe783e150427ff03e0e0cdf5e763a60be8a571be38327d2904092",
   "additional/tabs/compact-hover/ZentralCompactHover.uc.js": "18c4950fb8ba45d318c1b9d71fad79f580059942d86ae36128a3cc192dc4c089",
-  "additional/tabs/compact-hover/ZentralCompactHover.standalone.uc.js": "80183a7d5fb7dfcec72a7e5191f3f9588904cf34a32ad2d3459e1e9176202aba",
+  "additional/tabs/compact-hover/ZentralCompactHover.standalone.uc.js": "c48c14d003ea693154b9dd0ad7e4b13aaeeb98fd945e6aa9987dea5555d83eda",
 };
 
 const sha256 = (rel) => crypto.createHash("sha256").update(read(rel)).digest("hex");

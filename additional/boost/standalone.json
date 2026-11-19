@@ -3,7 +3,7 @@
   "themeId": "zentral-boost",
   "name": "Zentral Boost",
   "description": "Read browser RAM on demand and give memory back without closing anything. Standalone part of Zentral Extended.",
-  "version": "3.4.0",
+  "version": "3.4.1",
   "entry": "ZentralBoost.uc.js",
   "output": "ZentralBoost.standalone.uc.js",
   "settings": "settings.json",

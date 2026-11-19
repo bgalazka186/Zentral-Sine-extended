@@ -1,8 +1,4 @@
 {
-  "version": "3.4.0",
-<<<<<<< HEAD
-  "hash": "3f3f2df78611c470f83abe6a200544d725d22fb2ae54da8e7e04c67fe79aafab"
-=======
-  "hash": "752dbf384556172eede3f6655f3e1d0beeb5c9406b4fdd44dbf23c19e7f0b2d5"
->>>>>>> c9a40c9f63370ac412ebec7b7a750cb1114f2c92
+  "version": "3.4.1",
+  "hash": "e8a2e332791ace28c8f5eff6ffb27c65c6e34096516e959e207a86d78308a9fc"
 }

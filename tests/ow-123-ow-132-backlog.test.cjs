@@ -86,7 +86,7 @@ try {
 
   test("7. clock quick note, pill menu, reminder color and DEMO colors keep their explicit contracts", () => {
     assert.match(flatTodo, /hidden until a small\s+bottom-right chevron/);
-    assert.match(flatTodo, /mouse-up applies hide\s+once, hold preserves the old toggle behavior/);
+    assert.match(flatTodo, /short pointer-up or click applies hide\s+once, even when autohide is off; hold toggles the\s+saved preference/);
     assert.match(flatTodo, /inherits the\s+category color but allows another color while keeping the category/);
     assert.match(flatTodo, /stable per-demo color to each `DEMO_NOTES` entry/);
     assert.match(flatTodo, /do not change existing installed demo\s+notes on reinstall/);
@@ -106,9 +106,10 @@ try {
   });
 
   test("8. version and release-loop constraints remain pinned", () => {
-    assert.equal(require("../theme.json").version, "3.4.0");
-    assert.match(flatTodo, /Keep the version at 3\.4\.0; never `--bump` or change the version/);
-    assert.match(flatTodo, /tools\/sync-version\.cjs` is only the exact chain's no-op 3\.4\.0 check/);
+    assert.equal(require("../theme.json").version, "3.4.1");
+    assert.match(flatTodo, /Keep the project version at 3\.4\.1 until the owner explicitly says otherwise/);
+    assert.match(flatTodo, /Keep the version at 3\.4\.1; the explicit `tools\/sync-version\.cjs --set 3\.4\.1` bump is already applied/);
+    assert.match(flatTodo, /Do not run plain `--bump` or a second version change/);
     assert.match(flatTodo, /No `--bump` \/ `sync-version`/);
   });
 
