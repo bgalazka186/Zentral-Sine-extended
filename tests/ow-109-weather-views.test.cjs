@@ -126,12 +126,12 @@ test("weatherViewParts keeps actual Today/Tomorrow descriptions and compact date
 });
 
 test("Week view shows all seven forecast rows without an inner scroll area", () => {
-  const rule = WIDGETS_CSS.match(
-    /#zentral-sidebar-widgets \\.zw-weather\\[data-zw-weather-view="week"\\] \\.zw-weather-outlook\\s*\\{([^}]*)\\}/,
-  );
-  assert.ok(rule, "Week view has its own outlook layout rule");
-  assert.match(rule[1], /max-height:\\s*none\\s*!important/, "the seven rows are not height-capped");
-  assert.match(rule[1], /overflow:\\s*visible\\s*!important/, "the outlook does not scroll internally");
+  const start = WIDGETS_CSS.indexOf('#zentral-sidebar-widgets .zw-weather[data-zw-weather-view="week"] .zw-weather-outlook {');
+  assert.ok(start >= 0, "Week view has its own outlook layout rule");
+  const end = WIDGETS_CSS.indexOf("}", start);
+  const rule = WIDGETS_CSS.slice(start, end);
+  assert.ok(rule.includes("max-height: none !important;"), "the seven rows are not height-capped");
+  assert.ok(rule.includes("overflow: visible !important;"), "the outlook does not scroll internally");
 });
 
 (async () => {
