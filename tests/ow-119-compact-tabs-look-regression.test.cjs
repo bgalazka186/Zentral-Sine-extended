@@ -98,6 +98,9 @@ test("the CSS audit separates compact overrides from Notes-owned visual rules", 
   assert.ok(report.visual.length >= 4, "Notes-owned OW-116 visual rules are listed separately");
   assert.ok(report.visual.every((r) => r.file === NOTES_CSS), "visual rules are not in the compact-tabs stylesheet");
   assert.ok(report.visual.every((r) => r.matches === false && r.kind === "visual"), "visual rules do not count as compact-density matches");
+  assert.ok(report.placeholderLayout.length >= 42, "OW-120 placeholder geometry rules are listed separately");
+  assert.ok(report.placeholderLayout.every((r) => r.file === NOTES_CSS && r.matches === false && r.kind === "placeholder-layout"),
+    "OW-120 rules are Notes-owned and do not become compact-density matches");
   assert.equal(read("docs/ow-114-pending-css-audit.md"), format(report), "generated audit report is current");
 });
 

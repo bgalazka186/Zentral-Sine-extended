@@ -134,6 +134,12 @@ test("Notes-owned pending visual rules clear grayscale without touching compact-
   assert.ok(visual.every((r) => r.file === "additional/notes/ZentralNotes.css"), "visual rules live in Notes' CSS");
   assert.equal(report.overrides.length, 8, "the eight compact OW-114 overrides are unchanged");
   assert.ok(report.overrides.every((r) => r.file === "additional/tabs/ZentralTabDensity.css"), "compact overrides stay in their own sheet");
+  const layout = report.placeholderLayout;
+  assert.ok(layout.length >= 42, "OW-120 diagnostic geometry rules are reported separately");
+  assert.ok(layout.every((r) => r.file === "additional/notes/ZentralNotes.css" && !r.matches && r.kind === "placeholder-layout"),
+    "OW-120 rules are Notes-owned, non-matching and never counted as compact-density overrides");
+  assert.ok(layout.every((r) => /bgalazka-notes-(?:item|agenda-item|folder|agenda-folder|agenda-day)/.test(r.selector)),
+    "every OW-120 rule carries a Notes/Agenda folder or placeholder marker");
   const selectors = visual.map((r) => r.selector).join("\n");
   assert.match(selectors, /bgalazka-notes-item/, "Notes rows are covered");
   assert.match(selectors, /bgalazka-notes-agenda-item/, "Agenda rows are covered");

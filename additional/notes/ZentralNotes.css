@@ -3652,6 +3652,174 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
   font-size: 0.82em;
 }
 
+/* OW-120: owner Browser Console diagnostic (2026-11-18/19). The run was named
+ * "collapsed-broken" but `context.sidebarState` was `expanded`; the regression is
+ * NOT Zen-wide collapsed-sidebar CSS. Computed geometry from that JSON:
+ *   Notes root header 12x18 centred at x=2464, note tab 26x22 with 14px inline-start,
+ *   labelContainer 0x22 / label 211.8x18.7; Agenda tab 142x22 with opacity 0.69 and
+ *   filter grayscale(1), iconImage opacity 0.5; root attrs carry
+ *   bgalazka-arc-gray-unloaded="true" / bgalazka-arc-fade-unloaded="true".
+ * OW-116's `filter`/`opacity` rules only matched zen-folder[bgalazka-notes-folder].
+ * Agenda rows live under bgalazka-notes-agenda-folder / -day, so Arc 2.0's pending
+ * grayscale and the compact pinned row geometry survived there. These rules are
+ * scoped to the three Notes/Agenda folder markers and the two placeholder markers;
+ * they do not use the compact switch, zen-sidebar-expanded, zen-compact-mode, a
+ * blanket [pending] selector, visibility:hidden, display:none, zero width/height or
+ * zero font-size. OW-116's colour/opacity-only rules remain below, unchanged. */
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]),
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]),
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]),
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]),
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]),
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) {
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+}
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending],
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending],
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending],
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending],
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending],
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] {
+  filter: none !important;
+  opacity: 1 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin-inline: 0 !important;
+  margin-block: var(--bgalazka-look-tabbar-row-gap, 0px) !important;
+  flex: 0 0 auto !important;
+  align-self: stretch !important;
+  justify-content: flex-start !important;
+  box-sizing: border-box !important;
+  pointer-events: auto !important;
+}
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content {
+  filter: none !important;
+  opacity: 1 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  flex: 0 0 auto !important;
+  justify-content: flex-start !important;
+  box-sizing: border-box !important;
+  pointer-events: auto !important;
+}
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack {
+  filter: none !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-image,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-image,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-image,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-image,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-image,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-image {
+  filter: none !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-pending,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-pending,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-pending,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-pending,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-pending,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-icon-stack > .tab-icon-pending {
+  filter: none !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-label-container {
+  filter: none !important;
+  opacity: 1 !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  flex: 1 1 auto !important;
+  overflow: hidden !important;
+  contain: none !important;
+  justify-content: flex-start !important;
+  align-items: flex-start !important;
+  box-sizing: border-box !important;
+  pointer-events: auto !important;
+}
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-label-container > .tab-label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-label-container > .tab-label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-label-container > .tab-label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-label-container > .tab-label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]) tab[bgalazka-notes-item][pending] > .tab-stack > .tab-content > .tab-label-container > .tab-label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) tab[bgalazka-notes-agenda-item][pending] > .tab-stack > .tab-content > .tab-label-container > .tab-label {
+  filter: none !important;
+  opacity: 1 !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  flex: 1 1 auto !important;
+  display: block !important;
+  visibility: visible !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  text-align: start !important;
+  box-sizing: border-box !important;
+  pointer-events: auto !important;
+}
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]) > .tab-group-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]) > .tab-group-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]) > .tab-group-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]) > .tab-group-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]) > .tab-group-label-container,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) > .tab-group-label-container {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  flex: 1 1 auto !important;
+  align-self: stretch !important;
+  justify-content: flex-start !important;
+  margin-inline: 0 !important;
+  box-sizing: border-box !important;
+  pointer-events: auto !important;
+}
+
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-item][pending]) > .tab-group-label-container > label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-folder]:has(tab[bgalazka-notes-agenda-item][pending]) > .tab-group-label-container > label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-item][pending]) > .tab-group-label-container > label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-folder]:has(tab[bgalazka-notes-agenda-item][pending]) > .tab-group-label-container > label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-item][pending]) > .tab-group-label-container > label,
+:root[lang][dir] #tabbrowser-tabs zen-folder[bgalazka-notes-agenda-day]:has(tab[bgalazka-notes-agenda-item][pending]) > .tab-group-label-container > label {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  flex: 1 1 auto !important;
+  text-align: start !important;
+  box-sizing: border-box !important;
+}
+
 /* OW-116: clear only colour and opacity for parked Notes/Agenda rows. Compact tabs keep their own
  * sizing and clipping; these selectors touch no layout properties and use no grouped pseudo-class.
  * The tab row, its content box, favicon, label container and native title each get the same

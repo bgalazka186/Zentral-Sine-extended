@@ -28,6 +28,9 @@ test("the screenshot-free audit lists every pending rule in the two owned CSS tr
   assert.equal(report.visual.length, 10, "OW-116's Notes-owned visual rules are listed separately");
   assert.ok(report.visual.every((r) => r.file === "additional/notes/ZentralNotes.css" && !r.matches),
     "visual rules do not masquerade as compact-density matches");
+  assert.ok(report.placeholderLayout.length >= 42, "OW-120's narrow placeholder geometry rules are listed separately");
+  assert.ok(report.placeholderLayout.every((r) => r.file === "additional/notes/ZentralNotes.css" && !r.matches),
+    "OW-120 rules stay in Notes' CSS and are not compact-density matches");
 
   const density = report.matching;
   assert.ok(density.every((r) => r.file === "additional/tabs/ZentralTabDensity.css"));
