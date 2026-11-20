@@ -60,7 +60,7 @@ const recordFor = (id, spec = {}) => ({
   backgroundMode: "asleep-allowed",
 });
 
-function bootBoost({ tabs = [], records = [] } = {}) {
+function bootBoost({ tabs = [], records = [], browsers = [] } = {}) {
   const store = new Map(Object.entries({
     "zen.workspace.zentral.boost.enabled": true,
     "zen.workspace.zentral.boost.startup_trim": false,
@@ -69,6 +69,7 @@ function bootBoost({ tabs = [], records = [] } = {}) {
   let timerId = 0;
   let registration = null;
   const unloadCalls = [];
+  const appBrowserMap = new Map(browsers.map((b) => [b._bgalazkaAppId, b]));
   const gBrowser = {
     tabs,
     selectedTab: null,
@@ -104,7 +105,11 @@ function bootBoost({ tabs = [], records = [] } = {}) {
   win.window = win;
   win.globalThis = win;
   win.Zentral = {
-    Apps: { appBrowsers: new Map(), closeApp() {} },
+    Apps: {
+      appBrowsers: appBrowserMap,
+      getAppBrowser: (id) => appBrowserMap.get(id) || null,
+      closeApp(id) { appBrowserMap.delete(id); },
+    },
     Panels: {
       essentialPanels: new Map(records.map((r) => [r.app.id, r])),
       getAllAppBrowsers: () => [],
@@ -188,9 +193,11 @@ test("Level 2 stores real tab elements, panel record refs and the before/after r
   h.destroy();
 });
 
+const panelBrowserFor = (id) => ({ _bgalazkaAppId: id, isConnected: true, isRemoteBrowser: true });
+
 test("panel entries keep the record reference, its mode and whether its browser was loaded", async () => {
-  const r = recordFor("whatsapp");
-  const h = bootBoost({ tabs: [r.tab], records: [r] });
+  const r = recordFor("whatsapp", { attrs: ["pending", "pinned"], pinned: true });
+  const h = bootBoost({ tabs: [r.tab], records: [r], browsers: [panelBrowserFor("whatsapp")] });
   h.gBrowser.selectedTab = null;
   const pending = h.api.runLevel2();
   await h.settle();
@@ -200,7 +207,10 @@ test("panel entries keep the record reference, its mode and whether its browser 
   assert.equal(entries.panels[0].appId, "whatsapp");
   assert.equal(entries.panels[0].recordRef, r, "Restore can wake this exact record");
   assert.equal(entries.panels[0].mode, "asleep-allowed");
-  assert.equal(entries.panels[0].wasLoaded, false, "the fake Apps has no live browser");
+  assert.equal(entries.panels[0].wasLoaded, true, "the fixture really had a live panel browser");
+  assert.deepEqual(plain(entries.panels[0].holders), { panel: true, tab: false },
+    "R1 records which holders existed; this page lived in its panel only");
+  assert.equal(entries.tabs.length, 0, "a pending tab was not slept, so it is not a tab entry");
   h.destroy();
 });
 

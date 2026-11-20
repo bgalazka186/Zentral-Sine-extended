@@ -331,15 +331,20 @@ test("panels sleep only when their own mode allows it, and Restore wakes exactly
   const pending = h.api.runLevel2();
   await h.settle();
   const result = await pending;
-  assert.equal(result.unloaded.panels, 1, "only the record marked asleep-allowed");
+  // R1: these fixtures never had a panel browser, so the asleep record's page lived in its TAB. It is counted
+  // and remembered as a tab, and the panels-only legacy door leaves it alone instead of inventing a panel.
+  assert.equal(result.unloaded.panels, 0, "a page that lived in its tab is not an app");
+  assert.equal(result.unloaded.tabs, 1, "only the record marked asleep-allowed");
   assert.equal(h.unloadCalls.length, 1);
   assert.equal(h.api.undoSize(), 1, "the record is remembered for Restore");
+  const snapshot = h.api.sessionEntries();
+  assert.equal(snapshot.panels.length, 0, "no panel entry for a tab-only record");
+  assert.equal(snapshot.tabs.length, 1);
+  assert.equal(snapshot.tabs[0].recordAppId, "asleep-app");
   const restored = h.api.restore();
-  assert.equal(restored.panels, 1, "Restore woke it");
-  assert.equal(h.loaded.length, 1, "woken on demand, not as a preload");
-  assert.equal(h.loaded[0]?.id, "asleep-app");
-  assert.equal(h.loaded[0]?.automatic, false);
-  assert.equal(h.api.undoSize(), 0, "and the record is cleared");
+  assert.equal(restored.panels, 0, "the panels-only profile does not reload a record tab");
+  assert.equal(h.loaded.length, 0, "no panel is created");
+  assert.equal(h.api.undoSize(), 0, "and the snapshot is cleared");
   h.destroy();
 });
 
@@ -362,8 +367,11 @@ test("OW-111: record tabs obey their mode, not keep_pinned, and are never counte
   const result = await pending;
   assert.deepEqual(h.unloadCalls.map((t) => t.linkedBrowser?.currentURI?.spec), ["https://asleep.example/"],
     "only the consenting record: keep_pinned true must not wake a live record into the tab loop");
-  assert.equal(result.unloaded.tabs, 0, "a record tab is never an ordinary tab too");
-  assert.equal(result.unloaded.panels, 1);
+  // R1: this fixture has no panel browsers, so the consenting record is freed as its TAB. The tab loop still
+  // refuses to decide for a record tab; the count comes from the panel loop's holder classification.
+  assert.equal(result.unloaded.tabs, 1, "the consenting record's tab is counted once, by the panel loop");
+  assert.equal(result.unloaded.panels, 0, "no panel browser existed in this fixture");
+  assert.equal(h.unloadCalls.length, 1, "the record tab was unloaded exactly once");
   h.destroy();
 });
 

@@ -1786,8 +1786,12 @@
       async function sleepPanelRecord(record, ctx = {}) {
         const appId = record?.app?.id || record?.appId || "";
         const browser = appId ? livePanelBrowser(appId) : null;
+        // R1: what existed BEFORE this call acts. `how` says what was freed now; `panelWas`/`tabWas` say which
+        // holders the page lived in, so Restore can rebuild exactly those and nothing else.
+        const panelWas = Boolean(browser);
+        const tabWas = Boolean(record?.tab) && !tabAlreadyAsleep(record.tab);
         const exempt = panelSleepExempt(record, ctx, browser);
-        if (exempt) return { slept: false, how: "none", reason: exempt };
+        if (exempt) return { slept: false, how: "none", reason: exempt, panelWas, tabWas };
         let panel = false;
         let tab = false;
         let reason = "";
@@ -1836,7 +1840,49 @@
         }
         const how = panel && tab ? "both" : panel ? "panel" : tab ? "tab" : "none";
         if (!panel && !tab && !reason) reason = "already-asleep";
-        return { slept: panel || tab, how, reason };
+        return { slept: panel || tab, how, reason, panelWas, tabWas };
+      }
+
+      /* R1: ONE recorder for whatever sleepPanelRecord actually freed. A record whose page lived only in its TAB
+       * is a TAB (snapshot tab entry, `unloaded.tabs`), never a panel: the old code counted every slept record as
+       * a panel, which is why Restore created Zentral panels for pages that were ordinary loaded tabs. The panel
+       * entry keeps `wasLoaded` for old readers only; `holders` is what the restore engine decides with. */
+      function recordPanelSleepHolders(record, appId, slept, mode, extra = {}) {
+        const when = Date.now();
+        const holders = {
+          panel: slept?.how === "panel" || slept?.how === "both",
+          tab: slept?.how === "tab" || slept?.how === "both",
+        };
+        const counts = { panels: 0, tabs: 0 };
+        if (holders.panel) {
+          counts.panels = 1;
+          rememberUndone("panels", { appId, title: String(record?.app?.name || ""), when, ...extra });
+          rememberSessionPanel({
+            appId,
+            recordRef: record,
+            wasLoaded: Boolean(slept?.panelWas),
+            holders,
+            mode,
+            when,
+            ...extra,
+          });
+        }
+        if (holders.tab && record?.tab) {
+          counts.tabs = 1;
+          const entry = {
+            tab: record.tab,
+            url: String(record.tab.linkedBrowser?.currentURI?.spec || ""),
+            title: String(record.tab.label || ""),
+            lastAccessed: Number(record.tab.lastAccessed) || 0,
+            wasPinned: Boolean(record.tab.pinned || record.tab.hasAttribute?.("zen-essential")),
+            recordAppId: appId,
+            when,
+            ...extra,
+          };
+          rememberUndone("tabs", entry);
+          rememberSessionTab(entry);
+        }
+        return counts;
       }
 
       // A deep run, in three steps that can each say no: tabs by the policy (oldest first), then panel records whose
@@ -1974,25 +2020,17 @@
               // live panel. Every deep-pass caller (manual Level 2, limiter batches, Stronger saver, and later
               // Game Mode) goes through this door, so sleep and wake cannot drift apart again.
               const appId = record.app?.id || record.appId;
-              const wasLoaded = Boolean(appId && livePanelBrowser(appId));
               const slept = await sleepPanelRecord(record, ctx);
               if (disposed) return null;
               if (!slept.slept) {
                 recordSkip("panel:" + (slept.reason || "not-slept"), 8);
                 continue;
               }
-              unloaded.panels += 1;
-              const entry = { appId, title: String(record.app?.name || ""), when: Date.now() };
-              rememberUndone("panels", entry);
-              // G3: the record reference is what G5's restore loop needs to wake it through
-              // loadEssentialInBackground(record, false).
-              rememberSessionPanel({
-                appId,
-                recordRef: record,
-                wasLoaded,
-                mode: modeOf(record),
-                when: entry.when,
-              });
+              // R1: the recorder counts what was freed. A tab-only record is a tab here too, so a later Restore
+              // reloads the tab instead of inventing a panel.
+              const counts = recordPanelSleepHolders(record, appId, slept, modeOf(record));
+              unloaded.panels += counts.panels;
+              unloaded.tabs += counts.tabs;
             }
           }
           if (disposed) return null;
@@ -2654,7 +2692,6 @@
           if (selectedWithoutParking(record?.tab)) { addKept("panel", record, "selected"); continue; }
           if (hostMatch(record?.tab)) { addKept("panel", record, "keep-host"); continue; }
           const appId = record.app?.id || record.appId;
-          const wasLoaded = Boolean(appId && livePanelBrowser(appId));
           const slept = await sleepPanelRecord(record, ctx);
           if (!gameModeWorkValid(generation)) return;
           if (!slept.slept) {
@@ -2662,15 +2699,12 @@
             continue;
           }
           if (slept.reason) addKept("panel", appId || record, slept.reason);
-          unloaded.panels += 1;
-          gameMode.woke.push("panel");
-          const entry = {
-            appId, title: String(record.app?.name || ""), gameMode: true, when: Date.now(),
-          };
-          rememberUndone("panels", entry);
-          rememberSessionPanel({
-            appId, recordRef: record, wasLoaded, mode: modeOf(record), gameMode: true, when: entry.when,
-          });
+          // R1: holders decide the counts and the snapshot lists. `how === "tab"` is a tab, not an app.
+          const counts = recordPanelSleepHolders(record, appId, slept, modeOf(record), { gameMode: true });
+          unloaded.panels += counts.panels;
+          unloaded.tabs += counts.tabs;
+          if (counts.panels) gameMode.woke.push("panel");
+          if (counts.tabs) gameMode.woke.push("tab");
         }
         if (!gameModeWorkValid(generation)) return;
         gameMode.lastUnloaded = { ...unloaded };

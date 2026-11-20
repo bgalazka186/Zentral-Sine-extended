@@ -222,8 +222,9 @@ test("F1 (c): an asleep-allowed pinned record IS unloaded with keep_pinned false
   const result = await pending;
   assert.equal(wasUnloaded(h, asleep.tab), true, "the mode is the person's explicit consent");
   assert.equal(h.unloadCalls.filter((t) => t === asleep.tab).length, 1, "owned by the panel loop only");
-  assert.equal(result.unloaded.panels, 1);
-  assert.equal(result.unloaded.tabs, 0, "never counted twice as an ordinary tab");
+  // R1: these fixtures carry no panel browser, so the page lived in its record TAB: counted once, as a tab.
+  assert.equal(result.unloaded.panels, 0, "no panel holder existed, so it is not an app");
+  assert.equal(result.unloaded.tabs, 1, "counted once, by the panel loop's holder classification");
   h.destroy();
 });
 
@@ -245,7 +246,9 @@ test("F1 (e): Stronger saver sleeps every record, whatever its mode", async () =
   const pending = h.api.runLevel2({ allowTabs: false, allowModes: ["live", "throttled", "asleep-allowed"] });
   await h.settle();
   const result = await pending;
-  assert.equal(result.unloaded.panels, 3, "the switch IS the consent for all three");
+  // R1: no panel browser exists in this fixture, so all three pages lived in their record TABs.
+  assert.equal(result.unloaded.tabs, 3, "the switch IS the consent for all three");
+  assert.equal(result.unloaded.panels, 0, "none of them had a panel holder");
   assert.deepEqual(urls(h), ["https://arena.example/", "https://messenger.example/", "https://whatsapp.example/"]);
   h.destroy();
 });
@@ -273,7 +276,9 @@ test("F1: the same rules hold for zen-essential record tabs (not only pinned one
   const result = await pending;
   assert.equal(wasUnloaded(h, live.tab), false, "essential-live is still refused for a live record");
   assert.equal(wasUnloaded(h, asleep.tab), true, "but the mode waives it for an asleep-allowed record");
-  assert.equal(result.unloaded.panels, 1);
+  // R1: no panel browser in this fixture, so the freed holder is the tab.
+  assert.equal(result.unloaded.tabs, 1);
+  assert.equal(result.unloaded.panels, 0, "no panel holder existed");
   h.destroy();
 });
 
@@ -312,7 +317,9 @@ test("F1/G8: Game Mode's plan-driven pass sleeps a live record, while Level 2 st
   await h.settle();
   assert.equal(wasUnloaded(h, live.tab), true, "Game Mode is the consent and sleeps the live record through G1's door");
   assert.equal(wasUnloaded(h, old), true, "the planned ordinary tab sleeps too");
-  assert.equal(h.api.gameModeState().unloaded.panels, 1, "the G8 report counts one slept panel");
+  // R1: the fixture has no panel browser, so Game Mode freed the record tab (not an app) plus the old tab.
+  assert.equal(h.api.gameModeState().unloaded.panels, 0, "no panel holder existed");
+  assert.equal(h.api.gameModeState().unloaded.tabs, 2, "the record tab and the planned ordinary tab");
   h.api.setGameMode(false);
   h.destroy();
 });

@@ -305,7 +305,8 @@ test("Restore wakes with loadEssentialInBackground(record, false) exactly once",
   const pending = h.api.runLevel2();
   await h.settle();
   await pending;
-  assert.equal(h.api.undoSize(), 1, "the slept record is remembered");
+  // R1: this record lived in BOTH holders, so it is remembered twice - as a panel and as a tab.
+  assert.equal(h.api.undoSize(), 2, "the panel holder and the tab holder are both remembered");
   const restored = h.api.restore();
   assert.equal(restored.panels, 1);
   assert.equal(h.wakeCalls.length, 1);
