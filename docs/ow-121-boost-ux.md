@@ -19,7 +19,7 @@ Both widget languages have one-line descriptions, shown in the buttons' `title` 
 - **Light** — GC/CC + memory minimize. No tabs touched.
 - **Deep** — Light clean first, then eligible tabs sleep. Restore available.
 - **Game Mode** — pauses repeating features and idles non-essential browsers.
-- **Restore** — wakes sleeping panels; sleeping tabs reload on click.
+- **Restore** — reloads what was unloaded: panels as panels, tabs as tabs (updated by the Restore follow-up).
 
 The Deep card's tooltip also folds in the OW-115 grouped skip reasons and pinned/unpinned loaded-tab counts. These are tooltips: they do not affect layout height.
 
