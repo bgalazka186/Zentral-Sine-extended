@@ -1311,7 +1311,24 @@
         const live = essentialRecords().find((r) => String(r?.app?.id || r?.appId || "") === appId);
         return live || entry?.recordRef || null;
       }
+      /* R2: a panel entry only means something when the page really lived in the panel. `holders` is what R1 wrote;
+       * data from an older build has no `holders`, so it keeps its old meaning through `wasLoaded`. */
+      function panelHadHolder(entry) {
+        if (entry && entry.holders) return entry.holders.panel === true;
+        return entry?.wasLoaded === true;
+      }
+      // Data written by an older build has no `holders`; this is the one place that gives it the same shape, so the
+      // engine never has to guess with a hard-coded `wasLoaded: false`.
+      function normalizePanelRestoreEntry(entry) {
+        if (entry && entry.holders) return entry;
+        return {
+          ...(entry || {}),
+          wasLoaded: entry?.wasLoaded === true,
+          holders: { panel: entry?.wasLoaded === true, tab: false },
+        };
+      }
       function panelNeedsWork(entry) {
+        if (!panelHadHolder(entry)) return false;
         const record = currentPanelRecord(entry);
         if (!record || isBoostParkingTab(record.tab)) return false;
         return !livePanelBrowser(String(entry?.appId || ""));
@@ -1338,6 +1355,11 @@
       }
       function tabNeedsWork(entry) {
         const tab = entry?.tab;
+        // R2: a record tab is never turned into a second holder. When the record had a panel entry, the panel task
+        // already woke it and this tab task is the OTHER holder's wake; when it had none, a live panel browser means
+        // somebody else opened the app in the meantime, so leave that page alone.
+        const appId = String(entry?.recordAppId || "");
+        if (appId && entry?.hadPanelHolder !== true && livePanelBrowser(appId)) return false;
         return Boolean(
           tab && tab.isConnected !== false && !tab.closing && !isBoostParkingTab(tab) &&
           tabIsSleeping(tab) && typeof tab.linkedBrowser?.reload === "function",
@@ -1347,15 +1369,22 @@
         return wakePendingTab(entry?.tab);
       }
       function restoreSnapshotEntries() {
+        // R2: only entries that really had the panel holder become panel tasks. Older data (no `holders`) keeps the
+        // `wasLoaded` answer it was written with instead of the hard-coded `false` that created panels out of tabs.
         const panelEntries = gameSession.panels.length
           ? gameSession.panels.slice()
-          : undoState.panels.map((entry) => ({
-              appId: entry.appId, recordRef: null, mode: "live", wasLoaded: false, when: entry.when || 0,
+          : undoState.panels.map((entry) => normalizePanelRestoreEntry({
+              appId: entry.appId,
+              recordRef: null,
+              mode: "live",
+              wasLoaded: entry?.wasLoaded === true,
+              when: entry.when || 0,
             }));
         const seenPanels = new Set();
         const panels = panelEntries.filter((entry) => {
           const id = String(entry?.appId || "");
           if (!id || seenPanels.has(id)) return false;
+          if (!panelHadHolder(entry)) return false;
           seenPanels.add(id);
           return true;
         });
@@ -1365,11 +1394,15 @@
           ? sessionTabsForRestore().slice()
           : undoState.tabs.filter((entry) => entry?.tab && entry.tab.isConnected !== false && !entry.tab.closing);
         const seenTabs = new Set();
+        const panelHolderIds = new Set(panels.map((entry) => String(entry?.appId || "")));
         const tabs = tabEntries.filter((entry) => {
           if (!entry?.tab || seenTabs.has(entry.tab)) return false;
           seenTabs.add(entry.tab);
           return true;
-        });
+        }).map((entry) => ({
+          ...entry,
+          hadPanelHolder: Boolean(entry?.recordAppId) && panelHolderIds.has(String(entry.recordAppId)),
+        }));
         tabs.sort((a, b) =>
           (Number(b?.lastAccessed) || 0) - (Number(a?.lastAccessed) || 0) ||
           (Number(b?.when) || 0) - (Number(a?.when) || 0));
@@ -3027,6 +3060,10 @@
         previewGameMode,
         // G3: the session snapshot, its live-only restore list and its counts. G5 consumes these.
         sessionState,
+        // R2: the pure holder questions behind Restore. Exposed so a test can prove the legacy rule (data written
+        // without `holders` restores a panel only when it was written with `wasLoaded: true`).
+        panelHadHolder,
+        normalizePanelRestoreEntry,
         // G4: the one parking tab, its deferred hand-back and its diagnostic state. `parkSelected()` defaults to
         // the pure planner's dry run; `unparkSelected()` is idempotent.
         parkSelected,
