@@ -8,6 +8,7 @@
   "use strict";
   // The full pack, when installed, owns this feature.
   if (window.ZentralRuntime) return;
+  // Resolve the install folder before anything else runs.
 /* Zentral standalone shim - TEMPLATE. Never loaded by the full pack.
  * tools/build-standalone.cjs prepends this to a module to produce a bundle that
  * Sine can install on its own (…/additional/<module> folder URL).
@@ -165,7 +166,7 @@ const __zentralShim = (function () {
       _observer: observer,
     };
   }
-  const numericItems = [{"key":"zen.workspace.zentral.boost.limit_mb","text":"zen.workspace.zentral.boost.limit_mb_text","min":0,"max":65536,"def":4096},{"key":"zen.workspace.zentral.boost.limit_cooldown_s","text":"zen.workspace.zentral.boost.limit_cooldown_s_text","min":0,"max":3600,"def":60},{"key":"zen.workspace.zentral.boost.limit_target_pct","text":"zen.workspace.zentral.boost.limit_target_pct_text","min":0,"max":100,"def":85}];
+  const numericItems = [{"key":"zen.workspace.zentral.boost.limit_mb","text":"zen.workspace.zentral.boost.limit_mb_text","min":0,"max":65536,"def":4096},{"key":"zen.workspace.zentral.boost.limit_cooldown_s","text":"zen.workspace.zentral.boost.limit_cooldown_s_text","min":0,"max":3600,"def":60},{"key":"zen.workspace.zentral.boost.limit_target_pct","text":"zen.workspace.zentral.boost.limit_target_pct_text","min":0,"max":100,"def":85},{"key":"zen.workspace.zentral.boost.game_restore_recent_n","text":"zen.workspace.zentral.boost.game_restore_recent_n_text","min":0,"max":500,"def":8},{"key":"zen.workspace.zentral.boost.game_restore_stagger_ms","text":"zen.workspace.zentral.boost.game_restore_stagger_ms_text","min":0,"max":60000,"def":700}];
   function nativeSidebarElement() {
       const tabs = window.gBrowser?.tabContainer;
       const candidates = [
@@ -1134,6 +1135,892 @@ function nativeSidebarSide() {
   return shim;
 })();
 
+const __BUNDLE_URL__ = Components.stack.filename; // install folder, resolved synchronously
+/* Zentral standalone embedded loader - TEMPLATE. Never loaded by the full pack.
+ * tools/build-standalone.cjs inserts it into bundles whose manifest sets
+ * "loader" (multi-file modules such as video).
+ *
+ * It implements the part of the full pack's window.ZentralModuleLoader contract
+ * that those modules use: define, load, create, require, has, readText, rootURI,
+ * sources, report, destroy. Differences, all deliberate:
+ * - Sources are not read from disk. The build embeds each controller as a
+ *   function and each content helper as a string, keyed by its repo path, so the
+ *   paths the module already uses keep working. (eval/new Function are blocked
+ *   in privileged windows, so sources are real code, not strings.)
+ * - The loader is published under a PRIVATE global (__zentralBoostLoader). The full
+ *   pack's loader/Zentral.uc.js refuses to start when window.ZentralModuleLoader
+ *   exists, so a standalone loader must never occupy that name.
+ * - rootURI is the folder of the bundle script (where Sine put the package), so
+ *   files that Gecko must read itself (the window actor) stay real files.
+ */
+const __zentralEmbeddedLoader = (function () {
+  const sources = {
+
+};
+  const texts = {
+
+};
+  const definitions = new Map(),
+    files = new Map(),
+    sourceById = new Map(),
+    components = new Map();
+  let loadingSource = null,
+    destroyed = false;
+  // Same shape of check as the full loader: only embedded repo paths resolve.
+  const safePath = (path) =>
+    /^(?:additional)\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*(?:\.uc|\.sys)?\.(?:js|mjs|css|json)$/.test(
+      path,
+    );
+  const rootURI = (() => {
+    try {
+      return Services.io.newURI("./", null, Services.io.newURI(__BUNDLE_URL__))
+        .spec;
+    } catch (error) {
+      console.error("[Zentral standalone] cannot resolve install folder", error);
+      return "";
+    }
+  })();
+  const loader = {
+    standalone: true,
+    rootURI,
+    define(id, factory) {
+      if (definitions.has(id)) throw new Error("Duplicate component: " + id);
+      definitions.set(id, factory);
+      sourceById.set(id, loadingSource);
+    },
+    load(path, { optional = false, owner = "core" } = {}) {
+      if (destroyed) throw new Error("Loader destroyed: " + path);
+      if (!safePath(path) || !/\.(?:js|mjs)$/.test(path))
+        throw new Error("Unsafe module path: " + path);
+      const existing = files.get(path);
+      if (existing?.state === "loaded") return true;
+      if (existing?.state === "failed") {
+        if (optional) return false;
+        throw new Error(
+          "Required source unavailable: " + path + ": " + existing.error,
+        );
+      }
+      const run = sources[path];
+      if (typeof run !== "function") {
+        // Not part of this package (for example the Zentral settings UI).
+        const error = "not included in the standalone package";
+        files.set(path, { file: path, owner, phase: "load", state: "failed", error });
+        if (optional) return false;
+        throw new Error("Required source unavailable: " + path + ": " + error);
+      }
+      const row = { file: path, owner, phase: "load", state: "loading" };
+      files.set(path, row);
+      const previousSource = loadingSource;
+      loadingSource = path;
+      const priorDefinitions = new Set(definitions.keys());
+      try {
+        run(window);
+        row.state = "loaded";
+        return true;
+      } catch (error) {
+        for (const id of definitions.keys())
+          if (!priorDefinitions.has(id) && sourceById.get(id) === path) {
+            definitions.delete(id);
+            sourceById.delete(id);
+          }
+        row.state = "failed";
+        row.error = String(error) + (error?.stack ? "\n" + error.stack : "");
+        console.error("[Zentral source]", path, error);
+        if (!optional) throw error;
+        return false;
+      } finally {
+        loadingSource = previousSource;
+      }
+    },
+    readText(path, owner = "core") {
+      if (!safePath(path)) throw new Error("Unsafe resource path: " + path);
+      if (typeof texts[path] !== "string" || !texts[path])
+        throw new Error("Resource unavailable: " + path);
+      files.set(path, { file: path, owner, phase: "resource", state: "loaded" });
+      return texts[path];
+    },
+    create(id, args, { optional = false } = {}) {
+      const file = sourceById.get(id);
+      try {
+        const factory = this.require(id);
+        if (typeof factory !== "function")
+          throw new Error("Invalid factory: " + id);
+        const value = factory(args);
+        const component = components.get(id) || { id, file, constructions: 0 };
+        component.state = "initialized";
+        component.constructions++;
+        delete component.error;
+        components.set(id, component);
+        return value;
+      } catch (error) {
+        components.set(id, { id, file, state: "failed", error: String(error) });
+        const row = file && files.get(file);
+        if (row) {
+          row.state = "failed";
+          row.phase = "factory";
+          row.component = id;
+          row.error = String(error) + (error?.stack ? "\n" + error.stack : "");
+        }
+        console.error("[Zentral component]", file || id, error);
+        if (!optional) throw error;
+        return null;
+      }
+    },
+    require(id) {
+      if (
+        !definitions.has(id) ||
+        files.get(sourceById.get(id))?.state === "failed"
+      )
+        throw new Error("Component did not register: " + id);
+      return definitions.get(id);
+    },
+    has: (id) =>
+      definitions.has(id) && files.get(sourceById.get(id))?.state !== "failed",
+    sources: () => [...files.values()].map((row) => ({ ...row })),
+    report() {
+      return {
+        standalone: true,
+        sources: this.sources(),
+        components: [...components.values()].map((row) => ({ ...row })),
+      };
+    },
+    destroy() {
+      destroyed = true;
+      definitions.clear();
+      components.clear();
+      files.clear();
+      sourceById.clear();
+      if (window.__zentralBoostLoader === loader) delete window.__zentralBoostLoader;
+    },
+  };
+  return loader;
+})();
+
+window.__zentralBoostLoader?.destroy?.(); // live re-run replaces the old instance
+window.__zentralBoostLoader = __zentralEmbeddedLoader;
+const __zentralExtras = [
+function (window, runtime, lifecycle) {
+/* Standalone-only Boost card (G10). This file is the BODY of an `extras` function
+ * `(window, runtime, lifecycle)`; tools/build-standalone.cjs embeds it in
+ * ZentralBoost.standalone.uc.js. It is never loaded by the full pack.
+ *
+ * Ownership: with only additional/boost/ installed, Boost draws ONE compact card
+ * through the shim's sidebar-hover helper. If the standalone Widgets tray is
+ * installed first, Boost registers ONE `boost` widget with the tray instead. If
+ * Boost is installed first, it publishes a marker; the later tray calls
+ * takeOver(), removes the self-contained card and registers the same definition.
+ * The full pack short-circuits the whole standalone bundle, so it never sees
+ * this file.
+ *
+ * There is no setInterval, polling or permanent document observer. Every DOM
+ * node, listener, one-shot timer, onChange subscription and startSampling() is
+ * released by the returned cleanup and by the shim's window-unload hook.
+ */
+const doc = window.document;
+const MARKER = "__zentralBoostStandaloneWidget";
+const CARD_ID = "zentral-boost-standalone-card";
+const ANCHOR_ID = "zentral-boost-standalone-anchor";
+const BOOST_ENABLED = "zen.workspace.zentral.boost.enabled";
+const WIDGET_ENABLED = "zen.workspace.zentral.boost.widget_enabled";
+const TOAST_MS = 4000;
+const markerState = { mode: "pending", disposed: false };
+const cardInstances = new Set();
+let disposed = false;
+let decisionTimer = null;
+let hostUnregister = null;
+let ownCardCleanup = null;
+let trayUnregister = null;
+let hover = null;
+let anchor = null;
+
+const consoleWarn = (...args) => {
+  try { window.console?.warn?.("[Zentral Boost standalone widget]", ...args); } catch (_) {}
+};
+const boostApi = () => window.ZentralBoost || null;
+const enabled = () =>
+  runtime.getPref(BOOST_ENABLED, true) !== false &&
+  runtime.getPref(WIDGET_ENABLED, true) !== false;
+const language = () => {
+  const raw = window.navigator?.language || window.navigator?.userLanguage || "en";
+  const api = boostApi();
+  return typeof api?.widgetLanguage === "function" ? api.widgetLanguage(raw) : String(raw).toLowerCase().startsWith("pl") ? "pl" : "en";
+};
+const text = (key, params = null) => {
+  const api = boostApi();
+  if (typeof api?.widgetText === "function") return api.widgetText(language(), key, params);
+  if (key === "card.title") return "Memory Boost";
+  if (key === "card.unknown") return "RAM unknown";
+  return String(key);
+};
+const number = (value, fallback = 0) => {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n) : fallback;
+};
+const normalizeSnapshot = (snapshot) => {
+  const s = snapshot && typeof snapshot === "object" ? snapshot : {};
+  const tabs = number(s.tabs ?? s.restorableTabs, 0);
+  return { ...s, panels: number(s.panels, 0), tabs, restorableTabs: number(s.restorableTabs ?? s.tabs, 0) };
+};
+const snapshotOf = (api = boostApi()) => {
+  let game = null;
+  let session = null;
+  try { game = typeof api?.gameModeState === "function" ? api.gameModeState() : null; } catch (_) {}
+  try { session = typeof api?.sessionState === "function" ? api.sessionState() : null; } catch (_) {}
+  return normalizeSnapshot(game?.snapshot || session || {});
+};
+const restorableCount = (snapshot) => number(snapshot?.panels, 0) + number(snapshot?.tabs, 0);
+function fallbackFeedbackText(state) {
+  const src = state && typeof state === "object" ? state : {};
+  const unloaded = src.unloaded && typeof src.unloaded === "object" ? src.unloaded : {};
+  const kept = Array.isArray(src.kept) ? src.kept : [];
+  const names = kept.slice(0, 3).map((entry) => {
+    const row = entry && typeof entry === "object" ? entry : { id: entry };
+    return String(row.id || row.kind || "tab") + " (" + String(row.reason || "kept") + ")";
+  });
+  if (kept.length > 3) names.push(text("feedback.keptMore", { count: kept.length - 3 }));
+  return text("feedback.gameOn", {
+    mb: number(src.freedMB ?? src.finalFreedMB, 0),
+    tabs: number(unloaded.tabs, 0),
+    panels: number(unloaded.panels, 0),
+    kept: names.length ? names.join(", ") : text("feedback.keptNone"),
+  });
+}
+function fallbackOffText(snapshot) {
+  const line = text("feedback.gameOff");
+  const label = restorableCount(snapshot)
+    ? text("card.restoreLabel", { panels: number(snapshot.panels, 0), tabs: number(snapshot.tabs, 0) })
+    : text("card.nothingRestore");
+  return restorableCount(snapshot) ? line + " \u00b7 " + label : line;
+}
+
+function fallbackMenu(api, snapshot, previewLine = "") {
+  const lang = language();
+  const t = (key, params) => text(key, params);
+  const gameOn = Boolean(api?.gameModeState?.()?.on);
+  const count = restorableCount(snapshot);
+  return [
+    { id: "free-light", level: "light", shortLabel: t("card.light"), label: t("card.light"), hint: t("card.lightHint"), available: true },
+    { id: "free-deep", level: "deep", shortLabel: t("card.deep"), label: t("card.deep"), hint: t("card.deepHint"), available: Boolean(api?.runLevel2) },
+    { id: "game-mode", level: "game", shortLabel: t("card.game"), label: t("card.game"), hint: previewLine || t(gameOn ? "card.gameHintOn" : "card.gameHint"), available: Boolean(api?.setGameMode), checked: gameOn },
+    { id: "restore", level: "restore", shortLabel: t("card.restore"), label: count ? api?.widgetRestoreLabel?.(snapshot, lang) || t("card.restoreLabel", { panels: number(snapshot.panels, 0), tabs: number(snapshot.tabs ?? snapshot.restorableTabs, 0) }) : t("card.nothingRestore"), hint: count ? t("card.restoreHint") : t("card.nothingRestore"), available: count > 0 && Boolean(api?.restoreSession || api?.restore) },
+  ];
+}
+
+function menuItems(api, snapshot, previewLine = "") {
+  const lang = language();
+  const state = typeof api?.state === "function" ? api.state() : {};
+  const game = typeof api?.gameModeState === "function" ? api.gameModeState() : { on: false };
+  const options = {
+    previewHint: previewLine,
+    running: Boolean(state.level2Busy),
+    canDeep: state.policy !== false,
+    canGameMode: typeof api?.setGameMode === "function",
+    canRestore: typeof api?.restoreSession === "function" || typeof api?.restore === "function",
+    gameMode: game,
+    snapshot,
+    language: lang,
+    undoSize: number(state.undoSize, 0),
+    restoreLabel: typeof api?.widgetRestoreLabel === "function" ? api.widgetRestoreLabel(snapshot, lang) : "",
+  };
+  const items = typeof api?.widgetMenu === "function" ? api.widgetMenu(options) : fallbackMenu(api, snapshot, previewLine);
+  return Array.isArray(items) ? items : fallbackMenu(api, snapshot, previewLine);
+}
+
+function createCard({ root, mode }) {
+  const lang = language();
+  const cardReleases = [];
+  const actionReleases = [];
+  let actionToastRelease = null;
+  let toastTimer = null;
+  let wantsActive = false;
+  let subscribed = false;
+  let sampling = false;
+  let samplingApi = null;
+  let unsubChange = null;
+  let unsubGameModeEvents = null;
+  let gameModeEventCount = 0;
+  let cardDisposed = false;
+
+  const ownListen = (target, type, fn, options, bucket = cardReleases) => {
+    if (!target || typeof target.addEventListener !== "function") return () => {};
+    const release = lifecycle.listen(target, type, fn, options);
+    bucket.push(release);
+    return release;
+  };
+  const clearActions = () => {
+    for (const release of actionReleases.splice(0).reverse()) {
+      try { release(); } catch (_) {}
+    }
+    while (root.querySelector?.("[data-zw-boost-action]")) {
+      const node = root.querySelector("[data-zw-boost-action]");
+      node.remove();
+    }
+    const popup = root.querySelector?.(".zbsw-popup");
+    if (popup) while (popup.children?.length) popup.children[0].remove();
+  };
+  const clearToast = () => {
+    if (toastTimer !== null) {
+      lifecycle.clearTimeout(toastTimer);
+      toastTimer = null;
+    }
+    if (actionToastRelease) {
+      try { actionToastRelease(); } catch (_) {}
+      actionToastRelease = null;
+    }
+    const toast = root.querySelector?.(".zbsw-toast");
+    if (toast) {
+      while (toast.children?.length) toast.children[0].remove();
+      toast.textContent = "";
+      toast.hidden = true;
+    }
+  };
+
+  root.setAttribute("class", "zbsw-card" + (mode === "tray" ? " zbsw-tray-card" : ""));
+  root.setAttribute("role", "group");
+  root.setAttribute("aria-label", text("card.title"));
+  const row = doc.createElement("div");
+  row.className = "zbsw-row";
+  const valueEl = doc.createElement("span");
+  valueEl.className = "zbsw-value";
+  valueEl.textContent = "\u2014";
+  const labelEl = doc.createElement("span");
+  labelEl.className = "zbsw-label";
+  labelEl.textContent = text("card.title");
+  const popup = doc.createElement("div");
+  popup.className = "zbsw-popup";
+  popup.setAttribute("role", "group");
+  popup.setAttribute("aria-label", "Boost levels and Restore");
+  popup.hidden = false;
+  row.appendChild(valueEl);
+  row.appendChild(labelEl);
+  row.appendChild(popup);
+  root.appendChild(row);
+  const hintEl = doc.createElement("div");
+  hintEl.className = "zbsw-hint";
+  hintEl.hidden = true;
+  root.appendChild(hintEl);
+  const toastEl = doc.createElement("div");
+  toastEl.className = "zbsw-toast";
+  toastEl.setAttribute("role", "status");
+  toastEl.hidden = true;
+  root.appendChild(toastEl);
+
+  function paintValue() {
+    const api = boostApi();
+    let mb = null;
+    try { mb = typeof api?.lastMB === "function" ? api.lastMB() : null; } catch (_) {}
+    if (!Number.isFinite(Number(mb)) || Number(mb) <= 0) {
+      try { mb = typeof api?.memoryMB === "function" ? api.memoryMB() : null; } catch (_) {}
+    }
+    const value = Number(mb);
+    valueEl.textContent = Number.isFinite(value) && value > 0
+      ? text("card.ram", { mb: Math.round(value) })
+      : "\u2014";
+    root.setAttribute("data-zw-boost", Number.isFinite(value) && value > 0 ? String(Math.round(value)) : "");
+    root.setAttribute("aria-label", Number.isFinite(value) && value > 0
+      ? text("card.ram", { mb: Math.round(value) }) + " \u00b7 " + text("card.title")
+      : text("card.unknown"));
+  }
+
+  function computePreviewLine() {
+    const api = boostApi();
+    if (!api || typeof api.previewGameMode !== "function" || api.gameModeState?.()?.on) return "";
+    let preview = null;
+    try { preview = api.previewGameMode(); } catch (_) { preview = null; }
+    return typeof api.widgetPreviewText === "function"
+      ? api.widgetPreviewText(preview, language())
+      : text("card.preview", { tabs: number(preview?.counts?.tabs, 0), panels: number(preview?.counts?.panels, 0) });
+  }
+
+  function previewHint() {
+    const line = computePreviewLine();
+    if (!line) return;
+    hintEl.textContent = line;
+    hintEl.setAttribute("data-zw-boost-preview", line);
+    hintEl.hidden = false;
+  }
+
+  function paintMenu() {
+    clearActions();
+    const api = boostApi();
+    const snapshot = snapshotOf(api);
+    const items = menuItems(api, snapshot, computePreviewLine());
+    for (const item of items) {
+      const button = doc.createElement("button");
+      button.type = "button";
+      button.className = "zbsw-action";
+      button.setAttribute("data-zw-boost-action", item.id);
+      if (item.level) button.setAttribute("data-zw-boost-level", item.level);
+      button.textContent = item.shortLabel || item.label || item.id;
+      button.setAttribute("aria-label", item.label || item.shortLabel || item.id);
+      const hints = [item.description, item.hint].filter(Boolean).join(" \u00b7 ");
+      if (hints) button.setAttribute("title", hints);
+      if (item.checked !== undefined) {
+        button.setAttribute("role", "switch");
+        button.setAttribute("aria-checked", item.checked ? "true" : "false");
+      }
+      button.disabled = item.available === false;
+      if (button.disabled) button.setAttribute("aria-disabled", "true");
+      if (item.available !== false) {
+        ownListen(button, "click", (event) => {
+          event?.preventDefault?.();
+          event?.stopPropagation?.();
+          void runAction(item.id);
+        }, undefined, actionReleases);
+        if (item.id === "game-mode") {
+          ownListen(button, "mouseenter", previewHint, undefined, actionReleases);
+          ownListen(button, "focus", previewHint, undefined, actionReleases);
+        }
+      }
+      popup.appendChild(button);
+    }
+  }
+
+  // G7: one event door from the Boost module. The card never asks for a second measurement; it paints the
+  // dry-run hint, the G8 settled/final report and the OFF Restore toast from the state Boost already owns.
+  function handleGameModeEvent(event) {
+    const api = boostApi();
+    const action = String(event?.action || "");
+    if (action === "on") {
+      gameModeEventCount += 1;
+      showToast(text("feedback.gameStarting"));
+      return;
+    }
+    if (action === "on-settle" || action === "on-final") {
+      const state = event?.state || (typeof api?.gameModeState === "function" ? api.gameModeState() : {});
+      const line = typeof api?.widgetFeedbackText === "function"
+        ? api.widgetFeedbackText(state, language())
+        : fallbackFeedbackText(state);
+      showToast(line);
+      paintMenu();
+      return;
+    }
+    if (action === "off") {
+      gameModeEventCount += 1;
+      const snapshot = normalizeSnapshot(event?.state?.snapshot || snapshotOf(api));
+      const line = typeof api?.widgetOffText === "function"
+        ? api.widgetOffText(snapshot, language())
+        : fallbackOffText(snapshot);
+      const restoreAction = restorableCount(snapshot)
+        ? { label: text("feedback.restoreAction"), run: () => { void runAction("restore"); } }
+        : null;
+      showToast(line, restoreAction);
+      paintMenu();
+      return;
+    }
+    if (action === "restored") paintMenu();
+  }
+
+  function subscribeGameModeEvents() {
+    if (cardDisposed || unsubGameModeEvents) return;
+    const api = boostApi();
+    if (!api || typeof api.onGameModeEvent !== "function") return;
+    try {
+      unsubGameModeEvents = api.onGameModeEvent(handleGameModeEvent);
+    } catch (_) {
+      unsubGameModeEvents = null;
+    }
+  }
+  function releaseGameModeEvents() {
+    if (unsubGameModeEvents) {
+      try { unsubGameModeEvents(); } catch (_) {}
+      unsubGameModeEvents = null;
+    }
+  }
+
+  function showToast(message, action = null) {
+    clearToast();
+    toastEl.textContent = String(message || "");
+    toastEl.hidden = false;
+    if (action && typeof action.run === "function") {
+      toastEl.textContent = "";
+      const line = doc.createElement("span");
+      line.className = "zbsw-toast-line";
+      line.textContent = String(message || "");
+      toastEl.appendChild(line);
+      const button = doc.createElement("button");
+      button.type = "button";
+      button.className = "zbsw-toast-action";
+      button.textContent = action.label || text("card.restore");
+      actionToastRelease = ownListen(button, "click", (event) => {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        action.run();
+      });
+      toastEl.appendChild(button);
+    }
+    toastTimer = lifecycle.setTimeout(() => {
+      toastTimer = null;
+      clearToast();
+    }, TOAST_MS);
+  }
+
+  async function runAction(id) {
+    const api = boostApi();
+    if (!api) return null;
+    if (id === "free-light" && typeof api.runLevel1 === "function") {
+      showToast(text("card.busy"));
+      let result = null;
+      try { result = await api.runLevel1(); } catch (_) { result = null; }
+      showToast(typeof api.widgetResultText === "function"
+        ? api.widgetResultText(result, language())
+        : text("card.result", { mb: number(result?.freedMB, 0) }));
+      paintValue();
+      paintMenu();
+      return result;
+    }
+    if (id === "free-deep" && typeof api.runLevel2 === "function") {
+      showToast(text("card.busy"));
+      let result = null;
+      try { result = await api.runLevel2(); } catch (_) { result = null; }
+      showToast(typeof api.widgetResultText === "function"
+        ? api.widgetResultText(result, language())
+        : text("card.result", { mb: number(result?.freedMB, 0) }));
+      paintValue();
+      paintMenu();
+      return result;
+    }
+    if (id === "game-mode" && typeof api.setGameMode === "function") {
+      previewHint();
+      const next = !Boolean(api.gameModeState?.()?.on);
+      const eventsBefore = gameModeEventCount;
+      let result = null;
+      try { result = api.setGameMode(next); } catch (_) { result = null; }
+      if (gameModeEventCount === eventsBefore)
+        showToast(text(next ? "card.gameOn" : "card.gameOff"));
+      paintMenu();
+      return result;
+    }
+    if (id === "restore") {
+      const before = snapshotOf(api);
+      let result = null;
+      try {
+        result = typeof api.restoreSession === "function" ? api.restoreSession() : api.restore?.();
+      } catch (_) { result = null; }
+      showToast(text("card.restoreDone", {
+        panels: number(before.panels, 0),
+        tabs: number(before.tabs, 0),
+      }));
+      paintMenu();
+      return result;
+    }
+    return null;
+  }
+
+  function start() {
+    if (cardDisposed) return;
+    wantsActive = true;
+    const api = boostApi();
+    if (!api) return;
+    if (!subscribed && typeof api.onChange === "function") {
+      try {
+        unsubChange = api.onChange(() => paintValue());
+        subscribed = true;
+      } catch (_) { unsubChange = null; subscribed = false; }
+    }
+    if (!sampling && typeof api.startSampling === "function") {
+      // Capture the API: the shim disposes the Boost feature before extras cleanup, so a later
+      // window.ZentralBoost lookup would be null and stopSampling() would be missed.
+      try { api.startSampling(); sampling = true; samplingApi = api; } catch (_) { sampling = false; samplingApi = null; }
+    }
+    subscribeGameModeEvents();
+  }
+  function stop() {
+    wantsActive = false;
+    releaseGameModeEvents();
+    const api = samplingApi || boostApi();
+    if (sampling) {
+      try { api?.stopSampling?.(); } catch (_) {}
+      sampling = false;
+      samplingApi = null;
+    }
+    if (unsubChange) {
+      try { unsubChange(); } catch (_) {}
+      unsubChange = null;
+    }
+    subscribed = false;
+  }
+  function refresh() {
+    if (cardDisposed) return;
+    start();
+    paintValue();
+    paintMenu();
+  }
+  function teardown() {
+    if (cardDisposed) return;
+    cardDisposed = true;
+    stop();
+    clearToast();
+    clearActions();
+    for (const release of cardReleases.splice(0).reverse()) {
+      try { release(); } catch (_) {}
+    }
+    cardInstances.delete(instance);
+  }
+  const instance = {
+    element: root,
+    fetch() {
+      refresh();
+      const api = boostApi();
+      return { mb: typeof api?.lastMB === "function" ? api.lastMB() : null, available: Boolean(api) };
+    },
+    render: refresh,
+    refresh,
+    paintValue,
+    paintMenu,
+    runAction,
+    showToast,
+    previewHint,
+    start,
+    stop,
+    dispose: teardown,
+  };
+  cardInstances.add(instance);
+  ownListen(doc, "keydown", (event) => {
+    if (event?.key !== "Escape") return;
+    hintEl.hidden = true;
+    clearToast();
+  });
+  refresh();
+  return instance;
+}
+
+function trayDefinition() {
+  return {
+    id: "boost",
+    title: text("card.title"),
+    showHeader: false,
+    order: 50,
+    pref: WIDGET_ENABLED,
+    defaultEnabled: true,
+    refreshMs: 0,
+    create(args = {}) {
+      const cardDoc = args.document || doc;
+      const root = cardDoc.createElement("div");
+      const instance = createCard({ root, mode: "tray" });
+      const release = lifecycle.own(() => {
+        instance.dispose();
+        root.remove();
+      });
+      return { ...instance, dispose() { release(); } };
+    },
+  };
+}
+
+function registerWithTray(handoff) {
+  const register = typeof handoff === "function" ? handoff : handoff?.registerWidget;
+  if (typeof register !== "function") return false;
+  destroyOwnCard();
+  try {
+    register(trayDefinition());
+    markerState.mode = "tray";
+    const unregister = typeof handoff === "function" ? null : handoff.unregisterWidget;
+    trayUnregister = typeof unregister === "function" ? () => unregister("boost") : null;
+    return true;
+  } catch (error) {
+    consoleWarn("tray registration failed", error);
+    return false;
+  }
+}
+
+function destroyOwnCard() {
+  if (ownCardCleanup) {
+    try { ownCardCleanup(); } catch (error) { consoleWarn("card cleanup failed", error); }
+    ownCardCleanup = null;
+  }
+  hover = null;
+  anchor = null;
+}
+
+function createSelfCard() {
+  if (ownCardCleanup || markerState.mode === "tray") return;
+  if (!doc || typeof doc.createElement !== "function" || typeof doc.documentElement?.append !== "function") return;
+  let card = null;
+  const localAnchor = doc.createElement("button");
+  localAnchor.type = "button";
+  localAnchor.id = ANCHOR_ID;
+  localAnchor.className = "zbsw-anchor";
+  localAnchor.setAttribute("aria-label", text("card.title"));
+  localAnchor.textContent = text("card.title");
+  const rect = runtime.nativeSidebarRect();
+  localAnchor.style.left = Math.max(4, number(rect.left, 4)) + "px";
+  localAnchor.style.top = Math.max(4, number(rect.top, 4)) + "px";
+  doc.documentElement.appendChild(localAnchor);
+
+  const localHover = runtime.createSidebarHoverCard({
+    window,
+    document: doc,
+    id: CARD_ID,
+    className: "zentral-boost-standalone-card",
+    role: "group",
+    ariaLabel: text("card.title"),
+    defaultWidth: 300,
+    defaultHeight: 26,
+    getShowDelay: () => 0,
+    getHideDelay: () => 0,
+    getGap: () => 6,
+    getSide: () => "auto",
+    getBounds: () => {
+      const r = runtime.nativeSidebarRect();
+      return { left: number(r.left, 0), right: number(r.right, window.innerWidth || 1200) };
+    },
+    isEnabled: () => !disposed && enabled(),
+    isValid: (target) => Boolean(target && target.isConnected !== false),
+    setTimer: (fn, ms) => lifecycle.setTimeout(fn, ms),
+    clearTimer: (id) => lifecycle.clearTimeout(id),
+    onCreate(node) {
+      card = createCard({ root: node, mode: "self" });
+    },
+    render() {
+      card?.refresh();
+    },
+    onShow() {
+      card?.start();
+    },
+    onHide() {
+      card?.stop();
+    },
+  });
+  const releaseHover = lifecycle.own(() => {
+    try { localHover.destroy(); } catch (_) {}
+  });
+  const releaseAnchor = lifecycle.own(() => {
+    try { localAnchor.remove(); } catch (_) {}
+  });
+  const releaseCard = lifecycle.own(() => {
+    try { card?.dispose(); } catch (_) {}
+    card = null;
+  });
+  ownListenSelf(localAnchor, "mouseenter", () => localHover.show(localAnchor));
+  ownListenSelf(localAnchor, "focus", () => localHover.show(localAnchor));
+  ownListenSelf(window, "resize", () => localHover.position());
+  ownCardCleanup = lifecycle.own(() => {
+    releaseCard();
+    releaseHover();
+    releaseAnchor();
+    hover = null;
+    anchor = null;
+  });
+  hover = localHover;
+  anchor = localAnchor;
+  try {
+    localHover.show(localAnchor);
+    markerState.mode = "self";
+  } catch (error) {
+    consoleWarn("self-contained card failed", error);
+    destroyOwnCard();
+  }
+}
+
+function ownListenSelf(target, type, fn, options) {
+  if (!target || typeof target.addEventListener !== "function") return;
+  lifecycle.listen(target, type, fn, options);
+}
+
+function decideOwner() {
+  decisionTimer = null;
+  if (disposed || !lifecycle.active || markerState.mode === "tray") return;
+  if (!enabled()) {
+    markerState.mode = "hidden";
+    return;
+  }
+  const tray = window.ZentralWidgets;
+  const hasBuiltInBoost = typeof tray?.listWidgets === "function" &&
+    tray.listWidgets().some((row) => row && row.id === "boost");
+  if (hasBuiltInBoost) {
+    markerState.mode = "tray";
+    return;
+  }
+  if (tray && typeof tray.registerWidget === "function") {
+    if (registerWithTray({
+      registerWidget: tray.registerWidget,
+      unregisterWidget: tray.unregisterWidget,
+    })) return;
+  }
+  createSelfCard();
+}
+
+const previous = window[MARKER];
+try { previous?.destroy?.(); } catch (_) {}
+const marker = {
+  id: "boost",
+  version: 1,
+  get mode() { return markerState.mode; },
+  visible: enabled,
+  refresh() {
+    for (const instance of [...cardInstances]) {
+      try { instance.refresh(); } catch (error) { consoleWarn("refresh failed", error); }
+    }
+  },
+  takeOver(handoff) {
+    if (disposed || markerState.mode === "tray") return false;
+    return registerWithTray(handoff);
+  },
+  destroy: fullCleanup,
+};
+window[MARKER] = marker;
+
+function fullCleanup() {
+  if (disposed) return;
+  disposed = true;
+  markerState.disposed = true;
+  if (decisionTimer !== null) {
+    lifecycle.clearTimeout(decisionTimer);
+    decisionTimer = null;
+  }
+  destroyOwnCard();
+  for (const instance of [...cardInstances]) {
+    try { instance.dispose(); } catch (_) {}
+  }
+  cardInstances.clear();
+  if (trayUnregister) {
+    try { trayUnregister(); } catch (_) {}
+    trayUnregister = null;
+  }
+  if (hostUnregister) {
+    try { hostUnregister(); } catch (_) {}
+    hostUnregister = null;
+  }
+  if (window[MARKER] === marker) delete window[MARKER];
+}
+
+hostUnregister = runtime.registerHostUnload(fullCleanup);
+decisionTimer = lifecycle.setTimeout(() => {
+  decideOwner();
+  // One post-native-ready refresh lets a tray card created before window.ZentralBoost
+  // bind the API without polling or a second registration.
+  marker.refresh();
+}, 0);
+return fullCleanup;
+
+},
+];
+const __zentralRegister = __zentralShim.register;
+__zentralShim.register = function (def) {
+  return __zentralRegister({
+    ...def,
+    init(args) {
+      const stops = [];
+      const stopAll = () => {
+        for (const stop of stops.splice(0).reverse()) {
+          try { stop(); } catch (error) { console.warn("[Zentral standalone] cleanup", error); }
+        }
+        __zentralEmbeddedLoader.destroy();
+      };
+      try {
+        for (const start of __zentralExtras) {
+          const stop = start(window, args.runtime, args.lifecycle);
+          if (typeof stop === "function") stops.push(stop);
+        }        const base = def.init(args);
+        stops.push(typeof base === "function" ? base : () => base?.destroy?.());
+      } catch (error) {
+        stopAll();
+        throw error;
+      }
+      return stopAll;
+    },
+  });
+};
 // ---- shared: loader/ZentralTabPolicy.js
 // <Zentral> shared tab policy: one answer to "may this tab be unloaded?", asked by every module that unloads.
 // <owner>Every module that unloads a tab: additional/tabs/unloading/ZentralTabUnload.uc.js and
@@ -1386,12 +2273,146 @@ function nativeSidebarSide() {
     // B7.2: "Stronger saver" also sleeps the records marked `live` (WhatsApp, Messenger). A separate switch, OFF by
     // default, because sleeping a notification app is the one thing the mode may not decide on its own.
     STRONGER_SAVER: "zen.workspace.zentral.boost.stronger_saver",
+    // G2: the optional host allow-list and the kill-switch for parking the selected tab (G4).
+    GAME_KEEP_HOSTS: "zen.workspace.zentral.boost.game_keep_hosts",
+    GAME_PARK_SELECTED: "zen.workspace.zentral.boost.game_park_selected",
+    // G5: the staggered Restore profiles and the kill switch for restoring automatically on Game Mode exit.
+    GAME_RESTORE_TABS: "zen.workspace.zentral.boost.game_restore_tabs",
+    GAME_RESTORE_RECENT_N: "zen.workspace.zentral.boost.game_restore_recent_n",
+    GAME_RESTORE_STAGGER_MS: "zen.workspace.zentral.boost.game_restore_stagger_ms",
+    GAME_RESTORE_ON_EXIT: "zen.workspace.zentral.boost.game_restore_on_exit",
   });
+  // G4: the ONE ephemeral parking tab. It is never pinned, never saved to session and excluded from every unload
+  // list. The attribute is also the planner's way of recognizing a tab that belongs to Boost, not to the person.
+  const PARKING_ATTR = "zentral-boost-parking";
+  const isBoostParkingTab = (tab) => Boolean(tab?.hasAttribute?.(PARKING_ATTR));
+  // G5: bounded, one-shot restore work. Nothing here is an interval; the 8 s timeout is the plan's own ceiling
+  // for a tab whose load/DOMContentLoaded event never arrives.
+  const RESTORE_PROFILES = Object.freeze(["all", "recent", "panels", "none"]);
+  const RESTORE_EXIT_POLICIES = Object.freeze(["ask", "always", "never"]);
+  const RESTORE_MAX_LOADING = 2;
+  const RESTORE_LOAD_TIMEOUT_MS = 8000;
+  const RESTORE_DEFAULT_STAGGER_MS = 700;
+  const RESTORE_DEFAULT_RECENT_N = 8;
+  const normalizeRestoreProfile = (value) =>
+    RESTORE_PROFILES.includes(String(value || "")) ? String(value) : "all";
+  const normalizeRestoreExit = (value) =>
+    RESTORE_EXIT_POLICIES.includes(String(value || "")) ? String(value) : "ask";
+  const clampRestoreInt = (value, fallback, min, max) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.max(min, Math.min(max, Math.round(number))) : fallback;
+  };
+
+  /* G2: the pure Game Mode planner. It never touches the DOM, prefs, tabs or timers: the caller passes every fact
+   * the policy cannot read. Switching Game Mode on is the consent, so `unload_pinned` and each record's
+   * `backgroundMode` are deliberately ignored (keepPinned/panelConsent are always true here). The NEVER rules are
+   * still the policy's own: audible, sharing/camera/mic, PiP, video source, host tab, private window, already
+   * pending, and an explicitUnloadTabs refusal (reported as `refused`, never forced). */
+  function hostOfTab(tab) {
+    try {
+      const spec = String(tab?.linkedBrowser?.currentURI?.spec || tab?._zentralNotesUrl || "");
+      if (!spec || spec === "about:blank") return "";
+      return new URL(spec).hostname.toLowerCase();
+    } catch (_) {
+      return "";
+    }
+  }
+  function isPrivateTab(tab) {
+    try {
+      const utils = window.PrivateBrowsingUtils;
+      return typeof utils?.isBrowserPrivate === "function"
+        ? Boolean(utils.isBrowserPrivate(tab?.linkedBrowser))
+        : false;
+    } catch (_) {
+      return false;
+    }
+  }
+  function planGameMode(input = {}) {
+    const {
+      tabs = [], panelRecords = [], selectedTab = null, videoSourceTab = null,
+      keepHosts = [], parkSelected = true, canPark = true,
+      isAudible = () => false,
+      isUnloadable = () => ({ allowed: false, reason: "no-policy" }),
+      isPrivate = () => false,
+      hostOf = hostOfTab,
+      refused = () => false,
+      labelOf = (x) => String(x?.label || x?.linkedBrowser?.currentURI?.spec || x?.app?.id || x?.appId || "unknown"),
+    } = input;
+    const hosts = (Array.isArray(keepHosts) ? keepHosts : [])
+      .map((h) => String(h || "").trim().toLowerCase().replace(/^\*\./, ""))
+      .filter(Boolean);
+    const keep = [];
+    const sleepTabs = [];
+    const sleepPanels = [];
+    const panelTabs = new Set(panelRecords.map((r) => r?.tab).filter(Boolean));
+    let park = null;
+    const addKeep = (id, kind, reason) => keep.push({ id, kind, reason });
+    const hostMatch = (tab) => {
+      const host = String(hostOf(tab) || "").toLowerCase();
+      return Boolean(host) && hosts.some((h) => host === h || host.endsWith("." + h));
+    };
+    const policyVerdict = (tab, isPanelRecord) =>
+      isUnloadable(tab, {
+        // Game Mode consent: pinned, Essential and every record mode may sleep.
+        keepPinned: true,
+        panelConsent: true,
+        isPanelRecord,
+        videoSourceTab,
+        selectedTab: null, // selection is decided by parking below, not by the policy
+        isPrivate,
+        isHostTab: () => false,
+        sessionUrl: "",
+      });
+    for (const tab of tabs) {
+      if (!tab) continue;
+      const id = labelOf(tab);
+      if (isBoostParkingTab(tab)) {
+        addKeep(id, "tab", "parking-tab");
+        continue;
+      }
+      if (panelTabs.has(tab)) continue; // owned by the panel list, not the generic sweep
+      if (isAudible(tab)) { addKeep(id, "tab", "audible"); continue; }
+      if (videoSourceTab && tab === videoSourceTab) { addKeep(id, "tab", "video-source"); continue; }
+      if (tab === selectedTab && !(parkSelected && canPark)) { addKeep(id, "tab", "selected"); continue; }
+      if (hostMatch(tab)) { addKeep(id, "tab", "keep-host"); continue; }
+      const verdict = policyVerdict(tab, false);
+      if (!verdict.allowed) { addKeep(id, "tab", String(verdict.reason || "policy-refused")); continue; }
+      if (refused(tab)) { addKeep(id, "tab", "refused"); continue; }
+      if (tab === selectedTab) park = tab;
+      sleepTabs.push(tab);
+    }
+    for (const record of panelRecords) {
+      if (!record) continue;
+      const tab = record?.tab;
+      const id = String(record?.app?.id || record?.appId || labelOf(record));
+      if (isAudible(tab) || record?.browser?.audioPlaying) { addKeep(id, "panel", "audible"); continue; }
+      if (videoSourceTab && tab === videoSourceTab) { addKeep(id, "panel", "video-source"); continue; }
+      if (tab === selectedTab && !(parkSelected && canPark)) { addKeep(id, "panel", "selected"); continue; }
+      if (hostMatch(tab)) { addKeep(id, "panel", "keep-host"); continue; }
+      const verdict = policyVerdict(tab, true);
+      // A pending/discarded tab can still hold a loaded panel browser (G1), so those two reasons are NOT a reason
+      // to keep the record; every other policy refusal is.
+      if (!verdict.allowed && verdict.reason !== "pending" && verdict.reason !== "no-panel" && verdict.reason !== "discarded") {
+        addKeep(id, "panel", String(verdict.reason || "policy-refused"));
+        continue;
+      }
+      if (refused(tab)) { addKeep(id, "panel", "refused"); continue; }
+      // A selected, loaded panel record is also a parking candidate; a pending/discarded one already has no
+      // selected tab to unload, so its panel browser is handled by sleepPanelRecord without a parking tab.
+      if (tab === selectedTab && parkSelected && canPark && !park && verdict.allowed) park = tab;
+      sleepPanels.push(record);
+    }
+    return { sleepPanels, sleepTabs, park, keep };
+  }
+
   // B2.1: sample only on demand. These are the two situations the plan allows a 2 s sampler.
   const SAMPLE_INTERVAL_MS = 2000;
   // B2.2: Level 1 measures "after" this long after the reporter manager answers, because Gecko frees on its own
   // schedule and an immediate reading only sees the request, not the result.
   const LEVEL1_SETTLE_MS = 3000;
+  // G8: content processes can free their memory well after a tab is made pending. Game Mode runs its second
+  // lightClean() after the existing 3 s settle, then ONE more one-shot clean 30 s later while the mode is still on.
+  const GAME_MODE_LATE_CLEAN_MS = 30000;
   // B2.3: after restore, one trim once the browser has been quiet this long. Every deferral is a fresh one-shot timer
   // that a new input cancels and re-arms; nothing polls.
   const TRIM_QUIET_MS = 90000;
@@ -1401,8 +2422,178 @@ function nativeSidebarSide() {
   // B4.5: Restore remembers what it put to sleep, for this session only. The cap keeps the record bounded; the state is
   // deliberately lost on restart, because a restored tab is the browser's own job after that.
   const UNDO_CAP = 50;
+  // G3: the session snapshot keeps REAL tab elements (an unloaded tab stays in the strip) and is capped at 500
+  // entries per list. The limiter's own 50-entry undo list above stays exactly as it was.
+  const SESSION_CAP = 500;
   // B4.3: what a panel record may do in the background. `live` is the default for every existing record.
   const BACKGROUND_MODES = Object.freeze(["live", "throttled", "asleep-allowed"]);
+
+  /* G10: strings and pure card data shared by the full-pack tray and the standalone Boost card. The standalone
+   * package has no Widgets source, so Boost owns its own words here; nothing in this block reads a pref, touches
+   * the DOM, starts a timer or samples RAM. Language comes from the caller (browser locale or Widgets language). */
+  const BOOST_WIDGET_STRINGS = Object.freeze({
+    en: Object.freeze({
+      "card.title": "Memory Boost",
+      "card.ram": "{mb} MB",
+      "card.unknown": "RAM unknown",
+      "card.light": "Light",
+      "card.deep": "Deep",
+      "card.game": "Game",
+      "card.restore": "Restore",
+      "card.lightHint": "Light: GC/CC + memory minimize. No tabs touched.",
+      "card.deepHint": "Deep: Light clean first, then eligible tabs sleep.",
+      "card.gameHint": "Game Mode: one plan-driven cleanup pass.",
+      "card.gameHintOn": "Game Mode is on. Switch it off to Restore.",
+      "card.deepSoon": "Needs the shared tab policy",
+      "card.restoreHint": "Restore: wake the saved Game Mode snapshot.",
+      "card.nothingRestore": "Nothing to restore yet",
+      "card.busy": "Working\u2026",
+      "card.result": "Freed {mb} MB",
+      "card.deepResult": "Put {tabs} tab(s) and {panels} app(s) to sleep \u00b7 freed {mb} MB",
+      "card.gameOn": "Game Mode on",
+      "card.gameOff": "Game Mode off",
+      "card.restoreDone": "Restoring {panels} apps and {tabs} tabs",
+      "card.preview": "Will free about {tabs} tabs and {panels} apps before Game Mode starts",
+      "card.restoreLabel": "Restore ({panels} apps, {tabs} tabs)",
+      "feedback.gameOn": "Game Mode: freed {mb} MB · {tabs} tabs, {panels} apps unloaded · kept: {kept}",
+      "feedback.gameStarting": "Game Mode: freeing memory…",
+      "feedback.gameOff": "Game Mode off",
+      "feedback.keptNone": "none",
+      "feedback.keptMore": "+{count} more",
+      "feedback.restoreAction": "Restore",
+    }),
+    pl: Object.freeze({
+      "card.title": "Pami\u0119\u0107 Boost",
+      "card.ram": "{mb} MB",
+      "card.unknown": "Nieznana pami\u0119\u0107 RAM",
+      "card.light": "Lekko",
+      "card.deep": "G\u0142\u0119boko",
+      "card.game": "Gra",
+      "card.restore": "Przywr\u00f3\u0107",
+      "card.lightHint": "Lekko: GC/CC i minimalizacja pami\u0119ci. Karty nie s\u0105 ruszane.",
+      "card.deepHint": "G\u0142\u0119boko: najpierw lekkie czyszczenie, potem usypianie kart.",
+      "card.gameHint": "Tryb gry: jeden planowy przebieg czyszczenia.",
+      "card.gameHintOn": "Tryb gry jest w\u0142\u0105czony. Wy\u0142\u0105cz go, aby przywr\u00f3ci\u0107.",
+      "card.deepSoon": "Wymaga wsp\u00f3lnej polityki kart",
+      "card.restoreHint": "Przywr\u00f3\u0107: obud\u017a zapisany stan Trybu gry.",
+      "card.nothingRestore": "Nie ma jeszcze czego przywraca\u0107",
+      "card.busy": "Pracuj\u0119\u2026",
+      "card.result": "Zwolniono {mb} MB",
+      "card.deepResult": "U\u015bpiono {tabs} kart i {panels} aplikacji \u00b7 zwolniono {mb} MB",
+      "card.gameOn": "Tryb gry w\u0142\u0105czony",
+      "card.gameOff": "Tryb gry wy\u0142\u0105czony",
+      "card.restoreDone": "Przywracanie {panels} aplikacji i {tabs} kart",
+      "card.preview": "U\u015bpi oko\u0142o {tabs} kart i {panels} aplikacji przed w\u0142\u0105czeniem Trybu gry",
+      "card.restoreLabel": "Przywr\u00f3\u0107 ({panels} aplikacji, {tabs} kart)",
+      "feedback.gameOn": "Tryb gry: zwolniono {mb} MB \u00b7 {tabs} kart, {panels} aplikacji u\u015bpionych \u00b7 zachowano: {kept}",
+      "feedback.gameStarting": "Tryb gry: zwalnianie pami\u0119ci\u2026",
+      "feedback.gameOff": "Tryb gry wy\u0142\u0105czony",
+      "feedback.keptNone": "brak",
+      "feedback.keptMore": "+{count} wi\u0119cej",
+      "feedback.restoreAction": "Przywr\u00f3\u0107",
+    }),
+  });
+  function boostWidgetLanguage(raw) {
+    const code = String(raw || "en").toLowerCase();
+    return code === "pl" || code.startsWith("pl-") ? "pl" : "en";
+  }
+  function boostWidgetText(language, key, params = null) {
+    const code = boostWidgetLanguage(language);
+    const table = BOOST_WIDGET_STRINGS[code] || BOOST_WIDGET_STRINGS.en;
+    let text = Object.prototype.hasOwnProperty.call(table, key) ? table[key] : BOOST_WIDGET_STRINGS.en[key];
+    if (typeof text !== "string") text = String(key);
+    if (!params || typeof params !== "object") return text;
+    return text.replace(/\{([A-Za-z0-9_]+)\}/g, (_all, name) =>
+      Object.prototype.hasOwnProperty.call(params, name) ? String(params[name] ?? "") : "{" + name + "}");
+  }
+  function boostWidgetNumber(value, fallback = 0) {
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 ? Math.round(n) : fallback;
+  }
+  function boostWidgetMenuItems(options = {}) {
+    const language = boostWidgetLanguage(options.language);
+    const t = (key, params) => boostWidgetText(language, key, params);
+    const running = Boolean(options.running);
+    const gameOn = Boolean(options.gameMode && options.gameMode.on);
+    const snapshot = options.snapshot && typeof options.snapshot === "object" ? options.snapshot : {};
+    const panels = boostWidgetNumber(snapshot.panels, 0);
+    const tabs = boostWidgetNumber(snapshot.tabs, options.undoSize || 0);
+    const restorable = panels + tabs;
+    const gameHint = !gameOn && options.previewHint
+      ? String(options.previewHint)
+      : t(gameOn ? "card.gameHintOn" : "card.gameHint");
+    return [
+      {
+        id: "free-light", level: "light", shortLabel: t("card.light"), label: t("card.light"),
+        description: t("card.lightHint"), hint: t("card.lightHint"), available: !running,
+      },
+      {
+        id: "free-deep", level: "deep", shortLabel: t("card.deep"), label: t("card.deep"),
+        description: t("card.deepHint"), hint: options.canDeep === false ? t("card.deepSoon") : t("card.deepHint"),
+        available: !running && options.canDeep !== false,
+      },
+      {
+        id: "game-mode", level: "game", shortLabel: t("card.game"), label: t("card.game"),
+        description: t("card.gameHint"), hint: gameHint, available: options.canGameMode !== false,
+        checked: gameOn,
+      },
+      {
+        id: "restore", level: "restore", shortLabel: t("card.restore"),
+        label: options.restoreLabel || (restorable ? t("card.restoreLabel", { panels, tabs }) : t("card.restore")),
+        description: t("card.restoreHint"),
+        hint: restorable ? t("card.restoreHint") : t("card.nothingRestore"),
+        available: options.canRestore !== false && !running && restorable > 0,
+      },
+    ];
+  }
+  function boostWidgetPreviewText(preview, language) {
+    const counts = preview && typeof preview === "object" ? (preview.counts || preview) : {};
+    return boostWidgetText(language, "card.preview", {
+      tabs: boostWidgetNumber(counts.tabs, 0), panels: boostWidgetNumber(counts.panels, 0),
+    });
+  }
+  function boostWidgetRestoreLabel(snapshot, language) {
+    const s = snapshot && typeof snapshot === "object" ? snapshot : {};
+    const panels = boostWidgetNumber(s.panels, 0), tabs = boostWidgetNumber(s.tabs, 0);
+    return panels + tabs
+      ? boostWidgetText(language, "card.restoreLabel", { panels, tabs })
+      : boostWidgetText(language, "card.nothingRestore");
+  }
+  function boostWidgetFeedbackText(state, language) {
+    const src = state && typeof state === "object" ? state : {};
+    const unloaded = src.unloaded && typeof src.unloaded === "object" ? src.unloaded : {};
+    const kept = Array.isArray(src.kept) ? src.kept : [];
+    const names = kept.slice(0, 3).map((entry) => {
+      const row = entry && typeof entry === "object" ? entry : { id: entry };
+      const id = String(row.id || row.kind || "tab");
+      const reason = String(row.reason || "kept");
+      return id + " (" + reason + ")";
+    });
+    if (kept.length > 3)
+      names.push(boostWidgetText(language, "feedback.keptMore", { count: kept.length - 3 }));
+    return boostWidgetText(language, "feedback.gameOn", {
+      mb: boostWidgetNumber(src.freedMB ?? src.finalFreedMB, 0),
+      tabs: boostWidgetNumber(unloaded.tabs, 0),
+      panels: boostWidgetNumber(unloaded.panels, 0),
+      kept: names.length ? names.join(", ") : boostWidgetText(language, "feedback.keptNone"),
+    });
+  }
+  function boostWidgetOffText(snapshot, language) {
+    const restore = boostWidgetRestoreLabel(snapshot, language);
+    const nothing = boostWidgetText(language, "card.nothingRestore");
+    return boostWidgetText(language, "feedback.gameOff") +
+      (restore && restore !== nothing ? " \u00b7 " + restore : "");
+  }
+  function boostWidgetResultText(result, language) {
+    const r = result && typeof result === "object" ? result : {};
+    if (r.unloaded && (r.unloaded.tabs || r.unloaded.panels)) {
+      return boostWidgetText(language, "card.deepResult", {
+        tabs: boostWidgetNumber(r.unloaded.tabs, 0), panels: boostWidgetNumber(r.unloaded.panels, 0),
+        mb: boostWidgetNumber(r.freedMB, 0),
+      });
+    }
+    return boostWidgetText(language, "card.result", { mb: boostWidgetNumber(r.freedMB, 0) });
+  }
   // B5/OW-92: the limiter's own numbers. Two cadences, both one-shot chains: a slow idle check and a faster one while
   // above 70 % of the limit. Nothing here is an interval.
   const LIMIT_IDLE_MS = 60000;
@@ -1752,6 +2943,19 @@ function nativeSidebarSide() {
       /* ---------------- sampling (only while someone is looking) ---------------- */
 
       const changeListeners = new Set();
+      // G7: UI feedback is event-driven. The Game Mode pass emits ON, its settled and final reports, and OFF;
+      // the cards subscribe once and never poll for a reading that G8 already owns.
+      const gameModeListeners = new Set();
+      function emitGameModeEvent(event) {
+        for (const listener of [...gameModeListeners]) {
+          try { listener(event); } catch (_) {}
+        }
+      }
+      function onGameModeEvent(cb) {
+        if (typeof cb !== "function") return () => {};
+        gameModeListeners.add(cb);
+        return () => gameModeListeners.delete(cb);
+      }
       let sampleTimer = 0;
       let samplerUsers = 0; // the popup and the limiter (OW-92) are the only two callers
       let lastSampleMB = null;
@@ -1857,7 +3061,7 @@ function nativeSidebarSide() {
         }
       };
 
-      const trimAllowed = () => !disposed && !trimDone && prefBool(PREF.STARTUP_TRIM, true);
+      const trimAllowed = () => !disposed && !trimDone && !gameMode.on && prefBool(PREF.STARTUP_TRIM, true);
 
       function armTrimQuietTimer() {
         if (!trimAllowed()) return;
@@ -1881,7 +3085,18 @@ function nativeSidebarSide() {
         }
       };
 
+      // G8: a one-time startup trim must not fire later behind Game Mode's own settle/clean chain or Restore.
+      function skipStartupTrimForGameMode() {
+        clearTrimTimers();
+        trimDone = true;
+        detachInputListeners();
+      }
+
       function finishStartupTrim() {
+        if (gameMode.on) {
+          skipStartupTrimForGameMode();
+          return;
+        }
         trimDone = true;
         clearTrimTimers();
         detachInputListeners();
@@ -1986,6 +3201,735 @@ function nativeSidebarSide() {
       };
       const undoSize = () => undoState.panels.length + undoState.tabs.length;
 
+      /* G4: ONE ephemeral parking tab, and the two one-shot scope timers that own its deferred selection changes.
+       * Notes' `onZenSelect` hazard is real: changing selection inside Zen's TabSelect dispatch corrupts the tab
+       * switcher and can leave a pending tab unloaded forever. Both parking and handing the selection back happen
+       * in a scope `setTimeout(..., 0)`, never in a TabSelect listener. */
+      const parking = {
+        parkTimer: 0,
+        restoreTimer: 0,
+        pendingTab: null,
+        pendingOriginal: null,
+        retiringTab: null,
+        // G8: the plan-driven unload pass waits for G4's deferred selection/unload door. The hook is cancelled by
+        // Game Mode off, a second ON, a Restore-owned hand-back or destroy; it is never a second timer chain.
+        parkHook: null,
+      };
+      // G5: ONE restore engine. Every timer and load listener below belongs to this scope; a second Game Mode ON,
+      // a new Restore, or destroy cancels all of them. The log exists for tests and the G7 report, not as history.
+      const restoreWork = {
+        active: false,
+        cancelled: false,
+        reason: "",
+        generation: 0,
+        profile: "all",
+        staggerMs: RESTORE_DEFAULT_STAGGER_MS,
+        timer: 0,
+        selectionTimer: 0,
+        selectionHook: null,
+        queue: [],
+        loading: new Set(),
+        items: new Set(),
+        // G6: IDs whose `loadEssentialInBackground(record,false)` call was made BY Restore, not by a person.
+        wakingPanels: new Set(),
+        log: [],
+      };
+      function closeParkingTab(tab) {
+        if (!tab) return false;
+        try {
+          const gBrowser = window.gBrowser;
+          if (typeof gBrowser?.removeTab === "function") {
+            gBrowser.removeTab(tab, { animate: false, skipPermitUnload: true, skipSessionStore: true });
+          } else {
+            tab.remove?.();
+          }
+          return true;
+        } catch (_) {
+          return false;
+        }
+      }
+      function parkingUserContextId(tab) {
+        const raw = tab?.userContextId ?? tab?.getAttribute?.("usercontextid");
+        const value = Number(raw);
+        return Number.isFinite(value) ? value : 0;
+      }
+      function parkingTabOptions(tab) {
+        const options = {
+          skipAnimation: true,
+          skipSessionStore: true,
+          userContextId: parkingUserContextId(tab),
+        };
+        try {
+          options.triggeringPrincipal = Services.scriptSecurityManager.getSystemPrincipal();
+        } catch (_) {
+          // A Chrome scope without the security manager still gets the two skip flags; addTab decides if that is
+          // enough, and a refusal below leaves the selected tab exactly where it was.
+        }
+        return options;
+      }
+      function nearestNormalTab(tabs, original, parked) {
+        const list = Array.isArray(tabs) ? [...tabs] : [];
+        const indexOfOriginal = list.indexOf(original);
+        const indexOfParked = list.indexOf(parked);
+        const origin = indexOfOriginal >= 0 ? indexOfOriginal : (indexOfParked >= 0 ? indexOfParked : 0);
+        const normal = (tab) =>
+          tab && tab !== parked && !isBoostParkingTab(tab) && tab.isConnected !== false &&
+          !tab.closing && !tab.hidden && !tab.hasAttribute?.("bgalazka-addon-host") &&
+          tab.linkedPanel !== null && tab.linkedPanel !== undefined;
+        for (let distance = 1; distance <= list.length; distance++) {
+          if (normal(list[origin - distance])) return list[origin - distance];
+          if (normal(list[origin + distance])) return list[origin + distance];
+        }
+        return list.find(normal) || null;
+      }
+      function parkingState() {
+        return {
+          pending: Boolean(parking.pendingTab || parking.parkTimer),
+          parked: Boolean(gameSession.parkingTab),
+          restoring: Boolean(parking.restoreTimer || parking.retiringTab),
+          parkTimer: Boolean(parking.parkTimer),
+          restoreTimer: Boolean(parking.restoreTimer),
+        };
+      }
+
+      /* G3: ONE snapshot for Level 2 and Game Mode. Unlike `tab: null`, these entries keep the real tab element:
+       * an unloaded tab stays in the strip as a pending row, so Restore (G5) can select/reload that exact element.
+       * Also remembers which browser activity Game Mode changed, and the before/after readings for G7's report.
+       * Cleared on Restore, window unload and destroy; never persisted across a restart. */
+      const gameSession = {
+        active: false,
+        startedAt: 0,
+        panels: [],
+        tabs: [],
+        originalSelected: null,
+        parkingTab: null,
+        activity: new Map(),
+        beforeMB: null,
+        afterMB: null,
+        processesBefore: 0,
+        processesAfter: 0,
+      };
+      function touchSession() {
+        if (gameSession.active) return;
+        gameSession.active = true;
+        gameSession.startedAt = Date.now();
+      }
+      function rememberSessionTab(entry) {
+        touchSession();
+        const list = gameSession.tabs;
+        list.push(entry);
+        while (list.length > SESSION_CAP) list.shift();
+      }
+      function rememberSessionPanel(entry) {
+        touchSession();
+        const list = gameSession.panels;
+        list.push(entry);
+        while (list.length > SESSION_CAP) list.shift();
+      }
+      function resetGameSession(teardown = false) {
+        clearTimer(parking.parkTimer);
+        parking.parkTimer = 0;
+        parking.parkHook = null;
+        const ownedParkingTabs = new Set(
+          [gameSession.parkingTab, parking.pendingTab, parking.retiringTab].filter(Boolean),
+        );
+        parking.pendingTab = null;
+        parking.pendingOriginal = null;
+        // A Restore already scheduled its own deferred hand-back; do not close the tab twice. On a real teardown
+        // that timer is cancelled and every Boost-owned parking tab is closed immediately.
+        if (teardown) {
+          clearTimer(parking.restoreTimer);
+          parking.restoreTimer = 0;
+          parking.retiringTab = null;
+          for (const tab of ownedParkingTabs) closeParkingTab(tab);
+        } else if (!parking.restoreTimer) {
+          for (const tab of ownedParkingTabs) closeParkingTab(tab);
+        }
+        gameSession.active = false;
+        gameSession.startedAt = 0;
+        gameSession.panels.length = 0;
+        gameSession.tabs.length = 0;
+        gameSession.originalSelected = null;
+        gameSession.parkingTab = null;
+        gameSession.activity.clear();
+        gameSession.beforeMB = null;
+        gameSession.afterMB = null;
+        gameSession.processesBefore = 0;
+        gameSession.processesAfter = 0;
+      }
+      // Restore may only touch elements that are still in the strip; a closed tab is skipped silently.
+      function sessionTabsForRestore() {
+        return gameSession.tabs.filter(
+          (entry) => entry?.tab && entry.tab.isConnected !== false && !entry.tab.closing,
+        );
+      }
+      function sessionState() {
+        return {
+          active: gameSession.active,
+          startedAt: gameSession.startedAt,
+          panels: gameSession.panels.length,
+          tabs: gameSession.tabs.length,
+          restorableTabs: sessionTabsForRestore().length,
+          hasSelected: Boolean(gameSession.originalSelected),
+          hasParking: Boolean(gameSession.parkingTab),
+          activity: gameSession.activity.size,
+          beforeMB: gameSession.beforeMB,
+          afterMB: gameSession.afterMB,
+          processesBefore: gameSession.processesBefore,
+          processesAfter: gameSession.processesAfter,
+        };
+      }
+
+      /* G5: one bounded, staggered Restore engine. The tab wake is a copy of ZentralStartup.uc.js `wake(tab)`'s
+       * essential two lines: re-check that the tab is really sleeping, then call `linkedBrowser.reload()` in the
+       * background. It never selects the tab, adds a tab or invents a second way to reload a pending page. */
+      function tabIsSleeping(tab) {
+        return Boolean(
+          !tab?.linkedPanel ||
+          tab?.hasAttribute?.("pending") ||
+          tab?.hasAttribute?.("discarded") ||
+          (tab?.hasAttribute?.("zen-dormant") && tab?.getAttribute?.("zen-dormant") !== "false"),
+        );
+      }
+      function wakePendingTab(tab) {
+        if (!tab || tab.closing || tab.isConnected === false || !tabIsSleeping(tab)) return false;
+        const browser = tab.linkedBrowser;
+        if (typeof browser?.reload !== "function") return false;
+        browser.reload(); // Startup's native lazy reload binding; selecting the tab would wake it in the foreground.
+        return true;
+      }
+      function restoreNote(message) {
+        restoreWork.log.push(String(message || ""));
+        while (restoreWork.log.length > 500) restoreWork.log.shift();
+      }
+      function maybeFinishRestore() {
+        if (!restoreWork.active) return;
+        if (!restoreWork.selectionTimer && !restoreWork.timer && !restoreWork.queue.length &&
+            !restoreWork.loading.size && !restoreWork.items.size) finishRestore();
+      }
+      function finishRestore() {
+        if (!restoreWork.active) return;
+        restoreWork.active = false;
+        restoreWork.cancelled = false;
+        restoreWork.reason = "complete";
+        restoreWork.timer = 0;
+        restoreWork.queue.length = 0;
+        restoreWork.loading.clear();
+        restoreWork.items.clear();
+        restoreWork.wakingPanels.clear();
+        restoreWork.selectionHook = null;
+        restoreNote("done");
+      }
+      function cancelRestore(reason) {
+        const hadWork = restoreWork.active || restoreWork.timer || restoreWork.selectionTimer ||
+          restoreWork.items.size || restoreWork.queue.length || restoreWork.loading.size;
+        if (!hadWork) return false;
+        restoreWork.generation += 1;
+        const adoptedParkingTimer = Boolean(
+          parking.restoreTimer && restoreWork.selectionTimer === parking.restoreTimer,
+        );
+        clearTimer(restoreWork.timer);
+        restoreWork.timer = 0;
+        clearTimer(restoreWork.selectionTimer);
+        restoreWork.selectionTimer = 0;
+        if (adoptedParkingTimer) {
+          parking.restoreTimer = 0;
+          const retiring = parking.retiringTab;
+          parking.retiringTab = null;
+          closeParkingTab(retiring);
+        }
+        restoreWork.selectionHook = null;
+        for (const item of restoreWork.items) {
+          clearTimer(item.timeoutId);
+          try { item.cleanup?.(); } catch (_) {}
+        }
+        restoreWork.items.clear();
+        restoreWork.queue.length = 0;
+        restoreWork.loading.clear();
+        restoreWork.wakingPanels.clear();
+        restoreWork.active = false;
+        restoreWork.cancelled = true;
+        restoreWork.reason = String(reason || "cancelled");
+        restoreNote("cancel:" + restoreWork.reason);
+        return true;
+      }
+      function ensureRestoreTick(delay) {
+        if (!restoreWork.active || disposed || restoreWork.timer) return;
+        restoreWork.timer = setTimer(restoreTick, Math.max(0, Number(delay) || 0));
+      }
+      function startRestoreTask(task) {
+        restoreWork.loading.add(task);
+        const item = {
+          task, generation: restoreWork.generation, done: false, timeoutId: 0, cleanup: null,
+        };
+        restoreWork.items.add(item);
+        const finish = (why) => {
+          if (item.done || item.generation !== restoreWork.generation || !restoreWork.active) return;
+          item.done = true;
+          clearTimer(item.timeoutId);
+          item.timeoutId = 0;
+          try { item.cleanup?.(); } catch (_) {}
+          restoreWork.items.delete(item);
+          restoreWork.loading.delete(task);
+          if (!restoreWork.active) return;
+          if (restoreWork.queue.length) ensureRestoreTick(restoreWork.staggerMs);
+          else if (!restoreWork.loading.size && !restoreWork.items.size) finishRestore();
+        };
+        // Register the timeout and the load listeners BEFORE the fallible wake, so every partial attachment has
+        // an owner even when reload() throws. There is no polling; whichever arrives first finishes the item.
+        item.timeoutId = setTimer(() => finish("timeout"), RESTORE_LOAD_TIMEOUT_MS);
+        let hasListeners = false;
+        const browser = task.tab?.linkedBrowser;
+        if (browser && typeof browser.addEventListener === "function") {
+          let inert = false;
+          const onLoad = () => { if (!inert) finish("load"); };
+          item.cleanup = () => {
+            inert = true;
+            for (const name of ["load", "DOMContentLoaded"]) {
+              try { browser.removeEventListener?.(name, onLoad); } catch (_) {}
+            }
+          };
+          for (const name of ["load", "DOMContentLoaded"]) {
+            try { browser.addEventListener(name, onLoad, { once: true }); hasListeners = true; } catch (_) {}
+          }
+        }
+        let result;
+        try {
+          result = task.run();
+        } catch (_) {
+          finish("failed");
+          return;
+        }
+        if (result === false) {
+          finish("failed");
+          return;
+        }
+        if (result && typeof result.then === "function") {
+          Promise.resolve(result).then(() => finish("ready"), () => finish("failed"));
+        } else if (!hasListeners) {
+          finish("started");
+        }
+      }
+      function restoreTick() {
+        restoreWork.timer = 0;
+        if (!restoreWork.active || disposed) return;
+        // ONE item per tick; the 2-slot cap is what keeps a whole 500-tab snapshot from spiking RAM at once.
+        while (restoreWork.queue.length && restoreWork.loading.size < RESTORE_MAX_LOADING) {
+          const task = restoreWork.queue.shift();
+          let needed = false;
+          try { needed = Boolean(task.needsWork()); } catch (_) {}
+          if (!needed) {
+            restoreNote("skip:" + task.label);
+            continue;
+          }
+          restoreNote(task.label);
+          startRestoreTask(task);
+          break;
+        }
+        if (restoreWork.queue.length) ensureRestoreTick(restoreWork.staggerMs);
+        else if (!restoreWork.loading.size && !restoreWork.items.size) finishRestore();
+      }
+      function currentPanelRecord(entry) {
+        const appId = String(entry?.appId || "");
+        const live = essentialRecords().find((r) => String(r?.app?.id || r?.appId || "") === appId);
+        return live || entry?.recordRef || null;
+      }
+      function panelNeedsWork(entry) {
+        const record = currentPanelRecord(entry);
+        if (!record || isBoostParkingTab(record.tab)) return false;
+        return !livePanelBrowser(String(entry?.appId || ""));
+      }
+      function runPanelRestore(entry) {
+        const record = currentPanelRecord(entry);
+        const ctx = panels();
+        if (!record || typeof ctx?.loadEssentialInBackground !== "function") return false;
+        const appId = String(entry?.appId || record?.app?.id || "");
+        // G6: Restore's own wake must not be mistaken for a person clicking the panel. Keep the marker across a
+        // promise-returning wake so the low-level explicit path never erases this item from the restore queue.
+        if (appId) restoreWork.wakingPanels.add(appId);
+        let result;
+        try {
+          result = ctx.loadEssentialInBackground(record, false); // explicit wake, never an automatic preload
+        } catch (_) {
+          if (appId) restoreWork.wakingPanels.delete(appId);
+          throw _;
+        }
+        const clear = () => { if (appId) restoreWork.wakingPanels.delete(appId); };
+        if (result && typeof result.then === "function") Promise.resolve(result).then(clear, clear);
+        else clear();
+        return result === false ? false : (result && typeof result.then === "function" ? result : true);
+      }
+      function tabNeedsWork(entry) {
+        const tab = entry?.tab;
+        return Boolean(
+          tab && tab.isConnected !== false && !tab.closing && !isBoostParkingTab(tab) &&
+          tabIsSleeping(tab) && typeof tab.linkedBrowser?.reload === "function",
+        );
+      }
+      function runTabRestore(entry) {
+        return wakePendingTab(entry?.tab);
+      }
+      function restoreSnapshotEntries() {
+        const panelEntries = gameSession.panels.length
+          ? gameSession.panels.slice()
+          : undoState.panels.map((entry) => ({
+              appId: entry.appId, recordRef: null, mode: "live", wasLoaded: false, when: entry.when || 0,
+            }));
+        const seenPanels = new Set();
+        const panels = panelEntries.filter((entry) => {
+          const id = String(entry?.appId || "");
+          if (!id || seenPanels.has(id)) return false;
+          seenPanels.add(id);
+          return true;
+        });
+        const rank = (entry) => (String(entry?.mode || "") === "live" ? 0 : 1);
+        panels.sort((a, b) => rank(a) - rank(b) || (Number(a?.when) || 0) - (Number(b?.when) || 0));
+        const tabEntries = gameSession.tabs.length
+          ? sessionTabsForRestore().slice()
+          : undoState.tabs.filter((entry) => entry?.tab && entry.tab.isConnected !== false && !entry.tab.closing);
+        const seenTabs = new Set();
+        const tabs = tabEntries.filter((entry) => {
+          if (!entry?.tab || seenTabs.has(entry.tab)) return false;
+          seenTabs.add(entry.tab);
+          return true;
+        });
+        tabs.sort((a, b) =>
+          (Number(b?.lastAccessed) || 0) - (Number(a?.lastAccessed) || 0) ||
+          (Number(b?.when) || 0) - (Number(a?.when) || 0));
+        return {
+          panels,
+          tabs,
+          originalSelected: gameSession.originalSelected || parking.pendingOriginal || null,
+          hasParking: Boolean(gameSession.parkingTab || parking.pendingTab || parking.retiringTab),
+        };
+      }
+      function originalTabAlive(tab) {
+        const tabs = Array.isArray(window.gBrowser?.tabs) ? window.gBrowser.tabs : [];
+        return Boolean(tab && tab.isConnected !== false && !tab.closing && tabs.includes(tab));
+      }
+      function beginRestoreSelection(original, hasParking) {
+        if (disposed || (!originalTabAlive(original) && !hasParking)) return false;
+        restoreNote("select");
+        restoreWork.selectionHook = () => {
+          restoreWork.selectionTimer = 0;
+          maybeFinishRestore();
+        };
+        const handed = unparkSelected();
+        if (handed) {
+          restoreWork.selectionTimer = parking.restoreTimer;
+          if (!restoreWork.selectionTimer) {
+            restoreWork.selectionHook = null;
+            maybeFinishRestore();
+          }
+          return true;
+        }
+        restoreWork.selectionHook = null;
+        if (!originalTabAlive(original)) {
+          maybeFinishRestore();
+          return true;
+        }
+        restoreWork.selectionTimer = setTimer(() => {
+          restoreWork.selectionTimer = 0;
+          if (disposed || !restoreWork.active) return;
+          try { window.gBrowser.selectedTab = original; } catch (_) {}
+          maybeFinishRestore();
+        }, 0);
+        return true;
+      }
+      function restoreProfileSettings(options = {}) {
+        return {
+          profile: normalizeRestoreProfile(options.profile || prefString(PREF.GAME_RESTORE_TABS, "all")),
+          recentN: clampRestoreInt(
+            Number.isFinite(Number(options.recentN)) ? options.recentN : prefInt(PREF.GAME_RESTORE_RECENT_N, RESTORE_DEFAULT_RECENT_N),
+            RESTORE_DEFAULT_RECENT_N, 0, SESSION_CAP,
+          ),
+          staggerMs: clampRestoreInt(
+            Number.isFinite(Number(options.staggerMs)) ? options.staggerMs : prefInt(PREF.GAME_RESTORE_STAGGER_MS, RESTORE_DEFAULT_STAGGER_MS),
+            RESTORE_DEFAULT_STAGGER_MS, 0, 60000,
+          ),
+        };
+      }
+      function restoreState() {
+        return {
+          active: restoreWork.active,
+          cancelled: restoreWork.cancelled,
+          reason: restoreWork.reason,
+          generation: restoreWork.generation,
+          profile: restoreWork.profile,
+          staggerMs: restoreWork.staggerMs,
+          queue: restoreWork.queue.length,
+          loading: restoreWork.loading.size,
+          items: restoreWork.items.size,
+          restoringPanels: restoreWork.wakingPanels.size,
+          timer: Boolean(restoreWork.timer),
+          selectionTimer: Boolean(restoreWork.selectionTimer),
+          log: restoreWork.log.slice(),
+        };
+      }
+      // G6: the low-level panel wake asks whether THIS call belongs to Restore. A person's click during a restore has
+      // no marker and is still forgotten from the pending queue; Restore's own wake is never mistaken for a click.
+      function isRestoreWake(kind, key) {
+        return kind === "panel" && restoreWork.active && restoreWork.wakingPanels.has(String(key || ""));
+      }
+      // G6: a click/tile/tab that wakes an item before the staggered Restore reaches it must take that item out of
+      // every snapshot list and out of the pending restore queue. Explicit user actions are never blocked here.
+      function noteUserWake(kind, key) {
+        if (disposed || !key) return 0;
+        const isPanel = kind === "panel";
+        const appId = String(key);
+        const matches = (entry) => isPanel
+          ? String(entry?.appId || entry?.recordRef?.app?.id || "") === appId
+          : entry?.tab === key || entry?.url === appId || entry?.title === appId;
+        const removeFrom = (list) => {
+          let removed = 0;
+          for (let i = list.length - 1; i >= 0; i--) {
+            if (matches(list[i])) { list.splice(i, 1); removed += 1; }
+          }
+          return removed;
+        };
+        let removed = 0;
+        removed += removeFrom(isPanel ? gameSession.panels : gameSession.tabs);
+        removed += removeFrom(isPanel ? undoState.panels : undoState.tabs);
+        for (let i = restoreWork.queue.length - 1; i >= 0; i--) {
+          if (matches(restoreWork.queue[i]?.entry)) { restoreWork.queue.splice(i, 1); removed += 1; }
+        }
+        if (!isPanel && gameSession.originalSelected === key) gameSession.originalSelected = null;
+        if (restoreWork.active) {
+          restoreNote("user-wake:" + kind + ":" + appId);
+          maybeFinishRestore();
+        }
+        return removed;
+      }
+      // G6: TabSelect is a user action, not an automatic wake. This listener only forgets an item the person just
+      // loaded; it never changes the selection inside Zen's dispatch (the G4 hazard still applies).
+      let userWakeListener = null;
+      try {
+        userWakeListener = (event) => {
+          try { noteUserWake("tab", event?.target); } catch (_) {}
+        };
+        window.addEventListener("TabSelect", userWakeListener, true);
+        onCleanup(() => {
+          try { window.removeEventListener("TabSelect", userWakeListener, true); } catch (_) {}
+          userWakeListener = null;
+        });
+      } catch (_) {
+        userWakeListener = null;
+      }
+      function restoreSession(options = {}) {
+        if (disposed) {
+          return { started: false, active: false, cancelled: false, panels: 0, tabs: 0, tabTasks: 0, selection: false, reason: "disposed" };
+        }
+        // G8: an explicit Restore while Game Mode is still on owns the hand-back. Cancel the game's settle/late
+        // chain so its one-shot clean never runs behind a restored page.
+        if (gameMode.on) cancelGameModeWork("restore");
+        cancelRestore("new-restore");
+        restoreWork.generation += 1;
+        restoreWork.log.length = 0;
+        restoreWork.cancelled = false;
+        restoreWork.reason = "starting";
+        restoreWork.queue.length = 0;
+        restoreWork.loading.clear();
+        restoreWork.items.clear();
+        restoreWork.wakingPanels.clear();
+        const settings = restoreProfileSettings(options);
+        restoreWork.profile = settings.profile;
+        restoreWork.staggerMs = settings.staggerMs;
+        const snapshot = restoreSnapshotEntries();
+        const immediate = Boolean(options.immediate);
+        const selection = beginRestoreSelection(snapshot.originalSelected, snapshot.hasParking);
+        const includePanels = settings.profile !== "none";
+        const panelTasks = includePanels ? snapshot.panels.map((entry) => ({
+          kind: "panel", label: "panel:" + String(entry.appId || ""), entry,
+          needsWork: () => panelNeedsWork(entry), run: () => runPanelRestore(entry),
+        })) : [];
+        let tabEntries = snapshot.tabs;
+        if (settings.profile === "recent") tabEntries = tabEntries.slice(0, settings.recentN);
+        else if (settings.profile === "panels" || settings.profile === "none") tabEntries = [];
+        const tabTasks = immediate ? [] : tabEntries.map((entry) => ({
+          kind: "tab", label: "tab:" + String(entry.url || entry.tab?.label || ""), entry, tab: entry.tab,
+          needsWork: () => tabNeedsWork(entry), run: () => runTabRestore(entry),
+        }));
+        // Restore owns the snapshot from now on: clear the old undo lists and G3's larger snapshot in one place.
+        undoState.panels.length = 0;
+        undoState.tabs.length = 0;
+        resetGameSession();
+        const hasWork = selection || panelTasks.length || tabTasks.length || snapshot.hasParking;
+        if (!hasWork) {
+          restoreWork.active = false;
+          restoreWork.reason = "empty";
+          restoreNote("empty");
+          return {
+            started: false, active: false, cancelled: false, profile: settings.profile,
+            panels: 0, tabs: snapshot.tabs.length, tabTasks: 0, selection: false,
+            staggerMs: settings.staggerMs, generation: restoreWork.generation,
+          };
+        }
+        restoreWork.active = true;
+        let panelsStarted = 0;
+        if (immediate) {
+          // Legacy `restore()` keeps its documented promise: panel records are waked NOW, while tabs are only
+          // reported and load when clicked. No timer, no stagger, no background reload in this profile.
+          for (const task of panelTasks) {
+            if (!task.needsWork()) { restoreNote("skip:" + task.label); continue; }
+            restoreNote(task.label);
+            if (task.run() !== false) panelsStarted += 1;
+          }
+          maybeFinishRestore();
+          return {
+            started: true, active: restoreWork.active, cancelled: false, profile: settings.profile,
+            panels: panelsStarted, tabs: snapshot.tabs.length, tabTasks: 0, selection,
+            staggerMs: settings.staggerMs, generation: restoreWork.generation,
+          };
+        }
+        restoreWork.queue.push(...panelTasks, ...tabTasks);
+        if (restoreWork.queue.length) ensureRestoreTick(0);
+        maybeFinishRestore();
+        return {
+          started: true, active: restoreWork.active, cancelled: false, profile: settings.profile,
+          panels: panelTasks.length, tabs: snapshot.tabs.length, tabTasks: tabTasks.length,
+          selection, staggerMs: settings.staggerMs, generation: restoreWork.generation,
+        };
+      }
+
+      // G4: the one deferred hand-back. Both a refused parking attempt and Restore/Game Mode off use it: select the
+      // original (or the nearest normal tab if it was closed), then close Boost's own about:blank tab. Nothing in
+      // this path force-closes a user's page; only the parking tab is removed, with skipPermitUnload.
+      function scheduleParkingHandback(original, parked, rollback = false) {
+        if (disposed || !parked) return false;
+        clearTimer(parking.restoreTimer);
+        if (parking.retiringTab && parking.retiringTab !== parked) closeParkingTab(parking.retiringTab);
+        parking.restoreTimer = 0;
+        parking.retiringTab = parked;
+        parking.restoreTimer = setTimer(() => {
+          parking.restoreTimer = 0;
+          parking.retiringTab = null;
+          if (disposed) return;
+          const gBrowser = window.gBrowser;
+          const tabs = Array.isArray(gBrowser?.tabs) ? gBrowser.tabs : [];
+          const originalAlive =
+            original && original.isConnected !== false && !original.closing && tabs.includes(original);
+          const target = originalAlive
+            ? original
+            : rollback ? null : nearestNormalTab(tabs, original, parked);
+          if (target) {
+            try {
+              gBrowser.selectedTab = target;
+            } catch (_) {}
+          }
+          closeParkingTab(parked);
+          // G5: a Restore may have adopted this 0 ms hand-back as its first step. Only AFTER the real selection
+          // change and parking-tab close may the engine finish a selection-only profile.
+          restoreWork.selectionHook?.();
+          restoreWork.selectionHook = null;
+        }, 0);
+        return true;
+      }
+
+      // G4: create ONE parking tab, mark it before anything else can see it, and defer the selection to the next
+      // task. The planner has already said this exact selected tab is not exempt. A failure at ANY step rolls back
+      // to the old behavior (selected tab stays loaded, reason `selected`); no page that refuses beforeunload is
+      // force-closed. `explicitUnloadTabs` is awaited before the snapshot records the tab.
+      function parkSelected(plan = previewGameMode(), onParked = null) {
+        if (disposed) return { created: false, reason: "disposed" };
+        if (!prefBool(PREF.GAME_PARK_SELECTED, true)) return { created: false, reason: "kill-switch" };
+        if (gameSession.parkingTab || parking.pendingTab || parking.parkTimer)
+          return { created: false, reason: "already-parked" };
+        if (parking.restoreTimer || parking.retiringTab)
+          return { created: false, reason: "restoring" };
+        const gBrowser = window.gBrowser;
+        if (!gBrowser || typeof gBrowser.addTab !== "function" ||
+            typeof gBrowser.removeTab !== "function" ||
+            typeof gBrowser.explicitUnloadTabs !== "function")
+          return { created: false, reason: "no-browser-api" };
+        const original = gBrowser.selectedTab;
+        if (!original || original.closing || original.isConnected === false ||
+            isBoostParkingTab(original) || !plan || plan.park !== original)
+          return { created: false, reason: "not-eligible" };
+        let parked = null;
+        try {
+          parked = gBrowser.addTab("about:blank", parkingTabOptions(original));
+          if (!parked) throw new Error("addTab returned nothing");
+          parked.setAttribute?.(PARKING_ATTR, "true");
+          parked.setAttribute?.("skipSessionStore", "true");
+        } catch (error) {
+          if (parked) closeParkingTab(parked);
+          warn(error);
+          return { created: false, reason: "addTab-refused" };
+        }
+        parking.pendingTab = parked;
+        parking.pendingOriginal = original;
+        parking.parkHook = typeof onParked === "function" ? onParked : null;
+        parking.parkTimer = setTimer(() => {
+          parking.parkTimer = 0;
+          void (async () => {
+            try {
+              if (disposed) return;
+              gBrowser.selectedTab = parked;
+              if (gBrowser.selectedTab !== parked) throw new Error("selection-refused");
+              const result = await gBrowser.explicitUnloadTabs([original]);
+              if (disposed) return;
+              if (result === false && !tabAlreadyAsleep(original)) throw new Error("unload-refused");
+              if (original.closing || original.isConnected === false) throw new Error("original-closed");
+              gameSession.originalSelected = original;
+              gameSession.parkingTab = parked;
+              touchSession();
+              const entry = {
+                tab: original,
+                url: String(original.linkedBrowser?.currentURI?.spec || ""),
+                title: String(original.label || ""),
+                lastAccessed: Number(original.lastAccessed) || 0,
+                wasPinned: Boolean(original.pinned || original.hasAttribute?.("zen-essential")),
+                parked: true,
+                when: Date.now(),
+              };
+              rememberUndone("tabs", entry);
+              rememberSessionTab(entry);
+              parking.pendingTab = null;
+              parking.pendingOriginal = null;
+              const hook = parking.parkHook;
+              parking.parkHook = null;
+              try { hook?.(); } catch (_) {}
+            } catch (error) {
+              parking.pendingTab = null;
+              parking.pendingOriginal = null;
+              gameSession.originalSelected = null;
+              gameSession.parkingTab = null;
+              warn(error);
+              scheduleParkingHandback(original, parked, true);
+              // G8: a refused parking selection must not lose the rest of the Game Mode pass; the selected tab is
+              // skipped by the pass because no Boost-owned parking tab was selected.
+              const hook = parking.parkHook;
+              parking.parkHook = null;
+              try { hook?.(); } catch (_) {}
+            }
+          })().catch((error) => warn(error));
+        }, 0);
+        return { created: true, tab: parked, original, deferred: true };
+      }
+
+      // G4: Restore and Game Mode off hand the selection back. The parking tab is retired by a deferred task; its
+      // snapshot field is cleared immediately so nothing can park twice. `originalSelected` stays in the session
+      // snapshot until Restore clears the whole snapshot — G5 needs it as the first item of the restore order even
+      // when the person switches Game Mode off before pressing Restore. A window teardown bypasses the timer.
+      function unparkSelected() {
+        if (disposed) return false;
+        const original = gameSession.originalSelected || parking.pendingOriginal;
+        const parked = gameSession.parkingTab || parking.pendingTab;
+        clearTimer(parking.parkTimer);
+        parking.parkTimer = 0;
+        parking.parkHook = null;
+        if (!parked) return Boolean(parking.restoreTimer || parking.retiringTab);
+        parking.pendingTab = null;
+        parking.pendingOriginal = null;
+        gameSession.parkingTab = null;
+        return scheduleParkingHandback(original, parked, false);
+      }
+
+      function processCount() {
+        const info = readProcInfo();
+        return info ? 1 + (Array.isArray(info.children) ? info.children.length : 0) : 0;
+      }
+
       // One tab's verdict, with every input the policy cannot read passed in. `opts.panelRecord` marks a tab that
       // backs an Essential-panel record and `opts.panelConsent` is that record's explicit permission to sleep it
       // (OW-111): the mode belongs to the panel loop, not to the `unload_pinned` pref or a generic tab sweep.
@@ -2014,12 +3958,109 @@ function nativeSidebarSide() {
         const tabs = window.gBrowser?.tabs;
         if (!tabs || !Array.isArray(tabs)) return counts;
         for (const tab of tabs) {
-          if (!tab || alreadyUnloaded(tab)) continue;
+          if (!tab || isBoostParkingTab(tab) || alreadyUnloaded(tab)) continue;
           if (tab.pinned || tab.hasAttribute?.("zen-essential")) counts.pinned += 1;
           else counts.unpinned += 1;
         }
         return counts;
       };
+
+      /* G1: ONE helper for every "put this Essential-panel record to sleep" path. The page can live in TWO places:
+       * the panel's own <browser> (state.appBrowsers, made by getOrCreateAppBrowser) and the strip tab. Unloading
+       * only the tab leaves WhatsApp/Messenger/arena.ai fully loaded in the panel — Zentral's own CSS even says a
+       * pending tab can contain a loaded panel. `apps.closeApp(appId)` is the public unload method the "Unload App"
+       * menu uses: it stops navigation, removes the <browser>, deletes it from appBrowsers and sets the tile
+       * data-loaded="false". Order matters: panel browser FIRST, then the tab, and never for the audible / selected /
+       * video-source exceptions. Wake stays with ctx.loadEssentialInBackground(record, false), which re-creates the
+       * app browser on demand; that side of the pair is deliberately unchanged. */
+      function livePanelBrowser(appId) {
+        const apps = window.Zentral?.Apps;
+        const direct =
+          (typeof apps?.getAppBrowser === "function" ? apps.getAppBrowser(appId) : null) ||
+          apps?.appBrowsers?.get?.(appId) ||
+          null;
+        if (direct && direct.isConnected !== false) return direct;
+        const all =
+          typeof panels()?.getAllAppBrowsers === "function" ? panels().getAllAppBrowsers() : [];
+        return (all || []).find(
+          (b) => b && b._bgalazkaAppId === appId && b.isConnected !== false,
+        ) || null;
+      }
+      function panelSleepExempt(record, ctx, browser) {
+        const t = record?.tab;
+        if (!t) return "no-tab";
+        const table = policy();
+        if (table?.isAudible?.(t) || browser?.audioPlaying) return "audible";
+        if (ctx?.videoSourceTab && t === ctx.videoSourceTab) return "video-source";
+        if (t === window.gBrowser?.selectedTab) return "selected";
+        return "";
+      }
+      function tabAlreadyAsleep(tab) {
+        const check = policy()?.isUnloadable_AlreadyUnloaded;
+        if (typeof check === "function") return Boolean(check(tab));
+        return Boolean(
+          !tab?.linkedPanel ||
+          tab?.hasAttribute?.("pending") ||
+          tab?.hasAttribute?.("discarded") ||
+          (tab?.hasAttribute?.("zen-dormant") && tab?.getAttribute?.("zen-dormant") !== "false"),
+        );
+      }
+
+      async function sleepPanelRecord(record, ctx = {}) {
+        const appId = record?.app?.id || record?.appId || "";
+        const browser = appId ? livePanelBrowser(appId) : null;
+        const exempt = panelSleepExempt(record, ctx, browser);
+        if (exempt) return { slept: false, how: "none", reason: exempt };
+        let panel = false;
+        let tab = false;
+        let reason = "";
+        // (a) The panel's own app browser. closeApp persists zoom and cleans addon-host records through the
+        // ZentralPanels wrapper, so Boost never touches the private browser map itself.
+        if (browser && appId) {
+          try {
+            const apps = window.Zentral?.Apps;
+            if (typeof apps?.closeApp === "function") {
+              apps.closeApp(appId);
+              panel = true;
+            }
+          } catch (_) {
+            reason = "close-failed";
+          }
+        }
+        // (b) The record's tab, but only when it is still loaded. A pending tab can still hold a loaded panel, so
+        // this check is independent of (a); a tab the person opened and uses directly has no app browser at all and
+        // this path does all the work. The shared policy still has the final say (PiP, sharing, host tab, private...).
+        const element = record?.tab;
+        const gBrowser = window.gBrowser;
+        if (element && !tabAlreadyAsleep(element) && gBrowser) {
+          const verdict = canUnload(element, ctx, { panelRecord: true, panelConsent: true });
+          if (!verdict.allowed) {
+            if (!reason) reason = String(verdict.reason || "policy-refused");
+          } else {
+            try {
+              let result = true;
+              if (typeof gBrowser.explicitUnloadTabs === "function")
+                result = await gBrowser.explicitUnloadTabs([element]);
+              else {
+                await gBrowser.prepareDiscardBrowser?.(element);
+                result = gBrowser.discardBrowser?.(element, true);
+              }
+              // G8: a `false` answer is a beforeunload refusal, not a command to force-close. A pending row may still
+              // have held a live panel browser, so the caller can report the panel part without counting this tab.
+              if (result === false && !tabAlreadyAsleep(element)) {
+                if (!reason) reason = "refused";
+              } else {
+                tab = true;
+              }
+            } catch (_) {
+              if (!reason) reason = "unload-failed";
+            }
+          }
+        }
+        const how = panel && tab ? "both" : panel ? "panel" : tab ? "tab" : "none";
+        if (!panel && !tab && !reason) reason = "already-asleep";
+        return { slept: panel || tab, how, reason };
+      }
 
       // A deep run, in three steps that can each say no: tabs by the policy (oldest first), then panel records whose
       // mode allows sleep, then the wake-up list for Restore. The counts and the freed number are the result.
@@ -2032,7 +4073,11 @@ function nativeSidebarSide() {
       });
 
       async function runLevel2(options = {}) {
-        if (disposed || level2Busy) return null;
+        if (disposed) return null;
+        // G8: Game Mode owns the unload pass. A manual Level 2 or a limiter batch reports its state instead of
+        // starting a parallel sweep that would fight the plan-driven pass and double-write the undo snapshot.
+        if (gameMode.on) return gameModeState();
+        if (level2Busy) return null;
         if (!policy()) {
           warn("the tab policy is not loaded, so the deep pass is not offered in this build");
           return null;
@@ -2047,6 +4092,9 @@ function nativeSidebarSide() {
         try {
           const beforeMB = memoryMB();
           if (beforeMB != null) lastSampleMB = beforeMB;
+          // G3: the snapshot's before reading. Both numbers are on-demand reads, never a timer.
+          gameSession.beforeMB = beforeMB;
+          gameSession.processesBefore = processCount();
           // OW-121: every deep clean now includes the light clean first. This is the same shared minimize +
           // GC/CC action list Level 1 uses, without a second 3 s settle; the one after-reading below is the
           // honest combined result. The public deep action never skips it, and the result says which path ran.
@@ -2095,6 +4143,10 @@ function nativeSidebarSide() {
             const limit = Number(options.batch) > 0 ? Number(options.batch) : Infinity;
             for (const tab of candidates) {
               if (disposed || unloaded.tabs >= limit) break;
+              // G4: Boost's parking tab is never unloaded, and the tab being parked by G4 belongs to the parking
+              // path only. Without this guard a deep pass racing the deferred selection could unload it twice.
+              if (isBoostParkingTab(tab) || tab === parking.pendingOriginal ||
+                  tab === gameSession.originalSelected) continue;
               // A record tab is owned ONLY by the panel loop below; the policy says so with its own named reason,
               // so a live record stays loaded whatever the `unload_pinned` pref says.
               const verdict = canUnload(tab, ctx, { panelRecord: recordTabs.has(tab) });
@@ -2110,12 +4162,18 @@ function nativeSidebarSide() {
                 }
                 if (disposed) return null;
                 unloaded.tabs += 1;
-                rememberUndone("tabs", {
-                  tab: null, // the element is gone from the session's point of view; the URL is what Restore lists
+                // G3: keep the REAL element. An unloaded tab stays in the strip as a pending row; storing `null`
+                // here was why Restore could only count tabs and never wake them.
+                const entry = {
+                  tab,
                   url: String(tab.linkedBrowser?.currentURI?.spec || ""),
                   title: String(tab.label || ""),
+                  lastAccessed: Number(tab.lastAccessed) || 0,
+                  wasPinned: Boolean(tab.pinned || tab.hasAttribute?.("zen-essential")),
                   when: Date.now(),
-                });
+                };
+                rememberUndone("tabs", entry);
+                rememberSessionTab(entry);
               } catch (_) {
                 recordSkip("unload-failed", 5);
               }
@@ -2124,29 +4182,40 @@ function nativeSidebarSide() {
           // Panels: only records the person marked `asleep-allowed`. `live` and `throttled` stay exactly as they are —
           // the mode is theirs, and this pass does not read it as advice.
           if (!disposed && options.allowPanels !== false) {
-            // A manual deep pass and the limiter sleep only `asleep-allowed` records — the mode is the person's advice
-            // and this pass does not read it as consent. A Stronger-saver Game Mode pass passes `allowModes` with every
-            // mode, because that switch IS the consent (plan B7.2).
-            const modes = Array.isArray(options.allowModes) ? options.allowModes : ["asleep-allowed"];
+            // OUTSIDE Game Mode, `stronger_saver` is the explicit consent that opens every record mode to Level 2.
+            // A plain deep pass (and the limiter) still sleeps only `asleep-allowed` records. Game Mode has its own
+            // G8 plan-driven pass and never calls this loop, so the two unload paths cannot fight each other.
+            const modes = Array.isArray(options.allowModes) ? options.allowModes :
+              (prefBool(PREF.STRONGER_SAVER, false) ? [...BACKGROUND_MODES] : ["asleep-allowed"]);
             for (const record of records) {
               if (disposed) break;
               if (!modes.includes(modeOf(record))) continue;
               // OW-111: consent comes from THIS record's mode (or Stronger saver's all-modes switch), not from
               // `unload_pinned`. It waives only the pinned/Essential rule; audible/selected/PiP/etc. still win.
-              const verdict = canUnload(record.tab, ctx, { panelRecord: true, panelConsent: true });
-              if (!verdict.allowed) {
-                recordSkip("panel:" + verdict.reason, 8);
+              // G1: the one helper frees BOTH holders. The policy verdict is asked inside it for the tab part;
+              // the panel-browser part uses the three named exceptions because a pending tab can still hold a
+              // live panel. Every deep-pass caller (manual Level 2, limiter batches, Stronger saver, and later
+              // Game Mode) goes through this door, so sleep and wake cannot drift apart again.
+              const appId = record.app?.id || record.appId;
+              const wasLoaded = Boolean(appId && livePanelBrowser(appId));
+              const slept = await sleepPanelRecord(record, ctx);
+              if (disposed) return null;
+              if (!slept.slept) {
+                recordSkip("panel:" + (slept.reason || "not-slept"), 8);
                 continue;
               }
-              try {
-                if (typeof gBrowser.explicitUnloadTabs === "function") await gBrowser.explicitUnloadTabs([record.tab]);
-                else gBrowser.discardBrowser?.(record.tab, true);
-                if (disposed) return null;
-                unloaded.panels += 1;
-                rememberUndone("panels", { appId: record.app?.id || record.appId, title: String(record.app?.name || ""), when: Date.now() });
-              } catch (_) {
-                recordSkip("panel-unload-failed", 8);
-              }
+              unloaded.panels += 1;
+              const entry = { appId, title: String(record.app?.name || ""), when: Date.now() };
+              rememberUndone("panels", entry);
+              // G3: the record reference is what G5's restore loop needs to wake it through
+              // loadEssentialInBackground(record, false).
+              rememberSessionPanel({
+                appId,
+                recordRef: record,
+                wasLoaded,
+                mode: modeOf(record),
+                when: entry.when,
+              });
             }
           }
           if (disposed) return null;
@@ -2183,6 +4252,9 @@ function nativeSidebarSide() {
             lastSampleMB = afterMB;
             emit(afterMB);
           }
+          // G3: the snapshot's after reading, for G7's "freed X MB" report.
+          gameSession.afterMB = afterMB;
+          gameSession.processesAfter = processCount();
           lastSkipped = { ...skippedCounts };
           return {
             beforeMB, afterMB, freedMB, by: "level2", unloaded, skipped,
@@ -2198,21 +4270,11 @@ function nativeSidebarSide() {
       // Restore: wakes what a deep run put to sleep. Panel records wake immediately (that is the promise Restore makes),
       // tabs are listed — waking them all at once would undo the run and cost the memory back in one go.
       function restore() {
-        const restored = { panels: 0, tabs: 0 };
-        const ctx = panels();
-        for (const record of undoState.panels.splice(0)) {
-          try {
-            const live = essentialRecords().find((r) => (r.app?.id || r.appId) === record.appId);
-            if (live && typeof ctx?.loadEssentialInBackground === "function") {
-              ctx.loadEssentialInBackground(live, false);
-              restored.panels += 1;
-            }
-          } catch (_) {}
-        }
-        // The tab list is what remains: Restore reports how many URLs are waiting for a click, and clears the record.
-        restored.tabs = undoState.tabs.length;
-        undoState.tabs.length = 0;
-        return restored;
+        // G5: the old Restore is now the engine's panels-only, immediate profile. Panels wake NOW, the parking
+        // hand-back still happens from a deferred task, and tabs are reported for the browser to load on click.
+        // All of the snapshot/undo clearing lives in restoreSession(), never in a second path.
+        const result = restoreSession({ profile: "panels", immediate: true });
+        return { panels: result.panels, tabs: result.tabs };
       }
 
       // The panel tile's menu reads and writes one record's mode through the panel module's own store, so a mode set
@@ -2386,6 +4448,12 @@ function nativeSidebarSide() {
       function limiterTick() {
         limiter.timer = 0;
         if (disposed) return;
+        // G8: the limiter is idle while Game Mode owns the session; it re-arms on exit, never behind the game pass.
+        if (gameMode.on) {
+          limiter.lastAction = "none";
+          limiter.lastReason = "game-mode";
+          return;
+        }
         const settings = limiterSettings();
         if (!settings.enabled) {
           limiter.lastAction = "none";
@@ -2428,7 +4496,7 @@ function nativeSidebarSide() {
           let unloaded = { tabs: 0, panels: 0 };
           // A hard run is a deep pass repeated until the number is where the person wants it, with a bounded number of
           // rounds so a page that refuses to sleep cannot make this loop forever.
-          while (!disposed && limiterSettings().enabled && rounds < 12 && current > decision.targetMB) {
+          while (!disposed && !gameMode.on && limiterSettings().enabled && rounds < 12 && current > decision.targetMB) {
             rounds += 1;
             const result = await runLevel2({ batch: LIMIT_BATCH });
             if (!result || result.by !== "level2") break;
@@ -2439,7 +4507,7 @@ function nativeSidebarSide() {
             current = after;
             if (!(result.unloaded?.tabs || result.unloaded?.panels)) break;
           }
-          if (disposed || !limiterSettings().enabled) return;
+          if (disposed || gameMode.on || !limiterSettings().enabled) return;
           for (const listener of limiterListeners) {
             try {
               listener({ kind: "limit", action: "hard-done", totalMB: current, unloaded, runs: rounds });
@@ -2462,9 +4530,18 @@ function nativeSidebarSide() {
       function armLimiter(ms) {
         clearTimer(limiter.timer);
         limiter.timer = 0;
-        if (disposed) return;
+        if (disposed || gameMode.on) return;
         if (!limiterSettings().enabled) return;
         limiter.timer = setTimer(limiterTick, Math.max(1000, Number(ms) || LIMIT_IDLE_MS));
+      }
+
+      // G8: turning the game on clears the limiter's one-shot timer and records why. Exit calls armLimiter()
+      // again, so an enabled limiter resumes its normal cadence without a second pass during the game.
+      function stopLimiterForGameMode() {
+        clearTimer(limiter.timer);
+        limiter.timer = 0;
+        limiter.lastAction = "none";
+        limiter.lastReason = "game-mode";
       }
 
       const limiterListeners = new Set();
@@ -2547,7 +4624,7 @@ function nativeSidebarSide() {
         try {
           for (const tab of gBrowser?.tabs || []) {
             const browser = tab?.linkedBrowser;
-            if (!browser || !tab.isConnected || seen.has(browser)) continue;
+            if (!browser || !tab.isConnected || isBoostParkingTab(tab) || seen.has(browser)) continue;
             seen.add(browser);
             const why = gameModeExemptReason(tab, videoSource);
             bodies.push({ id: browser, kind: "tab", exempt: Boolean(why), why });
@@ -2590,15 +4667,49 @@ function nativeSidebarSide() {
 
       // The state Game Mode owns. `saved` is everything it changed, so switching it off puts the session back instead of
       // guessing; `woke` is what a Stronger-saver pass put to sleep, so Restore can bring it back.
-      const gameMode = { on: false, saved: new Map(), woke: [], pausedBy: false, run: 0, lastActed: 0, lastResult: null };
+      const gameMode = {
+        on: false, saved: new Map(), woke: [], pausedBy: false, run: 0,
+        lastActed: 0, lastResult: null, lastPlan: null,
+        // G8: the final memory report and the one-shot cleanup chain belong to the current Game Mode run only.
+        beforeMB: null, afterMB: null, finalMB: null, freedMB: null, finalFreedMB: null,
+        processesBefore: 0, processesAfter: 0,
+        lastUnloaded: { tabs: 0, panels: 0 }, lastKept: [],
+        firstCleanBy: "", secondCleanBy: "", lateCleanBy: "",
+      };
+      const gameModeWork = {
+        active: false,
+        generation: 0,
+        reason: "",
+        settleTimer: 0,
+        lateTimer: 0,
+        firstClean: 0,
+        secondClean: 0,
+        lateClean: 0,
+      };
+      const gameModeWorkValid = (generation) =>
+        !disposed && gameMode.on && gameModeWork.active && generation === gameModeWork.generation;
+      function cancelGameModeWork(reason) {
+        gameModeWork.generation += 1;
+        gameModeWork.active = false;
+        gameModeWork.reason = String(reason || "cancelled");
+        clearTimer(gameModeWork.settleTimer);
+        clearTimer(gameModeWork.lateTimer);
+        gameModeWork.settleTimer = 0;
+        gameModeWork.lateTimer = 0;
+        parking.parkHook = null;
+      }
 
       function rememberBrowser(browser) {
         if (!browser || gameMode.saved.has(browser)) return;
         try {
-          gameMode.saved.set(browser, {
+          const state = {
             docShellIsActive: browser.docShellIsActive,
             renderLayers: browser.renderLayers,
-          });
+          };
+          gameMode.saved.set(browser, state);
+          // G3: the same activity record belongs to the session snapshot, so Restore/G7 can report what changed.
+          if (!gameSession.activity.has(browser)) gameSession.activity.set(browser, { ...state });
+          touchSession();
         } catch (_) {}
       }
 
@@ -2619,14 +4730,226 @@ function nativeSidebarSide() {
         return { acted, kept: decision.kept };
       }
 
-      // B7.2's "Stronger saver": sleep every panel record, whatever its mode, by running the deep pass with the modes
-      // opened up. It goes through `runLevel2` rather than a second unload path, so the policy still decides what may go
-      // (audible, selected, pending, video source...) and `undoState` is filled by the same code Restore reads.
-      async function strongerSaverSleep() {
-        const result = await runLevel2({ allowTabs: false, allowModes: [...BACKGROUND_MODES] });
-        const slept = Number(result?.unloaded?.panels) || 0;
-        for (let i = 0; i < slept; i++) gameMode.woke.push("panel");
-        return slept;
+      /* G8: ONE plan-driven Game Mode pass. G2 decides what may sleep, G4 parks the selected tab through its deferred
+       * door, G1's sleepPanelRecord closes both holders of a panel record, and G3 remembers every real tab/panel for
+       * the one Restore action. Nothing here calls runLevel2(): a second generic sweep would ignore Game Mode consent
+       * for `live` records and write duplicate undo entries. */
+      const gameModeLabel = (value) => {
+        if (value == null) return "unknown";
+        if (typeof value === "string" || typeof value === "number") return String(value);
+        return String(value.label || value.app?.name || value.app?.id || value.appId ||
+          value._bgalazkaAppId || value.currentURI?.spec || "browser");
+      };
+      function gameModeUnloadContext() {
+        const gBrowser = window.gBrowser;
+        return {
+          // Game Mode consent: pinned/Essential tabs and every panel record mode may sleep. The policy's NEVER rules
+          // (audible, video source, PiP, sharing, private, add-on host, placeholders and refusals) still win.
+          keepPinned: true,
+          videoSourceTab: videoSourceTab(),
+          selectedTab: gBrowser?.selectedTab || null,
+          sessionUrlFor: (tab) => {
+            try {
+              const liveSpec = tab?.linkedBrowser?.currentURI?.spec;
+              if (liveSpec && liveSpec !== "about:blank") return String(liveSpec);
+              const state = JSON.parse(window.SessionStore?.getTabState?.(tab) || "{}");
+              const entries = Array.isArray(state.entries) ? state.entries : [];
+              const index = entries.length ? Math.max(0, Math.min(entries.length - 1, (Number(state.index) || 1) - 1)) : -1;
+              return index >= 0 ? String(entries[index]?.url || "") : "";
+            } catch (_) {
+              return "";
+            }
+          },
+          isHostTab: (tab) => Boolean(tab?.hasAttribute?.("bgalazka-addon-host") || tab?.hasAttribute?.("bgalazka-addon-host-fallback")),
+          isPrivate: isPrivateTab,
+        };
+      }
+      function startGameModePass(plan, parked) {
+        const generation = ++gameModeWork.generation;
+        gameModeWork.active = true;
+        gameModeWork.reason = "running";
+        gameModeWork.firstClean = 0;
+        gameModeWork.secondClean = 0;
+        gameModeWork.lateClean = 0;
+        const run = () => { void runGameModePass(plan, generation).catch(() => {}); };
+        // G4's selection/unload is deferred. The hook runs after that one door finishes (or rolls back), so the pass
+        // sees the parking tab as selected and never skips a panel record merely because it used to be selected.
+        if (parked?.created) parking.parkHook = run;
+        else run();
+      }
+      async function runGameModePass(plan, generation) {
+        if (!gameModeWorkValid(generation)) return;
+        const gBrowser = window.gBrowser;
+        if (!gBrowser || !Array.isArray(gBrowser.tabs)) return;
+        const beforeMB = memoryMB();
+        const processesBefore = processCount();
+        gameSession.beforeMB = beforeMB;
+        gameSession.processesBefore = processesBefore;
+        gameMode.beforeMB = beforeMB;
+        gameMode.processesBefore = processesBefore;
+        gameMode.afterMB = null;
+        gameMode.finalMB = null;
+        gameMode.freedMB = null;
+        gameMode.finalFreedMB = null;
+        gameMode.processesAfter = 0;
+        gameMode.firstCleanBy = "";
+        gameMode.secondCleanBy = "";
+        gameMode.lateCleanBy = "";
+        // G8: the pass starts with the same shared light-clean action list Level 2 used to run. It does not call
+        // runLevel2() itself: the pass owns the unload plan, the settle and BOTH later cleans.
+        gameModeWork.firstClean += 1;
+        const firstBy = await lightClean();
+        if (!gameModeWorkValid(generation)) return;
+        gameMode.firstCleanBy = String(firstBy || "");
+        const ctx = gameModeUnloadContext();
+        const unloaded = { tabs: 0, panels: 0 };
+        const kept = Array.isArray(gameMode.lastKept) ? gameMode.lastKept.slice() : [];
+        const addKept = (kind, id, reason) => {
+          kept.push({ id: gameModeLabel(id), kind, reason: String(reason || "kept") });
+          while (kept.length > SESSION_CAP) kept.shift();
+        };
+        const recordTabs = new Set(essentialRecords().map((record) => record?.tab).filter(Boolean));
+        const skipTabs = new Set([
+          parking.pendingTab, parking.pendingOriginal, gameSession.parkingTab, gameSession.originalSelected,
+        ].filter(Boolean));
+        const parkingSelected = isBoostParkingTab(gBrowser.selectedTab);
+        const selectedWithoutParking = (tab) => Boolean(tab && !parkingSelected && tab === gBrowser.selectedTab);
+        if (!parkingSelected && gBrowser.selectedTab) skipTabs.add(gBrowser.selectedTab);
+        const keepHosts = gameKeepHosts();
+        const hostMatch = (tab) => {
+          const host = String(hostOfTab(tab) || "").toLowerCase();
+          return Boolean(host) && keepHosts.some((h) => host === h || host.endsWith("." + h));
+        };
+        // G4's deferred door owns the selected original. It already wrote the real tab into the G3 snapshot; count
+        // that exact tab once here so the final report includes the full Game Mode pass, without unloading it twice.
+        const parkedOriginal = gameSession.originalSelected;
+        if (parkedOriginal && gameSession.tabs.some((entry) => entry?.tab === parkedOriginal)) unloaded.tabs += 1;
+        // Ordinary tabs: the G2 plan already filtered exemptions, but live state can change between preview and the
+        // deferred parking door. Re-read the policy and treat explicitUnloadTabs(false) as a refusal, never a close.
+        for (const tab of (Array.isArray(plan?.sleepTabs) ? plan.sleepTabs : [])) {
+          if (!gameModeWorkValid(generation)) return;
+          if (!tab || isBoostParkingTab(tab) || skipTabs.has(tab) || recordTabs.has(tab)) continue;
+          if (selectedWithoutParking(tab)) { addKept("tab", tab, "selected"); continue; }
+          if (hostMatch(tab)) { addKept("tab", tab, "keep-host"); continue; }
+          const verdict = canUnload(tab, ctx, { panelRecord: false });
+          if (!verdict.allowed) {
+            addKept("tab", tab, verdict.reason);
+            continue;
+          }
+          try {
+            let result = true;
+            if (typeof gBrowser.explicitUnloadTabs === "function")
+              result = await gBrowser.explicitUnloadTabs([tab]);
+            else if (typeof gBrowser.discardBrowser === "function") {
+              await gBrowser.prepareDiscardBrowser?.(tab);
+              result = gBrowser.discardBrowser(tab, true);
+            } else {
+              addKept("tab", tab, "no-unload-api");
+              continue;
+            }
+            if (!gameModeWorkValid(generation)) return;
+            if (result === false && !tabAlreadyAsleep(tab)) {
+              addKept("tab", tab, "refused");
+              continue;
+            }
+            unloaded.tabs += 1;
+            const entry = {
+              tab,
+              url: String(tab.linkedBrowser?.currentURI?.spec || ""),
+              title: String(tab.label || ""),
+              lastAccessed: Number(tab.lastAccessed) || 0,
+              wasPinned: Boolean(tab.pinned || tab.hasAttribute?.("zen-essential")),
+              gameMode: true,
+              when: Date.now(),
+            };
+            rememberUndone("tabs", entry);
+            rememberSessionTab(entry);
+          } catch (_) {
+            addKept("tab", tab, "unload-failed");
+          }
+        }
+        // Panel records: every mode is in the G2 plan because Game Mode is the consent. sleepPanelRecord closes the
+        // app browser and, when still loaded, unloads the record tab through the same policy door used by G1.
+        for (const record of (Array.isArray(plan?.sleepPanels) ? plan.sleepPanels : [])) {
+          if (!gameModeWorkValid(generation)) return;
+          if (!record) continue;
+          if (isBoostParkingTab(record.tab)) { addKept("panel", record, "parking-tab"); continue; }
+          if (selectedWithoutParking(record?.tab)) { addKept("panel", record, "selected"); continue; }
+          if (hostMatch(record?.tab)) { addKept("panel", record, "keep-host"); continue; }
+          const appId = record.app?.id || record.appId;
+          const wasLoaded = Boolean(appId && livePanelBrowser(appId));
+          const slept = await sleepPanelRecord(record, ctx);
+          if (!gameModeWorkValid(generation)) return;
+          if (!slept.slept) {
+            addKept("panel", appId || record, slept.reason || "not-slept");
+            continue;
+          }
+          if (slept.reason) addKept("panel", appId || record, slept.reason);
+          unloaded.panels += 1;
+          gameMode.woke.push("panel");
+          const entry = {
+            appId, title: String(record.app?.name || ""), gameMode: true, when: Date.now(),
+          };
+          rememberUndone("panels", entry);
+          rememberSessionPanel({
+            appId, recordRef: record, wasLoaded, mode: modeOf(record), gameMode: true, when: entry.when,
+          });
+        }
+        if (!gameModeWorkValid(generation)) return;
+        gameMode.lastUnloaded = { ...unloaded };
+        gameMode.lastKept = kept.slice();
+        gameMode.lastResult = { ...gameModeState(), unloaded: { ...unloaded } };
+        // Existing 3 s settle, then the SECOND lightClean(). One 30 s one-shot timer follows for late process frees.
+        gameModeWork.reason = "settling";
+        gameModeWork.settleTimer = setTimer(async () => {
+          gameModeWork.settleTimer = 0;
+          if (!gameModeWorkValid(generation)) return;
+          gameModeWork.secondClean += 1;
+          const by = await lightClean();
+          if (!gameModeWorkValid(generation)) return;
+          const afterMB = memoryMB();
+          if (afterMB != null) {
+            lastSampleMB = afterMB;
+            emit(afterMB);
+          }
+          gameMode.afterMB = afterMB;
+          gameMode.finalMB = afterMB;
+          gameMode.processesAfter = processCount();
+          gameMode.secondCleanBy = String(by || "");
+          const freed = beforeMB != null && afterMB != null ? Math.max(0, beforeMB - afterMB) : null;
+          gameMode.freedMB = freed;
+          gameMode.finalFreedMB = freed;
+          gameSession.afterMB = afterMB;
+          gameSession.processesAfter = gameMode.processesAfter;
+          gameMode.lastResult = { ...gameModeState(), unloaded: { ...unloaded } };
+          emitGameModeEvent({ kind: "game-mode", action: "on-settle", state: gameMode.lastResult });
+          gameModeWork.reason = "late-clean-armed";
+          gameModeWork.lateTimer = setTimer(async () => {
+            gameModeWork.lateTimer = 0;
+            if (!gameModeWorkValid(generation)) return;
+            gameModeWork.lateClean += 1;
+            const lateBy = await lightClean();
+            if (!gameModeWorkValid(generation)) return;
+            const finalMB = memoryMB();
+            if (finalMB != null) {
+              lastSampleMB = finalMB;
+              emit(finalMB);
+            }
+            gameMode.finalMB = finalMB;
+            gameMode.afterMB = finalMB;
+            gameMode.lateCleanBy = String(lateBy || "");
+            const finalFreed = beforeMB != null && finalMB != null ? Math.max(0, beforeMB - finalMB) : freed;
+            gameMode.finalFreedMB = finalFreed;
+            gameMode.freedMB = finalFreed;
+            gameMode.processesAfter = processCount();
+            gameSession.afterMB = finalMB;
+            gameSession.processesAfter = gameMode.processesAfter;
+            gameModeWork.active = false;
+            gameModeWork.reason = "complete";
+            gameMode.lastResult = { ...gameModeState(), unloaded: { ...unloaded } };
+            emitGameModeEvent({ kind: "game-mode", action: "on-final", state: gameMode.lastResult });
+          }, GAME_MODE_LATE_CLEAN_MS);
+        }, LEVEL1_SETTLE_MS);
       }
 
       function restoreGameModeActivity() {
@@ -2648,7 +4971,10 @@ function nativeSidebarSide() {
       // every browser on the way out of a game would cost exactly the memory the mode was saving.
       function restoreSelectedTabActivity() {
         const gBrowser = window.gBrowser;
-        const browser = gBrowser?.selectedTab?.linkedBrowser || gBrowser?.selectedBrowser;
+        // G4: while parked, `gBrowser.selectedTab` is Boost's about:blank tab; the person's original tab is the
+        // one whose activity must be made live again. Without a parking tab this is exactly the old expression.
+        const original = gameSession.originalSelected;
+        const browser = original?.linkedBrowser || gBrowser?.selectedTab?.linkedBrowser || gBrowser?.selectedBrowser;
         if (!browser) return 0;
         try {
           if (browser.docShellIsActive !== true) browser.docShellIsActive = true;
@@ -2679,38 +5005,64 @@ function nativeSidebarSide() {
 
       function applyGameMode(on) {
         const target = Boolean(on);
+        // G5: a (re)entry into Game Mode cancels any staggered Restore still in flight, so a restore chain can
+        // never wake tabs behind a fresh Game Mode pass. This runs even when the switch was already on.
+        if (target) cancelRestore("game-mode-on");
         // Already in that state: a second switch, the pref observer having just done the work, or a restart with the
         // pref set. The caller still wants to know what the last real pass did, so that is what it gets.
         if (target === gameMode.on) return gameMode.lastResult || gameModeState();
         if (target) {
+          // G8: the game owns every cleanup timer. A fresh ON clears any stale chain, stops the limiter and marks the
+          // one-shot startup trim skipped; none of those paths may run a parallel pass behind the game plan.
+          cancelGameModeWork("new-game-mode");
           gameMode.on = true;
           gameMode.run += 1;
+          gameMode.woke.length = 0;
+          gameMode.lastUnloaded = { tabs: 0, panels: 0 };
+          gameMode.lastResult = null;
+          stopLimiterForGameMode();
+          skipStartupTrimForGameMode();
           const switchApi = performanceSwitch();
           if (switchApi && !switchApi.isPaused()) {
             switchApi.setPaused(true);
             gameMode.pausedBy = true;
           }
-          // Level 2 first (the plan's "Level 2 +"), then the activity pass. Level 2 is async and must not block the
-          // switch: the activity pass is what the person feels, and it is synchronous by design. Do NOT call
-          // `syncPanelActivity()` here on turn-on: `deactivateForGameMode` already idled background panels, whereas
-          // `syncPanelActivity()` would reactivate preload `live` notification panels right back.
-          const level2 = runLevel2({ allowPanels: false });
-          if (level2 && typeof level2.catch === "function") level2.catch(() => {});
+          // G2/G4/G8: one dry run decides what may sleep and whether the selected tab is parked. `parkSelected`
+          // creates ONE ephemeral tab now and defers the selection/unload. The G8 pass waits for that same door,
+          // then unloads exactly the planned tabs and panel records through G1's sleepPanelRecord helper. No
+          // runLevel2(), Stronger-saver chain or generic tab sweep runs while Game Mode is on.
+          // Do NOT call `syncPanelActivity()` here on turn-on: `deactivateForGameMode` already idled background
+          // panels, whereas `syncPanelActivity()` would reactivate preload `live` notification panels right back.
+          const plan = previewGameMode();
+          gameMode.lastPlan = plan;
+          gameMode.lastKept = plan.keep.slice(0, SESSION_CAP).map((item) => ({
+            id: gameModeLabel(item?.id), kind: String(item?.kind || "tab"),
+            reason: String(item?.reason || "kept"),
+          }));
+          const parked = parkSelected(plan);
+          startGameModePass(plan, parked);
           const activity = deactivateForGameMode(gameModeTargets());
-          if (prefBool(PREF.STRONGER_SAVER, false)) {
-            Promise.resolve(level2)
-              .then(() => {
-                if (disposed || !gameMode.on || !prefBool(PREF.STRONGER_SAVER, false)) return null;
-                return strongerSaverSleep();
-              })
-              .catch(() => {});
-          }
-          gameMode.lastResult = { ...gameModeState(), acted: activity.acted, kept: activity.kept.length };
+          gameMode.lastResult = {
+            ...gameModeState(), acted: activity.acted, kept: activity.kept.length,
+            parked: parked.created, plannedKept: plan.keep.length,
+          };
+          emitGameModeEvent({ kind: "game-mode", action: "on", state: gameMode.lastResult, preview: plan.counts });
           return gameMode.lastResult;
         }
         gameMode.on = false;
+        // G8: OFF cancels the settle/late one-shot timers and their generation. A callback already in flight checks
+        // the same generation, so no clean or memory report can land after the game has ended.
+        if (gameModeWork.active || gameModeWork.settleTimer || gameModeWork.lateTimer)
+          cancelGameModeWork(gameModeWork.reason === "destroy" ? "destroy" : "game-mode-off");
         const restored = restoreGameModeActivity();
         const selected = restoreSelectedTabActivity();
+        // G4: hand the selection back from the parking tab. This is deferred, so the pending original loads on
+        // the next task; the parking tab is closed in that same task. G5's `always` profile adopts that timer as
+        // the first step of the staggered Restore; `ask` (default) waits for G7's Restore action and `never`
+        // leaves the snapshot for a manual Restore.
+        unparkSelected();
+        const exitPolicy = normalizeRestoreExit(prefString(PREF.GAME_RESTORE_ON_EXIT, "ask"));
+        if (exitPolicy === "always") restoreSession();
         gameMode.woke.length = 0;
         const switchApi = performanceSwitch();
         if (gameMode.pausedBy && switchApi) {
@@ -2718,11 +5070,16 @@ function nativeSidebarSide() {
           gameMode.pausedBy = false;
         }
         syncPanelActivity();
+        // G8: an enabled limiter takes its normal one-shot cadence back on exit, never during the game.
+        armLimiter();
         gameMode.lastResult = { ...gameModeState(), restored, selected };
+        emitGameModeEvent({ kind: "game-mode", action: "off", state: gameMode.lastResult });
         return gameMode.lastResult;
       }
 
       function gameModeState() {
+        // G7: the snapshot is read on demand from G3/G5's session state; no second measurement path.
+        const session = sessionState();
         return {
           on: gameMode.on,
           paused: Boolean(performanceSwitch()?.isPaused?.()),
@@ -2731,6 +5088,71 @@ function nativeSidebarSide() {
           woke: gameMode.woke.length,
           acted: gameMode.lastActed,
           run: gameMode.run,
+          parking: parkingState(),
+          restoreOnExit: normalizeRestoreExit(prefString(PREF.GAME_RESTORE_ON_EXIT, "ask")),
+          restoreProfile: normalizeRestoreProfile(prefString(PREF.GAME_RESTORE_TABS, "all")),
+          restorePending: restoreWork.active,
+          // G8: `freedMB` is the FINAL reading after the settle clean and the one-shot 30 s clean. It starts null
+          // while the pass is still settling; the owner reads the same shape from the Browser Console.
+          freedMB: gameMode.finalFreedMB,
+          finalFreedMB: gameMode.finalFreedMB,
+          beforeMB: gameMode.beforeMB,
+          afterMB: gameMode.finalMB == null ? gameMode.afterMB : gameMode.finalMB,
+          finalMB: gameMode.finalMB,
+          processesBefore: gameMode.processesBefore,
+          processesAfter: gameMode.processesAfter,
+          unloaded: { ...gameMode.lastUnloaded },
+          kept: gameMode.lastKept.slice(),
+          snapshot: {
+            panels: session.panels,
+            tabs: session.restorableTabs,
+            active: session.active,
+            hasSelected: session.hasSelected,
+            hasParking: session.hasParking,
+          },
+          cleanup: {
+            active: gameModeWork.active,
+            reason: gameModeWork.reason,
+            firstClean: gameModeWork.firstClean,
+            secondClean: gameModeWork.secondClean,
+            lateClean: gameModeWork.lateClean,
+            settleArmed: Boolean(gameModeWork.settleTimer),
+            lateArmed: Boolean(gameModeWork.lateTimer),
+            firstCleanBy: gameMode.firstCleanBy,
+            secondCleanBy: gameMode.secondCleanBy,
+            lateCleanBy: gameMode.lateCleanBy,
+          },
+        };
+      }
+
+      // G2: the dry run. Everything is read on demand when the widget/menu asks; nothing here writes a pref, unloads
+      // a tab, starts a timer or samples RAM. The widget uses `counts` for "Will free about N tabs and M apps".
+      function gameKeepHosts() {
+        return prefString(PREF.GAME_KEEP_HOSTS, "")
+          .split(",")
+          .map((h) => h.trim().toLowerCase().replace(/^\*\./, ""))
+          .filter(Boolean);
+      }
+      function previewGameMode() {
+        const table = policy();
+        const gBrowser = window.gBrowser;
+        const plan = planGameMode({
+          tabs: [...(gBrowser?.tabs || [])],
+          panelRecords: essentialRecords(),
+          selectedTab: gBrowser?.selectedTab || null,
+          videoSourceTab: videoSourceTab(),
+          keepHosts: gameKeepHosts(),
+          parkSelected: prefBool(PREF.GAME_PARK_SELECTED, true),
+          canPark: typeof gBrowser?.addTab === "function",
+          isAudible: (t) => Boolean(table?.isAudible?.(t)),
+          isUnloadable: (t, ctx) =>
+            table?.isUnloadable?.(t, ctx) || { allowed: false, reason: "no-policy" },
+          isPrivate: isPrivateTab,
+          hostOf: hostOfTab,
+        });
+        return {
+          ...plan,
+          counts: { tabs: plan.sleepTabs.length, panels: plan.sleepPanels.length },
         };
       }
 
@@ -2779,6 +5201,9 @@ function nativeSidebarSide() {
         setBackgroundMode,
         backgroundModeOf: (record) => modeOf(record),
         BACKGROUND_MODES,
+        // G1: the single sleep door, exposed for tests and for the Game Mode planner (G2). It reports which
+        // holder(s) were freed so a caller can explain a record that stayed loaded.
+        sleepPanelRecord,
         // B7/OW-94: Game Mode. `setGameMode(true/false)` is what the widget's switch and the pref both call; the pref
         // observer is the only other entry point.
         setGameMode,
@@ -2786,6 +5211,29 @@ function nativeSidebarSide() {
         gameModeState,
         decideGameMode,
         gameModeTargets,
+        // G2: pure planner and its on-demand dry run; neither changes anything.
+        planGameMode,
+        previewGameMode,
+        // G3: the session snapshot, its live-only restore list and its counts. G5 consumes these.
+        sessionState,
+        // G4: the one parking tab, its deferred hand-back and its diagnostic state. `parkSelected()` defaults to
+        // the pure planner's dry run; `unparkSelected()` is idempotent.
+        parkSelected,
+        unparkSelected,
+        parkingState,
+        // G5: one-click staggered Restore, its diagnostic state and its canceller. `restore()` above is the
+        // panels-only immediate profile; the widget calls restoreSession() for the real Game Mode Restore.
+        restoreSession,
+        restoreState,
+        cancelRestore,
+        // G6: explicit user wakes remove their item from the snapshot and pending restore queue.
+        noteUserWake,
+        isRestoreWake,
+        sessionEntries: () => ({
+          panels: gameSession.panels.slice(),
+          tabs: gameSession.tabs.slice(),
+        }),
+        sessionTabsForRestore,
         // B5/OW-92: the limiter's decisions and its live state, for a caller (the widget, a live check) that wants to
         // show them. The deciding itself is pure and tested on its own.
         decideLimiter,
@@ -2801,6 +5249,18 @@ function nativeSidebarSide() {
         onChange,
         startSampling,
         stopSampling,
+        // G10: one owner for the standalone card's words and menu data. The full-pack tray keeps its own OW-121
+        // strings; both UIs call these pure helpers for the shared Game Mode preview and snapshot wording.
+        BOOST_WIDGET_STRINGS,
+        widgetLanguage: boostWidgetLanguage,
+        widgetText: boostWidgetText,
+        widgetMenu: boostWidgetMenuItems,
+        widgetPreviewText: boostWidgetPreviewText,
+        widgetRestoreLabel: boostWidgetRestoreLabel,
+        widgetResultText: boostWidgetResultText,
+        widgetFeedbackText: boostWidgetFeedbackText,
+        widgetOffText: boostWidgetOffText,
+        onGameModeEvent,
         // The last sampled value, for a widget that must show something before it samples (OW-90).
         lastMB: () => lastSampleMB,
         isSupported: () => memoryMB() != null,
@@ -2827,7 +5287,12 @@ function nativeSidebarSide() {
 
       function destroy() {
         if (disposed) return;
+        // G8: cancel the Game Mode settle/late chain before any cleanup can observe the disposed flag; its
+        // generation guard and owned timers are removed here, never left to fire after the window goes away.
+        cancelGameModeWork("destroy");
         disposed = true;
+        // G5: cancel the restore chain and remove every owned load listener/timeout before the window goes away.
+        cancelRestore("destroy");
         for (const fn of cleanups.splice(0).reverse()) {
           try {
             fn();
@@ -2835,6 +5300,9 @@ function nativeSidebarSide() {
         }
         for (const id of [...timers]) clearTimer(id);
         changeListeners.clear();
+        gameModeListeners.clear();
+        // G3/G4: no snapshot or Boost-owned parking tab survives a window teardown; both are in-memory work.
+        resetGameSession(true);
         delete window.ZentralBoost;
       }
 

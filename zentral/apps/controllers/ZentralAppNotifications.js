@@ -33,6 +33,11 @@
         SVG_STRINGS,
         WELL_KNOWN_SERVICES,
       } = shared;
+      // G6: badge/title polling is an automatic wake path too; no browser is created or title read while paused.
+      const automaticWakeBlocked = () => Boolean(
+        (window.ZentralRuntime || window.__zentralStandaloneRuntime)?.performance?.isPaused?.() ||
+        window.ZentralBoost?.gameModeState?.().on,
+      );
       return {
         extractBadgeFromTitle(title) {
           if (!title || typeof title !== "string")
@@ -88,6 +93,7 @@
           }
         },
         syncAllAppBadges(onlyAppId = null) {
+          if (automaticWakeBlocked()) return;
           if (!access.state.appBrowsers || access.state.appBrowsers.size === 0)
             return;
           const appsById = new Map();
@@ -132,6 +138,7 @@
           this.ensureBadgeSyncLoop();
         },
         ensureBadgeSyncLoop() {
+          if (automaticWakeBlocked()) return;
           if (!access.badgePollingObserver) {
             access.badgePollingObserver = {
               observe: () => this.syncBadgePollingPreference(),

@@ -7,6 +7,11 @@
   "entry": "ZentralBoost.uc.js",
   "output": "ZentralBoost.standalone.uc.js",
   "settings": "settings.json",
+  "css": "ZentralBoostWidget.css",
+  "loader": "__zentralBoostLoader",
+  "extras": [
+    "standalone/ZentralBoostWidget.js"
+  ],
   "tags": [
     "memory",
     "zen"

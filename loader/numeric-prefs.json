@@ -595,6 +595,20 @@
     "def": 85
   },
   {
+    "key": "zen.workspace.zentral.boost.game_restore_recent_n",
+    "text": "zen.workspace.zentral.boost.game_restore_recent_n_text",
+    "min": 0,
+    "max": 500,
+    "def": 8
+  },
+  {
+    "key": "zen.workspace.zentral.boost.game_restore_stagger_ms",
+    "text": "zen.workspace.zentral.boost.game_restore_stagger_ms_text",
+    "min": 0,
+    "max": 60000,
+    "def": 700
+  },
+  {
     "key": "zen.workspace.zentral.notes.autosave_seconds",
     "text": "zen.workspace.zentral.notes.autosave_seconds_text",
     "min": 2,

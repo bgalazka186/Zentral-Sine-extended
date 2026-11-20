@@ -103,6 +103,8 @@
         /** @private Toolbar background observer */
         #toolbarBgObserver = null;
         #toolbarBgListeners = [];
+        /** @private G6: unsubscribe from the shared performance-pause switch on destroy. */
+        #performanceUnsubscribe = null;
         #tabContextMenu = null;
         #tabContextPopupHandler = null;
         #libraryGuardObserver = null;
@@ -120,6 +122,9 @@
           try {
             Core.log("ZentralApps", "Destroying Apps module...");
 
+            // G6: an owned pause subscription must not survive a hot unload or re-init.
+            try { this.#performanceUnsubscribe?.(); } catch (_) {}
+            this.#performanceUnsubscribe = null;
             this.destroyLibraryPanelGuard();
 
             // 1. Clear timers and animation frames
@@ -761,6 +766,25 @@
           }
         }
 
+        // G6: the pause switch is event-driven. It stops the existing one-shot preload/badge work while a game owns
+        // the window and re-arms that SAME work on resume; neither branch starts a second interval or a second chain.
+        installPerformancePauseSubscription() {
+          const pauseSwitch = (window.ZentralRuntime || window.__zentralStandaloneRuntime)?.performance;
+          if (typeof pauseSwitch?.subscribe !== "function") return;
+          try { this.#performanceUnsubscribe?.(); } catch (_) {}
+          this.#performanceUnsubscribe = pauseSwitch.subscribe((paused) => {
+            if (this._destroyed) return;
+            if (paused) {
+              this.cancelAutomaticPreloads();
+              this.stopBadgeSyncLoop();
+              return;
+            }
+            if (!Core.getPref(Constants.Apps.PREF_ENABLED, true)) return;
+            this.ensureBadgeSyncLoop();
+            this.scheduleAutomaticPreloads();
+          });
+        }
+
         init() {
           if (!Core.getPref(Constants.Apps.PREF_ENABLED)) {
             Core.log("ZentralApps", "Apps Grid feature is disabled.");
@@ -787,6 +811,7 @@
 
           // Preload apps sequentially after browser startup
           this.scheduleAutomaticPreloads();
+          this.installPerformancePauseSubscription();
         }
 
         /**

@@ -6,6 +6,13 @@
     "defaultValue": true
   },
   {
+    "property": "zen.workspace.zentral.boost.widget_enabled",
+    "label": "Show the standalone Boost card",
+    "description": "On by default in a standalone Boost install. Turn it off to hide the Boost-owned card; the Widgets tray still owns the single Boost card when it is installed. Does not add a second card to the full pack.",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
     "property": "zen.workspace.zentral.boost.startup_trim",
     "label": "Free memory once after startup, when the browser has been quiet for 90 seconds",
     "type": "checkbox",
@@ -73,15 +80,89 @@
   {
     "property": "zen.workspace.zentral.boost.game_mode",
     "label": "Game Mode: pause everything else while I play",
-    "description": "Level 3 of Memory Boost. Runs a deep pass, stops every repeating timer (widgets, video discovery, RSS, Notes), and stops painting tabs you are not looking at. Tabs that are playing sound and the video preview keep running, so a podcast or a video keeps playing. Off when the browser restarts.",
+    "description": "Level 3 of Memory Boost. Runs ONE plan-driven unload pass through the panel sleep door, then a light clean after the settle and one late clean about 30 s later. Pauses repeating timers (widgets, video discovery, RSS, Notes) and stops painting tabs you are not looking at. Audible tabs, the video preview source, sharing/PiP/private/add-on host tabs and configured keep-hosts stay loaded. Unloaded tabs lose unsaved page state and need a short reload when you return; Restore is available. Off when the browser restarts.",
     "type": "checkbox",
     "defaultValue": false
   },
   {
     "property": "zen.workspace.zentral.boost.stronger_saver",
     "label": "Stronger saver: also sleep apps marked 'keep running'",
-    "description": "Off by default. When on, Game Mode also puts to sleep the Essential apps whose background mode is 'keep running' (WhatsApp, Messenger). Restore, or leaving Game Mode, brings them back.",
+    "description": "Off by default. OUTSIDE Game Mode, this opens every Essential-panel background mode (including live/keep running) to a manual Level 2 deep pass. Game Mode does not depend on it; a plain deep pass still sleeps only asleep-allowed records.",
     "type": "checkbox",
     "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.boost.game_keep_hosts",
+    "label": "Game Mode: sites that must stay loaded (host names, comma-separated)",
+    "description": "Optional. A tab whose host matches one of these names is kept, for example music.example.com, bank.example.com. Empty keeps nothing extra.",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.boost.game_park_selected",
+    "label": "Game Mode: park the selected tab so it can be unloaded too",
+    "description": "On by default. Game Mode creates one temporary about:blank parking tab, selects it from a deferred task, then unloads the original. Turn this off to keep the old behavior where the selected tab always stays loaded.",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.boost.game_restore_tabs",
+    "label": "Game Mode: what Restore brings back",
+    "description": "All tabs, the most recent tabs, panels only, or nothing. Panels are woken first; tabs reload in the background without changing selection. Unloaded pages lose unsaved form state and need a short reload.",
+    "type": "dropdown",
+    "defaultValue": "all",
+    "options": [
+      {
+        "label": "All snapshot tabs",
+        "value": "all"
+      },
+      {
+        "label": "Recent snapshot tabs",
+        "value": "recent"
+      },
+      {
+        "label": "Panels only",
+        "value": "panels"
+      },
+      {
+        "label": "Nothing (selection hand-back only)",
+        "value": "none"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.boost.game_restore_recent_n_text",
+    "label": "Game Mode: number of recent tabs to restore [0 to 500]",
+    "type": "string",
+    "defaultValue": "8",
+    "placeholder": "8"
+  },
+  {
+    "property": "zen.workspace.zentral.boost.game_restore_stagger_ms_text",
+    "label": "Game Mode: delay between restore items (ms) [0 to 60000]",
+    "type": "string",
+    "defaultValue": "700",
+    "placeholder": "700"
+  },
+  {
+    "property": "zen.workspace.zentral.boost.game_restore_on_exit",
+    "label": "Game Mode: Restore when the mode is switched off",
+    "description": "Ask shows the Restore action; always runs Restore automatically; never leaves the snapshot for a manual Restore. This is the kill switch for automatic restore on exit.",
+    "type": "dropdown",
+    "defaultValue": "ask",
+    "options": [
+      {
+        "label": "Ask (show Restore action)",
+        "value": "ask"
+      },
+      {
+        "label": "Always restore automatically",
+        "value": "always"
+      },
+      {
+        "label": "Never restore automatically",
+        "value": "never"
+      }
+    ]
   }
 ]

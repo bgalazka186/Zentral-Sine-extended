@@ -74,6 +74,11 @@
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
   const ZentralRuntime = window.ZentralRuntime;
+  // G6: fallback maintenance is an automatic wake path; neither the runtime pause nor Game Mode may let it run.
+  const automaticWakeBlocked = () => Boolean(
+    (ZentralRuntime || window.__zentralStandaloneRuntime)?.performance?.isPaused?.() ||
+    window.ZentralBoost?.gameModeState?.().on,
+  );
   // Panel integration owns the ordered interaction points between panel features.
   ZentralRuntime.register({
     id: "panels",
@@ -2413,7 +2418,7 @@
           // OW-94 (plan B7.1): no fallback poll while Game Mode holds every timer. `syncPanelFallbackPolling` is also
           // called from the pause subscription below, so ending a game re-arms it immediately rather than at the next
           // panel event.
-          !window.ZentralRuntime?.performance?.isPaused?.() &&
+          !automaticWakeBlocked() &&
           panelMaintenanceVisible();
         if (active && panelStatusTimer && panelStatusTimer.delay === delay)
           return;
@@ -2423,8 +2428,12 @@
           : null;
       }
       syncPanelFallbackPolling();
-      // OW-94: pause/re-arm with the shared switch.
-      const unsubscribePerformance = window.ZentralRuntime?.performance?.subscribe?.(() => syncPanelFallbackPolling()) || null;
+      // OW-94/G6: pause/re-arm with the shared switch; on resume also request one ordinary tile sync so Corner
+      // Tiles can re-arm its existing one-shot preloads. Both calls recheck the live pause/Game Mode predicate.
+      const unsubscribePerformance = (ZentralRuntime || window.__zentralStandaloneRuntime)?.performance?.subscribe?.((paused) => {
+        syncPanelFallbackPolling();
+        if (!paused && !automaticWakeBlocked()) ctx.requestTileSync?.(0);
+      }) || null;
       registerCleanup(() => {
         try {
           unsubscribePerformance?.();
@@ -2737,6 +2746,8 @@
           apps.refreshApp = function (id, ...args) {
             if (!ctx.essentialPanels.has(id))
               return origRefreshApp(id, ...args);
+            // G6: an explicit refresh/click removes the app from Boost's sleep snapshot and pending Restore.
+            try { window.ZentralBoost?.noteUserWake?.("panel", id); } catch (_) {}
             const browser = ctx
               .getAllAppBrowsers()
               .find((browser) => browser._bgalazkaAppId === id);

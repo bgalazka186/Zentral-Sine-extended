@@ -1292,6 +1292,15 @@ function nativeSidebarSide() {
       "boost.gameMode": "Game Mode",
       "boost.gameModeOn": "Game Mode on \u2014 timers paused, background tabs idle",
       "boost.gameModeOff": "Game Mode off \u2014 everything back to normal",
+      // G7: the preview, the G8 final report and the OFF toast belong to BOTH Boost card owners.
+      "boost.gamePreview": "Will free about {tabs} tabs and {panels} apps before Game Mode starts",
+      "boost.gameFeedback": "Game Mode: freed {mb} MB \u00b7 {tabs} tabs, {panels} apps unloaded \u00b7 kept: {kept}",
+      "boost.gameStarting": "Game Mode: freeing memory\u2026",
+      "boost.gameFeedbackOff": "Game Mode off",
+      "boost.keptNone": "none",
+      "boost.keptMore": "+{count} more",
+      "boost.gameRestoreAction": "Restore",
+      "boost.restoreSnapshot": "Restore ({panels} apps, {tabs} tabs)",
       "boost.later": "Boost levels: Light, Deep, Game Mode and Restore",
       "boost.levels": "Boost levels and Restore",
       "boost.shortLight": "Light",
@@ -1372,6 +1381,14 @@ function nativeSidebarSide() {
       "boost.gameMode": "Tryb gry",
       "boost.gameModeOn": "Tryb gry w\u0142\u0105czony \u2014 liczniki wstrzymane, karty w tle bezczynne",
       "boost.gameModeOff": "Tryb gry wy\u0142\u0105czony \u2014 wszystko wraca do normy",
+      "boost.gamePreview": "U\u015bpi oko\u0142o {tabs} kart i {panels} aplikacji przed w\u0142\u0105czeniem Trybu gry",
+      "boost.gameFeedback": "Tryb gry: zwolniono {mb} MB \u00b7 {tabs} kart, {panels} aplikacji u\u015bpionych \u00b7 zachowano: {kept}",
+      "boost.gameStarting": "Tryb gry: zwalnianie pami\u0119ci\u2026",
+      "boost.gameFeedbackOff": "Tryb gry wy\u0142\u0105czony",
+      "boost.keptNone": "brak",
+      "boost.keptMore": "+{count} wi\u0119cej",
+      "boost.gameRestoreAction": "Przywr\u00f3\u0107",
+      "boost.restoreSnapshot": "Przywr\u00f3\u0107 ({panels} aplikacji, {tabs} kart)",
       "boost.later": "Poziomy Boost: Lekko, Głęboko, Tryb gry i Przywróć",
       "boost.levels": "Poziomy Boost i Przywróć",
       "boost.shortLight": "Lekko",
@@ -3150,6 +3167,14 @@ function nativeSidebarSide() {
     // `restore` only when something was actually put to sleep, so a greyed entry now means a fact, not "not yet".
     const canDeep = opts.canDeep !== false;
     const undoSize = Number(opts.undoSize) || 0;
+    const gameOn = Boolean(opts.gameMode && typeof opts.gameMode === "object" ? opts.gameMode.on : opts.gameMode);
+    // G7: a real G3/G5 snapshot wins over the older deep-pass undo count. Without one, older callers keep
+    // their exact four-entry menu and "Restore (N)" label.
+    const snapshot = opts.snapshot && typeof opts.snapshot === "object" ? boostGameModeSnapshot(opts.snapshot) : null;
+    const restoreLabel = snapshot
+      ? (snapshot.total ? widgetText(lang, "boost.restoreSnapshot", { panels: snapshot.panels, tabs: snapshot.tabs })
+          : widgetText(lang, "boost.restoreSoon"))
+      : undoSize ? widgetText(lang, "boost.restoreCount", { count: undoSize }) : widgetText(lang, "boost.restore");
     // OW-115: after a deep pass, show WHY it kept tabs, plus how many loaded tabs are pinned vs not.
     // With no skipped data the menu stays exactly the four entries every older test expects.
     const skippedLine = boostSkippedLine(opts.skipped);
@@ -3182,18 +3207,16 @@ function nativeSidebarSide() {
         description: widgetText(lang, "boost.levelGame"),
         level: "game",
         available: opts.canGameMode !== false,
-        checked: Boolean(opts.gameMode),
-        hint: Boolean(opts.gameMode) ? widgetText(lang, "boost.gameModeOn") : "",
+        checked: gameOn,
+        hint: gameOn ? widgetText(lang, "boost.gameModeOn") : "",
       },
       {
         id: "restore",
-        label: undoSize
-          ? widgetText(lang, "boost.restoreCount", { count: undoSize })
-          : widgetText(lang, "boost.restore"),
+        label: restoreLabel,
         shortLabel: widgetText(lang, "boost.shortRestore"),
         description: widgetText(lang, "boost.levelRestore"),
-        available: !running && undoSize > 0,
-        hint: undoSize ? "" : widgetText(lang, "boost.restoreSoon"),
+        available: !running && (snapshot ? snapshot.total > 0 : undoSize > 0),
+        hint: !running && (snapshot ? snapshot.total > 0 : undoSize > 0) ? "" : widgetText(lang, "boost.restoreSoon"),
       },
     ];
     if (skippedLine) {
@@ -3238,6 +3261,59 @@ function nativeSidebarSide() {
     if (result.freedMB == null || !Number.isFinite(freed)) return withSkipped(widgetText(lang, "boost.unknown"));
     if (freed <= 0) return withSkipped(widgetText(lang, "boost.nothingFreed"));
     return withSkipped(widgetText(lang, "boost.freed", { mb: Math.round(freed) }));
+  }
+
+  /* G7: the same pure feedback rules for the full-pack tray. Boost owns the measurement; these functions only
+   * turn its dry run, final state and snapshot into words. No DOM, pref, timer or platform read lives here. */
+  function boostGameModeNumber(value, fallback = 0) {
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 ? Math.round(n) : fallback;
+  }
+  function boostGameModeSnapshot(snapshot) {
+    const s = snapshot && typeof snapshot === "object" ? snapshot : {};
+    return {
+      panels: boostGameModeNumber(s.panels, 0),
+      tabs: boostGameModeNumber(s.tabs, 0),
+      get total() { return this.panels + this.tabs; },
+    };
+  }
+  function boostGameModePreviewText(preview, opts = {}) {
+    const lang = resolveWidgetLanguage(opts.language, opts.notesRaw);
+    const counts = preview && typeof preview === "object" ? (preview.counts || preview) : {};
+    return widgetText(lang, "boost.gamePreview", {
+      tabs: boostGameModeNumber(counts.tabs, 0),
+      panels: boostGameModeNumber(counts.panels, 0),
+    });
+  }
+  function boostGameModeFeedbackText(state, opts = {}) {
+    const lang = resolveWidgetLanguage(opts.language, opts.notesRaw);
+    const s = state && typeof state === "object" ? state : {};
+    const unloaded = s.unloaded && typeof s.unloaded === "object" ? s.unloaded : {};
+    const kept = Array.isArray(s.kept) ? s.kept : [];
+    const names = kept.slice(0, 3).map((entry) => {
+      const row = entry && typeof entry === "object" ? entry : { id: entry };
+      return String(row.id || row.kind || "tab") + " (" + String(row.reason || "kept") + ")";
+    });
+    if (kept.length > 3) names.push(widgetText(lang, "boost.keptMore", { count: kept.length - 3 }));
+    return widgetText(lang, "boost.gameFeedback", {
+      mb: boostGameModeNumber(s.freedMB ?? s.finalFreedMB, 0),
+      tabs: boostGameModeNumber(unloaded.tabs, 0),
+      panels: boostGameModeNumber(unloaded.panels, 0),
+      kept: names.length ? names.join(", ") : widgetText(lang, "boost.keptNone"),
+    });
+  }
+  function boostRestoreSnapshotLabel(snapshot, opts = {}) {
+    const lang = resolveWidgetLanguage(opts.language, opts.notesRaw);
+    const s = boostGameModeSnapshot(snapshot);
+    return s.total
+      ? widgetText(lang, "boost.restoreSnapshot", { panels: s.panels, tabs: s.tabs })
+      : widgetText(lang, "boost.restoreSoon");
+  }
+  function boostGameModeOffText(snapshot, opts = {}) {
+    const lang = resolveWidgetLanguage(opts.language, opts.notesRaw);
+    const label = boostRestoreSnapshotLabel(snapshot, opts);
+    const line = widgetText(lang, "boost.gameFeedbackOff");
+    return label && label !== widgetText(lang, "boost.restoreSoon") ? line + " \u00b7 " + label : line;
   }
 
   // ---- T3.9d: stopwatch, quick timer and quick note -----------------------------------------------------------
@@ -4252,6 +4328,12 @@ function nativeSidebarSide() {
     boostSkippedCount,
     boostMenuItems,
     boostResultText,
+    boostGameModeNumber,
+    boostGameModeSnapshot,
+    boostGameModePreviewText,
+    boostGameModeFeedbackText,
+    boostRestoreSnapshotLabel,
+    boostGameModeOffText,
     cleanWidgetOrder,
     cleanWidgetColor, parseWidgetColor, contrastRatio, widgetAppearanceVars, CONTRAST_MIN,
     orderedByIds,
@@ -4374,9 +4456,24 @@ function nativeSidebarSide() {
       // OW-67: the previous "is the tray on screen" answer, so only a real transition repaints (never every measure).
       let wasVisible = false;
 
+      // G10: a standalone Boost publishes ONE marker. If the owner never made an explicit choice for the
+      // Widgets tray, the tray appears so it can own that Boost card. An explicit `widgets.enabled=false`
+      // still wins; no existing preference default is silently changed.
+      function externalBoostWantsTray() {
+        const marker = window.__zentralBoostStandaloneWidget;
+        if (!marker || typeof marker.visible !== "function") return false;
+        try {
+          if (typeof Services.prefs.prefHasUserValue === "function" &&
+              Services.prefs.prefHasUserValue(WIDGET_PREFS.ENABLED)) return false;
+          return Boolean(marker.visible());
+        } catch (_) {
+          return Boolean(marker.visible());
+        }
+      }
+
       function readConfig() {
         return {
-          enabled: getBool(WIDGET_PREFS.ENABLED, false),
+          enabled: getBool(WIDGET_PREFS.ENABLED, false) || externalBoostWantsTray(),
           maxHeightShare: clampInt(
             getInt(WIDGET_PREFS.MAX_HEIGHT_SHARE, 45),
             LIMITS.MAX_HEIGHT_SHARE[0],
@@ -6563,7 +6660,18 @@ function nativeSidebarSide() {
       // setTimeout that a second end replaces.
       let widgetToastEl = null;
       let widgetToastTimer = null;
-      function showWidgetToast(text) {
+      let widgetToastActionRelease = null;
+      const clearWidgetToastAction = () => {
+        if (widgetToastActionRelease) {
+          try { widgetToastActionRelease(); } catch (_) {}
+          widgetToastActionRelease = null;
+        }
+      };
+      // G7: the OFF toast may carry ONE Restore action. Plain toasts still set textContent, so no older
+      // assertion or screen reader sees a hidden button; the action listener is released by the next toast,
+      // the 4 s one-shot timer and the shell's own teardown.
+      function showWidgetToast(text, action = null) {
+        clearWidgetToastAction();
         try {
           const doc = window.document;
           const host = tray || doc?.getElementById?.(TRAY_ID) || doc?.body;
@@ -6575,6 +6683,25 @@ function nativeSidebarSide() {
             host.appendChild(widgetToastEl);
           }
           widgetToastEl.textContent = String(text || "");
+          if (action && typeof action.run === "function") {
+            widgetToastEl.textContent = "";
+            const line = doc.createElement("span");
+            line.className = "zw-toast-line";
+            line.textContent = String(text || "");
+            widgetToastEl.appendChild(line);
+            const button = doc.createElement("button");
+            button.type = "button";
+            button.className = "zw-toast-action";
+            button.textContent = action.label || "Restore";
+            const onClick = (event) => {
+              event?.preventDefault?.();
+              event?.stopPropagation?.();
+              action.run();
+            };
+            button.addEventListener("click", onClick);
+            widgetToastActionRelease = () => button.removeEventListener("click", onClick);
+            widgetToastEl.appendChild(button);
+          }
           widgetToastEl.hidden = false;
           if (widgetToastTimer !== null && typeof window.clearTimeout === "function") window.clearTimeout(widgetToastTimer);
           widgetToastTimer = null;
@@ -6582,10 +6709,17 @@ function nativeSidebarSide() {
           // OW-90: the plan's own number for the Boost toast is 4 s.
           widgetToastTimer = window.setTimeout(() => {
             widgetToastTimer = null;
+            clearWidgetToastAction();
             if (widgetToastEl) widgetToastEl.hidden = true;
           }, 4000);
         } catch (_) {}
       }
+      registerCleanup(() => {
+        if (widgetToastTimer !== null && typeof window.clearTimeout === "function") window.clearTimeout(widgetToastTimer);
+        widgetToastTimer = null;
+        clearWidgetToastAction();
+        if (widgetToastEl) widgetToastEl.hidden = true;
+      });
 
       // OW-60: the panel is part of the Clock card, so a Clock click has nowhere to travel. One function, one card.
       function clockClick(action) {
@@ -6628,7 +6762,7 @@ function nativeSidebarSide() {
       let boostUnsubscribe = null;
       let boostLastMB = null;
       let boostRunning = false;
-      registerWidget({
+      const boostWidgetDefinition = {
         id: "boost",
         title: tw("boost.title"),
         showHeader: false,
@@ -6684,11 +6818,13 @@ function nativeSidebarSide() {
             while (popup.children.length) popup.children[0].remove();
             const state = typeof api()?.state === "function" ? api().state() : {};
             const gameMode = typeof api()?.gameModeState === "function" ? api().gameModeState() : null;
+            const snapshot = gameMode?.snapshot || state.snapshot || null;
             const items = boostMenuItems({
               running: boostRunning,
               canDeep: state.policy !== false,
               canGameMode: typeof api()?.setGameMode === "function",
-              gameMode: Boolean(gameMode?.on),
+              gameMode,
+              snapshot,
               undoSize: Number(state.undoSize) || 0,
               // OW-115: the module owns the last run's grouped reasons and the live loaded-tab counts.
               skipped: state.lastSkipped,
@@ -6713,6 +6849,18 @@ function nativeSidebarSide() {
               if (item.id === "free-deep" && skippedInfo) hints.push(skippedInfo.label, skippedInfo.hint);
               const title = hints.filter(Boolean).join(" \u00b7 ");
               if (title) row.setAttribute("title", title);
+              if (item.id === "game-mode" && item.available) {
+                const baseTitle = title;
+                const showPreview = () => {
+                  const line = previewGameModeHint();
+                  if (!line) return;
+                  row.setAttribute("data-zw-boost-preview", line);
+                  row.setAttribute("aria-description", line);
+                  row.setAttribute("title", [baseTitle, line].filter(Boolean).join(" \u00b7 "));
+                };
+                row.addEventListener("mouseenter", showPreview);
+                row.addEventListener("focus", showPreview);
+              }
               row.disabled = !item.available;
               row.setAttribute("aria-disabled", item.available ? "false" : "true");
               // A switch, not an action: the state is on the row so a screen reader and a test can both read it.
@@ -6730,6 +6878,22 @@ function nativeSidebarSide() {
           };
 
           const api = () => boostModule();
+          const languageOptions = () => ({
+            language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE),
+            notesRaw: getString(NOTES_LANGUAGE_PREF, "en"),
+          });
+          // G7: read the G2 dry run on hover/focus and immediately before ON. No cached reading, no polling.
+          function previewGameModeHint() {
+            const boost = api();
+            if (!boost || typeof boost.previewGameMode !== "function" || boost.gameModeState?.()?.on) return "";
+            let preview = null;
+            try { preview = boost.previewGameMode(); } catch (_) { preview = null; }
+            return typeof boost.widgetPreviewText === "function"
+              ? boost.widgetPreviewText(preview, widgetLang())
+              : boostGameModePreviewText(preview, languageOptions());
+          }
+          let gameModeUnsubscribe = null;
+          let gameModeEventHandled = false;
           let boostSampling = false;
           const stopCardSampling = () => {
             if (!boostSampling) return;
@@ -6781,6 +6945,8 @@ function nativeSidebarSide() {
             const boost = api();
             if (!boost || typeof boost.setGameMode !== "function") return Promise.resolve(null);
             const next = !Boolean(boost.gameModeState?.().on);
+            if (next) previewGameModeHint();
+            gameModeEventHandled = false;
             let result = null;
             try {
               result = boost.setGameMode(next);
@@ -6788,8 +6954,12 @@ function nativeSidebarSide() {
               result = null;
             }
             paintMenu();
-            const t = (key) => widgetText(resolveWidgetLanguage(getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), getString(NOTES_LANGUAGE_PREF, "en")), key);
-            showWidgetToast(t(next ? "boost.gameModeOn" : "boost.gameModeOff"));
+            // G7: the real module emits ON/OFF through onGameModeEvent. Keep the older toast for a module
+            // that has no event door, but never let it overwrite the richer G8 feedback.
+            if (!gameModeEventHandled) {
+              const t = (key) => widgetText(resolveWidgetLanguage(getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), getString(NOTES_LANGUAGE_PREF, "en")), key);
+              showWidgetToast(t(next ? "boost.gameModeOn" : "boost.gameModeOff"));
+            }
             return Promise.resolve(result);
           }
 
@@ -6821,10 +6991,13 @@ function nativeSidebarSide() {
           // Restore wakes what the last deep pass put to sleep; the toast reports the count the module restored.
           function runRestore() {
             const boost = api();
-            if (!boost || typeof boost.restore !== "function") return Promise.resolve(null);
+            const restoreDoor = typeof boost?.restoreSession === "function"
+              ? () => boost.restoreSession()
+              : typeof boost?.restore === "function" ? () => boost.restore() : null;
+            if (!restoreDoor) return Promise.resolve(null);
             let restored = null;
             try {
-              restored = boost.restore();
+              restored = restoreDoor();
             } catch (_) {
               restored = null;
             }
@@ -6907,9 +7080,57 @@ function nativeSidebarSide() {
               limiterUnsubscribe = null;
             }
           };
+          // G7: the Boost module owns the ON, settled, 30 s final and OFF reports. The tray subscribes once,
+          // paints from the event state and shows the OFF toast's Restore action without polling gameModeState().
+          const subscribeGameMode = () => {
+            if (gameModeUnsubscribe) return;
+            const boost = api();
+            if (!boost || typeof boost.onGameModeEvent !== "function") return;
+            try {
+              gameModeUnsubscribe = boost.onGameModeEvent((event) => {
+                const action = String(event?.action || "");
+                const opts = languageOptions();
+                const code = resolveWidgetLanguage(opts.language, opts.notesRaw);
+                if (action === "on") {
+                  gameModeEventHandled = true;
+                  showWidgetToast(widgetText(code, "boost.gameStarting"));
+                  return;
+                }
+                if (action === "on-settle" || action === "on-final") {
+                  gameModeEventHandled = true;
+                  const state = event.state || (typeof boost.gameModeState === "function" ? boost.gameModeState() : null);
+                  const line = typeof boost.widgetFeedbackText === "function"
+                    ? boost.widgetFeedbackText(state, widgetLang())
+                    : boostGameModeFeedbackText(state, opts);
+                  showWidgetToast(line);
+                  paintMenu();
+                  return;
+                }
+                if (action === "off") {
+                  gameModeEventHandled = true;
+                  const snapshot = event.state?.snapshot ||
+                    (typeof boost.gameModeState === "function" ? boost.gameModeState()?.snapshot : null) || {};
+                  const line = typeof boost.widgetOffText === "function"
+                    ? boost.widgetOffText(snapshot, widgetLang())
+                    : boostGameModeOffText(snapshot, opts);
+                  const counts = boostGameModeSnapshot(snapshot);
+                  const restoreAction = counts.total
+                    ? { label: widgetText(code, "boost.gameRestoreAction"), run: () => { void runRestore(); } }
+                    : null;
+                  showWidgetToast(line, restoreAction);
+                  paintMenu();
+                  return;
+                }
+                if (action === "restored") paintMenu();
+              });
+            } catch (_) {
+              gameModeUnsubscribe = null;
+            }
+          };
           const ensureSubscribed = () => {
             subscribe();
             subscribeLimiter();
+            subscribeGameMode();
           };
           ensureSubscribed();
           paintValue();
@@ -6949,9 +7170,11 @@ function nativeSidebarSide() {
               doc.removeEventListener("keydown", onKeyDown);
               if (typeof boostUnsubscribe === "function") boostUnsubscribe();
               if (typeof limiterUnsubscribe === "function") limiterUnsubscribe();
+              if (typeof gameModeUnsubscribe === "function") gameModeUnsubscribe();
             } catch (_) {}
             boostUnsubscribe = null;
             limiterUnsubscribe = null;
+            gameModeUnsubscribe = null;
           };
           registerCleanup(teardownCard);
 
@@ -6975,7 +7198,25 @@ function nativeSidebarSide() {
             closeMenu: closePopup,
           };
         },
-      });
+      };
+
+      // G10: with a standalone Boost installed, its marker asks the tray to own the one Boost card.
+      // Widgets-first installs already drew this definition; Boost then leaves it alone. Boost-first
+      // installs hand their external definition through takeOver(), so there is never a second card.
+      const boostHandoff = window.__zentralBoostStandaloneWidget;
+      const trayTookBoost = boostHandoff && typeof boostHandoff.takeOver === "function"
+        ? boostHandoff.takeOver({
+            registerWidget,
+            unregisterWidget,
+            widgetText,
+            widgetLang,
+            boostResultText,
+            boostPreviewText: boostGameModePreviewText,
+            boostFeedbackText: boostGameModeFeedbackText,
+            boostOffText: boostGameModeOffText,
+          })
+        : false;
+      if (!trayTookBoost) registerWidget(boostWidgetDefinition);
 
       // The legacy choice is applied once both cards exist, so the migration can see the Boost definition.
       adoptLegacyStatusCard();

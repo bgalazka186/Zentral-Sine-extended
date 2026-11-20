@@ -70,11 +70,12 @@ function runSync({ browsers, essentialPanels, visibleOf }) {
   };
   // The shipped body calls `panelBrowserVisible` directly; the stub is supplied under that exact name, so what runs is
   // the real function with one injected input.
+  // G6: inject the module's pause predicate; these throttle tests run with Game Mode off.
   const fn = new Function(
-    "ctx", "document", "window", "addonHostByAppId", "console", "panelBrowserVisible",
+    "ctx", "document", "window", "addonHostByAppId", "console", "panelBrowserVisible", "automaticWakeBlocked",
     `${fnBody}\nreturn syncAppPanelBrowserActivity;`,
   );
-  const sync = fn(ctx, document, window, addonHostByAppId, console, (b) => visibleOf(b));
+  const sync = fn(ctx, document, window, addonHostByAppId, console, (b) => visibleOf(b), () => false);
   sync(browsers);
   return browsers;
 }

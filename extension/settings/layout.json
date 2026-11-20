@@ -348,7 +348,7 @@
       "group": "Performance",
       "owner": "boost",
       "icon": "sliders",
-      "description": "Read browser RAM on demand and give memory back without closing anything.",
+      "description": "Read browser RAM on demand and give memory back without closing anything. Game Mode unloads tabs; unsaved page state is lost and a short reload is needed when you return.",
       "sections": [
         {
           "label": "Memory"
@@ -1165,6 +1165,7 @@
     "zen.workspace.zentral.boost.startup_trim",
     "zen.workspace.zentral.boost.unload_pinned",
     "zen.workspace.zentral.boost.shortcut",
+    "zen.workspace.zentral.boost.widget_enabled",
     {
       "type": "text",
       "label": "**Memory Boost · Limiter**",
@@ -1182,6 +1183,12 @@
     },
     "zen.workspace.zentral.boost.game_mode",
     "zen.workspace.zentral.boost.stronger_saver",
+    "zen.workspace.zentral.boost.game_keep_hosts",
+    "zen.workspace.zentral.boost.game_park_selected",
+    "zen.workspace.zentral.boost.game_restore_tabs",
+    "zen.workspace.zentral.boost.game_restore_recent_n",
+    "zen.workspace.zentral.boost.game_restore_stagger_ms",
+    "zen.workspace.zentral.boost.game_restore_on_exit",
     {
       "type": "text",
       "label": "**Panels**",

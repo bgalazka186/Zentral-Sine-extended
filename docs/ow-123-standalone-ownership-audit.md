@@ -28,3 +28,8 @@ Static audit on 3.4.0 after OW-122. The request is to list issues only: no repor
 ## Scope and limits
 
 Reviewed the feature catalog and stylesheet owners; standalone manifests, bootstrap/shim, shared tab policy, settings and generated-package configuration; cross-feature references in `additional/`, `extension/`, `loader/`, `zentral/`, and relevant CSS. This is static code inspection plus the repository's existing tests, not exhaustive live execution of every feature-removal combination or third-party theme. Therefore it identifies the evidenced cases above and candidates, but cannot certify that no other misplaced code exists. A Zen/Sine install/uninstall matrix and visual checks remain necessary before claiming full independence. No audit finding was fixed.
+
+
+## Dated follow-up (2026-11-19, G10)
+
+Finding 1 is addressed in code: the standalone Boost manifest now embeds `standalone/ZentralBoostWidget.js` and declares `ZentralBoostWidget.css`; the Boost source owns EN/PL card strings and pure menu/preview helpers, and a marker hand-off lets the standalone Widgets tray take over the one Boost card without a duplicate. The full pack short-circuits the standalone bundle. `tests/boost-standalone-widget.test.cjs` drives the generated bundle with a fake DOM; live Zen/Sine install order, visual parity and teardown remain OWNER GATE 6. This dated note does not rewrite the frozen audit above or claim that findings 2–5 were fixed.

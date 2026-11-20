@@ -47,6 +47,11 @@
         SVG_STRINGS,
         WELL_KNOWN_SERVICES,
       } = shared;
+      // G6: automatic app-grid preloads stay asleep while the performance switch or Game Mode is paused.
+      const automaticWakeBlocked = () => Boolean(
+        (window.ZentralRuntime || window.__zentralStandaloneRuntime)?.performance?.isPaused?.() ||
+        window.ZentralBoost?.gameModeState?.().on,
+      );
       let preloadGeneration = 0,
         preloadWaitTimer = null,
         finishPreloadWait = null;
@@ -139,6 +144,7 @@
           const enabled = () =>
             !this._destroyed &&
             generation === preloadGeneration &&
+            !automaticWakeBlocked() &&
             Core.getPref(Constants.Apps.PREF_ENABLED, true);
           if (!enabled()) return;
           const queue = access.state.apps
@@ -193,12 +199,15 @@
           this.cancelAutomaticPreloads();
           if (
             this._destroyed ||
+            automaticWakeBlocked() ||
             !Core.getPref(Constants.Apps.PREF_ENABLED, true)
           )
             return;
           this._preloadTimer = setTimeout(
             () => {
               this._preloadTimer = null;
+              // G6: a game can start between the one-shot timer and its callback; do not create a browser then.
+              if (automaticWakeBlocked()) return;
               this.preloadAppsSequence().catch((error) =>
                 console.error("[ZentralApps] Preload sequence failed:", error),
               );
