@@ -84,3 +84,17 @@ Reproduce with a mixed session: one pinned page loaded as a TAB (for example are
 ## 5. Definition of done
 
 `node tests/run-all.cjs` green, build commands from `PLAN_CODING_AGENT.md` rule 5 green, the ten new tests fail on the old code, README and strings updated, `docs/perf-results.md` has a line, handoff lists the three owner gates.
+
+## 6. Status tracker (updated by the coding agent)
+
+| Task | Status | Evidence |
+| :--- | :--- | :--- |
+| `R1` — record what was actually freed, per record | **DONE** | `sleepPanelRecord()` returns `panelWas`/`tabWas` from the pre-sleep state; both callers classify through one `recordPanelSleepHolders()` recorder. `tests/r1-sleep-holders.test.cjs` (7 passed), strict RED on the pre-R1 tree. |
+| `R2` — restore engine builds only the matching tasks | **DONE** | `panelHadHolder()` + `normalizePanelRestoreEntry()` gate every panel task, `hadPanelHolder` gates record tabs, the legacy `restore()` door inherits the filter. `tests/r2-restore-holders.test.cjs` (11 passed), strict RED on the R1 tree at the second-holder rule. |
+| `R3` — honest counts and labels | **DONE** | Live snapshot counts drive the label and toasts; `boost.levelRestore` and the Boost README holders table rewritten in EN/PL. `tests/r3-restore-counts.test.cjs` (5 passed). |
+| `R4` — the ten tests | **DONE** | `tests/r4-restore-holder-spec.test.cjs` (10 passed) with real `pinned`/`zen-essential` fixtures; 0/10 pass on the pre-fix tree `6d2e2934`. |
+| `R5` — owner gates | **DONE (recorded, not measured)** | The three gates are in `TODO_notes_roadmap.md` under **Restore follow-up owner gates (R5)**; `tests/r5-restore-owner-gates.test.cjs` keeps them there. |
+
+Full suite at this tree: `310/310 passed; 0 failed`, `0 TODO failing: none`. Exact no-bump chain green at
+608 root settings / 608 Sine preferences and version 3.4.1. No live Zen/Sine runtime, toast, visual or RAM result is
+claimed: gates A/B/C above remain owner work.
