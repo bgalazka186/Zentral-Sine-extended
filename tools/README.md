@@ -1,6 +1,6 @@
 # tools
 
-Owner and local file guide for Extended 3.4.0. Original Zentral reference: 1.1.0.
+Owner and local file guide for Extended 3.4.1. Original Zentral reference: 1.1.0.
 
 | File                    | Responsibility                        |
 | ----------------------- | ------------------------------------- |
@@ -15,7 +15,7 @@ Builds the Sine-installable standalone packages (`additional/**/standalone.json`
 
 ## sync-version.cjs
 
-Keeps the main mod and every standalone module on one version (rule in `AGENTS.md`, "Version bumps"). Without arguments it raises every version marker (root `theme.json`, `UPSTREAM.json`, loader headers, the settings badge, `INSTALL.md`, `.github/README.md`, the local guide READMEs and every `additional/**/standalone.json`) to the highest version found; `--set X.Y.Z` picks the version; `--check` only reports drift. Run it between `build-standalone.cjs --bump` and a second `build-standalone.cjs`, which regenerates the bundles. `tests/version-sync.test.cjs` fails while anything lags behind.
+Keeps the main mod and every standalone module on one version (rule in `AGENTS.md`, "Version bumps"). Without arguments it raises every version marker (root `theme.json`, `UPSTREAM.json`, loader headers, the settings badge, `INSTALL.md`, `.github/README.md`, the local guide READMEs and every `additional/**/standalone.json`) to the highest version found; `--set X.Y.Z` picks the version; `--check` only reports drift. The `3.4.1` release uses the explicit `node tools/sync-version.cjs --set 3.4.1` chain, then `node tools/build-standalone.cjs` to regenerate every bundle, theme and lock; plain `--bump` is not used for an owner-requested version. `tests/version-sync.test.cjs` fails while anything lags behind.
 
 ## audit-standalone.cjs
 

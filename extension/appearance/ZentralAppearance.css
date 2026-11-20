@@ -24,11 +24,12 @@
  *   .zs-select-input; .zs-sublabel; .zs-tab-bar; .zs-tab-btn; .zs-text-input
  * Attribute selectors used: aria-selected; bgalazka-corner-tiles; bgalazka-hide-hover-reveal-btn;
  *   bgalazka-hover-corner-tiles; bgalazka-hover-panel-enabled; bgalazka-hover-panel-hidden;
+ *   bgalazka-hover-panel-hidden-once;
  *   bgalazka-hresize-active; bgalazka-look; bgalazka-look-buttons; bgalazka-look-rows;
  *   bgalazka-look-spacing; bgalazka-look-tiles; bgalazka-look-video-selection; bgalazka-opposite-docking;
  *   bgalazka-panel-pinned; bgalazka-panel-side; bgalazka-push-page; bgalazka-tab-isolation;
  *   bgalazka-tab-panel-launcher; bgalazka-translucency; bgalazka-triple-view; bgalazka-webtoolbar; class;
- *   data-active; data-hold-active; data-loaded; data-panel-side; data-pinned; data-tab-loaded; hidden; id;
+ *   data-active; data-hold-active; data-loaded; data-once-hidden; data-panel-side; data-pinned; data-tab-loaded; hidden; id;
  *   open; pending; type; zen-compact-mode; zen-essential;
  *   zentral-arc2-regular-sidebar; zentral-insta-peek
  *
@@ -430,6 +431,11 @@
  * The blue fill belongs only to data-active (autohide). */
 #zen-app-panel-pill .zen-app-hover-reveal-btn[data-hold-active="true"] {
   outline: 2px solid #dc3545 !important;
+  outline-offset: -2px !important;
+}
+/* A one-shot hide is not the saved autohide preference. */
+#zen-app-panel-pill .zen-app-hover-reveal-btn[data-once-hidden="true"] {
+  outline: 1px dashed var(--zen-primary-color, #83a5ff) !important;
   outline-offset: -2px !important;
 }
 :root[bgalazka-hide-hover-reveal-btn="true"]

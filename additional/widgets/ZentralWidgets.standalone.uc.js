@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Widgets
 // @include chrome://browser/content/browser.xhtml
-// @version 3.4.0
+// @version 3.4.1
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.4.0, the numeric-preference list and
+ * Placeholders replaced by the build: 3.4.1, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.4.0";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.4.1";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1310,7 +1310,7 @@ function nativeSidebarSide() {
       "boost.levelLight": "Light: GC/CC + memory minimize. No tabs touched.",
       "boost.levelDeep": "Deep: Light clean first, then eligible tabs sleep. Restore available.",
       "boost.levelGame": "Game Mode: pauses repeating features and idles non-essential browsers.",
-      "boost.levelRestore": "Restore: wakes sleeping panels; sleeping tabs reload on click.",
+      "boost.levelRestore": "Restore: reloads what was unloaded - panels as panels, tabs as tabs.",
       "boost.resultSkipped": " \u00b7 skipped {count} protected tab(s)",
       "tray.label": "Sidebar widgets",
       "tray.move": "Move this widget",
@@ -1398,7 +1398,7 @@ function nativeSidebarSide() {
       "boost.levelLight": "Lekko: GC/CC i minimalizacja pamięci. Karty nie są ruszane.",
       "boost.levelDeep": "Głęboko: najpierw lekkie czyszczenie, potem usypianie kart. Dostępne Przywróć.",
       "boost.levelGame": "Tryb gry: wstrzymuje cykliczne funkcje i wygasza niepotrzebne karty.",
-      "boost.levelRestore": "Przywróć: budzi uśpione panele; karty wczytują się po kliknięciu.",
+      "boost.levelRestore": "Przywróć: wczytuje to, co zostało uśpione \u2014 panele jako panele, karty jako karty.",
       "boost.resultSkipped": " \u00b7 pominięto {count} chronionych kart",
       "tray.label": "Widgety panelu bocznego",
       "tray.move": "Przenieś ten widget",

@@ -69,7 +69,7 @@ test("the standalone manifest embeds the parser part after the calendar UI part"
   const ui = include.indexOf("calendar/ZentralNotesCalendarUI.js");
   const parser = include.indexOf("parser/ZentralNotesParserGraph.js");
   assert.ok(ui >= 0 && parser > ui, "the parser part loads after calendar UI");
-  assert.equal(MANIFEST.version, "3.4.0");
+  assert.equal(MANIFEST.version, "3.4.1");
 });
 
 test("the monolith loads the part and every extracted name delegates to it", () => {

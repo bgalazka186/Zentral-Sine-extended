@@ -274,7 +274,12 @@ test("Game Mode sleeps the whole plan through sleepPanelRecord and refuses a par
   assert.ok(h.unloadCalls.includes(record.tab), "the planned live panel record is unloaded through the G1 door");
   assert.ok(h.closeAppCalls.includes("whatsapp"), "sleepPanelRecord closes the panel's own app browser too");
   assert.equal(h.unloadCalls.filter((t) => t === record.tab).length, 1, "no second generic sweep unloads it again");
+<<<<<<< HEAD
   assert.deepEqual(plain(h.api.gameModeState().unloaded), { tabs: 2, panels: 1 });
+=======
+  assert.deepEqual(plain(h.api.gameModeState().unloaded), { tabs: 3, panels: 1 },
+    "R1 counts the record tab as a tab and its panel browser as an app");
+>>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
   assert.equal(h.api.gameModeState().cleanup.reason, "settling");
   assert.equal(h.api.gameModeState().cleanup.settleArmed, true);
   assert.equal(h.minimizeCalls.length, 1, "the first lightClean() has run; the second waits for the settle");

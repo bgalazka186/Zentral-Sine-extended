@@ -1,4 +1,9 @@
 {
+<<<<<<< HEAD
   "version": "3.4.0",
   "hash": "97f56488be3f7038aac81da247476de4be661b20fb88e819b5b865aa021ad8c3"
+=======
+  "version": "3.4.1",
+  "hash": "5ccabfe80f3bf28ddaddf328d5c479650ade1d56a78e0b0d34d3fbb7466a6dc1"
+>>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
 }

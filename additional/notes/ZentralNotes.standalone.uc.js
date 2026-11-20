@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.4.0
+// @version 3.4.1
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.4.0, the numeric-preference list and
+ * Placeholders replaced by the build: 3.4.1, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.4.0";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.4.1";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -13877,7 +13877,8 @@ __zentralShim.register = function (def) {
  * Layout: store (files) -> pure core (format, markdown, edit helpers) -> sheet UI -> bar/host bindings.
  * Registration: notes
  * Loaded/created by: loader/ZentralCatalog.js
- * Literal DOM event subscriptions: unload
+ * Literal DOM event subscriptions: unload; pointerdown; pointerup; pointerleave; click.
+ *   The standalone card pill's autohide button uses the same hold-action pattern as the pin / keep buttons.
  *
  * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
  * contracts from this source, not a promise that every collaborator is enabled at runtime.
@@ -21726,6 +21727,19 @@ __zentralShim.register = function (def) {
         },
       };
     }
+    // 3.4.1: the card pill's autohide button uses the same hold-action pattern
+    // as the pin / keep buttons. A short click is a tap, a completed hold is a
+    // separate action, and the click that ends a hold is swallowed.
+    const PILL_AUTOHIDE_HOLD_MS = 550;
+    const PANEL_HIDDEN_ONCE_ATTR = "bgalazka-hover-panel-hidden-once";
+    function zentralPanelHidden(root) {
+      return (
+        !!root?.hasAttribute?.("bgalazka-hover-panel-hidden") &&
+        (root.hasAttribute("bgalazka-hover-panel-enabled") ||
+          root.hasAttribute(PANEL_HIDDEN_ONCE_ATTR))
+      );
+    }
+
     // Most recently opened note first, no duplicates, at most `max`.
     const pushRecent = (list, id, max = MAX_RECENT) => [id, ...(list || []).filter((x) => x !== id)].slice(0, max);
     const cleanRecent = (raw) =>
@@ -30484,6 +30498,7 @@ __zentralShim.register = function (def) {
         alignDelim, buildImage, insertImageMd, pastedWebAddress, CODE_LANGS, CALLOUT_KINDS, CALLOUT_FOLDABLE, calloutMemory, calloutId, insertCallout,
         HIDEABLE_TOOLS, parseHidden, serializeHidden, applyTreeSelection, resolveTreeSelection, cleanBatchTag, appendTagToBody,
         normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, clearOfRect, sideOf, createHoldAction,
+        PILL_AUTOHIDE_HOLD_MS, PANEL_HIDDEN_ONCE_ATTR, zentralPanelHidden,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, cleanSlotPx, cleanCardPx, cleanCardShare, resolveSlotHeight, resolveCardHeight, hasStartupPanelPref, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, gapPageFloor, gapMaxPx, clampGapPx, GAP_PANEL_MIN_PX, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
@@ -31245,6 +31260,7 @@ __zentralShim.register = function (def) {
       let dialog = null; // export notice
       let activeDatePicker = null; // one shared calendar popup per Notes sheet
       let collapsed = false; // hover mode: open but folded away; only the thin real strip stays in layout
+      let hiddenOnceCard = false; // 3.4.1: a click hides this card once without changing card_autohide
       let revealEl = null;
       let panelHiddenObserver = null;
       let panelHiddenObserverOff = null;
@@ -44127,9 +44143,12 @@ __zentralShim.register = function (def) {
       // dock / detach), larger, autohide (docked only), close. A separate element beside the card (the card
       // clips its own children), placed on the side that has room.
       const cardFree = () => !!adapter.cardMode && adapter.geoKey === "float";
+      const canHideCardOnce = () => !!dockedSide() && store.meta.size !== "span";
       let pillEl = null;
       const pillBtn = {};
       let holdMove = null;
+      let holdHide = null;
+      const pillHideOffs = [];
       let pillOffLive = null; // live vertical place while the handle is dragged (percent, -50..50)
       let pillSideLock = ""; // keeps the pill's side steady during a gesture
       let lastRect = null; // the card's last placed rectangle (the pill is re-placed from it)
@@ -44181,7 +44200,7 @@ __zentralShim.register = function (def) {
         const pin = mk("pin", "pin", "Keep open");
         const push = mk("push", "push", "Push the page aside");
         const move = mk("move", "move", "Move / resize");
-        const hide = mk("hide", "hide", "Autohide");
+        const hide = mk("hide", "hide", "Toggle card autohide (click: hide once; hold: on/off)");
         const size = mk("size", "expand", "Fill the whole area");
         // Grabber: drag sideways to resize the card, up or down to slide the pill along it.
         const grab = h("div", { class: "zn-pill-grab", title: "Drag sideways to resize; up or down to move this bar", "aria-label": "Resize or move the bar" });
@@ -44208,13 +44227,64 @@ __zentralShim.register = function (def) {
           syncPill();
           scheduleLayout();
         });
-        listen(hide, "click", () => {
-          if (!dockedSide()) return flash("Autohide needs the card docked to an edge: drag it past the edge or hold the move button", 3500);
-          setPref(PREF.CARD_AUTOHIDE, !getPref(PREF.CARD_AUTOHIDE, false));
+        const hideCardOnce = () => {
+          if (!canHideCardOnce())
+            return flash(
+              "Hide once needs the card docked at an edge: drag it past the edge or hold the move button",
+              3500,
+            );
+          hiddenOnceCard = true;
+          collapse();
+          syncPill();
+          scheduleLayout();
+        };
+        const toggleCardAutohide = () => {
+          if (!canHideCardOnce())
+            return flash(
+              "Autohide needs the card docked at an edge: drag it past the edge or hold the move button",
+              3500,
+            );
+          const next = !getPref(PREF.CARD_AUTOHIDE, false);
+          hiddenOnceCard = false;
+          if (collapsed) expand(false);
+          setPref(PREF.CARD_AUTOHIDE, next);
           syncPill();
           scheduleLayout();
           armGrace();
+        };
+        holdHide = createHoldAction({
+          ms: PILL_AUTOHIDE_HOLD_MS,
+          setTimer: (fn, ms) => window.setTimeout(fn, ms),
+          clearTimer: (id) => window.clearTimeout(id),
+          onTap: () => {
+            hide.removeAttribute("data-hold-active");
+            hideCardOnce();
+          },
+          onHold: () => {
+            hide.setAttribute("data-hold-active", "true");
+            toggleCardAutohide();
+          },
         });
+        pillHideOffs.push(
+          listen(hide, "pointerdown", (e) => {
+            if (e.button === undefined || e.button === 0) holdHide.press();
+          }),
+        );
+        pillHideOffs.push(
+          listen(hide, "pointerup", () => holdHide.release()),
+        );
+        pillHideOffs.push(
+          listen(hide, "pointerleave", () => {
+            holdHide.cancel();
+            hide.removeAttribute("data-hold-active");
+          }),
+        );
+        pillHideOffs.push(
+          listen(hide, "click", () => {
+            if (!holdHide.click()) hide.removeAttribute("data-hold-active");
+          }),
+        );
+        cleanups.push(() => holdHide?.cancel());
         listen(size, "click", () => toggleSpan());
         listen(close2, "click", () => close());
         // Pin = keep open (the header's pin): it stays when something outside is clicked.
@@ -44267,7 +44337,18 @@ __zentralShim.register = function (def) {
         set("move", { on: root.dataset.handles === "all", title: "Move / resize: click toggles all-side handles; drag moves the card (past an edge it docks); hold to dock / detach" });
         set("size", { on: big, title: big ? "Back to the normal size" : "Fill the whole area" });
         pillBtn.size.replaceChildren(panelIcon(big ? "collapse" : "expand"));
-        set("hide", { on: !!docked && !!getPref(PREF.CARD_AUTOHIDE, false), off: !docked, title: docked ? "Autohide: hide at the edge, show on hover" : "Autohide is unavailable while the card is detached. Dock it first." });
+        const canHide = canHideCardOnce();
+        set("hide", {
+          on: canHide && !!getPref(PREF.CARD_AUTOHIDE, false),
+          off: !canHide,
+          title: canHide
+            ? "Toggle card autohide (click: hide once; hold: on/off)"
+            : "Autohide is unavailable while the card is detached or enlarged. Dock it at its normal size first.",
+        });
+        if (pillBtn.hide) {
+          if (hiddenOnceCard) pillBtn.hide.setAttribute("data-once-hidden", "true");
+          else pillBtn.hide.removeAttribute("data-once-hidden");
+        }
         const kept = keptOpen();
         const autoKept = kept && store.meta.pinned === false;
         set("pin", { on: kept, off: autoKept, title: autoKept ? "Autohide keeps the card open when something outside is clicked (it acts as pinned)." : kept ? "Pinned: stays open when something outside is clicked. Click to unpin." : "Click to pin: keep the card open when something outside is clicked." });
@@ -44303,6 +44384,11 @@ __zentralShim.register = function (def) {
       }
       function dropPill() {
         holdMove?.cancel?.();
+        holdHide?.cancel();
+        holdHide = null;
+        for (const off of pillHideOffs.splice(0)) {
+          try { off(); } catch (_) {}
+        }
         pillOffLive = null;
         pillSideLock = "";
         pillEl?.remove();
@@ -44316,7 +44402,12 @@ __zentralShim.register = function (def) {
       // focus is inside, a menu or dialog is open, a drag runs or the pointer is down.
       // Autohide: a panel-hosted sheet in hover mode, or a card docked to an edge with card_autohide on.
       function cardHides() {
-        return !!adapter.cardMode && !!cleanCardDock(store.meta.cardDock) && !!getPref(PREF.CARD_AUTOHIDE, false) && store.meta.size !== "span";
+        return (
+          !!adapter.cardMode &&
+          !!cleanCardDock(store.meta.cardDock) &&
+          store.meta.size !== "span" &&
+          (hiddenOnceCard || !!getPref(PREF.CARD_AUTOHIDE, false))
+        );
       }
       // The card counts as pinned while it autohides: a card folded away cannot be seen, so closing it for a click
       // elsewhere would only be confusing (the panel does the same). The saved pin comes back when autohide is off.
@@ -44470,7 +44561,11 @@ __zentralShim.register = function (def) {
         panelHiddenObserver = new MutationObserver(syncParentPanelHidden);
         panelHiddenObserver.observe(document.documentElement, {
           attributes: true,
-          attributeFilter: ["bgalazka-hover-panel-enabled", "bgalazka-hover-panel-hidden"],
+          attributeFilter: [
+            "bgalazka-hover-panel-enabled",
+            "bgalazka-hover-panel-hidden",
+            PANEL_HIDDEN_ONCE_ATTR,
+          ],
         });
         panelHiddenObserverOff = resources.observer("sheet:parentPanelMO", "MutationObserver", () => panelHiddenObserver?.disconnect());
         syncParentPanelHidden();
@@ -44581,6 +44676,7 @@ __zentralShim.register = function (def) {
       function expand(fromHover) {
         window.clearTimeout(openTimer);
         openTimer = 0;
+        hiddenOnceCard = false;
         if (!collapsed) return;
         collapsed = false;
         delete root.dataset.collapsed;
@@ -44892,6 +44988,7 @@ __zentralShim.register = function (def) {
         dragNoteId = "";
         calendarMoveUndo = null;
         collapsed = false;
+        hiddenOnceCard = false;
         unwatchParentPanelHidden();
         delete root.dataset.collapsed;
         dropReveal();
@@ -45520,8 +45617,7 @@ __zentralShim.register = function (def) {
         },
         // True while the Zentral panel is slid away by its own "hide when not hovered" (its bars stay in the DOM).
         panelHidden() {
-          const r = document.documentElement;
-          return r.hasAttribute("bgalazka-hover-panel-enabled") && r.hasAttribute("bgalazka-hover-panel-hidden");
+          return zentralPanelHidden(document.documentElement);
         },
         setActive(on, { strip = false } = {}) {
           if (!on) {
@@ -50797,8 +50893,7 @@ __zentralShim.register = function (def) {
       // the user cannot see it: the shortcut then opens the standalone (floating) sheet as if no
       // panel were open.
       function panelsHidden() {
-        const r = document.documentElement;
-        return r.hasAttribute("bgalazka-hover-panel-enabled") && r.hasAttribute("bgalazka-hover-panel-hidden");
+        return zentralPanelHidden(document.documentElement);
       }
       // (The old "reveal strip" along the top of a panel is gone: hover reveal now lives in the hidden sheet's own
       // band and in the Zentral panel's hover zone, and a second hover system made a second Notes appear, S6 B2.)

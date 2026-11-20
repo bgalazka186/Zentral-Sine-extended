@@ -21,6 +21,9 @@ const Services = {
     getBoolPref: (k, d) => (prefs.has(k) ? prefs.get(k) : d),
     getStringPref: (k, d) => (prefs.has(k) ? prefs.get(k) : d),
     getIntPref: (k, d) => (prefs.has(k) ? prefs.get(k) : d),
+    setBoolPref: (k, v) => prefs.set(k, !!v),
+    setStringPref: (k, v) => prefs.set(k, String(v)),
+    setIntPref: (k, v) => prefs.set(k, Math.round(Number(v))),
     addObserver: (_b, o) => prefObservers.push(o),
     removeObserver: (_b, o) => prefObservers.splice(prefObservers.indexOf(o), 1),
   },
@@ -922,6 +925,60 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     tabbox.remove();
   });
 
+  await test("S6 card-as-panel: pill hide click hides once without autohide; a 550 ms hold toggles the saved pref", async () => {
+    const card = floatCard();
+    const html = document.documentElement;
+    const pill = html.all().find((c) => c._classes.has("zentral-notes-pill"));
+    assert.ok(pill && !pill.hidden, "the docked card's pill is visible");
+    const hide = pill.querySelectorAll("button").find((b) => b.dataset.id === "hide");
+    assert.ok(hide);
+    prefs.set("zen.workspace.zentral.notes.card_autohide", false);
+    prefs.set("zen.workspace.zentral.notes.push_page", false);
+    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", "zen.workspace.zentral.notes.card_autohide"));
+    await flush();
+    assert.equal(card.dataset.docked, "right", "the card is still docked at the right edge");
+    assert.equal(card.dataset.collapsed, undefined, "it starts expanded with saved autohide off");
+
+    let pointerId = 61;
+    const fire = (type, extra = {}) => {
+      const ev = new Ev(type, {
+        bubbles: true, target: hide, button: 0, pointerId,
+        clientX: 100, clientY: 100, ...extra,
+      });
+      hide.dispatchEvent(ev);
+      windowListeners.filter((l) => l.t === type).forEach((l) => l.fn(ev));
+      return ev;
+    };
+    fire("pointerdown");
+    fire("pointermove", { clientX: 105, clientY: 106 });
+    fire("pointerup", { clientX: 105, clientY: 106 });
+    hide.click();
+    await flush();
+    assert.equal(card.dataset.collapsed, "true", "a short pointer press / click hides once with autohide off");
+    assert.equal(prefs.get("zen.workspace.zentral.notes.card_autohide"), false, "hide once never changes the saved pref");
+    assert.equal(hide.getAttribute("data-once-hidden"), "true", "the pill marks the one-shot hide");
+    const strip = html.all().find((c) => c._classes.has("zentral-notes-reveal"));
+    assert.ok(strip, "the hidden card leaves its reveal strip");
+    strip.dispatchEvent(new Ev("mousedown", { bubbles: true }));
+    await flush();
+    assert.equal(card.dataset.collapsed, undefined, "pressing the strip reveals it once");
+    assert.equal(hide.getAttribute("data-once-hidden"), null, "the one-shot marker is cleared after reveal");
+
+    pointerId = 62;
+    fire("pointerdown");
+    await sleep(600);
+    assert.equal(hide.getAttribute("data-hold-active"), "true", "the hold state is visible");
+    fire("pointerup");
+    hide.click();
+    await flush();
+    assert.equal(prefs.get("zen.workspace.zentral.notes.card_autohide"), true, "a completed hold toggles autohide on");
+    assert.equal(hide.getAttribute("data-hold-active"), null);
+    assert.equal(card.dataset.collapsed, undefined, "the hold itself does not hide the card");
+    prefs.set("zen.workspace.zentral.notes.card_autohide", false);
+    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", "zen.workspace.zentral.notes.card_autohide"));
+    await flush();
+  });
+
   await test("S6 card-as-panel: pill buttons act (push and autohide are refused while detached, larger / close work), handles toggle shows every grip", async () => {
     const card = floatCard();
     const html = document.documentElement;
@@ -941,7 +998,8 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     pb("push").click(); await flush();
     assert.equal(prefs.get("zen.workspace.zentral.notes.push_page"), pushBefore, "push refused while detached");
     pb("hide").click(); await flush();
-    assert.notEqual(prefs.get("zen.workspace.zentral.notes.card_autohide"), true, "autohide refused while detached");
+    assert.notEqual(prefs.get("zen.workspace.zentral.notes.card_autohide"), true, "autohide toggle refused while detached");
+    assert.equal(card.dataset.collapsed, undefined, "a one-shot hide is refused while detached");
     pb("move").dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0, clientX: 5, clientY: 5, pointerId: 32 }));
     pb("move").dispatchEvent(new Ev("pointerup", { bubbles: true, pointerId: 32 }));
     pb("move").click(); await flush();

@@ -60,8 +60,9 @@ live Zen/Sine runtime is available here.
   parse with `node --check`.
 - No `about:preferences` URL or hard-coded Firefox preferences window opener in
   `additional`, `extension`, `loader` or `zentral` runtime source.
-- Root `theme.json` remains `3.4.0`; generated standalone bundles are rebuilt
-  with `--keep-version`.
+- The audit was recorded on `3.4.0`. For the owner-requested `3.4.1` release,
+  root `theme.json` and every main/standalone marker are now `3.4.1`; generated
+  standalone bundles were rebuilt through the explicit `--set 3.4.1` chain.
 - Exact `--keep-version` chain is `CHAIN_GREEN` (12 packages, `601 Sine
   preferences`) and the docs-inclusive full suite is `294/294 passed; 0 failed`;
   see `docs/bugfix-2026-11-18.md`. The new cross-feature regression sweep adds

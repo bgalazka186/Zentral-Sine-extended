@@ -39,7 +39,7 @@ in its tooltip, in both widget languages:
 - **Light** — GC/CC + memory minimize. No tabs touched.
 - **Deep** — Light clean first, then eligible tabs sleep. Restore available.
 - **Game Mode** — pauses repeating features and idles non-essential browsers.
-- **Restore** — wakes sleeping panels; sleeping tabs reload on click.
+- **Restore** — reloads what was unloaded: panels as panels, tabs as tabs.
 
 OW-115's grouped skip reasons and pinned/unpinned loaded-tab counts are folded into the Deep tooltip. The existing
 post-run toast adds a short ` · skipped N protected tab(s)` suffix when a run reports grouped skips; no result row
@@ -230,9 +230,33 @@ disables automatic Restore on exit; `game_restore_tabs=none` restores only the s
 Boost card; the full-pack tray does not borrow it. Every generated root and standalone `preferences.json` field has a
 placed settings row through the G11 catalog checker (608 fields after G10).
 
+<<<<<<< HEAD
 **Restore and what is lost.** Restore first re-selects the original tab, wakes live panel records first with
 `loadEssentialInBackground(record, false)`, then reloads other snapshot tabs newest `lastAccessed` first, one item per
 one-shot stagger tick with at most two loading at once. A user click or tile action removes that item from the queue.
+=======
+**Restore and what is lost.** Restore rebuilds exactly the holders that existed before the sleep, and nothing else
+(R1/R2):
+
+| Before the sleep | After Restore |
+| :--- | :--- |
+| page lived only in the record's TAB (a loaded pinned/Essential tab, no panel browser) | the tab is reloaded in the background; **no** panel is created |
+| page lived only in the PANEL app browser (the tab was pending) | the panel is woken with `loadEssentialInBackground(record, false)`; the tab stays pending |
+| both were loaded | both come back, panel first and then the tab |
+| neither (nothing was freed) | nothing is restored |
+
+`sleepPanelRecord()` reports `panelWas`/`tabWas` from the pre-sleep state and the one `recordPanelSleepHolders()`
+recorder writes the matching snapshot entries: a panel entry with `holders`, and/or a tab entry with `recordAppId`.
+The counts a person sees follow the same rule — a record freed only as a tab is a tab, not an app.
+
+Restore first re-selects the original tab, wakes the panel entries that had a panel holder first with
+`loadEssentialInBackground(record, false)`, then reloads the tab entries newest `lastAccessed` first, one item per
+one-shot stagger tick with at most two loading at once. A record tab is never turned into a second holder: when that
+app already has a live panel browser and the record had no panel holder, the tab task is skipped. Because a record
+tab belongs to the tab list, the `panels` profile does **not** reload it — "panels" means apps that lived in panels.
+
+A user click or tile action removes that item from the queue.
+>>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
 Unloaded tabs lose **unsaved page state** (form text, in-page drafts and transient client state); they need a short
 reload when selected or restored. Session URLs, labels, order and pinned state are remembered in memory only, capped at
 500 entries and cleared on Restore/destroy. Explicit Restore and direct user clicks keep working while Game Mode is on.
@@ -366,4 +390,8 @@ one-shot `setTimeout` chain, and Game Mode is the one switch that stops every ot
 Enable `sine.allow-unsafe-js` and restart Zen after the first install. `ZentralBoost.standalone.uc.js`,
 `theme.json`, `preferences.json` and `standalone.lock.json` are **generated** by `node tools/build-standalone.cjs`
 from `ZentralBoost.uc.js`, `standalone/ZentralBoostWidget.js`, `ZentralBoostWidget.css` and `standalone.json`; edit
+<<<<<<< HEAD
 the sources and rebuild, never the generated files. Keep version 3.4.0 with `--keep-version` on this branch.
+=======
+the sources and rebuild, never the generated files. Keep version 3.4.1 with `--keep-version` on this branch.
+>>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db

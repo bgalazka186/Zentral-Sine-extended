@@ -26,15 +26,14 @@ async function test(name, fn) {
 }
 
 function gestureRuntime() {
-  const start = SRC.hover.indexOf("function classifyPillAutohideGesture");
-  const end = SRC.hover.indexOf("      function ensurePillHoverRevealButton()");
-  assert.ok(start >= 0 && end > start, "the gesture block is bounded and extractable");
+  const start = SRC.hover.indexOf("// <<OW-130 PIN-STYLE GESTURE>>");
+  const end = SRC.hover.indexOf("// <<OW-130 PIN-STYLE GESTURE END>>");
+  assert.ok(start >= 0 && end > start, "the pin-style gesture block is bounded and extractable");
   const block = SRC.hover.slice(start, end);
 
   let now = 1000;
   let nextTimer = 0;
   const timers = new Map();
-  const fakeDate = { now: () => now };
   const fakeSetTimeout = (fn, ms) => {
     const id = ++nextTimer;
     timers.set(id, { fn, at: now + ms });
@@ -51,6 +50,7 @@ function gestureRuntime() {
     }
   };
 
+  let target;
   const makeEmitter = () => ({
     listeners: [],
     addEventListener(type, fn) { this.listeners.push({ type, fn }); },
@@ -60,7 +60,10 @@ function gestureRuntime() {
         type,
         button: 0,
         isTrusted: true,
-        target: target,
+        target,
+        clientX: 100,
+        clientY: 100,
+        detail: 1,
         preventDefault() { this.defaultPrevented = true; },
         stopPropagation() { this.stopped = true; },
         stopImmediatePropagation() { this.immediateStopped = true; },
@@ -71,7 +74,7 @@ function gestureRuntime() {
     },
   });
 
-  const target = {
+  target = {
     attrs: new Map(),
     closest(selector) { return selector === "#zen-app-hover-reveal-btn" ? this : null; },
     setAttribute(k, v) { this.attrs.set(k, String(v)); },
@@ -79,49 +82,51 @@ function gestureRuntime() {
     getAttribute(k) { return this.attrs.has(k) ? this.attrs.get(k) : null; },
   };
   const outside = { closest: () => null };
-  const document = makeEmitter();
   const window = makeEmitter();
   let hiddenCalls = 0;
   let toggleCalls = 0;
   let pref = false;
+  const hiddenOptions = [];
 
   // The extracted block is intentionally not copied into the test: it runs the
-  // shipped gesture code with fake DOM, clock and preference seams.
+  // shipped pin-style gesture with fake DOM, clock and preference seams.
   // eslint-disable-next-line no-new-func
   const factory = new Function(
-    "document", "window", "Date", "setTimeout", "clearTimeout",
-    "BGALAZKA_EXT_PREFS", "getPref", "setPref", "syncHoverPanelAvailability",
-    "clearHoverHide", "setHoverPanelHidden", "PILL_AUTOHIDE_HOLD_MS", "PILL_AUTOHIDE_SELECTOR",
+    "window", "setTimeout", "clearTimeout", "BGALAZKA_EXT_PREFS", "getPref",
+    "setPref", "syncHoverPanelAvailability", "clearHoverHide",
+    "setHoverPanelHidden", "hoverPanelAvailable", "PILL_AUTOHIDE_HOLD_MS",
+    "PILL_AUTOHIDE_MOVE_TOLERANCE_PX", "PILL_AUTOHIDE_SELECTOR",
     block + `
       return {
-        classifyPillAutohideGesture,
-        onPillAutohideDown, onPillAutohideUp, onPillAutohideMove,
-        onPillAutohideCancel, onPillAutohideClick, onPillAutohideKeyDown,
-        removePillAutohideListeners,
-        get press() { return pillAutohidePress; },
-        get consumed() { return pillAutohideConsumedClick; },
+        onPillAutohideDown, onPillAutohideMove, onPillAutohideClick,
+        cancelPillAutohidePending, removePillAutohideListeners,
+        get pending() { return pillAutohidePending; },
+        get suppress() { return pillAutohideSuppress; },
       };
     `,
   );
   const runtime = factory(
-    document,
     window,
-    fakeDate,
     fakeSetTimeout,
     fakeClearTimeout,
     { HOVER_REVEAL_PANEL: "zen.workspace.zentral.panels.autohide" },
-    (_k, fallback) => (fallback === undefined ? pref : fallback),
+    (_k, fallback) => (_k === "zen.workspace.zentral.panels.autohide" ? pref : fallback),
     (_k, v) => { pref = v; toggleCalls++; },
     () => {},
     () => {},
-    (hidden) => { if (hidden) hiddenCalls++; },
+    (hidden, opts) => { if (hidden) { hiddenCalls++; hiddenOptions.push(opts || {}); } },
+    () => true,
     550,
+    8,
     "#zen-app-hover-reveal-btn",
   );
-  return { runtime, document, window, target, outside, advance, state: () => ({ hiddenCalls, toggleCalls, pref }) };
+  return {
+    runtime, window, target, outside, advance,
+    state: () => ({ hiddenCalls, toggleCalls, pref, hiddenOptions: [...hiddenOptions] }),
+  };
 }
 
- (async () => {
+(async () => {
 try {
   await test("1. every batched pure helper and settings row stays exported together", () => {
     for (const name of [
@@ -232,71 +237,69 @@ try {
     api.destroy();
   });
 
-  await test("5. OW-130 off-target, cancel, no-op and cleanup paths release the press and consumed-click latch", () => {
+  await test("5. OW-130 pin-style gesture keeps short clicks, jitter, holds and cleanup honest", () => {
     const a = gestureRuntime();
-    a.document.fire("mousedown", { target: a.target });
-    a.advance(200);
-    a.window.fire("mouseup", { target: a.target });
-    assert.equal(a.runtime.consumed, true, "a completed short press leaves its own click latch");
-    a.document.fire("mousedown", { target: a.target });
-    a.advance(200);
-    a.window.fire("mouseup", { target: a.outside });
-    assert.equal(a.runtime.press, null, "off-target mouse-up clears the press");
-    assert.equal(a.runtime.consumed, false, "and releases the stale latch");
-    assert.equal(a.target.getAttribute("data-hold-active"), null);
-    const click = a.document.fire("click", { target: a.target });
-    assert.equal(click.defaultPrevented, undefined, "the next ordinary click is not swallowed");
+    a.window.fire("pointerdown", { target: a.target });
+    a.window.fire("pointermove", { target: a.target, clientX: 105, clientY: 106 });
+    assert.notEqual(a.runtime.pending, null, "sub-threshold jitter does not cancel");
+    a.window.fire("pointerup", { target: a.target });
+    const shortClick = a.window.fire("click", { target: a.target });
+    assert.equal(shortClick.defaultPrevented, undefined, "a short click is never swallowed");
+    assert.equal(a.state().hiddenCalls, 1, "a short click hides once");
+    assert.equal(a.state().hiddenOptions[0].once, true, "hide-once is independent of the saved preference");
+    assert.equal(a.state().toggleCalls, 0, "a short click does not toggle the pref");
+    assert.equal(a.runtime.pending, null);
+    assert.equal(a.runtime.suppress, null);
 
     const b = gestureRuntime();
-    b.document.fire("mousedown", { target: b.target });
-    b.advance(200);
-    b.window.fire("mouseup", { target: b.target });
-    assert.equal(b.runtime.consumed, true, "a real short gesture consumes its own click");
-    b.window.fire("pointercancel");
-    assert.equal(b.runtime.consumed, false, "cancel releases a stale latch");
-    const nextClick = b.document.fire("click", { target: b.target });
-    assert.equal(nextClick.defaultPrevented, undefined, "and leaves the following click alone");
-    assert.equal(b.state().hiddenCalls, 1);
-    assert.equal(b.state().toggleCalls, 0);
+    b.window.fire("pointerdown", { target: b.target });
+    b.advance(550);
+    assert.equal(b.state().toggleCalls, 1, "the completed hold toggles the pref");
+    assert.equal(b.state().hiddenCalls, 0, "and does not also hide once");
+    assert.equal(b.target.getAttribute("data-hold-active"), "true");
+    assert.equal(b.runtime.suppress, b.target);
+    b.window.fire("pointerup", { target: b.target });
+    const holdClick = b.window.fire("click", { target: b.target });
+    assert.equal(holdClick.defaultPrevented, true, "only the hold-ending click is swallowed");
+    assert.equal(b.target.getAttribute("data-hold-active"), null);
+    assert.equal(b.runtime.suppress, null);
 
     const c = gestureRuntime();
-    c.document.fire("mousedown", { target: c.target });
-    c.advance(600);
-    c.window.fire("mouseup", { target: c.target });
-    assert.equal(c.state().toggleCalls, 1, "a completed hold still toggles the pref");
-    assert.equal(c.state().hiddenCalls, 0);
-    assert.equal(c.runtime.press, null);
-    assert.equal(c.target.getAttribute("data-hold-active"), null);
+    c.window.fire("pointerdown", { target: c.target });
+    c.window.fire("pointermove", { target: c.target, clientX: 130 });
+    assert.equal(c.runtime.pending, null, "a real move cancels only the pending hold");
+    c.advance(550);
+    assert.equal(c.state().toggleCalls, 0, "no hold fires after the move");
+    c.window.fire("pointerup", { target: c.target });
+    c.window.fire("click", { target: c.target });
+    assert.equal(c.state().hiddenCalls, 1, "the short click still reaches its own action");
 
     const d = gestureRuntime();
-    d.document.fire("mousedown", { target: d.target });
-    d.advance(200);
-    d.window.fire("mouseup", { target: d.target });
-    assert.equal(d.runtime.consumed, true, "a real short gesture consumes its own click");
-    d.window.fire("mouseup", { target: d.target });
-    assert.equal(d.runtime.consumed, false, "a stray mouse-up with no press releases the latch");
-    const dClick = d.document.fire("click", { target: d.target });
-    assert.equal(dClick.defaultPrevented, undefined, "and leaves the following click alone");
+    d.window.fire("pointerdown", { target: d.target });
+    d.window.fire("pointercancel", { target: d.target });
+    assert.equal(d.runtime.pending, null, "pointercancel cancels the pending hold");
+    d.advance(550);
+    d.window.fire("pointerup", { target: d.target });
+    d.window.fire("click", { target: d.target });
+    assert.equal(d.state().hiddenCalls, 1, "a canceled hold still leaves the short click alone");
+    assert.equal(d.state().toggleCalls, 0);
 
     const e = gestureRuntime();
-    e.document.fire("mousedown", { target: e.target });
-    e.advance(200);
-    e.window.fire("mouseup", { target: e.target });
-    assert.equal(e.runtime.consumed, true, "pre-load a stale latch for a no-op verdict");
-    e.document.fire("mousedown", { target: e.target });
-    e.advance(200);
-    e.window.fire("mouseup", { target: e.target, button: 2 });
-    assert.equal(e.runtime.consumed, false, "a no-op verdict cannot leave a stale latch");
-    assert.equal(e.state().hiddenCalls, 1);
+    e.window.fire("pointerdown", { target: e.outside });
+    assert.equal(e.runtime.pending, null, "an off-target pointerdown arms nothing");
+    e.advance(550);
     assert.equal(e.state().toggleCalls, 0);
+    e.window.fire("click", { target: e.outside });
+    assert.equal(e.state().hiddenCalls, 0, "an off-target click does not hide");
 
     const f = gestureRuntime();
-    f.document.fire("mousedown", { target: f.target });
-    f.advance(200);
-    f.window.fire("mouseup", { target: f.target });
-    assert.equal(f.runtime.consumed, true, "pre-load a latch before cleanup");
+    f.window.fire("pointerdown", { target: f.target });
+    assert.notEqual(f.runtime.pending, null);
     f.runtime.removePillAutohideListeners();
-    assert.equal(f.runtime.consumed, false, "cleanup cannot leave a click latch behind");
+    assert.equal(f.runtime.pending, null, "cleanup clears the pending hold");
+    assert.equal(f.runtime.suppress, null, "and the suppress marker");
+    assert.equal(f.target.getAttribute("data-hold-active"), null);
+    assert.equal(f.window.listeners.length, 0, "cleanup removes every window listener");
   });
 
   await test("6. OW-131 inheritance preview uses the resolved value, not a nested Inherit sentence", () => {
