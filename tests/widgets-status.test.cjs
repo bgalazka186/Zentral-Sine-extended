@@ -116,11 +116,15 @@ test("the toast line never invents a number", () => {
 });
 
 test("the card registers once and the Status card is gone", () => {
-  const registrations = [...SRC.matchAll(/registerWidget\(\{\n\s+id: "([a-z-]+)",/g)].map((m) => m[1]);
-  assert.equal(registrations.filter((id) => id === "boost").length, 1, "one Boost card");
-  assert.equal(registrations.includes("status"), false, "the Status card is not registered at all");
+  // G10: the Boost card may be a literal registerWidget({ ... }) call or a named
+  // definition handed to the tray through the standalone Boost marker. Either
+  // way there is exactly one definition and one card id.
+  const definitions = [...SRC.matchAll(/(?:registerWidget\(\{|const boostWidgetDefinition = \{)\n\s+id: "([a-z-]+)",/g)].map((m) => m[1]);
+  assert.equal(definitions.filter((id) => id === "boost").length, 1, "one Boost card");
+  assert.match(SRC, /if \(!trayTookBoost\) registerWidget\(boostWidgetDefinition\);|registerWidget\(\{\n\s+id: "boost",/);
+  assert.equal(definitions.includes("status"), false, "the Status card is not registered at all");
   assert.equal(SRC.includes("id: \"status\""), false, "not even as a definition nobody mounts");
-  assert.equal(registrations.filter((id) => id === "clock").length, 1, "the other cards are untouched");
+  assert.equal(definitions.filter((id) => id === "clock").length, 1, "the other cards are untouched");
 });
 
 test("the card reads the module, never the platform, and owns no timer", () => {

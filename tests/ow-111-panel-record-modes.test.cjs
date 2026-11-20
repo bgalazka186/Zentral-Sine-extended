@@ -1,7 +1,7 @@
 "use strict";
 const MB = 1_000_000; // Firefox ProcInfo.memory is bytes; readings are written in MB.
-/* OW-111 (owner audit F1): a tab that backs an Essential-panel record must obey its
- * `backgroundMode` in EVERY pass — Level 2, the RAM limiter and Game Mode.
+/* OW-111 (owner audit F1): a tab that backs an Essential-panel record obeys its
+ * `backgroundMode` in Level 2 and the RAM limiter; G8's Game Mode is the explicit consent that may sleep every mode.
  *
  * This file is also the "check the CURRENT behaviour" audit the owner asked for. It does not
  * trust the old patch's report: every record tab here is a real member of `gBrowser.tabs`
@@ -301,14 +301,18 @@ test("F1: the limiter never unloads a live record, even with keep_pinned true", 
   h.destroy();
 });
 
-test("F1: Game Mode's Level 2 never unloads a record tab", async () => {
+test("F1/G8: Game Mode's plan-driven pass sleeps a live record, while Level 2 still obeys its mode", async () => {
   const live = record("messenger", "live", { url: "https://messenger.example/" });
   const old = tab({ url: "https://old.example/", lastAccessed: 1 });
-  const h = boot({ tabs: [live.tab, old], panels: [live], prefs: { [PINNED_PREF]: true } });
+  const h = boot({
+    tabs: [live.tab, old], panels: [live],
+    prefs: { [PINNED_PREF]: true, "zen.workspace.zentral.boost.game_park_selected": false },
+  });
   h.api.setGameMode(true);
   await h.settle();
-  assert.equal(wasUnloaded(h, live.tab), false, "Game Mode's allowPanels:false pass skips record tabs");
-  assert.equal(wasUnloaded(h, old), true, "but it still idles ordinary tabs");
+  assert.equal(wasUnloaded(h, live.tab), true, "Game Mode is the consent and sleeps the live record through G1's door");
+  assert.equal(wasUnloaded(h, old), true, "the planned ordinary tab sleeps too");
+  assert.equal(h.api.gameModeState().unloaded.panels, 1, "the G8 report counts one slept panel");
   h.api.setGameMode(false);
   h.destroy();
 });

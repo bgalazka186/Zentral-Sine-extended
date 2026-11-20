@@ -5,7 +5,7 @@
   "homepage": "https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/boost",
   "supportsUnload": true,
   "style": {
-    "chrome": "",
+    "chrome": "ZentralBoostWidget.css",
     "content": ""
   },
   "scripts": {

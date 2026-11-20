@@ -53,6 +53,11 @@
     const attempted = new WeakSet();
     const cleanups = [];
     const enabled = () => !stopped && Services.prefs.getBoolPref(PREF, true);
+    // G6: a startup background wake must not load a tab that Game Mode deliberately put to sleep.
+    const automaticWakeBlocked = () => Boolean(
+      (window.ZentralRuntime || window.__zentralStandaloneRuntime)?.performance?.isPaused?.() ||
+      window.ZentralBoost?.gameModeState?.().on,
+    );
     const listen = (target, type, handler, options) => {
       target.addEventListener(type, handler, options);
       cleanups.push(() => target.removeEventListener(type, handler, options));
@@ -112,7 +117,7 @@
     function wake(tab) {
       // Recheck the actual live tab immediately before touching its browser.
       // Never add a tab, load a saved URL, select a tab or reload a running page.
-      if (!enabled() || !eligible(tab) || !selected(tab) || attempted.has(tab))
+      if (!enabled() || automaticWakeBlocked() || !eligible(tab) || !selected(tab) || attempted.has(tab))
         return;
       if (!sleeping(tab)) {
         attempted.add(tab);
@@ -135,7 +140,7 @@
 
     function pump() {
       timer = null;
-      if (!enabled()) {
+      if (!enabled() || automaticWakeBlocked()) {
         queue.clear();
         return;
       }
@@ -150,7 +155,7 @@
       if (queue.size) timer = window.setTimeout(pump, 1500);
     }
     function scan() {
-      if (!ready || !enabled()) return;
+      if (!ready || !enabled() || automaticWakeBlocked()) return;
       const tabs = new Set(allNativeTabs());
       for (const tab of tabs) {
         if (eligible(tab, tabs) && selected(tab) && !attempted.has(tab))
@@ -254,6 +259,15 @@
     window.ZentralStartup = { destroy };
     listen(window, "unload", destroy, { once: true });
     const hostRuntime = window.ZentralRuntime || window.__zentralStandaloneRuntime;
+    // G6: a queue cleared by Game Mode must be rebuilt when the pause ends. This is one owned subscription, not polling.
+    const pauseOff = typeof hostRuntime?.performance?.subscribe === "function"
+      ? hostRuntime.performance.subscribe((paused) => { if (!paused) scan(); })
+      : null;
+    if (pauseOff) {
+      cleanups.push(() => {
+        try { pauseOff(); } catch (_) {}
+      });
+    }
     if (typeof hostRuntime?.registerHostUnload === "function")
       hostRuntime.registerHostUnload(destroy);
     else {

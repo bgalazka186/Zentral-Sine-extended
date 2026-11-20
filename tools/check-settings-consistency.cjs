@@ -1,6 +1,9 @@
-/* Catalog consistency check: mirrors ZentralSettingsCatalog.js validation. */
+/* Catalog consistency check: mirrors ZentralSettingsCatalog.js validation.
+ * G11 also cross-checks the catalog's descriptor list and every generated Sine
+ * preference against its owner schema; see tools/lib/settings-coverage.cjs. */
 const fs = require("node:fs");
 const path = require("node:path");
+const { checkCoverage } = require("./lib/settings-coverage.cjs");
 const root = path.resolve(__dirname, "..");
 function walk(dir) {
   return fs
@@ -80,4 +83,8 @@ const recommended = JSON.parse(
 for (const key of Object.keys(recommended.prefs || {}))
   if (!seen.has(key))
     console.log("note: recommended key is not in any schema: " + key);
+for (const message of checkCoverage(root)) {
+  fail("coverage: " + message);
+}
 console.log(errors ? errors + " errors" : "catalog checks passed");
+if (errors) process.exitCode = 1;

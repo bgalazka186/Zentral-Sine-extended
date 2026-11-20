@@ -113,13 +113,17 @@ test("every repeating feature subscribes and honours the pause", () => {
     ["additional/widgets/ZentralWidgets.uc.js", /scheduler\.setHeld\(paused, lastArea\)/, "the scheduler is held"],
     ["additional/rss/ZentralRssDisplay.uc.js", /if \(performancePaused\(\)\) \{/, "the scan is skipped"],
     ["additional/notes/ZentralNotes.uc.js", /paused: \(\) => Boolean\(performanceSwitch\?\.isPaused\?\.\(\)\)/, "the minute wake"],
-    ["extension/panels/ZentralPanels.uc.js", /!window\.ZentralRuntime\?\.performance\?\.isPaused\?\.\(\)/, "the fallback poll"],
+    // G6: the fallback poll now asks the shared pause/Game Mode predicate instead of duplicating the raw check.
+    ["extension/panels/ZentralPanels.uc.js", /!automaticWakeBlocked\(\)/, "the fallback poll"],
   ];
   for (const [file, pattern, what] of cases) {
     const source = read(file);
     assert.match(source, pattern, `${file}: ${what}`);
     assert.match(source, /\.subscribe\?\.\(|\.subscribe\(/, `${file} subscribes to the switch`);
   }
+  const panels = read("extension/panels/ZentralPanels.uc.js");
+  assert.match(panels, /const automaticWakeBlocked = \(\) => Boolean\([\s\S]*?performance\?\.isPaused\?\.\(\)/,
+    "the shared fallback-pause predicate still reads the runtime performance switch");
 });
 
 test("the video preview stops scanning without touching playback", () => {
@@ -150,23 +154,23 @@ test("Game Mode exemptions: an audible tab and the video source are never deacti
   assert.match(body, /tab === window\.gBrowser\?\.selectedTab/, "and the tab being looked at");
 });
 
-test("Stronger saver is what makes a `live` record a candidate", () => {
+test("Stronger saver is the Level 2 all-modes switch outside Game Mode", () => {
   const source = read("additional/boost/ZentralBoost.uc.js");
-  // The deep pass defaults to `asleep-allowed` only; the strong Game Mode pass opens every mode up, and that switch is
-  // the only caller that does.
-  assert.match(source, /const modes = Array\.isArray\(options\.allowModes\) \? options\.allowModes : \["asleep-allowed"\];/);
-  const callers = source.match(/allowModes: \[\.\.\.BACKGROUND_MODES\]/g) || [];
-  assert.equal(callers.length, 1, "exactly one caller opens every mode: the strong pass");
-  const stronger = extract(source, "strongerSaverSleep");
-  assert.match(stronger, /allowModes: \[\.\.\.BACKGROUND_MODES\]/, "the strong pass opens every mode");
-  assert.match(source, /if \(prefBool\(PREF\.STRONGER_SAVER, false\)\) \{/, "and it only runs when the switch is on");
+  // G8: a plain deep pass still defaults to `asleep-allowed`; the pref opens every mode for Level 2 OUTSIDE Game Mode.
+  // Game Mode itself uses the G2 planner's consent, so it no longer depends on this pref or a second saver pass.
+  assert.match(source, /const modes = Array\.isArray\(options\.allowModes\) \? options\.allowModes :\s*\n?\s*\(prefBool\(PREF\.STRONGER_SAVER, false\) \? \[\.\.\.BACKGROUND_MODES\] : \["asleep-allowed"\]\);/);
+  assert.match(source, /if \(gameMode\.on\) return gameModeState\(\);/, "Game Mode blocks a parallel Level 2 pass");
+  assert.match(source, /async function runGameModePass\(/, "Game Mode has one plan-driven pass");
+  assert.doesNotMatch(source, /strongerSaverSleep/, "no second generic Game Mode saver path remains");
+  assert.equal((source.match(/allowModes: \[\.\.\.BACKGROUND_MODES\]/g) || []).length, 0,
+    "the pref, not an option from Game Mode, opens every mode");
 });
 
 test("switching Game Mode off restores the selected tab, not every browser", () => {
   const source = read("additional/boost/ZentralBoost.uc.js");
   const off = source.slice(source.indexOf("gameMode.on = false;"));
-  assert.match(off.slice(0, 400), /restoreGameModeActivity\(\)/, "what it changed is put back");
-  assert.match(off.slice(0, 400), /restoreSelectedTabActivity\(\)/, "and the selected tab is made active again");
+  assert.match(off.slice(0, 900), /restoreGameModeActivity\(\)/, "what it changed is put back");
+  assert.match(off.slice(0, 900), /restoreSelectedTabActivity\(\)/, "and the selected tab is made active again");
   const selected = extract(source, "restoreSelectedTabActivity");
   assert.match(selected, /docShellIsActive !== true/);
   assert.equal(/for \(const tab of/.test(selected), false, "it never walks every tab");

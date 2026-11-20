@@ -19,7 +19,8 @@
  *   extension/panels/settings.json; additional/rss/settings.json;
  *   extension/panels/secondary-views/settings.json; additional/tabs/startup/settings.json;
  *   zentral/groups/settings.json; additional/tabs/unloading/settings.json;
- *   additional/video/settings.json; extension/settings/layout.json
+ *   additional/boost/settings.json; additional/video/settings.json;
+ *   extension/settings/layout.json
  * Returned factory API: SETTINGS_ORGANIZATION; SETTINGS_SCHEMA
  *
  * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
@@ -111,6 +112,13 @@
       {
         owner: "tab-unload",
         file: "additional/tabs/unloading/settings.json",
+      },
+      {
+        // G11: Boost's 11 preferences are in preferences.json and layout.order, but without this
+        // descriptor the main settings window never renders them (OW-61's bug class). Every owner
+        // schema must appear here; tools/check-settings-consistency.cjs now enforces that.
+        owner: "boost",
+        file: "additional/boost/settings.json",
       },
       {
         owner: "extension-settings",

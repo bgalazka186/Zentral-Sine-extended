@@ -21,6 +21,8 @@ docs/*
 !docs/NOTES_PERFORMANCE_AUDIT.md
 !docs/NOTES_DISCOVERABILITY.md
 !docs/PLAN_CODING_AGENT.md
+!docs/PLAN_CODING_AGENT_FOLLOWUP_GAME_MODE.md
+!docs/PLAN_DIAGNOSTICS.md
 !docs/ADDING_A_LANGUAGE.md
 !docs/MENU_BASELINE.md
 !docs/perf-results.md
@@ -29,8 +31,8 @@ docs/*
 !docs/bugfix-2026-11-18.md
 !docs/ow-120-owner-diagnosis.md
 !docs/ow-121-boost-ux.md
-!docs/ow-122-restart-pseudo-tabs.md
 !docs/ow-123-standalone-ownership-audit.md
+!docs/ow-122-restart-pseudo-tabs.md
 !docs/weather-rain-options.md
 !docs/zen-1243b-compat-audit.md
 !docs/zen-125t-compat-audit.md

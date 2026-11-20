@@ -1,0 +1,115 @@
+/* G10: standalone Boost card. Declared by additional/boost/standalone.json as the
+ * package's `css`; the full pack never loads this file. OW-121's one-row rule is
+ * kept: the value, label and all four actions stay on a 26 px row. */
+#zentral-boost-standalone-anchor {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+#zentral-boost-standalone-card,
+.zbsw-card {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 360px;
+  padding: 2px 4px;
+  font: 11px/1.2 system-ui, sans-serif;
+  color: var(--zen-primary-color, #eee);
+  background: var(--zen-colors-secondary, rgba(0, 0, 0, .72));
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: 6px;
+}
+
+#zentral-boost-standalone-card[hidden],
+.zbsw-card[hidden],
+.zbsw-hint[hidden],
+.zbsw-toast[hidden] {
+  display: none !important;
+}
+
+.zbsw-row,
+.zbsw-popup {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 4px !important;
+  width: 100%;
+  max-height: 26px !important;
+  overflow: hidden !important;
+}
+
+.zbsw-value {
+  flex: 0 0 auto;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.zbsw-label {
+  flex: 0 1 auto;
+  opacity: .78;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.zbsw-popup {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
+
+.zbsw-action,
+.zbsw-toast-action {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  height: 20px !important;
+  min-width: 38px;
+  max-width: 76px;
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+  overflow: hidden !important;
+  cursor: pointer;
+}
+
+.zbsw-action[disabled] {
+  opacity: .42;
+  cursor: default;
+}
+
+.zbsw-hint,
+.zbsw-toast {
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 0 2px;
+  opacity: .86;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.zbsw-toast {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.zbsw-toast-line {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}

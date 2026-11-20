@@ -275,11 +275,13 @@ test("syncAppPanelBrowserActivity in ZentralBrowserIntegrations respects active 
     documentElement: { hasAttribute: () => false, getAttribute: () => null },
   };
   const window = { ZentralBoost: { gameModeState: () => ({ on: true }) }, Zentral: undefined };
+  // G6: the shipped body now calls the shared pause/Game Mode guard; inject the same predicate the module uses.
   const fn = new Function(
-    "ctx", "document", "window", "addonHostByAppId", "console", "panelBrowserVisible",
+    "ctx", "document", "window", "addonHostByAppId", "console", "panelBrowserVisible", "automaticWakeBlocked",
     `${fnBody}\nreturn syncAppPanelBrowserActivity;`,
   );
-  const sync = fn(ctx, document, window, new Map(), console, () => false);
+  const sync = fn(ctx, document, window, new Map(), console, () => false,
+    () => Boolean(window.ZentralBoost?.gameModeState?.().on));
   sync([preloadBrowser]);
   assert.equal(preloadBrowser.docShellIsActive, false, "hidden preload panel must remain inactive while Game Mode is on");
 });

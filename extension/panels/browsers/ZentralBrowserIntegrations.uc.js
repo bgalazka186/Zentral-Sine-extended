@@ -42,6 +42,11 @@
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
   const ZentralRuntime = window.ZentralRuntime;
+  // G6: the notification/preload branch must not reactivate a hidden panel while Game Mode is paused.
+  const automaticWakeBlocked = () => Boolean(
+    (ZentralRuntime || window.__zentralStandaloneRuntime)?.performance?.isPaused?.() ||
+    window.ZentralBoost?.gameModeState?.().on,
+  );
   // Feature: browser-integrations. Imports and exports are listed in ARCHITECTURE.md.
   // Preparation publishes functions; activation preserves the baseline initialization order.
   ZentralRuntime.registerPart("browser-integrations", function* (ctx) {
@@ -1748,7 +1753,7 @@
             (essential?.app.preload && essential.tab.isConnected) ||
             window.Zentral?.Apps?.isAppPreloadEnabled?.(browser._bgalazkaAppId)
           );
-          const gameModeOn = Boolean(window.ZentralBoost?.gameModeState?.().on);
+          const gameModeOn = automaticWakeBlocked();
           const audible = Boolean(
             essential?.tab?.soundPlaying || browser.audioPlaying,
           );

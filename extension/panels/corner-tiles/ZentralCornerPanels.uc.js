@@ -33,6 +33,12 @@
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
   const ZentralRuntime = window.ZentralRuntime;
+  // G6: an automatic preload may not wake a slept panel while the performance switch or Game Mode is paused.
+  // Explicit `loadEssentialInBackground(record, false)` (a click, refresh or Restore) is deliberately exempt.
+  const automaticWakeBlocked = () => Boolean(
+    (ZentralRuntime || window.__zentralStandaloneRuntime)?.performance?.isPaused?.() ||
+    window.ZentralBoost?.gameModeState?.().on,
+  );
   // Feature: corner-panels. Imports and exports are listed in ARCHITECTURE.md.
   // Preparation publishes functions; activation preserves the baseline initialization order.
   ZentralRuntime.registerPart("corner-panels", function* (ctx) {
@@ -311,6 +317,11 @@
     let nextPreloadAt = 0;
     const pendingPreloads = new Set();
     function scheduleEssentialPreload(record) {
+      // G6: do not even arm the preload timer while Game Mode owns the session.
+      if (automaticWakeBlocked()) {
+        record.preloadAttempted = false;
+        return;
+      }
       if (record.preloadPending) return;
       record.preloadPending = true;
       const now = Date.now(),
@@ -325,6 +336,7 @@
         ctx.retryPanelTask(record, () => {
           record.preloadPending = false;
           if (
+            automaticWakeBlocked() ||
             !record.tab.isConnected ||
             !record.app.preload ||
             essentialPanels.get(record.app.id) !== record ||
@@ -349,9 +361,23 @@
       record.preloadTimer = timer;
       pendingPreloads.add(timer);
     }
+    // G6: re-arm ordinary one-shot preloads when the Game Mode pause ends. This is an owned subscription, not a
+    // second timer; the shared predicate is rechecked so a still-on Game Mode cannot slip a preload through.
+    const pauseSwitch = (ZentralRuntime || window.__zentralStandaloneRuntime)?.performance;
+    const unsubscribePause = typeof pauseSwitch?.subscribe === "function"
+      ? pauseSwitch.subscribe((paused) => {
+          if (paused || automaticWakeBlocked()) return;
+          try { ctx.requestTileSync?.(0); } catch (_) {}
+        })
+      : null;
+    if (unsubscribePause) {
+      ctx.registerCleanup(() => {
+        try { unsubscribePause(); } catch (_) {}
+      });
+    }
     ctx.registerCleanup(() => {
       for (const timer of pendingPreloads) ctx.clearTimeout(timer);
-      pendingPreloads.clear();
+        pendingPreloads.clear();
     });
 
     // Pair identities belong to the extension, not to the lifetime of a browser.
@@ -545,10 +571,16 @@
       }
     }
     function loadEssentialInBackground(record, automatic = false) {
+      // G6: an automatic preload request returns WITHOUT calling getOrCreateAppBrowser while Game Mode is on.
+      // The `false` form is an explicit user/Restore wake and must keep working.
+      if (automatic && automaticWakeBlocked()) return false;
       const apps = window.Zentral?.Apps;
       if (!record.tab.isConnected || record.tab.closing || (automatic && !record.app.preload) ||
           essentialPanels.get(record.app.id) !== record ||
           !window.Zentral?.Core?.getPref("zen.workspace.apps.sidebar.enabled", true)) return true;
+      if (!automatic && !window.ZentralBoost?.isRestoreWake?.("panel", record.app.id)) {
+        try { window.ZentralBoost?.noteUserWake?.("panel", record.app.id); } catch (_) {}
+      }
       if (
         !apps?.getOrCreateAppBrowser ||
         !document.getElementById("zen-app-panel-slider")
