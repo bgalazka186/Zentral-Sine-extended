@@ -349,19 +349,11 @@ test("the active plan, perf report, README and handoff record G7 DONE", () => {
   assert.match(PLAN, /\| `G7` \| \*\*DONE\*\*/);
   assert.match(PERF, /\| `G7` \|/);
   assert.match(PERF, /tests\/g7-game-mode-feedback\.test\.cjs` \(10 passed\)/);
-<<<<<<< HEAD
-  assert.match(PERF, /305\/305 passed; 0 failed/);
-  assert.match(README, /## G7 UI feedback/);
-  assert.match(HANDOFF, /all G0\.\.G11 plan tasks are DONE/);
-  assert.match(HANDOFF, /`g7-game-mode-feedback` \(10\)/);
-  assert.match(HANDOFF, /305\/305 passed; 0 failed/);
-=======
   assert.match(PERF, /306\/306 passed; 0 failed/);
   assert.match(README, /## G7 UI feedback/);
   assert.match(HANDOFF, /all G0\.\.G11 plan tasks are DONE/);
   assert.match(HANDOFF, /`g7-game-mode-feedback` \(10\)/);
   assert.match(HANDOFF, /306\/306 passed; 0 failed/);
->>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
   assert.match(HANDOFF, /`G10` must be done before `G7`/, "the G9 handoff wording remains intact");
 });
 

@@ -230,11 +230,6 @@ disables automatic Restore on exit; `game_restore_tabs=none` restores only the s
 Boost card; the full-pack tray does not borrow it. Every generated root and standalone `preferences.json` field has a
 placed settings row through the G11 catalog checker (608 fields after G10).
 
-<<<<<<< HEAD
-**Restore and what is lost.** Restore first re-selects the original tab, wakes live panel records first with
-`loadEssentialInBackground(record, false)`, then reloads other snapshot tabs newest `lastAccessed` first, one item per
-one-shot stagger tick with at most two loading at once. A user click or tile action removes that item from the queue.
-=======
 **Restore and what is lost.** Restore rebuilds exactly the holders that existed before the sleep, and nothing else
 (R1/R2):
 
@@ -256,7 +251,6 @@ app already has a live panel browser and the record had no panel holder, the tab
 tab belongs to the tab list, the `panels` profile does **not** reload it — "panels" means apps that lived in panels.
 
 A user click or tile action removes that item from the queue.
->>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
 Unloaded tabs lose **unsaved page state** (form text, in-page drafts and transient client state); they need a short
 reload when selected or restored. Session URLs, labels, order and pinned state are remembered in memory only, capped at
 500 entries and cleared on Restore/destroy. Explicit Restore and direct user clicks keep working while Game Mode is on.
@@ -390,8 +384,4 @@ one-shot `setTimeout` chain, and Game Mode is the one switch that stops every ot
 Enable `sine.allow-unsafe-js` and restart Zen after the first install. `ZentralBoost.standalone.uc.js`,
 `theme.json`, `preferences.json` and `standalone.lock.json` are **generated** by `node tools/build-standalone.cjs`
 from `ZentralBoost.uc.js`, `standalone/ZentralBoostWidget.js`, `ZentralBoostWidget.css` and `standalone.json`; edit
-<<<<<<< HEAD
-the sources and rebuild, never the generated files. Keep version 3.4.0 with `--keep-version` on this branch.
-=======
 the sources and rebuild, never the generated files. Keep version 3.4.1 with `--keep-version` on this branch.
->>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db

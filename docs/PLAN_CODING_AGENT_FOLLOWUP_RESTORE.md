@@ -95,6 +95,19 @@ Reproduce with a mixed session: one pinned page loaded as a TAB (for example are
 | `R4` — the ten tests | **DONE** | `tests/r4-restore-holder-spec.test.cjs` (10 passed) with real `pinned`/`zen-essential` fixtures; 0/10 pass on the pre-fix tree `6d2e2934`. |
 | `R5` — owner gates | **DONE (recorded, not measured)** | The three gates are in `TODO_notes_roadmap.md` under **Restore follow-up owner gates (R5)**; `tests/r5-restore-owner-gates.test.cjs` keeps them there. |
 
-Full suite at this tree: `311/311 passed; 0 failed`, `0 TODO failing: none`. Exact no-bump chain green at
+Full suite at this tree: `312/312 passed; 0 failed`, `0 TODO failing: none`. Exact no-bump chain green at
 608 root settings / 608 Sine preferences and version 3.4.1. No live Zen/Sine runtime, toast, visual or RAM result is
 claimed: gates A/B/C above remain owner work.
+
+## 7. Follow-up outside the plan: the 2026-11-20 merge markers (`S1`)
+
+Not a plan task, but it has to be written down where the next session will look. The branch tip `0ecd5b8` was a
+merge commit that committed its unresolved conflicts: 18 files, 42 marker pairs, including
+`additional/boost/ZentralBoost.uc.js` and its generated bundle. The owner reported the visible result — `Memory
+Boost — FAILED` in the loader report, `additional/boost/ZentralBoost.uc.js`, only the `load@…/loader/Zentral.uc.js:82`
+frame in the details — because `loadSubScript()` cannot parse a file that starts with `<<<<<<< HEAD`, so the module
+never evaluated and `register({ id: "boost" })` never ran. Every other feature loaded, so nothing else looked wrong.
+
+| Task | Status | Evidence |
+| :--- | :--- | :--- |
+| `S1` — resolve the merge and stop it happening again | **DONE** | The 18 conflicted files are resolved to the verified `3e6d7d3` content, so the tree matches the last suite-verified commit exactly. `tests/source-integrity.test.cjs` (3 passed) rejects conflict markers in any tracked file, parses all 103 shipped scripts, and checks that all 53 catalog references exist; it is strict RED (exit 1) on `0ecd5b8` via `ZENTRAL_SOURCE_ROOT`, naming `additional/boost/ZentralBoost.uc.js:1314` first. Full suite `312/312 passed; 0 failed`, version still 3.4.1. |

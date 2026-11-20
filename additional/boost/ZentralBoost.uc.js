@@ -1311,9 +1311,6 @@
         const live = essentialRecords().find((r) => String(r?.app?.id || r?.appId || "") === appId);
         return live || entry?.recordRef || null;
       }
-<<<<<<< HEAD
-      function panelNeedsWork(entry) {
-=======
       /* R2: a panel entry only means something when the page really lived in the panel. `holders` is what R1 wrote;
        * data from an older build has no `holders`, so it keeps its old meaning through `wasLoaded`. */
       function panelHadHolder(entry) {
@@ -1332,7 +1329,6 @@
       }
       function panelNeedsWork(entry) {
         if (!panelHadHolder(entry)) return false;
->>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
         const record = currentPanelRecord(entry);
         if (!record || isBoostParkingTab(record.tab)) return false;
         return !livePanelBrowser(String(entry?.appId || ""));
@@ -1359,14 +1355,11 @@
       }
       function tabNeedsWork(entry) {
         const tab = entry?.tab;
-<<<<<<< HEAD
-=======
         // R2: a record tab is never turned into a second holder. When the record had a panel entry, the panel task
         // already woke it and this tab task is the OTHER holder's wake; when it had none, a live panel browser means
         // somebody else opened the app in the meantime, so leave that page alone.
         const appId = String(entry?.recordAppId || "");
         if (appId && entry?.hadPanelHolder !== true && livePanelBrowser(appId)) return false;
->>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
         return Boolean(
           tab && tab.isConnected !== false && !tab.closing && !isBoostParkingTab(tab) &&
           tabIsSleeping(tab) && typeof tab.linkedBrowser?.reload === "function",
@@ -1376,12 +1369,6 @@
         return wakePendingTab(entry?.tab);
       }
       function restoreSnapshotEntries() {
-<<<<<<< HEAD
-        const panelEntries = gameSession.panels.length
-          ? gameSession.panels.slice()
-          : undoState.panels.map((entry) => ({
-              appId: entry.appId, recordRef: null, mode: "live", wasLoaded: false, when: entry.when || 0,
-=======
         // R2: only entries that really had the panel holder become panel tasks. Older data (no `holders`) keeps the
         // `wasLoaded` answer it was written with instead of the hard-coded `false` that created panels out of tabs.
         const panelEntries = gameSession.panels.length
@@ -1392,16 +1379,12 @@
               mode: "live",
               wasLoaded: entry?.wasLoaded === true,
               when: entry.when || 0,
->>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
             }));
         const seenPanels = new Set();
         const panels = panelEntries.filter((entry) => {
           const id = String(entry?.appId || "");
           if (!id || seenPanels.has(id)) return false;
-<<<<<<< HEAD
-=======
           if (!panelHadHolder(entry)) return false;
->>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
           seenPanels.add(id);
           return true;
         });
@@ -1411,22 +1394,15 @@
           ? sessionTabsForRestore().slice()
           : undoState.tabs.filter((entry) => entry?.tab && entry.tab.isConnected !== false && !entry.tab.closing);
         const seenTabs = new Set();
-<<<<<<< HEAD
-=======
         const panelHolderIds = new Set(panels.map((entry) => String(entry?.appId || "")));
->>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
         const tabs = tabEntries.filter((entry) => {
           if (!entry?.tab || seenTabs.has(entry.tab)) return false;
           seenTabs.add(entry.tab);
           return true;
-<<<<<<< HEAD
-        });
-=======
         }).map((entry) => ({
           ...entry,
           hadPanelHolder: Boolean(entry?.recordAppId) && panelHolderIds.has(String(entry.recordAppId)),
         }));
->>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
         tabs.sort((a, b) =>
           (Number(b?.lastAccessed) || 0) - (Number(a?.lastAccessed) || 0) ||
           (Number(b?.when) || 0) - (Number(a?.when) || 0));
@@ -1843,17 +1819,12 @@
       async function sleepPanelRecord(record, ctx = {}) {
         const appId = record?.app?.id || record?.appId || "";
         const browser = appId ? livePanelBrowser(appId) : null;
-<<<<<<< HEAD
-        const exempt = panelSleepExempt(record, ctx, browser);
-        if (exempt) return { slept: false, how: "none", reason: exempt };
-=======
         // R1: what existed BEFORE this call acts. `how` says what was freed now; `panelWas`/`tabWas` say which
         // holders the page lived in, so Restore can rebuild exactly those and nothing else.
         const panelWas = Boolean(browser);
         const tabWas = Boolean(record?.tab) && !tabAlreadyAsleep(record.tab);
         const exempt = panelSleepExempt(record, ctx, browser);
         if (exempt) return { slept: false, how: "none", reason: exempt, panelWas, tabWas };
->>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
         let panel = false;
         let tab = false;
         let reason = "";
@@ -1902,9 +1873,6 @@
         }
         const how = panel && tab ? "both" : panel ? "panel" : tab ? "tab" : "none";
         if (!panel && !tab && !reason) reason = "already-asleep";
-<<<<<<< HEAD
-        return { slept: panel || tab, how, reason };
-=======
         return { slept: panel || tab, how, reason, panelWas, tabWas };
       }
 
@@ -1948,7 +1916,6 @@
           rememberSessionTab(entry);
         }
         return counts;
->>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
       }
 
       // A deep run, in three steps that can each say no: tabs by the policy (oldest first), then panel records whose
@@ -2086,36 +2053,17 @@
               // live panel. Every deep-pass caller (manual Level 2, limiter batches, Stronger saver, and later
               // Game Mode) goes through this door, so sleep and wake cannot drift apart again.
               const appId = record.app?.id || record.appId;
-<<<<<<< HEAD
-              const wasLoaded = Boolean(appId && livePanelBrowser(appId));
-=======
->>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
               const slept = await sleepPanelRecord(record, ctx);
               if (disposed) return null;
               if (!slept.slept) {
                 recordSkip("panel:" + (slept.reason || "not-slept"), 8);
                 continue;
               }
-<<<<<<< HEAD
-              unloaded.panels += 1;
-              const entry = { appId, title: String(record.app?.name || ""), when: Date.now() };
-              rememberUndone("panels", entry);
-              // G3: the record reference is what G5's restore loop needs to wake it through
-              // loadEssentialInBackground(record, false).
-              rememberSessionPanel({
-                appId,
-                recordRef: record,
-                wasLoaded,
-                mode: modeOf(record),
-                when: entry.when,
-              });
-=======
               // R1: the recorder counts what was freed. A tab-only record is a tab here too, so a later Restore
               // reloads the tab instead of inventing a panel.
               const counts = recordPanelSleepHolders(record, appId, slept, modeOf(record));
               unloaded.panels += counts.panels;
               unloaded.tabs += counts.tabs;
->>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
             }
           }
           if (disposed) return null;
@@ -2777,10 +2725,6 @@
           if (selectedWithoutParking(record?.tab)) { addKept("panel", record, "selected"); continue; }
           if (hostMatch(record?.tab)) { addKept("panel", record, "keep-host"); continue; }
           const appId = record.app?.id || record.appId;
-<<<<<<< HEAD
-          const wasLoaded = Boolean(appId && livePanelBrowser(appId));
-=======
->>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
           const slept = await sleepPanelRecord(record, ctx);
           if (!gameModeWorkValid(generation)) return;
           if (!slept.slept) {
@@ -2788,24 +2732,12 @@
             continue;
           }
           if (slept.reason) addKept("panel", appId || record, slept.reason);
-<<<<<<< HEAD
-          unloaded.panels += 1;
-          gameMode.woke.push("panel");
-          const entry = {
-            appId, title: String(record.app?.name || ""), gameMode: true, when: Date.now(),
-          };
-          rememberUndone("panels", entry);
-          rememberSessionPanel({
-            appId, recordRef: record, wasLoaded, mode: modeOf(record), gameMode: true, when: entry.when,
-          });
-=======
           // R1: holders decide the counts and the snapshot lists. `how === "tab"` is a tab, not an app.
           const counts = recordPanelSleepHolders(record, appId, slept, modeOf(record), { gameMode: true });
           unloaded.panels += counts.panels;
           unloaded.tabs += counts.tabs;
           if (counts.panels) gameMode.woke.push("panel");
           if (counts.tabs) gameMode.woke.push("tab");
->>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
         }
         if (!gameModeWorkValid(generation)) return;
         gameMode.lastUnloaded = { ...unloaded };
@@ -3062,11 +2994,6 @@
           isPrivate: isPrivateTab,
           hostOf: hostOfTab,
         });
-<<<<<<< HEAD
-        return {
-          ...plan,
-          counts: { tabs: plan.sleepTabs.length, panels: plan.sleepPanels.length },
-=======
         // Plan section 2: a count shown to the person follows the holder rule. A planned record whose page lives
         // only in its TAB will be freed as a tab, so the hint must not promise a panel that will never appear. This
         // reads the same two facts `sleepPanelRecord()` reads, without acting on anything.
@@ -3080,7 +3007,6 @@
         return {
           ...plan,
           counts: { tabs: previewTabs, panels: previewPanels },
->>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
         };
       }
 
@@ -3144,13 +3070,10 @@
         previewGameMode,
         // G3: the session snapshot, its live-only restore list and its counts. G5 consumes these.
         sessionState,
-<<<<<<< HEAD
-=======
         // R2: the pure holder questions behind Restore. Exposed so a test can prove the legacy rule (data written
         // without `holders` restores a panel only when it was written with `wasLoaded: true`).
         panelHadHolder,
         normalizePanelRestoreEntry,
->>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
         // G4: the one parking tab, its deferred hand-back and its diagnostic state. `parkSelected()` defaults to
         // the pure planner's dry run; `unparkSelected()` is idempotent.
         parkSelected,

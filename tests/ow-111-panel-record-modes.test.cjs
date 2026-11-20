@@ -317,13 +317,9 @@ test("F1/G8: Game Mode's plan-driven pass sleeps a live record, while Level 2 st
   await h.settle();
   assert.equal(wasUnloaded(h, live.tab), true, "Game Mode is the consent and sleeps the live record through G1's door");
   assert.equal(wasUnloaded(h, old), true, "the planned ordinary tab sleeps too");
-<<<<<<< HEAD
-  assert.equal(h.api.gameModeState().unloaded.panels, 1, "the G8 report counts one slept panel");
-=======
   // R1: the fixture has no panel browser, so Game Mode freed the record tab (not an app) plus the old tab.
   assert.equal(h.api.gameModeState().unloaded.panels, 0, "no panel holder existed");
   assert.equal(h.api.gameModeState().unloaded.tabs, 2, "the record tab and the planned ordinary tab");
->>>>>>> 3e6d7d32ec15c70a605d41b01dd18c88b7eb08db
   h.api.setGameMode(false);
   h.destroy();
 });
