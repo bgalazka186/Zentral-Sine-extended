@@ -192,6 +192,38 @@ test("a mixed sleep reports tab-only records as TABS in gameModeState().unloaded
   h.destroy();
 });
 
+test("the pre-ON preview counts by holder, and agrees with what Game Mode then frees", async () => {
+  const build = () => {
+    const selected = makeTab({ url: "https://selected.example/", label: "selected" });
+    const tabOnly = record("arena", { tabLoaded: true, panel: false });
+    const panelOnly = record("whatsapp", { tabLoaded: false, panel: true });
+    const both = record("messenger", { tabLoaded: true, panel: true });
+    return bootBoost({
+      tabs: [selected, tabOnly.tab, panelOnly.tab, both.tab],
+      records: [tabOnly, panelOnly, both],
+    });
+  };
+  const previewing = build();
+  const preview = previewing.api.previewGameMode();
+  // arena is a tab-only record, whatsapp a panel-only record, messenger has both holders.
+  assert.deepEqual(plain(preview.counts), { tabs: 2, panels: 2 },
+    "two tabs (arena, messenger) and two apps (whatsapp, messenger)");
+  previewing.destroy();
+
+  const running = build();
+  running.api.setGameMode(true);
+  await running.flushTimers(0);
+  const state = plain(running.api.gameModeState());
+  assert.deepEqual(state.unloaded, { tabs: 2, panels: 2 },
+    "the preview promised exactly what the pass freed");
+  assert.deepEqual(state.snapshot.panels, 2);
+  assert.deepEqual(state.snapshot.tabs, 2);
+  running.api.setGameMode(false);
+  await running.flushTimers(0);
+  running.destroy();
+  assert.match(BOOST_SRC, /counts: \{ tabs: previewTabs, panels: previewPanels \}/);
+});
+
 test("the Restore label reads the live snapshot counts, so a tab-only record is a tab", async () => {
   const selected = makeTab({ url: "https://selected.example/", label: "selected" });
   const tabOnly = record("arena", { tabLoaded: true, panel: false });

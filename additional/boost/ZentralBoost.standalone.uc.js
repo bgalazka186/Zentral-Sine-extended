@@ -5217,9 +5217,19 @@ __zentralShim.register = function (def) {
           isPrivate: isPrivateTab,
           hostOf: hostOfTab,
         });
+        // Plan section 2: a count shown to the person follows the holder rule. A planned record whose page lives
+        // only in its TAB will be freed as a tab, so the hint must not promise a panel that will never appear. This
+        // reads the same two facts `sleepPanelRecord()` reads, without acting on anything.
+        let previewTabs = plan.sleepTabs.length;
+        let previewPanels = 0;
+        for (const record of plan.sleepPanels) {
+          const appId = record?.app?.id || record?.appId || "";
+          if (appId && livePanelBrowser(appId)) previewPanels += 1;
+          if (record?.tab && !tabAlreadyAsleep(record.tab)) previewTabs += 1;
+        }
         return {
           ...plan,
-          counts: { tabs: plan.sleepTabs.length, panels: plan.sleepPanels.length },
+          counts: { tabs: previewTabs, panels: previewPanels },
         };
       }
 

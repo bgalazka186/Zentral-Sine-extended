@@ -95,6 +95,6 @@ Reproduce with a mixed session: one pinned page loaded as a TAB (for example are
 | `R4` — the ten tests | **DONE** | `tests/r4-restore-holder-spec.test.cjs` (10 passed) with real `pinned`/`zen-essential` fixtures; 0/10 pass on the pre-fix tree `6d2e2934`. |
 | `R5` — owner gates | **DONE (recorded, not measured)** | The three gates are in `TODO_notes_roadmap.md` under **Restore follow-up owner gates (R5)**; `tests/r5-restore-owner-gates.test.cjs` keeps them there. |
 
-Full suite at this tree: `310/310 passed; 0 failed`, `0 TODO failing: none`. Exact no-bump chain green at
+Full suite at this tree: `311/311 passed; 0 failed`, `0 TODO failing: none`. Exact no-bump chain green at
 608 root settings / 608 Sine preferences and version 3.4.1. No live Zen/Sine runtime, toast, visual or RAM result is
 claimed: gates A/B/C above remain owner work.
